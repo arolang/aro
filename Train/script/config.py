@@ -141,6 +141,16 @@ def load_knowledge():
         return json.load(f)
 
 
+def valid_action_verbs(kb=None):
+    """Return the set of all valid ARO action verbs (lowercased) from knowledge.json."""
+    kb = kb or load_knowledge()
+    verbs = set()
+    for a in kb.get('actions', []):
+        for v in a.get('verbs', []):
+            verbs.add(v.lower())
+    return verbs
+
+
 # ── Warm-start adapter resolver ───────────────────────────────────────────────
 
 def resolve_warm_adapter(kb=None):
@@ -285,7 +295,13 @@ RESPONSE BEHAVIOUR:
 - QUESTION about ARO: answer concisely with examples in ```aro fences.
 - FIX/DEBUG request: read the code first (read_file), diagnose, apply fix
   (edit_file), then verify (aro_check).
-- Do not invent actions or prepositions not listed above.
+- ONLY use action verbs from the AVAILABLE ACTIONS list above. NEVER invent
+  new actions. If a user asks for functionality not covered by an existing
+  action, explain which available action(s) to use instead. For example,
+  there is no "Tail" action — use the file-monitor (Start + File Event
+  Handler) for watching files, or Read for reading file contents.
+- Do not invent prepositions not listed above.
+- If unsure whether an action exists, say so — do not guess.
 - Always produce syntactically valid ARO."""
 
 

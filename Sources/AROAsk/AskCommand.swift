@@ -213,7 +213,7 @@ public struct AskCommand: AsyncParsableCommand {
             try await session.prepare(modelManager: manager)
             defer { Task { await session.shutdown() } }
             let path = args.joined(separator: " ")
-            let answer = try await session.ask("Read the file at \(path) and explain what each feature set does, what events trigger them, and how data flows through the application.")
+            let answer = try await session.ask("Use the read_file tool to read \(path), then explain what each feature set does, what events trigger them, and how data flows through the application.")
             print(answer)
 
         case "/docs":
@@ -371,13 +371,13 @@ public struct AskCommand: AsyncParsableCommand {
             // Inline /fix, /explain, /docs, /plugin
             if trimmed.hasPrefix("/fix ") {
                 let path = String(trimmed.dropFirst("/fix ".count))
-                let answer = try await session.ask("Read the file at \(path), run aro_check, diagnose errors, fix them with edit_file, then re-verify.")
+                let answer = try await session.ask("Use the read_file tool to read \(path), then run aro_check, diagnose errors, fix them with edit_file, then re-verify.")
                 print(answer)
                 continue
             }
             if trimmed.hasPrefix("/explain ") {
                 let path = String(trimmed.dropFirst("/explain ".count))
-                let answer = try await session.ask("Read the file at \(path) and explain what each feature set does.")
+                let answer = try await session.ask("Use the read_file tool to read \(path), then explain what each feature set does.")
                 print(answer)
                 continue
             }

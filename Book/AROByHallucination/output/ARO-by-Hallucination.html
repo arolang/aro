@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>ARO by Haluzination</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+  <link rel="stylesheet" href="unix-style.css" />
+</head>
+<body>
+<h1 id="aro-by-haluzination">ARO by Haluzination</h1>
+<p><em>A language built by a conversation, and how to continue the
+conversation yourself.</em></p>
+<hr />
+<p>This is not a reference manual. The Language Guide already does that
+job, and it does it well. This is something different: a short book
+about how ARO came into the world and what you can do now that it has.
+It is the story of a language that was designed by talking with a
+machine, written by that machine, and then used to train
+<em>another</em> machine — one small enough to live on your laptop, and
+stubborn enough to keep talking back.</p>
+<p>The cover word — <em>haluzination</em> — is deliberate. It is the
+German spelling of “hallucination”, and it is what critics call it when
+an LLM makes something up. Most of ARO was made up first, in exactly
+that sense, during a conversation. Then it was checked, edited, pushed
+back on, compiled, broken, fixed, and eventually shipped. Hallucination
+is not the opposite of rigor. It is its starting condition.</p>
+<p>If you picked this up looking for the definitive list of actions or
+the specification of the type system, put it back down and pick up the
+Language Guide. If you picked it up because you want to understand
+<em>how</em> ARO was built, or because you want to build on it the same
+way — yes, sitting at a laptop, talking to a local model — keep
+reading.</p>
+<p>— The ARO team, April 2026</p>
+<header id="title-block-header">
+<h1 class="title">ARO by Haluzination</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#chapter-1-genesis" id="toc-chapter-1-genesis">Chapter 1:
+Genesis</a>
+<ul>
+<li><a href="#the-first-conversation" id="toc-the-first-conversation">1.1 The First Conversation</a></li>
+<li><a href="#letting-the-machine-write" id="toc-letting-the-machine-write">1.2 Letting the Machine
+Write</a></li>
+<li><a href="#the-first-full-application" id="toc-the-first-full-application">1.3 The First Full
+Application</a></li>
+<li><a href="#the-problem-with-general-models" id="toc-the-problem-with-general-models">1.4 The Problem With General
+Models</a></li>
+<li><a href="#why-haluzination" id="toc-why-haluzination">1.5 Why
+“Haluzination”</a></li>
+</ul></li>
+<li><a href="#chapter-2-training-the-local" id="toc-chapter-2-training-the-local">Chapter 2: Training the Local</a>
+<ul>
+<li><a href="#why-small" id="toc-why-small">2.1 Why Small</a></li>
+<li><a href="#what-the-pipeline-does" id="toc-what-the-pipeline-does">2.2 What the Pipeline Does</a></li>
+<li><a href="#what-the-model-was-taught" id="toc-what-the-model-was-taught">2.3 What the Model Was
+Taught</a></li>
+<li><a href="#what-the-model-was-not-taught" id="toc-what-the-model-was-not-taught">2.4 What the Model Was Not
+Taught</a></li>
+<li><a href="#running-the-model" id="toc-running-the-model">2.5 Running
+the Model</a></li>
+<li><a href="#a-note-on-iteration" id="toc-a-note-on-iteration">2.6 A
+Note on Iteration</a></li>
+</ul></li>
+<li><a href="#chapter-3-the-commands" id="toc-chapter-3-the-commands">Chapter 3: The Commands</a>
+<ul>
+<li><a href="#the-first-invocation" id="toc-the-first-invocation">3.1
+The First Invocation</a></li>
+<li><a href="#backends" id="toc-backends">3.2 Backends</a></li>
+<li><a href="#one-shot-vs.-repl" id="toc-one-shot-vs.-repl">3.3 One-shot
+vs. REPL</a></li>
+<li><a href="#the-slash-commands" id="toc-the-slash-commands">3.4 The
+Slash Commands</a></li>
+<li><a href="#flags" id="toc-flags">3.5 Flags</a></li>
+<li><a href="#the-context-file" id="toc-the-context-file">3.6 The
+Context File</a></li>
+</ul></li>
+<li><a href="#chapter-4-habits" id="toc-chapter-4-habits">Chapter 4:
+Habits</a>
+<ul>
+<li><a href="#context-is-small" id="toc-context-is-small">4.1 Context Is
+Small</a></li>
+<li><a href="#let-it-read-the-project" id="toc-let-it-read-the-project">4.2 Let It Read the Project</a></li>
+<li><a href="#approve-shell-commands-like-you-mean-it" id="toc-approve-shell-commands-like-you-mean-it">4.3 Approve Shell
+Commands Like You Mean It</a></li>
+<li><a href="#parse-before-you-write" id="toc-parse-before-you-write">4.4 Parse Before You Write</a></li>
+<li><a href="#keep-the-index-fresh" id="toc-keep-the-index-fresh">4.5
+Keep the Index Fresh</a></li>
+<li><a href="#read-the-proposals-before-you-argue" id="toc-read-the-proposals-before-you-argue">4.6 Read the Proposals
+Before You Argue</a></li>
+<li><a href="#commit-messages-are-not-the-models-job" id="toc-commit-messages-are-not-the-models-job">4.7 Commit Messages Are
+Not the Model’s Job</a></li>
+<li><a href="#shorter-prompts-are-better" id="toc-shorter-prompts-are-better">4.8 Shorter Prompts Are
+Better</a></li>
+</ul></li>
+<li><a href="#chapter-5-automation-everyone-understands" id="toc-chapter-5-automation-everyone-understands">Chapter 5: Automation
+Everyone Understands</a>
+<ul>
+<li><a href="#the-case-for-readable-automation" id="toc-the-case-for-readable-automation">5.1 The Case for Readable
+Automation</a></li>
+<li><a href="#the-first-useful-script-a-nightly-report" id="toc-the-first-useful-script-a-nightly-report">5.2 The First Useful
+Script: A Nightly Report</a></li>
+<li><a href="#ci-style-invocations" id="toc-ci-style-invocations">5.3
+CI-style Invocations</a></li>
+<li><a href="#scheduled-jobs" id="toc-scheduled-jobs">5.4 Scheduled
+Jobs</a></li>
+<li><a href="#talking-to-other-mcp-servers" id="toc-talking-to-other-mcp-servers">5.5 Talking to Other MCP
+Servers</a></li>
+<li><a href="#a-principle" id="toc-a-principle">5.6 A Principle</a></li>
+</ul></li>
+<li><a href="#chapter-6-reclaiming-the-local" id="toc-chapter-6-reclaiming-the-local">Chapter 6: Reclaiming the
+Local</a>
+<ul>
+<li><a href="#the-drift-to-the-cloud" id="toc-the-drift-to-the-cloud">6.1 The Drift to the Cloud</a></li>
+<li><a href="#what-changed" id="toc-what-changed">6.2 What
+Changed</a></li>
+<li><a href="#what-aro-ask-is-for" id="toc-what-aro-ask-is-for">6.3 What
+<code>aro ask</code> Is For</a></li>
+<li><a href="#the-recursive-game" id="toc-the-recursive-game">6.4 The
+Recursive Game</a></li>
+<li><a href="#what-you-can-do-now" id="toc-what-you-can-do-now">6.5 What
+You Can Do Now</a></li>
+<li><a href="#where-this-ends" id="toc-where-this-ends">6.6 Where This
+Ends</a></li>
+</ul></li>
+<li><a href="#chapter-7-tool-calling" id="toc-chapter-7-tool-calling">Chapter 7: Tool Calling</a>
+<ul>
+<li><a href="#the-eighteen-tools" id="toc-the-eighteen-tools">7.1 The
+Eighteen Tools</a></li>
+<li><a href="#how-the-loop-works" id="toc-how-the-loop-works">7.2 How
+the Loop Works</a></li>
+<li><a href="#the-shape-of-a-tool-call" id="toc-the-shape-of-a-tool-call">7.3 The Shape of a Tool Call</a></li>
+<li><a href="#approval-and-trust" id="toc-approval-and-trust">7.4
+Approval and Trust</a></li>
+<li><a href="#chaining-read-edit-check" id="toc-chaining-read-edit-check">7.5 Chaining: Read, Edit,
+Check</a></li>
+<li><a href="#creating-a-project-from-scratch" id="toc-creating-a-project-from-scratch">7.6 Creating a Project from
+Scratch</a></li>
+<li><a href="#the-limits-of-tools" id="toc-the-limits-of-tools">7.7 The
+Limits of Tools</a></li>
+<li><a href="#tips-for-better-tool-usage" id="toc-tips-for-better-tool-usage">7.8 Tips for Better Tool
+Usage</a></li>
+</ul></li>
+<li><a href="#chapter-8-tips-and-tricks" id="toc-chapter-8-tips-and-tricks">Chapter 8: Tips and Tricks</a>
+<ul>
+<li><a href="#writing-good-prompts" id="toc-writing-good-prompts">8.1
+Writing Good Prompts</a></li>
+<li><a href="#common-mistakes-the-model-makes" id="toc-common-mistakes-the-model-makes">8.2 Common Mistakes the Model
+Makes</a></li>
+<li><a href="#using-fix-vs.-manual-editing" id="toc-using-fix-vs.-manual-editing">8.3 Using /fix vs. Manual
+Editing</a></li>
+<li><a href="#building-incrementally" id="toc-building-incrementally">8.4 Building Incrementally</a></li>
+<li><a href="#using-.context-effectively" id="toc-using-.context-effectively">8.5 Using .context
+Effectively</a></li>
+<li><a href="#combining-aro-ask-with-the-cli" id="toc-combining-aro-ask-with-the-cli">8.6 Combining aro ask with the
+CLI</a></li>
+<li><a href="#performance-tips" id="toc-performance-tips">8.7
+Performance Tips</a></li>
+</ul></li>
+<li><a href="#chapter-9-worked-examples" id="toc-chapter-9-worked-examples">Chapter 9: Worked Examples</a>
+<ul>
+<li><a href="#example-1-a-user-service-from-scratch" id="toc-example-1-a-user-service-from-scratch">9.1 Example 1: A User
+Service from Scratch</a></li>
+<li><a href="#example-2-a-file-watcher" id="toc-example-2-a-file-watcher">9.2 Example 2: A File Watcher</a></li>
+<li><a href="#example-3-a-plugin-from-scratch" id="toc-example-3-a-plugin-from-scratch">9.3 Example 3: A Plugin from
+Scratch</a></li>
+<li><a href="#what-the-examples-show" id="toc-what-the-examples-show">9.4 What the Examples Show</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="chapter-1-genesis">Chapter 1: Genesis</h1>
+<blockquote>
+<p>“There are two ways to write a language. One is to know exactly what
+you want. The other is to ask until you find out.”</p>
+</blockquote>
+<hr />
+<h2 id="the-first-conversation">1.1 The First Conversation</h2>
+<p>ARO did not begin with a grammar. It began with a complaint. The
+complaint went roughly like this: every piece of business software, no
+matter the domain, ended up expressing the same three things — what
+happens, what we have afterwards, and what it applies to. Every form,
+every API, every back-office job. And yet every framework, every
+language, every architecture pattern found a different way to bury those
+three things under ceremony.</p>
+<p>That complaint was typed into a chat window. The reply — from a
+general-purpose language model — was a sketch. Not a specification. A
+sketch. Three words. <em>Action, result, object.</em> The shape of every
+sentence in English business prose. “Retrieve the user from the
+repository.” “Compute the total from the line items.” “Publish the
+invoice to the queue.” The sketch fit every example the conversation
+threw at it.</p>
+<p>That was the hallucination. A useful one. The next hour of
+conversation was spent asking the model to break it — to find a case
+where the shape didn’t fit. It failed. Or rather, it found cases where
+you could argue about prepositions, but the shape held. At the end of
+that hour, the first line of ARO was typed:</p>
+<pre class="aro"><code>Retrieve the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.</code></pre>
+<p>It has barely changed since.</p>
+<h2 id="letting-the-machine-write">1.2 Letting the Machine Write</h2>
+<p>Once the shape was fixed, the question became: who writes the first
+thousand lines? The honest answer was “nobody, yet”. Nobody knew ARO —
+it didn’t exist outside the conversation window. The parser, the lexer,
+the action registry, the event bus, the OpenAPI integration, the plugin
+loader, the LLVM backend — every single one of those components was
+written in the same way. A human asked for a component. A model produced
+a draft. The human compiled it, ran the tests, pointed out the failures,
+and asked for a fix. The model fixed it. Repeat until it ran.</p>
+<p>This is not a triumphal story. The drafts were wrong about half the
+time. The model hallucinated Swift APIs that did not exist. It got the
+concurrency model subtly wrong in ways that only showed up under load.
+It invented test frameworks. Every one of those wrong drafts was fixed —
+not by magic, not by “prompting harder”, but by reading the code and
+understanding what it was trying to do, and then correcting it by hand
+or by going back to the model with a tighter question.</p>
+<p>What made it work was not that the model was smart. It was that the
+language being built — ARO — was small. The grammar fits on one page.
+The action roles are four categories. The concurrency model follows one
+rule. When a component was wrong, the smallness of the language made the
+wrong part easy to see.</p>
+<p>The lesson was not “you can ship software without reading code”. The
+lesson was: you can move a lot faster than you think you can, <em>if you
+already know what shape you want</em>.</p>
+<h2 id="the-first-full-application">1.3 The First Full Application</h2>
+<p>The first ARO program that ran end-to-end was a user service. An
+OpenAPI contract with <code>listUsers</code>, <code>createUser</code>,
+<code>getUser</code>. Six feature sets, one
+<code>Application-Start</code>, a repository, a handful of events. It
+compiled, it ran, it served HTTP traffic. The conversation window that
+produced it is still in a text file somewhere — thousands of turns,
+mostly fixing things the model got almost right.</p>
+<p>The important thing about that first application is not that it
+worked. It is that it was <em>readable</em>. Someone who had never seen
+ARO before could open <code>listUsers.aro</code> and understand what it
+did, because every statement was an English sentence. That was always
+the point: ARO is a language for business logic, written in the shape
+that business people already speak in. The fact that a language model —
+trained on business prose — could guess at ARO was not a happy accident.
+It was the whole design.</p>
+<h2 id="the-problem-with-general-models">1.4 The Problem With General
+Models</h2>
+<p>And yet — ARO has a problem with general models. The problem has two
+parts.</p>
+<p>The first part is vocabulary. There are four action roles, seventeen
+prepositions, and a few dozen built-in action verbs. The model that
+wrote the first version of ARO does not know any of them. It has to be
+reminded, every time, which verbs exist and which prepositions they
+take. It tends to invent new ones when it runs out of patience. Invented
+verbs do not parse. Feature sets with invented verbs fail silently in
+review and loudly in production.</p>
+<p>The second part is privacy. Large general models live in a cloud.
+They see your source, your questions, and — if you’re not careful — the
+production data you paste in when you’re trying to debug something.
+That’s a problem for teams that cannot ship their business logic to a
+vendor for analysis. It’s a problem for people who simply do not want a
+transcript of every engineering decision leaving their machine.</p>
+<p>The solution to both problems is obvious once you say it out loud:
+train a small model on ARO, and run it locally. The obvious solution is
+what this book is about.</p>
+<h2 id="why-haluzination">1.5 Why “Haluzination”</h2>
+<p>The title of the book is a joke with a sharp edge.
+<em>Haluzination</em> is what critics call it when an LLM makes
+something up. It is also, quite accurately, how ARO was born — a chain
+of well-placed hallucinations, each one checked and kept or thrown away.
+The derogatory use of the word “hallucination” assumes that making
+things up is bad. That is wrong. Making things up is how design works.
+What matters is what happens <em>after</em> you make them up.</p>
+<p>The rest of this book is about what happens after. Chapter 2 tells
+the story of training the local model. Chapter 3 teaches the commands.
+Chapter 4 is about good habits. Chapter 5 is about what you can do with
+<code>aro ask</code> that you cannot do with any other tool. Chapter 6
+is about why all of this matters — why the local machine is worth
+claiming back. Chapter 7 explains how the tool-call loop works. Chapter
+8 collects practical tips. And Chapter 9 walks through complete examples
+from scratch.</p>
+<h1 id="chapter-2-training-the-local">Chapter 2: Training the Local</h1>
+<blockquote>
+<p>“The question is not whether a model can learn ARO. The question is
+how small it can be and still do it.”</p>
+</blockquote>
+<hr />
+<h2 id="why-small">2.1 Why Small</h2>
+<p>The fine-tuned model that ships with <code>aro ask</code> is not
+large. By the standards of 2026, it is small — a 4-bit quantised
+30-billion-parameter coder with enough of its weights shaved off to run
+comfortably on a laptop with unified memory or a mid-range GPU. This was
+not a compromise. It was the point.</p>
+<p>A large model trained on ARO would be impressive. It would also be
+useless, because nobody would be able to run it. The decision to build a
+local assistant meant the decision to build a small one. Everything
+about the training pipeline was designed around that constraint. The
+goal was never “state of the art on general code”. The goal was “good
+enough on ARO to make a working engineer faster”.</p>
+<h2 id="what-the-pipeline-does">2.2 What the Pipeline Does</h2>
+<p>The training pipeline lives in the sibling project
+<code>ARO-Train</code>. It is a sequence of Jupyter notebooks — numbered
+<code>00</code> through <code>21</code> — that collect data, shape it
+into pairs, fine-tune a base model, and package the result. You do not
+need to run it to use <code>aro ask</code>. You only need to run it if
+you want to train your own variant.</p>
+<p>In prose, the pipeline does the following:</p>
+<ol type="1">
+<li><strong>Collects a corpus</strong> from every authoritative source
+in the ARO project — proposals, the Book, the wiki, every example
+application, the commit history of the language itself, and the README.
+This is the only place where the training process touches the public
+internet; after this step, everything happens locally.</li>
+<li><strong>Extracts knowledge</strong> from that corpus into a
+structured file — the grammar, the list of actions with their verbs and
+prepositions, the canonical syntax, and the error philosophy.</li>
+<li><strong>Generates instruction/response pairs</strong> from the
+knowledge file, from the books, from the git history of the language,
+and from comments left in existing ARO applications. This is the bulk of
+the training data.</li>
+<li><strong>Warm-starts a fine-tune</strong> on a general base model —
+by default a 4-bit Qwen coder — using the pairs.</li>
+<li><strong>Runs a preference optimisation pass (DPO)</strong> using
+pairs of good and bad ARO answers, so the model learns which of two
+superficially correct responses is the one a human would actually
+want.</li>
+<li><strong>Evaluates</strong> the fine-tune against a fixed set of
+probe prompts, checks the output with <code>aro check</code>, and
+reports a syntax pass rate.</li>
+<li><strong>Packages</strong> the resulting weights for distribution —
+both as an MLX bundle for Apple Silicon and a GGUF bundle for
+<code>llama.cpp</code>.</li>
+</ol>
+<p>The entire pipeline was written by the same method as the rest of
+ARO: a person asking a general model what each step should look like,
+reading the draft, running it, fixing it, and asking for the next step.
+The training script that produced <code>aro-coder-4bit</code> was itself
+the product of a long conversation with a model that did not know what
+ARO was, and that needed to be told.</p>
+<p>The irony is load-bearing. A model that did not know ARO wrote the
+code that trained a model that does.</p>
+<h2 id="what-the-model-was-taught">2.3 What the Model Was Taught</h2>
+<p>The fine-tuned model learned four things, in roughly decreasing order
+of how much pipeline time was spent on each:</p>
+<p><strong>The shape of every statement.</strong> Every line of ARO is
+<em>verb the &lt;result&gt; preposition [the] &lt;object&gt;</em>. The
+model saw thousands of statements in that shape and learned to produce
+new ones in the same shape without dropping the angle brackets, without
+inventing prepositions, and without drifting into Python or Swift syntax
+halfway through.</p>
+<p><strong>The four action roles.</strong> REQUEST actions (Extract,
+Parse, Retrieve, Fetch) pull data from outside. OWN actions (Compute,
+Validate, Compare, Create, Transform) work inside the process. RESPONSE
+actions (Return, Throw) hand data back. EXPORT actions (Publish, Store,
+Log, Send, Emit) push data out. The model learned which verbs live in
+which category, and which prepositions each verb actually takes.</p>
+<p><strong>The feature set shape.</strong> A feature set is
+<code>(Name: Business Activity) { statements }</code>. Feature sets are
+triggered by events — HTTP requests, domain events, repository changes —
+not called directly. The model learned to write complete, runnable
+feature sets given only the trigger and a one-line description of what
+should happen.</p>
+<p><strong>The error philosophy.</strong> ARO feature sets contain only
+the happy case. Errors are handled by the runtime. The model learned to
+resist adding defensive <code>when</code> guards, try/catch constructs,
+or error returns — because none of those exist in ARO.</p>
+<p>It was also taught, almost as an afterthought, how to wrap its output
+in markdown fences and how to cite the proposal number when asked about
+a design decision. These are small things. They compound into the
+difference between a useful assistant and an exasperating one.</p>
+<h2 id="what-the-model-was-not-taught">2.4 What the Model Was Not
+Taught</h2>
+<p>The pipeline deliberately did not teach the model several things.</p>
+<p>It was not taught to hold your hand. There are no long prefaces, no
+“I’ll be happy to help with your request” boilerplate, no summary at the
+end of every reply. The training data was stripped of these. You get the
+answer, or you get an ARO code block, and then the model stops
+talking.</p>
+<p>It was not taught to pretend it knows things it does not. When asked
+about features that do not exist in ARO, the fine-tune will say so and
+point you at the closest proposal. The alternative — confidently
+inventing features — was exactly the failure mode that killed general
+models on ARO. The DPO pass pushed hard against that mode.</p>
+<p>It was not taught general web knowledge. The corpus is <em>just</em>
+the ARO project. Ask the fine-tune about Kubernetes and it will redirect
+you to its general base model’s knowledge, which is stale and thin on
+ARO terms. Ask it about the EventBus and it will quote you the relevant
+proposal.</p>
+<h2 id="running-the-model">2.5 Running the Model</h2>
+<p>The fine-tune is published as <code>ARO-Lang/aro-coder-4bit</code> on
+Hugging Face. It is loaded automatically the first time you run
+<code>aro ask</code>. You do not need to run the training pipeline to
+use the model. You only need to install one of the supported runners —
+<code>llama-server</code>, <code>mlx_lm.server</code>, or any
+OpenAI-compatible endpoint — and the first <code>aro ask</code>
+invocation will offer to download the weights to
+<code>~/.cache/aro/models/</code>.</p>
+<p>The interactive loop inside the training pipeline (notebook
+<code>21_chat.ipynb</code>) is the same loop that <code>aro ask</code>
+uses, in spirit: load the model, build a system prompt from the ARO
+knowledge base, pass user turns through the tokenizer, and stream back a
+reply. The difference is that <code>aro ask</code> does not require
+Python, does not require MLX, and does not require you to start Jupyter.
+It is the same brain in a simpler body.</p>
+<h2 id="a-note-on-iteration">2.6 A Note on Iteration</h2>
+<p>One of the later notebooks in the pipeline is
+<code>19_iterative_loop.ipynb</code>. It does something that is easy to
+describe and hard to do well: it uses the <em>current</em> fine-tune to
+generate new training data for the <em>next</em> fine-tune. Every cycle,
+the model is asked to produce ARO programs for a list of prompts; the
+ones that pass <code>aro check</code> are added to the training set; the
+ones that fail are added to the DPO negative set. The next round of
+training learns from both.</p>
+<p>This is a feedback loop. It is also the point where the story becomes
+recursive: the model is now helping train its own successor. Not
+autonomously — a human still runs the notebooks, reviews the outputs,
+and decides what to keep. But the leverage is enormous. A morning of
+curation turns into a weekend of training, which turns into a model that
+is better at helping you curate.</p>
+<p>The first version of <code>aro-coder-4bit</code> was bootstrapped
+from data generated by a general cloud model. The next version will be
+bootstrapped from data generated by the first version of
+<code>aro-coder-4bit</code>. The cloud model will, eventually, drop out
+of the loop entirely. That is the plan, and it is less far away than it
+sounds.</p>
+<h1 id="chapter-3-the-commands">Chapter 3: The Commands</h1>
+<blockquote>
+<p>“There is a difference between a tool you can use and a tool you
+already know. This chapter is about closing that gap.”</p>
+</blockquote>
+<hr />
+<h2 id="the-first-invocation">3.1 The First Invocation</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> aro ask <span class="st">&quot;write a feature set that returns OK for GET /health&quot;</span></span></code></pre></div>
+<p>That is the entire interface. Everything after <code>aro ask</code>
+is a prompt. The first time you run this, the CLI will notice it has no
+model cached and offer to download one:</p>
+<pre><code>Model &#39;ARO-Lang/aro-coder-4bit&#39; (~4.5 GB) is not installed.
+Download from Hugging Face? [y/N]</code></pre>
+<p>Say yes. The weights land in
+<code>~/.cache/aro/models/ARO-Lang/aro-coder-4bit/</code>. Subsequent
+invocations find them there and skip the download.</p>
+<p>If you would rather put the cache somewhere else — a shared network
+drive, an external SSD — set the <code>HF_HOME</code> environment
+variable before running <code>aro ask</code>. If the model is gated and
+you have a token, set <code>HF_TOKEN</code>. Neither is required for the
+default model.</p>
+<h2 id="backends">3.2 Backends</h2>
+<p><code>aro ask</code> does not ship its own inference engine. It
+relies on a local runner. It will use whichever of the following it
+finds first, in order:</p>
+<ol type="1">
+<li><strong>Any OpenAI-compatible endpoint</strong> specified by
+<code>ARO_LM_ENDPOINT</code>. This is how you point <code>aro ask</code>
+at a shared inference server — an office GPU box, a colleague’s machine,
+a dev container. Set <code>ARO_LM_API_KEY</code> if the endpoint needs
+one.</li>
+<li><strong><code>llama-server</code></strong> from
+<code>llama.cpp</code>. Install with your package manager. This is the
+preferred backend on Linux and on Intel Macs.</li>
+<li><strong><code>mlx_lm.server</code></strong> from
+<code>mlx-lm</code>. Install with <code>pip install mlx-lm</code>. This
+is the preferred backend on Apple Silicon.</li>
+</ol>
+<p>If none of these are available the command fails with a clear error,
+not a cryptic one. There is no “automatic fallback to cloud” — the whole
+point of the local model is that it is local. You choose when to involve
+anyone else’s machine.</p>
+<p>Run <code>aro ask /model</code> to see which backend
+<code>aro ask</code> picked and where the weights live.</p>
+<h2 id="one-shot-vs.-repl">3.3 One-shot vs. REPL</h2>
+<p><code>aro ask</code> runs in two modes. If you pass a prompt as
+arguments, it runs one-shot: send the prompt, run tools, print the
+reply, save the context, exit.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> aro ask <span class="st">&quot;show me how to extract a path parameter&quot;</span></span></code></pre></div>
+<p>If you run it with no arguments <em>and</em> stdin is a terminal, it
+drops into an interactive REPL.</p>
+<pre><code>$ aro ask
+aro ask — backend: llama.cpp, model: ARO-Lang/aro-coder-4bit
+type /quit to exit, /help for commands
+lm&gt;</code></pre>
+<p>The REPL is built on LineNoise, so arrow keys, history, and Ctrl+R
+search all work the way you expect. Press Ctrl+D or type
+<code>/quit</code> to leave. Type <code>/help</code> at any time to see
+the list of slash commands.</p>
+<h2 id="the-slash-commands">3.4 The Slash Commands</h2>
+<p>Slash commands are how you talk to <code>aro ask</code> itself,
+instead of to the model. They work in both modes: pass them as the first
+argument in one-shot, or type them at the REPL prompt.</p>
+<pre><code>/clean               Delete .context in the current directory.
+/show                Print a short summary of the current conversation.
+/tools               List every tool the model can call.
+/model               Print the active model, its path, and the backend.
+/mcp                 List the MCP servers currently bridged into the session.
+/index               Walk the project and (re)build the retrieval index.
+/search &lt;query&gt;      Debug retrieval: print the top 5 matches for a query.
+/fix                 Run aro check, feed diagnostics to the model, auto-repair.
+/explain &lt;file&gt;      Ask the model to explain a file or feature set in plain English.
+/docs &lt;topic&gt;        Generate documentation for a topic from the current project.
+/plugin &lt;name&gt;       Scaffold a new plugin directory with plugin.yaml and stubs.
+/openapi &lt;spec&gt;      Generate or update openapi.yaml from a natural-language description.
+/quit                Leave the REPL.</code></pre>
+<p>A few of these are worth a paragraph of their own.</p>
+<p><strong><code>/clean</code></strong> deletes the
+<code>.context</code> file in the current directory. Contexts drift over
+long conversations — the model starts to “remember” things from three
+tasks ago and applies them to the thing in front of it. When a
+conversation has clearly lost the plot, <code>/clean</code> and start
+again.</p>
+<p><strong><code>/tools</code></strong> is how you discover what the
+model can actually do. The built-in tools are listed, plus any tool the
+bridged MCP servers expose. If a colleague ships a new ARO plugin that
+registers an MCP tool, you’ll see it here without any extra
+configuration on your side.</p>
+<p><strong><code>/index</code></strong> walks the project and builds a
+retrieval index at <code>.context.index/vectors.json</code>. Run this
+once after a fresh clone, and then again any time you move or add a lot
+of files. Chapter 5 explains what the index is used for.</p>
+<p><strong><code>/search</code></strong> is a debugging tool. It shows
+you which chunks of the project the model would see if it called
+<code>search_project</code> with the same query. Use it to understand
+why the model did or did not find the thing you expected it to find.</p>
+<p><strong><code>/fix</code></strong> is the one you will reach for most
+often. It runs <code>aro check</code> on the current directory, collects
+any diagnostics, and feeds them to the model as a prompt. The model
+reads the offending file, edits the broken line, and re-runs the check.
+It repeats until the check passes or it runs out of ideas. You can also
+pass a path: <code>/fix ./MyApp/users.aro</code>. The workflow it
+replaces — read error, open file, find line, fix it, re-run check —
+takes minutes by hand and seconds with <code>/fix</code>.</p>
+<p><strong><code>/explain</code></strong> is for reading code you did
+not write. Point it at a file and it produces a paragraph-level
+explanation of what each feature set does, what events trigger it, and
+what data flows through it. It is not a substitute for reading the code
+yourself, but it is a good first pass when you inherit a project.</p>
+<p><strong><code>/docs</code></strong> generates documentation from the
+project in its current state. It reads the relevant <code>.aro</code>
+files, the <code>openapi.yaml</code> if one exists, and produces a
+markdown summary of the application’s endpoints, events, and feature
+sets. Useful for onboarding, and for keeping a wiki page in sync with
+the code without writing it by hand.</p>
+<p><strong><code>/plugin</code></strong> scaffolds a new plugin. Give it
+a name and it creates the directory under <code>Plugins/</code>, writes
+a <code>plugin.yaml</code> with sensible defaults, and stubs out the
+source files for the plugin type it infers from your environment (Swift
+on macOS, Rust or C elsewhere). You still have to write the logic, but
+the boilerplate is done.</p>
+<p><strong><code>/openapi</code></strong> is the inverse of the usual
+workflow. Instead of writing <code>openapi.yaml</code> by hand and then
+writing feature sets to match, you describe your API in plain English —
+“a user service with CRUD operations and a health check” — and the model
+generates the OpenAPI spec. It is a starting point, not a final draft.
+Review it, adjust the schemas, and then let the model write the feature
+sets to match.</p>
+<h2 id="flags">3.5 Flags</h2>
+<p><code>aro ask</code> has five flags, and you will probably only ever
+use two of them.</p>
+<ul>
+<li><strong><code>--model &lt;id&gt;</code></strong> — override the
+default model. Only useful if you have trained your own variant.</li>
+<li><strong><code>--yes</code></strong> — auto-approve every shell tool
+call. Use this in scripts and in CI. Never use it when you are about to
+walk away from the terminal.</li>
+<li><strong><code>--no-mcp</code></strong> — skip the MCP bridge
+bootstrap. Faster startup for slash commands that don’t need tools.</li>
+<li><strong><code>--temperature &lt;value&gt;</code></strong> — sampling
+temperature. Defaults to <code>0.2</code>, which is deliberately low;
+the fine-tune was trained to be confident about ARO syntax, and high
+temperatures make it start inventing verbs again. Raise it only if you
+want the model to be more creative in non-code explanations.</li>
+</ul>
+<h2 id="the-context-file">3.6 The Context File</h2>
+<p>Every conversation lives in a single file, <code>.context</code>, in
+the current working directory. It is YAML. It is human-readable. You can
+open it in your editor and read it, you can commit fragments of it into
+your project if you want to preserve a particularly useful conversation,
+and you can hand it to a colleague so they can see exactly what you
+asked and what the model replied.</p>
+<p>A shortened example:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">model</span><span class="kw">:</span><span class="at"> ARO-Lang/aro-coder-4bit</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">created</span><span class="kw">:</span><span class="at"> 2026-04-06T12:00:00Z</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="fu">messages</span><span class="kw">:</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">role</span><span class="kw">:</span><span class="at"> system</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">content</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;You are ARO-Coder, an assistant specialised in the ARO ...&quot;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">role</span><span class="kw">:</span><span class="at"> user</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">content</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;write a feature set that greets a user&quot;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">role</span><span class="kw">:</span><span class="at"> assistant</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="fu">    content</span><span class="kw">: </span><span class="ch">|</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>      ```aro</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>      (greetUser: User API) {</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>          Extract the &lt;name&gt; from the &lt;pathParameters: name&gt;.</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>          Compute the &lt;greeting&gt; from &quot;Hello, &quot; ++ &lt;name&gt; ++ &quot;!&quot;.</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>          Return an &lt;OK: status&gt; with &lt;greeting&gt;.</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>      ```</span></code></pre></div>
+<p>You can also add an <code>mcp_servers:</code> section at the top to
+bring additional MCP servers into the session:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">mcp_servers</span><span class="kw">:</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">command</span><span class="kw">:</span><span class="at"> aro</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">args</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">mcp</span><span class="kw">]</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">command</span><span class="kw">:</span><span class="at"> /opt/my-tools/docs-mcp</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">args</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">--stdio</span><span class="kw">]</span></span></code></pre></div>
+<p>The file is written atomically — the CLI writes a
+<code>.context.tmp</code> sibling and renames it into place — and its
+permissions are restricted to <code>0600</code> on Unix systems. It is
+yours, not the world’s.</p>
+<h1 id="chapter-4-habits">Chapter 4: Habits</h1>
+<blockquote>
+<p>“A sharp tool makes the user faster; a well-habituated tool makes the
+user calmer.”</p>
+</blockquote>
+<hr />
+<h2 id="context-is-small">4.1 Context Is Small</h2>
+<p>The single most common mistake, made by everyone who picks up
+<code>aro ask</code> for the first time, is treating the context file as
+a long-lived project log. It is not. It is a scratchpad. The longer it
+gets, the worse the model gets.</p>
+<p>There are two reasons. The first is mechanical: the fine-tune has a
+context window of 8192 tokens. The longer your <code>.context</code>
+grows, the closer you get to the edge, and the more the model forgets.
+The second is behavioural: when there are twenty turns of prior
+conversation in the prompt, the model tends to confuse the current
+question with a previous one. It starts giving you answers to things you
+asked an hour ago.</p>
+<p>The habit is simple: one task, one <code>.context</code>. When you
+finish a feature, run <code>/clean</code>. When you switch from writing
+a feature to debugging a test, run <code>/clean</code>. When you come
+back to work in the morning and the previous evening’s conversation does
+not match what you want to do now, run <code>/clean</code>.</p>
+<p>You will not lose anything important. If the conversation was worth
+keeping, you already committed the code it produced. The chat is not the
+artifact. The code is the artifact.</p>
+<h2 id="let-it-read-the-project">4.2 Let It Read the Project</h2>
+<p>The second most common mistake is pasting code into the prompt. Do
+not do this. The model has a tool — <code>read_file</code> — for
+precisely this reason. When you want the model to look at
+<code>Sources/AROParser/Lexer.swift</code>, do not paste the file. Say
+“read Sources/AROParser/Lexer.swift and summarise the tokenising
+strategy.” The model will call <code>read_file</code> and report
+back.</p>
+<p>The habit generalises. Never describe what a file contains when the
+model could just read it. Never describe what a directory contains when
+the model could just <code>list_dir</code> it. Never run a command
+yourself and paste the output when the model could
+<code>run_shell</code> it and get the output directly. The more the
+model does by itself, the less drift there is between what you think is
+true and what actually is.</p>
+<p>The exceptions are real but small. If a file is enormous, say “read
+the first hundred lines of …”. If the command is destructive, approve it
+or deny it but do not bypass the approval by running it in another
+terminal and pasting the result.</p>
+<h2 id="approve-shell-commands-like-you-mean-it">4.3 Approve Shell
+Commands Like You Mean It</h2>
+<p>When the model wants to run a shell command, <code>aro ask</code>
+stops and asks:</p>
+<pre><code>[aro ask] approve shell command? [y/N]
+  rm -rf build/
+&gt;</code></pre>
+<p>Read the command before typing <code>y</code>. Read it <em>every</em>
+time. The fine-tune is good. The fine-tune is not infallible.
+“Approve-and-forget” is how people end up deleting directories they did
+not mean to delete. Typing <code>y</code> is muscle memory; pausing for
+half a second before typing <code>y</code> is also muscle memory, and
+the second one is the muscle memory you want.</p>
+<p>The <code>--yes</code> flag bypasses the prompt. It exists because
+there are legitimate, non-interactive reasons to run
+<code>aro ask</code> — CI pipelines, scheduled jobs, batch refactors.
+Use it in scripts. Do not use it when you are about to leave the
+terminal unattended. A model that is permitted to run arbitrary shell
+commands without supervision is, at minimum, an engineer who does not
+need to sleep. At maximum it is a mistake waiting for a moment of
+distraction. The safety margin between those two is the
+<code>--yes</code> flag.</p>
+<h2 id="parse-before-you-write">4.4 Parse Before You Write</h2>
+<p>The model has a tool called <code>parse_aro</code>. It takes a block
+of ARO source and returns either <code>ok</code> or a parser diagnostic.
+It does not write anything to disk. It does not touch the filesystem. It
+just tells you whether what the model is about to write is going to
+compile.</p>
+<p>Train yourself — and the model — to use this tool before writing
+files. “Parse this first, and if it’s clean, write it to
+<code>users.aro</code>.” Two calls instead of one, but the second call
+only happens if the first one succeeds. The result is that your working
+tree never contains a half-written feature set that does not parse.</p>
+<h2 id="keep-the-index-fresh">4.5 Keep the Index Fresh</h2>
+<p>The first time you run <code>aro ask /index</code> in a project, it
+walks every indexable file, chunks them, embeds them, and writes the
+result to <code>.context.index/vectors.json</code>. After that, the
+model has access to a search tool that can find a relevant piece of the
+project in one call.</p>
+<p>The index does not update itself. If you move a file, add a new
+proposal, or rewrite a large chunk of source, run <code>/index</code>
+again. It is fast. There is no reason not to.</p>
+<p>Your <code>.gitignore</code> should include
+<code>.context.index/</code>. The index is a cache, not a source of
+truth; regenerating it is cheap, and committing it would bloat the repo
+with megabytes of vectors that go stale on every edit. Similarly, decide
+explicitly whether you want <code>.context</code> to be committed. Some
+teams do — a shared record of the conversations that shaped a feature.
+Most teams do not. Either is fine; just make the choice
+deliberately.</p>
+<h2 id="read-the-proposals-before-you-argue">4.6 Read the Proposals
+Before You Argue</h2>
+<p>When <code>aro ask</code> gives you an answer you disagree with, your
+first instinct will be to argue with it. Your second instinct should be
+to ask it for a citation. The fine-tune was trained on the
+<code>Proposals/</code> directory, and it has the
+<code>read_proposal</code> tool. Ask: “read ARO-0018 and tell me why you
+suggested pipeline syntax for this.” The model will read the proposal
+and either reinforce its original answer with a citation, or it will
+notice it was wrong and correct itself.</p>
+<p>The habit is to move disagreements from your head into the spec. Both
+of you — human and model — get better at ARO this way.</p>
+<h2 id="commit-messages-are-not-the-models-job">4.7 Commit Messages Are
+Not the Model’s Job</h2>
+<p><code>aro ask</code> is excellent at writing ARO feature sets,
+explaining error messages, refactoring handlers, and chasing down
+compiler diagnostics. It is mediocre at writing commit messages, because
+the training data did not include many.</p>
+<p>If you ask it to write a commit message, you will get one. It will be
+syntactically fine and semantically vague, because the model does not
+know what you were trying to accomplish outside of this one
+conversation. Write the commit message yourself. It will take you thirty
+seconds and will be better than anything the model produces. This is not
+a rule. It is a recommendation based on which battles are worth
+picking.</p>
+<h2 id="shorter-prompts-are-better">4.8 Shorter Prompts Are Better</h2>
+<p>The fine-tune likes short, direct prompts. “Write a feature set for
+<code>createUser</code> that validates the email and emits a
+<code>UserCreated</code> event” is better than “Could you please help me
+write a feature set that will create a user, and also make sure to
+validate that the email address they provide is in a valid format, and
+then after the user is created successfully, it would be good if we
+could emit an event saying the user was created…”</p>
+<p>The reason is that the training data was terse. Every
+instruction/response pair in the fine-tune was short. The model learned
+that the shape of a request-to-<code>aro-coder</code> is: verb, subject,
+constraints, and nothing else. When you write in that shape, the model
+responds in kind. When you write long prompts, the model matches your
+style, and the reply gets longer and less focused.</p>
+<p>There is a useful test: if you can remove a word from your prompt
+without changing the meaning, remove it. The model will thank you by
+being more correct.</p>
+<h1 id="chapter-5-automation-everyone-understands">Chapter 5: Automation
+Everyone Understands</h1>
+<blockquote>
+<p>“A script that only its author can read is a liability. A script
+anyone on the team can read is an asset.”</p>
+</blockquote>
+<hr />
+<h2 id="the-case-for-readable-automation">5.1 The Case for Readable
+Automation</h2>
+<p>Most automation fails not because it is wrong but because it is
+illegible. A shell script accumulates flags over the years, each added
+by someone now on a different team, and eventually nobody is willing to
+touch it. A Python job grows into three hundred lines of
+<code>try</code> blocks and retry logic, and new joiners are quietly
+warned not to go near it. The automation works, until it doesn’t, and
+when it doesn’t nobody can fix it.</p>
+<p>ARO changes the economics of this. Because every ARO feature set is a
+sequence of English sentences, a person reading an ARO script can
+understand what it does without reading a single line of Python or
+shell. Because feature sets are triggered by events, the flow is
+declarative — you see what happens in what order, not how it happens
+behind a web of callbacks. And because ARO ships with a local assistant,
+you can ask the assistant “what does this job do, and what would break
+it?” and get a real answer.</p>
+<p>This chapter is about using <code>aro ask</code> to write automation
+that your non-engineer colleagues can read. Not “should be able to read
+in principle, with a day of training” — actually read, today, at the
+same terminal where they already check their email.</p>
+<h2 id="the-first-useful-script-a-nightly-report">5.2 The First Useful
+Script: A Nightly Report</h2>
+<p>Start small. Here is a prompt that has produced a working ARO
+application on every model the fine-tune was evaluated against:</p>
+<blockquote>
+<p>Write an ARO application that runs once, reads every
+<code>.log</code> file in <code>./logs</code>, counts how many lines
+contain the word “ERROR”, writes a report to <code>./report.md</code>,
+and exits.</p>
+</blockquote>
+<p>What <code>aro ask</code> will do, if you let it:</p>
+<ol type="1">
+<li>Call <code>list_dir</code> on <code>./logs</code> to see what’s
+actually there.</li>
+<li>Call <code>parse_aro</code> on a draft feature set before writing
+anything.</li>
+<li>Call <code>write_file</code> to create <code>main.aro</code>.</li>
+<li>Call <code>aro_check</code> on the resulting directory.</li>
+<li>Report back with a short explanation and the path to the new
+file.</li>
+</ol>
+<p>You can read the resulting <code>main.aro</code>, and so can the
+person sitting next to you who does not write software. It will look
+like this:</p>
+<pre class="aro"><code>(Application-Start: Nightly Report) {
+    Retrieve the &lt;log-files&gt; from the &lt;filesystem&gt; where path = &quot;./logs&quot; and extension = &quot;.log&quot;.
+
+    For each &lt;file&gt; in &lt;log-files&gt; {
+        Retrieve the &lt;content&gt; from the &lt;file&gt;.
+        Filter the &lt;error-lines&gt; from the &lt;content&gt; where line contains &quot;ERROR&quot;.
+        Compute the &lt;error-count: length&gt; from the &lt;error-lines&gt;.
+        Publish as &lt;counts&gt; append &lt;counts&gt; with &lt;error-count&gt;.
+    }
+
+    Compute the &lt;total: sum&gt; from the &lt;counts&gt;.
+    Compute the &lt;report-text&gt; from &quot;Total errors: &quot; ++ &lt;total&gt;.
+    Store the &lt;report-text&gt; to the &lt;filesystem&gt; where path = &quot;./report.md&quot;.
+
+    Return an &lt;OK: status&gt; for the &lt;report&gt;.
+}</code></pre>
+<p>Anyone on the team can read that. Anyone on the team can edit it. The
+automation is no longer hidden behind someone’s personal Python
+library.</p>
+<h2 id="ci-style-invocations">5.3 CI-style Invocations</h2>
+<p><code>aro ask</code> is scriptable. Here are patterns that have
+proven themselves:</p>
+<p><strong>Ask the assistant to fix a failing check.</strong></p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;run aro_check on ./Examples/UserService and fix any diagnostics&quot;</span></span></code></pre></div>
+<p>This will, in order, call <code>aro_check</code>, read the offending
+files, edit them with <code>edit_file</code>, re-run the check, and stop
+when it passes or after 25 rounds of tool calls. The <code>--yes</code>
+flag auto-approves shell access so the loop can run without a human at
+the keyboard. The result is either a fixed directory or a context file
+you can open afterwards to see what was tried.</p>
+<p><strong>Generate boilerplate for a new operation.</strong></p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;add a feature set called deleteUser that handles DELETE /users/{id} in ./MyApp&quot;</span></span></code></pre></div>
+<p>The model will read <code>openapi.yaml</code>, extract the schema,
+write the new <code>.aro</code> file, and run <code>aro_check</code> to
+confirm it parses. Your job is to review the diff, not to write the
+boilerplate.</p>
+<p><strong>Run on a shared endpoint.</strong></p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="va">ARO_LM_ENDPOINT</span><span class="op">=</span>http://192.168.1.42:8080 <span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;check everything under Examples/&quot;</span></span></code></pre></div>
+<p>On CI servers, running <code>llama-server</code> per job is wasteful.
+Run it once, on a machine with a GPU, point every job at it with
+<code>ARO_LM_ENDPOINT</code>, and <code>aro ask</code> will happily use
+it over the network. The model never leaves your infrastructure, and
+every job gets a fast response.</p>
+<p><strong>Explain changes in a PR.</strong></p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--no-mcp</span> <span class="st">&quot;read the last five files modified in this branch and write a short PR summary&quot;</span> <span class="op">&gt;</span> pr-summary.md</span></code></pre></div>
+<p>The <code>--no-mcp</code> flag skips the MCP bridge boot for a small
+speedup; the command writes its output to a file you can paste into the
+PR description. Nothing fancy, just tedium deleted.</p>
+<h2 id="scheduled-jobs">5.4 Scheduled Jobs</h2>
+<p>You can put <code>aro ask --yes &quot;...&quot;</code> into a cron job, a
+systemd timer, or a GitHub Actions schedule. The fact that it runs a
+local model rather than a cloud service is a feature, not a limitation —
+your scheduled jobs are not rate-limited, not billed per token, and not
+waiting on someone else’s availability.</p>
+<p>Two things to watch for:</p>
+<ul>
+<li><strong>Approval is off.</strong> With <code>--yes</code>, every
+shell and file tool runs without human review. Make sure the job’s
+working directory is one you’re willing to have fully modified.</li>
+<li><strong>The model can still be wrong.</strong> A scheduled
+<code>aro ask</code> job should produce a diff you review before it
+lands in production, not commit directly to main. Use the job to
+propose, not to merge.</li>
+</ul>
+<p>A good pattern is to have the job open a pull request rather than
+push to a branch. The assistant writes the code, the CI runs the tests,
+and a human approves the merge.</p>
+<h2 id="talking-to-other-mcp-servers">5.5 Talking to Other MCP
+Servers</h2>
+<p>Every MCP server you add to the <code>mcp_servers:</code> list in
+your <code>.context</code> file becomes a set of tools the model can
+call during a conversation. This is how you extend <code>aro ask</code>
+without changing the binary.</p>
+<p>A few examples of MCP servers worth bridging, if you use them:</p>
+<ul>
+<li><strong>An internal docs MCP</strong>: the model can read your
+company wiki without leaking it to a cloud provider.</li>
+<li><strong>A ticket system MCP</strong>: the model can look up the
+ticket number in the commit message and pull its description.</li>
+<li><strong>A secrets broker MCP</strong>: the model can ask “is there a
+database password configured for <code>staging</code>?” without ever
+seeing the password itself.</li>
+</ul>
+<p>The pattern is always the same: add a server to
+<code>.context</code>, run <code>aro ask /mcp</code> to confirm it
+connected, run <code>aro ask /tools</code> to see what new tools are
+available, and then write a prompt that asks the model to use them. The
+tools appear alongside the built-ins without any special flag. The model
+does not care whether a tool is built-in or bridged; it just calls
+it.</p>
+<h2 id="a-principle">5.6 A Principle</h2>
+<p>The principle threading through this chapter is: automation is
+readable when the human and the machine are writing in the same
+language. ARO makes the automation human-readable. <code>aro ask</code>
+makes the human’s job of authoring it fast enough to be worth the
+investment.</p>
+<p>The old argument against domain-specific languages was that they were
+expensive to write. That argument depended on nobody having an assistant
+that already knew the language. The assistant is here. The language is
+here. The only thing left is to sit down and write the first script.</p>
+<h1 id="chapter-6-reclaiming-the-local">Chapter 6: Reclaiming the
+Local</h1>
+<blockquote>
+<p>“Every generation of computing begins by promising the user control
+and ends by renting it back to them. Ours does not have to end that
+way.”</p>
+</blockquote>
+<hr />
+<h2 id="the-drift-to-the-cloud">6.1 The Drift to the Cloud</h2>
+<p>There was a period, roughly from 2020 to 2024, when the trajectory of
+programming tooling was clear: everything moves to the cloud. The
+editor, the compiler, the assistant, the test runner, the deployment
+pipeline — all of it was migrating from the developer’s laptop into
+someone else’s data centre. The argument for this was seductive. Cloud
+services had more compute, newer hardware, bigger models, faster
+iteration. Your laptop was just a terminal; the real work happened
+elsewhere.</p>
+<p>What went unspoken was that the real work <em>also cost money</em>,
+per token, per CPU-second, per gigabyte of egress. And that the real
+work could be throttled, or rate-limited, or rewritten on someone else’s
+schedule, or simply switched off. And that the code you fed to the real
+work was copied, stored, and sometimes used as training data in ways the
+terms of service made technically legal and morally vague.</p>
+<p>This was not a conspiracy. It was the natural economic pull of a
+market in which compute was expensive and centralisation was efficient.
+It was also, quietly, a loss. The programmer’s laptop — a machine more
+powerful than any mainframe of 1985 — was reduced to a display for a
+login screen.</p>
+<h2 id="what-changed">6.2 What Changed</h2>
+<p>Two things changed, more or less simultaneously.</p>
+<p>The first is that inference got dramatically cheaper. A model small
+enough to run on a laptop with integrated graphics, in 2026, is roughly
+as capable on code as a flagship cloud model was two years earlier. The
+capability curve is not flat — the frontier is still in the cloud — but
+the <em>useful</em> line has dropped well below the laptop hardware of
+ordinary engineers. A 30-billion-parameter coder, 4-bit quantised, fits
+in memory on machines that cost less than a business-class flight.</p>
+<p>The second is that we finally learned how to fine-tune for tasks. A
+model that knows a little bit about everything is less useful, on a
+specific domain, than a model that knows only that domain. The ARO
+fine-tune is a sharp example: it is terrible at explaining kubernetes
+YAML, because it was never trained on it, but it is excellent at writing
+ARO feature sets, because that is all it was trained on. A team that
+knows its domain can build a specialised model that outperforms any
+general-purpose cloud model <em>on that domain</em>, for a fraction of
+the cost, on a machine they already own.</p>
+<p>Put those two changes together and the economic pull reverses. The
+cloud is no longer the obvious answer for domain-specific programming
+tasks. The obvious answer is the laptop — <em>your</em> laptop, running
+<em>your</em> model, talking to <em>your</em> code.</p>
+<h2 id="what-aro-ask-is-for">6.3 What <code>aro ask</code> Is For</h2>
+<p><code>aro ask</code> is a small, specific bet on that reversal. It is
+not a general-purpose coding assistant. It is a coding assistant for one
+language, running locally, with tools that are scoped to one project. It
+does not phone home. It does not require an account. It does not need
+network access once the model is downloaded. It does not train on your
+conversations.</p>
+<p>That last point is worth dwelling on. Every message you send to
+<code>aro ask</code>, every file it reads, every command it runs, lives
+on your machine and nowhere else. The <code>.context</code> file is
+yours. The tool-call logs are yours. The history of your thinking,
+captured in the back-and-forth with the model, is yours. If you want to
+share a conversation with a colleague, you copy the
+<code>.context</code> file. If you want to delete it, you delete it.
+There is no “but a copy is still on our servers for thirty days per our
+retention policy”.</p>
+<p>This is the most understated feature of the whole tool. It is also,
+arguably, the most important one.</p>
+<h2 id="the-recursive-game">6.4 The Recursive Game</h2>
+<p>Chapter 2 ended with a note on the iterative loop notebook — the one
+where the current version of the fine-tune helps train the next version.
+That note is worth expanding, because it points at something genuinely
+new.</p>
+<p>A local model that is <em>good enough</em> to help improve itself
+creates a feedback loop that does not require a cloud provider to close.
+A person with a laptop, a handful of gigabytes of disk space, and a
+willingness to curate, can train a model that is slightly better at ARO
+than last week’s version. Not in three weeks on a rented GPU cluster. On
+a laptop, over a weekend. And next week, the slightly-better model helps
+curate slightly-better training data for the week after. The curve is
+not steep. It does not need to be. It is locally owned, and it does not
+stop.</p>
+<p>The end state of this game is not “our local model beats GPT-7”. It
+is “our local model is good enough that we no longer need to ask whether
+a cloud model would be better, because the cost of finding out is more
+than the value of the answer.” That is a different kind of sufficiency
+than the frontier chases. It is the kind that used to be called “tools
+the engineer owns”.</p>
+<h2 id="what-you-can-do-now">6.5 What You Can Do Now</h2>
+<p>If you are reading this and you have an ARO project on your laptop,
+here is what you can do today, without permission, without a
+subscription, without an account:</p>
+<ol type="1">
+<li>Install <code>aro ask</code> — it comes with the <code>aro</code>
+binary. You already have it.</li>
+<li>Install <code>llama-server</code> or <code>mlx_lm.server</code>.
+Five minutes.</li>
+<li>Run <code>aro ask &quot;hello&quot;</code>. Answer <code>y</code> to the
+download prompt. Wait.</li>
+<li>Ask the model to help you write a feature set. Any feature set. The
+one you have been putting off because it was boring.</li>
+<li>When it is done, commit the code, delete the <code>.context</code>,
+and go to bed.</li>
+</ol>
+<p>That sequence is a small act, but it is an act of claiming something
+back. The code is on your machine. The model is on your machine. The
+decision about what to build next is on your machine. There is no cloud
+to consult, no quota to worry about, no billing email at the end of the
+month, no vendor’s priorities leaking into your architecture.</p>
+<h2 id="where-this-ends">6.6 Where This Ends</h2>
+<p>The honest answer is: we do not know where this ends. The fine-tune
+will get better. The pipeline will get simpler. The hardware will get
+cheaper. Eventually, someone on the ARO team will train a variant of the
+model that specialises in their own application domain — invoicing,
+logistics, content moderation — and ship it alongside the base
+<code>aro-coder</code>. Someone else will bridge an internal MCP server
+and get the model to do things we have not thought of yet. Someone else
+will fork the whole training pipeline and train a model for a language
+that is <em>not</em> ARO, because the pattern generalises.</p>
+<p>Every one of those things is a small victory against the drift to the
+cloud. None of them require anybody’s permission.</p>
+<p>ARO started with a conversation. So did this chapter of computing.
+The conversation continues on the laptop in front of you.</p>
+<hr />
+<p><em>The next three chapters shift from philosophy to practice.
+Chapter 7 explains how the tool-call loop works — the mechanism that
+turns <code>aro ask</code> from a chatbot into a colleague. Chapter 8
+collects the practical tips that make the difference between fighting
+the model and working with it. Chapter 9 walks through complete
+examples, from an empty directory to a running application, so you can
+see the whole process from end to end.</em></p>
+<h1 id="chapter-7-tool-calling">Chapter 7: Tool Calling</h1>
+<blockquote>
+<p>“A model that can only talk is a lecturer. A model that can read,
+write, and run is a colleague.”</p>
+</blockquote>
+<hr />
+<h2 id="the-eighteen-tools">7.1 The Eighteen Tools</h2>
+<p>When you type <code>/tools</code> in the REPL, you see a list. It
+looks something like this:</p>
+<pre><code>Built-in tools:
+  read_file         Read a file from the project
+  write_file        Write content to a file
+  edit_file         Apply a targeted edit to a file
+  list_dir          List files and directories
+  grep              Search file contents by pattern
+  search_project    Semantic search over the project index
+  run_shell         Execute a shell command (requires approval)
+  parse_aro         Parse ARO source and return diagnostics
+  aro_check         Run aro check on a directory
+  aro_run           Run aro run on a directory
+  aro_test          Run aro test on a directory
+  read_proposal     Read an ARO proposal by number
+  create_plugin     Scaffold a plugin directory
+  write_openapi     Write or update an openapi.yaml file
+  write_plugin_yaml Write a plugin.yaml manifest
+  explain_error     Explain an ARO diagnostic in plain English
+  format_aro        Format ARO source to canonical style
+  list_actions      List available ARO actions and their verbs</code></pre>
+<p>Eighteen tools. Some read. Some write. Some run code. Together they
+turn the model from something that generates text into something that
+modifies your project. That distinction matters more than anything else
+in this book.</p>
+<p>A model without tools can suggest a fix. A model with tools can
+<em>apply</em> the fix, check that it compiles, and tell you whether it
+worked. The difference is the difference between a code review and a
+pull request.</p>
+<h2 id="how-the-loop-works">7.2 How the Loop Works</h2>
+<p>Every conversation with <code>aro ask</code> follows the same loop.
+It is simple enough to fit in a paragraph.</p>
+<p>You send a message. The model reads it and decides what to do. If the
+answer is obvious, it replies with text. If the answer requires
+information the model does not have, it generates a <em>tool call</em> —
+a structured request to one of the eighteen tools. <code>aro ask</code>
+executes the tool call, captures the result, and feeds it back to the
+model. The model reads the result and decides again: reply, or call
+another tool. This continues until the model has enough information to
+answer, or until it has made the changes you asked for.</p>
+<p>A typical exchange looks like this under the hood:</p>
+<pre><code>User:     &quot;fix the parser error in users.aro&quot;
+Model:    [tool_call: aro_check {&quot;path&quot;: &quot;.&quot;}]
+Runtime:  &quot;users.aro:4: error: unknown verb &#39;Retreive&#39; — did you mean &#39;Retrieve&#39;?&quot;
+Model:    [tool_call: read_file {&quot;path&quot;: &quot;users.aro&quot;}]
+Runtime:  (file contents)
+Model:    [tool_call: edit_file {&quot;path&quot;: &quot;users.aro&quot;, &quot;old&quot;: &quot;Retreive&quot;, &quot;new&quot;: &quot;Retrieve&quot;}]
+Runtime:  &quot;ok&quot;
+Model:    [tool_call: aro_check {&quot;path&quot;: &quot;.&quot;}]
+Runtime:  &quot;all checks passed&quot;
+Model:    &quot;Fixed the typo in users.aro line 4: &#39;Retreive&#39; → &#39;Retrieve&#39;. Check passes now.&quot;</code></pre>
+<p>Five tool calls. No human intervention between them. The model read
+the error, found the file, fixed the typo, and verified the fix. This is
+the tool-call loop at its most routine, and it is the kind of work that
+<code>aro ask</code> does dozens of times a day if you let it.</p>
+<h2 id="the-shape-of-a-tool-call">7.3 The Shape of a Tool Call</h2>
+<p>A tool call is not a free-form shell command. It is a structured JSON
+object with a name and parameters. The model cannot call a tool that
+does not exist. It cannot pass parameters the tool does not accept. The
+schema of every tool is baked into the system prompt, and the fine-tune
+was trained to produce calls that match the schema.</p>
+<p>This is a deliberate constraint. An unconstrained model that could
+run arbitrary code would be powerful and terrifying. A constrained model
+that can only call eighteen well-defined tools is powerful and
+predictable. You know, at any point, exactly what the model
+<em>could</em> do, because the list of tools is right there in
+<code>/tools</code>.</p>
+<p>The constraint also means the model cannot surprise you with tools
+you did not know about — unless you bridge an MCP server that adds new
+ones, in which case you chose to add them, and <code>/tools</code> will
+show you what they are.</p>
+<h2 id="approval-and-trust">7.4 Approval and Trust</h2>
+<p>Not all tools are created equal. <code>read_file</code> is harmless —
+it reads a file and returns its contents. <code>run_shell</code> is not
+harmless — it executes an arbitrary shell command. <code>aro ask</code>
+knows the difference.</p>
+<p>Tools are classified into three tiers:</p>
+<ul>
+<li><strong>Read-only tools</strong> (<code>read_file</code>,
+<code>list_dir</code>, <code>grep</code>, <code>search_project</code>,
+<code>read_proposal</code>, <code>list_actions</code>,
+<code>explain_error</code>): these run without asking. The model can
+read your project freely. This is by design — a model that has to ask
+permission to read a file is too slow to be useful.</li>
+<li><strong>Write tools</strong> (<code>write_file</code>,
+<code>edit_file</code>, <code>write_openapi</code>,
+<code>write_plugin_yaml</code>, <code>create_plugin</code>,
+<code>format_aro</code>): these run without asking in REPL mode, but
+every change is printed to the terminal so you can see what happened. In
+one-shot mode with <code>--yes</code>, they run silently. Without
+<code>--yes</code>, one-shot mode prints the change and asks for
+confirmation.</li>
+<li><strong>Execution tools</strong> (<code>run_shell</code>,
+<code>aro_run</code>, <code>aro_check</code>, <code>aro_test</code>,
+<code>parse_aro</code>): <code>aro_check</code>, <code>aro_test</code>,
+and <code>parse_aro</code> are considered safe and run without asking,
+because they do not modify anything. <code>aro_run</code> and
+<code>run_shell</code> always ask for approval unless <code>--yes</code>
+is set.</li>
+</ul>
+<p>The dividing line is simple: tools that cannot change your project or
+execute arbitrary code run freely. Tools that can change files print
+what they did. Tools that can run your code ask first. If you want to
+move the line — make everything auto-approved — use <code>--yes</code>.
+If you want to move it the other way, there is no flag for that, because
+the default is already cautious.</p>
+<h2 id="chaining-read-edit-check">7.5 Chaining: Read, Edit, Check</h2>
+<p>The most common tool-call pattern is the three-step chain: read a
+file, edit it, and check the result. You will see this pattern over and
+over, and it is worth understanding why it works so well.</p>
+<p>The model does not edit files blind. It reads first. This matters
+because the edit tool uses exact string matching — the model provides
+the old text and the new text, and the tool replaces one with the other.
+If the model has not read the file, it cannot know what the old text
+looks like, and the edit will fail. The fine-tune learned this the hard
+way during training, and now it almost always reads before editing.</p>
+<p>After the edit, the model calls <code>aro_check</code> or
+<code>parse_aro</code> to verify that the change did not break anything.
+If the check fails, it reads the new diagnostic, edits again, and checks
+again. This loop — edit, check, edit, check — runs until the check
+passes or the model decides it cannot fix the problem and asks you for
+help.</p>
+<p>The pattern generalises. For creating a new file:</p>
+<pre><code>write_openapi → write_file (main.aro) → aro_check → edit_file (fix) → aro_check</code></pre>
+<p>For adding a feature to an existing application:</p>
+<pre><code>list_dir → read_file (openapi.yaml) → read_file (main.aro) → write_file (new.aro) → aro_check</code></pre>
+<p>For debugging a runtime error:</p>
+<pre><code>aro_run → read error → read_file → edit_file → aro_run → confirm fix</code></pre>
+<p>Every chain follows the same rhythm: gather information, make a
+change, verify the change. If you watch the tool calls scroll by in the
+terminal, you will start to see the rhythm, and you will start to trust
+it — or to interrupt it when something looks wrong.</p>
+<h2 id="creating-a-project-from-scratch">7.6 Creating a Project from
+Scratch</h2>
+<p>Here is what happens when you ask <code>aro ask</code> to build
+something from nothing. Say you type:</p>
+<pre><code>&quot;create an ARO application called HealthCheck with a single GET /health endpoint that returns OK&quot;</code></pre>
+<p>The model will typically make these calls, in this order:</p>
+<ol type="1">
+<li><code>list_dir</code> on the current directory to see what
+exists.</li>
+<li><code>write_openapi</code> to create
+<code>HealthCheck/openapi.yaml</code> with a single path.</li>
+<li><code>write_file</code> to create <code>HealthCheck/main.aro</code>
+with <code>Application-Start</code> and the <code>healthCheck</code>
+feature set.</li>
+<li><code>aro_check</code> on <code>HealthCheck/</code> to verify
+everything parses.</li>
+<li>If the check fails, <code>read_file</code> and
+<code>edit_file</code> to fix whatever it got wrong.</li>
+<li>A final <code>aro_check</code> to confirm.</li>
+</ol>
+<p>The result is a directory you can immediately run with
+<code>aro run ./HealthCheck</code>. Two files, both correct, both
+checked. The model did not guess at the directory structure or the
+OpenAPI format — it used dedicated tools that know the conventions.</p>
+<h2 id="the-limits-of-tools">7.7 The Limits of Tools</h2>
+<p>Tools make the model useful. They do not make the model
+infallible.</p>
+<p>The model can call the wrong tool. It occasionally calls
+<code>write_file</code> when it should call <code>edit_file</code>,
+overwriting content it meant to preserve. It sometimes runs
+<code>aro_check</code> on the wrong directory. It sometimes calls
+<code>run_shell</code> with a command that makes sense on Linux but not
+on macOS, or the other way around.</p>
+<p>The model can also get stuck in a loop. If a check keeps failing and
+the model keeps making the same edit, it will cycle until the tool-call
+limit is reached (25 rounds by default). When this happens, the model
+gives up and reports what it tried. This is the right behaviour — an
+infinite loop of bad edits would be worse — but it means you sometimes
+have to step in and fix the problem yourself.</p>
+<p>The defence against both failure modes is the same: watch the tool
+calls. They are printed to the terminal as they happen. If you see the
+model heading in the wrong direction, press Ctrl+C. The conversation is
+saved, and you can steer it back on course with your next message.</p>
+<h2 id="tips-for-better-tool-usage">7.8 Tips for Better Tool Usage</h2>
+<p>A few patterns reliably get better results from the tool-call
+loop.</p>
+<p><strong>Be specific about paths.</strong> “Fix the error in
+users.aro” is better than “fix the error”. The model will find the file
+either way, but the specific prompt saves a <code>list_dir</code> and a
+<code>grep</code>, which saves time and context window.</p>
+<p><strong>Ask for verification.</strong> “Write the feature set and run
+aro check” is better than “write the feature set”. The model often
+checks on its own, but explicitly asking makes it reliable.</p>
+<p><strong>One task per conversation.</strong> The model is better at
+tool-calling when the goal is clear. “Add a deleteUser endpoint” is one
+task. “Add deleteUser, refactor the repository pattern, and update the
+README” is three tasks, and the model will try to do all three in one
+chain of tool calls, which gets messy. Do them one at a time. Use
+<code>/clean</code> between them.</p>
+<p><strong>Let it fail.</strong> If the first edit does not fix the
+check, do not interrupt. Let the model see the failure and try again.
+The second attempt is usually better than the first, because the model
+now has the diagnostic <em>and</em> the knowledge of what did not work.
+Interrupting after the first failure robs it of that learning.</p>
+<p><strong>Read the diffs.</strong> Every <code>edit_file</code> call
+prints the change. Read it. Not because the model is untrustworthy, but
+because reading the diff is faster than reading the whole file, and it
+keeps you in the loop. The model is a colleague, not a contractor. You
+are still responsible for the code.</p>
+<h1 id="chapter-8-tips-and-tricks">Chapter 8: Tips and Tricks</h1>
+<blockquote>
+<p>“Mastery is not knowing the tool’s features. It is knowing which
+features to use when.”</p>
+</blockquote>
+<hr />
+<h2 id="writing-good-prompts">8.1 Writing Good Prompts</h2>
+<p>The fine-tune responds to shape. It was trained on thousands of
+instruction/response pairs, and every instruction had the same
+structure: a verb, a subject, and constraints. The closer your prompt
+matches that structure, the better the response.</p>
+<p>Good prompts:</p>
+<ul>
+<li>“Write a feature set for <code>createOrder</code> that validates the
+total is positive and emits an <code>OrderCreated</code> event.”</li>
+<li>“Add a <code>deleteUser</code> endpoint to the OpenAPI spec and
+write the matching feature set.”</li>
+<li>“Explain why this feature set uses <code>Publish as</code> instead
+of returning the value directly.”</li>
+</ul>
+<p>Bad prompts:</p>
+<ul>
+<li>“I’m trying to build a thing where users can create orders and I
+want to make sure the order total is a positive number and also after
+the order is created I want to send out some kind of event so other
+parts of the system know about it…”</li>
+<li>“Can you help me?”</li>
+<li>“Write me a complete e-commerce application.”</li>
+</ul>
+<p>The pattern is: tell the model what to do, tell it what constraints
+matter, and stop. Do not explain your reasoning. Do not provide
+background the model did not ask for. Do not hedge. The model is not a
+person who needs to be convinced. It is a tool that needs a clear
+instruction.</p>
+<p>There is one exception. When you are asking the model to make a
+judgement call — “should this be one feature set or two?” — a sentence
+of context helps. “This endpoint returns paginated results and also sets
+a cache header; should that be one feature set or two?” The context
+narrows the judgement space.</p>
+<h2 id="common-mistakes-the-model-makes">8.2 Common Mistakes the Model
+Makes</h2>
+<p>The fine-tune is good. It is not perfect. Here are the mistakes you
+will see most often, and what to do about them.</p>
+<p><strong>Inventing verbs.</strong> The model occasionally generates a
+verb that does not exist in ARO. “Process the order” sounds natural, but
+<code>Process</code> is not a registered action verb. When this happens,
+<code>aro check</code> will catch it. The fix is usually obvious:
+<code>Process</code> should be <code>Compute</code> or
+<code>Transform</code>. You can tell the model “Process is not a valid
+verb, use Compute instead” and it will correct itself.</p>
+<p><strong>Wrong prepositions.</strong> Each action verb takes specific
+prepositions. <code>Retrieve ... from</code> is correct.
+<code>Retrieve ... with</code> is not. The fine-tune mostly gets this
+right, but under long contexts it drifts. Run <code>aro check</code>
+early and often — it validates prepositions.</p>
+<p><strong>Forgetting angle brackets.</strong> ARO uses
+<code>&lt;angle-brackets&gt;</code> for all identifiers in statements.
+The model sometimes drops them, especially when it is explaining code in
+prose and then switches to writing code. A missing bracket is a parse
+error. <code>aro check</code> catches it. <code>/fix</code> fixes
+it.</p>
+<p><strong>Overcomplicating.</strong> ARO’s error philosophy is “code is
+the error message”. The happy case is all you write. The model sometimes
+forgets this and adds <code>When</code> guards for error conditions that
+the runtime handles automatically. If you see a feature set that is
+twice as long as you expected, look for defensive guards and remove
+them. Or tell the model: “remove the error handling, ARO handles that at
+runtime.”</p>
+<p><strong>Confusing feature set triggers.</strong> The model sometimes
+writes a feature set named <code>createUser</code> and assigns it to a
+business activity that does not match the OpenAPI operationId. The
+feature set will parse but will never be triggered. Check that the name
+in parentheses matches the operationId in <code>openapi.yaml</code>.</p>
+<h2 id="using-fix-vs.-manual-editing">8.3 Using /fix vs. Manual
+Editing</h2>
+<p><code>/fix</code> is the fastest path from “broken” to “working”. It
+runs the check, reads the diagnostics, and applies edits. For simple
+errors — typos, missing brackets, wrong prepositions — it is nearly
+always right on the first try.</p>
+<p>But <code>/fix</code> is not always the right choice. Here is the
+dividing line.</p>
+<p>Use <code>/fix</code> when: - The error is syntactic. A misspelled
+verb, a missing period, a malformed feature set header. - The error is
+local. One file, one line, one obvious fix. - You want speed.
+<code>/fix</code> is faster than opening the file, finding the line, and
+editing it yourself.</p>
+<p>Edit manually when: - The error is semantic. The code parses but does
+the wrong thing. - The fix requires understanding context that the model
+does not have. A business rule that is not written down anywhere, a
+naming convention your team uses, a dependency between files. - You are
+learning. Reading the error and fixing it yourself teaches you ARO.
+Letting the model fix it teaches you nothing.</p>
+<p>A good rhythm is: let <code>/fix</code> handle the mechanical errors,
+and handle the design errors yourself. Over time, the ratio shifts — you
+make fewer mechanical errors, and the model handles more of the design,
+because you have trained yourself to write better prompts and the model
+has been fine-tuned to understand your patterns.</p>
+<h2 id="building-incrementally">8.4 Building Incrementally</h2>
+<p>The best way to build an ARO application with <code>aro ask</code> is
+one feature set at a time. Not because the model cannot write ten
+feature sets in one go — it can — but because you cannot review ten
+feature sets in one go. Not well.</p>
+<p>The workflow:</p>
+<ol type="1">
+<li>Write or generate <code>openapi.yaml</code> with
+<code>/openapi</code>.</li>
+<li>Ask the model to write the <code>Application-Start</code> feature
+set. Review it. Run <code>aro check</code>.</li>
+<li>Pick the next endpoint. Ask the model to write the feature set.
+Review it. Run <code>aro check</code>.</li>
+<li>Repeat until the application is complete.</li>
+<li>Run <code>aro run</code> and test it.</li>
+</ol>
+<p>Each step is a single conversation turn. Each step produces a single
+file. Each step ends with a check that passes. At no point do you have a
+project with five unreviewed files and a check that fails for reasons
+you cannot untangle.</p>
+<p>The incremental approach also means you can <code>/clean</code>
+between steps without losing anything. The code is committed. The
+context is disposable.</p>
+<h2 id="using-.context-effectively">8.5 Using .context Effectively</h2>
+<p>The <code>.context</code> file is your conversation state. It grows
+with every turn, and as it grows, the model’s effective context window
+shrinks. On the default 8192-token window, a long conversation can push
+the system prompt and the current question off the edge, and the model
+starts giving answers that ignore the project structure it was told
+about three turns ago.</p>
+<p>The rule is: <code>/clean</code> more often than you think you
+should.</p>
+<p>Some specific signals that it is time to <code>/clean</code>:</p>
+<ul>
+<li>You have switched tasks. The context from the previous task is
+noise.</li>
+<li>The model repeats itself or gives an answer that contradicts what it
+said two turns ago.</li>
+<li>The model stops calling tools and starts guessing at file contents
+it could just read.</li>
+<li>You have been going back and forth for more than ten turns on the
+same problem.</li>
+</ul>
+<p>After <code>/clean</code>, the model starts fresh. It re-reads the
+system prompt, re-discovers the project, and gives answers that are
+based on what is actually there, not on what it remembers from an
+earlier turn. This feels wasteful. It is not. A fresh context with one
+good question produces better results than a stale context with ten
+turns of accumulated confusion.</p>
+<h2 id="combining-aro-ask-with-the-cli">8.6 Combining aro ask with the
+CLI</h2>
+<p><code>aro ask</code> is one command in the <code>aro</code>
+toolchain. It works best when you use it alongside the others, not
+instead of them.</p>
+<p><strong><code>aro check</code></strong> validates syntax without
+running anything. Use it after every edit, whether the edit came from
+you or from the model. The model calls it internally via the
+<code>aro_check</code> tool, but running it yourself in another terminal
+gives you a second pair of eyes.</p>
+<p><strong><code>aro run</code></strong> executes the application. The
+model can call this via <code>aro_run</code>, but you should run it
+yourself when you want to see the actual HTTP responses, the actual log
+output, the actual behaviour. The model sees the stdout; you see whether
+the application does what your users need.</p>
+<p><strong><code>aro test</code></strong> runs colocated tests. If your
+project has test feature sets, run them after every change. The model
+can run them via <code>aro_test</code>, but the habit of running tests
+yourself — not just having the model run them — is what keeps you
+honest.</p>
+<p><strong><code>aro build</code></strong> compiles to a native binary.
+The model does not have a tool for this, because building is a
+deployment decision, not a development one. Build when you are ready to
+ship, not when the model tells you to.</p>
+<p>The pattern is: use <code>aro ask</code> for generation and
+debugging, use the other commands for verification and deployment. The
+model is good at writing code and finding bugs. You are good at deciding
+whether the code does the right thing.</p>
+<h2 id="performance-tips">8.7 Performance Tips</h2>
+<p>The fine-tune runs locally, and local inference has constraints that
+cloud inference does not. A few things make a noticeable difference.</p>
+<p><strong>Temperature.</strong> The default is <code>0.2</code>. Leave
+it there. Higher temperatures produce more creative prose but less
+accurate ARO. If you are asking for an explanation, <code>0.4</code> is
+fine. If you are asking for code, <code>0.2</code> or lower. The
+training data was terse and correct; the model performs best when it is
+not being asked to improvise.</p>
+<p><strong>Model selection.</strong> The default
+<code>aro-coder-4bit</code> is a 4-bit quantised 30B model. If your
+machine struggles — if tokens come out slowly, if the fan spins up — try
+a smaller variant if one is available. A slightly less capable model
+that responds in two seconds is more useful than a slightly more capable
+model that takes thirty.</p>
+<p><strong>Backend.</strong> On Apple Silicon,
+<code>mlx_lm.server</code> is faster than <code>llama-server</code> for
+the default model. On Linux with an NVIDIA GPU,
+<code>llama-server</code> with CUDA is faster. On CPU-only machines,
+both are slow, and the best optimisation is to point
+<code>ARO_LM_ENDPOINT</code> at a machine that has a GPU.</p>
+<p><strong>Context length.</strong> Keep conversations short. The
+model’s context window is 8192 tokens. A long conversation does not just
+degrade quality — it also slows inference, because every token of
+context has to be processed on every turn. <code>/clean</code> is a
+performance optimisation as much as a quality one.</p>
+<p><strong>Indexing.</strong> Run <code>/index</code> once after cloning
+a project. The retrieval index lets the model find relevant files
+without scanning the whole directory tree, which saves tool calls and
+time. A project with an index gets better answers faster than one
+without.</p>
+<h1 id="chapter-9-worked-examples">Chapter 9: Worked Examples</h1>
+<blockquote>
+<p>“Theory is what you know before you try it. Practice is what you know
+after.”</p>
+</blockquote>
+<hr />
+<h2 id="example-1-a-user-service-from-scratch">9.1 Example 1: A User
+Service from Scratch</h2>
+<p>This example builds a complete REST API for managing users — list,
+create, get, delete — using nothing but <code>aro ask</code> in a fresh
+directory.</p>
+<h3 id="the-opening-prompt">The Opening Prompt</h3>
+<pre><code>$ mkdir UserService &amp;&amp; cd UserService
+$ aro ask
+lm&gt; create an openapi.yaml for a user service with CRUD operations on /users and /users/{id}</code></pre>
+<p>The model calls <code>write_openapi</code> and produces:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">openapi</span><span class="kw">:</span><span class="at"> </span><span class="fl">3.0.3</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="fu">info</span><span class="kw">:</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">title</span><span class="kw">:</span><span class="at"> User Service</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">version</span><span class="kw">:</span><span class="at"> </span><span class="fl">1.0.0</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="fu">paths</span><span class="kw">:</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">/users</span><span class="kw">:</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">get</span><span class="kw">:</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">operationId</span><span class="kw">:</span><span class="at"> listUsers</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">summary</span><span class="kw">:</span><span class="at"> List all users</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">responses</span><span class="kw">:</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">&#39;200&#39;</span><span class="kw">:</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">description</span><span class="kw">:</span><span class="at"> OK</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">post</span><span class="kw">:</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">operationId</span><span class="kw">:</span><span class="at"> createUser</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">summary</span><span class="kw">:</span><span class="at"> Create a user</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">requestBody</span><span class="kw">:</span></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">required</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">content</span><span class="kw">:</span></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">application/json</span><span class="kw">:</span></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">schema</span><span class="kw">:</span></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a><span class="at">              </span><span class="fu">type</span><span class="kw">:</span><span class="at"> object</span></span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="at">              </span><span class="fu">properties</span><span class="kw">:</span></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="at">                </span><span class="fu">name</span><span class="kw">:</span></span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a><span class="at">                  </span><span class="fu">type</span><span class="kw">:</span><span class="at"> string</span></span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a><span class="at">                </span><span class="fu">email</span><span class="kw">:</span></span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a><span class="at">                  </span><span class="fu">type</span><span class="kw">:</span><span class="at"> string</span></span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">responses</span><span class="kw">:</span></span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">&#39;201&#39;</span><span class="kw">:</span></span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Created</span></span>
+<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">/users/{id}</span><span class="kw">:</span></span>
+<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">get</span><span class="kw">:</span></span>
+<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">operationId</span><span class="kw">:</span><span class="at"> getUser</span></span>
+<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">summary</span><span class="kw">:</span><span class="at"> Get a user by ID</span></span>
+<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">parameters</span><span class="kw">:</span></span>
+<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> id</span></span>
+<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">in</span><span class="kw">:</span><span class="at"> path</span></span>
+<span id="cb22-37"><a href="#cb22-37" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">required</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb22-38"><a href="#cb22-38" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">schema</span><span class="kw">:</span></span>
+<span id="cb22-39"><a href="#cb22-39" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">type</span><span class="kw">:</span><span class="at"> string</span></span>
+<span id="cb22-40"><a href="#cb22-40" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">responses</span><span class="kw">:</span></span>
+<span id="cb22-41"><a href="#cb22-41" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">&#39;200&#39;</span><span class="kw">:</span></span>
+<span id="cb22-42"><a href="#cb22-42" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">description</span><span class="kw">:</span><span class="at"> OK</span></span>
+<span id="cb22-43"><a href="#cb22-43" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">delete</span><span class="kw">:</span></span>
+<span id="cb22-44"><a href="#cb22-44" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">operationId</span><span class="kw">:</span><span class="at"> deleteUser</span></span>
+<span id="cb22-45"><a href="#cb22-45" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">summary</span><span class="kw">:</span><span class="at"> Delete a user</span></span>
+<span id="cb22-46"><a href="#cb22-46" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">parameters</span><span class="kw">:</span></span>
+<span id="cb22-47"><a href="#cb22-47" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> id</span></span>
+<span id="cb22-48"><a href="#cb22-48" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">in</span><span class="kw">:</span><span class="at"> path</span></span>
+<span id="cb22-49"><a href="#cb22-49" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">required</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb22-50"><a href="#cb22-50" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">schema</span><span class="kw">:</span></span>
+<span id="cb22-51"><a href="#cb22-51" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">type</span><span class="kw">:</span><span class="at"> string</span></span>
+<span id="cb22-52"><a href="#cb22-52" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">responses</span><span class="kw">:</span></span>
+<span id="cb22-53"><a href="#cb22-53" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">&#39;204&#39;</span><span class="kw">:</span></span>
+<span id="cb22-54"><a href="#cb22-54" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Deleted</span></span></code></pre></div>
+<p>The model then says it has written <code>openapi.yaml</code>. The
+tool call log shows a single <code>write_openapi</code> call. No edits
+needed.</p>
+<h3 id="the-application-start">The Application Start</h3>
+<pre><code>lm&gt; write main.aro with Application-Start that starts the HTTP server</code></pre>
+<p>The model calls <code>write_file</code> with path
+<code>main.aro</code>:</p>
+<pre class="aro"><code>(Application-Start: User Service) {
+    Log &quot;User Service starting...&quot; to the &lt;console&gt;.
+    Start the &lt;http-server&gt; with &lt;contract&gt;.
+    Keepalive the &lt;application&gt; for the &lt;events&gt;.
+    Return an &lt;OK: status&gt; for the &lt;startup&gt;.
+}</code></pre>
+<p>Then it calls <code>aro_check</code> on the directory. The check
+passes.</p>
+<h3 id="the-feature-sets">The Feature Sets</h3>
+<pre><code>lm&gt; write users.aro with feature sets for all four operations in the OpenAPI spec</code></pre>
+<p>The model calls <code>read_file</code> on <code>openapi.yaml</code>
+to refresh its memory of the operationIds, then calls
+<code>write_file</code> with path <code>users.aro</code>:</p>
+<pre class="aro"><code>(listUsers: User Service) {
+    Retrieve the &lt;users&gt; from the &lt;user-repository&gt;.
+    Return an &lt;OK: status&gt; with &lt;users&gt;.
+}
+
+(createUser: User Service) {
+    Extract the &lt;data&gt; from the &lt;request: body&gt;.
+    Create the &lt;user&gt; with &lt;data&gt;.
+    Store the &lt;user&gt; to the &lt;user-repository&gt;.
+    Emit a &lt;UserCreated: event&gt; with &lt;user&gt;.
+    Return a &lt;Created: status&gt; with &lt;user&gt;.
+}
+
+(getUser: User Service) {
+    Extract the &lt;id&gt; from the &lt;pathParameters: id&gt;.
+    Retrieve the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    Return an &lt;OK: status&gt; with &lt;user&gt;.
+}
+
+(deleteUser: User Service) {
+    Extract the &lt;id&gt; from the &lt;pathParameters: id&gt;.
+    Retrieve the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    Delete the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    Emit a &lt;UserDeleted: event&gt; with &lt;user&gt;.
+    Return a &lt;NoContent: status&gt; for the &lt;deletion&gt;.
+}</code></pre>
+<p>The model calls <code>aro_check</code>. The check passes. Four
+feature sets, four endpoints, all matching the OpenAPI contract.</p>
+<h3 id="running-it">Running It</h3>
+<pre><code>lm&gt; /quit
+$ aro run .
+User Service starting...
+HTTP server listening on 0.0.0.0:8080</code></pre>
+<p>In another terminal:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-s</span> localhost:8080/users</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="ex">[]</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-s</span> <span class="at">-X</span> POST localhost:8080/users <span class="at">-H</span> <span class="st">&#39;Content-Type: application/json&#39;</span> <span class="at">-d</span> <span class="st">&#39;{&quot;name&quot;:&quot;Ada&quot;,&quot;email&quot;:&quot;ada@example.com&quot;}&#39;</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a><span class="dt">{</span><span class="st">&quot;id&quot;</span><span class="dt">:</span><span class="st">&quot;1&quot;</span><span class="op">,</span><span class="st">&quot;name&quot;</span><span class="dt">:</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span><span class="st">&quot;email&quot;</span><span class="dt">:</span><span class="st">&quot;ada@example.com&quot;</span><span class="dt">}</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-s</span> localhost:8080/users</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="ex">[</span><span class="dt">{</span><span class="st">&quot;id&quot;</span><span class="dt">:</span><span class="st">&quot;1&quot;</span><span class="op">,</span><span class="st">&quot;name&quot;</span><span class="dt">:</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span><span class="st">&quot;email&quot;</span><span class="dt">:</span><span class="st">&quot;ada@example.com&quot;</span><span class="dt">}</span><span class="ex">]</span></span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> curl <span class="at">-s</span> localhost:8080/users/1</span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a><span class="dt">{</span><span class="st">&quot;id&quot;</span><span class="dt">:</span><span class="st">&quot;1&quot;</span><span class="op">,</span><span class="st">&quot;name&quot;</span><span class="dt">:</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span><span class="st">&quot;email&quot;</span><span class="dt">:</span><span class="st">&quot;ada@example.com&quot;</span><span class="dt">}</span></span></code></pre></div>
+<p>Three files. Two minutes. A working REST API.</p>
+<hr />
+<h2 id="example-2-a-file-watcher">9.2 Example 2: A File Watcher</h2>
+<p>This example builds an application that watches a directory for
+changes and logs them.</p>
+<h3 id="the-prompt">The Prompt</h3>
+<pre><code>$ mkdir FileWatcher &amp;&amp; cd FileWatcher
+$ aro ask &quot;create an ARO application that watches the current directory for file changes and logs each change to the console&quot;</code></pre>
+<p>This time we use one-shot mode. The model makes several tool calls in
+sequence:</p>
+<ol type="1">
+<li><code>list_dir</code> on <code>.</code> — empty directory, nothing
+to conflict with.</li>
+<li><code>write_file</code> for <code>main.aro</code>:</li>
+</ol>
+<pre class="aro"><code>(Application-Start: File Watcher) {
+    Log &quot;File watcher starting...&quot; to the &lt;console&gt;.
+    Start the &lt;file-monitor&gt; with &quot;.&quot;.
+    Keepalive the &lt;application&gt; for the &lt;events&gt;.
+    Return an &lt;OK: status&gt; for the &lt;startup&gt;.
+}
+
+(File Changed: File Event Handler) {
+    Extract the &lt;path&gt; from the &lt;event: path&gt;.
+    Extract the &lt;kind&gt; from the &lt;event: kind&gt;.
+    Compute the &lt;message&gt; from &quot;[&quot; ++ &lt;kind&gt; ++ &quot;] &quot; ++ &lt;path&gt;.
+    Log &lt;message&gt; to the &lt;console&gt;.
+    Return an &lt;OK: status&gt; for the &lt;notification&gt;.
+}</code></pre>
+<ol start="3" type="1">
+<li><code>aro_check</code> on <code>.</code> — passes.</li>
+</ol>
+<p>The model replies: “Created <code>main.aro</code> with two feature
+sets. <code>Application-Start</code> starts a file monitor on the
+current directory and keeps the application alive.
+<code>File Changed</code> handles file events by extracting the path and
+kind and logging them. Run with <code>aro run .</code>.”</p>
+<h3 id="testing-it">Testing It</h3>
+<div class="sourceCode" id="cb31"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> aro run .</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="ex">File</span> watcher starting...</span></code></pre></div>
+<p>In another terminal:</p>
+<div class="sourceCode" id="cb32"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> echo <span class="st">&quot;hello&quot;</span> <span class="op">&gt;</span> test.txt</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> echo <span class="st">&quot;world&quot;</span> <span class="op">&gt;&gt;</span> test.txt</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> rm test.txt</span></code></pre></div>
+<p>Back in the first terminal:</p>
+<pre><code>[created] ./test.txt
+[modified] ./test.txt
+[deleted] ./test.txt</code></pre>
+<p>One file. One prompt. A working file watcher.</p>
+<hr />
+<h2 id="example-3-a-plugin-from-scratch">9.3 Example 3: A Plugin from
+Scratch</h2>
+<p>This example builds a Swift plugin that provides a <code>slug</code>
+qualifier — converting a string like “Hello World” into
+“hello-world”.</p>
+<h3 id="scaffolding">Scaffolding</h3>
+<pre><code>$ cd MyApp
+$ aro ask
+lm&gt; /plugin slug-generator</code></pre>
+<p>The model calls <code>create_plugin</code> with the name
+<code>slug-generator</code>. This creates:</p>
+<pre><code>Plugins/
+└── slug-generator/
+    ├── plugin.yaml
+    └── Sources/
+        └── SlugGenerator.swift</code></pre>
+<p>The model reports the scaffold is ready.</p>
+<h3 id="defining-the-plugin">Defining the Plugin</h3>
+<pre><code>lm&gt; update the plugin.yaml to provide a slug qualifier with handle SlugGenerator, then implement it in the Swift source</code></pre>
+<p>The model calls <code>edit_file</code> on
+<code>Plugins/slug-generator/plugin.yaml</code>:</p>
+<div class="sourceCode" id="cb37"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> slug-generator</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="fu">version</span><span class="kw">:</span><span class="at"> </span><span class="fl">1.0.0</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="fu">handle</span><span class="kw">:</span><span class="at"> SlugGenerator</span></span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="fu">provides</span><span class="kw">:</span></span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> swift-plugin</span></span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">path</span><span class="kw">:</span><span class="at"> Sources/</span></span></code></pre></div>
+<p>Then it calls <code>read_file</code> on
+<code>Sources/SlugGenerator.swift</code> to see the stub, and
+<code>edit_file</code> to replace it:</p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode swift"><code class="sourceCode swift"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">Foundation</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a><span class="at">@_cdecl</span><span class="op">(</span><span class="st">&quot;aro_plugin_info&quot;</span><span class="op">)</span></span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">func</span> <span class="fu">pluginInfo</span><span class="op">()</span> -&gt; <span class="fu">UnsafeMutablePointer</span><span class="op">&lt;</span><span class="dt">CChar</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">info</span> <span class="op">=</span> <span class="st">&quot;&quot;&quot;</span></span>
+<span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a><span class="st">    {</span></span>
+<span id="cb38-7"><a href="#cb38-7" aria-hidden="true" tabindex="-1"></a><span class="st">        &quot;name&quot;: &quot;slug-generator&quot;,</span></span>
+<span id="cb38-8"><a href="#cb38-8" aria-hidden="true" tabindex="-1"></a><span class="st">        &quot;version&quot;: &quot;1.0.0&quot;,</span></span>
+<span id="cb38-9"><a href="#cb38-9" aria-hidden="true" tabindex="-1"></a><span class="st">        &quot;qualifiers&quot;: [&quot;slug&quot;]</span></span>
+<span id="cb38-10"><a href="#cb38-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb38-11"><a href="#cb38-11" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;&quot;&quot;</span></span>
+<span id="cb38-12"><a href="#cb38-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> strdup<span class="op">(</span>info<span class="op">)</span></span>
+<span id="cb38-13"><a href="#cb38-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb38-14"><a href="#cb38-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-15"><a href="#cb38-15" aria-hidden="true" tabindex="-1"></a><span class="at">@_cdecl</span><span class="op">(</span><span class="st">&quot;aro_plugin_qualifier&quot;</span><span class="op">)</span></span>
+<span id="cb38-16"><a href="#cb38-16" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">func</span> <span class="fu">pluginQualifier</span><span class="op">(</span></span>
+<span id="cb38-17"><a href="#cb38-17" aria-hidden="true" tabindex="-1"></a>    <span class="va">_</span> <span class="va">qualifier</span><span class="op">:</span> <span class="dt">UnsafePointer</span>&lt;<span class="va">CChar</span>&gt;<span class="op">,</span></span>
+<span id="cb38-18"><a href="#cb38-18" aria-hidden="true" tabindex="-1"></a>    <span class="va">_</span> <span class="va">inputJSON</span><span class="op">:</span> <span class="dt">UnsafePointer</span>&lt;<span class="va">CChar</span>&gt;</span>
+<span id="cb38-19"><a href="#cb38-19" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> -&gt; <span class="fu">UnsafeMutablePointer</span><span class="op">&lt;</span><span class="dt">CChar</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb38-20"><a href="#cb38-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">qual</span> <span class="op">=</span> String<span class="op">(</span>cString<span class="op">:</span> qualifier<span class="op">)</span></span>
+<span id="cb38-21"><a href="#cb38-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">input</span> <span class="op">=</span> String<span class="op">(</span>cString<span class="op">:</span> inputJSON<span class="op">)</span></span>
+<span id="cb38-22"><a href="#cb38-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb38-23"><a href="#cb38-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">guard</span> qual <span class="op">==</span> <span class="st">&quot;slug&quot;</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb38-24"><a href="#cb38-24" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> strdup<span class="op">(</span><span class="st">&quot;{</span><span class="sc">\&quot;</span><span class="st">error</span><span class="sc">\&quot;</span><span class="st">: </span><span class="sc">\&quot;</span><span class="st">unknown qualifier</span><span class="sc">\&quot;</span><span class="st">}&quot;</span><span class="op">)</span></span>
+<span id="cb38-25"><a href="#cb38-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb38-26"><a href="#cb38-26" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb38-27"><a href="#cb38-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Parse the input JSON to extract the value</span></span>
+<span id="cb38-28"><a href="#cb38-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">value</span> <span class="op">=</span> input</span>
+<span id="cb38-29"><a href="#cb38-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>replacingOccurrences<span class="op">(</span>of<span class="op">:</span> <span class="st">&quot;{</span><span class="sc">\&quot;</span><span class="st">value</span><span class="sc">\&quot;</span><span class="st">:</span><span class="sc">\&quot;</span><span class="st">&quot;</span><span class="op">,</span> with<span class="op">:</span> <span class="st">&quot;&quot;</span><span class="op">)</span></span>
+<span id="cb38-30"><a href="#cb38-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>replacingOccurrences<span class="op">(</span>of<span class="op">:</span> <span class="st">&quot;</span><span class="sc">\&quot;</span><span class="st">}&quot;</span><span class="op">,</span> with<span class="op">:</span> <span class="st">&quot;&quot;</span><span class="op">)</span></span>
+<span id="cb38-31"><a href="#cb38-31" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb38-32"><a href="#cb38-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">slug</span> <span class="op">=</span> value</span>
+<span id="cb38-33"><a href="#cb38-33" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>lowercased<span class="op">()</span></span>
+<span id="cb38-34"><a href="#cb38-34" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>replacingOccurrences<span class="op">(</span>of<span class="op">:</span> <span class="st">&quot; &quot;</span><span class="op">,</span> with<span class="op">:</span> <span class="st">&quot;-&quot;</span><span class="op">)</span></span>
+<span id="cb38-35"><a href="#cb38-35" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>filter <span class="op">{</span> $<span class="fl">0.</span>isLetter <span class="op">||</span> $<span class="fl">0.</span>isNumber <span class="op">||</span> $<span class="dv">0</span> <span class="op">==</span> <span class="st">&quot;-&quot;</span> <span class="op">}</span></span>
+<span id="cb38-36"><a href="#cb38-36" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb38-37"><a href="#cb38-37" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> strdup<span class="op">(</span><span class="st">&quot;{</span><span class="sc">\&quot;</span><span class="st">value</span><span class="sc">\&quot;</span><span class="st">: </span><span class="sc">\&quot;</span><span class="er">\(</span><span class="st">slug)</span><span class="sc">\&quot;</span><span class="st">}&quot;</span><span class="op">)</span></span>
+<span id="cb38-38"><a href="#cb38-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb38-39"><a href="#cb38-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-40"><a href="#cb38-40" aria-hidden="true" tabindex="-1"></a><span class="at">@_cdecl</span><span class="op">(</span><span class="st">&quot;aro_plugin_execute&quot;</span><span class="op">)</span></span>
+<span id="cb38-41"><a href="#cb38-41" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">func</span> <span class="fu">pluginExecute</span><span class="op">(</span></span>
+<span id="cb38-42"><a href="#cb38-42" aria-hidden="true" tabindex="-1"></a>    <span class="va">_</span> <span class="va">action</span><span class="op">:</span> <span class="dt">UnsafePointer</span>&lt;<span class="va">CChar</span>&gt;<span class="op">,</span></span>
+<span id="cb38-43"><a href="#cb38-43" aria-hidden="true" tabindex="-1"></a>    <span class="va">_</span> <span class="va">inputJSON</span><span class="op">:</span> <span class="dt">UnsafePointer</span>&lt;<span class="va">CChar</span>&gt;</span>
+<span id="cb38-44"><a href="#cb38-44" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> -&gt; <span class="fu">UnsafeMutablePointer</span><span class="op">&lt;</span><span class="dt">CChar</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb38-45"><a href="#cb38-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> strdup<span class="op">(</span><span class="st">&quot;{</span><span class="sc">\&quot;</span><span class="st">error</span><span class="sc">\&quot;</span><span class="st">: </span><span class="sc">\&quot;</span><span class="st">no actions provided</span><span class="sc">\&quot;</span><span class="st">}&quot;</span><span class="op">)</span></span>
+<span id="cb38-46"><a href="#cb38-46" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb38-47"><a href="#cb38-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb38-48"><a href="#cb38-48" aria-hidden="true" tabindex="-1"></a><span class="at">@_cdecl</span><span class="op">(</span><span class="st">&quot;aro_plugin_free&quot;</span><span class="op">)</span></span>
+<span id="cb38-49"><a href="#cb38-49" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">func</span> <span class="fu">pluginFree</span><span class="op">(</span><span class="va">_</span> <span class="va">ptr</span><span class="op">:</span> <span class="dt">UnsafeMutablePointer</span>&lt;<span class="va">CChar</span>&gt;<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb38-50"><a href="#cb38-50" aria-hidden="true" tabindex="-1"></a>    free<span class="op">(</span>ptr<span class="op">)</span></span>
+<span id="cb38-51"><a href="#cb38-51" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The model calls <code>aro_check</code> on the project root.
+Passes.</p>
+<h3 id="using-the-plugin">Using the Plugin</h3>
+<pre><code>lm&gt; write a feature set that uses the slug qualifier on a title extracted from the request body</code></pre>
+<p>The model calls <code>write_file</code> to create
+<code>slugify.aro</code>:</p>
+<pre class="aro"><code>(createPost: Blog API) {
+    Extract the &lt;title&gt; from the &lt;request: body&gt;.
+    Compute the &lt;slug: SlugGenerator.slug&gt; from the &lt;title&gt;.
+    Compute the &lt;post&gt; from &lt;title&gt; and &lt;slug&gt;.
+    Store the &lt;post&gt; to the &lt;post-repository&gt;.
+    Return a &lt;Created: status&gt; with &lt;post&gt;.
+}</code></pre>
+<p>The model calls <code>aro_check</code>. Passes. The qualifier is
+referenced as <code>SlugGenerator.slug</code> — the handle from
+<code>plugin.yaml</code> dot the qualifier name from
+<code>aro_plugin_info</code>.</p>
+<h3 id="the-full-picture">The Full Picture</h3>
+<p>Three prompts. A plugin directory with a manifest and source. A
+feature set that uses the plugin’s qualifier. Everything checked,
+everything parseable, everything following the conventions documented in
+the proposals.</p>
+<p>The model did not memorise the C ABI for ARO plugins. It was trained
+on the proposals and the examples in the <code>Examples/</code>
+directory, and it applied that knowledge through its tools. The
+<code>create_plugin</code> tool gave it the scaffold. The
+<code>read_file</code> tool let it see the stub. The
+<code>edit_file</code> tool let it fill in the implementation. The
+<code>aro_check</code> tool confirmed it worked.</p>
+<p>That is the tool-call loop doing what it was designed to do: turning
+a description of what you want into a project that works, one verified
+step at a time.</p>
+<hr />
+<h2 id="what-the-examples-show">9.4 What the Examples Show</h2>
+<p>All three examples follow the same arc. You describe what you want.
+The model reads the project, writes files, and checks its work. You
+review the result and run it. The conversation is short — three to five
+turns — because the model has tools that let it act instead of
+explain.</p>
+<p>The examples also show what the model does <em>not</em> do. It does
+not write tests unless you ask. It does not set up deployment. It does
+not make architectural decisions about things you did not mention. It
+stays in its lane: ARO code, ARO tooling, ARO conventions. Everything
+else is yours.</p>
+<p>That division of labour is the point. The model handles the syntax,
+the boilerplate, the mechanical correctness. You handle the design, the
+naming, the business logic that only you know. Between the two of you, a
+working application emerges faster than either of you could produce
+alone.</p>
+</body>
+</html>
