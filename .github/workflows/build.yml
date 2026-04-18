@@ -734,13 +734,23 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Clean plugin build directories
+      - name: Clean and compile Swift plugins
         run: |
-          # Remove any cached plugin builds from previous runs with different Swift versions
           find Examples -name ".build" -type d -path "*/Plugins/*" -exec rm -rf {} + 2>/dev/null || true
           find Examples -name ".build" -type d -path "*/plugins/*" -exec rm -rf {} + 2>/dev/null || true
           find Examples -name ".build-aro" -type d -exec rm -rf {} + 2>/dev/null || true
-          echo "Plugin build directories cleaned"
+          for plugin_dir in \
+            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
+            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
+            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/ExternalService/plugins/CounterPlugin \
+            Examples/SQLiteExample/plugins/SQLitePlugin \
+            Examples/ZipService/plugins/ZipPlugin; do
+            if [ -f "$plugin_dir/Package.swift" ]; then
+              echo "=== Building $plugin_dir ==="
+              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
+            fi
+          done
 
       - name: Run integration tests
         run: |
@@ -976,6 +986,24 @@ jobs:
           echo "=== Checking for binary ==="
           ls -la Examples/HelloWorld/HelloWorld 2>/dev/null || echo "Binary not found"
           ls -la Examples/HelloWorld/.build/ 2>/dev/null || echo "No .build directory"
+
+      - name: Compile Swift plugins
+        run: |
+          # aro compiles Swift plugins on demand, but on CI the first-time
+          # SwiftSyntax build (~280 modules) takes 4-5 min per plugin.
+          # Compile them upfront so aro run/build finds cached .dylibs.
+          for plugin_dir in \
+            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
+            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
+            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/ExternalService/plugins/CounterPlugin \
+            Examples/SQLiteExample/plugins/SQLitePlugin \
+            Examples/ZipService/plugins/ZipPlugin; do
+            if [ -f "$plugin_dir/Package.swift" ]; then
+              echo "=== Building $plugin_dir ==="
+              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
+            fi
+          done
 
       - name: Run integration tests
         run: |
