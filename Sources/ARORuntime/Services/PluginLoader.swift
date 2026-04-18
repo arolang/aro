@@ -1786,10 +1786,37 @@ public final class PluginLoader: @unchecked Sendable {
     private func compilePackagePlugin(source: URL, output: URL) throws {
         let pluginName = source.lastPathComponent
 
-        // Use a dedicated scratch path inside the plugin dir so that builds from
-        // different callers (interpreter vs aro-build) don't clash. On case-insensitive
-        // mounts the module cache can contain entries from both path casings; using a
-        // fresh scratch path avoids those conflicts.
+        // Check if the library is already built in the standard .build/ directory
+        // (e.g. from a prior `swift build` or `aro run`). Reuse it to avoid
+        // recompiling SwiftSyntax which takes several minutes.
+        #if os(Windows)
+        let ext = "dll"
+        #elseif os(Linux)
+        let ext = "so"
+        #else
+        let ext = "dylib"
+        #endif
+        if let existingLib = findBuiltLibrary(in: source.appendingPathComponent(".build"), name: pluginName, extension: ext) {
+            if FileManager.default.fileExists(atPath: output.path) {
+                try FileManager.default.removeItem(at: output)
+            }
+            try FileManager.default.copyItem(at: existingLib, to: output)
+            // Copy dependency libraries too
+            let buildDir = existingLib.deletingLastPathComponent()
+            let outputDir = output.deletingLastPathComponent()
+            if let siblings = try? FileManager.default.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
+                for sibling in siblings where sibling.pathExtension == ext && sibling != existingLib {
+                    let dest = outputDir.appendingPathComponent(sibling.lastPathComponent)
+                    if !FileManager.default.fileExists(atPath: dest.path) {
+                        try? FileManager.default.copyItem(at: sibling, to: dest)
+                    }
+                }
+            }
+            return
+        }
+
+        // Fall back to building with a dedicated scratch path to avoid module-cache
+        // conflicts on case-insensitive filesystem mounts (Docker virtiofs).
         let scratchPath = source.appendingPathComponent(".build-aro")
 
         // Build the package using swift build
