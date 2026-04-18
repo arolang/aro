@@ -1,5 +1,7 @@
 # Appendix A: Command Quick Reference
 
+All commands work with both `:` and `/` prefix (e.g., `:help` or `/help`).
+
 ## Meta-Commands
 
 | Command | Aliases | Description |
@@ -23,9 +25,10 @@
 | `:services` | `:svc` | List active services |
 | `:service start <type>` | | Start a service |
 | `:service stop <name>` | | Stop a service |
-| `:plugins` | | List loaded plugins |
-| `:plugin load <path>` | | Load a plugin |
-| `:plugin reload <name>` | | Reload a plugin |
+| `:plugin add <git-url>` | | Install and load a plugin from Git |
+| `:plugin add <url> --ref <ref>` | | Install specific version |
+| `:plugin list` | `:plugins` | List loaded plugins |
+| `:plugin remove <name>` | | Unload a plugin |
 | `:quit` | `:q`, `:exit` | Exit the REPL |
 
 ## Keyboard Shortcuts

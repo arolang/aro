@@ -803,6 +803,21 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         return true
     }
 
+    /// Load a single plugin from a directory that contains a `plugin.yaml`.
+    ///
+    /// This is the public entry point used by the REPL's `:plugin add` command
+    /// to hot-load a newly installed plugin into a running session.
+    ///
+    /// - Parameter directory: Path to the plugin directory (must contain `plugin.yaml`)
+    /// - Throws: If the manifest is missing or the plugin fails to load
+    public func loadPluginFromDirectory(_ directory: URL) throws {
+        let manifestPath = directory.appendingPathComponent("plugin.yaml")
+        guard FileManager.default.fileExists(atPath: manifestPath.path) else {
+            throw UnifiedPluginError.notFound(directory.lastPathComponent)
+        }
+        try loadPlugin(at: directory, manifestPath: manifestPath)
+    }
+
     /// Reload a single plugin: unload the current version then load the plugin
     /// fresh from its source directory on disk.
     ///
@@ -986,18 +1001,18 @@ private func semverSatisfies(version: String, constraint: String) -> Bool {
 
 /// Simplified manifest for internal use
 public struct UnifiedPluginManifest: Codable, Sendable {
-    let name: String
-    let version: String
-    let description: String?
-    let author: String?
-    let license: String?
+    public let name: String
+    public let version: String
+    public let description: String?
+    public let author: String?
+    public let license: String?
     let aroVersion: String?
     let source: UnifiedSourceInfo?
-    let provides: [UnifiedProvideEntry]
+    public let provides: [UnifiedProvideEntry]
     let dependencies: [String: UnifiedDependencySpec]?
 
     /// Root-level namespace handle (PascalCase, e.g. `Markdown`, `Hash`, `Collections`).
-    let handle: String?
+    public let handle: String?
 
     /// Platform-specific configuration (ARO-0073)
     let platforms: UnifiedPlatformConfig?
@@ -1049,7 +1064,7 @@ public struct UnifiedProvideEntry: Codable, Sendable {
     ///
     /// When present, the loader registers lazy action stubs at startup and defers
     /// `dlopen`/`cargo build`/subprocess-launch to the first invocation.
-    let actions: [ManifestActionEntry]?
+    public let actions: [ManifestActionEntry]?
 }
 
 /// An action declared in a plugin manifest's `provides[].actions[]` array.
@@ -1058,7 +1073,7 @@ public struct UnifiedProvideEntry: Codable, Sendable {
 /// without loading the plugin library.
 public struct ManifestActionEntry: Codable, Sendable {
     /// Canonical action name (e.g. "Hash", "Greet").
-    let name: String
+    public let name: String
     /// Verbs that invoke this action (e.g. ["hash", "digest"]).
     let verbs: [String]
     /// Semantic role ("own", "request", "response", "export"). Optional.
