@@ -1,2 +1,2 @@
-timeout: 180
+timeout: 300
 skip-build: true

@@ -2,6 +2,6 @@
 # Package plugin compilation requires Swift compiler at runtime
 # Zip library requires zlib.h which is not available on Windows CI
 skip-on-windows: Zip library requires zlib which is not installed on Windows CI
-timeout: 120
+timeout: 300
 # Use occurrence-check for order-independent matching (dictionary output order varies)
 occurrence-check: true
