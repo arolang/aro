@@ -737,8 +737,27 @@ jobs:
       - name: Clean plugin build directories
         run: |
           # Remove any cached plugin builds from previous runs with different Swift versions
-          find Examples -name ".build" -type d -exec rm -rf {} + 2>/dev/null || true
+          find Examples -name ".build" -type d -path "*/Plugins/*" -exec rm -rf {} + 2>/dev/null || true
+          find Examples -name ".build" -type d -path "*/plugins/*" -exec rm -rf {} + 2>/dev/null || true
+          find Examples -name ".build-aro" -type d -exec rm -rf {} + 2>/dev/null || true
           echo "Plugin build directories cleaned"
+
+      - name: Pre-build Swift plugins
+        run: |
+          # Swift plugins using @AROExport pull in SwiftSyntax which takes
+          # several minutes to compile. Pre-build to avoid test timeouts.
+          for plugin_dir in \
+            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
+            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
+            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/ExternalService/plugins/CounterPlugin \
+            Examples/SQLiteExample/plugins/SQLitePlugin \
+            Examples/ZipService/plugins/ZipPlugin; do
+            if [ -f "$plugin_dir/Package.swift" ]; then
+              echo "=== Pre-building $plugin_dir ==="
+              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
+            fi
+          done
 
       - name: Run integration tests
         run: |
@@ -974,6 +993,24 @@ jobs:
           echo "=== Checking for binary ==="
           ls -la Examples/HelloWorld/HelloWorld 2>/dev/null || echo "Binary not found"
           ls -la Examples/HelloWorld/.build/ 2>/dev/null || echo "No .build directory"
+
+      - name: Pre-build Swift plugins
+        run: |
+          # Swift plugins using @AROExport pull in SwiftSyntax (~280 modules) which
+          # takes 3-4 minutes to compile on CI. Pre-build them so the test harness
+          # doesn't hit its per-test timeout waiting for compilation.
+          for plugin_dir in \
+            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
+            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
+            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/ExternalService/plugins/CounterPlugin \
+            Examples/SQLiteExample/plugins/SQLitePlugin \
+            Examples/ZipService/plugins/ZipPlugin; do
+            if [ -f "$plugin_dir/Package.swift" ]; then
+              echo "=== Pre-building $plugin_dir ==="
+              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
+            fi
+          done
 
       - name: Run integration tests
         run: |
