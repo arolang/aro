@@ -67,6 +67,9 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Qualifier registrations from this plugin
     private var qualifierRegistrations: [QualifierRegistration] = []
 
+    /// Subprocess timeout in seconds
+    private static let defaultTimeout: TimeInterval = 30
+
     /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
     private let encoder = JSONEncoder()
@@ -113,7 +116,7 @@ public final class PythonPluginHost: @unchecked Sendable {
         let script = """
         import sys
         import json
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_plugin_info
             info = aro_plugin_info()
@@ -230,7 +233,7 @@ public final class PythonPluginHost: @unchecked Sendable {
         import sys
         import json
         import base64
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_action_\(pythonFuncName)
             input_json = base64.b64decode('\(base64Input)').decode('utf-8')
@@ -336,7 +339,20 @@ public final class PythonPluginHost: @unchecked Sendable {
         process.standardError = errorPipe
 
         try process.run()
-        process.waitUntilExit()
+        defer { if process.isRunning { process.terminate() } }
+
+        // Wait with timeout to prevent hung plugins from blocking the runtime
+        let completed = process.waitWithTimeout(Self.defaultTimeout)
+        if !completed {
+            process.terminate()
+            // Give it a moment to terminate gracefully
+            Thread.sleep(forTimeInterval: 0.1)
+            if process.isRunning {
+                // Force kill if still running
+                process.interrupt()
+            }
+            throw PythonPluginError.timeout(pluginName, seconds: Int(Self.defaultTimeout))
+        }
 
         let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: outputData, encoding: .utf8) ?? ""
@@ -392,6 +408,17 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Escape a string for safe inclusion in a Python single-quoted string literal.
+    /// Handles backslashes, single quotes, newlines, carriage returns, and null bytes.
+    private func escapePythonString(_ s: String) -> String {
+        return s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\0", with: "\\0")
+    }
 
     /// Convert action name to Python function name (snake_case)
     /// Handles both kebab-case (to-html) and camelCase (toHtml)
@@ -462,7 +489,7 @@ extension PythonPluginHost: PluginQualifierHost {
         import sys
         import json
         import base64
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_plugin_qualifier
             input_json = base64.b64decode('\(base64Input)').decode('utf-8')
@@ -585,6 +612,7 @@ public enum PythonPluginError: Error, CustomStringConvertible {
     case invalidInfo(String)
     case loadFailed(String, message: String)
     case executionFailed(String, action: String, message: String)
+    case timeout(String, seconds: Int)
     case pythonNotFound
 
     public var description: String {
@@ -597,8 +625,25 @@ public enum PythonPluginError: Error, CustomStringConvertible {
             return "Failed to load Python plugin '\(name)': \(message)"
         case .executionFailed(let name, let action, let message):
             return "Python plugin '\(name)' action '\(action)' failed: \(message)"
+        case .timeout(let name, let seconds):
+            return "Python plugin '\(name)' timed out after \(seconds) seconds"
         case .pythonNotFound:
             return "Python interpreter not found"
         }
+    }
+}
+
+// MARK: - Process Timeout Extension
+
+private extension Process {
+    /// Wait for the process to exit, returning true if it finished within the timeout.
+    func waitWithTimeout(_ timeout: TimeInterval) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        let workItem = DispatchWorkItem { [self] in
+            self.waitUntilExit()
+            semaphore.signal()
+        }
+        DispatchQueue.global().async(execute: workItem)
+        return semaphore.wait(timeout: .now() + timeout) == .success
     }
 }
