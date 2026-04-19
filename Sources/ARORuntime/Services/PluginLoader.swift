@@ -494,8 +494,6 @@ public final class PluginLoader: @unchecked Sendable {
         lock.unlock()
 
         guard let pluginFuncs = pluginFuncs else {
-            let allKeys = Array(cPluginFunctions.keys)
-            // debugPrint("[PluginLoader] Service not found. Available: \(allKeys)")
             throw PluginError.serviceNotFound(serviceName)
         }
 

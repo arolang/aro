@@ -6,9 +6,6 @@
 import Foundation
 import AROParser
 
-#if canImport(Darwin)
-import CoreFoundation
-#endif
 
 /// Extracts a value from a source object
 ///

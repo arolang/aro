@@ -101,11 +101,6 @@ public struct ComputeAction: SynchronousAction {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)
         }
 
-        // Computation service (plugin): needs async — fall back to Task path
-        if context.service(ComputationService.self) != nil {
-            throw NeedsAsyncExecution()
-        }
-
         // Built-in computations — all synchronous except "count" on streaming input
         switch computationName.lowercased() {
         case "hash":
@@ -232,11 +227,6 @@ public struct ComputeAction: SynchronousAction {
             "intersect", "difference", "union"
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
-
-        // Plugin compute service
-        if let computeService = context.service(ComputationService.self) {
-            return try await computeService.compute(named: computationName, input: input)
-        }
 
         // ARO-0051: Streaming count — materialize and rebind
         if let anyStreaming = input as? AnyStreamingValue {
@@ -590,11 +580,6 @@ public struct ValidateAction: ActionImplementation {
         // Validation rule from result specifiers or base (for backward compatibility)
         let knownRules: Set<String> = ["required", "exists", "nonempty", "email", "numeric"]
         let ruleName = resolveOperationName(from: result, knownOperations: knownRules, fallback: "required")
-
-        // Look up validation service
-        if let validationService = context.service(ValidationService.self) {
-            return try await validationService.validate(value: value, rule: ruleName)
-        }
 
         // Built-in validations
         let isValid: Bool
@@ -1138,16 +1123,6 @@ public struct UpdateAction: SynchronousAction {
 }
 
 // MARK: - Supporting Types
-
-/// Computation service protocol
-public protocol ComputationService: Sendable {
-    func compute(named: String, input: Any) async throws -> any Sendable
-}
-
-/// Validation service protocol
-public protocol ValidationService: Sendable {
-    func validate(value: Any, rule: String) async throws -> ValidationResult
-}
 
 /// Result of a validation operation
 public struct ValidationResult: Sendable, Equatable {

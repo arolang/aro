@@ -164,6 +164,7 @@ public struct AROStatement: Statement {
 
     // MARK: - Legacy Initializer (Backward Compatibility)
 
+    @available(*, deprecated, message: "Use the grouped initializer instead")
     public init(
         action: Action,
         result: QualifiedNoun,
