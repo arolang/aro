@@ -95,6 +95,7 @@
         <pre><code><span class="code-comment"># plugin.yaml - Package manifest</span>
 name: csv-tools
 version: 1.0.0
+handle: CSV                   <span class="code-comment"># PascalCase namespace for actions and qualifiers</span>
 description: "CSV parsing, validation, and formatting tools"
 author: "Your Name"
 license: MIT
@@ -106,8 +107,10 @@ provides:
     path: features/
   - type: swift-plugin        <span class="code-comment"># Swift native code</span>
     path: Sources/
-  - type: aro-templates       <span class="code-comment"># Template files (optional)</span>
-    path: templates/
+
+<span class="code-comment"># System library requirements (optional)</span>
+system:
+  - libsqlite3
 
 <span class="code-comment"># Dependencies on other packages (optional)</span>
 dependencies:
@@ -123,6 +126,11 @@ build:
       - name: CSVTools
         path: Sources/</code></pre>
 
+        <p>
+            When installed via <code>aro add</code>, a <code>source:</code> block is automatically
+            added to record the Git URL, ref, and commit hash.
+        </p>
+
         <h3>Required Fields</h3>
         <table>
             <thead>
@@ -131,7 +139,24 @@ build:
             <tbody>
                 <tr><td><code>name</code></td><td>Unique package identifier</td></tr>
                 <tr><td><code>version</code></td><td>Semantic version (e.g., 1.0.0)</td></tr>
+                <tr><td><code>handle</code></td><td>PascalCase namespace (e.g., <code>CSV</code>). Actions are invoked as <code>Handle.Action</code>, qualifiers as <code>handle.qualifier</code></td></tr>
                 <tr><td><code>provides</code></td><td>List of content types and paths</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Optional Fields</h3>
+        <table>
+            <thead>
+                <tr><th>Field</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>description</code></td><td>Human-readable description</td></tr>
+                <tr><td><code>author</code></td><td>Author name</td></tr>
+                <tr><td><code>license</code></td><td>License identifier (e.g., MIT)</td></tr>
+                <tr><td><code>aro-version</code></td><td>Required ARO version constraint (e.g., <code>&gt;=0.2.0</code>)</td></tr>
+                <tr><td><code>system</code></td><td>Required system libraries (e.g., <code>[libsqlite3]</code>)</td></tr>
+                <tr><td><code>dependencies</code></td><td>Other ARO packages this plugin depends on</td></tr>
+                <tr><td><code>build</code></td><td>Language-specific build configuration</td></tr>
             </tbody>
         </table>
 
@@ -144,7 +169,8 @@ build:
                 <tr><td><code>aro-files</code></td><td>ARO feature sets (.aro files)</td></tr>
                 <tr><td><code>swift-plugin</code></td><td>Swift native plugins</td></tr>
                 <tr><td><code>rust-plugin</code></td><td>Rust native plugins</td></tr>
-                <tr><td><code>c-plugin</code></td><td>C/C++ native plugins</td></tr>
+                <tr><td><code>c-plugin</code></td><td>C native plugins</td></tr>
+                <tr><td><code>cpp-plugin</code></td><td>C++ native plugins</td></tr>
                 <tr><td><code>python-plugin</code></td><td>Python plugins</td></tr>
                 <tr><td><code>aro-templates</code></td><td>HTML templates</td></tr>
             </tbody>
@@ -188,8 +214,11 @@ import AROPluginKit
 <span class="code-keyword">@AROExport</span>
 private let plugin = AROPlugin(name: <span class="code-string">"csv-parser"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"CSV"</span>)
     .action(<span class="code-string">"ParseCSV"</span>, verbs: [<span class="code-string">"parsecsv"</span>], role: <span class="code-string">"own"</span>,
-            prepositions: [<span class="code-string">"from"</span>]) { input in
-        let data = input.string(<span class="code-string">"data"</span>) ?? <span class="code-string">""</span>
+            prepositions: [<span class="code-string">"from"</span>],
+            description: <span class="code-string">"Parse CSV data into rows"</span>) { input in
+        let data = input.string(<span class="code-string">"data"</span>)
+            ?? input.from.string(<span class="code-string">"data"</span>)
+            ?? <span class="code-string">""</span>
         let rows = parseCSV(data)
         return .success([<span class="code-string">"rows"</span>: rows, <span class="code-string">"count"</span>: rows.count])
     }</code></pre>
@@ -246,9 +275,20 @@ if __name__ == <span class="code-string">"__main__"</span>:
 <span class="code-keyword">ARO_PLUGIN</span>(<span class="code-string">"csv-parser-c"</span>, <span class="code-string">"1.0.0"</span>)
 <span class="code-keyword">ARO_HANDLE</span>(<span class="code-string">"CSV"</span>)
 
-<span class="code-keyword">ARO_ACTION</span>(<span class="code-string">"ParseCSV"</span>, <span class="code-string">"own"</span>, <span class="code-string">"from"</span>) {
+<span class="code-comment">/* Lifecycle hooks (called on load/unload) */</span>
+<span class="code-keyword">ARO_INIT</span>() {
+    <span class="code-comment">/* initialise resources */</span>
+}
+
+<span class="code-keyword">ARO_SHUTDOWN</span>() {
+    <span class="code-comment">/* clean up resources */</span>
+}
+
+<span class="code-keyword">ARO_ACTION</span>(<span class="code-string">"ParseCSV"</span>, <span class="code-string">"own"</span>, <span class="code-string">"from,with"</span>) {
     const char* data = aro_input_string(ctx, <span class="code-string">"data"</span>);
     <span class="code-comment">/* parse CSV and populate output */</span>
+    aro_output_string(ctx, <span class="code-string">"rows"</span>, result);
+    aro_output_int(ctx, <span class="code-string">"count"</span>, row_count);
     return aro_ok(ctx);
 }</code></pre>
 
@@ -266,6 +306,91 @@ if __name__ == <span class="code-string">"__main__"</span>:
                 <tr><td><strong>Rust</strong></td><td><code>#[action]</code> + <code>aro_export!</code></td><td><code>aro-plugin-sdk</code> (crate)</td></tr>
                 <tr><td><strong>C / C++</strong></td><td><code>ARO_PLUGIN()</code> + <code>ARO_ACTION()</code></td><td><code>aro_plugin_sdk.h</code> (header)</td></tr>
                 <tr><td><strong>Python</strong></td><td><code>@plugin</code> + <code>@action</code> + <code>export_abi()</code></td><td><code>aro-plugin-sdk</code> (pip)</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Plugin Qualifiers</h2>
+        <p>
+            Plugins can register custom <strong>qualifiers</strong> that transform values.
+            Qualifiers are namespaced via the plugin's <code>handle</code> and accessed as
+            <code>handle.qualifier</code> in ARO code:
+        </p>
+
+        <pre><code><span class="code-comment">(* Using qualifiers from a plugin with handle: Collections *)</span>
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;random-item: Collections.pick-random&gt;</span> from the &lt;items&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;shuffled: Collections.shuffle&gt;</span> from the &lt;items&gt;.
+<span class="code-keyword">Log</span> &lt;items: Collections.reverse&gt; to the &lt;console&gt;.</code></pre>
+
+        <h3>Swift Qualifiers</h3>
+        <pre><code><span class="code-keyword">@AROExport</span>
+private let plugin = AROPlugin(name: <span class="code-string">"my-plugin"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"MyPlugin"</span>)
+    .qualifier(<span class="code-string">"reverse"</span>, inputTypes: [<span class="code-string">"List"</span>, <span class="code-string">"String"</span>],
+               description: <span class="code-string">"Reverse elements or characters"</span>) { params in
+        if let array = params.arrayValue {
+            return .success(Array(array.reversed()))
+        }
+        if let string = params.stringValue {
+            return .success(String(string.reversed()))
+        }
+        return .failure(<span class="code-string">"reverse requires a list or string"</span>)
+    }</code></pre>
+
+        <h3>C Qualifiers</h3>
+        <pre><code><span class="code-keyword">ARO_QUALIFIER</span>(<span class="code-string">"first"</span>, <span class="code-string">"List"</span>, <span class="code-string">"Returns the first element"</span>) {
+    aro_array* arr = aro_qualifier_array(ctx);
+    if (!arr || aro_array_length(arr) == 0)
+        return aro_error(ctx, ARO_ERR_INVALID_INPUT,
+                         <span class="code-string">"first requires a non-empty list"</span>);
+    const char* elem = aro_array_string(arr, 0);
+    return aro_qualifier_result_string(ctx, elem);
+}</code></pre>
+
+        <h3>Rust Qualifiers</h3>
+        <pre><code><span class="code-keyword">#[qualifier</span>(name = <span class="code-string">"reverse"</span>, input_types = [<span class="code-string">"List"</span>, <span class="code-string">"String"</span>])<span class="code-keyword">]</span>
+fn reverse(input: &amp;QualifierInput) -> PluginResult&lt;QualifierOutput&gt; {
+    <span class="code-comment">// ...</span>
+}
+
+<span class="code-keyword">aro_export!</span> {
+    name: <span class="code-string">"my-plugin"</span>,
+    version: <span class="code-string">"1.0.0"</span>,
+    handle: <span class="code-string">"MyPlugin"</span>,
+    actions: [],
+    qualifiers: [reverse],
+}</code></pre>
+
+        <h3>Python Qualifiers</h3>
+        <pre><code>from aro_plugin_sdk import plugin, qualifier, export_abi, run
+
+<span class="code-keyword">@plugin</span>(name=<span class="code-string">"my-plugin"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"MyPlugin"</span>)
+class MyPlugin:
+    pass
+
+<span class="code-keyword">@qualifier</span>(name=<span class="code-string">"sort"</span>, description=<span class="code-string">"Sort a list"</span>)
+def handle_sort(value, params=None):
+    if isinstance(value, list):
+        return sorted(value)
+    return value
+
+export_abi(globals())</code></pre>
+
+        <h2>C ABI Interface</h2>
+        <p>
+            All plugin SDKs generate a common C ABI. You don't need to implement these manually
+            when using an SDK, but here is the interface for reference:
+        </p>
+
+        <table>
+            <thead>
+                <tr><th>Symbol</th><th>Required</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>aro_plugin_info()</code></td><td>Yes</td><td>Returns plugin metadata as JSON</td></tr>
+                <tr><td><code>aro_plugin_free(ptr)</code></td><td>Yes</td><td>Frees memory allocated by the plugin</td></tr>
+                <tr><td><code>aro_plugin_execute(action, input)</code></td><td>No</td><td>Dispatches an action by name</td></tr>
+                <tr><td><code>aro_plugin_qualifier(name, input)</code></td><td>No</td><td>Dispatches a qualifier by name</td></tr>
+                <tr><td><code>aro_plugin_init()</code></td><td>No</td><td>Called when the plugin is loaded</td></tr>
+                <tr><td><code>aro_plugin_shutdown()</code></td><td>No</td><td>Called when the plugin is unloaded</td></tr>
             </tbody>
         </table>
 
