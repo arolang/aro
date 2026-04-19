@@ -90,7 +90,9 @@ public struct ComputeAction: SynchronousAction {
         }
 
         // Plugin qualifier — synchronous when the qualifier registry is sync
-        if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input) {
+        // Pass with-clause parameters if present (bound as _with_ by FeatureSetExecutor)
+        let withParams: [String: any Sendable]? = context.resolveAny("_with_") as? [String: any Sendable]
+        if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input, withParams: withParams) {
             return pluginResult
         }
 

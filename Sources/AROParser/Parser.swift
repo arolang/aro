@@ -431,15 +431,14 @@ public final class Parser {
             if let agg = try parseAggregationIfPresent() {
                 aggregation = agg
             } else if isExpressionStart(peek()) {
-                // If we're in expression mode (object is an expression like `from <variable>`),
-                // store the with clause separately for set operations (ARO-0042).
-                // Otherwise, use the standard expression binding for existing actions.
-                if objectNoun.base == "_expression_" {
-                    // Expression mode: `from <a> with <b>` - store in withClause for set operations
-                    withExpression = try parseExpression()
-                } else {
-                    // Standard mode: `from the <object> with <expr>` - use regular expression binding
-                    expression = try parseExpression()
+                // Store the with clause in withExpression (→ rangeModifiers.withClause)
+                // so the runtime can bind it as _with_ for plugin qualifiers and set operations.
+                // For backward compatibility, also store in expression when in standard object mode
+                // so existing actions that read _expression_ continue to work.
+                withExpression = try parseExpression()
+                if objectNoun.base != "_expression_" {
+                    // Standard mode: also bind as expression for legacy action compatibility
+                    expression = withExpression
                 }
             }
         }

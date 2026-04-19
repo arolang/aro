@@ -111,6 +111,15 @@ struct TestCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        // Load plugins so plugin-provided actions and qualifiers are available in tests
+        do {
+            try UnifiedPluginLoader.shared.loadPlugins(from: appConfig.rootPath)
+        } catch {
+            if verbose {
+                print("Warning: Failed to load plugins: \(error)")
+            }
+        }
+
         // Collect all feature sets
         let allFeatureSets = compiledPrograms.flatMap { $0.featureSets }
 
