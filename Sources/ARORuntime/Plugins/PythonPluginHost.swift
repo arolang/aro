@@ -33,7 +33,7 @@ import Foundation
 /// Note: For production use with better performance, consider using PythonKit
 /// for direct Python embedding. This subprocess approach is simpler and more
 /// portable but has higher overhead per call.
-public final class PythonPluginHost: @unchecked Sendable {
+public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin name
     public let pluginName: String
 
@@ -41,7 +41,7 @@ public final class PythonPluginHost: @unchecked Sendable {
     ///
     /// Used as the prefix when registering qualifiers (e.g., "stats.sort")
     /// and actions (e.g., "markdown.tohtml"). Nil when no explicit handler is set.
-    private let qualifierNamespace: String?
+    public let qualifierNamespace: String?
 
     /// Path to the plugin
     public let pluginPath: URL
@@ -65,7 +65,7 @@ public final class PythonPluginHost: @unchecked Sendable {
     private var verbToActionName: [String: String] = [:]
 
     /// Qualifier registrations from this plugin
-    private var qualifierRegistrations: [QualifierRegistration] = []
+    public var qualifierRegistrations: [QualifierRegistration] = []
 
     /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
@@ -136,55 +136,27 @@ public final class PythonPluginHost: @unchecked Sendable {
             throw PythonPluginError.loadFailed(pluginName, message: error)
         }
 
-        // Parse qualifiers array
-        var qualifierDescriptors: [PythonQualifierDescriptor] = []
-        if let qualifierObjects = json["qualifiers"] as? [[String: Any]] {
-            for qualifierObj in qualifierObjects {
-                if let qualifierName = qualifierObj["name"] as? String {
-                    // Parse input types
-                    var inputTypes: Set<QualifierInputType> = []
-                    if let typeStrings = qualifierObj["inputTypes"] as? [String] {
-                        for typeStr in typeStrings {
-                            if let inputType = QualifierInputType(rawValue: typeStr) {
-                                inputTypes.insert(inputType)
-                            }
-                        }
-                    }
-                    // Default to all types if none specified
-                    if inputTypes.isEmpty {
-                        inputTypes = Set(QualifierInputType.allCases)
-                    }
-
-                    let description = qualifierObj["description"] as? String
-
-                    qualifierDescriptors.append(PythonQualifierDescriptor(
-                        name: qualifierName,
-                        inputTypes: inputTypes,
-                        description: description
-                    ))
-                }
-            }
-        }
+        // Parse qualifiers and actions using shared helpers
+        let qualifierDescriptors = Self.parseQualifierDescriptors(from: json)
 
         // Parse actions: supports both flat [String] (legacy) and structured [[String: Any]] (SDK)
+        // Python uses a flattened verb list with verb→action mapping for SDK format
         var parsedActions: [String] = []
-        if let flatActions = json["actions"] as? [String] {
-            parsedActions = flatActions
-        } else if let structuredActions = json["actions"] as? [[String: Any]] {
-            for actionObj in structuredActions {
-                let actionName = actionObj["name"] as? String
-                if let verbs = actionObj["verbs"] as? [String] {
+        let parsedActionList = Self.parseActionList(from: json)
+        if !parsedActionList.verbsMap.isEmpty {
+            // SDK format: flatten verbs and build reverse mapping
+            for name in parsedActionList.names {
+                if let verbs = parsedActionList.verbsMap[name], !verbs.isEmpty {
                     parsedActions.append(contentsOf: verbs)
-                    // Map each verb back to the canonical action name for aro_action_<name> lookup
-                    if let actionName = actionName {
-                        for verb in verbs {
-                            verbToActionName[verb] = actionName
-                        }
+                    for verb in verbs {
+                        verbToActionName[verb] = name
                     }
-                } else if let name = actionName {
+                } else {
                     parsedActions.append(name)
                 }
             }
+        } else {
+            parsedActions = parsedActionList.names
         }
 
         pluginInfo = PythonPluginInfo(
@@ -196,19 +168,8 @@ public final class PythonPluginHost: @unchecked Sendable {
 
         actions = Set(pluginInfo?.actions ?? [])
 
-        // Register qualifiers with QualifierRegistry
-        for descriptor in qualifierDescriptors {
-            let registration = QualifierRegistration(
-                qualifier: descriptor.name,
-                inputTypes: descriptor.inputTypes,
-                pluginName: pluginName,
-                namespace: qualifierNamespace,
-                description: descriptor.description,
-                pluginHost: self
-            )
-            qualifierRegistrations.append(registration)
-            QualifierRegistry.shared.register(registration)
-        }
+        // Register qualifiers using shared helper
+        registerQualifiers(qualifierDescriptors)
     }
 
     // MARK: - Execution
@@ -266,9 +227,7 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        // Use semaphore to ensure all registrations complete before returning
-        let semaphore = DispatchSemaphore(value: 0)
-        var registrationCount = 0
+        var entries: [(verb: String, pluginName: String, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
         for action in actions {
             // When a handler namespace is set, register only as "handler.verb".
@@ -285,39 +244,18 @@ public final class PythonPluginHost: @unchecked Sendable {
                 actionName: action,
                 host: self
             )
-
-            registrationCount += 1
-            Task {
-                await ActionRegistry.shared.registerDynamic(
-                    verb: registeredVerb,
-                    handler: wrapper.handle,
-                    pluginName: pluginName
-                )
-                semaphore.signal()
-            }
+            entries.append((verb: registeredVerb, pluginName: pluginName, handler: wrapper.handle))
         }
 
-        // Wait for all registrations to complete
-        for _ in 0..<registrationCount {
-            semaphore.wait()
-        }
+        syncRegisterActions(entries)
     }
 
     // MARK: - Unload
 
     /// Unload the plugin
     public func unload() {
-        // Unregister dynamic actions from ActionRegistry
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            await ActionRegistry.shared.unregisterPlugin(pluginName)
-            semaphore.signal()
-        }
-        semaphore.wait()
-
-        // Unregister qualifiers
-        QualifierRegistry.shared.unregisterPlugin(pluginName)
-        qualifierRegistrations.removeAll()
+        // Unregister from ActionRegistry and QualifierRegistry (shared logic)
+        unloadFromRegistries()
 
         actions.removeAll()
         pluginInfo = nil
@@ -438,16 +376,10 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 }
 
-// MARK: - PluginQualifierHost Conformance
+// MARK: - Qualifier Execution
 
-extension PythonPluginHost: PluginQualifierHost {
+extension PythonPluginHost {
     /// Execute a qualifier transformation via the Python plugin
-    ///
-    /// - Parameters:
-    ///   - qualifier: The qualifier name (e.g., "pick-random")
-    ///   - input: The input value to transform
-    /// - Returns: The transformed value
-    /// - Throws: QualifierError on failure
     public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
         // Create input JSON using QualifierInput (ARO-0073: includes _with params)
         let qualifierInput = QualifierInput(value: input, withParams: withParams)
@@ -457,7 +389,7 @@ extension PythonPluginHost: PluginQualifierHost {
         // Convert qualifier name to snake_case for Python function
         let pythonQualifierName = toSnakeCase(qualifier)
 
-        // Create execution script that calls aro_plugin_qualifier
+        // Language-specific: call via Python subprocess
         let script = """
         import sys
         import json
@@ -477,7 +409,7 @@ extension PythonPluginHost: PluginQualifierHost {
 
         let result = try runPython(script: script)
 
-        // Parse result as QualifierOutput
+        // Shared result decoding
         guard let resultData = result.data(using: .utf8) else {
             throw QualifierError.executionFailed(
                 qualifier: qualifier,
@@ -485,20 +417,7 @@ extension PythonPluginHost: PluginQualifierHost {
             )
         }
 
-        let output = try decoder.decode(QualifierOutput.self, from: resultData)
-
-        if let error = output.error {
-            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
-        }
-
-        guard let resultValue = output.result else {
-            throw QualifierError.executionFailed(
-                qualifier: qualifier,
-                message: "Plugin returned neither result nor error"
-            )
-        }
-
-        return resultValue.value
+        return try decodeQualifierResult(from: resultData, qualifier: qualifier, decoder: decoder)
     }
 }
 
@@ -508,21 +427,14 @@ struct PythonPluginInfo: Sendable {
     let name: String
     let version: String
     let actions: [String]
-    let qualifiers: [PythonQualifierDescriptor]
+    let qualifiers: [PluginQualifierDescriptor]
 
-    init(name: String, version: String, actions: [String], qualifiers: [PythonQualifierDescriptor] = []) {
+    init(name: String, version: String, actions: [String], qualifiers: [PluginQualifierDescriptor] = []) {
         self.name = name
         self.version = version
         self.actions = actions
         self.qualifiers = qualifiers
     }
-}
-
-/// Descriptor for a plugin-provided qualifier
-struct PythonQualifierDescriptor: Sendable {
-    let name: String
-    let inputTypes: Set<QualifierInputType>
-    let description: String?
 }
 
 // MARK: - Python Plugin Action Wrapper

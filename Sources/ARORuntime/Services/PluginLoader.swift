@@ -358,87 +358,54 @@ public final class PluginLoader: @unchecked Sendable {
                 let infoJSON = String(cString: infoPtr)
                 freeFunc?(infoPtr)
 
-                // Parse JSON to get actions and qualifiers
+                // Parse JSON to get actions and qualifiers using shared helpers
                 if let data = infoJSON.data(using: .utf8),
                    let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    // Register actions
-                    if let actions = info["actions"] as? [[String: Any]] {
-                        // Register each action verb as a dynamic handler
-                        // Use semaphore to ensure registration completes synchronously
-                        let semaphore = DispatchSemaphore(value: 0)
-                        var registrationCount = 0
+                    // Register actions using shared parser
+                    let parsedActions = PluginInfoParser.parseActionList(from: info)
+                    var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
-                        for actionDef in actions {
-                            // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
-                            let verbs: [String]
-                            if let v = actionDef["verbs"] as? [String], !v.isEmpty {
-                                verbs = v
-                            } else if let actionName = actionDef["name"] as? String {
-                                verbs = [actionName.lowercased()]
+                    for actionName in parsedActions.names {
+                        let verbs = parsedActions.verbsMap[actionName] ?? [actionName.lowercased()]
+
+                        for verb in verbs {
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+
+                            let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                var input: [String: any Sendable] = [:]
+                                if let data = context.resolveAny(object.base) {
+                                    input["data"] = data
+                                    input["object"] = data
+                                    input[object.base] = data
+                                }
+                                if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                    input.merge(withArgs) { _, new in new }
+                                }
+                                if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                    input.merge(exprArgs) { _, new in new }
+                                }
+                                let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                context.bind(result.base, value: pluginResult)
+                                return pluginResult
+                            }
+
+                            let registeredVerb: String
+                            if let ns = namespace {
+                                registeredVerb = "\(ns).\(normalizedVerb)"
                             } else {
-                                continue
+                                registeredVerb = normalizedVerb
                             }
-
-                            for verb in verbs {
-                                let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
-                                // Capture the original verb for plugin calls (may have hyphens)
-                                let originalVerb = verb
-
-                                let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
-                                    // Build input from context
-                                    var input: [String: any Sendable] = [:]
-                                    if let data = context.resolveAny(object.base) {
-                                        // Pass data under multiple keys for compatibility
-                                        input["data"] = data
-                                        input["object"] = data
-                                        // Also pass under the object's base name (e.g., "rows")
-                                        input[object.base] = data
-                                    }
-
-                                    // Add with clause arguments if present
-                                    if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                        input.merge(withArgs) { _, new in new }
-                                    }
-                                    if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                        input.merge(exprArgs) { _, new in new }
-                                    }
-
-                                    // Call the plugin with original verb (may have hyphens)
-                                    let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-
-                                    // Bind result
-                                    context.bind(result.base, value: pluginResult)
-
-                                    return pluginResult
-                                }
-
-                                // When a handler namespace is set, register only as "namespace.verb".
-                                // Without a handler, register only the plain verb.
-                                let registeredVerb: String
-                                if let ns = namespace {
-                                    registeredVerb = "\(ns).\(normalizedVerb)"
-                                } else {
-                                    registeredVerb = normalizedVerb
-                                }
-
-                                registrationCount += 1
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(verb: registeredVerb, handler: handler)
-                                    semaphore.signal()
-                                }
-                            }
-                        }
-
-                        // Wait for all registrations to complete
-                        for _ in 0..<registrationCount {
-                            semaphore.wait()
+                            let pName: String? = nil
+                            entries.append((verb: registeredVerb, pluginName: pName, handler: handler))
                         }
                     }
+                    PluginInfoParser.syncRegisterActions(entries)
 
-                    // Register qualifiers (plugin-provided value transformations)
-                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
-                        // Load aro_plugin_qualifier symbol
+                    // Register qualifiers using shared parser
+                    let qualifierDescriptors = PluginInfoParser.parseQualifierDescriptors(from: info)
+                    if !qualifierDescriptors.isEmpty {
                         #if os(Windows)
                         let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
                         #else
@@ -449,24 +416,20 @@ public final class PluginLoader: @unchecked Sendable {
                             typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
                             let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
 
-                            // Create a host wrapper for the plugin
                             let host = CPluginQualifierHost(
                                 pluginName: name,
                                 qualifierFunc: qualifierFunc,
                                 freeFunc: freeFunc
                             )
 
-                            // Register each qualifier
-                            for qualifierDef in qualifiers {
-                                guard let qualifierName = qualifierDef["name"] as? String else { continue }
-                                let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
-                                let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
-
+                            for descriptor in qualifierDescriptors {
                                 let registration = QualifierRegistration(
-                                    qualifier: qualifierName,
-                                    inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
+                                    qualifier: descriptor.name,
+                                    inputTypes: descriptor.inputTypes,
                                     pluginName: name,
                                     namespace: namespace,
+                                    description: descriptor.description,
+                                    acceptsParameters: descriptor.acceptsParameters,
                                     pluginHost: host
                                 )
                                 QualifierRegistry.shared.register(registration)
