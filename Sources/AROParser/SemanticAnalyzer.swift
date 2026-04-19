@@ -1255,7 +1255,7 @@ public final class SemanticAnalyzer {
             // Runtime objects
             "console", "application", "event", "shutdown",
             // Service targets
-            "port", "host", "directory", "file", "events", "contract",
+            "port", "host", "directory", "file", "events", "contract", "template",
             // Repository pattern (any *-repository is external)
             "repository",
             // Literals (internal representation)
