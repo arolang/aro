@@ -355,8 +355,8 @@ public final class PluginLoader: @unchecked Sendable {
         if let infoSymbol = infoSymbol {
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
                 let infoJSON = String(cString: infoPtr)
-                freeFunc?(infoPtr)
 
                 // Parse JSON to get actions and qualifiers
                 if let data = infoJSON.data(using: .utf8),
@@ -518,10 +518,9 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.executionFailed(serviceName, method: method, message: "Plugin returned null")
         }
 
+        // Free via defer to prevent leaks if subsequent parsing throws
+        defer { pluginFuncs.free?(resultPtr) }
         let resultJSON = String(cString: resultPtr)
-
-        // Free the result memory if the plugin provides a free function
-        pluginFuncs.free?(resultPtr)
 
         // Check for error in response
         if resultJSON.contains("\"error\":") {
@@ -1953,8 +1952,8 @@ public final class PluginLoader: @unchecked Sendable {
             // Parse plugin info for custom actions
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
                 let infoJSON = String(cString: infoPtr)
-                freeFunc?(infoPtr)
 
                 // Parse JSON to get actions and qualifiers
                 if let data = infoJSON.data(using: .utf8),
@@ -2328,8 +2327,8 @@ public final class PluginLoader: @unchecked Sendable {
             let freeFunc: CPluginFreeFunction? = freeSymbol.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
 
             if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
                 let infoJSON = String(cString: infoPtr)
-                freeFunc?(infoPtr)
 
                 if let data = infoJSON.data(using: .utf8),
                    let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -2549,8 +2548,8 @@ public struct PluginSystemObjectWrapper: SystemObject {
             return ""
         }
 
+        defer { resultPtr.deallocate() }
         let result = String(cString: resultPtr)
-        resultPtr.deallocate()
 
         // Parse JSON result
         if let data = result.data(using: .utf8),
@@ -2666,8 +2665,8 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
             )
         }
 
+        defer { freeFunc?(resultPtr) }
         let resultJSON = String(cString: resultPtr)
-        freeFunc?(resultPtr)
 
         // Parse output
         guard let resultData = resultJSON.data(using: .utf8) else {
