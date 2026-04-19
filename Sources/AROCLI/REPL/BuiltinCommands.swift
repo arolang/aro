@@ -6,6 +6,7 @@
 import Foundation
 import AROParser
 import ARORuntime
+import AROPackageManager
 
 // MARK: - Help Command
 
@@ -18,7 +19,7 @@ public struct HelpCommand: MetaCommand {
 
     public func execute(args: [String], session: REPLSession) async throws -> MetaCommandResult {
         let helpText = """
-        ARO REPL Commands:
+        ARO REPL Commands (use : or / prefix):
 
         Session:
           :help, :h, :?           Show this help message
@@ -41,8 +42,16 @@ public struct HelpCommand: MetaCommand {
           :export <file>          Save session to file
           :export --test <file>   Export as test file
 
+        Plugins:
+          :plugin add <git-url>   Install and load a plugin from Git
+          :plugin add <url> --ref <ref>  Install specific version
+          :plugin list            List loaded plugins
+          :plugin remove <name>   Unload a plugin
+
         Control:
           :quit, :q, :exit        Exit the REPL
+
+        All commands work with both : and / prefix (e.g. /plugin add ...)
 
         Direct Mode:
           Type ARO statements directly, ending with .
@@ -502,6 +511,143 @@ public struct LoadCommand: MetaCommand {
             return .output("Loaded \(loadedCount) feature set(s) from \(filename)")
         } catch {
             return .error("Failed to read file: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - Plugin Command
+
+public struct PluginCommand: MetaCommand {
+    public static let name = "plugin"
+    public static let aliases = ["plugins"]
+    public static let help = "Manage plugins (:plugin add <url>, :plugin list, :plugin remove <name>)"
+
+    public init() {}
+
+    public func execute(args: [String], session: REPLSession) async throws -> MetaCommandResult {
+        guard let subcommand = args.first else {
+            return .error("""
+                Usage:
+                  :plugin add <git-url> [--ref <ref>]   Install and load a plugin
+                  :plugin list                          List loaded plugins
+                  :plugin remove <name>                 Unload a plugin
+                """)
+        }
+
+        switch subcommand.lowercased() {
+        case "add":
+            return try await handleAdd(args: Array(args.dropFirst()), session: session)
+        case "list", "ls":
+            return handleList()
+        case "remove", "rm":
+            return handleRemove(args: Array(args.dropFirst()))
+        default:
+            return .error("Unknown subcommand '\(subcommand)'. Use: add, list, remove")
+        }
+    }
+
+    // MARK: - Add
+
+    private func handleAdd(args: [String], session: REPLSession) async throws -> MetaCommandResult {
+        guard let url = args.first else {
+            return .error("Usage: :plugin add <git-url> [--ref <ref>]")
+        }
+
+        // Parse optional --ref
+        var ref: String? = nil
+        if let refIndex = args.firstIndex(of: "--ref"), refIndex + 1 < args.count {
+            ref = args[refIndex + 1]
+        }
+
+        // Use ~/.aro/repl-plugins/ as the persistent plugin directory for the REPL
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let replPluginsDir = homeDir.appendingPathComponent(".aro/repl-plugins")
+
+        // Create directory if needed
+        try FileManager.default.createDirectory(at: replPluginsDir, withIntermediateDirectories: true)
+
+        // Use PackageManager to clone, validate, and build
+        let pm = AROPackageManager.PackageManager(
+            applicationDirectory: replPluginsDir,
+            pluginsDirectory: replPluginsDir.appendingPathComponent("Plugins")
+        )
+
+        // Install the plugin
+        let result: AROPackageManager.InstallResult
+        do {
+            result = try pm.add(url: url, ref: ref, currentAROVersion: nil)
+        } catch {
+            return .error("Failed to install plugin: \(error)")
+        }
+
+        // Build status
+        var buildMessages: [String] = []
+        for buildResult in result.buildResults {
+            let icon = buildResult.success ? "+" : "x"
+            buildMessages.append("  [\(icon)] \(buildResult.message)")
+        }
+
+        // Load into the running session via UnifiedPluginLoader
+        let pluginDir = replPluginsDir
+            .appendingPathComponent("Plugins")
+            .appendingPathComponent(result.name)
+        do {
+            try UnifiedPluginLoader.shared.loadPluginFromDirectory(pluginDir)
+        } catch {
+            return .error("Plugin installed but failed to load: \(error)")
+        }
+
+        // Collect info about what was loaded
+        var output = "Plugin '\(result.name)' v\(result.version) installed and loaded"
+        if let commitPrefix = result.commit?.prefix(7) {
+            output += " (commit: \(commitPrefix))"
+        }
+        if !buildMessages.isEmpty {
+            output += "\n" + buildMessages.joined(separator: "\n")
+        }
+
+        // Show registered actions
+        let manifest = UnifiedPluginLoader.shared.getPlugin(name: result.name)
+        if let provides = manifest?.provides {
+            let actionNames = provides.flatMap { $0.actions ?? [] }.map { $0.name }
+            if !actionNames.isEmpty {
+                output += "\nActions: \(actionNames.joined(separator: ", "))"
+            }
+        }
+
+        return .output(output)
+    }
+
+    // MARK: - List
+
+    private func handleList() -> MetaCommandResult {
+        let plugins = UnifiedPluginLoader.shared.getLoadedPlugins()
+
+        if plugins.isEmpty {
+            return .output("No plugins loaded")
+        }
+
+        var table: [[String]] = [["Name", "Version", "Handle", "Status"]]
+        for (name, manifest) in plugins.sorted(by: { $0.key < $1.key }) {
+            let handle = manifest.handle ?? "-"
+            let loaded = UnifiedPluginLoader.shared.isPluginLoaded(name: name) ? "loaded" : "stub"
+            table.append([name, manifest.version, handle, loaded])
+        }
+        return .table(table)
+    }
+
+    // MARK: - Remove
+
+    private func handleRemove(args: [String]) -> MetaCommandResult {
+        guard let name = args.first else {
+            return .error("Usage: :plugin remove <plugin-name>")
+        }
+
+        let removed = UnifiedPluginLoader.shared.unload(pluginName: name)
+        if removed {
+            return .output("Plugin '\(name)' unloaded")
+        } else {
+            return .error("Plugin '\(name)' is not loaded")
         }
     }
 }

@@ -176,9 +176,11 @@ public final class REPLShell: @unchecked Sendable {
 
     /// Evaluate input and return result
     private func evaluate(_ input: String) async throws -> REPLResult {
-        // Meta-command
-        if input.hasPrefix(":") {
-            let cmdResult = try await commandRegistry.execute(input: input, session: session)
+        // Meta-command (: or / prefix)
+        if input.hasPrefix(":") || input.hasPrefix("/") {
+            // Normalise '/' prefix to ':' so the registry handles both uniformly
+            let normalised = input.hasPrefix("/") ? ":" + input.dropFirst() : input
+            let cmdResult = try await commandRegistry.execute(input: normalised, session: session)
             return convertCommandResult(cmdResult)
         }
 
@@ -254,7 +256,7 @@ public final class REPLShell: @unchecked Sendable {
     /// Print welcome message
     private func printWelcome() {
         print(colorize("ARO REPL", .bold) + " v\(AROVersion.shortVersion)")
-        print("Type " + colorize(":help", .cyan) + " for commands, " + colorize(":quit", .cyan) + " to exit")
+        print("Type " + colorize(":help", .cyan) + " or " + colorize("/help", .cyan) + " for commands, " + colorize(":quit", .cyan) + " to exit")
         print()
     }
 
@@ -405,12 +407,13 @@ public final class REPLShell: @unchecked Sendable {
             var completions: [String] = []
             let trimmed = currentBuffer.trimmingCharacters(in: .whitespaces)
 
-            // Complete meta-commands
-            if trimmed.hasPrefix(":") {
+            // Complete meta-commands (both : and / prefixes)
+            if trimmed.hasPrefix(":") || trimmed.hasPrefix("/") {
+                let prefix = String(trimmed.first!)
                 let partial = String(trimmed.dropFirst()).lowercased()
                 for name in self.commandRegistry.commandNames {
                     if name.lowercased().hasPrefix(partial) {
-                        completions.append(":\(name)")
+                        completions.append("\(prefix)\(name)")
                     }
                 }
             }

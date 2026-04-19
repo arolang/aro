@@ -4,16 +4,17 @@
 
 ---
 
-## The Colon Prefix
+## The Command Prefix
 
-Commands start with `:`. They control the REPL, not ARO:
+Commands start with `:` or `/`. They control the REPL, not ARO:
 
 ```
 aro> :help      # Talk to the REPL
+aro> /help      # Same thing, different prefix
 aro> <Set>...   # Talk to ARO
 ```
 
-Two languages. One prompt. The colon is the switch.
+Two languages. One prompt. The prefix is the switch.
 
 ## Essential Commands
 
@@ -109,6 +110,18 @@ Most commands have short forms:
 | `:quit` | `:q` |
 
 Less typing. Same power.
+
+## The Slash Alternative
+
+Every `:` command also works with `/`:
+
+```
+aro> /vars
+aro> /plugin add git@github.com:arolang/my-plugin.git
+aro> /quit
+```
+
+Use whichever feels natural.
 
 ---
 
