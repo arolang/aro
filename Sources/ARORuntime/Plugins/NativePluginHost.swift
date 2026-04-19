@@ -15,27 +15,70 @@ private func debugPrint(_ message: String) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 
+// MARK: - CPluginString (RAII wrapper)
+
+/// RAII wrapper for C-allocated strings returned by plugin functions.
+///
+/// Ensures the string is freed when the wrapper goes out of scope, preventing
+/// memory leaks even when exceptions are thrown between allocation and cleanup.
+///
+/// ```swift
+/// let managed = CPluginString(ptr: resultPtr, freeFunc: freeFunc)
+/// defer { managed.release() }
+/// let json = managed.string
+/// ```
+struct CPluginString {
+    let ptr: UnsafeMutablePointer<CChar>
+    private let freeFunc: ((UnsafeMutablePointer<CChar>?) -> Void)?
+
+    /// The C string as a Swift `String`.
+    var string: String { String(cString: ptr) }
+
+    init(ptr: UnsafeMutablePointer<CChar>, freeFunc: ((UnsafeMutablePointer<CChar>?) -> Void)?) {
+        self.ptr = ptr
+        self.freeFunc = freeFunc
+    }
+
+    /// Free the underlying C memory. Safe to call multiple times (no-op after first).
+    func release() {
+        freeFunc?(ptr)
+    }
+}
+
 // MARK: - Native Plugin Host
 
 /// Host for native plugins written in C, C++, or Rust
 ///
 /// Native plugins communicate through a C ABI interface using JSON strings.
 ///
+/// ## Memory Ownership
+///
+/// All `char*` pointers returned by plugin functions are **owned by the caller**.
+/// The caller MUST free them via `aro_plugin_free()`. Conversely, pointers passed
+/// INTO plugin functions (e.g., `action`, `input_json`) are borrowed — the plugin
+/// must NOT free them.
+///
+/// The runtime uses `defer { freeFunc?(ptr) }` or `CPluginString` to guarantee
+/// cleanup even when exceptions occur between allocation and use.
+///
 /// ## Required C Interface (ARO-0073)
 /// ```c
 /// // Get plugin info as JSON (name, version, actions[], qualifiers[], etc.)
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_plugin_info(void);
 ///
-/// // Free memory allocated by the plugin
+/// // Free memory allocated by the plugin (required for all returned char* pointers)
 /// void aro_plugin_free(char* ptr);
 /// ```
 ///
 /// ## Optional C Interface
 /// ```c
 /// // Execute an action with JSON input, return JSON output
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_plugin_execute(const char* action, const char* input_json);
 ///
 /// // Execute a qualifier transformation
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_plugin_qualifier(const char* name, const char* input_json);
 ///
 /// // One-time initialization (DB connections, model loading, etc.)
@@ -48,12 +91,15 @@ private func debugPrint(_ message: String) {
 /// void aro_plugin_on_event(const char* event_type, const char* data_json);
 ///
 /// // System object read
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_object_read(const char* identifier, const char* qualifier);
 ///
 /// // System object write
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_object_write(const char* identifier, const char* qualifier, const char* value_json);
 ///
 /// // System object list
+/// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_object_list(const char* pattern);
 /// ```
 public final class NativePluginHost: @unchecked Sendable {
@@ -794,11 +840,15 @@ public final class NativePluginHost: @unchecked Sendable {
             let setInvokeFn = unsafeBitCast(setInvokeSymbol, to: SetInvokeFunc.self)
             // Pass the invoke callback if one has been registered by the runtime
             if NativePluginHost.invokeCallback != nil {
+                // Ownership: the returned strdup'd pointer is owned by the plugin.
+                // The plugin MUST free it via aro_plugin_free() or free().
+                // This follows the same convention as aro_plugin_execute return values.
                 let callback: InvokeFunc = { featureSetPtr, inputPtr in
                     guard let invoke = NativePluginHost.invokeCallback else { return nil }
                     let featureSet = String(cString: featureSetPtr)
                     let inputJSON = String(cString: inputPtr)
                     let resultJSON = invoke(featureSet, inputJSON)
+                    // strdup: ownership transfers to the plugin (caller must free)
                     return resultJSON.withCString { strdup($0) }
                 }
                 setInvokeFn(callback)
