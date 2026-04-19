@@ -268,10 +268,6 @@ private let handleLock = NSLock()
 /// Set during aro_runtime_init(), cleared during aro_runtime_shutdown()
 nonisolated(unsafe) public var globalRuntimePtr: UnsafeMutableRawPointer?
 
-/// Global registry for compiled handler function names: eventType -> [handlerFunctionName]
-/// TODO: This variable is currently unused - clarify if it's needed for future features or should be removed
-nonisolated(unsafe) private var compiledHandlerRegistry: [String: [String]] = [:]
-
 // MARK: - Runtime Lifecycle
 
 /// Initialize the ARO runtime
