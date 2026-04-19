@@ -102,7 +102,7 @@ struct CPluginString {
 /// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_object_list(const char* pattern);
 /// ```
-public final class NativePluginHost: @unchecked Sendable {
+public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin name
     public let pluginName: String
 
@@ -110,7 +110,7 @@ public final class NativePluginHost: @unchecked Sendable {
     ///
     /// Used as the prefix when registering qualifiers (e.g., "collections.reverse")
     /// and actions (e.g., "greeting.greet"). Nil when no explicit handler is set.
-    private let qualifierNamespace: String?
+    public let qualifierNamespace: String?
 
     /// Path to the plugin
     public let pluginPath: URL
@@ -159,7 +159,7 @@ public final class NativePluginHost: @unchecked Sendable {
     private nonisolated(unsafe) static var invokeCallback: ((_ featureSet: String, _ inputJSON: String) -> String)?
 
     /// Qualifier registrations from this plugin
-    private var qualifierRegistrations: [QualifierRegistration] = []
+    public var qualifierRegistrations: [QualifierRegistration] = []
 
     /// Reused encoder/decoder — safe because NativePluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
@@ -649,73 +649,19 @@ public final class NativePluginHost: @unchecked Sendable {
         return contents.filter { $0.pathExtension == ext }
     }
 
-    /// Compile a Swift Package plugin using `swift build`
+    /// Compile a Swift Package plugin using `swift build`, copying the result to `output`.
+    ///
+    /// Delegates to the returning variant and copies the built library.
     private func compileSwiftPackagePlugin(packageDir: URL, output: URL, ext: String) throws {
-        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
-
-        debugPrint("[NativePluginHost] Building Swift package at \(packageDir.path)")
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: swiftPath)
-        process.currentDirectoryURL = packageDir
-        process.arguments = ["build", "-c", "release"]
-
-        let errorPipe = Pipe()
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = errorPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
-        }
-
-        // Find the built dynamic library in .build/release/ or .build/<arch>/release/
-        let buildDir = packageDir.appendingPathComponent(".build")
-        if let builtLib = findBuiltLibrary(in: buildDir, name: pluginName, extension: ext) {
-            if FileManager.default.fileExists(atPath: output.path) {
-                try FileManager.default.removeItem(at: output)
-            }
-            try FileManager.default.copyItem(at: builtLib, to: output)
-            debugPrint("[NativePluginHost] Swift package plugin compiled to: \(output.path)")
-        } else {
+        guard let builtLib = try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext) else {
+            let buildDir = packageDir.appendingPathComponent(".build")
             throw NativePluginError.compilationFailed(pluginName, message: "Built library not found in \(buildDir.path)")
         }
-    }
-
-    /// Find a built dynamic library by searching common Swift build output directories
-    private func findBuiltLibrary(in buildDir: URL, name: String, extension ext: String) -> URL? {
-        let fm = FileManager.default
-        let libName = "lib\(name).\(ext)"
-
-        // Check release/ directly
-        let releasePath = buildDir.appendingPathComponent("release").appendingPathComponent(libName)
-        if fm.fileExists(atPath: releasePath.path) { return releasePath }
-
-        // Check arch-specific paths (e.g. .build/arm64-apple-macosx/release/)
-        if let contents = try? fm.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
-            for dir in contents {
-                let candidate = dir.appendingPathComponent("release").appendingPathComponent(libName)
-                if fm.fileExists(atPath: candidate.path) { return candidate }
-            }
+        if FileManager.default.fileExists(atPath: output.path) {
+            try FileManager.default.removeItem(at: output)
         }
-
-        return nil
-    }
-
-    /// Find swift executable
-    private func findSwiftExecutable() -> String? {
-        let paths = [
-            "/usr/bin/swift",
-            "/usr/share/swift/usr/bin/swift",
-            "/opt/swift/usr/bin/swift",
-            "/opt/homebrew/bin/swift",
-            "/usr/local/bin/swift",
-        ]
-        return paths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        try FileManager.default.copyItem(at: builtLib, to: output)
+        debugPrint("[NativePluginHost] Swift package plugin copied to: \(output.path)")
     }
 
     /// Compile C source files to a dynamic library
@@ -896,57 +842,13 @@ public final class NativePluginHost: @unchecked Sendable {
         let version = dict["version"] as? String ?? "1.0.0"
         let language = dict["language"] as? String ?? "native"
 
-        // Parse actions - supports both old format (string array) and new format (object array with verbs)
-        var actionNames: [String] = []
-        var verbsMap: [String: [String]] = [:]  // Maps action name to its verbs
+        // Parse actions using shared helper (supports both flat and structured formats)
+        let parsedActions = Self.parseActionList(from: dict)
+        let actionNames = parsedActions.names
+        let verbsMap = parsedActions.verbsMap
 
-        if let actionStrings = dict["actions"] as? [String] {
-            // Old format: ["action1", "action2"]
-            actionNames = actionStrings
-        } else if let actionObjects = dict["actions"] as? [[String: Any]] {
-            // New format: [{ "name": "ParseCSV", "verbs": ["parsecsv", "readcsv"], ... }]
-            for actionObj in actionObjects {
-                if let actionName = actionObj["name"] as? String {
-                    actionNames.append(actionName)
-                    // Store verbs for this action
-                    if let verbs = actionObj["verbs"] as? [String] {
-                        verbsMap[actionName] = verbs
-                    }
-                }
-            }
-        }
-
-        // Parse qualifiers array
-        var qualifierDescriptors: [NativeQualifierDescriptor] = []
-        if let qualifierObjects = dict["qualifiers"] as? [[String: Any]] {
-            for qualifierObj in qualifierObjects {
-                if let qualifierName = qualifierObj["name"] as? String {
-                    // Parse input types
-                    var inputTypes: Set<QualifierInputType> = []
-                    if let typeStrings = qualifierObj["inputTypes"] as? [String] {
-                        for typeStr in typeStrings {
-                            if let inputType = QualifierInputType(rawValue: typeStr) {
-                                inputTypes.insert(inputType)
-                            }
-                        }
-                    }
-                    // Default to all types if none specified
-                    if inputTypes.isEmpty {
-                        inputTypes = Set(QualifierInputType.allCases)
-                    }
-
-                    let description = qualifierObj["description"] as? String
-                    let acceptsParams = qualifierObj["accepts_parameters"] as? Bool ?? false
-
-                    qualifierDescriptors.append(NativeQualifierDescriptor(
-                        name: qualifierName,
-                        inputTypes: inputTypes,
-                        description: description,
-                        acceptsParameters: acceptsParams
-                    ))
-                }
-            }
-        }
+        // Parse qualifiers using shared helper
+        let qualifierDescriptors = Self.parseQualifierDescriptors(from: dict)
 
         // Parse services (declared in plugin info, routed through aro_plugin_execute)
         var serviceDescriptors: [NativeServiceDescriptor] = []
@@ -1026,18 +928,8 @@ public final class NativePluginHost: @unchecked Sendable {
         if qualifierFunc != nil {
             for descriptor in qualifierDescriptors {
                 debugPrint("[NativePluginHost] Registering qualifier: \(qualifierNamespace ?? pluginName).\(descriptor.name)")
-                let registration = QualifierRegistration(
-                    qualifier: descriptor.name,
-                    inputTypes: descriptor.inputTypes,
-                    pluginName: pluginName,
-                    namespace: qualifierNamespace,
-                    description: descriptor.description,
-                    acceptsParameters: descriptor.acceptsParameters,
-                    pluginHost: self
-                )
-                qualifierRegistrations.append(registration)
-                QualifierRegistry.shared.register(registration)
             }
+            registerQualifiers(qualifierDescriptors)
         }
 
         // Subscribe to domain events if plugin has on_event function
@@ -1110,9 +1002,7 @@ public final class NativePluginHost: @unchecked Sendable {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        // Use semaphore to ensure all registrations complete before returning
-        let semaphore = DispatchSemaphore(value: 0)
-        var registrationCount = 0
+        var entries: [(verb: String, pluginName: String, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
         for (name, descriptor) in actions {
             // Get verbs for this action (or use the action name itself as a fallback)
@@ -1141,24 +1031,12 @@ public final class NativePluginHost: @unchecked Sendable {
                         host: self,
                         descriptor: descriptor
                     )
-
-                    registrationCount += 1
-                    Task {
-                        await ActionRegistry.shared.registerDynamic(
-                            verb: registeredVerb,
-                            handler: wrapper.handle,
-                            pluginName: pluginName
-                        )
-                        semaphore.signal()
-                    }
+                    entries.append((verb: registeredVerb, pluginName: pluginName, handler: wrapper.handle))
                 }
             }
         }
 
-        // Wait for all registrations to complete
-        for _ in 0..<registrationCount {
-            semaphore.wait()
-        }
+        syncRegisterActions(entries)
     }
 
     // MARK: - Unload
@@ -1170,18 +1048,10 @@ public final class NativePluginHost: @unchecked Sendable {
         // Call shutdown lifecycle hook before unloading
         shutdownFunc?()
 
-        // Unregister dynamic actions from ActionRegistry
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            await ActionRegistry.shared.unregisterPlugin(pluginName)
-            semaphore.signal()
-        }
-        semaphore.wait()
+        // Unregister from ActionRegistry and QualifierRegistry (shared logic)
+        unloadFromRegistries()
 
-        // Unregister qualifiers
-        QualifierRegistry.shared.unregisterPlugin(pluginName)
-        qualifierRegistrations.removeAll()
-
+        // Language-specific cleanup: close the dynamic library
         #if os(Windows)
         let hmodule = unsafeBitCast(handle, to: HMODULE.self)
         FreeLibrary(hmodule)
@@ -1369,17 +1239,10 @@ public final class NativePluginHost: @unchecked Sendable {
     }
 }
 
-// MARK: - PluginQualifierHost Conformance
+// MARK: - Qualifier Execution
 
-extension NativePluginHost: PluginQualifierHost {
+extension NativePluginHost {
     /// Execute a qualifier transformation via the native plugin (ARO-0073: with parameters)
-    ///
-    /// - Parameters:
-    ///   - qualifier: The qualifier name (e.g., "pick-random")
-    ///   - input: The input value to transform
-    ///   - withParams: Optional parameters from the `with` clause
-    /// - Returns: The transformed value
-    /// - Throws: QualifierError on failure
     public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
         guard let qualifierFunc = qualifierFunc else {
             throw QualifierError.executionFailed(
@@ -1393,7 +1256,7 @@ extension NativePluginHost: PluginQualifierHost {
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
-        // Call the plugin
+        // Language-specific: call the C ABI function
         let resultPtr = qualifier.withCString { qualifierCStr in
             inputJSON.withCString { inputCStr in
                 qualifierFunc(qualifierCStr, inputCStr)
@@ -1415,7 +1278,7 @@ extension NativePluginHost: PluginQualifierHost {
 
         let resultJSON = String(cString: resultPtr)
 
-        // Parse result as QualifierOutput
+        // Shared result decoding
         guard let resultData = resultJSON.data(using: .utf8) else {
             throw QualifierError.executionFailed(
                 qualifier: qualifier,
@@ -1423,20 +1286,7 @@ extension NativePluginHost: PluginQualifierHost {
             )
         }
 
-        let output = try decoder.decode(QualifierOutput.self, from: resultData)
-
-        if let error = output.error {
-            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
-        }
-
-        guard let result = output.result else {
-            throw QualifierError.executionFailed(
-                qualifier: qualifier,
-                message: "Plugin returned neither result nor error"
-            )
-        }
-
-        return result.value
+        return try decodeQualifierResult(from: resultData, qualifier: qualifier, decoder: decoder)
     }
 }
 
@@ -1451,13 +1301,13 @@ struct NativePluginInfo: Sendable {
     /// Maps action names to their verbs (e.g., "ParseCSV" -> ["parsecsv", "readcsv"])
     let verbsMap: [String: [String]]
     /// Qualifiers provided by this plugin
-    let qualifiers: [NativeQualifierDescriptor]
+    let qualifiers: [PluginQualifierDescriptor]
     /// Services provided by this plugin (routed through aro_plugin_execute)
     let services: [NativeServiceDescriptor]
     /// Deprecated features
     let deprecations: [DeprecationDescriptor]
 
-    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [NativeQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = []) {
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [PluginQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = []) {
         self.name = name
         self.version = version
         self.language = language
@@ -1466,21 +1316,6 @@ struct NativePluginInfo: Sendable {
         self.qualifiers = qualifiers
         self.services = services
         self.deprecations = deprecations
-    }
-}
-
-/// Descriptor for a plugin-provided qualifier
-struct NativeQualifierDescriptor: Sendable {
-    let name: String
-    let inputTypes: Set<QualifierInputType>
-    let description: String?
-    let acceptsParameters: Bool
-
-    init(name: String, inputTypes: Set<QualifierInputType>, description: String? = nil, acceptsParameters: Bool = false) {
-        self.name = name
-        self.inputTypes = inputTypes
-        self.description = description
-        self.acceptsParameters = acceptsParameters
     }
 }
 
