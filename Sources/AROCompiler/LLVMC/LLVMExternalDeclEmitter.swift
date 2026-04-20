@@ -39,6 +39,9 @@ public final class LLVMExternalDeclEmitter {
     private var _setEmbeddedTemplates: Function?
     private var _registerEmbeddedPlugin: Function?
     private var _registerStaticPlugin: Function?
+    private var _registerEmbeddedPythonPlugin: Function?
+    private var _setPythonStdlib: Function?
+    private var _setPythonDeps: Function?
 
     // Cached per-plugin static function declarations
     private var staticPluginFunctions: [String: StaticPluginFunctions] = [:]
@@ -260,6 +263,28 @@ public final class LLVMExternalDeclEmitter {
         _registerStaticPlugin = ctx.module.declareFunction(
             "aro_register_static_plugin",
             types.voidFunctionType(parameters: [ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr])
+        )
+
+        // void @aro_register_embedded_python_plugin(ptr name, ptr yaml, ptr source)
+        // Registers an embedded Python plugin with its source code
+        _registerEmbeddedPythonPlugin = ctx.module.declareFunction(
+            "aro_register_embedded_python_plugin",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // void @aro_set_python_stdlib(ptr data, i64 length)
+        // Sets the embedded Python stdlib zip data
+        let i64 = ctx.i64Type
+        _setPythonStdlib = ctx.module.declareFunction(
+            "aro_set_python_stdlib",
+            types.voidFunctionType(parameters: [ptr, i64])
+        )
+
+        // void @aro_set_python_deps(ptr data, i64 length)
+        // Sets the embedded Python deps zip data
+        _setPythonDeps = ctx.module.declareFunction(
+            "aro_set_python_deps",
+            types.voidFunctionType(parameters: [ptr, i64])
         )
     }
 
@@ -579,6 +604,9 @@ public final class LLVMExternalDeclEmitter {
     public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }
     public var registerEmbeddedPlugin: Function { _registerEmbeddedPlugin! }
     public var registerStaticPlugin: Function { _registerStaticPlugin! }
+    public var registerEmbeddedPythonPlugin: Function { _registerEmbeddedPythonPlugin! }
+    public var setPythonStdlib: Function { _setPythonStdlib! }
+    public var setPythonDeps: Function { _setPythonDeps! }
 
     /// Declare external symbols for a statically-linked plugin and return references.
     ///

@@ -1701,6 +1701,161 @@ public final class PluginSymbolRenamer {
     }
 }
 
+// MARK: - Python Library Discovery
+
+/// Finds the Python library and include paths for linking.
+public final class PythonLibraryFinder {
+
+    public let verbose: Bool
+
+    public init(verbose: Bool = false) {
+        self.verbose = verbose
+    }
+
+    /// Result of finding Python on the build machine
+    public struct PythonPaths {
+        /// Path to libpython (dylib or framework)
+        public let libraryPath: String
+        /// Linker flags (e.g., "-lpython3.12")
+        public let linkerFlags: [String]
+        /// Path to Python stdlib directory
+        public let stdlibPath: String
+        /// Python version string (e.g., "3.12")
+        public let version: String
+        /// Path to python3 executable
+        public let executable: String
+    }
+
+    /// Find Python installation on the build machine.
+    /// Uses python3-config to discover paths.
+    public func findPython() -> PythonPaths? {
+        // Find python3 executable
+        guard let python3 = findPython3() else { return nil }
+
+        // Get version
+        guard let version = runPython(python3, code: "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") else { return nil }
+
+        // Get prefix
+        guard let prefix = runPython(python3, code: "import sys; print(sys.prefix)") else { return nil }
+
+        // Get linker flags via python3-config
+        let ldflags = runCommand(python3 + "-config", args: ["--ldflags", "--embed"])
+            ?? runCommand(python3 + "-config", args: ["--ldflags"])
+
+        // Determine library path and linker flags
+        var linkerFlags: [String] = []
+        var libraryPath = ""
+
+        #if os(macOS)
+        // On macOS, use the framework
+        let frameworkBinary = "\(prefix)/Python"
+        if FileManager.default.fileExists(atPath: frameworkBinary) {
+            libraryPath = frameworkBinary
+            linkerFlags = [frameworkBinary]
+        } else if let flags = ldflags {
+            linkerFlags = flags.split(separator: " ").map(String.init)
+            libraryPath = "\(prefix)/lib/libpython\(version).dylib"
+        }
+        #else
+        // On Linux, use the shared library
+        let libDir = "\(prefix)/lib"
+        let soPath = "\(libDir)/libpython\(version).so"
+        let aPath = "\(libDir)/python\(version)/config-\(version)-\(machineArch())-linux-gnu/libpython\(version).a"
+
+        if FileManager.default.fileExists(atPath: aPath) {
+            // Prefer static library on Linux
+            libraryPath = aPath
+            linkerFlags = [aPath, "-ldl", "-lm", "-lutil", "-lpthread"]
+        } else if FileManager.default.fileExists(atPath: soPath) {
+            libraryPath = soPath
+            linkerFlags = ["-L\(libDir)", "-lpython\(version)"]
+        } else if let flags = ldflags {
+            linkerFlags = flags.split(separator: " ").map(String.init)
+            libraryPath = soPath
+        }
+        #endif
+
+        // Find stdlib
+        let stdlibPath = "\(prefix)/lib/python\(version)"
+
+        guard !linkerFlags.isEmpty else {
+            if verbose { print("[PythonFinder] Could not determine linker flags for Python") }
+            return nil
+        }
+
+        if verbose {
+            print("[PythonFinder] Python \(version) at \(python3)")
+            print("[PythonFinder] Library: \(libraryPath)")
+            print("[PythonFinder] Stdlib: \(stdlibPath)")
+        }
+
+        return PythonPaths(
+            libraryPath: libraryPath,
+            linkerFlags: linkerFlags,
+            stdlibPath: stdlibPath,
+            version: version,
+            executable: python3
+        )
+    }
+
+    // MARK: - Private
+
+    private func findPython3() -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ]
+
+        for path in candidates {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        // Try PATH
+        if let path = runCommand("/usr/bin/which", args: ["python3"]) {
+            return path
+        }
+
+        return nil
+    }
+
+    private func runPython(_ python: String, code: String) -> String? {
+        return runCommand(python, args: ["-c", code])
+    }
+
+    private func runCommand(_ executable: String, args: [String]) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = args
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            return nil
+        }
+    }
+
+    private func machineArch() -> String {
+        #if arch(x86_64)
+        return "x86_64"
+        #elseif arch(arm64)
+        return "aarch64"
+        #else
+        return "x86_64"
+        #endif
+    }
+}
+
 /// Metadata about a plugin prepared for static linking
 public struct StaticPluginInfo {
     /// Plugin name (matches directory name)

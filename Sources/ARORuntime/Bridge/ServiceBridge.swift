@@ -2363,6 +2363,24 @@ public struct StaticPluginEntry {
 /// Key: plugin name, Value: StaticPluginEntry with function pointers and YAML metadata
 nonisolated(unsafe) public var staticPluginRegistry: [String: StaticPluginEntry] = [:]
 
+/// Entry for an embedded Python plugin (source + deps bundled in binary)
+public struct EmbeddedPythonPluginEntry {
+    public let yaml: String
+    public let source: String
+    public let stdlibZip: Data?
+    public let depsZip: Data?
+}
+
+/// Global registry for embedded Python plugins (source + deps, executed in-process)
+/// Key: plugin name, Value: EmbeddedPythonPluginEntry
+nonisolated(unsafe) public var embeddedPythonPluginRegistry: [String: EmbeddedPythonPluginEntry] = [:]
+
+/// Embedded Python stdlib zip data (shared across all Python plugins)
+nonisolated(unsafe) public var embeddedPythonStdlibZip: Data? = nil
+
+/// Embedded Python site-packages zip data (all pip deps bundled together)
+nonisolated(unsafe) public var embeddedPythonDepsZip: Data? = nil
+
 /// Set the embedded OpenAPI spec (called from generated main)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
@@ -2436,6 +2454,40 @@ public func aro_register_static_plugin(
         initFunc: initFunc,
         shutdownFunc: shutdownFunc
     )
+}
+
+/// Register an embedded Python plugin (source code + YAML metadata)
+/// Called from generated main() for each Python plugin compiled into the binary.
+@_cdecl("aro_register_embedded_python_plugin")
+public func aro_register_embedded_python_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ sourcePtr: UnsafePointer<CChar>?
+) {
+    guard let namePtr, let yamlPtr, let sourcePtr else { return }
+    let name = String(cString: namePtr)
+    let yaml = String(cString: yamlPtr)
+    let source = String(cString: sourcePtr)
+    embeddedPythonPluginRegistry[name] = EmbeddedPythonPluginEntry(
+        yaml: yaml,
+        source: source,
+        stdlibZip: nil,
+        depsZip: nil
+    )
+}
+
+/// Set the embedded Python stdlib zip data (called once from generated main)
+@_cdecl("aro_set_python_stdlib")
+public func aro_set_python_stdlib(_ dataPtr: UnsafePointer<UInt8>?, _ length: Int64) {
+    guard let dataPtr, length > 0 else { return }
+    embeddedPythonStdlibZip = Data(bytes: dataPtr, count: Int(length))
+}
+
+/// Set the embedded Python deps zip data (called once from generated main)
+@_cdecl("aro_set_python_deps")
+public func aro_set_python_deps(_ dataPtr: UnsafePointer<UInt8>?, _ length: Int64) {
+    guard let dataPtr, length > 0 else { return }
+    embeddedPythonDepsZip = Data(bytes: dataPtr, count: Int(length))
 }
 
 /// Register a feature set handler for HTTP routing

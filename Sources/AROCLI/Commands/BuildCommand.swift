@@ -223,6 +223,10 @@ struct BuildCommand: AsyncParsableCommand {
         var embeddedPlugins: [(name: String, yaml: String, base64Library: String)] = []
         var staticPluginInfos: [StaticPluginInfo] = []
         var staticPluginIRInfos: [StaticPluginIRInfo] = []
+        var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
+        var pythonRequirementsFiles: [URL] = []
+        var hasPythonPlugins = false
+        var pythonLinkerFlags: [String] = []
         let sourceManagedPluginsDirEarly = appConfig.rootPath.appendingPathComponent("Plugins")
         let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
 
@@ -262,31 +266,43 @@ struct BuildCommand: AsyncParsableCommand {
                     let yamlPath = pluginDir.appendingPathComponent("plugin.yaml")
                     let yamlContent = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
 
-                    // Check if this is a Python plugin (keep base64 for those)
+                    // Check if this is a Python plugin
                     let isPythonPlugin = yamlContent.contains("python-plugin")
                     if isPythonPlugin {
-                        // Python plugins: fall back to base64 embedding
+                        // Embedded Python: read source, install deps, link libpython
                         let searchDirs = [
                             pluginDir,
                             pluginDir.appendingPathComponent("src"),
+                            sourceManagedPluginsDirEarly.appendingPathComponent(pluginName).appendingPathComponent("src"),
                         ]
                         for searchDir in searchDirs {
                             guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
                             let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
                             if let pyFile = contents.first(where: { $0.pathExtension == "py" }) {
-                                if let pyData = try? Data(contentsOf: pyFile) {
-                                    embeddedPlugins.append((
+                                if let source = try? String(contentsOf: pyFile, encoding: .utf8) {
+                                    pythonPluginIRInfos.append(EmbeddedPythonPluginIRInfo(
                                         name: pluginName,
                                         yaml: yamlContent,
-                                        base64Library: pyData.base64EncodedString()
+                                        source: source
                                     ))
+                                    hasPythonPlugins = true
                                     if verbose {
-                                        print("  Embedded Python plugin '\(pluginName)' (\(pyData.count) bytes)")
+                                        print("  Python plugin '\(pluginName)' (\(source.count) bytes source)")
                                     }
                                 }
                                 break
                             }
                         }
+
+                        // Check for requirements.txt and install deps
+                        let reqCandidates = [
+                            pluginDir.appendingPathComponent("requirements.txt"),
+                            sourceManagedPluginsDirEarly.appendingPathComponent(pluginName).appendingPathComponent("requirements.txt"),
+                        ]
+                        if let reqFile = reqCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+                            pythonRequirementsFiles.append(reqFile)
+                        }
+
                         continue
                     }
 
@@ -446,6 +462,62 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        // If Python plugins were found, find libpython and prepare deps
+        if hasPythonPlugins {
+            let pythonFinder = PythonLibraryFinder(verbose: verbose)
+            if let pythonPaths = pythonFinder.findPython() {
+                pythonLinkerFlags = pythonPaths.linkerFlags
+                if verbose {
+                    print("Python \(pythonPaths.version) found: \(pythonPaths.executable)")
+                    print("  Linker flags: \(pythonPaths.linkerFlags.joined(separator: " "))")
+                }
+
+                // Install requirements to a temporary venv if needed
+                if !pythonRequirementsFiles.isEmpty {
+                    let venvDir = buildDir.appendingPathComponent("python-venv")
+                    if verbose { print("  Installing Python dependencies...") }
+
+                    // Create venv
+                    let venvProcess = Process()
+                    venvProcess.executableURL = URL(fileURLWithPath: pythonPaths.executable)
+                    venvProcess.arguments = ["-m", "venv", venvDir.path]
+                    venvProcess.standardOutput = FileHandle.nullDevice
+                    venvProcess.standardError = FileHandle.nullDevice
+                    try? venvProcess.run()
+                    venvProcess.waitUntilExit()
+
+                    // Install requirements
+                    let pip = venvDir.appendingPathComponent("bin/pip").path
+                    for reqFile in pythonRequirementsFiles {
+                        let pipProcess = Process()
+                        pipProcess.executableURL = URL(fileURLWithPath: pip)
+                        pipProcess.arguments = ["install", "-r", reqFile.path, "--quiet"]
+                        pipProcess.standardOutput = verbose ? FileHandle.standardOutput : FileHandle.nullDevice
+                        pipProcess.standardError = verbose ? FileHandle.standardError : FileHandle.nullDevice
+                        try? pipProcess.run()
+                        pipProcess.waitUntilExit()
+                    }
+
+                    if verbose { print("  Python dependencies installed") }
+                }
+            } else {
+                print("Warning: Python plugins found but python3 not available on build machine")
+                print("  Python plugins will use legacy base64 embedding")
+                // Fall back: convert Python IR infos back to legacy base64 embedded plugins
+                for pyPlugin in pythonPluginIRInfos {
+                    if let data = pyPlugin.source.data(using: .utf8) {
+                        embeddedPlugins.append((
+                            name: pyPlugin.name,
+                            yaml: pyPlugin.yaml,
+                            base64Library: data.base64EncodedString()
+                        ))
+                    }
+                }
+                pythonPluginIRInfos.removeAll()
+                hasPythonPlugins = false
+            }
+        }
+
         // Generate LLVM IR
         if verbose {
             print("Generating LLVM IR...")
@@ -519,7 +591,8 @@ struct BuildCommand: AsyncParsableCommand {
                 openAPISpecJSON: openAPISpecJSON,
                 templatesJSON: templatesJSON,
                 embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins,
-                staticPlugins: staticPluginIRInfos.isEmpty ? nil : staticPluginIRInfos
+                staticPlugins: staticPluginIRInfos.isEmpty ? nil : staticPluginIRInfos,
+                pythonPlugins: pythonPluginIRInfos.isEmpty ? nil : pythonPluginIRInfos
             )
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
@@ -655,11 +728,13 @@ struct BuildCommand: AsyncParsableCommand {
             FileHandle.standardError.write("[BUILD] Inside do block, calling link...\n".data(using: .utf8)!)
             #endif
 
-            // Collect all object files: main program + statically-linked plugins
+            // Collect all object files: main program + statically-linked plugins + Python lib
             var allObjectFiles = [objectPath]
             for pluginInfo in staticPluginInfos {
                 allObjectFiles.append(contentsOf: pluginInfo.objectFiles)
             }
+            // Add Python library if Python plugins are embedded
+            allObjectFiles.append(contentsOf: pythonLinkerFlags)
 
             try linker.link(
                 objectFiles: allObjectFiles,

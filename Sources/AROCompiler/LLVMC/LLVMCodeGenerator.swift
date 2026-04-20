@@ -37,6 +37,32 @@ public struct StaticPluginIRInfo {
     }
 }
 
+/// Metadata for an embedded Python plugin passed to LLVM IR generation.
+public struct EmbeddedPythonPluginIRInfo {
+    public let name: String
+    public let yaml: String
+    public let source: String
+
+    public init(name: String, yaml: String, source: String) {
+        self.name = name
+        self.yaml = yaml
+        self.source = source
+    }
+}
+
+/// Embedded Python bundle data for LLVM IR generation.
+public struct PythonBundleIRInfo {
+    /// Zipped Python stdlib (nil if no Python plugins)
+    public let stdlibZipPath: String?
+    /// Zipped pip dependencies (nil if no requirements)
+    public let depsZipPath: String?
+
+    public init(stdlibZipPath: String? = nil, depsZipPath: String? = nil) {
+        self.stdlibZipPath = stdlibZipPath
+        self.depsZipPath = depsZipPath
+    }
+}
+
 /// LLVM Code Generator using the Swifty-LLVM API for type-safe IR generation
 /// with source-location-aware error messages
 public final class LLVMCodeGenerator {
@@ -63,8 +89,10 @@ public final class LLVMCodeGenerator {
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
     ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0050)
-    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary (base64, for Python)
+    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary (legacy base64)
     ///   - staticPlugins: Optional array of statically-linked plugin metadata (native plugins)
+    ///   - pythonPlugins: Optional array of embedded Python plugin metadata
+    ///   - pythonBundle: Optional Python stdlib/deps bundle paths
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
@@ -72,7 +100,9 @@ public final class LLVMCodeGenerator {
         openAPISpecJSON: String? = nil,
         templatesJSON: String? = nil,
         embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil,
-        staticPlugins: [StaticPluginIRInfo]? = nil
+        staticPlugins: [StaticPluginIRInfo]? = nil,
+        pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
+        pythonBundle: PythonBundleIRInfo? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
@@ -93,7 +123,7 @@ public final class LLVMCodeGenerator {
 
         // Collect and emit string constants
         let stringCollector = StringConstantCollector(context: ctx)
-        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins)
+        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins)
 
         // Generate feature set functions
         for analyzedFS in program.featureSets {
@@ -101,7 +131,7 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle)
 
         // Verify module
         try verifyModule()
@@ -1867,7 +1897,7 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Main Function Generation
 
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1928,6 +1958,20 @@ public final class LLVMCodeGenerator {
                 ], at: ip)
             }
         }
+
+        // Register embedded Python plugins (source code, executed in-process via libpython)
+        if let plugins = pythonPlugins {
+            for plugin in plugins {
+                let nameStr = ctx.stringConstant(plugin.name)
+                let yamlStr = ctx.stringConstant(plugin.yaml)
+                let sourceStr = ctx.stringConstant(plugin.source)
+                _ = ctx.module.insertCall(externals.registerEmbeddedPythonPlugin, on: [nameStr, yamlStr, sourceStr], at: ip)
+            }
+        }
+
+        // TODO: Embed Python stdlib and deps as binary data when pythonBundle is provided
+        // This requires LLVM IR binary constant support (not string constants)
+        // For now, the runtime extracts from the cache or uses system Python stdlib
 
         // Load precompiled plugins
         _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
@@ -2233,7 +2277,7 @@ private final class StringConstantCollector {
         self.ctx = context
     }
 
-    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil) {
+    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil) {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
@@ -2268,6 +2312,15 @@ private final class StringConstantCollector {
             for plugin in plugins {
                 _ = ctx.stringConstant(plugin.name)
                 _ = ctx.stringConstant(plugin.yaml)
+            }
+        }
+
+        // Pre-register embedded Python plugin strings (name + yaml + source)
+        if let plugins = pythonPlugins {
+            for plugin in plugins {
+                _ = ctx.stringConstant(plugin.name)
+                _ = ctx.stringConstant(plugin.yaml)
+                _ = ctx.stringConstant(plugin.source)
             }
         }
 
