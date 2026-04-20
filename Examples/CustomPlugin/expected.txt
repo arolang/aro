@@ -1,9 +1,8 @@
-# Generated: Mon Apr 13 16:03:32 2026
 # Type: console
 # Command: aro run ./Examples/CustomPlugin
 ---
 Testing custom greeting plugin...
-result: Hello, ARO Developer!
-result: Goodbye, ARO Developer! See you next time.
+Hello, ARO Developer!
+Goodbye, ARO Developer! See you next time.
 Custom plugin demo completed.
 startup
