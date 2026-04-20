@@ -2,8 +2,5 @@
 # This file configures custom plugins for the application
 
 plugins:
-  # Swift source plugins (compiled on first run)
-  - source: plugins/GreetingService.swift
-
-  # Pre-compiled plugins (optional)
-  # - library: /path/to/CustomPlugin.dylib
+  # Managed Swift plugin (compiled automatically by aro build/run)
+  - source: Plugins/GreetingService
