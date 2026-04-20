@@ -45,7 +45,13 @@ struct HandlerInfo {
 /// Analyzes event flow graphs to detect circular chains
 public final class EventChainAnalyzer: Sendable {
 
-    public init() {}
+    /// System handler patterns that are excluded from cycle detection.
+    /// Injected at init so new handler types don't require modifying this class.
+    public let excludedHandlerPatterns: Set<String>
+
+    public init(excludedHandlerPatterns: Set<String> = ["Socket Event Handler", "File Event Handler"]) {
+        self.excludedHandlerPatterns = excludedHandlerPatterns
+    }
 
     // MARK: - Public Interface
 
