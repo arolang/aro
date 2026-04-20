@@ -9,12 +9,6 @@ import Foundation
 import WinSDK
 #endif
 
-/// Write debug message to stderr (only when ARO_DEBUG is set)
-private func debugPrint(_ message: String) {
-    guard ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil else { return }
-    FileHandle.standardError.write(Data((message + "\n").utf8))
-}
-
 // MARK: - CPluginString (RAII wrapper)
 
 /// RAII wrapper for C-allocated strings returned by plugin functions.
@@ -251,7 +245,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 
         // If library not found, try to compile it
         if libraryPath == nil {
-            debugPrint("[NativePluginHost] No pre-built library found for \(pluginName), attempting compilation...")
+            AROLogger.debug("No pre-built library found for \(pluginName), attempting compilation...", subsystem: "plugins")
             do {
                 libraryPath = try compileNativePlugin(config: config, ext: ext)
             } catch let NativePluginError.compilationFailed(name, message) {
@@ -260,7 +254,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         }
 
         guard let libraryPath = libraryPath else {
-            debugPrint("[NativePluginHost] Failed to find or compile library for \(pluginName)")
+            AROLogger.debug("Failed to find or compile library for \(pluginName)", subsystem: "plugins")
             throw NativePluginError.libraryNotFound(pluginName)
         }
 
@@ -312,7 +306,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         ]
 
         if let cargoToml = cargoTomlCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-            debugPrint("[NativePluginHost] Found Cargo.toml at \(cargoToml.path), compiling Rust plugin: \(pluginName)")
+            AROLogger.debug("Found Cargo.toml at \(cargoToml.path), compiling Rust plugin: \(pluginName)", subsystem: "plugins")
             let rustProjectDir = cargoToml.deletingLastPathComponent()
             return try compileRustPlugin(projectDir: rustProjectDir, ext: ext)
         }
@@ -320,7 +314,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         // Check for Package.swift (Swift Package plugin with dependencies)
         let packageSwift = pluginPath.appendingPathComponent("Package.swift")
         if FileManager.default.fileExists(atPath: packageSwift.path) {
-            debugPrint("[NativePluginHost] Found Package.swift, compiling Swift package plugin: \(pluginName)")
+            AROLogger.debug("Found Package.swift, compiling Swift package plugin: \(pluginName)", subsystem: "plugins")
             let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
             try compileSwiftPackagePlugin(packageDir: pluginPath, output: outputPath, ext: ext)
             return outputPath
@@ -345,13 +339,13 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         // C-ABI .so that loads safely via dlopen on all platforms).
         let swiftFiles = findSourceFiles(withExtension: "swift")
         if !swiftFiles.isEmpty {
-            debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
+            AROLogger.debug("Found Swift files: \(swiftFiles.map { $0.lastPathComponent })", subsystem: "plugins")
             let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
             do {
                 try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
                 return outputPath
             } catch {
-                debugPrint("[NativePluginHost] Standalone swiftc failed (\(error)), trying Package.swift...")
+                AROLogger.debug("Standalone swiftc failed (\(error)), trying Package.swift...", subsystem: "plugins")
                 // Clean up partial output so SPM doesn't complain about unhandled files
                 try? FileManager.default.removeItem(at: outputPath)
             }
@@ -365,11 +359,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 
         if let packageSwift = packageSwiftCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
             let packageDir = packageSwift.deletingLastPathComponent()
-            debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
+            AROLogger.debug("Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)", subsystem: "plugins")
             return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
         }
 
-        debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
+        AROLogger.debug("No compilable sources found for plugin: \(pluginName)", subsystem: "plugins")
         return nil
     }
 
@@ -419,7 +413,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             throw NativePluginError.compilationFailed(pluginName, message: "swiftc not found")
         }
 
-        debugPrint("[NativePluginHost] Compiling Swift plugin with \(swiftcPath)")
+        AROLogger.debug("Compiling Swift plugin with \(swiftcPath)", subsystem: "plugins")
 
         var args: [String] = []
         args.append(contentsOf: sources.map { $0.path })
@@ -449,11 +443,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            debugPrint("[NativePluginHost] Swift compilation failed: \(errorMessage)")
+            AROLogger.debug("Swift compilation failed: \(errorMessage)", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "swiftc failed: \(errorMessage)")
         }
 
-        debugPrint("[NativePluginHost] Swift plugin compiled to: \(output.path)")
+        AROLogger.debug("Swift plugin compiled to: \(output.path)", subsystem: "plugins")
     }
 
     /// Compile Swift plugin using Package.swift (swift build)
@@ -499,7 +493,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             throw NativePluginError.compilationFailed(pluginName, message: "swift not found")
         }
 
-        debugPrint("[NativePluginHost] Building Swift package plugin with \(swiftPath) in \(packageDir.path)")
+        AROLogger.debug("Building Swift package plugin with \(swiftPath) in \(packageDir.path)", subsystem: "plugins")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: swiftPath)
@@ -522,7 +516,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
             let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus), reason: \(process.terminationReason.rawValue)" : combined
-            debugPrint("[NativePluginHost] Swift package build failed: \(errorMessage)")
+            AROLogger.debug("Swift package build failed: \(errorMessage)", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
         }
 
@@ -565,12 +559,12 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
                 // Do NOT copy it out — the RPATH in the .so references sibling
                 // dependencies (e.g. AROPluginKit) that live in the same build dir.
                 // Copying breaks those references and causes dlopen to crash.
-                debugPrint("[NativePluginHost] Swift package plugin built: \(lib.path)")
+                AROLogger.debug("Swift package plugin built: \(lib.path)", subsystem: "plugins")
                 return lib
             }
         }
 
-        debugPrint("[NativePluginHost] Swift package built but no dynamic library found")
+        AROLogger.debug("Swift package built but no dynamic library found", subsystem: "plugins")
         return nil
     }
 
@@ -585,15 +579,15 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             "/usr/bin/cargo",
         ]
 
-        debugPrint("[NativePluginHost] Looking for cargo in: \(cargoPaths)")
+        AROLogger.debug("Looking for cargo in: \(cargoPaths)", subsystem: "plugins")
 
         guard let cargoPath = cargoPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            debugPrint("[NativePluginHost] Cargo not found!")
+            AROLogger.debug("Cargo not found!", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "Cargo not found. Install Rust to compile this plugin.")
         }
 
-        debugPrint("[NativePluginHost] Using cargo at: \(cargoPath)")
-        debugPrint("[NativePluginHost] Building in: \(projectDir.path)")
+        AROLogger.debug("Using cargo at: \(cargoPath)", subsystem: "plugins")
+        AROLogger.debug("Building in: \(projectDir.path)", subsystem: "plugins")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cargoPath)
@@ -611,28 +605,28 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            debugPrint("[NativePluginHost] Cargo build failed: \(errorMessage)")
+            AROLogger.debug("Cargo build failed: \(errorMessage)", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "Cargo build failed: \(errorMessage)")
         }
 
-        debugPrint("[NativePluginHost] Cargo build succeeded")
+        AROLogger.debug("Cargo build succeeded", subsystem: "plugins")
 
         // Find the built library in target/release
         let targetDir = projectDir.appendingPathComponent("target/release")
-        debugPrint("[NativePluginHost] Looking for library in: \(targetDir.path) with extension: \(ext)")
+        AROLogger.debug("Looking for library in: \(targetDir.path) with extension: \(ext)", subsystem: "plugins")
 
         // Look for library file (lib*.dylib on macOS, lib*.so on Linux)
         if let contents = try? FileManager.default.contentsOfDirectory(at: targetDir, includingPropertiesForKeys: nil) {
-            debugPrint("[NativePluginHost] Files in target/release: \(contents.map { $0.lastPathComponent })")
+            AROLogger.debug("Files in target/release: \(contents.map { $0.lastPathComponent })", subsystem: "plugins")
             // Find lib*.dylib or lib*.so
             if let lib = contents.first(where: { $0.pathExtension == ext && $0.lastPathComponent.hasPrefix("lib") }) {
-                debugPrint("[NativePluginHost] Found library: \(lib.path)")
+                AROLogger.debug("Found library: \(lib.path)", subsystem: "plugins")
                 return lib
             }
         }
 
         let errorMessage = "Library not found in '\(targetDir.path)' after successful cargo build"
-        debugPrint("[NativePluginHost] \(errorMessage)")
+        AROLogger.debug("\(errorMessage)", subsystem: "plugins")
         throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
     }
 
@@ -661,7 +655,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             try FileManager.default.removeItem(at: output)
         }
         try FileManager.default.copyItem(at: builtLib, to: output)
-        debugPrint("[NativePluginHost] Swift package plugin copied to: \(output.path)")
+        AROLogger.debug("Swift package plugin copied to: \(output.path)", subsystem: "plugins")
     }
 
     /// Compile C source files to a dynamic library
@@ -751,7 +745,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         // --- Optional: aro_plugin_qualifier ---
         if let qualifierSymbol = resolveSymbol("aro_plugin_qualifier") {
             qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
-            debugPrint("[NativePluginHost] Found aro_plugin_qualifier in \(pluginName)")
+            AROLogger.debug("Found aro_plugin_qualifier in \(pluginName)", subsystem: "plugins")
         }
 
         // --- Optional: aro_plugin_init (lifecycle) ---
@@ -767,7 +761,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         // --- Optional: aro_plugin_on_event ---
         if let eventSymbol = resolveSymbol("aro_plugin_on_event") {
             onEventFunc = unsafeBitCast(eventSymbol, to: OnEventFunc.self)
-            debugPrint("[NativePluginHost] Found aro_plugin_on_event in \(pluginName)")
+            AROLogger.debug("Found aro_plugin_on_event in \(pluginName)", subsystem: "plugins")
         }
 
         // --- Optional: system object functions ---
@@ -798,7 +792,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
                     return resultJSON.withCString { strdup($0) }
                 }
                 setInvokeFn(callback)
-                debugPrint("[NativePluginHost] Passed invoke callback to \(pluginName)")
+                AROLogger.debug("Passed invoke callback to \(pluginName)", subsystem: "plugins")
             }
         }
 
@@ -808,7 +802,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         if let registerSymbol = resolveSymbol("aro_plugin_register") {
             let registerFn = unsafeBitCast(registerSymbol, to: InitFunc.self)
             registerFn()
-            debugPrint("[NativePluginHost] Called aro_plugin_register for \(pluginName)")
+            AROLogger.debug("Called aro_plugin_register for \(pluginName)", subsystem: "plugins")
         }
 
         // Load and parse plugin info JSON
@@ -924,17 +918,17 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         }
 
         // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
-        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil), namespace=\(qualifierNamespace ?? "none")")
+        AROLogger.debug("Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil), namespace=\(qualifierNamespace ?? "none")", subsystem: "plugins")
         if qualifierFunc != nil {
             for descriptor in qualifierDescriptors {
-                debugPrint("[NativePluginHost] Registering qualifier: \(qualifierNamespace ?? pluginName).\(descriptor.name)")
+                AROLogger.debug("Registering qualifier: \(qualifierNamespace ?? pluginName).\(descriptor.name)", subsystem: "plugins")
             }
             registerQualifiers(qualifierDescriptors)
         }
 
         // Subscribe to domain events if plugin has on_event function
         if onEventFunc != nil && !eventSubscriptions.isEmpty {
-            debugPrint("[NativePluginHost] Subscribing \(pluginName) to events: \(eventSubscriptions)")
+            AROLogger.debug("Subscribing \(pluginName) to events: \(eventSubscriptions)", subsystem: "plugins")
             EventBus.shared.subscribe(to: DomainEvent.self) { [weak self] event in
                 guard let self = self else { return }
                 // Check if this event matches any of the plugin's subscriptions
@@ -954,7 +948,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 
         // Log deprecation warnings
         for dep in deprecationList {
-            debugPrint("[NativePluginHost] ⚠ Deprecation in \(pluginName): \(dep.feature) - \(dep.message)")
+            AROLogger.warning("Deprecation in \(pluginName): \(dep.feature) - \(dep.message)", subsystem: "plugins")
         }
     }
 
