@@ -970,8 +970,9 @@ Python plugins open the entire Python ecosystem to ARO:
 - **`aro_action_{name}(input_json: str) -> str`** for each action the plugin provides
 - **`aro_qualifier_{name}(input_json: str) -> str`** for qualifier implementations; declare `"accepts_parameters": True` in `aro_plugin_info` to support `with { }` clauses
 - **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`, execution context under `"_context"`
-- **Communication**: JSON over stdin/stdout via a persistent subprocess (models/state cached across calls)
-- **Dependencies**: Standard `requirements.txt` with pip
+- **Communication (interpreter mode)**: JSON over stdin/stdout via a persistent subprocess (models/state cached across calls)
+- **Communication (binary mode)**: In-process execution via embedded `libpython3` — no subprocess, no Python installation needed on the target machine. `aro build` links `libpython3` into the binary and embeds plugin source as string constants.
+- **Dependencies**: Standard `requirements.txt` with pip. In binary mode, dependencies are installed at build time and bundled.
 - **ML/AI**: Hugging Face Transformers for LLM inference
 - **Performance**: Model caching, batching, GPU acceleration
 - **Error handling**: Always catch exceptions, return JSON errors

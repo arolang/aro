@@ -673,15 +673,23 @@ call void @aro_register_static_plugin(
 
 Symbols that don't exist in the plugin pass `null`. The runtime bridge stores these function pointers in `staticPluginRegistry` and uses them directly — no `dlopen` or `dlsym` at runtime.
 
-### Python Plugin Exception
+### Embedded Python Runtime
 
-Python plugins cannot be statically linked (they require an interpreter). These continue using base64 embedding with `/tmp` extraction at runtime.
+Python plugins use a different strategy: the Python interpreter itself (`libpython3`) is linked into the binary, and plugin source code is embedded as string constants. At runtime:
+
+1. `EmbeddedPythonHost` resolves Python C API functions (`Py_Initialize`, `PyImport_ImportModule`, etc.) via `dlsym(RTLD_DEFAULT)` — the symbols come from the statically-linked `libpython3`
+2. Plugin source is extracted to `~/.aro/cache/python-<hash>/`
+3. Third-party dependencies (from `requirements.txt`) are installed at build time and their wheels can be bundled
+4. Plugin functions (`aro_plugin_info`, `aro_plugin_execute`) are called in-process via the Python C API
+
+This eliminates the subprocess overhead of the interpreter-mode `PythonPluginHost` and makes Python plugins self-contained — no Python installation needed on the target machine.
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `Sources/AROCompiler/Linker.swift` | `PluginSymbolRenamer` — symbol renaming via `llvm-objcopy` |
+| `Sources/AROCompiler/Linker.swift` | `PluginSymbolRenamer` + `PythonLibraryFinder` |
+| `Sources/ARORuntime/Plugins/EmbeddedPythonHost.swift` | In-process Python execution via dlsym |
 | `Sources/ARORuntime/Bridge/ServiceBridge.swift` | `aro_register_static_plugin` — stores function pointers |
 | `Sources/ARORuntime/Services/PluginLoader.swift` | `loadStaticPlugin` — initializes plugins from function pointers |
 | `Sources/AROCompiler/LLVMC/LLVMExternalDeclEmitter.swift` | Declares renamed external symbols |
