@@ -5,10 +5,6 @@
 
 import Foundation
 
-#if canImport(Darwin)
-import CoreFoundation
-#endif
-
 /// Streaming JSON parser that processes JSON data incrementally.
 ///
 /// Supports two modes:
@@ -211,49 +207,12 @@ public struct JSONStreamParser: Sendable {
 
     /// Converts a JSON dictionary to Sendable types
     private static func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, value) in dict {
-            result[key] = convertValueToSendable(value)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 
     /// Converts a JSON value to a Sendable type
     private static func convertValueToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            // Check if it's a boolean (Apple platforms have CFBoolean APIs)
-            #if canImport(Darwin)
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
-                return num.boolValue
-            }
-            #else
-            // On Linux, check type encoding for boolean
-            let objCType = String(cString: num.objCType)
-            if objCType == "B" || objCType == "c" {
-                if num.intValue == 0 || num.intValue == 1 {
-                    return num.boolValue
-                }
-            }
-            #endif
-            // Check if it's an integer
-            if floor(num.doubleValue) == num.doubleValue && abs(num.doubleValue) < Double(Int.max) {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let bool as Bool:
-            return bool
-        case let arr as [Any]:
-            return arr.map { convertValueToSendable($0) }
-        case let dict as [String: Any]:
-            return convertToSendable(dict)
-        case is NSNull:
-            return Optional<String>.none as any Sendable
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 }
 

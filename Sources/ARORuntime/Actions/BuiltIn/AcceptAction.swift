@@ -275,33 +275,13 @@ public struct AcceptAction: ActionImplementation {
     }
 
     /// Convert any value to a Sendable type
-    /// Since Sendable is a marker protocol and cannot be checked at runtime,
-    /// we explicitly handle known types
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let int = value as? Int { return int }
-        if let double = value as? Double { return double }
-        if let bool = value as? Bool { return bool }
-        if let date = value as? Date { return date }
-        if let data = value as? Data { return data }
-        if let uuid = value as? UUID { return uuid }
-        if let url = value as? URL { return url }
-        if let array = value as? [String] { return array }
-        if let array = value as? [Int] { return array }
-        if let array = value as? [Double] { return array }
-        if let dict = value as? [String: String] { return dict }
-        if let dict = value as? [String: Int] { return dict }
-        if let dict = value as? [String: Any] { return convertToSendableDict(dict) }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 
     /// Convert a [String: Any] dictionary to [String: any Sendable]
     private func convertToSendableDict(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, value) in dict {
-            result[key] = convertToSendable(value)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 }
 

@@ -1108,17 +1108,7 @@ public struct UpdateAction: SynchronousAction {
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let s = value as? String { return s }
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return d }
-        if let b = value as? Bool { return b }
-        if let arr = value as? [Any] { return arr.map { convertToSendable($0) } as [any Sendable] }
-        if let dict = value as? [String: Any] {
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict { result[k] = convertToSendable(v) }
-            return result
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }
 

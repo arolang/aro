@@ -379,27 +379,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        case let arr as [Any]:
-            return arr.map { convertToSendable($0) }
-        case let bool as Bool:
-            return bool
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 }
 

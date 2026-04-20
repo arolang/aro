@@ -464,32 +464,12 @@ public struct ExtractAction: SynchronousAction {
 
     /// Convert a JSON dictionary to a Sendable dictionary
     private func convertJSONDict(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, value) in dict {
-            result[key] = convertJSONValue(value)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 
     /// Convert any value to Sendable (for type-erased dictionaries)
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let num = value as? Int { return num }
-        if let num = value as? Double { return num }
-        if let b = value as? Bool { return b }
-        if let dict = value as? [String: any Sendable] { return dict }
-        if let dict = value as? Dictionary<String, Any> {
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        }
-        if let arr = value as? [any Sendable] { return arr }
-        if let arr = value as? [Any] {
-            return arr.map { convertToSendable($0) }
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 
     private func extractFromString(_ source: String, key: String) -> (any Sendable)? {
@@ -546,43 +526,7 @@ public struct ExtractAction: SynchronousAction {
 
     /// Convert JSON value to Sendable
     private func convertJSONValue(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            let objCType = String(cString: num.objCType)
-            #if canImport(Darwin)
-            // On Darwin, check if it's actually a boolean type (CFBoolean)
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
-                return num.boolValue
-            }
-            #else
-            // On Linux, NSNumber from JSON booleans have objCType "c" (char)
-            if objCType == "c" || objCType == "B" {
-                let intVal = num.intValue
-                if intVal == 0 || intVal == 1 {
-                    return num.boolValue
-                }
-            }
-            #endif
-            // Check if it's a double
-            if objCType == "d" || objCType == "f" {
-                return num.doubleValue
-            }
-            return num.intValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertJSONValue(v)
-            }
-            return result
-        case let array as [Any]:
-            return array.map { convertJSONValue($0) }
-        case let bool as Bool:
-            return bool
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 
     /// Extract value from form-urlencoded data: key=value&key2=value2

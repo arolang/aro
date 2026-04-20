@@ -336,21 +336,11 @@ enum WebSocketStreamRunner {
     }
 
     private static func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, val) in dict {
-            result[key] = convertValue(val)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 
     private static func convertValue(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let int = value as? Int { return int }
-        if let double = value as? Double { return double }
-        if let bool = value as? Bool { return bool }
-        if let array = value as? [Any] { return array.map { convertValue($0) } }
-        if let dict = value as? [String: Any] { return convertToSendable(dict) }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }
 
@@ -492,21 +482,11 @@ enum SSEStreamRunner {
     }
 
     private static func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, val) in dict {
-            result[key] = convertValue(val)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 
     private static func convertValue(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let int = value as? Int { return int }
-        if let double = value as? Double { return double }
-        if let bool = value as? Bool { return bool }
-        if let array = value as? [Any] { return array.map { convertValue($0) } }
-        if let dict = value as? [String: Any] { return convertToSendable(dict) }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }
 
