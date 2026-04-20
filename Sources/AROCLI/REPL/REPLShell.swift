@@ -4,6 +4,7 @@
 // The main Read-Eval-Print Loop implementation
 
 import Foundation
+import ARORuntime
 import AROVersion
 import LineNoise
 #if canImport(Darwin)
@@ -64,6 +65,7 @@ public final class REPLShell: @unchecked Sendable {
     /// Run the REPL
     public func run() async {
         printWelcome()
+        loadInstalledPlugins()
         setupSignalHandlers()
         setupCompletion()
 
@@ -389,6 +391,22 @@ public final class REPLShell: @unchecked Sendable {
             // Flush stdout - use fflush(nil) to avoid concurrency issues with Glibc.stdout on Linux
             fflush(nil)
             return Swift.readLine()
+        }
+    }
+
+    /// Load previously installed REPL plugins from ~/.aro/repl-plugins/
+    private func loadInstalledPlugins() {
+        let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".aro/repl-plugins")
+        let pluginsDir = replPluginsDir.appendingPathComponent("Plugins")
+
+        guard FileManager.default.fileExists(atPath: pluginsDir.path) else { return }
+
+        do {
+            try UnifiedPluginLoader.shared.loadPlugins(from: replPluginsDir)
+        } catch {
+            // Non-fatal — warn but continue
+            print(colorize("Warning: ", .yellow) + "Failed to load installed plugins: \(error)")
         }
     }
 

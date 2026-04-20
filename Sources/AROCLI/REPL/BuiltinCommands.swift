@@ -643,11 +643,22 @@ public struct PluginCommand: MetaCommand {
             return .error("Usage: :plugin remove <plugin-name>")
         }
 
+        // Unload from runtime
         let removed = UnifiedPluginLoader.shared.unload(pluginName: name)
-        if removed {
-            return .output("Plugin '\(name)' unloaded")
+
+        // Remove from disk so :plugin add works again in future sessions
+        let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".aro/repl-plugins/Plugins")
+        let pluginDir = replPluginsDir.appendingPathComponent(name)
+        let removedFromDisk = FileManager.default.fileExists(atPath: pluginDir.path)
+        if removedFromDisk {
+            try? FileManager.default.removeItem(at: pluginDir)
+        }
+
+        if removed || removedFromDisk {
+            return .output("Plugin '\(name)' removed")
         } else {
-            return .error("Plugin '\(name)' is not loaded")
+            return .error("Plugin '\(name)' is not installed")
         }
     }
 }
