@@ -217,14 +217,17 @@ struct BuildCommand: AsyncParsableCommand {
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
 
-        // Pre-compile managed plugins so they can be embedded in the binary
-        // This must happen before LLVM IR generation so the plugin data is available for embedding.
+        // Pre-compile managed plugins for inclusion in the binary.
+        // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
+        // Python plugins fall back to base64 embedding (they run via subprocess).
         var embeddedPlugins: [(name: String, yaml: String, base64Library: String)] = []
+        var staticPluginInfos: [StaticPluginInfo] = []
+        var staticPluginIRInfos: [StaticPluginIRInfo] = []
         let sourceManagedPluginsDirEarly = appConfig.rootPath.appendingPathComponent("Plugins")
         let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
 
         if FileManager.default.fileExists(atPath: sourceManagedPluginsDirEarly.path) {
-            if verbose { print("Compiling managed plugins for embedding...") }
+            if verbose { print("Compiling managed plugins...") }
             do {
                 let sourceResolved = sourceManagedPluginsDirEarly.standardizedFileURL.path
                 let outputResolved = outputManagedPluginsDirEarly.standardizedFileURL.path
@@ -242,7 +245,11 @@ struct BuildCommand: AsyncParsableCommand {
                 let libExt = "dylib"
                 #endif
 
-                // Collect compiled .so files for embedding
+                let symbolRenamer = PluginSymbolRenamer(verbose: verbose)
+                let staticBuildDir = buildDir.appendingPathComponent("static-plugins")
+                try? FileManager.default.createDirectory(at: staticBuildDir, withIntermediateDirectories: true)
+
+                // Process each compiled plugin
                 let pluginDirs = (try? FileManager.default.contentsOfDirectory(
                     at: outputManagedPluginsDirEarly,
                     includingPropertiesForKeys: [.isDirectoryKey]
@@ -254,32 +261,188 @@ struct BuildCommand: AsyncParsableCommand {
                     let pluginName = pluginDir.lastPathComponent
                     let yamlPath = pluginDir.appendingPathComponent("plugin.yaml")
                     let yamlContent = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
-                    let searchDirs = [
-                        pluginDir,
-                        pluginDir.appendingPathComponent("src"),
-                        pluginDir.appendingPathComponent("Sources"),
-                        pluginDir.appendingPathComponent("target/release"),
+
+                    // Check if this is a Python plugin (keep base64 for those)
+                    let isPythonPlugin = yamlContent.contains("python-plugin")
+                    if isPythonPlugin {
+                        // Python plugins: fall back to base64 embedding
+                        let searchDirs = [
+                            pluginDir,
+                            pluginDir.appendingPathComponent("src"),
+                        ]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            if let pyFile = contents.first(where: { $0.pathExtension == "py" }) {
+                                if let pyData = try? Data(contentsOf: pyFile) {
+                                    embeddedPlugins.append((
+                                        name: pluginName,
+                                        yaml: yamlContent,
+                                        base64Library: pyData.base64EncodedString()
+                                    ))
+                                    if verbose {
+                                        print("  Embedded Python plugin '\(pluginName)' (\(pyData.count) bytes)")
+                                    }
+                                }
+                                break
+                            }
+                        }
+                        continue
+                    }
+
+                    // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
+                    var objectFiles: [String] = []
+
+                    // Create a working directory for this plugin's renamed object files
+                    let pluginWorkDir = staticBuildDir.appendingPathComponent(pluginName)
+                    try? FileManager.default.createDirectory(at: pluginWorkDir, withIntermediateDirectories: true)
+
+                    // Strategy 1: Find .o files from SPM build directory (Swift package plugins)
+                    // After `swift build`, .o files are in .build/<triple>/release/<Module>.build/*.o
+                    // The managed plugin compiler uses .build-aro as the build directory
+                    let sourcePluginDir = sourceManagedPluginsDirEarly.appendingPathComponent(pluginName)
+                    let spmBuildCandidates = [
+                        pluginDir.appendingPathComponent(".build-aro"),
+                        pluginDir.appendingPathComponent(".build"),
+                        sourcePluginDir.appendingPathComponent(".build-aro"),
+                        sourcePluginDir.appendingPathComponent(".build"),
                     ]
-                    for searchDir in searchDirs {
-                        guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
-                        let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
-                        if let soFile = contents.first(where: { $0.pathExtension == libExt }) {
-                            if let soData = try? Data(contentsOf: soFile) {
-                                embeddedPlugins.append((
-                                    name: pluginName,
-                                    yaml: yamlContent,
-                                    base64Library: soData.base64EncodedString()
-                                ))
-                                if verbose {
-                                    print("  Embedded plugin '\(pluginName)' (\(soData.count) bytes → \(soFile.lastPathComponent))")
+                    let spmBuildDir = spmBuildCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+                        ?? sourcePluginDir.appendingPathComponent(".build")
+                    // Determine which directory contains the Package.swift for --show-bin-path
+                    let packageDir = FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("Package.swift").path) ? pluginDir : sourcePluginDir
+                    if FileManager.default.fileExists(atPath: spmBuildDir.path) {
+                        // Use `swift build --show-bin-path` to find the correct build directory
+                        var binPath: String? = nil
+                        let showBinProcess = Process()
+                        showBinProcess.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+                        showBinProcess.arguments = ["build", "-c", "release", "--show-bin-path", "--scratch-path", spmBuildDir.path]
+                        showBinProcess.currentDirectoryURL = packageDir
+                        let binPipe = Pipe()
+                        showBinProcess.standardOutput = binPipe
+                        showBinProcess.standardError = FileHandle.nullDevice
+                        if let _ = try? showBinProcess.run() {
+                            showBinProcess.waitUntilExit()
+                            if showBinProcess.terminationStatus == 0,
+                               let path = String(data: binPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                                   .trimmingCharacters(in: .whitespacesAndNewlines),
+                               !path.isEmpty {
+                                binPath = path
+                            }
+                        }
+
+                        if let releaseDir = binPath {
+                            // Collect .o files from all module build directories
+                            // Include the plugin itself + its dependencies (e.g., AROPluginSDK, AROPluginKit)
+                            let releaseDirURL = URL(fileURLWithPath: releaseDir)
+                            if let buildDirContents = try? FileManager.default.contentsOfDirectory(
+                                at: releaseDirURL, includingPropertiesForKeys: [.isDirectoryKey]
+                            ) {
+                                for dir in buildDirContents where dir.pathExtension == "build" {
+                                    let moduleName = dir.deletingPathExtension().lastPathComponent
+                                    // Skip compiler plugin / macro modules (they end in -tool or are swift-syntax related)
+                                    if moduleName.hasSuffix("-tool") || moduleName.contains("SwiftSyntax") ||
+                                       moduleName.contains("SwiftParser") || moduleName.contains("SwiftOperators") ||
+                                       moduleName.contains("SwiftBasicFormat") || moduleName.contains("SwiftDiagnostics") ||
+                                       moduleName.contains("SwiftLexicalLookup") || moduleName.contains("SwiftCompiler") ||
+                                       moduleName.contains("_SwiftSyntax") || moduleName.contains("SwiftIfConfig") ||
+                                       moduleName.contains("SwiftRefactor") || moduleName.contains("SwiftIDEUtils") ||
+                                       moduleName == "_SwiftSyntaxCShims" || moduleName.contains("GenericTestSupport") {
+                                        continue
+                                    }
+                                    if let oFiles = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                                        for oFile in oFiles where oFile.pathExtension == "o" {
+                                            objectFiles.append(oFile.path)
+                                        }
+                                    }
                                 }
                             }
-                            break
                         }
+                    }
+
+                    // Strategy 2: Find .o from Rust cargo build
+                    if objectFiles.isEmpty {
+                        let cargoTarget = sourcePluginDir.appendingPathComponent("target/release")
+                        if let contents = try? FileManager.default.contentsOfDirectory(at: cargoTarget, includingPropertiesForKeys: nil) {
+                            // Rust produces a .a in target/release/
+                            if let aFile = contents.first(where: { $0.pathExtension == "a" && $0.lastPathComponent.hasPrefix("lib") }) {
+                                objectFiles = try symbolRenamer.extractObjectFiles(from: aFile.path, to: pluginWorkDir.path)
+                            }
+                        }
+                    }
+
+                    // Strategy 3: Find .o from direct C compilation
+                    if objectFiles.isEmpty {
+                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            objectFiles.append(contentsOf: contents.filter { $0.pathExtension == "o" }.map { $0.path })
+                        }
+                    }
+
+                    // Strategy 4: Recompile from .c source files to .o
+                    if objectFiles.isEmpty {
+                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            let cFiles = contents.filter { $0.pathExtension == "c" }
+                            for cFile in cFiles {
+                                let oPath = pluginWorkDir.appendingPathComponent(cFile.deletingPathExtension().lastPathComponent + ".o").path
+                                let compileProcess = Process()
+                                compileProcess.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
+                                compileProcess.arguments = ["-c", "-fPIC", "-O2", "-o", oPath, cFile.path]
+                                compileProcess.standardOutput = FileHandle.nullDevice
+                                compileProcess.standardError = FileHandle.nullDevice
+                                try? compileProcess.run()
+                                compileProcess.waitUntilExit()
+                                if compileProcess.terminationStatus == 0 {
+                                    objectFiles.append(oPath)
+                                }
+                            }
+                        }
+                    }
+
+                    if objectFiles.isEmpty {
+                        if verbose { print("  Warning: No object files found for plugin '\(pluginName)', skipping") }
+                        continue
+                    }
+
+                    // Rename plugin symbols to avoid collisions
+                    let renamedFiles = try symbolRenamer.renamePluginSymbols(
+                        objectFiles: objectFiles,
+                        pluginName: pluginName,
+                        outputDir: pluginWorkDir.path
+                    )
+
+                    // Discover which symbols this plugin actually exports
+                    let availableSymbols = try symbolRenamer.discoverSymbols(in: renamedFiles, pluginName: pluginName)
+
+                    if !availableSymbols.contains("aro_plugin_info") {
+                        if verbose { print("  Warning: Plugin '\(pluginName)' missing aro_plugin_info, skipping static link") }
+                        continue
+                    }
+
+                    staticPluginInfos.append(StaticPluginInfo(
+                        name: pluginName,
+                        yaml: yamlContent,
+                        objectFiles: renamedFiles,
+                        availableSymbols: availableSymbols
+                    ))
+                    staticPluginIRInfos.append(StaticPluginIRInfo(
+                        name: pluginName,
+                        yaml: yamlContent,
+                        availableSymbols: availableSymbols
+                    ))
+
+                    if verbose {
+                        let totalSize = renamedFiles.compactMap { try? FileManager.default.attributesOfItem(atPath: $0)[.size] as? Int }.reduce(0, +)
+                        print("  Static plugin '\(pluginName)' (\(totalSize) bytes, \(availableSymbols.count) symbols)")
                     }
                 }
             } catch {
-                print("Warning: Failed to compile managed plugins for embedding: \(error)")
+                print("Warning: Failed to compile managed plugins: \(error)")
             }
         }
 
@@ -355,7 +518,8 @@ struct BuildCommand: AsyncParsableCommand {
                 program: mergedProgram,
                 openAPISpecJSON: openAPISpecJSON,
                 templatesJSON: templatesJSON,
-                embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins
+                embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins,
+                staticPlugins: staticPluginIRInfos.isEmpty ? nil : staticPluginIRInfos
             )
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
@@ -491,8 +655,14 @@ struct BuildCommand: AsyncParsableCommand {
             FileHandle.standardError.write("[BUILD] Inside do block, calling link...\n".data(using: .utf8)!)
             #endif
 
+            // Collect all object files: main program + statically-linked plugins
+            var allObjectFiles = [objectPath]
+            for pluginInfo in staticPluginInfos {
+                allObjectFiles.append(contentsOf: pluginInfo.objectFiles)
+            }
+
             try linker.link(
-                objectFiles: [objectPath],
+                objectFiles: allObjectFiles,
                 outputPath: binaryPath.path,
                 outputType: .executable,
                 options: linkOptions

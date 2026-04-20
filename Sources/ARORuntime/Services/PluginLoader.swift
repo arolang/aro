@@ -276,6 +276,138 @@ public final class PluginLoader: @unchecked Sendable {
         return legacyHandler
     }
 
+    /// Load a statically-linked plugin using function pointers (no dlopen).
+    ///
+    /// Follows the same registration path as `loadCPlugin` but uses direct function
+    /// pointers instead of dlopen/dlsym. The plugin code is already linked into the binary.
+    private func loadStaticPlugin(name: String, entry: StaticPluginEntry, namespace: String?) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        // Check if already loaded
+        if loadedPlugins[name] != nil { return }
+
+        // Register as loaded (use a sentinel value since there is no dlopen handle)
+        loadedPlugins[name] = UnsafeMutableRawPointer(bitPattern: 1)
+
+        // Cast function pointers to C ABI types
+        let executeFunc: CPluginExecuteFunction? = entry.executeFunc.map { unsafeBitCast($0, to: CPluginExecuteFunction.self) }
+        let freeFunc: CPluginFreeFunction? = entry.freeFunc.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
+
+        // Store the execute function for action dispatch
+        if let executeFunc {
+            cPluginFunctions[name.lowercased()] = (execute: executeFunc, free: freeFunc)
+        }
+
+        // Register as AROService with the directory name
+        let wrapper = CPluginServiceWrapper(name: name, loader: self)
+        try? ExternalServiceRegistry.shared.register(wrapper, withName: name)
+
+        // Call aro_plugin_register if present (SDK plugins use lazy initializers)
+        if let initPtr = entry.initFunc {
+            let initFn = unsafeBitCast(initPtr, to: (@convention(c) () -> Void).self)
+            initFn()
+        }
+
+        // Parse plugin info to get actions and qualifiers (same as loadCPlugin)
+        if let infoPtr = entry.infoFunc {
+            typealias PluginInfoFunc = @convention(c) () -> UnsafeMutablePointer<CChar>?
+            let infoFunc = unsafeBitCast(infoPtr, to: PluginInfoFunc.self)
+            if let resultPtr = infoFunc() {
+                defer { freeFunc?(resultPtr) }
+                let infoJSON = String(cString: resultPtr)
+                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                    FileHandle.standardError.write("[PluginLoader] Static plugin '\(name)' info: \(infoJSON)\n".data(using: .utf8)!)
+                }
+
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+                    // Register with the plugin's handle/name from info JSON (for service routing)
+                    if let handle = info["handle"] as? String, handle.lowercased() != name.lowercased() {
+                        if let funcs = cPluginFunctions[name.lowercased()] {
+                            cPluginFunctions[handle.lowercased()] = funcs
+                        }
+                        let handleWrapper = CPluginServiceWrapper(name: name, loader: self)
+                        try? ExternalServiceRegistry.shared.register(handleWrapper, withName: handle)
+                    }
+                    if let infoName = info["name"] as? String, infoName.lowercased() != name.lowercased() {
+                        if let funcs = cPluginFunctions[name.lowercased()] {
+                            cPluginFunctions[infoName.lowercased()] = funcs
+                        }
+                        let nameWrapper = CPluginServiceWrapper(name: name, loader: self)
+                        try? ExternalServiceRegistry.shared.register(nameWrapper, withName: infoName)
+                    }
+
+                    // Register actions using shared parser
+                    let parsedActions = PluginInfoParser.parseActionList(from: info)
+                    var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
+
+                    for actionName in parsedActions.names {
+                        let verbs = parsedActions.verbsMap[actionName] ?? [actionName.lowercased()]
+
+                        for verb in verbs {
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+
+                            let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                var input: [String: any Sendable] = [:]
+                                if let data = context.resolveAny(object.base) {
+                                    input["data"] = data
+                                    input["object"] = data
+                                    input[object.base] = data
+                                }
+                                if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                    input.merge(withArgs) { _, new in new }
+                                }
+                                if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                    input.merge(exprArgs) { _, new in new }
+                                }
+                                let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                context.bind(result.base, value: pluginResult)
+                                return pluginResult
+                            }
+
+                            let registeredVerb: String
+                            if let ns = namespace {
+                                registeredVerb = "\(ns).\(normalizedVerb)"
+                            } else {
+                                registeredVerb = normalizedVerb
+                            }
+                            let pName: String? = nil
+                            entries.append((verb: registeredVerb, pluginName: pName, handler: handler))
+                        }
+                    }
+                    PluginInfoParser.syncRegisterActions(entries)
+
+                    // Register qualifiers using shared parser
+                    let qualifierDescriptors = PluginInfoParser.parseQualifierDescriptors(from: info)
+                    if !qualifierDescriptors.isEmpty, let qualFuncPtr = entry.qualifierFunc {
+                        let qualifierFunc = unsafeBitCast(qualFuncPtr, to: (@convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?).self)
+                        let host = CPluginQualifierHost(
+                            pluginName: name,
+                            qualifierFunc: qualifierFunc,
+                            freeFunc: freeFunc
+                        )
+
+                        for descriptor in qualifierDescriptors {
+                            let registration = QualifierRegistration(
+                                qualifier: descriptor.name,
+                                inputTypes: descriptor.inputTypes,
+                                pluginName: name,
+                                namespace: namespace,
+                                description: descriptor.description,
+                                acceptsParameters: descriptor.acceptsParameters,
+                                pluginHost: host
+                            )
+                            QualifierRegistry.shared.register(registration)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Load a C plugin dynamic library
     /// C plugins export aro_plugin_info() and aro_plugin_execute() functions
     /// - Parameters:
@@ -546,6 +678,18 @@ public final class PluginLoader: @unchecked Sendable {
     /// - Parameter binaryPath: Path to the executable binary
     public func loadPrecompiledManagedPlugins(relativeTo binaryPath: URL) throws {
         let binaryDir = binaryPath.deletingLastPathComponent()
+
+        // Priority 0: Load statically-linked plugins (function pointers, no dlopen)
+        if !staticPluginRegistry.isEmpty {
+            for (pluginName, entry) in staticPluginRegistry {
+                let namespace = parseHandlerFromPluginYAML(entry.yaml)
+                do {
+                    try loadStaticPlugin(name: pluginName, entry: entry, namespace: namespace)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to load static plugin '\(pluginName)': \(error)")
+                }
+            }
+        }
 
         // Priority 1: Load plugins embedded in the binary (base64-encoded .so compiled into binary)
         if !embeddedPluginRegistry.isEmpty {

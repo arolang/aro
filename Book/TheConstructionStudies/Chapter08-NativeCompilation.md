@@ -617,6 +617,77 @@ Size optimization (`-Os`, `-Oz`) is applied during linking. Strip flags can be a
 
 ---
 
+## Plugin Static Linking
+
+When building with `aro build`, native plugins (C, Rust, Swift) are statically linked into the binary. This eliminates runtime dependencies on shared libraries, `/tmp` extraction, and `dlopen` — producing a fully self-contained executable.
+
+### The Problem
+
+Each ARO plugin exports the same C ABI symbols (`aro_plugin_info`, `aro_plugin_execute`, `aro_plugin_free`, etc.). Linking multiple plugins into one binary would cause symbol collisions.
+
+### Symbol Renaming
+
+The solution uses `llvm-objcopy --redefine-sym` to give each plugin unique symbol names:
+
+```
+aro_plugin_info      → aro_static_GreetingService__aro_plugin_info
+aro_plugin_execute   → aro_static_GreetingService__aro_plugin_execute
+aro_plugin_free      → aro_static_GreetingService__aro_plugin_free
+```
+
+On macOS (Mach-O), symbols carry a leading underscore, so both `_aro_plugin_info` and `aro_plugin_info` forms are renamed. On Linux (ELF), only the plain form is needed. The `--redefine-sym` flag works on both platforms, and silently ignores symbols that don't exist in the object file.
+
+### Build Pipeline
+
+```
+Plugin source → swift build → .o files → llvm-objcopy (rename) → link into binary
+```
+
+1. **Compile**: The managed plugin compiler (`compileManagedPluginsParallel`) builds the plugin via SPM
+2. **Extract**: Object files are collected from `.build-aro/<triple>/release/<Module>.build/*.o`
+3. **Rename**: `PluginSymbolRenamer` applies `--redefine-sym` for all 12 standard ABI symbols
+4. **Discover**: `nm` inspects the renamed `.o` files to determine which symbols actually exist
+5. **Declare**: The LLVM IR emitter declares only the symbols that exist as external functions
+6. **Register**: The generated `main()` calls `aro_register_static_plugin` with function pointers
+
+### Generated LLVM IR
+
+For each statically-linked plugin, the generated `main()` passes function pointers directly:
+
+```llvm
+declare ptr @aro_static_GreetingService__aro_plugin_info()
+declare ptr @aro_static_GreetingService__aro_plugin_execute(ptr, ptr)
+declare void @aro_static_GreetingService__aro_plugin_free(ptr)
+
+call void @aro_register_static_plugin(
+    ptr @.str.plugin_name,     ; "GreetingService"
+    ptr @.str.plugin_yaml,     ; plugin.yaml content
+    ptr @aro_static_GreetingService__aro_plugin_info,
+    ptr @aro_static_GreetingService__aro_plugin_execute,
+    ptr @aro_static_GreetingService__aro_plugin_free,
+    ptr @aro_static_GreetingService__aro_plugin_qualifier,
+    ptr @aro_static_GreetingService__aro_plugin_register,
+    ptr @aro_static_GreetingService__aro_plugin_shutdown
+)
+```
+
+Symbols that don't exist in the plugin pass `null`. The runtime bridge stores these function pointers in `staticPluginRegistry` and uses them directly — no `dlopen` or `dlsym` at runtime.
+
+### Python Plugin Exception
+
+Python plugins cannot be statically linked (they require an interpreter). These continue using base64 embedding with `/tmp` extraction at runtime.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `Sources/AROCompiler/Linker.swift` | `PluginSymbolRenamer` — symbol renaming via `llvm-objcopy` |
+| `Sources/ARORuntime/Bridge/ServiceBridge.swift` | `aro_register_static_plugin` — stores function pointers |
+| `Sources/ARORuntime/Services/PluginLoader.swift` | `loadStaticPlugin` — initializes plugins from function pointers |
+| `Sources/AROCompiler/LLVMC/LLVMExternalDeclEmitter.swift` | Declares renamed external symbols |
+
+---
+
 ## Chapter Summary
 
 Native compilation transforms ARO programs into standalone executables:
@@ -628,7 +699,8 @@ Native compilation transforms ARO programs into standalone executables:
 5. **Control flow** (when, match, for-each, range-loop, while-loop, break) uses LLVM branches and phi nodes
 6. **Parallel loops** extract the body into a separate function, called via function pointer
 7. **Main function** initializes the runtime, registers handlers, executes the entry point
-8. **Linking** combines object code with the Swift runtime and ARO library
+8. **Plugin static linking** renames symbols with `llvm-objcopy`, passes function pointers in generated IR
+9. **Linking** combines object code, plugin objects, Swift runtime, and ARO library
 
 The Swifty-LLVM C API approach provides compile-time type safety and module verification, replacing the earlier text-based generator. The cost is requiring LLVM 20 as a build dependency and a more complex build setup — a worthwhile trade for a production compiler.
 
@@ -636,7 +708,7 @@ Implementation references:
 - `Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift` — Main code generator
 - `Sources/AROCompiler/LLVMC/LLVMTypeMapper.swift` — Descriptor struct type definitions
 - `Sources/AROCompiler/LLVMC/LLVMExternalDeclEmitter.swift` — Runtime function declarations
-- `Sources/AROCompiler/Linker.swift` — Object linking
+- `Sources/AROCompiler/Linker.swift` — Object linking and `PluginSymbolRenamer`
 
 ---
 

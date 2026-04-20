@@ -585,7 +585,7 @@ provides:
 aro build . --optimize
 ```
 
-`aro build` calls `cargo build --release` internally, then base64-encodes the compiled `.so`/`.dylib` and embeds it directly into the application binary. No separate plugin file needs to be deployed alongside the binary.
+`aro build` calls `cargo build --release` internally, then statically links the compiled plugin directly into the application binary. The plugin's C ABI symbols are renamed with a unique prefix (via `llvm-objcopy --redefine-sym`) to avoid collisions when multiple plugins are linked, and function pointers are passed to the runtime at startup. No separate plugin file needs to be deployed alongside the binary.
 
 If you want to compile the plugin in isolation (for example, to run Rust unit tests), you can still invoke Cargo directly:
 
