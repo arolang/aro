@@ -34,8 +34,8 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
-    /// Break target block for the innermost while loop (nil when not inside a loop)
-    private var currentBreakBlock: BasicBlock?
+    /// Stack of break target blocks for nested loops (top = innermost loop)
+    private var breakBlockStack: [BasicBlock] = []
 
     // MARK: - Initialization
 
@@ -85,6 +85,14 @@ public final class LLVMCodeGenerator {
 
         // Generate main function
         generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
+
+        // Fail explicitly if any errors were recorded during generation
+        if ctx.hasErrors {
+            let messages = ctx.errors.map(\.description).joined(separator: "\n")
+            throw LLVMCodeGenError.llvmInternalError(
+                message: "Code generation failed with \(ctx.errors.count) error(s):\n\(messages)"
+            )
+        }
 
         // Verify module
         try verifyModule()
@@ -342,9 +350,12 @@ public final class LLVMCodeGenerator {
             handler(self)(statement, index, errorBlock)
             return
         }
-        // Unsupported statement type
+        // Unsupported statement type — record a fatal compilation error.
+        // This will cause generation to abort before LLVM module verification.
+        let typeName = String(describing: type(of: statement))
         ctx.recordError(.invalidExpression(
-            description: "Unsupported statement type: \(type(of: statement))",
+            description: "Statement type '\(typeName)' is not supported in compiled mode (aro build). "
+                + "Use interpreter mode (aro run) or add codegen support for this statement type.",
             span: statement.span
         ))
     }
@@ -1325,10 +1336,16 @@ public final class LLVMCodeGenerator {
             )
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1556,10 +1573,16 @@ public final class LLVMCodeGenerator {
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, bodyVarName], at: ctx.insertionPoint)
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1613,16 +1636,15 @@ public final class LLVMCodeGenerator {
         ctx.setInsertionPoint(atEndOf: bodyBlock)
 
         // Push break target so inner BreakStatement knows where to jump
-        let savedBreakBlock = currentBreakBlock
-        currentBreakBlock = endBlock
+        breakBlockStack.append(endBlock)
 
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
 
-        // Restore outer break target
-        currentBreakBlock = savedBreakBlock
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Loop back to condition (unless we already have a terminator)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
@@ -1639,9 +1661,9 @@ public final class LLVMCodeGenerator {
     }
 
     private func generateBreakStatement(index: Int) {
-        guard let breakBlock = currentBreakBlock else {
+        guard let breakBlock = breakBlockStack.last else {
             ctx.recordError(.invalidExpression(
-                description: "break used outside of while loop",
+                description: "break used outside of loop",
                 span: SourceSpan.unknown
             ))
             return
