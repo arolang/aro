@@ -227,7 +227,13 @@ struct BuildCommand: AsyncParsableCommand {
         var pythonRequirementsFiles: [URL] = []
         var hasPythonPlugins = false
         var pythonLinkerFlags: [String] = []
-        let sourceManagedPluginsDirEarly = appConfig.rootPath.appendingPathComponent("Plugins")
+        // Check both "Plugins" (canonical) and "plugins" (convention) — Linux is case-sensitive
+        let pluginsDirCandidates = [
+            appConfig.rootPath.appendingPathComponent("Plugins"),
+            appConfig.rootPath.appendingPathComponent("plugins"),
+        ]
+        let sourceManagedPluginsDirEarly = pluginsDirCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+            ?? appConfig.rootPath.appendingPathComponent("Plugins")
         let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
 
         if FileManager.default.fileExists(atPath: sourceManagedPluginsDirEarly.path) {
