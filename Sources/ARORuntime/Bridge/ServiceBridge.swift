@@ -1964,7 +1964,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
         response += "\r\n"
 
         // Send headers
-        let headerData = response.data(using: .utf8)!
+        let headerData = Data(response.utf8)
         headerData.withUnsafeBytes { buffer in
             _ = systemSend(fd, buffer.baseAddress!, headerData.count, 0)
         }

@@ -62,7 +62,7 @@ struct BuildCommand: AsyncParsableCommand {
         // Debug: Always print on Linux to verify command is running
         // Use FileHandle to write directly to stderr to bypass any buffering
         let debugMsg = "[BUILD] Starting aro build on Linux for \(resolvedPath.path)\n"
-        FileHandle.standardError.write(debugMsg.data(using: .utf8)!)
+        FileHandle.standardError.write(Data(debugMsg.utf8))
         #endif
 
         if verbose {
@@ -80,11 +80,11 @@ struct BuildCommand: AsyncParsableCommand {
         do {
             appConfig = try await discovery.discoverWithImports(at: resolvedPath, includePlugins: true)
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".utf8))
             #endif
         } catch {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] Discovery failed: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Discovery failed: \(error)\n".utf8))
             #endif
             print("Error: \(error)")
             throw ExitCode.failure
@@ -124,7 +124,7 @@ struct BuildCommand: AsyncParsableCommand {
         var compiledPrograms: [AnalyzedProgram] = []
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".utf8))
         #endif
 
         for sourceFile in appConfig.sourceFiles {
@@ -149,7 +149,7 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".utf8))
         #endif
 
         // Report compilation errors
@@ -165,7 +165,7 @@ struct BuildCommand: AsyncParsableCommand {
 
         if !errors.isEmpty {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] Compilation errors found: \(errors.count)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Compilation errors found: \(errors.count)\n".utf8))
             #endif
             print("\nCompilation errors:")
             for error in errors {
@@ -177,14 +177,14 @@ struct BuildCommand: AsyncParsableCommand {
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] ERROR: No programs to merge\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] ERROR: No programs to merge\n".utf8))
             #endif
             print("Error: No programs to compile")
             throw ExitCode.failure
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".utf8))
         #endif
 
         if verbose {
@@ -211,7 +211,7 @@ struct BuildCommand: AsyncParsableCommand {
         let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Binary path: \(binaryPath.path)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Binary path: \(binaryPath.path)\n".utf8))
         #endif
 
         // Create build directory
@@ -530,7 +530,7 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Starting LLVM IR generation\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Starting LLVM IR generation\n".utf8))
         #endif
 
         // Serialize OpenAPI spec to JSON for embedding (if present)
@@ -601,11 +601,11 @@ struct BuildCommand: AsyncParsableCommand {
                 pythonPlugins: pythonPluginIRInfos.isEmpty ? nil : pythonPluginIRInfos
             )
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] LLVM IR generated successfully\n".utf8))
             #endif
         } catch {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] ERROR: LLVM generation failed: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] ERROR: LLVM generation failed: \(error)\n".utf8))
             #endif
             print("Code generation error: \(error)")
             throw ExitCode.failure
@@ -667,14 +667,14 @@ struct BuildCommand: AsyncParsableCommand {
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
             #if os(Linux) || os(Windows)
-            FileHandle.standardError.write("[BUILD] ERROR: Runtime library not found\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] ERROR: Runtime library not found\n".utf8))
             #endif
             print("Error: ARORuntime library not found.")
             throw ExitCode.failure
         }
 
         #if os(Linux) || os(Windows)
-        FileHandle.standardError.write("[BUILD] Runtime library found: \(runtimeLibPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Runtime library found: \(runtimeLibPath)\n".utf8))
         print("[BUILD] Runtime library found: \(runtimeLibPath)")
         #endif
 
@@ -695,9 +695,9 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Linux) || os(Windows)
-        FileHandle.standardError.write("[BUILD] Starting linker\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Object file: \(objectPath)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Output path: \(binaryPath.path)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Starting linker\n".utf8))
+        FileHandle.standardError.write(Data("[BUILD] Object file: \(objectPath)\n".utf8))
+        FileHandle.standardError.write(Data("[BUILD] Output path: \(binaryPath.path)\n".utf8))
         print("[BUILD] Starting linker")
         print("[BUILD] Object file: \(objectPath)")
         print("[BUILD] Output path: \(binaryPath.path)")
@@ -714,7 +714,7 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] CCompiler created\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] CCompiler created\n".utf8))
         #endif
 
         let linkOptions = CCompiler.LinkOptions(
@@ -725,13 +725,13 @@ struct BuildCommand: AsyncParsableCommand {
         )
 
         #if os(Linux)
-        FileHandle.standardError.write("[BUILD] LinkOptions created\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] LinkOptions created\n".utf8))
+        FileHandle.standardError.write(Data("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".utf8))
         #endif
 
         do {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] Inside do block, calling link...\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Inside do block, calling link...\n".utf8))
             #endif
 
             // Collect all object files: main program + statically-linked plugins + Python lib
@@ -750,7 +750,7 @@ struct BuildCommand: AsyncParsableCommand {
             )
 
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] Linking completed\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Linking completed\n".utf8))
             #endif
 
             if verbose {
@@ -758,7 +758,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
         } catch {
             #if os(Linux)
-            FileHandle.standardError.write("[BUILD] ERROR: Linking failed: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] ERROR: Linking failed: \(error)\n".utf8))
             #endif
             print("Linking error: \(error)")
             throw ExitCode.failure
@@ -986,7 +986,7 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         // Write to stderr
-        FileHandle.standardError.write(debugLog.data(using: .utf8)!)
+        FileHandle.standardError.write(Data(debugLog.utf8))
 
         // Also write to stdout so it's captured in test output
         print(debugLog)
@@ -1035,7 +1035,7 @@ struct BuildCommand: AsyncParsableCommand {
 
             #if os(Windows)
             let exists = fm.fileExists(atPath: fullPath)
-            FileHandle.standardError.write("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".utf8))
             if exists {
                 return fullPath
             }
@@ -1047,10 +1047,10 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Windows)
-        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND in standard locations\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND in standard locations\n".utf8))
 
         // Last resort: try to find the library anywhere on disk using where/dir commands
-        FileHandle.standardError.write("[BUILD] Attempting filesystem search...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Attempting filesystem search...\n".utf8))
 
         // Try to find libARORuntime.a near the executable
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
@@ -1061,24 +1061,24 @@ struct BuildCommand: AsyncParsableCommand {
             // Try listing the directory contents
             do {
                 let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
-                FileHandle.standardError.write("[BUILD] Contents of \(aroBinDir.path):\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[BUILD] Contents of \(aroBinDir.path):\n".utf8))
                 for item in contents {
-                    FileHandle.standardError.write("[BUILD]   - \(item)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[BUILD]   - \(item)\n".utf8))
                     if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
                         let itemPath = aroBinDir.appendingPathComponent(item).path
-                        FileHandle.standardError.write("[BUILD] Found potential library: \(itemPath)\n".data(using: .utf8)!)
+                        FileHandle.standardError.write(Data("[BUILD] Found potential library: \(itemPath)\n".utf8))
                         if fm.fileExists(atPath: itemPath) {
-                            FileHandle.standardError.write("[BUILD] Returning: \(itemPath)\n".data(using: .utf8)!)
+                            FileHandle.standardError.write(Data("[BUILD] Returning: \(itemPath)\n".utf8))
                             return itemPath
                         }
                     }
                 }
             } catch {
-                FileHandle.standardError.write("[BUILD] Error listing directory: \(error)\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[BUILD] Error listing directory: \(error)\n".utf8))
             }
         }
 
-        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND anywhere\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND anywhere\n".utf8))
         #endif
 
         return nil

@@ -897,7 +897,7 @@ public struct CreateAction: ActionImplementation {
         // Debug: Log _to_ resolution for ARO-0041 diagnostics (enable with ARO_DEBUG=1)
         let endValue = context.resolveAny("_to_")
         if endValue == nil && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-            FileHandle.standardError.write("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".utf8))
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {
             throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Create date-range")
@@ -1108,17 +1108,7 @@ public struct UpdateAction: SynchronousAction {
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let s = value as? String { return s }
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return d }
-        if let b = value as? Bool { return b }
-        if let arr = value as? [Any] { return arr.map { convertToSendable($0) } as [any Sendable] }
-        if let dict = value as? [String: Any] {
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict { result[k] = convertToSendable(v) }
-            return result
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }
 
