@@ -189,26 +189,7 @@ public struct ReturnAction: SynchronousAction {
 
     /// Convert a Sendable value to a JSON-compatible type
     private func convertSendableToJSON(_ value: any Sendable) -> Any {
-        switch value {
-        case let str as String:
-            return str
-        case let int as Int:
-            return int
-        case let double as Double:
-            return double
-        case let bool as Bool:
-            return bool
-        case let dict as [String: any Sendable]:
-            var result: [String: Any] = [:]
-            for (k, v) in dict {
-                result[k] = convertSendableToJSON(v)
-            }
-            return result
-        case let array as [any Sendable]:
-            return array.map { convertSendableToJSON($0) }
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.toJSON(value)
     }
 
     /// Add a value from JSON parsing (Any type) into the data dictionary

@@ -1442,64 +1442,9 @@ public func aro_variable_bind_array(
     contextHandle.context.bind(nameStr, value: sendableArray)
 }
 
-/// Convert Any to Sendable recursively
+/// Convert Any to Sendable recursively (delegates to shared SendableConverter)
 private func convertToSendable(_ value: Any) -> any Sendable {
-    switch value {
-    case let str as String:
-        return str
-    // IMPORTANT: Check NSNumber BEFORE Bool
-    // On macOS, CFBoolean (used for JSON true/false) is a subclass of NSNumber
-    // and can match both cases. We need to check NSNumber first and use type info
-    // to distinguish between boolean CFBoolean and numeric NSNumber
-    case let nsNumber as NSNumber:
-        let objCType = String(cString: nsNumber.objCType)
-        #if canImport(Darwin)
-        // On Darwin, CFBoolean has objCType "c" (signed char) and is for true/false
-        // NSNumber integers also use various types like "q" (long long), "i" (int), etc.
-        // Check CFBooleanGetTypeID to definitively identify JSON booleans
-        if CFGetTypeID(nsNumber) == CFBooleanGetTypeID() {
-            // This is a JSON boolean (true/false), not an integer
-            return nsNumber.boolValue
-        }
-        #else
-        // On Linux, JSONSerialization uses objCType "c" (signed char) for booleans
-        // We need to check if it's in boolean range (0 or 1) to distinguish from
-        // actual signed char integers
-        if objCType == "c" || objCType == "B" {
-            let intVal = nsNumber.intValue
-            if intVal == 0 || intVal == 1 {
-                return nsNumber.boolValue
-            }
-        }
-        #endif
-        // Check if it has a decimal point (is a double)
-        if objCType == "d" || objCType == "f" {
-            return nsNumber.doubleValue
-        }
-        // Otherwise treat as integer
-        return nsNumber.intValue
-    case let bool as Bool:
-        // This case should not be reached on macOS (CFBoolean is NSNumber)
-        // But keep it for other platforms
-        return bool
-    case let sendableDict as [String: any Sendable]:
-        // Already the correct type — recurse to ensure nested values are also clean
-        var result: [String: any Sendable] = [:]
-        for (k, v) in sendableDict {
-            result[k] = convertToSendable(v)
-        }
-        return result
-    case let dict as [String: Any]:
-        var result: [String: any Sendable] = [:]
-        for (k, v) in dict {
-            result[k] = convertToSendable(v)
-        }
-        return result
-    case let array as [Any]:
-        return array.map { convertToSendable($0) }
-    default:
-        return String(describing: value)
-    }
+    SendableConverter.fromJSON(value)
 }
 
 /// Copy a resolved value to the _expression_ variable
