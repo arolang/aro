@@ -2043,39 +2043,7 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Convert Any to Sendable
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            // Check if it's a boolean (Apple platforms have CFBoolean APIs)
-            #if canImport(Darwin)
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
-                return num.boolValue
-            }
-            #else
-            // On Linux, check type encoding for boolean
-            let objCType = String(cString: num.objCType)
-            if objCType == "B" || objCType == "c" {
-                if num.intValue == 0 || num.intValue == 1 {
-                    return num.boolValue
-                }
-            }
-            #endif
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        case let array as [Any]:
-            return array.map { convertToSendable($0) }
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 
     /// Unload all plugins
@@ -2556,27 +2524,7 @@ public struct PluginSystemObjectWrapper: SystemObject {
 
     /// Convert Any to Sendable for JSON parsing
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (key, val) in dict {
-                result[key] = convertToSendable(val)
-            }
-            return result
-        case let arr as [Any]:
-            return arr.map { convertToSendable($0) }
-        case let bool as Bool:
-            return bool
-        default:
-            return "\(value)"
-        }
+        SendableConverter.fromJSON(value)
     }
 }
 

@@ -34,8 +34,8 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
-    /// Break target block for the innermost while loop (nil when not inside a loop)
-    private var currentBreakBlock: BasicBlock?
+    /// Stack of break target blocks for nested loops (top = innermost loop)
+    private var breakBlockStack: [BasicBlock] = []
 
     // MARK: - Initialization
 
@@ -85,6 +85,14 @@ public final class LLVMCodeGenerator {
 
         // Generate main function
         generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
+
+        // Fail explicitly if any errors were recorded during generation
+        if ctx.hasErrors {
+            let messages = ctx.errors.map(\.description).joined(separator: "\n")
+            throw LLVMCodeGenError.llvmInternalError(
+                message: "Code generation failed with \(ctx.errors.count) error(s):\n\(messages)"
+            )
+        }
 
         // Verify module
         try verifyModule()
@@ -277,27 +285,32 @@ public final class LLVMCodeGenerator {
     nonisolated(unsafe) private static let statementHandlers: [ObjectIdentifier: StatementHandler] = [
         ObjectIdentifier(AROStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateAROStatement(stmt as! AROStatement, index: index, errorBlock: errorBlock)
+                guard let aroStmt = stmt as? AROStatement else { return }
+                gen.generateAROStatement(aroStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(MatchStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateMatchStatement(stmt as! MatchStatement, index: index, errorBlock: errorBlock)
+                guard let matchStmt = stmt as? MatchStatement else { return }
+                gen.generateMatchStatement(matchStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(ForEachLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateForEachLoop(stmt as! ForEachLoop, index: index, errorBlock: errorBlock)
+                guard let forEachStmt = stmt as? ForEachLoop else { return }
+                gen.generateForEachLoop(forEachStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(RangeLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateRangeLoop(stmt as! RangeLoop, index: index, errorBlock: errorBlock)
+                guard let rangeStmt = stmt as? RangeLoop else { return }
+                gen.generateRangeLoop(rangeStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(WhileLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateWhileLoop(stmt as! WhileLoop, index: index, errorBlock: errorBlock)
+                guard let whileStmt = stmt as? WhileLoop else { return }
+                gen.generateWhileLoop(whileStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(BreakStatement.self): { gen in
@@ -307,12 +320,14 @@ public final class LLVMCodeGenerator {
         },
         ObjectIdentifier(PublishStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generatePublishStatement(stmt as! PublishStatement, index: index, errorBlock: errorBlock)
+                guard let publishStmt = stmt as? PublishStatement else { return }
+                gen.generatePublishStatement(publishStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(RequireStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateRequireStatement(stmt as! RequireStatement, index: index, errorBlock: errorBlock)
+                guard let requireStmt = stmt as? RequireStatement else { return }
+                gen.generateRequireStatement(requireStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(PipelineStatement.self): { gen in
@@ -321,7 +336,7 @@ public final class LLVMCodeGenerator {
                 // each stage's object is the previous stage's result. The parser
                 // has already rewritten the stages to reference the chained names,
                 // so we can emit them sequentially like plain statements.
-                let pipeline = stmt as! PipelineStatement
+                guard let pipeline = stmt as? PipelineStatement else { return }
                 for (stageOffset, stage) in pipeline.stages.enumerated() {
                     gen.generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
                 }
@@ -342,9 +357,12 @@ public final class LLVMCodeGenerator {
             handler(self)(statement, index, errorBlock)
             return
         }
-        // Unsupported statement type
+        // Unsupported statement type — record a fatal compilation error.
+        // This will cause generation to abort before LLVM module verification.
+        let typeName = String(describing: type(of: statement))
         ctx.recordError(.invalidExpression(
-            description: "Unsupported statement type: \(type(of: statement))",
+            description: "Statement type '\(typeName)' is not supported in compiled mode (aro build). "
+                + "Use interpreter mode (aro run) or add codegen support for this statement type.",
             span: statement.span
         ))
     }
@@ -1325,10 +1343,16 @@ public final class LLVMCodeGenerator {
             )
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1556,10 +1580,16 @@ public final class LLVMCodeGenerator {
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, bodyVarName], at: ctx.insertionPoint)
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1613,16 +1643,15 @@ public final class LLVMCodeGenerator {
         ctx.setInsertionPoint(atEndOf: bodyBlock)
 
         // Push break target so inner BreakStatement knows where to jump
-        let savedBreakBlock = currentBreakBlock
-        currentBreakBlock = endBlock
+        breakBlockStack.append(endBlock)
 
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
 
-        // Restore outer break target
-        currentBreakBlock = savedBreakBlock
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Loop back to condition (unless we already have a terminator)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
@@ -1639,9 +1668,9 @@ public final class LLVMCodeGenerator {
     }
 
     private func generateBreakStatement(index: Int) {
-        guard let breakBlock = currentBreakBlock else {
+        guard let breakBlock = breakBlockStack.last else {
             ctx.recordError(.invalidExpression(
-                description: "break used outside of while loop",
+                description: "break used outside of loop",
                 span: SourceSpan.unknown
             ))
             return

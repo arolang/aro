@@ -109,30 +109,7 @@ public final class EventChainAnalyzer: Sendable {
     /// - Parameter activity: The business activity string (e.g., "UserCreated Handler")
     /// - Returns: The event type if this is a domain handler, nil otherwise
     private func extractHandledEventType(from activity: String) -> String? {
-        // Must end with " Handler"
-        guard activity.hasSuffix(" Handler") else {
-            return nil
-        }
-
-        // Exclude special system handlers
-        let specialHandlers = ["Socket Event Handler", "File Event Handler"]
-        for special in specialHandlers {
-            if activity.contains(special) {
-                return nil
-            }
-        }
-
-        // Exclude Application-End handlers
-        if activity.contains("Application-End") {
-            return nil
-        }
-
-        // Extract event type by removing " Handler" suffix
-        let eventType = activity
-            .replacingOccurrences(of: " Handler", with: "")
-            .trimmingCharacters(in: .whitespaces)
-
-        return eventType.isEmpty ? nil : eventType
+        EventAnalyzer.extractEventType(from: activity)
     }
 
     /// Finds all event types emitted by the given statements

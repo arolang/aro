@@ -329,21 +329,21 @@ public final class CCompiler {
         options: LinkOptions
     ) throws {
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] ===== ENTERED link() method =====\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[LINKER] link() called with objectFiles: \(objectFiles)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[LINKER] outputPath: \(outputPath)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[LINKER] Finding compiler...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] ===== ENTERED link() method =====\n".utf8))
+        FileHandle.standardError.write(Data("[LINKER] link() called with objectFiles: \(objectFiles)\n".utf8))
+        FileHandle.standardError.write(Data("[LINKER] outputPath: \(outputPath)\n".utf8))
+        FileHandle.standardError.write(Data("[LINKER] Finding compiler...\n".utf8))
         #endif
 
         var args = [findCompiler()]
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] Array created with compiler: \(args[0])\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[LINKER] Building arguments...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] Array created with compiler: \(args[0])\n".utf8))
+        FileHandle.standardError.write(Data("[LINKER] Building arguments...\n".utf8))
         #endif
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] 1. Handling output type...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] 1. Handling output type...\n".utf8))
         #endif
 
         // Output type
@@ -364,7 +364,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] 2. Adding object files...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] 2. Adding object files...\n".utf8))
 
         // On Linux, export all symbols to the dynamic symbol table
         // This is required for dlsym() to find feature set functions (aro_fs_*)
@@ -378,7 +378,7 @@ public final class CCompiler {
         args.append(contentsOf: objectFiles)
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] 3. Adding output path...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] 3. Adding output path...\n".utf8))
         #endif
 
         // Output
@@ -386,7 +386,7 @@ public final class CCompiler {
         args.append(outputPath)
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] 4. Processing runtime library...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] 4. Processing runtime library...\n".utf8))
         #endif
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
@@ -416,7 +416,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] 5. Checking platform-specific libraries...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] 5. Checking platform-specific libraries...\n".utf8))
         #endif
 
         // Platform-specific libraries
@@ -451,8 +451,8 @@ public final class CCompiler {
             let compiler = args[0]
             let usingSwiftc = compiler.contains("swiftc")
 
-            FileHandle.standardError.write("[LINKER] Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
-            FileHandle.standardError.write("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Swift lib path: \(swiftLibPath)\n".utf8))
+            FileHandle.standardError.write(Data("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".utf8))
 
             args.append("-L\(swiftLibPath)")
 
@@ -484,11 +484,11 @@ public final class CCompiler {
                 // Without it, the binary will hang during Swift runtime bootstrap
                 let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
                 if let rtPath = swiftRTPath {
-                    FileHandle.standardError.write("[LINKER] Found swiftrt.o at: \(rtPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER] Found swiftrt.o at: \(rtPath)\n".utf8))
                     // swiftrt.o must be linked FIRST to initialize Swift runtime before any Swift code runs
                     args.insert(rtPath, at: 1)  // Insert right after compiler, before object files
                 } else {
-                    FileHandle.standardError.write("[LINKER] WARNING: swiftrt.o not found - binary may hang\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER] WARNING: swiftrt.o not found - binary may hang\n".utf8))
                 }
 
                 // CRITICAL: Explicitly link Swift runtime libraries when using clang
@@ -507,7 +507,7 @@ public final class CCompiler {
                 args.append("-lswiftSwiftOnoneSupport")
             }
         } else {
-            FileHandle.standardError.write("[LINKER] WARNING: Swift library path not found\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] WARNING: Swift library path not found\n".utf8))
         }
 
         args.append("-lpthread")
@@ -536,17 +536,17 @@ public final class CCompiler {
         // We add -L for the SDK's import libraries.
 
         if let swiftLibPath = findSwiftLibPath() {
-            FileHandle.standardError.write("[LINKER-WIN] Found Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Found Swift lib path: \(swiftLibPath)\n".utf8))
             args.append("-L\(swiftLibPath)")
 
             // CRITICAL: Link swiftrt.obj to initialize Swift runtime on Windows
             // Without this, the binary will crash with ACCESS_VIOLATION at startup
             if let swiftRTPath = findWindowsSwiftRuntimeObject(swiftLibPath: swiftLibPath) {
-                FileHandle.standardError.write("[LINKER-WIN] Found swiftrt at: \(swiftRTPath)\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] Found swiftrt at: \(swiftRTPath)\n".utf8))
                 // Insert right after compiler, before object files
                 args.insert(swiftRTPath, at: 1)
             } else {
-                FileHandle.standardError.write("[LINKER-WIN] WARNING: swiftrt not found - binary may crash at runtime\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] WARNING: swiftrt not found - binary may crash at runtime\n".utf8))
             }
 
             // Also add the runtime lib path in case import libs are there
@@ -556,13 +556,13 @@ public final class CCompiler {
                 .first(where: { $0.contains("Swift\\Runtimes") && $0.contains("\\bin") }) {
                 // Convert bin path to lib path
                 let libPath = runtimeLibPath.replacingOccurrences(of: "\\bin", with: "\\lib")
-                FileHandle.standardError.write("[LINKER-WIN] Also checking runtime lib: \(libPath)\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] Also checking runtime lib: \(libPath)\n".utf8))
                 if FileManager.default.fileExists(atPath: libPath) {
                     args.append("-L\(libPath)")
                 }
             }
         } else {
-            FileHandle.standardError.write("[LINKER-WIN] WARNING: Swift library path not found!\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] WARNING: Swift library path not found!\n".utf8))
         }
 
         // Windows CRT and system libraries
@@ -572,19 +572,19 @@ public final class CCompiler {
 
         // Add UCRT library path from Windows SDK if available
         if let ucrtPath = findWindowsUCRTPath() {
-            FileHandle.standardError.write("[LINKER-WIN] Found UCRT path: \(ucrtPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Found UCRT path: \(ucrtPath)\n".utf8))
             args.append("-L\(ucrtPath)")
         }
 
         // Add VC runtime library path if available
         if let vcrtPath = findWindowsVCRuntimePath() {
-            FileHandle.standardError.write("[LINKER-WIN] Found VC runtime path: \(vcrtPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Found VC runtime path: \(vcrtPath)\n".utf8))
             args.append("-L\(vcrtPath)")
         }
 
         // Add Windows UM (user mode) library path for kernel32.lib, user32.lib, etc.
         if let umPath = findWindowsUMPath() {
-            FileHandle.standardError.write("[LINKER-WIN] Found Windows UM path: \(umPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Found Windows UM path: \(umPath)\n".utf8))
             args.append("-L\(umPath)")
         }
 
@@ -623,14 +623,14 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] Arguments built, calling runProcess...\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[LINKER] Total args: \(args.count)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] Arguments built, calling runProcess...\n".utf8))
+        FileHandle.standardError.write(Data("[LINKER] Total args: \(args.count)\n".utf8))
         #endif
 
         try runProcess(args)
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] runProcess completed successfully\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] runProcess completed successfully\n".utf8))
         #endif
     }
 
@@ -697,12 +697,12 @@ public final class CCompiler {
     /// Log a debug message (only when verbose is enabled)
     private func debugLog(_ message: String) {
         guard verbose else { return }
-        FileHandle.standardError.write("\(message)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("\(message)\n".utf8))
     }
 
     private func findCompiler() -> String {
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] findCompiler() called on Linux\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] findCompiler() called on Linux\n".utf8))
 
         // On Linux, use clang for linking Swift static libraries
         // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
@@ -710,18 +710,18 @@ public final class CCompiler {
 
         // 1. Check for generic clang (may be symlinked to clang-20 in CI)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            FileHandle.standardError.write("[LINKER] Found clang at /usr/bin/clang\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Found clang at /usr/bin/clang\n".utf8))
             return "/usr/bin/clang"
         }
 
         // 2. Check for clang-14 (Ubuntu fallback)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Found clang-14 at /usr/bin/clang-14\n".utf8))
             return "/usr/bin/clang-14"
         }
 
         // 3. Try to find clang in PATH
-        FileHandle.standardError.write("[LINKER] Trying to find clang in PATH...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] Trying to find clang in PATH...\n".utf8))
         do {
             let whichProcess = Process()
             whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -738,16 +738,16 @@ public final class CCompiler {
                 let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
                 if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !path.isEmpty {
-                    FileHandle.standardError.write("[LINKER] Found clang in PATH: \(path)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER] Found clang in PATH: \(path)\n".utf8))
                     return path
                 }
             }
         } catch {
-            FileHandle.standardError.write("[LINKER] Error searching for clang: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Error searching for clang: \(error)\n".utf8))
         }
 
         // 4. Final fallback
-        FileHandle.standardError.write("[LINKER] WARNING: No compiler found, returning clang-14\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] WARNING: No compiler found, returning clang-14\n".utf8))
         return "clang-14"
         #elseif os(Windows)
         // Windows: Find clang.exe in standard LLVM installation paths
@@ -851,7 +851,7 @@ public final class CCompiler {
         // Windows: Find Swift library path for import libraries (.lib files)
         // Import libs are in: toolchain\usr\lib\swift\windows\x86_64\
 
-        FileHandle.standardError.write("[LINKER-WIN] Searching for Swift library path...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Searching for Swift library path...\n".utf8))
 
         // Try to find swift.exe and derive library path from it
         do {
@@ -866,65 +866,65 @@ public final class CCompiler {
             try whereProcess.run()
             whereProcess.waitUntilExit()
 
-            FileHandle.standardError.write("[LINKER-WIN] where swift exit status: \(whereProcess.terminationStatus)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] where swift exit status: \(whereProcess.terminationStatus)\n".utf8))
 
             if whereProcess.terminationStatus == 0 {
                 let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
                 if let output = String(data: data, encoding: .utf8) {
-                    FileHandle.standardError.write("[LINKER-WIN] where swift output: \(output.trimmingCharacters(in: .whitespacesAndNewlines))\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER-WIN] where swift output: \(output.trimmingCharacters(in: .whitespacesAndNewlines))\n".utf8))
                     let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
                     if let swiftPath = paths.first?.trimmingCharacters(in: .whitespaces) {
-                        FileHandle.standardError.write("[LINKER-WIN] Swift path: \(swiftPath)\n".data(using: .utf8)!)
+                        FileHandle.standardError.write(Data("[LINKER-WIN] Swift path: \(swiftPath)\n".utf8))
                         // Swift is at: C:\path\to\toolchain\usr\bin\swift.exe
                         // Import libs are at: C:\path\to\toolchain\usr\lib\swift\windows\x86_64\
                         if let binRange = swiftPath.range(of: "\\bin\\", options: .backwards) {
                             let usrPath = String(swiftPath[..<binRange.lowerBound])
-                            FileHandle.standardError.write("[LINKER-WIN] usr path: \(usrPath)\n".data(using: .utf8)!)
+                            FileHandle.standardError.write(Data("[LINKER-WIN] usr path: \(usrPath)\n".utf8))
                             // Try architecture-specific path first (contains .lib import libraries)
                             let archLibPath = usrPath + "\\lib\\swift\\windows\\x86_64"
-                            FileHandle.standardError.write("[LINKER-WIN] Checking arch path: \(archLibPath)\n".data(using: .utf8)!)
+                            FileHandle.standardError.write(Data("[LINKER-WIN] Checking arch path: \(archLibPath)\n".utf8))
                             if FileManager.default.fileExists(atPath: archLibPath) {
-                                FileHandle.standardError.write("[LINKER-WIN] Found at arch path!\n".data(using: .utf8)!)
+                                FileHandle.standardError.write(Data("[LINKER-WIN] Found at arch path!\n".utf8))
                                 return archLibPath
                             }
                             // Fall back to platform path
                             let libPath = usrPath + "\\lib\\swift\\windows"
-                            FileHandle.standardError.write("[LINKER-WIN] Checking platform path: \(libPath)\n".data(using: .utf8)!)
+                            FileHandle.standardError.write(Data("[LINKER-WIN] Checking platform path: \(libPath)\n".utf8))
                             if FileManager.default.fileExists(atPath: libPath) {
-                                FileHandle.standardError.write("[LINKER-WIN] Found at platform path!\n".data(using: .utf8)!)
+                                FileHandle.standardError.write(Data("[LINKER-WIN] Found at platform path!\n".utf8))
                                 return libPath
                             }
                         } else {
-                            FileHandle.standardError.write("[LINKER-WIN] Could not find \\bin\\ in path\n".data(using: .utf8)!)
+                            FileHandle.standardError.write(Data("[LINKER-WIN] Could not find \\bin\\ in path\n".utf8))
                         }
                     }
                 }
             }
         } catch {
-            FileHandle.standardError.write("[LINKER-WIN] Error running where: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Error running where: \(error)\n".utf8))
         }
 
         // Check SDKROOT environment variable - Swift import libs are in the SDK, not the toolchain
         if let sdkRoot = ProcessInfo.processInfo.environment["SDKROOT"] {
-            FileHandle.standardError.write("[LINKER-WIN] SDKROOT: \(sdkRoot)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] SDKROOT: \(sdkRoot)\n".utf8))
             // Import libs are at: SDKROOT\usr\lib\swift\windows\x86_64
             // Handle trailing backslash in SDKROOT
             let cleanSdkRoot = sdkRoot.hasSuffix("\\") ? String(sdkRoot.dropLast()) : sdkRoot
             let sdkLibPath = cleanSdkRoot + "\\usr\\lib\\swift\\windows\\x86_64"
             let sdkLibPathAlt = cleanSdkRoot + "\\usr\\lib\\swift\\windows"  // Without arch suffix
-            FileHandle.standardError.write("[LINKER-WIN] Checking SDK path: \(sdkLibPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Checking SDK path: \(sdkLibPath)\n".utf8))
             if FileManager.default.fileExists(atPath: sdkLibPath) {
-                FileHandle.standardError.write("[LINKER-WIN] Found at SDK path!\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] Found at SDK path!\n".utf8))
                 return sdkLibPath
             }
             if FileManager.default.fileExists(atPath: sdkLibPathAlt) {
-                FileHandle.standardError.write("[LINKER-WIN] Found at SDK alt path!\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] Found at SDK alt path!\n".utf8))
                 return sdkLibPathAlt
             }
         }
 
         // Check common installation locations (GitHub Actions Windows runner)
-        FileHandle.standardError.write("[LINKER-WIN] Checking common paths...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Checking common paths...\n".utf8))
         let commonPaths = [
             // SDK paths (where import libs actually live)
             "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.2.1\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows\\x86_64",
@@ -937,14 +937,14 @@ public final class CCompiler {
         ]
 
         for path in commonPaths {
-            FileHandle.standardError.write("[LINKER-WIN] Checking: \(path)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER-WIN] Checking: \(path)\n".utf8))
             if FileManager.default.fileExists(atPath: path) {
-                FileHandle.standardError.write("[LINKER-WIN] Found!\n".data(using: .utf8)!)
+                FileHandle.standardError.write(Data("[LINKER-WIN] Found!\n".utf8))
                 return path
             }
         }
 
-        FileHandle.standardError.write("[LINKER-WIN] No Swift lib path found\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] No Swift lib path found\n".utf8))
         return nil
         #else
         // First, try to get the Swift library path from the Swift toolchain itself
@@ -1131,7 +1131,7 @@ public final class CCompiler {
             return shareSwiftLib
         }
 
-        FileHandle.standardError.write("[LINKER] WARNING: Could not find Swift library path\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] WARNING: Could not find Swift library path\n".utf8))
         #endif
 
         return nil
@@ -1145,7 +1145,7 @@ public final class CCompiler {
         // The UCRT is typically at: C:\Program Files (x86)\Windows Kits\10\Lib\<version>\ucrt\x64
         let windowsKitsBase = "C:\\Program Files (x86)\\Windows Kits\\10\\Lib"
 
-        FileHandle.standardError.write("[LINKER-WIN] Looking for UCRT in Windows Kits...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Looking for UCRT in Windows Kits...\n".utf8))
 
         // Find the latest SDK version
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: windowsKitsBase) {
@@ -1154,7 +1154,7 @@ public final class CCompiler {
             for version in sortedVersions {
                 let ucrtPath = "\(windowsKitsBase)\\\(version)\\ucrt\\x64"
                 if FileManager.default.fileExists(atPath: ucrtPath) {
-                    FileHandle.standardError.write("[LINKER-WIN] Found UCRT at: \(ucrtPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER-WIN] Found UCRT at: \(ucrtPath)\n".utf8))
                     return ucrtPath
                 }
             }
@@ -1176,7 +1176,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write("[LINKER-WIN] UCRT not found in Windows Kits\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] UCRT not found in Windows Kits\n".utf8))
         #endif
         return nil
     }
@@ -1189,7 +1189,7 @@ public final class CCompiler {
         // Located at: C:\Program Files\Microsoft Visual Studio\<year>\<edition>\VC\Tools\MSVC\<version>\lib\x64
         // Or: C:\Program Files (x86)\Microsoft Visual Studio\<year>\<edition>\VC\Tools\MSVC\<version>\lib\x64
 
-        FileHandle.standardError.write("[LINKER-WIN] Looking for VC runtime...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Looking for VC runtime...\n".utf8))
 
         let vsBasePaths = [
             "C:\\Program Files\\Microsoft Visual Studio",
@@ -1208,7 +1208,7 @@ public final class CCompiler {
                         if let latestVersion = versions.sorted().last {
                             let libPath = "\(vcToolsPath)\\\(latestVersion)\\lib\\x64"
                             if FileManager.default.fileExists(atPath: libPath) {
-                                FileHandle.standardError.write("[LINKER-WIN] Found VC runtime at: \(libPath)\n".data(using: .utf8)!)
+                                FileHandle.standardError.write(Data("[LINKER-WIN] Found VC runtime at: \(libPath)\n".utf8))
                                 return libPath
                             }
                         }
@@ -1217,7 +1217,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write("[LINKER-WIN] VC runtime not found\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] VC runtime not found\n".utf8))
         #endif
         return nil
     }
@@ -1284,7 +1284,7 @@ public final class CCompiler {
             }
         } catch {}
 
-        FileHandle.standardError.write("[LINKER-WIN] Could not find swiftrt.obj\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Could not find swiftrt.obj\n".utf8))
         #endif
         return nil
     }
@@ -1295,14 +1295,14 @@ public final class CCompiler {
         #if os(Windows)
         let windowsKitsBase = "C:\\Program Files (x86)\\Windows Kits\\10\\Lib"
 
-        FileHandle.standardError.write("[LINKER-WIN] Looking for Windows UM libs...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Looking for Windows UM libs...\n".utf8))
 
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: windowsKitsBase) {
             let sortedVersions = versions.filter { $0.hasPrefix("10.") }.sorted().reversed()
             for version in sortedVersions {
                 let umPath = "\(windowsKitsBase)\\\(version)\\um\\x64"
                 if FileManager.default.fileExists(atPath: umPath) {
-                    FileHandle.standardError.write("[LINKER-WIN] Found Windows UM libs at: \(umPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write(Data("[LINKER-WIN] Found Windows UM libs at: \(umPath)\n".utf8))
                     return umPath
                 }
             }
@@ -1324,7 +1324,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write("[LINKER-WIN] Windows UM libs not found\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER-WIN] Windows UM libs not found\n".utf8))
         #endif
         return nil
     }
@@ -1360,7 +1360,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write("[LINKER] Searched for swiftrt.o in: \(potentialPaths)\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] Searched for swiftrt.o in: \(potentialPaths)\n".utf8))
         #endif
 
         return nil
@@ -1372,7 +1372,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] runProcess() called with \(args.count) args\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] runProcess() called with \(args.count) args\n".utf8))
         #endif
 
         // Debug: Print command being run (only in verbose mode)
@@ -1391,7 +1391,7 @@ public final class CCompiler {
         process.standardError = errorPipe
 
         #if os(Linux)
-        FileHandle.standardError.write("[LINKER] Starting process...\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[LINKER] Starting process...\n".utf8))
         #endif
 
         // Thread-safe data storage
@@ -1418,7 +1418,7 @@ public final class CCompiler {
         do {
             try process.run()
             #if os(Linux)
-            FileHandle.standardError.write("[LINKER] Process started, waiting for exit...\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Process started, waiting for exit...\n".utf8))
             #endif
 
             // Read pipes in background to prevent deadlock
@@ -1441,7 +1441,7 @@ public final class CCompiler {
             Thread.sleep(forTimeInterval: 0.1)
 
             #if os(Linux)
-            FileHandle.standardError.write("[LINKER] Process exited with status: \(process.terminationStatus)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[LINKER] Process exited with status: \(process.terminationStatus)\n".utf8))
             #endif
         } catch {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
