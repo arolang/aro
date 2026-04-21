@@ -285,27 +285,32 @@ public final class LLVMCodeGenerator {
     nonisolated(unsafe) private static let statementHandlers: [ObjectIdentifier: StatementHandler] = [
         ObjectIdentifier(AROStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateAROStatement(stmt as! AROStatement, index: index, errorBlock: errorBlock)
+                guard let aroStmt = stmt as? AROStatement else { return }
+                gen.generateAROStatement(aroStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(MatchStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateMatchStatement(stmt as! MatchStatement, index: index, errorBlock: errorBlock)
+                guard let matchStmt = stmt as? MatchStatement else { return }
+                gen.generateMatchStatement(matchStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(ForEachLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateForEachLoop(stmt as! ForEachLoop, index: index, errorBlock: errorBlock)
+                guard let forEachStmt = stmt as? ForEachLoop else { return }
+                gen.generateForEachLoop(forEachStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(RangeLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateRangeLoop(stmt as! RangeLoop, index: index, errorBlock: errorBlock)
+                guard let rangeStmt = stmt as? RangeLoop else { return }
+                gen.generateRangeLoop(rangeStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(WhileLoop.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateWhileLoop(stmt as! WhileLoop, index: index, errorBlock: errorBlock)
+                guard let whileStmt = stmt as? WhileLoop else { return }
+                gen.generateWhileLoop(whileStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(BreakStatement.self): { gen in
@@ -315,12 +320,14 @@ public final class LLVMCodeGenerator {
         },
         ObjectIdentifier(PublishStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generatePublishStatement(stmt as! PublishStatement, index: index, errorBlock: errorBlock)
+                guard let publishStmt = stmt as? PublishStatement else { return }
+                gen.generatePublishStatement(publishStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(RequireStatement.self): { gen in
             { stmt, index, errorBlock in
-                gen.generateRequireStatement(stmt as! RequireStatement, index: index, errorBlock: errorBlock)
+                guard let requireStmt = stmt as? RequireStatement else { return }
+                gen.generateRequireStatement(requireStmt, index: index, errorBlock: errorBlock)
             }
         },
         ObjectIdentifier(PipelineStatement.self): { gen in
@@ -329,7 +336,7 @@ public final class LLVMCodeGenerator {
                 // each stage's object is the previous stage's result. The parser
                 // has already rewritten the stages to reference the chained names,
                 // so we can emit them sequentially like plain statements.
-                let pipeline = stmt as! PipelineStatement
+                guard let pipeline = stmt as? PipelineStatement else { return }
                 for (stageOffset, stage) in pipeline.stages.enumerated() {
                     gen.generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
                 }

@@ -106,7 +106,7 @@ public final class AROLanguageServer: Sendable {
 
     private func log(_ message: String) {
         if debugMode {
-            FileHandle.standardError.write("[\(timestamp())] \(message)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[\(timestamp())] \(message)\n".utf8))
         }
     }
 

@@ -155,6 +155,14 @@ public struct SchemaBinding {
     }
 
     /// Validate schema composition keywords: allOf, anyOf, oneOf, not.
+    /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool, Array, Dictionary)
+    /// which are all Sendable. This helper exists because `Sendable` is a marker protocol and cannot be used
+    /// in conditional casts (`as?`).
+    @inline(__always)
+    private static func assumeSendable(_ value: Any) -> any Sendable {
+        value as! any Sendable
+    }
+
     private static func validateComposition(json: Any, schema: Schema, components: Components?) throws -> Any {
         // allOf: must be valid against ALL sub-schemas; results are merged for objects
         if let allOf = schema.allOf, !allOf.isEmpty {
@@ -424,7 +432,7 @@ extension SchemaBinding {
             // No type constraint — still apply composition keywords if present
             if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
                 let composed = try validateComposition(json: value, schema: schema, components: components)
-                return composed as! any Sendable  // safe: validateComposition returns JSON-compatible types
+                return assumeSendable(composed)
             }
             return value
         }
@@ -576,7 +584,7 @@ extension SchemaBinding {
             // identical (String, Int, Double, Bool, [Any], [String: Any]) — all
             // of which satisfy Sendable at runtime. Force-cast is safe here.
             let composed = try validateComposition(json: validated, schema: schema, components: components)
-            return composed as! any Sendable  // safe: validateComposition returns JSON-compatible types
+            return assumeSendable(composed)
         }
 
         return validated
@@ -611,7 +619,7 @@ extension SchemaBinding {
 
         do {
             _ = try validateAgainstSchema(
-                value: body as AnyObject as! any Sendable,
+                value: assumeSendable(body),
                 schemaName: "response",
                 schema: schema,
                 components: components

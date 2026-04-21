@@ -1006,7 +1006,9 @@ public func aro_context_create_child(
     let featureSetName = name.map { String(cString: $0) } ?? parentHandle.context.featureSetName
 
     // Create child context from parent
-    let childContext = parentHandle.context.createChild(featureSetName: featureSetName) as! RuntimeContext
+    guard let childContext = parentHandle.context.createChild(featureSetName: featureSetName) as? RuntimeContext else {
+        return nil
+    }
 
     // Wrap in a handle with the existing context
     let childHandle = AROCContextHandle(runtime: parentHandle.runtime, existingContext: childContext)
@@ -2137,7 +2139,7 @@ public func aro_variable_resolve(
     guard let value = contextHandle.context.resolveAny(nameStr) else {
         // Debug: Log when resolving end-date fails (ARO-0041 diagnostics)
         if nameStr == "end-date" && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-            FileHandle.standardError.write("[RuntimeBridge] DEBUG: aro_variable_resolve(end-date) returned nil - variable not bound\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[RuntimeBridge] DEBUG: aro_variable_resolve(end-date) returned nil - variable not bound\n".utf8))
         }
         return nil
     }
@@ -2843,7 +2845,7 @@ public func aro_variable_bind_value(
     let nameStr = name.map { String(cString: $0) }
     if nameStr == "_to_" && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
         let hasValue = valuePtr != nil
-        FileHandle.standardError.write("[RuntimeBridge] DEBUG: aro_variable_bind_value(_to_) called, valuePtr=\(hasValue ? "valid" : "NULL")\n".data(using: .utf8)!)
+        FileHandle.standardError.write(Data("[RuntimeBridge] DEBUG: aro_variable_bind_value(_to_) called, valuePtr=\(hasValue ? "valid" : "NULL")\n".utf8))
     }
 
     guard let ctxPtr = contextPtr,
