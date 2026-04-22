@@ -58,12 +58,11 @@ struct BuildCommand: AsyncParsableCommand {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
 
-        #if os(Linux)
-        // Debug: Always print on Linux to verify command is running
-        // Use FileHandle to write directly to stderr to bypass any buffering
-        let debugMsg = "[BUILD] Starting aro build on Linux for \(resolvedPath.path)\n"
-        FileHandle.standardError.write(Data(debugMsg.utf8))
-        #endif
+        if verbose {
+            AROLogger.setLevel(.debug)
+        }
+
+        AROLogger.debug("Starting aro build for \(resolvedPath.path)", subsystem: "build")
 
         if verbose {
             print("ARO Compiler v\(AROVersion.shortVersion)")
@@ -79,13 +78,9 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             appConfig = try await discovery.discoverWithImports(at: resolvedPath, includePlugins: true)
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".utf8))
-            #endif
+            AROLogger.debug("Discovery completed, found \(appConfig.sourceFiles.count) files", subsystem: "build")
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Discovery failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("Discovery failed: \(error)", subsystem: "build")
             print("Error: \(error)")
             throw ExitCode.failure
         }
@@ -123,9 +118,7 @@ struct BuildCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".utf8))
-        #endif
+        AROLogger.debug("Starting compilation of \(appConfig.sourceFiles.count) files", subsystem: "build")
 
         for sourceFile in appConfig.sourceFiles {
             if verbose {
@@ -148,9 +141,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".utf8))
-        #endif
+        AROLogger.debug("Compilation completed, \(compiledPrograms.count) programs", subsystem: "build")
 
         // Report compilation errors
         let errors = allDiagnostics.filter { $0.severity == .error }
@@ -164,9 +155,7 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         if !errors.isEmpty {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Compilation errors found: \(errors.count)\n".utf8))
-            #endif
+            AROLogger.error("Compilation errors found: \(errors.count)", subsystem: "build")
             print("\nCompilation errors:")
             for error in errors {
                 print("  \(error)")
@@ -176,16 +165,12 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: No programs to merge\n".utf8))
-            #endif
+            AROLogger.error("No programs to merge", subsystem: "build")
             print("Error: No programs to compile")
             throw ExitCode.failure
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".utf8))
-        #endif
+        AROLogger.debug("Merged \(mergedProgram.featureSets.count) feature sets", subsystem: "build")
 
         if verbose {
             print("\nParsing successful!")
@@ -210,21 +195,32 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
         let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Binary path: \(binaryPath.path)\n".utf8))
-        #endif
+        AROLogger.debug("Binary path: \(binaryPath.path)", subsystem: "build")
 
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
 
-        // Pre-compile managed plugins so they can be embedded in the binary
-        // This must happen before LLVM IR generation so the plugin data is available for embedding.
+        // Pre-compile managed plugins for inclusion in the binary.
+        // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
+        // Python plugins fall back to base64 embedding (they run via subprocess).
         var embeddedPlugins: [(name: String, yaml: String, base64Library: String)] = []
-        let sourceManagedPluginsDirEarly = appConfig.rootPath.appendingPathComponent("Plugins")
+        var staticPluginInfos: [StaticPluginInfo] = []
+        var staticPluginIRInfos: [StaticPluginIRInfo] = []
+        var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
+        var pythonRequirementsFiles: [URL] = []
+        var hasPythonPlugins = false
+        var pythonLinkerFlags: [String] = []
+        // Check both "Plugins" (canonical) and "plugins" (convention) — Linux is case-sensitive
+        let pluginsDirCandidates = [
+            appConfig.rootPath.appendingPathComponent("Plugins"),
+            appConfig.rootPath.appendingPathComponent("plugins"),
+        ]
+        let sourceManagedPluginsDirEarly = pluginsDirCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+            ?? appConfig.rootPath.appendingPathComponent("Plugins")
         let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
 
         if FileManager.default.fileExists(atPath: sourceManagedPluginsDirEarly.path) {
-            if verbose { print("Compiling managed plugins for embedding...") }
+            if verbose { print("Compiling managed plugins...") }
             do {
                 let sourceResolved = sourceManagedPluginsDirEarly.standardizedFileURL.path
                 let outputResolved = outputManagedPluginsDirEarly.standardizedFileURL.path
@@ -242,7 +238,11 @@ struct BuildCommand: AsyncParsableCommand {
                 let libExt = "dylib"
                 #endif
 
-                // Collect compiled .so files for embedding
+                let symbolRenamer = PluginSymbolRenamer(verbose: verbose)
+                let staticBuildDir = buildDir.appendingPathComponent("static-plugins")
+                try? FileManager.default.createDirectory(at: staticBuildDir, withIntermediateDirectories: true)
+
+                // Process each compiled plugin
                 let pluginDirs = (try? FileManager.default.contentsOfDirectory(
                     at: outputManagedPluginsDirEarly,
                     includingPropertiesForKeys: [.isDirectoryKey]
@@ -254,32 +254,256 @@ struct BuildCommand: AsyncParsableCommand {
                     let pluginName = pluginDir.lastPathComponent
                     let yamlPath = pluginDir.appendingPathComponent("plugin.yaml")
                     let yamlContent = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
-                    let searchDirs = [
-                        pluginDir,
-                        pluginDir.appendingPathComponent("src"),
-                        pluginDir.appendingPathComponent("Sources"),
-                        pluginDir.appendingPathComponent("target/release"),
+
+                    // Check if this is a Python plugin
+                    let isPythonPlugin = yamlContent.contains("python-plugin")
+                    if isPythonPlugin {
+                        // Embedded Python: read source, install deps, link libpython
+                        let searchDirs = [
+                            pluginDir,
+                            pluginDir.appendingPathComponent("src"),
+                            sourceManagedPluginsDirEarly.appendingPathComponent(pluginName).appendingPathComponent("src"),
+                        ]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            if let pyFile = contents.first(where: { $0.pathExtension == "py" }) {
+                                if let source = try? String(contentsOf: pyFile, encoding: .utf8) {
+                                    pythonPluginIRInfos.append(EmbeddedPythonPluginIRInfo(
+                                        name: pluginName,
+                                        yaml: yamlContent,
+                                        source: source
+                                    ))
+                                    hasPythonPlugins = true
+                                    if verbose {
+                                        print("  Python plugin '\(pluginName)' (\(source.count) bytes source)")
+                                    }
+                                }
+                                break
+                            }
+                        }
+
+                        // Check for requirements.txt and install deps
+                        let reqCandidates = [
+                            pluginDir.appendingPathComponent("requirements.txt"),
+                            sourceManagedPluginsDirEarly.appendingPathComponent(pluginName).appendingPathComponent("requirements.txt"),
+                        ]
+                        if let reqFile = reqCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+                            pythonRequirementsFiles.append(reqFile)
+                        }
+
+                        continue
+                    }
+
+                    // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
+                    var objectFiles: [String] = []
+
+                    // Create a working directory for this plugin's renamed object files
+                    let pluginWorkDir = staticBuildDir.appendingPathComponent(pluginName)
+                    try? FileManager.default.createDirectory(at: pluginWorkDir, withIntermediateDirectories: true)
+
+                    // Strategy 1: Find .o files from SPM build directory (Swift package plugins)
+                    // After `swift build`, .o files are in .build/<triple>/release/<Module>.build/*.o
+                    // The managed plugin compiler uses .build-aro as the build directory
+                    let sourcePluginDir = sourceManagedPluginsDirEarly.appendingPathComponent(pluginName)
+                    let spmBuildCandidates = [
+                        pluginDir.appendingPathComponent(".build-aro"),
+                        pluginDir.appendingPathComponent(".build"),
+                        sourcePluginDir.appendingPathComponent(".build-aro"),
+                        sourcePluginDir.appendingPathComponent(".build"),
                     ]
-                    for searchDir in searchDirs {
-                        guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
-                        let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
-                        if let soFile = contents.first(where: { $0.pathExtension == libExt }) {
-                            if let soData = try? Data(contentsOf: soFile) {
-                                embeddedPlugins.append((
-                                    name: pluginName,
-                                    yaml: yamlContent,
-                                    base64Library: soData.base64EncodedString()
-                                ))
-                                if verbose {
-                                    print("  Embedded plugin '\(pluginName)' (\(soData.count) bytes → \(soFile.lastPathComponent))")
+                    let spmBuildDir = spmBuildCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+                        ?? sourcePluginDir.appendingPathComponent(".build")
+                    // Determine which directory contains the Package.swift for --show-bin-path
+                    let packageDir = FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("Package.swift").path) ? pluginDir : sourcePluginDir
+                    if FileManager.default.fileExists(atPath: spmBuildDir.path) {
+                        // Use `swift build --show-bin-path` to find the correct build directory
+                        var binPath: String? = nil
+                        let showBinProcess = Process()
+                        showBinProcess.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+                        showBinProcess.arguments = ["build", "-c", "release", "--show-bin-path", "--scratch-path", spmBuildDir.path]
+                        showBinProcess.currentDirectoryURL = packageDir
+                        let binPipe = Pipe()
+                        showBinProcess.standardOutput = binPipe
+                        showBinProcess.standardError = FileHandle.nullDevice
+                        if let _ = try? showBinProcess.run() {
+                            showBinProcess.waitUntilExit()
+                            if showBinProcess.terminationStatus == 0,
+                               let path = String(data: binPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                                   .trimmingCharacters(in: .whitespacesAndNewlines),
+                               !path.isEmpty {
+                                binPath = path
+                            }
+                        }
+
+                        if let releaseDir = binPath {
+                            // Collect .o files from all module build directories
+                            // Include the plugin itself + its dependencies (e.g., AROPluginSDK, AROPluginKit)
+                            let releaseDirURL = URL(fileURLWithPath: releaseDir)
+                            if let buildDirContents = try? FileManager.default.contentsOfDirectory(
+                                at: releaseDirURL, includingPropertiesForKeys: [.isDirectoryKey]
+                            ) {
+                                for dir in buildDirContents where dir.pathExtension == "build" {
+                                    let moduleName = dir.deletingPathExtension().lastPathComponent
+                                    // Skip compiler plugin / macro modules (they end in -tool or are swift-syntax related)
+                                    if moduleName.hasSuffix("-tool") || moduleName.contains("SwiftSyntax") ||
+                                       moduleName.contains("SwiftParser") || moduleName.contains("SwiftOperators") ||
+                                       moduleName.contains("SwiftBasicFormat") || moduleName.contains("SwiftDiagnostics") ||
+                                       moduleName.contains("SwiftLexicalLookup") || moduleName.contains("SwiftCompiler") ||
+                                       moduleName.contains("_SwiftSyntax") || moduleName.contains("SwiftIfConfig") ||
+                                       moduleName.contains("SwiftRefactor") || moduleName.contains("SwiftIDEUtils") ||
+                                       moduleName == "_SwiftSyntaxCShims" || moduleName.contains("GenericTestSupport") {
+                                        continue
+                                    }
+                                    if let oFiles = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                                        for oFile in oFiles where oFile.pathExtension == "o" {
+                                            objectFiles.append(oFile.path)
+                                        }
+                                    }
                                 }
                             }
-                            break
                         }
+                    }
+
+                    // Strategy 2: Find .o from Rust cargo build
+                    if objectFiles.isEmpty {
+                        let cargoTarget = sourcePluginDir.appendingPathComponent("target/release")
+                        if let contents = try? FileManager.default.contentsOfDirectory(at: cargoTarget, includingPropertiesForKeys: nil) {
+                            // Rust produces a .a in target/release/
+                            if let aFile = contents.first(where: { $0.pathExtension == "a" && $0.lastPathComponent.hasPrefix("lib") }) {
+                                objectFiles = try symbolRenamer.extractObjectFiles(from: aFile.path, to: pluginWorkDir.path)
+                            }
+                        }
+                    }
+
+                    // Strategy 3: Find .o from direct C compilation
+                    if objectFiles.isEmpty {
+                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            objectFiles.append(contentsOf: contents.filter { $0.pathExtension == "o" }.map { $0.path })
+                        }
+                    }
+
+                    // Strategy 4: Recompile from .c source files to .o
+                    if objectFiles.isEmpty {
+                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        for searchDir in searchDirs {
+                            guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                            let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                            let cFiles = contents.filter { $0.pathExtension == "c" }
+                            for cFile in cFiles {
+                                let oPath = pluginWorkDir.appendingPathComponent(cFile.deletingPathExtension().lastPathComponent + ".o").path
+                                let compileProcess = Process()
+                                compileProcess.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
+                                compileProcess.arguments = ["-c", "-fPIC", "-O2", "-o", oPath, cFile.path]
+                                compileProcess.standardOutput = FileHandle.nullDevice
+                                compileProcess.standardError = FileHandle.nullDevice
+                                try? compileProcess.run()
+                                compileProcess.waitUntilExit()
+                                if compileProcess.terminationStatus == 0 {
+                                    objectFiles.append(oPath)
+                                }
+                            }
+                        }
+                    }
+
+                    if objectFiles.isEmpty {
+                        if verbose { print("  Warning: No object files found for plugin '\(pluginName)', skipping") }
+                        continue
+                    }
+
+                    // Rename plugin symbols to avoid collisions
+                    let renamedFiles = try symbolRenamer.renamePluginSymbols(
+                        objectFiles: objectFiles,
+                        pluginName: pluginName,
+                        outputDir: pluginWorkDir.path
+                    )
+
+                    // Discover which symbols this plugin actually exports
+                    let availableSymbols = try symbolRenamer.discoverSymbols(in: renamedFiles, pluginName: pluginName)
+
+                    if !availableSymbols.contains("aro_plugin_info") {
+                        if verbose { print("  Warning: Plugin '\(pluginName)' missing aro_plugin_info, skipping static link") }
+                        continue
+                    }
+
+                    staticPluginInfos.append(StaticPluginInfo(
+                        name: pluginName,
+                        yaml: yamlContent,
+                        objectFiles: renamedFiles,
+                        availableSymbols: availableSymbols
+                    ))
+                    staticPluginIRInfos.append(StaticPluginIRInfo(
+                        name: pluginName,
+                        yaml: yamlContent,
+                        availableSymbols: availableSymbols
+                    ))
+
+                    if verbose {
+                        let totalSize = renamedFiles.compactMap { try? FileManager.default.attributesOfItem(atPath: $0)[.size] as? Int }.reduce(0, +)
+                        print("  Static plugin '\(pluginName)' (\(totalSize) bytes, \(availableSymbols.count) symbols)")
                     }
                 }
             } catch {
-                print("Warning: Failed to compile managed plugins for embedding: \(error)")
+                print("Warning: Failed to compile managed plugins: \(error)")
+            }
+        }
+
+        // If Python plugins were found, find libpython and prepare deps
+        if hasPythonPlugins {
+            let pythonFinder = PythonLibraryFinder(verbose: verbose)
+            if let pythonPaths = pythonFinder.findPython() {
+                pythonLinkerFlags = pythonPaths.linkerFlags
+                if verbose {
+                    print("Python \(pythonPaths.version) found: \(pythonPaths.executable)")
+                    print("  Linker flags: \(pythonPaths.linkerFlags.joined(separator: " "))")
+                }
+
+                // Install requirements to a temporary venv if needed
+                if !pythonRequirementsFiles.isEmpty {
+                    let venvDir = buildDir.appendingPathComponent("python-venv")
+                    if verbose { print("  Installing Python dependencies...") }
+
+                    // Create venv
+                    let venvProcess = Process()
+                    venvProcess.executableURL = URL(fileURLWithPath: pythonPaths.executable)
+                    venvProcess.arguments = ["-m", "venv", venvDir.path]
+                    venvProcess.standardOutput = FileHandle.nullDevice
+                    venvProcess.standardError = FileHandle.nullDevice
+                    try? venvProcess.run()
+                    venvProcess.waitUntilExit()
+
+                    // Install requirements
+                    let pip = venvDir.appendingPathComponent("bin/pip").path
+                    for reqFile in pythonRequirementsFiles {
+                        let pipProcess = Process()
+                        pipProcess.executableURL = URL(fileURLWithPath: pip)
+                        pipProcess.arguments = ["install", "-r", reqFile.path, "--quiet"]
+                        pipProcess.standardOutput = verbose ? FileHandle.standardOutput : FileHandle.nullDevice
+                        pipProcess.standardError = verbose ? FileHandle.standardError : FileHandle.nullDevice
+                        try? pipProcess.run()
+                        pipProcess.waitUntilExit()
+                    }
+
+                    if verbose { print("  Python dependencies installed") }
+                }
+            } else {
+                print("Warning: Python plugins found but python3 not available on build machine")
+                print("  Python plugins will use legacy base64 embedding")
+                // Fall back: convert Python IR infos back to legacy base64 embedded plugins
+                for pyPlugin in pythonPluginIRInfos {
+                    if let data = pyPlugin.source.data(using: .utf8) {
+                        embeddedPlugins.append((
+                            name: pyPlugin.name,
+                            yaml: pyPlugin.yaml,
+                            base64Library: data.base64EncodedString()
+                        ))
+                    }
+                }
+                pythonPluginIRInfos.removeAll()
+                hasPythonPlugins = false
             }
         }
 
@@ -288,9 +512,7 @@ struct BuildCommand: AsyncParsableCommand {
             print("Generating LLVM IR...")
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Starting LLVM IR generation\n".utf8))
-        #endif
+        AROLogger.debug("Starting LLVM IR generation", subsystem: "build")
 
         // Serialize OpenAPI spec to JSON for embedding (if present)
         var openAPISpecJSON: String? = nil
@@ -355,15 +577,13 @@ struct BuildCommand: AsyncParsableCommand {
                 program: mergedProgram,
                 openAPISpecJSON: openAPISpecJSON,
                 templatesJSON: templatesJSON,
-                embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins
+                embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins,
+                staticPlugins: staticPluginIRInfos.isEmpty ? nil : staticPluginIRInfos,
+                pythonPlugins: pythonPluginIRInfos.isEmpty ? nil : pythonPluginIRInfos
             )
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] LLVM IR generated successfully\n".utf8))
-            #endif
+            AROLogger.debug("LLVM IR generated successfully", subsystem: "build")
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: LLVM generation failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("LLVM generation failed: \(error)", subsystem: "build")
             print("Code generation error: \(error)")
             throw ExitCode.failure
         }
@@ -423,17 +643,12 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
-            #if os(Linux) || os(Windows)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: Runtime library not found\n".utf8))
-            #endif
+            AROLogger.error("Runtime library not found", subsystem: "build")
             print("Error: ARORuntime library not found.")
             throw ExitCode.failure
         }
 
-        #if os(Linux) || os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Runtime library found: \(runtimeLibPath)\n".utf8))
-        print("[BUILD] Runtime library found: \(runtimeLibPath)")
-        #endif
+        AROLogger.debug("Runtime library found: \(runtimeLibPath)", subsystem: "build")
 
         if verbose {
             print("Using runtime: \(runtimeLibPath)")
@@ -451,28 +666,15 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        #if os(Linux) || os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Starting linker\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] Object file: \(objectPath)\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] Output path: \(binaryPath.path)\n".utf8))
-        print("[BUILD] Starting linker")
-        print("[BUILD] Object file: \(objectPath)")
-        print("[BUILD] Output path: \(binaryPath.path)")
-        #endif
+        AROLogger.debug("Starting linker", subsystem: "build")
+        AROLogger.debug("Object file: \(objectPath)", subsystem: "build")
+        AROLogger.debug("Output path: \(binaryPath.path)", subsystem: "build")
 
-        #if os(Windows)
-        print("[BUILD] Creating CCompiler with runtime: \(runtimeLibPath)")
-        #endif
+        AROLogger.debug("Creating CCompiler with runtime: \(runtimeLibPath)", subsystem: "build")
 
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: verbose)
 
-        #if os(Windows)
-        print("[BUILD] CCompiler created successfully")
-        #endif
-
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] CCompiler created\n".utf8))
-        #endif
+        AROLogger.debug("CCompiler created", subsystem: "build")
 
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
@@ -481,34 +683,34 @@ struct BuildCommand: AsyncParsableCommand {
             deadStrip: effectiveStrip || effectiveSize  // Enable dead stripping when stripping or optimizing for size
         )
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] LinkOptions created\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".utf8))
-        #endif
+        AROLogger.debug("LinkOptions created", subsystem: "build")
+        AROLogger.debug("About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)", subsystem: "build")
 
         do {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Inside do block, calling link...\n".utf8))
-            #endif
+            AROLogger.debug("Calling linker.link()...", subsystem: "build")
+
+            // Collect all object files: main program + statically-linked plugins + Python lib
+            var allObjectFiles = [objectPath]
+            for pluginInfo in staticPluginInfos {
+                allObjectFiles.append(contentsOf: pluginInfo.objectFiles)
+            }
+            // Add Python library if Python plugins are embedded
+            allObjectFiles.append(contentsOf: pythonLinkerFlags)
 
             try linker.link(
-                objectFiles: [objectPath],
+                objectFiles: allObjectFiles,
                 outputPath: binaryPath.path,
                 outputType: .executable,
                 options: linkOptions
             )
 
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Linking completed\n".utf8))
-            #endif
+            AROLogger.debug("Linking completed", subsystem: "build")
 
             if verbose {
                 print("  Executable created")
             }
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: Linking failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("Linking failed: \(error)", subsystem: "build")
             print("Linking error: \(error)")
             throw ExitCode.failure
         }
@@ -591,17 +793,13 @@ struct BuildCommand: AsyncParsableCommand {
 
         let elapsed = Date().timeIntervalSince(startTime)
 
-        #if os(Linux)
-        print("[BUILD] Binary created successfully")
-        print("[BUILD] Path: \(binaryPath.path)")
-        print("[BUILD] Checking if binary exists...")
+        AROLogger.debug("Binary created successfully", subsystem: "build")
+        AROLogger.debug("Path: \(binaryPath.path)", subsystem: "build")
         if FileManager.default.fileExists(atPath: binaryPath.path) {
-            print("[BUILD] ✓ Binary exists")
-            print("[BUILD] Size: \(try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size] ?? 0) bytes")
+            AROLogger.debug("Binary exists, size: \(String(describing: try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size]))", subsystem: "build")
         } else {
-            print("[BUILD] ✗ Binary NOT found!")
+            AROLogger.error("Binary NOT found after build!", subsystem: "build")
         }
-        #endif
 
         print("Built: \(binaryPath.path)")
         if verbose {
@@ -722,23 +920,18 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
 
         #if os(Windows)
-        // Debug output for Windows - write to both stderr AND a debug file
-        var debugLog = "[BUILD] Searching for runtime library...\n"
-        debugLog += "[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
-        debugLog += "[BUILD] Executable path: \(executablePath.path)\n"
-        debugLog += "[BUILD] Executable dir: \(executableDir.path)\n"
-        debugLog += "[BUILD] Current working dir: \(fm.currentDirectoryPath)\n"
-        debugLog += "[BUILD] Search paths (\(searchPaths.count) total):\n"
+        // Debug output for Windows
+        var debugLog = "Searching for runtime library...\n"
+        debugLog += "ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
+        debugLog += "Executable path: \(executablePath.path)\n"
+        debugLog += "Executable dir: \(executableDir.path)\n"
+        debugLog += "Current working dir: \(fm.currentDirectoryPath)\n"
+        debugLog += "Search paths (\(searchPaths.count) total):\n"
         for (index, path) in searchPaths.enumerated() {
             let exists = fm.fileExists(atPath: path)
-            debugLog += "[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
+            debugLog += "  \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
         }
-
-        // Write to stderr
-        FileHandle.standardError.write(Data(debugLog.utf8))
-
-        // Also write to stdout so it's captured in test output
-        print(debugLog)
+        AROLogger.debug(debugLog, subsystem: "build")
 
         // Also write to a debug file
         let debugFilePath = fm.currentDirectoryPath + "\\aro-build-debug.log"
@@ -784,7 +977,7 @@ struct BuildCommand: AsyncParsableCommand {
 
             #if os(Windows)
             let exists = fm.fileExists(atPath: fullPath)
-            FileHandle.standardError.write(Data("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".utf8))
+            AROLogger.debug("Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")", subsystem: "build")
             if exists {
                 return fullPath
             }
@@ -796,10 +989,8 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND in standard locations\n".utf8))
-
-        // Last resort: try to find the library anywhere on disk using where/dir commands
-        FileHandle.standardError.write(Data("[BUILD] Attempting filesystem search...\n".utf8))
+        AROLogger.debug("Runtime library NOT FOUND in standard locations", subsystem: "build")
+        AROLogger.debug("Attempting filesystem search...", subsystem: "build")
 
         // Try to find libARORuntime.a near the executable
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
@@ -810,24 +1001,23 @@ struct BuildCommand: AsyncParsableCommand {
             // Try listing the directory contents
             do {
                 let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
-                FileHandle.standardError.write(Data("[BUILD] Contents of \(aroBinDir.path):\n".utf8))
+                AROLogger.debug("Contents of \(aroBinDir.path): \(contents)", subsystem: "build")
                 for item in contents {
-                    FileHandle.standardError.write(Data("[BUILD]   - \(item)\n".utf8))
                     if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
                         let itemPath = aroBinDir.appendingPathComponent(item).path
-                        FileHandle.standardError.write(Data("[BUILD] Found potential library: \(itemPath)\n".utf8))
+                        AROLogger.debug("Found potential library: \(itemPath)", subsystem: "build")
                         if fm.fileExists(atPath: itemPath) {
-                            FileHandle.standardError.write(Data("[BUILD] Returning: \(itemPath)\n".utf8))
+                            AROLogger.debug("Returning: \(itemPath)", subsystem: "build")
                             return itemPath
                         }
                     }
                 }
             } catch {
-                FileHandle.standardError.write(Data("[BUILD] Error listing directory: \(error)\n".utf8))
+                AROLogger.error("Error listing directory: \(error)", subsystem: "build")
             }
         }
 
-        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND anywhere\n".utf8))
+        AROLogger.error("Runtime library NOT FOUND anywhere", subsystem: "build")
         #endif
 
         return nil

@@ -2348,6 +2348,39 @@ nonisolated(unsafe) public var embeddedTemplates: [String: String]? = nil
 /// Key: plugin name, Value: (yaml: plugin.yaml content, base64So: base64-encoded library bytes)
 nonisolated(unsafe) public var embeddedPluginRegistry: [String: (yaml: String, base64So: String)] = [:]
 
+/// Entry for a statically-linked plugin whose function pointers are baked into the binary
+public struct StaticPluginEntry {
+    public let yaml: String
+    public let infoFunc: UnsafeRawPointer?
+    public let executeFunc: UnsafeRawPointer?
+    public let freeFunc: UnsafeRawPointer?
+    public let qualifierFunc: UnsafeRawPointer?
+    public let initFunc: UnsafeRawPointer?
+    public let shutdownFunc: UnsafeRawPointer?
+}
+
+/// Global registry for statically-linked plugins (function pointers, no dlopen)
+/// Key: plugin name, Value: StaticPluginEntry with function pointers and YAML metadata
+nonisolated(unsafe) public var staticPluginRegistry: [String: StaticPluginEntry] = [:]
+
+/// Entry for an embedded Python plugin (source + deps bundled in binary)
+public struct EmbeddedPythonPluginEntry {
+    public let yaml: String
+    public let source: String
+    public let stdlibZip: Data?
+    public let depsZip: Data?
+}
+
+/// Global registry for embedded Python plugins (source + deps, executed in-process)
+/// Key: plugin name, Value: EmbeddedPythonPluginEntry
+nonisolated(unsafe) public var embeddedPythonPluginRegistry: [String: EmbeddedPythonPluginEntry] = [:]
+
+/// Embedded Python stdlib zip data (shared across all Python plugins)
+nonisolated(unsafe) public var embeddedPythonStdlibZip: Data? = nil
+
+/// Embedded Python site-packages zip data (all pip deps bundled together)
+nonisolated(unsafe) public var embeddedPythonDepsZip: Data? = nil
+
 /// Set the embedded OpenAPI spec (called from generated main)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
@@ -2385,6 +2418,76 @@ public func aro_register_embedded_plugin(
     let yaml = String(cString: yamlPtr)
     let base64 = String(cString: base64Ptr)
     embeddedPluginRegistry[name] = (yaml: yaml, base64So: base64)
+}
+
+/// Register a statically-linked plugin with function pointers (no dlopen needed)
+/// Called from generated main() for each native plugin compiled into the binary.
+/// - Parameters:
+///   - namePtr: Plugin name
+///   - yamlPtr: Content of plugin.yaml
+///   - infoFunc: Pointer to renamed aro_plugin_info function (or null)
+///   - executeFunc: Pointer to renamed aro_plugin_execute function (or null)
+///   - freeFunc: Pointer to renamed aro_plugin_free function (or null)
+///   - qualifierFunc: Pointer to renamed aro_plugin_qualifier function (or null)
+///   - initFunc: Pointer to renamed aro_plugin_init function (or null)
+///   - shutdownFunc: Pointer to renamed aro_plugin_shutdown function (or null)
+@_cdecl("aro_register_static_plugin")
+public func aro_register_static_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ infoFunc: UnsafeRawPointer?,
+    _ executeFunc: UnsafeRawPointer?,
+    _ freeFunc: UnsafeRawPointer?,
+    _ qualifierFunc: UnsafeRawPointer?,
+    _ initFunc: UnsafeRawPointer?,
+    _ shutdownFunc: UnsafeRawPointer?
+) {
+    guard let namePtr, let yamlPtr else { return }
+    let name = String(cString: namePtr)
+    let yaml = String(cString: yamlPtr)
+    staticPluginRegistry[name] = StaticPluginEntry(
+        yaml: yaml,
+        infoFunc: infoFunc,
+        executeFunc: executeFunc,
+        freeFunc: freeFunc,
+        qualifierFunc: qualifierFunc,
+        initFunc: initFunc,
+        shutdownFunc: shutdownFunc
+    )
+}
+
+/// Register an embedded Python plugin (source code + YAML metadata)
+/// Called from generated main() for each Python plugin compiled into the binary.
+@_cdecl("aro_register_embedded_python_plugin")
+public func aro_register_embedded_python_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ sourcePtr: UnsafePointer<CChar>?
+) {
+    guard let namePtr, let yamlPtr, let sourcePtr else { return }
+    let name = String(cString: namePtr)
+    let yaml = String(cString: yamlPtr)
+    let source = String(cString: sourcePtr)
+    embeddedPythonPluginRegistry[name] = EmbeddedPythonPluginEntry(
+        yaml: yaml,
+        source: source,
+        stdlibZip: nil,
+        depsZip: nil
+    )
+}
+
+/// Set the embedded Python stdlib zip data (called once from generated main)
+@_cdecl("aro_set_python_stdlib")
+public func aro_set_python_stdlib(_ dataPtr: UnsafePointer<UInt8>?, _ length: Int64) {
+    guard let dataPtr, length > 0 else { return }
+    embeddedPythonStdlibZip = Data(bytes: dataPtr, count: Int(length))
+}
+
+/// Set the embedded Python deps zip data (called once from generated main)
+@_cdecl("aro_set_python_deps")
+public func aro_set_python_deps(_ dataPtr: UnsafePointer<UInt8>?, _ length: Int64) {
+    guard let dataPtr, length > 0 else { return }
+    embeddedPythonDepsZip = Data(bytes: dataPtr, count: Int(length))
 }
 
 /// Register a feature set handler for HTTP routing
