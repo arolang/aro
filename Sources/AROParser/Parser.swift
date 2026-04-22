@@ -273,21 +273,64 @@ public final class Parser {
     /// ARO-0043: Also supports sink syntax like `Log "message" to the <console>.`
     /// ARO-0067: When expectDot is false, doesn't consume the terminating dot (for pipeline stages)
     private func parseAROStatement(expectDot: Bool = true) throws -> AROStatement {
-        // Parse action verb (capitalized identifier or testing keyword)
         let startToken = peek()
-        let actionToken: Token
-        let action: Action
 
-        // Check for keywords that can also be action verbs
-        // Note: 'Given' is NOT a keyword - it's parsed as an identifier
+        // 1. Action verb
+        let action = try parseActionVerb()
+
+        // 2. Result (sink syntax or standard <result>)
+        let (result, resultExpression) = try parseAROResult(action: action)
+
+        // 3. Preposition
+        let prep = try parsePreposition()
+
+        // 4. Object (expression or standard <object>)
+        var (objectNoun, expression) = try parseAROObject(preposition: prep)
+
+        // 5. Optional trailing clauses
+        let clauses = try parseOptionalClauses(objectNoun: &objectNoun, expression: &expression)
+
+        // 6. Terminating dot
+        let endToken: Token
+        if expectDot {
+            endToken = try expect(.dot, message: "'.'")
+        } else {
+            endToken = previous()
+        }
+
+        // 7. Build AST node
+        let valueSource: ValueSource
+        if let resExpr = resultExpression {
+            valueSource = .sinkExpression(resExpr)
+        } else if let expr = expression {
+            valueSource = .expression(expr)
+        } else {
+            valueSource = .none
+        }
+
+        return AROStatement(
+            action: action,
+            result: result,
+            object: ObjectClause(preposition: prep, noun: objectNoun),
+            valueSource: valueSource,
+            queryModifiers: clauses.queryModifiers,
+            rangeModifiers: clauses.rangeModifiers,
+            statementGuard: clauses.guard_,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
+    // MARK: - parseAROStatement Submethods
+
+    /// Parses the action verb (capitalized identifier, keyword, or Namespace.Verb syntax)
+    private func parseActionVerb() throws -> Action {
         switch peek().kind {
         case .when, .then, .assert, .exists:
-            actionToken = advance()
-            // Capitalize the keyword for consistency (when -> When, then -> Then, etc.)
+            let actionToken = advance()
             let capitalizedVerb = actionToken.lexeme.prefix(1).uppercased() + actionToken.lexeme.dropFirst()
-            action = Action(verb: capitalizedVerb, span: actionToken.span)
+            return Action(verb: capitalizedVerb, span: actionToken.span)
         case .identifier(let verb) where verb.first?.isUppercase == true:
-            actionToken = advance()
+            let actionToken = advance()
             var fullVerb = actionToken.lexeme
             var endSpan = actionToken.span
             // ARO-0095: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
@@ -299,93 +342,65 @@ public final class Parser {
                     fullVerb += "." + partToken.lexeme
                     endSpan = partToken.span
                 } else {
-                    // Not a capitalized identifier after dot — backtrack
                     current = savedPosition
                     break
                 }
             }
-            action = Action(verb: fullVerb, span: actionToken.span.merged(with: endSpan))
+            return Action(verb: fullVerb, span: actionToken.span.merged(with: endSpan))
         default:
             throw ParserError.unexpectedToken(expected: "action verb (e.g., Extract, Filter, Return)", got: peek())
         }
+    }
 
-        // ARO-0043: Check for sink verb syntax
-        // Sink verbs: log, print, output, debug, write, send, dispatch
-        // Syntax: <Log> "message" to the <console>.
-        //         <Write> <data> to the <file: "./output.json">.
+    /// Parses the result position: sink syntax (ARO-0043) or standard `[article] <result>`
+    /// Returns the result noun and an optional sink expression
+    private func parseAROResult(action: Action) throws -> (QualifiedNoun, (any Expression)?) {
         let isSinkVerb = isSinkActionVerb(action.verb)
-        var resultExpression: (any Expression)? = nil
-
-        // Check if we should parse sink syntax:
-        // After a sink verb, if we see an expression-starting token (like string literal)
-        // OR a `<variable>` NOT preceded by an article, treat it as sink syntax
         let useSinkSyntax = isSinkVerb && isSinkSyntaxStart(peek())
 
-        var result: QualifiedNoun
         if useSinkSyntax {
-            // ARO-0043: Parse expression as the value to output
-            resultExpression = try parseExpression()
-            // Create a placeholder result noun
-            result = QualifiedNoun(base: "_sink_", specifiers: [], span: previous().span)
-        } else {
-            // Standard syntax: [article] <result>
-            // Skip optional article before result
-            if case .article = peek().kind {
-                advance()
-            }
-
-            // Parse result
-            try expect(.leftAngle, message: "'<'")
-            result = try parseQualifiedNoun()
-            try expect(.rightAngle, message: "'>'")
-
-            // ARO-0038: Check for optional 'as Type' annotation after result
-            // Syntax: <result> as Type  (alternative to <result: Type>)
-            if check(.as) {
-                advance()
-                let typeAnnotation = try parseTypeAnnotation()
-                result = QualifiedNoun(
-                    base: result.base,
-                    typeAnnotation: typeAnnotation,
-                    span: result.span
-                )
-            }
+            let expr = try parseExpression()
+            let result = QualifiedNoun(base: "_sink_", specifiers: [], span: previous().span)
+            return (result, expr)
         }
 
-        // Parse preposition
-        // Note: "for" is lexed as .for keyword (for iteration) but also used as a preposition
-        let prep: Preposition
+        // Standard syntax: [article] <result>
+        if case .article = peek().kind { advance() }
+        try expect(.leftAngle, message: "'<'")
+        var result = try parseQualifiedNoun()
+        try expect(.rightAngle, message: "'>'")
+
+        // ARO-0038: optional 'as Type' annotation
+        if check(.as) {
+            advance()
+            let typeAnnotation = try parseTypeAnnotation()
+            result = QualifiedNoun(base: result.base, typeAnnotation: typeAnnotation, span: result.span)
+        }
+
+        return (result, nil)
+    }
+
+    /// Parses the preposition between result and object
+    private func parsePreposition() throws -> Preposition {
         if case .preposition(let p) = peek().kind {
-            prep = p
             advance()
+            return p
         } else if case .for = peek().kind {
-            // Accept "for" keyword as the preposition .for
-            prep = .for
             advance()
-        } else {
-            throw ParserError.unexpectedToken(expected: "preposition", got: peek())
+            return .for
         }
+        throw ParserError.unexpectedToken(expected: "preposition", got: peek())
+    }
 
-        // After preposition, we can have:
-        // 1. [article] <object> [with literal/expression] - standard syntax
-        // 2. expression - for computed values like `from <x> * <y>` or `to 30`
-        var objectNoun: QualifiedNoun
-        let literalValue: LiteralValue? = nil
-        var expression: (any Expression)? = nil
-        var aggregation: AggregationClause? = nil
-        var toExpression: (any Expression)? = nil
-
-        // Check if we should parse an expression after the preposition
-        // This happens for: `to <expr>`, `from <expr>`, `with <expr>`, `for <expr>` when followed by expression-starting token
+    /// Parses the object position: expression or standard `[article] <object>`
+    /// Returns the object noun and an optional expression
+    private func parseAROObject(preposition prep: Preposition) throws -> (QualifiedNoun, (any Expression)?) {
         let shouldParseExpression = (prep == .to || prep == .from || prep == .with || prep == .for) && isExpressionStart(peek())
 
         if shouldParseExpression && !isObjectPattern() {
-            // Parse expression (ARO-0002)
-            expression = try parseExpression()
+            let expression = try parseExpression()
 
-            // Time-unit suffix for duration literals: "with 2 seconds." / "for 30 seconds." / "with 1 hour."
-            // When a time-unit identifier follows a numeric literal, consume it and set objectNoun.base
-            // to the unit string so actions can apply the correct multiplier.
+            // Time-unit suffix for duration literals
             let timeUnits: Set<String> = [
                 "second", "seconds", "s",
                 "minute", "minutes", "min",
@@ -393,142 +408,112 @@ public final class Parser {
                 "millisecond", "milliseconds", "ms"
             ]
             if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
-                advance()  // consume the time-unit identifier
-                objectNoun = QualifiedNoun(base: unit, specifiers: [], span: previous().span)
-            } else {
-                // Create a placeholder object noun for the expression
-                objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
-            }
-        } else {
-            // Standard syntax: [article] <object> or [article] bare-identifier
-            // Skip optional article before object
-            if case .article = peek().kind {
                 advance()
+                return (QualifiedNoun(base: unit, specifiers: [], span: previous().span), expression)
             }
-
-            // Parse object - angle brackets optional for simple objects (no qualifier)
-            if check(.leftAngle) {
-                // Standard syntax: <object> or <object: qualifier>
-                advance()
-                objectNoun = try parseQualifiedNoun()
-                try expect(.rightAngle, message: "'>'")
-            } else if case .identifier = peek().kind {
-                // Bare identifier syntax: object or object-hyphenated (no qualifier allowed)
-                let startSpan = peek().span
-                let base = try parseCompoundIdentifier()
-                objectNoun = QualifiedNoun(base: base, specifiers: [], span: startSpan.merged(with: previous().span))
-            } else {
-                throw ParserError.unexpectedToken(expected: "object ('<' or identifier)", got: peek())
-            }
+            return (QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span), expression)
         }
 
-        // Parse optional with clause: `with "string"` or `with <expr>` or `with sum(<field>)`
-        // This is placed outside the if/else to handle both expression and standard object syntax (ARO-0042)
+        // Standard syntax: [article] <object> or bare identifier
+        if case .article = peek().kind { advance() }
+
+        if check(.leftAngle) {
+            advance()
+            let objectNoun = try parseQualifiedNoun()
+            try expect(.rightAngle, message: "'>'")
+            return (objectNoun, nil)
+        } else if case .identifier = peek().kind {
+            let startSpan = peek().span
+            let base = try parseCompoundIdentifier()
+            return (QualifiedNoun(base: base, specifiers: [], span: startSpan.merged(with: previous().span)), nil)
+        }
+
+        throw ParserError.unexpectedToken(expected: "object ('<' or identifier)", got: peek())
+    }
+
+    /// Intermediate storage for parsed optional clauses
+    private struct AROClauses {
+        var queryModifiers: QueryModifiers
+        var rangeModifiers: RangeModifiers
+        var guard_: StatementGuard
+    }
+
+    /// Parses optional trailing clauses: with, to, where, by, default, when
+    private func parseOptionalClauses(
+        objectNoun: inout QualifiedNoun,
+        expression: inout (any Expression)?
+    ) throws -> AROClauses {
+        var aggregation: AggregationClause? = nil
         var withExpression: (any Expression)? = nil
+        var toExpression: (any Expression)? = nil
+        var whereClause: WhereClause? = nil
+        var byClause: ByClause? = nil
+        var defaultValue: (any Expression)? = nil
+        var whenCondition: (any Expression)? = nil
+
+        // with clause (ARO-0042)
         if case .preposition(.with) = peek().kind {
-            advance() // consume 'with'
-            // Check for aggregation functions: sum(<field>), count(), avg(<field>)
+            advance()
             if let agg = try parseAggregationIfPresent() {
                 aggregation = agg
             } else if isExpressionStart(peek()) {
-                // Store the with clause in withExpression (→ rangeModifiers.withClause)
-                // so the runtime can bind it as _with_ for plugin qualifiers and set operations.
-                // For backward compatibility, also store in expression when in standard object mode
-                // so existing actions that read _expression_ continue to work.
                 withExpression = try parseExpression()
                 if objectNoun.base != "_expression_" {
-                    // Standard mode: also bind as expression for legacy action compatibility
                     expression = withExpression
                 }
             }
         }
 
-        // Parse optional to clause (ARO-0041): `from <start> to <end>` for date ranges
-        // This is placed outside the if/else to handle both expression and standard object syntax
+        // to clause (ARO-0041)
         if case .preposition(let p) = peek().kind, p == .to {
-            advance() // consume 'to'
+            advance()
             toExpression = try parseExpression()
         }
 
-        // Parse optional where clause (ARO-0018): `where <field> is "value"` or `where <field> > 1000`
-        var whereClause: WhereClause?
+        // where clause (ARO-0018)
         if check(.where) {
-            advance() // consume 'where'
+            advance()
             whereClause = try parseWhereClause()
         }
 
-        // Parse optional by clause: `by /pattern/flags` (ARO-0037) or `by "field"` (Group)
-        var byClause: ByClause?
+        // by clause (ARO-0037)
         if case .preposition(.by) = peek().kind {
-            let byToken = advance() // consume 'by'
+            let byToken = advance()
             if case .regexLiteral(let pattern, let flags) = peek().kind {
-                advance() // consume regex literal
+                advance()
                 byClause = ByClause(pattern: pattern, flags: flags, span: byToken.span.merged(with: previous().span))
             } else if case .stringLiteral(let fieldName) = peek().kind {
-                advance() // consume string literal
+                advance()
                 byClause = ByClause(pattern: fieldName, flags: "", span: byToken.span.merged(with: previous().span), isFieldName: true)
             } else {
                 throw ParserError.unexpectedToken(expected: "regex literal or string literal after 'by'", got: peek())
             }
         }
 
-        // Parse optional default clause (ARO-0072): `default <expr>`
-        var defaultValue: (any Expression)?
+        // default clause (ARO-0072)
         if case .identifier(let kw) = peek().kind, kw == "default" {
-            advance() // consume 'default'
+            advance()
             defaultValue = try parseExpression()
         }
 
-        // Parse optional when clause (ARO-0004): `when <condition>`
-        var whenCondition: (any Expression)?
+        // when clause (ARO-0004)
         if check(.when) {
-            advance() // consume 'when'
+            advance()
             whenCondition = try parseExpression()
         }
 
-        // ARO-0067: Only expect dot if not part of a pipeline
-        let endToken: Token
-        if expectDot {
-            endToken = try expect(.dot, message: "'.'")
-        } else {
-            endToken = previous()
-        }
-
-        // Build grouped types from parsed fields
-        let valueSource: ValueSource
-        if let resExpr = resultExpression {
-            valueSource = .sinkExpression(resExpr)
-        } else if let expr = expression {
-            valueSource = .expression(expr)
-        } else if let literal = literalValue {
-            valueSource = .literal(literal)
-        } else {
-            valueSource = .none
-        }
-
-        let queryMods = QueryModifiers(
-            whereClause: whereClause,
-            aggregation: aggregation,
-            byClause: byClause,
-            defaultValue: defaultValue
-        )
-
-        let rangeMods = RangeModifiers(
-            toClause: toExpression,
-            withClause: withExpression
-        )
-
-        let guard_ = StatementGuard(condition: whenCondition)
-
-        return AROStatement(
-            action: action,
-            result: result,
-            object: ObjectClause(preposition: prep, noun: objectNoun),
-            valueSource: valueSource,
-            queryModifiers: queryMods,
-            rangeModifiers: rangeMods,
-            statementGuard: guard_,
-            span: startToken.span.merged(with: endToken.span)
+        return AROClauses(
+            queryModifiers: QueryModifiers(
+                whereClause: whereClause,
+                aggregation: aggregation,
+                byClause: byClause,
+                defaultValue: defaultValue
+            ),
+            rangeModifiers: RangeModifiers(
+                toClause: toExpression,
+                withClause: withExpression
+            ),
+            guard_: StatementGuard(condition: whenCondition)
         )
     }
 
@@ -601,9 +586,8 @@ public final class Parser {
         // This allows optional article before system objects
         if check(.leftAngle) {
             // Look ahead: < identifier : ... > means system object
-            if current + 2 < tokens.count,
-               case .identifier = tokens[current + 1].kind,
-               case .colon = tokens[current + 2].kind {
+            if case .identifier = peekAt(1)?.kind,
+               case .colon = peekAt(2)?.kind {
                 return true
             }
         }
@@ -1245,7 +1229,6 @@ public final class Parser {
     /// Date offsets like "+7d", "-3h" are also supported (ARO-0041).
     private func parseTypeAnnotation() throws -> String {
         // Check for date offset pattern (ARO-0041): +7d, -3h, etc.
-        // Also check for negative integer literals (lexer may parse "-1" as intLiteral(-1))
         if check(.plus) || check(.minus) {
             return try parseDateOffsetPattern()
         }
@@ -1254,7 +1237,6 @@ public final class Parser {
         }
 
         // Check for numeric range specifier (ARO-0038): 0, 0-19, 0,3,7
-        // This handles list element access patterns
         if case .intLiteral(let startValue) = peek().kind, startValue >= 0 {
             return try parseNumericSpecifier()
         }
@@ -1262,74 +1244,73 @@ public final class Parser {
         // Parse compound identifier (may contain hyphens like "password-hash")
         var typeStr = try parseCompoundIdentifier()
 
-        // Check for generic type parameters (List<T>, Map<K,V>)
-        // Only look for `<` immediately after the type name (no whitespace)
+        // Generic types, property paths, or file paths
         if check(.leftAngle) || check(.lessThan) {
-            advance()
-            typeStr += "<"
-
-            // Parse first type parameter
-            typeStr += try parseTypeAnnotation()
-
-            // Check for second type parameter (for Map<K, V>)
-            if check(.comma) {
-                advance()
-                typeStr += ", "
-                typeStr += try parseTypeAnnotation()
-            }
-
-            // Expect closing angle bracket for the generic (not the outer variable)
-            if check(.rightAngle) || check(.greaterThan) {
-                advance()
-                typeStr += ">"
-            } else {
-                throw ParserError.unexpectedToken(
-                    expected: "'>'",
-                    got: peek()
-                )
-            }
+            typeStr += try parseGenericTypeParameters()
         } else {
-            // Parse dot-separated property path or slash-separated file path
-            // e.g., <user: profile.name> where "profile" and "name" form a property path
-            // e.g., <template: emails/welcome.tpl> where "emails/welcome.tpl" is a file path
-            while check(.dot) || check(.slash) {
-                // Peek ahead to distinguish member access from statement-ending dot
-                let nextIdx = current + 1
-                if nextIdx < tokens.count, tokens[nextIdx].kind.isIdentifier {
-                    let separator = peek()
-                    advance() // consume dot or slash
-                    if case .dot = separator.kind {
-                        typeStr += "."
-                    } else {
-                        typeStr += "/"
-                    }
-                    typeStr += try parseCompoundIdentifier()
-                } else {
-                    break
-                }
-            }
+            typeStr += try parsePropertyOrFilePath()
         }
 
         // Qualifier chaining: <result: stats.sort | list.take>
-        // The | token separates chained qualifiers evaluated left-to-right.
+        typeStr += try parseQualifierChain()
+
+        return typeStr
+    }
+
+    /// Parses generic type parameters: `<T>` or `<K, V>`
+    private func parseGenericTypeParameters() throws -> String {
+        advance() // consume <
+        var result = "<"
+        result += try parseTypeAnnotation()
+        if check(.comma) {
+            advance()
+            result += ", "
+            result += try parseTypeAnnotation()
+        }
+        if check(.rightAngle) || check(.greaterThan) {
+            advance()
+            result += ">"
+        } else {
+            throw ParserError.unexpectedToken(expected: "'>'", got: peek())
+        }
+        return result
+    }
+
+    /// Parses dot-separated property paths or slash-separated file paths
+    /// e.g., `profile.name` or `emails/welcome.tpl`
+    private func parsePropertyOrFilePath() throws -> String {
+        var result = ""
+        while check(.dot) || check(.slash) {
+            if peekAt(1)?.kind.isIdentifier == true {
+                let separator = peek()
+                advance()
+                result += (separator.kind == .dot ? "." : "/")
+                result += try parseCompoundIdentifier()
+            } else {
+                break
+            }
+        }
+        return result
+    }
+
+    /// Parses qualifier chain: `| stats.sort | list.take`
+    private func parseQualifierChain() throws -> String {
+        var result = ""
         while check(.bar) {
-            advance() // consume |
+            advance()
             var nextQualifier = try parseCompoundIdentifier()
-            // Parse dot-separated qualifier path (e.g., list.take)
             while check(.dot) {
-                let nextIdx = current + 1
-                if nextIdx < tokens.count, tokens[nextIdx].kind.isIdentifier {
-                    advance() // consume dot
+                if peekAt(1)?.kind.isIdentifier == true {
+                    advance()
                     nextQualifier += "."
                     nextQualifier += try parseCompoundIdentifier()
                 } else {
                     break
                 }
             }
-            typeStr += "|" + nextQualifier
+            result += "|" + nextQualifier
         }
-
-        return typeStr
+        return result
     }
 
     /// Parses a date offset pattern like +7d, -3h, +2w (ARO-0041)
@@ -1480,6 +1461,14 @@ public final class Parser {
             return tokens[tokens.count - 1] // Return EOF
         }
         return tokens[current]
+    }
+
+    /// Safe lookahead by offset from current position.
+    /// Returns nil if out of bounds instead of requiring manual bounds checking.
+    private func peekAt(_ offset: Int) -> Token? {
+        let index = current + offset
+        guard index >= 0 && index < tokens.count else { return nil }
+        return tokens[index]
     }
 
     private func previous() -> Token {
