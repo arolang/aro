@@ -226,7 +226,7 @@ integration:linux:
     # Install dependencies
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
-    - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev gnupg software-properties-common python3 build-essential
+    - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev gnupg software-properties-common python3 python3-dev python3-venv build-essential
 
     # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
@@ -237,6 +237,7 @@ integration:linux:
     # Setup LLVM 20 for both aro binary and llc/clang (V2 code generator produces LLVM 20 IR)
     - ln -sf /usr/bin/llc-20 /usr/bin/llc
     - ln -sf /usr/bin/clang-20 /usr/bin/clang
+    - ln -sf /usr/bin/llvm-objcopy-20 /usr/bin/llvm-objcopy
     - export PATH="/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
 

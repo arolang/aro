@@ -180,6 +180,67 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         try loadPluginInfo()
     }
 
+    /// Initialize from statically-linked function pointers (no dlopen).
+    ///
+    /// Used by compiled binaries where plugin object files are linked directly
+    /// into the executable. The function pointers point to renamed symbols
+    /// (e.g., `aro_static_GreetingService__aro_plugin_info`).
+    public init(
+        pluginName: String,
+        qualifierNamespace: String?,
+        infoFunc: UnsafeRawPointer?,
+        executeFunc: UnsafeRawPointer?,
+        freeFunc: UnsafeRawPointer?,
+        qualifierFunc: UnsafeRawPointer?,
+        initFuncPtr: UnsafeRawPointer?,
+        shutdownFunc: UnsafeRawPointer?
+    ) throws {
+        self.pluginName = pluginName
+        self.qualifierNamespace = qualifierNamespace
+        self.pluginPath = URL(fileURLWithPath: "/static/\(pluginName)")
+        self.libraryHandle = nil  // No dynamic library
+
+        // Cast raw pointers to typed function pointers
+        if let ptr = executeFunc {
+            self.executeFunc = unsafeBitCast(ptr, to: ExecuteFunc.self)
+        }
+        if let ptr = freeFunc {
+            self.freeFunc = unsafeBitCast(ptr, to: FreeFunc.self)
+        }
+        if let ptr = qualifierFunc {
+            self.qualifierFunc = unsafeBitCast(ptr, to: QualifierFunc.self)
+        }
+        if let ptr = initFuncPtr {
+            self.initFunc = unsafeBitCast(ptr, to: InitFunc.self)
+        }
+        if let ptr = shutdownFunc {
+            self.shutdownFunc = unsafeBitCast(ptr, to: ShutdownFunc.self)
+        }
+
+        // Call aro_plugin_register equivalent (init lifecycle) if present
+        self.initFunc?()
+
+        // Load plugin info from the info function
+        guard let infoPtr = infoFunc else {
+            throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_info")
+        }
+        let typedInfoFunc = unsafeBitCast(infoPtr, to: PluginInfoFunc.self)
+        if let resultPtr = typedInfoFunc() {
+            defer { self.freeFunc?(resultPtr) }
+            let infoJSON = String(cString: resultPtr)
+            parsePluginInfo(json: infoJSON)
+        }
+
+        if pluginInfo == nil {
+            pluginInfo = NativePluginInfo(
+                name: pluginName,
+                version: "1.0.0",
+                language: "native",
+                actions: []
+            )
+        }
+    }
+
     // MARK: - Library Loading
 
     private func loadLibrary(config: UnifiedProvideEntry) throws {
