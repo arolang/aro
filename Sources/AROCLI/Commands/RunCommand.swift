@@ -130,6 +130,10 @@ struct RunCommand: AsyncParsableCommand {
         let replayPath = mutableSelf.replay
 
         if verbose {
+            AROLogger.setLevel(.debug)
+        }
+
+        if verbose {
             print("ARO Runtime v\(AROVersion.shortVersion)")
             print("Build: \(AROVersion.buildDate)")
             print("=======================")

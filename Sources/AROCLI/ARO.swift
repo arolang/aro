@@ -5,6 +5,7 @@
 
 import ArgumentParser
 import Foundation
+import Logging
 import AROParser
 import ARORuntime
 import AROCompiler
@@ -13,26 +14,38 @@ import AROVersion
 
 @main
 struct ARO: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "aro",
-        abstract: "ARO Compiler and Runtime",
-        discussion: """
-            The ARO CLI compiles and runs ARO applications.
+    /// Bootstrap the logging system before any subcommand runs.
+    private static let _bootstrapLogging: Void = {
+        LoggingSystem.bootstrap { label in
+            var handler = StreamLogHandler.standardError(label: label)
+            handler.logLevel = .info
+            return handler
+        }
+    }()
 
-            ARO is a domain-specific language for expressing business features
-            as Action-Result-Object statements.
+    static let configuration: CommandConfiguration = {
+        _bootstrapLogging
+        return CommandConfiguration(
+            commandName: "aro",
+            abstract: "ARO Compiler and Runtime",
+            discussion: """
+                The ARO CLI compiles and runs ARO applications.
 
-            Example:
-              aro run ./Examples/HelloWorld     # Run with interpreter
-              aro build ./Examples/HelloWorld   # Compile to native binary
-              aro test ./Examples/Calculator    # Run tests
-              aro compile myapp.aro             # Compile and check syntax
-              aro check myapp.aro               # Syntax check only
-            """,
-        version: AROVersion.shortVersion,
-        subcommands: subcommandsList,
-        defaultSubcommand: RunCommand.self
-    )
+                ARO is a domain-specific language for expressing business features
+                as Action-Result-Object statements.
+
+                Example:
+                  aro run ./Examples/HelloWorld     # Run with interpreter
+                  aro build ./Examples/HelloWorld   # Compile to native binary
+                  aro test ./Examples/Calculator    # Run tests
+                  aro compile myapp.aro             # Compile and check syntax
+                  aro check myapp.aro               # Syntax check only
+                """,
+            version: AROVersion.shortVersion,
+            subcommands: subcommandsList,
+            defaultSubcommand: RunCommand.self
+        )
+    }()
 
     // LSP and MCP commands are only available on non-Windows platforms
     private static var subcommandsList: [any ParsableCommand.Type] {

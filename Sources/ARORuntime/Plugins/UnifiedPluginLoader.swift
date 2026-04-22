@@ -7,12 +7,6 @@ import Foundation
 import AROParser
 import Yams
 
-/// Write debug message to stderr (only when ARO_DEBUG is set)
-private func debugPrint(_ message: String) {
-    guard ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil else { return }
-    FileHandle.standardError.write(Data((message + "\n").utf8))
-}
-
 // MARK: - Unified Plugin Loader
 
 /// Unified plugin loader that supports dual-mode plugins
@@ -118,7 +112,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 options: [.skipsHiddenFiles]
             )
 
-            debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
+            AROLogger.debug("Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })", subsystem: "plugins")
 
             for item in contents {
                 var isDirectory: ObjCBool = false
@@ -132,14 +126,14 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 if FileManager.default.fileExists(atPath: manifestPath.path) {
                     managedPluginNames.insert(item.lastPathComponent)
                     do {
-                        debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
+                        AROLogger.debug("Loading plugin: \(item.lastPathComponent)", subsystem: "plugins")
                         try loadPlugin(at: item, manifestPath: manifestPath)
-                        debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
+                        AROLogger.debug("Successfully loaded plugin: \(item.lastPathComponent)", subsystem: "plugins")
                     } catch {
-                        print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+                        AROLogger.warning("Failed to load \(item.lastPathComponent): \(error)", subsystem: "plugins")
                     }
                 } else {
-                    debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+                    AROLogger.debug("\(item.lastPathComponent) missing plugin.yaml, skipping", subsystem: "plugins")
                 }
             }
         }
@@ -149,7 +143,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         do {
             try legacyLoader.loadPlugins(from: directory, excluding: managedPluginNames)
         } catch {
-            debugPrint("[UnifiedPluginLoader] Legacy loader error: \(error)")
+            AROLogger.debug("Legacy loader error: \(error)", subsystem: "plugins")
         }
     }
 
@@ -165,8 +159,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         if let constraint = manifest.aroVersion {
             let currentVersion = currentAROVersion()
             if !semverSatisfies(version: currentVersion, constraint: constraint) {
-                let msg = "[Plugin] Warning: '\(manifest.name)' requires ARO \(constraint), current version is \(currentVersion). Plugin may not work correctly.\n"
-                FileHandle.standardError.write(Data(msg.utf8))
+                AROLogger.warning("'\(manifest.name)' requires ARO \(constraint), current version is \(currentVersion). Plugin may not work correctly.", subsystem: "plugins")
             }
         }
 
@@ -193,18 +186,18 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
             switch provide.type {
             case "aro-files":
-                debugPrint("[UnifiedPluginLoader] Loading ARO files from: \(providePath.path)")
+                AROLogger.debug("Loading ARO files from: \(providePath.path)", subsystem: "plugins")
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
 
             case "aro-templates":
-                debugPrint("[UnifiedPluginLoader] Loading ARO templates from: \(providePath.path)")
+                AROLogger.debug("Loading ARO templates from: \(providePath.path)", subsystem: "plugins")
                 try loadAROTemplates(at: providePath, pluginName: manifest.name)
 
             case "swift-plugin":
                 // Swift plugins with @_cdecl are binary-compatible with C ABI
                 // Route through NativePluginHost for unified qualifier support
                 if let actions = provide.actions, !actions.isEmpty {
-                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for swift-plugin '\(manifest.name)'")
+                    AROLogger.debug("Registering lazy stubs for swift-plugin '\(manifest.name)'", subsystem: "plugins")
                     registerLazyNativePlugin(
                         at: providePath,
                         pluginName: manifest.name,
@@ -223,7 +216,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
                 if let actions = provide.actions, !actions.isEmpty {
-                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for '\(provide.type)' plugin '\(manifest.name)'")
+                    AROLogger.debug("Registering lazy stubs for '\(provide.type)' plugin '\(manifest.name)'", subsystem: "plugins")
                     registerLazyNativePlugin(
                         at: providePath,
                         pluginName: manifest.name,
@@ -242,7 +235,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
             case "python-plugin":
                 if let actions = provide.actions, !actions.isEmpty {
-                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for python-plugin '\(manifest.name)'")
+                    AROLogger.debug("Registering lazy stubs for python-plugin '\(manifest.name)'", subsystem: "plugins")
                     registerLazyPythonPlugin(
                         at: providePath,
                         pluginName: manifest.name,
@@ -260,7 +253,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 }
 
             default:
-                print("[UnifiedPluginLoader] Warning: Unknown provide type '\(provide.type)'")
+                AROLogger.warning("Unknown provide type '\(provide.type)'", subsystem: "plugins")
             }
         }
     }
@@ -394,7 +387,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             lazyPlugins[pluginName] = .loading
             loadCondition.unlock()
 
-            debugPrint("[UnifiedPluginLoader] Lazily loading native plugin '\(pluginName)'")
+            AROLogger.debug("Lazily loading native plugin '\(pluginName)'", subsystem: "plugins")
             do {
                 let host = try NativePluginHost(
                     pluginPath: dir,
@@ -412,7 +405,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 loadCondition.broadcast()
                 loadCondition.unlock()
 
-                debugPrint("[UnifiedPluginLoader] Native plugin '\(pluginName)' loaded lazily")
+                AROLogger.debug("Native plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
                 return host
             } catch {
                 loadCondition.lock()
@@ -446,7 +439,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             lazyPlugins[pluginName] = .loading
             loadCondition.unlock()
 
-            debugPrint("[UnifiedPluginLoader] Lazily loading Python plugin '\(pluginName)'")
+            AROLogger.debug("Lazily loading Python plugin '\(pluginName)'", subsystem: "plugins")
             do {
                 let host = try PythonPluginHost(
                     pluginPath: dir,
@@ -460,7 +453,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 loadCondition.broadcast()
                 loadCondition.unlock()
 
-                debugPrint("[UnifiedPluginLoader] Python plugin '\(pluginName)' loaded lazily")
+                AROLogger.debug("Python plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
                 return host
             } catch {
                 loadCondition.lock()
@@ -522,10 +515,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             aroFiles = []
         }
 
-        debugPrint("[UnifiedPluginLoader] Found \(aroFiles.count) ARO files: \(aroFiles.map { $0.lastPathComponent })")
+        AROLogger.debug("Found \(aroFiles.count) ARO files: \(aroFiles.map { $0.lastPathComponent })", subsystem: "plugins")
 
         for aroFile in aroFiles {
-            debugPrint("[UnifiedPluginLoader] Loading ARO file: \(aroFile.lastPathComponent)")
+            AROLogger.debug("Loading ARO file: \(aroFile.lastPathComponent)", subsystem: "plugins")
             let aroPlugin = try AROFilePlugin(file: aroFile, pluginName: pluginName)
 
             lock.lock()
@@ -533,7 +526,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             lock.unlock()
 
             // Register feature sets
-            debugPrint("[UnifiedPluginLoader] Registering \(aroPlugin.featureSets.count) feature sets from \(aroFile.lastPathComponent)")
+            AROLogger.debug("Registering \(aroPlugin.featureSets.count) feature sets from \(aroFile.lastPathComponent)", subsystem: "plugins")
             aroPlugin.registerFeatureSets()
         }
     }
@@ -571,11 +564,11 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         }
 
         guard !templateFiles.isEmpty else {
-            debugPrint("[UnifiedPluginLoader] No template files found at: \(path.path)")
+            AROLogger.debug("No template files found at: \(path.path)", subsystem: "plugins")
             return
         }
 
-        debugPrint("[UnifiedPluginLoader] Found \(templateFiles.count) template(s) in plugin '\(pluginName)'")
+        AROLogger.debug("Found \(templateFiles.count) template(s) in plugin '\(pluginName)'", subsystem: "plugins")
 
         // Register templates with the shared service when available.
         // AROTemplateService is created per-application and not a global singleton;
@@ -589,9 +582,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 // AROTemplateService instance created later can resolve the template
                 // by name without knowing the plugin path.
                 PluginTemplateStore.shared.register(name: templateName, content: content, pluginName: pluginName)
-                debugPrint("[UnifiedPluginLoader] Registered template '\(templateName)' from plugin '\(pluginName)'")
+                AROLogger.debug("Registered template '\(templateName)' from plugin '\(pluginName)'", subsystem: "plugins")
             } catch {
-                print("[UnifiedPluginLoader] Warning: Could not read template '\(templateName)' from '\(pluginName)': \(error)")
+                AROLogger.warning("Could not read template '\(templateName)' from '\(pluginName)': \(error)", subsystem: "plugins")
             }
         }
     }
@@ -621,7 +614,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                         do {
                             try legacyLoader.loadPlugin(from: swiftFile)
                         } catch {
-                            print("[UnifiedPluginLoader] Warning: Failed to load Swift plugin \(swiftFile.lastPathComponent): \(error)")
+                            AROLogger.warning("Failed to load Swift plugin \(swiftFile.lastPathComponent): \(error)", subsystem: "plugins")
                         }
                     }
                 } else if path.pathExtension == "swift" {
@@ -857,8 +850,8 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // 2. Legacy: handler inside provides entries
         let legacyHandler = manifest.provides.compactMap { $0.handler }.first
         if let handler = legacyHandler {
-            print("[Plugin] Warning: plugin '\(manifest.name)' uses deprecated 'handler:' inside 'provides:'. " +
-                  "Move it to a root-level 'handle:' field in plugin.yaml (e.g., handle: \(toPascalCase(handler))).")
+            AROLogger.warning("plugin '\(manifest.name)' uses deprecated 'handler:' inside 'provides:'. " +
+                  "Move it to a root-level 'handle:' field in plugin.yaml (e.g., handle: \(toPascalCase(handler))).", subsystem: "plugins")
             return handler
         }
 
@@ -868,17 +861,17 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     /// Validate that a handle follows PascalCase convention.
     private func validateHandleFormat(_ handle: String, pluginName: String) {
         guard !handle.isEmpty else {
-            print("[Plugin] Warning: plugin '\(pluginName)' has an empty handle.")
+            AROLogger.warning("plugin '\(pluginName)' has an empty handle.", subsystem: "plugins")
             return
         }
         guard handle.first?.isUppercase == true else {
-            print("[Plugin] Warning: plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
-                  "(e.g., '\(toPascalCase(handle))'). Handles must start with an uppercase letter.")
+            AROLogger.warning("plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
+                  "(e.g., '\(toPascalCase(handle))'). Handles must start with an uppercase letter.", subsystem: "plugins")
             return
         }
         if handle.contains("-") || handle.contains("_") {
-            print("[Plugin] Warning: plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
-                  "without hyphens or underscores.")
+            AROLogger.warning("plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
+                  "without hyphens or underscores.", subsystem: "plugins")
         }
     }
 
@@ -887,8 +880,8 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     private func registerHandle(_ handle: String, pluginName: String) -> Bool {
         let key = handle.lowercased()
         if let existing = registeredHandles[key], existing != pluginName {
-            print("[Plugin] Error: plugin '\(pluginName)' handle '\(handle)' conflicts with " +
-                  "already-loaded plugin '\(existing)'. Plugin will be loaded without namespace.")
+            AROLogger.error("plugin '\(pluginName)' handle '\(handle)' conflicts with " +
+                  "already-loaded plugin '\(existing)'. Plugin will be loaded without namespace.", subsystem: "plugins")
             return false
         }
         registeredHandles[key] = pluginName
@@ -1220,8 +1213,8 @@ public final class PluginTemplateStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if let existing = templates[name] {
-            print("[PluginTemplateStore] Warning: template '\(name)' from plugin '\(pluginName)' " +
-                  "overwrites existing entry from plugin '\(existing.pluginName)'.")
+            AROLogger.warning("template '\(name)' from plugin '\(pluginName)' " +
+                  "overwrites existing entry from plugin '\(existing.pluginName)'.", subsystem: "plugins")
         }
         templates[name] = (content: content, pluginName: pluginName)
     }

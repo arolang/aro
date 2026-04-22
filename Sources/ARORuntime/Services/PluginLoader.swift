@@ -119,7 +119,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try loadPlugin(from: swiftFile)
             } catch {
-                print("[PluginLoader] Warning: Failed to load \(swiftFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load \(swiftFile.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
 
@@ -138,7 +138,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try loadDylib(at: dylib, name: name)
             } catch {
-                print("[PluginLoader] Warning: Failed to load \(dylib.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load \(dylib.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
 
@@ -157,7 +157,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try loadPackagePlugin(from: item)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to load package plugin \(item.lastPathComponent): \(error)")
+                        AROLogger.warning("Failed to load package plugin \(item.lastPathComponent): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -243,7 +243,7 @@ public final class PluginLoader: @unchecked Sendable {
                     if found { break }
                 }
             } catch {
-                print("[PluginLoader] Warning: Failed to load managed plugin \(item.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load managed plugin \(item.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
     }
@@ -536,7 +536,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try loadDylib(at: dylibFile, name: pluginName)
             } catch {
-                print("[PluginLoader] Warning: Failed to load \(dylibFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load \(dylibFile.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
     }
@@ -562,7 +562,7 @@ public final class PluginLoader: @unchecked Sendable {
 
             for (pluginName, embeddedData) in embeddedPluginRegistry {
                 guard let soData = Data(base64Encoded: embeddedData.base64So) else {
-                    print("[PluginLoader] Warning: Failed to decode embedded plugin '\(pluginName)'")
+                    AROLogger.warning("Failed to decode embedded plugin '\(pluginName)'", subsystem: "plugins")
                     continue
                 }
 
@@ -579,7 +579,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try loadCPlugin(at: soPath, name: pluginName, namespace: namespace)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to load embedded plugin '\(pluginName)': \(error)")
+                    AROLogger.warning("Failed to load embedded plugin '\(pluginName)': \(error)", subsystem: "plugins")
                 }
             }
         }
@@ -675,7 +675,7 @@ public final class PluginLoader: @unchecked Sendable {
                         }
                     }
                 } catch {
-                    print("[PluginLoader] Warning: Failed to load managed plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to load managed plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
 
                 if found { break }
@@ -723,7 +723,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try compilePlugin(source: swiftFile, output: outputPath)
             } catch {
-                print("[PluginLoader] Warning: Failed to compile \(swiftFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to compile \(swiftFile.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
 
@@ -740,7 +740,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compilePackagePlugin(source: item, output: outputPath)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile package plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile package plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -810,7 +810,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try compilePackagePlugin(source: item, output: outputLibPath)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to compile managed package plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to compile managed package plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
                 continue
             }
@@ -841,7 +841,7 @@ public final class PluginLoader: @unchecked Sendable {
                             try compileMultipleSwiftFiles(sources: swiftFiles, output: outputLibPath)
                         }
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed Swift plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed Swift plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -862,7 +862,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compileRustPlugin(projectDir: srcDir, outputDir: outputTargetDir, pluginName: pluginName)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed Rust plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                     continue
                 }
@@ -879,7 +879,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compileCPlugin(sources: cFiles, output: outputLibPath)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed C plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed C plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -891,7 +891,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try compileRustPlugin(projectDir: item, outputDir: outputTargetDir, pluginName: pluginName)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to compile managed Rust plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
             }
 
@@ -1009,7 +1009,7 @@ public final class PluginLoader: @unchecked Sendable {
                 }
             }
             for await warning in group {
-                if let warning { print(warning) }
+                if let warning { AROLogger.warning(warning, subsystem: "plugins") }
             }
         }
     }
@@ -1066,7 +1066,7 @@ public final class PluginLoader: @unchecked Sendable {
                 }
             }
             for await warning in group {
-                if let warning { print(warning) }
+                if let warning { AROLogger.warning(warning, subsystem: "plugins") }
             }
         }
     }

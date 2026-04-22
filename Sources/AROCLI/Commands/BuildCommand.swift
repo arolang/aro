@@ -58,12 +58,11 @@ struct BuildCommand: AsyncParsableCommand {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
 
-        #if os(Linux)
-        // Debug: Always print on Linux to verify command is running
-        // Use FileHandle to write directly to stderr to bypass any buffering
-        let debugMsg = "[BUILD] Starting aro build on Linux for \(resolvedPath.path)\n"
-        FileHandle.standardError.write(Data(debugMsg.utf8))
-        #endif
+        if verbose {
+            AROLogger.setLevel(.debug)
+        }
+
+        AROLogger.debug("Starting aro build for \(resolvedPath.path)", subsystem: "build")
 
         if verbose {
             print("ARO Compiler v\(AROVersion.shortVersion)")
@@ -79,13 +78,9 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             appConfig = try await discovery.discoverWithImports(at: resolvedPath, includePlugins: true)
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".utf8))
-            #endif
+            AROLogger.debug("Discovery completed, found \(appConfig.sourceFiles.count) files", subsystem: "build")
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Discovery failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("Discovery failed: \(error)", subsystem: "build")
             print("Error: \(error)")
             throw ExitCode.failure
         }
@@ -123,9 +118,7 @@ struct BuildCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".utf8))
-        #endif
+        AROLogger.debug("Starting compilation of \(appConfig.sourceFiles.count) files", subsystem: "build")
 
         for sourceFile in appConfig.sourceFiles {
             if verbose {
@@ -148,9 +141,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".utf8))
-        #endif
+        AROLogger.debug("Compilation completed, \(compiledPrograms.count) programs", subsystem: "build")
 
         // Report compilation errors
         let errors = allDiagnostics.filter { $0.severity == .error }
@@ -164,9 +155,7 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         if !errors.isEmpty {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Compilation errors found: \(errors.count)\n".utf8))
-            #endif
+            AROLogger.error("Compilation errors found: \(errors.count)", subsystem: "build")
             print("\nCompilation errors:")
             for error in errors {
                 print("  \(error)")
@@ -176,16 +165,12 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: No programs to merge\n".utf8))
-            #endif
+            AROLogger.error("No programs to merge", subsystem: "build")
             print("Error: No programs to compile")
             throw ExitCode.failure
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".utf8))
-        #endif
+        AROLogger.debug("Merged \(mergedProgram.featureSets.count) feature sets", subsystem: "build")
 
         if verbose {
             print("\nParsing successful!")
@@ -210,9 +195,7 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
         let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Binary path: \(binaryPath.path)\n".utf8))
-        #endif
+        AROLogger.debug("Binary path: \(binaryPath.path)", subsystem: "build")
 
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
@@ -288,9 +271,7 @@ struct BuildCommand: AsyncParsableCommand {
             print("Generating LLVM IR...")
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] Starting LLVM IR generation\n".utf8))
-        #endif
+        AROLogger.debug("Starting LLVM IR generation", subsystem: "build")
 
         // Serialize OpenAPI spec to JSON for embedding (if present)
         var openAPISpecJSON: String? = nil
@@ -357,13 +338,9 @@ struct BuildCommand: AsyncParsableCommand {
                 templatesJSON: templatesJSON,
                 embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins
             )
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] LLVM IR generated successfully\n".utf8))
-            #endif
+            AROLogger.debug("LLVM IR generated successfully", subsystem: "build")
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: LLVM generation failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("LLVM generation failed: \(error)", subsystem: "build")
             print("Code generation error: \(error)")
             throw ExitCode.failure
         }
@@ -423,17 +400,12 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
-            #if os(Linux) || os(Windows)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: Runtime library not found\n".utf8))
-            #endif
+            AROLogger.error("Runtime library not found", subsystem: "build")
             print("Error: ARORuntime library not found.")
             throw ExitCode.failure
         }
 
-        #if os(Linux) || os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Runtime library found: \(runtimeLibPath)\n".utf8))
-        print("[BUILD] Runtime library found: \(runtimeLibPath)")
-        #endif
+        AROLogger.debug("Runtime library found: \(runtimeLibPath)", subsystem: "build")
 
         if verbose {
             print("Using runtime: \(runtimeLibPath)")
@@ -451,28 +423,15 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        #if os(Linux) || os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Starting linker\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] Object file: \(objectPath)\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] Output path: \(binaryPath.path)\n".utf8))
-        print("[BUILD] Starting linker")
-        print("[BUILD] Object file: \(objectPath)")
-        print("[BUILD] Output path: \(binaryPath.path)")
-        #endif
+        AROLogger.debug("Starting linker", subsystem: "build")
+        AROLogger.debug("Object file: \(objectPath)", subsystem: "build")
+        AROLogger.debug("Output path: \(binaryPath.path)", subsystem: "build")
 
-        #if os(Windows)
-        print("[BUILD] Creating CCompiler with runtime: \(runtimeLibPath)")
-        #endif
+        AROLogger.debug("Creating CCompiler with runtime: \(runtimeLibPath)", subsystem: "build")
 
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: verbose)
 
-        #if os(Windows)
-        print("[BUILD] CCompiler created successfully")
-        #endif
-
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] CCompiler created\n".utf8))
-        #endif
+        AROLogger.debug("CCompiler created", subsystem: "build")
 
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
@@ -481,15 +440,11 @@ struct BuildCommand: AsyncParsableCommand {
             deadStrip: effectiveStrip || effectiveSize  // Enable dead stripping when stripping or optimizing for size
         )
 
-        #if os(Linux)
-        FileHandle.standardError.write(Data("[BUILD] LinkOptions created\n".utf8))
-        FileHandle.standardError.write(Data("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".utf8))
-        #endif
+        AROLogger.debug("LinkOptions created", subsystem: "build")
+        AROLogger.debug("About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)", subsystem: "build")
 
         do {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Inside do block, calling link...\n".utf8))
-            #endif
+            AROLogger.debug("Calling linker.link()...", subsystem: "build")
 
             try linker.link(
                 objectFiles: [objectPath],
@@ -498,17 +453,13 @@ struct BuildCommand: AsyncParsableCommand {
                 options: linkOptions
             )
 
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] Linking completed\n".utf8))
-            #endif
+            AROLogger.debug("Linking completed", subsystem: "build")
 
             if verbose {
                 print("  Executable created")
             }
         } catch {
-            #if os(Linux)
-            FileHandle.standardError.write(Data("[BUILD] ERROR: Linking failed: \(error)\n".utf8))
-            #endif
+            AROLogger.error("Linking failed: \(error)", subsystem: "build")
             print("Linking error: \(error)")
             throw ExitCode.failure
         }
@@ -591,17 +542,13 @@ struct BuildCommand: AsyncParsableCommand {
 
         let elapsed = Date().timeIntervalSince(startTime)
 
-        #if os(Linux)
-        print("[BUILD] Binary created successfully")
-        print("[BUILD] Path: \(binaryPath.path)")
-        print("[BUILD] Checking if binary exists...")
+        AROLogger.debug("Binary created successfully", subsystem: "build")
+        AROLogger.debug("Path: \(binaryPath.path)", subsystem: "build")
         if FileManager.default.fileExists(atPath: binaryPath.path) {
-            print("[BUILD] ✓ Binary exists")
-            print("[BUILD] Size: \(try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size] ?? 0) bytes")
+            AROLogger.debug("Binary exists, size: \(String(describing: try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size]))", subsystem: "build")
         } else {
-            print("[BUILD] ✗ Binary NOT found!")
+            AROLogger.error("Binary NOT found after build!", subsystem: "build")
         }
-        #endif
 
         print("Built: \(binaryPath.path)")
         if verbose {
@@ -722,23 +669,18 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
 
         #if os(Windows)
-        // Debug output for Windows - write to both stderr AND a debug file
-        var debugLog = "[BUILD] Searching for runtime library...\n"
-        debugLog += "[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
-        debugLog += "[BUILD] Executable path: \(executablePath.path)\n"
-        debugLog += "[BUILD] Executable dir: \(executableDir.path)\n"
-        debugLog += "[BUILD] Current working dir: \(fm.currentDirectoryPath)\n"
-        debugLog += "[BUILD] Search paths (\(searchPaths.count) total):\n"
+        // Debug output for Windows
+        var debugLog = "Searching for runtime library...\n"
+        debugLog += "ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
+        debugLog += "Executable path: \(executablePath.path)\n"
+        debugLog += "Executable dir: \(executableDir.path)\n"
+        debugLog += "Current working dir: \(fm.currentDirectoryPath)\n"
+        debugLog += "Search paths (\(searchPaths.count) total):\n"
         for (index, path) in searchPaths.enumerated() {
             let exists = fm.fileExists(atPath: path)
-            debugLog += "[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
+            debugLog += "  \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
         }
-
-        // Write to stderr
-        FileHandle.standardError.write(Data(debugLog.utf8))
-
-        // Also write to stdout so it's captured in test output
-        print(debugLog)
+        AROLogger.debug(debugLog, subsystem: "build")
 
         // Also write to a debug file
         let debugFilePath = fm.currentDirectoryPath + "\\aro-build-debug.log"
@@ -784,7 +726,7 @@ struct BuildCommand: AsyncParsableCommand {
 
             #if os(Windows)
             let exists = fm.fileExists(atPath: fullPath)
-            FileHandle.standardError.write(Data("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".utf8))
+            AROLogger.debug("Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")", subsystem: "build")
             if exists {
                 return fullPath
             }
@@ -796,10 +738,8 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Windows)
-        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND in standard locations\n".utf8))
-
-        // Last resort: try to find the library anywhere on disk using where/dir commands
-        FileHandle.standardError.write(Data("[BUILD] Attempting filesystem search...\n".utf8))
+        AROLogger.debug("Runtime library NOT FOUND in standard locations", subsystem: "build")
+        AROLogger.debug("Attempting filesystem search...", subsystem: "build")
 
         // Try to find libARORuntime.a near the executable
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
@@ -810,24 +750,23 @@ struct BuildCommand: AsyncParsableCommand {
             // Try listing the directory contents
             do {
                 let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
-                FileHandle.standardError.write(Data("[BUILD] Contents of \(aroBinDir.path):\n".utf8))
+                AROLogger.debug("Contents of \(aroBinDir.path): \(contents)", subsystem: "build")
                 for item in contents {
-                    FileHandle.standardError.write(Data("[BUILD]   - \(item)\n".utf8))
                     if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
                         let itemPath = aroBinDir.appendingPathComponent(item).path
-                        FileHandle.standardError.write(Data("[BUILD] Found potential library: \(itemPath)\n".utf8))
+                        AROLogger.debug("Found potential library: \(itemPath)", subsystem: "build")
                         if fm.fileExists(atPath: itemPath) {
-                            FileHandle.standardError.write(Data("[BUILD] Returning: \(itemPath)\n".utf8))
+                            AROLogger.debug("Returning: \(itemPath)", subsystem: "build")
                             return itemPath
                         }
                     }
                 }
             } catch {
-                FileHandle.standardError.write(Data("[BUILD] Error listing directory: \(error)\n".utf8))
+                AROLogger.error("Error listing directory: \(error)", subsystem: "build")
             }
         }
 
-        FileHandle.standardError.write(Data("[BUILD] Runtime library NOT FOUND anywhere\n".utf8))
+        AROLogger.error("Runtime library NOT FOUND anywhere", subsystem: "build")
         #endif
 
         return nil
