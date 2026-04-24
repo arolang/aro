@@ -111,6 +111,30 @@ public struct DocumentSymbolHandler: Sendable {
                     ]
 
                     children.append(rangeLoopSymbol)
+                } else if let whileLoop = statement as? WhileLoop {
+                    let whileRange = PositionConverter.toLSP(whileLoop.span)
+
+                    let whileSymbol: [String: Any] = [
+                        "name": "while",
+                        "detail": "\(whileLoop.body.count) statements",
+                        "kind": 26,  // Struct
+                        "range": rangeToDict(whileRange),
+                        "selectionRange": rangeToDict(whileRange)
+                    ]
+
+                    children.append(whileSymbol)
+                } else if let pipeline = statement as? PipelineStatement {
+                    let pipelineRange = PositionConverter.toLSP(pipeline.span)
+
+                    let pipelineSymbol: [String: Any] = [
+                        "name": "pipeline",
+                        "detail": "\(pipeline.stages.count) stages",
+                        "kind": 6,  // Method
+                        "range": rangeToDict(pipelineRange),
+                        "selectionRange": rangeToDict(pipelineRange)
+                    ]
+
+                    children.append(pipelineSymbol)
                 }
             }
 

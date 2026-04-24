@@ -284,7 +284,7 @@ public final class AROLanguageServer: Sendable {
             "capabilities": capabilitiesDict,
             "serverInfo": [
                 "name": "aro-lsp",
-                "version": "1.2.0"
+                "version": "1.3.0"
             ]
         ]
     }
@@ -435,10 +435,27 @@ public final class AROLanguageServer: Sendable {
                 if let found = findHighlightTargetInStatements(rangeLoop.body, position: position, isActionVerb: &isActionVerb) {
                     return found
                 }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let found = findHighlightTargetInStatements(whileLoop.body, position: position, isActionVerb: &isActionVerb) {
+                    return found
+                }
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
                     if let found = findHighlightTargetInStatements(caseClause.body, position: position, isActionVerb: &isActionVerb) {
                         return found
+                    }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isPositionInSpan(position, stage.action.span) {
+                        isActionVerb = true
+                        return stage.action.verb
+                    }
+                    if isPositionInSpan(position, stage.result.span) {
+                        return stage.result.base
+                    }
+                    if isPositionInSpan(position, stage.object.noun.span) {
+                        return stage.object.noun.base
                     }
                 }
             }
@@ -472,9 +489,26 @@ public final class AROLanguageServer: Sendable {
                 highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb))
             } else if let rangeLoop = statement as? RangeLoop {
                 highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb))
+            } else if let whileLoop = statement as? WhileLoop {
+                highlights.append(contentsOf: collectHighlightsInStatements(whileLoop.body, name: name, isActionVerb: isActionVerb))
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
                     highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb))
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isActionVerb {
+                        if stage.action.verb.lowercased() == name.lowercased() {
+                            highlights.append(makeHighlight(span: stage.action.span, kind: 1))
+                        }
+                    } else {
+                        if stage.result.base == name {
+                            highlights.append(makeHighlight(span: stage.result.span, kind: 2))
+                        }
+                        if stage.object.noun.base == name {
+                            highlights.append(makeHighlight(span: stage.object.noun.span, kind: 3))
+                        }
+                    }
                 }
             }
         }
@@ -784,6 +818,12 @@ public final class AROLanguageServer: Sendable {
         case "textDocument/codeAction":
             result = await handleCodeAction(params: params)
 
+        case "textDocument/inlayHint":
+            result = await handleInlayHint(params: params)
+
+        case "textDocument/documentHighlight":
+            result = handleDocumentHighlightSync(params: params)
+
         case "$/cancelRequest":
             // Cancellation not fully supported yet, just acknowledge
             return nil
@@ -813,7 +853,7 @@ public final class AROLanguageServer: Sendable {
             "capabilities": capabilitiesDict,
             "serverInfo": [
                 "name": "aro-lsp",
-                "version": "1.2.0"
+                "version": "1.3.0"
             ]
         ]
     }
@@ -1173,6 +1213,29 @@ public final class AROLanguageServer: Sendable {
             diagnostics: diagnostics,
             content: state.content,
             compilationResult: state.compilationResult
+        )
+    }
+
+    private func handleInlayHint(params: Any?) async -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let range = dict["range"] as? [String: Any],
+              let start = range["start"] as? [String: Any],
+              let end = range["end"] as? [String: Any],
+              let startLine = start["line"] as? Int,
+              let endLine = end["line"] as? Int else {
+            return nil
+        }
+
+        guard let state = documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        return inlayHintHandler.handle(
+            compilationResult: state.compilationResult,
+            startLine: startLine,
+            endLine: endLine
         )
     }
 

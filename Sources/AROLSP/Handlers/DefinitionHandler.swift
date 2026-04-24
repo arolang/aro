@@ -26,37 +26,77 @@ public struct DefinitionHandler: Sendable {
 
         // Find the variable at the position
         for analyzed in result.analyzedProgram.featureSets {
-            let fs = analyzed.featureSet
+            if let location = findDefinitionInStatements(analyzed.featureSet.statements, position: aroPosition, symbolTable: analyzed.symbolTable, uri: uri) {
+                return location
+            }
+        }
 
-            // Check statements for variable references
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check if on result
-                    if isPositionInSpan(aroPosition, aro.result.span) {
-                        let name = aro.result.base
-                        if let symbol = analyzed.symbolTable.lookup(name) {
+        return nil
+    }
+
+    // MARK: - Statement Traversal
+
+    private func findDefinitionInStatements(
+        _ statements: [Statement],
+        position: SourceLocation,
+        symbolTable: SymbolTable,
+        uri: String
+    ) -> [String: Any]? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isPositionInSpan(position, aro.result.span) {
+                    if let symbol = symbolTable.lookup(aro.result.base) {
+                        return createLocationResponse(uri: uri, span: symbol.definedAt)
+                    }
+                }
+                if isPositionInSpan(position, aro.object.noun.span) {
+                    if let symbol = symbolTable.lookup(aro.object.noun.base) {
+                        return createLocationResponse(uri: uri, span: symbol.definedAt)
+                    }
+                }
+                if let expr = aro.valueSource.asExpression {
+                    if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri) {
+                        return location
+                    }
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let location = findDefinitionInStatements(forEachLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                    return location
+                }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let location = findDefinitionInStatements(rangeLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                    return location
+                }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let location = findDefinitionInStatements(whileLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                    return location
+                }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let location = findDefinitionInStatements(caseClause.body, position: position, symbolTable: symbolTable, uri: uri) {
+                        return location
+                    }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isPositionInSpan(position, stage.result.span) {
+                        if let symbol = symbolTable.lookup(stage.result.base) {
                             return createLocationResponse(uri: uri, span: symbol.definedAt)
                         }
                     }
-
-                    // Check if on object
-                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                        let name = aro.object.noun.base
-                        if let symbol = analyzed.symbolTable.lookup(name) {
+                    if isPositionInSpan(position, stage.object.noun.span) {
+                        if let symbol = symbolTable.lookup(stage.object.noun.base) {
                             return createLocationResponse(uri: uri, span: symbol.definedAt)
                         }
                     }
-
-                    // Check expression for variable references
-                    if let expr = aro.valueSource.asExpression {
-                        if let location = findDefinitionInExpression(expr, position: aroPosition, symbolTable: analyzed.symbolTable, uri: uri) {
+                    if let expr = stage.valueSource.asExpression {
+                        if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri) {
                             return location
                         }
                     }
                 }
             }
         }
-
         return nil
     }
 

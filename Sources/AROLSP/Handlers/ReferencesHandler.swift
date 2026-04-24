@@ -77,9 +77,23 @@ public struct ReferencesHandler: Sendable {
                 references.append(contentsOf: findReferencesInStatements(forEachLoop.body, name: symbolName, uri: uri))
             } else if let rangeLoop = statement as? RangeLoop {
                 references.append(contentsOf: findReferencesInStatements(rangeLoop.body, name: symbolName, uri: uri))
+            } else if let whileLoop = statement as? WhileLoop {
+                references.append(contentsOf: findReferencesInStatements(whileLoop.body, name: symbolName, uri: uri))
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
                     references.append(contentsOf: findReferencesInStatements(caseClause.body, name: symbolName, uri: uri))
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if stage.result.base == symbolName {
+                        references.append(createLocationDict(uri: uri, span: stage.result.span))
+                    }
+                    if stage.object.noun.base == symbolName {
+                        references.append(createLocationDict(uri: uri, span: stage.object.noun.span))
+                    }
+                    if let expr = stage.valueSource.asExpression {
+                        references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
+                    }
                 }
             }
         }
@@ -100,9 +114,18 @@ public struct ReferencesHandler: Sendable {
                 if let name = findSymbolNameInStatements(forEachLoop.body, position: position) { return name }
             } else if let rangeLoop = statement as? RangeLoop {
                 if let name = findSymbolNameInStatements(rangeLoop.body, position: position) { return name }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let name = findSymbolNameInStatements(whileLoop.body, position: position) { return name }
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
                     if let name = findSymbolNameInStatements(caseClause.body, position: position) { return name }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isPositionInSpan(position, stage.result.span) { return stage.result.base }
+                    if isPositionInSpan(position, stage.object.noun.span) { return stage.object.noun.base }
+                    if let expr = stage.valueSource.asExpression,
+                       let name = findSymbolNameInExpression(expr, position: position) { return name }
                 }
             }
         }
