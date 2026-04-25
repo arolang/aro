@@ -440,10 +440,9 @@ public struct AskCommand: AsyncParsableCommand {
             let msg = "Download update? [y/N] "
             FileHandle.standardError.write(Data(msg.utf8))
             if let line = readLine(), line.lowercased().hasPrefix("y") {
-                TerminalUI.printStatus("Downloading \(capturedModel)")
-                _ = try await manager.ensureInstalled(
+                TerminalUI.printStatus("Updating \(capturedModel) (removing old files)...")
+                _ = try await manager.update(
                     capturedModel,
-                    confirm: { _ in true },
                     progress: { TerminalUI.printDownloadProgress($0) }
                 )
             }

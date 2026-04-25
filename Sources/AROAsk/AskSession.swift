@@ -216,7 +216,7 @@ public actor AskSession {
     // MARK: - Post-inference self-repair
 
     /// Maximum number of aro-check → fix cycles before giving up.
-    private static let maxRepairAttempts = 3
+    private static let maxRepairAttempts = 5
 
     /// Extract ```aro code blocks from text.
     private func extractAroBlocks(_ text: String) -> [String] {
@@ -327,9 +327,15 @@ public actor AskSession {
             try contextStore.save(context)
         }
 
+        // Save repair conversation to .context.repairs.jsonl for training data.
+        // Each entry: the original broken output, the error, and the final fix.
+        let repairMessages = Array(context.messages[preRepairCount...])
+        if repairMessages.count > 1 {
+            saveRepairLog(repairMessages)
+        }
+
         // Collapse repair loop: remove intermediate repair turns from context,
         // keep only the final (corrected) assistant message.
-        let repairMessages = Array(context.messages[preRepairCount...])
         if repairMessages.count > 1, let lastAssistant = repairMessages.last(where: { $0.role == "assistant" }) {
             context.messages.removeSubrange(preRepairCount...)
             context.messages.append(lastAssistant)
@@ -337,6 +343,44 @@ public actor AskSession {
         }
 
         return currentText
+    }
+
+    /// Append a repair conversation to `.context.repairs.jsonl` for training.
+    /// Each line is a JSON object with the broken code, error, and fix — usable
+    /// as debugging training pairs and DPO negatives.
+    private func saveRepairLog(_ messages: [AskMessage]) {
+        let logURL = config.workingDirectory.appendingPathComponent(".context.repairs.jsonl")
+        let assistantMsgs = messages.filter { $0.role == "assistant" }
+        let userMsgs = messages.filter { $0.role == "user" }
+        guard let broken = assistantMsgs.first?.content,
+              let fixed = assistantMsgs.last?.content,
+              broken != fixed else { return }
+
+        // Extract the aro check error from the first repair prompt
+        let firstError = userMsgs.first?.content ?? ""
+
+        let entry: [String: Any] = [
+            "broken_output": broken,
+            "error_prompt": firstError,
+            "fixed_output": fixed,
+            "attempts": assistantMsgs.count,
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+        ]
+
+        do {
+            let data = try JSONSerialization.data(withJSONObject: entry)
+            let line = String(decoding: data, as: UTF8.self) + "\n"
+            if FileManager.default.fileExists(atPath: logURL.path) {
+                let handle = try FileHandle(forWritingTo: logURL)
+                handle.seekToEndOfFile()
+                handle.write(Data(line.utf8))
+                handle.closeFile()
+            } else {
+                try Data(line.utf8).write(to: logURL)
+            }
+        } catch {
+            // Non-fatal — don't interrupt the user's session for a log write failure
+        }
     }
 
     // MARK: - Auto context compaction

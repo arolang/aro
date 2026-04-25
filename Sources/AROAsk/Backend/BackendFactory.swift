@@ -29,7 +29,10 @@ public enum BackendFactory {
 
         // 2. macOS: native MLX (in-process, no external deps)
         #if arch(arm64) && canImport(MLXLLM)
-        return NativeMLXBackend(modelIdentifier: modelIdentifier)
+        return NativeMLXBackend(
+            modelIdentifier: modelIdentifier,
+            modelDirectory: modelPath.deletingLastPathComponent()
+        )
         #else
 
         // 3. llama-server — on PATH, in cache, or auto-downloaded

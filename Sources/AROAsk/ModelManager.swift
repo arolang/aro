@@ -149,6 +149,21 @@ public actor ModelManager {
         return .updateAvailable(local: localCommit ?? "unknown", remote: remoteSha)
     }
 
+    /// Delete the cached model and re-download it from scratch.
+    /// This ensures no stale weight files remain from a previous version.
+    public func update(
+        _ modelId: String,
+        progress: @Sendable (DownloadProgress) async -> Void
+    ) async throws -> URL {
+        let dir = modelDirectory(for: modelId)
+        // Remove entire cached directory so no old shards linger
+        if FileManager.default.fileExists(atPath: dir.path) {
+            try FileManager.default.removeItem(at: dir)
+        }
+        try await downloadModel(modelId: modelId, to: dir, progress: progress)
+        return dir
+    }
+
     private func downloadModel(
         modelId: String,
         to dir: URL,
@@ -177,9 +192,15 @@ public actor ModelManager {
             try Data(sha.utf8).write(to: dir.appendingPathComponent(".commit_sha"))
         }
 
-        // Build file list with known sizes
+        // Build file list with known sizes — skip files not needed for inference
+        let skipExtensions: Set<String> = [".md", ".gitattributes", ".gitignore"]
+        let skipFiles: Set<String> = ["README.md", ".gitattributes", ".gitignore",
+                                       "LICENSE", "LICENSE.md", "NOTICE"]
         let files: [(name: String, size: Int64)] = siblings.compactMap { entry -> (String, Int64)? in
             guard let name = entry["rfilename"] as? String else { return nil }
+            // Skip non-model files to reduce download size
+            if skipFiles.contains(name) { return nil }
+            if skipExtensions.contains(where: { name.hasSuffix($0) }) { return nil }
             let size = (entry["size"] as? Int64) ?? (entry["size"] as? Int).map(Int64.init) ?? 0
             return (name, size)
         }
@@ -289,6 +310,63 @@ public actor ModelManager {
             overallBytes: downloadedBytes,
             overallTotalBytes: totalBytes
         ))
+
+        // Validate and repair safetensors headers (some quantization tools
+        // write the wrong header length).
+        repairSafetensorsHeaders(in: dir)
+    }
+
+    /// Check every `.safetensors` file in `dir` for a truncated JSON header
+    /// and patch the 8-byte length prefix if needed.
+    private func repairSafetensorsHeaders(in dir: URL) {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
+
+        for name in contents where name.hasSuffix(".safetensors") {
+            let path = dir.appendingPathComponent(name).path
+            guard let handle = FileHandle(forUpdatingAtPath: path) else { continue }
+            defer { handle.closeFile() }
+
+            // Read declared header length (first 8 bytes, little-endian UInt64)
+            let lenData = handle.readData(ofLength: 8)
+            guard lenData.count == 8 else { continue }
+            let declared = lenData.withUnsafeBytes { $0.load(as: UInt64.self).littleEndian }
+
+            // Read the declared header + a small probe window
+            let probe: UInt64 = 4096
+            let readLen = min(declared + probe, UInt64(INT_MAX))
+            let headerData = handle.readData(ofLength: Int(readLen))
+            guard headerData.count >= Int(declared) else { continue }
+
+            // Check if the JSON is valid at the declared length
+            let declaredSlice = headerData.prefix(Int(declared))
+            if (try? JSONSerialization.jsonObject(with: Data(declaredSlice))) != nil {
+                continue  // header is fine
+            }
+
+            // Scan forward to find the actual JSON end (look for closing `}`)
+            var actual: UInt64 = 0
+            for i in Int(declared)..<headerData.count {
+                if headerData[i] == UInt8(ascii: "}") {
+                    let candidate = Data(headerData.prefix(i + 1))
+                    if (try? JSONSerialization.jsonObject(with: candidate)) != nil {
+                        actual = UInt64(i + 1)
+                        break
+                    }
+                }
+            }
+            guard actual > declared else { continue }
+
+            // Patch the 8-byte length prefix
+            var le = actual.littleEndian
+            let patchData = Data(bytes: &le, count: 8)
+            handle.seek(toFileOffset: 0)
+            handle.write(patchData)
+
+            FileHandle.standardError.write(Data(
+                "  Repaired safetensors header in \(name): \(declared) → \(actual)\n".utf8
+            ))
+        }
     }
 }
 

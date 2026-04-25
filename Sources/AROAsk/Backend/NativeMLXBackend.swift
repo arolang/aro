@@ -12,7 +12,6 @@
 #if canImport(MLXLLM)
 
 import Foundation
-import Hub
 import MLXLLM
 import MLXLMCommon
 import Tokenizers
@@ -127,11 +126,13 @@ private struct HFTokenizerLoader: TokenizerLoader, Sendable {
 public actor NativeMLXBackend: LMBackend {
     public nonisolated let name: String = "mlx-native"
     public nonisolated let modelIdentifier: String
+    private let modelDirectory: URL
 
     private var container: ModelContainer?
 
-    public init(modelIdentifier: String) {
+    public init(modelIdentifier: String, modelDirectory: URL) {
         self.modelIdentifier = modelIdentifier
+        self.modelDirectory = modelDirectory
     }
 
     public func start() async throws {
@@ -148,25 +149,11 @@ public actor NativeMLXBackend: LMBackend {
 
         let tokenizerLoader = HFTokenizerLoader()
 
-        // Use HuggingFace Hub API to download/cache the model properly.
-        // This handles large files with resume support, unlike our ModelManager.
-        let hubApi = HubApi()
-        let repo = Hub.Repo(id: modelIdentifier)
-        let dir = try await hubApi.snapshot(
-            from: repo,
-            matching: ["*.safetensors", "*.json", "*.jinja"]
-        ) { progress in
-            let pct = Int(progress.fractionCompleted * 100)
-            if pct % 5 == 0 {
-                FileHandle.standardError.write(
-                    Data("\r\u{001B}[2K  Downloading... \(pct)%".utf8)
-                )
-            }
-        }
-        FileHandle.standardError.write(Data("\r\u{001B}[2K".utf8))
-
+        // Use the model directory already downloaded by ModelManager.
+        // This avoids a redundant re-download via HuggingFace Hub API and
+        // ensures we always load the version ModelManager has on disk.
         container = try await LLMModelFactory.shared.loadContainer(
-            from: dir,
+            from: modelDirectory,
             using: tokenizerLoader
         )
 
