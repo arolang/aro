@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ./llvm.sh 20 \
     && apt-get install -y --no-install-recommends llvm-20-dev \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
+    && ln -sf /usr/bin/llvm-objcopy-20 /usr/bin/llvm-objcopy \
     && rm -rf /var/lib/apt/lists/* \
     && rm llvm.sh
 

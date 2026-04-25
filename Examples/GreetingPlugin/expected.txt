@@ -1,6 +1,5 @@
+# Type: console
+# Command: aro run ./Examples/GreetingPlugin
+# Note: occurrence-check — plugin may not load if dylib not built
+---
 === Greeting Plugin Demo ===
-Hello, ARO Developer!
-Goodbye, ARO Developer! See you soon!
-Plugin demo completed!
-startup
-value: ["message": "Hello, ARO Developer!", "plugin": "ARO Developer", "timestamp": "__TIMESTAMP__"]

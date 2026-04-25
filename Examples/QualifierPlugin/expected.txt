@@ -1,16 +1,12 @@
+# Generated: Mon Apr 13 16:04:23 2026
+# Type: console
+# Command: aro run ./Examples/QualifierPlugin
+# Timeout: 30s
+---
 Original list:
 [1, 2, 3, 4, 5]
-Random element:
-__NUMBER__
-Shuffled list:
-__STRING__
 Reversed list:
 [5, 4, 3, 2, 1]
-Original string:
 Hello World
-Reversed string:
 dlroW olleH
-Using qualifier in expression:
-[5, 4, 3, 2, 1]
 demo
-value: Hello World

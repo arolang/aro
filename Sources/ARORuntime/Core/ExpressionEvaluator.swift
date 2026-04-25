@@ -53,6 +53,14 @@ public struct ExpressionEvaluator: Sendable {
             // Plugin qualifiers are checked first, then property access as fallback
             let specifiers = varRef.noun.specifiers
 
+            // Qualifier chaining: <value: stats.sort | list.take>
+            // The typeAnnotation contains "|" separating chained qualifiers.
+            if let chain = varRef.noun.qualifierChain {
+                if let transformed = try context.container.qualifierRegistry.resolveChain(chain, value: value) {
+                    return transformed
+                }
+            }
+
             // Try namespaced qualifier form first (e.g., <list: plugin-swift-collection.reverse>)
             // This allows disambiguation when multiple plugins provide the same qualifier
             if specifiers.count > 1 {

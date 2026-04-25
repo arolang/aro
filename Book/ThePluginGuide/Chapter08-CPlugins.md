@@ -66,39 +66,46 @@ Key build flags:
 
 ## 8.3 The Plugin Interface
 
-Every C plugin exports three functions:
+### Required Exports
 
-### aro_plugin_info
-
-Returns metadata about the plugin:
+Every C plugin **must** export exactly two functions:
 
 ```c
+/* REQUIRED: Returns JSON metadata describing the plugin */
 char* aro_plugin_info(void);
-```
 
-Returns a JSON string describing the plugin. The caller is responsible for freeing the returned pointer using `aro_plugin_free`.
-
-### aro_plugin_execute
-
-Executes a plugin action:
-
-```c
-char* aro_plugin_execute(const char* action, const char* input_json);
-```
-
-- `action`: The method name to execute
-- `input_json`: JSON string with input arguments
-- Returns: JSON string with the result (caller frees)
-
-### aro_plugin_free
-
-Frees memory allocated by the plugin:
-
-```c
+/* REQUIRED: Frees any string returned by the plugin */
 void aro_plugin_free(char* ptr);
 ```
 
-This is essential for proper memory management. ARO calls this function to free any strings returned by `aro_plugin_info` or `aro_plugin_execute`.
+`aro_plugin_info` is called once when the plugin is loaded. It returns a JSON string declaring all actions, services, qualifiers, and system objects the plugin provides.
+
+### Optional Exports
+
+The remaining functions are optional—export only what your plugin needs:
+
+```c
+/* One-time initialization (DB connections, model loading, etc.) */
+void aro_plugin_init(void);
+
+/* Cleanup on unload */
+void aro_plugin_shutdown(void);
+
+/* Execute an action or service — only needed if you provide actions/services */
+char* aro_plugin_execute(const char* action, const char* input_json);
+
+/* Execute a qualifier transformation — only needed if you provide qualifiers */
+char* aro_plugin_qualifier(const char* name, const char* input_json);
+
+/* Receive events — only needed if you subscribe to events */
+void aro_plugin_on_event(const char* event_type, const char* data_json);
+```
+
+Key points:
+- `aro_plugin_execute` takes **two parameters** and returns `char*` directly. There is no out-pointer parameter and no integer return code.
+- Qualifier-only plugins do **not** need to implement `aro_plugin_execute`.
+- Services route through `aro_plugin_execute` using the action name `"service:<method>"`. The old three-parameter service ABI (method, args, &result → Int32) is removed entirely.
+- `aro_plugin_init` returns `void`. The old form that returned `char*` with service metadata is removed.
 
 ## 8.4 Your First C Plugin: Custom Actions
 
@@ -224,7 +231,7 @@ static uint32_t simple_hash(const char* str) {
 /**
  * Return plugin metadata as JSON with custom action definitions.
  *
- * This function is called once when the plugin is loaded.
+ * REQUIRED. Called once when the plugin is loaded.
  * The returned string must be freed by the caller using aro_plugin_free.
  */
 char* aro_plugin_info(void) {
@@ -248,18 +255,47 @@ char* aro_plugin_info(void) {
 }
 
 /**
+ * One-time initialization. OPTIONAL.
+ *
+ * Called after the plugin is loaded, before any action is invoked.
+ * Use this for setup that should happen once: opening connections,
+ * allocating shared buffers, etc.
+ *
+ * This function returns void. The old pattern of returning char* with
+ * service metadata from aro_plugin_init is removed.
+ */
+void aro_plugin_init(void) {
+    /* Perform one-time initialization here */
+}
+
+/**
+ * Cleanup on unload. OPTIONAL.
+ *
+ * Called when the plugin is about to be unloaded.
+ */
+void aro_plugin_shutdown(void) {
+    /* Release resources here */
+}
+
+/**
  * Execute a plugin action.
  *
+ * Takes two parameters and returns a char* directly — no out-pointer, no integer
+ * return code. Parameters from the ARO `with { }` clause arrive nested under the
+ * "_with" key in input_json, not flat-merged with the primary value.
+ *
  * @param action     The action name (e.g., "djb2", "fnv1a")
- * @param input_json JSON string containing the input arguments
- * @return           JSON string with the result (caller must free)
+ * @param input_json JSON string containing the input. Primary value is under "data".
+ *                   Parameters from `with { }` are under "_with".
+ *                   Execution context is under "_context".
+ * @return           JSON string with the result (caller must free via aro_plugin_free)
  */
 char* aro_plugin_execute(const char* action, const char* input_json) {
     /* Allocate result buffer */
     char* result = malloc(512);
     if (!result) return NULL;
 
-    /* Extract input data */
+    /* Extract input data — the primary object value */
     char* data = extract_json_string(input_json, "data");
     if (!data) {
         snprintf(result, 512, "{\"error\":\"Missing 'data' field\"}");
@@ -892,10 +928,14 @@ static uint64_t compute_hash(const char* str) {
 /**
  * Execute a plugin action.
  *
- * @param action     Action name (owned by caller, must not be modified)
- * @param input_json JSON input (owned by caller, must not be modified)
- * @return           JSON result (caller must free using aro_plugin_free)
- *                   Returns NULL on allocation failure
+ * @param action     Action name (owned by caller, must not be modified or freed)
+ * @param input_json JSON input (owned by caller, must not be modified or freed).
+ *                   Primary value is under "data". Parameters from `with { }` are
+ *                   nested under "_with". Execution context is under "_context".
+ * @return           JSON result (caller must free using aro_plugin_free).
+ *                   Returns NULL on allocation failure.
+ *
+ * Note: 2-parameter signature returning char* directly. No out-pointer.
  */
 char* aro_plugin_execute(const char* action, const char* input_json);
 ```
@@ -904,7 +944,11 @@ char* aro_plugin_execute(const char* action, const char* input_json);
 
 C plugins are the most direct way to extend ARO:
 
-- **Interface**: Three functions—`aro_plugin_info`, `aro_plugin_execute`, `aro_plugin_free`
+- **Required exports**: `aro_plugin_info` (returns JSON metadata) and `aro_plugin_free`
+- **`aro_plugin_execute`** is optional—only needed for actions and services; uses a **2-parameter** `(action, input_json) -> char*` signature with no out-pointer
+- **`aro_plugin_init` / `aro_plugin_shutdown`** are optional `void` lifecycle hooks
+- **`aro_plugin_on_event`** is optional—for plugins that subscribe to events
+- **Input JSON**: primary value under `"data"`, `with { }` parameters under `"_with"`, context under `"_context"`
 - **Memory**: Plugin allocates, plugin frees (via `aro_plugin_free`)
 - **JSON**: Use cJSON or similar for robust parsing
 - **Thread Safety**: Make plugins stateless or use proper synchronization

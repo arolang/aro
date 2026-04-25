@@ -213,17 +213,13 @@ public struct RequestAction: ActionImplementation {
         } else if let string = value as? String {
             return string.data(using: .utf8)
         } else if let array = value as? [any Sendable] {
-            let anyArray: [Any] = array.map { $0 }
-            return try? JSONSerialization.data(withJSONObject: anyArray)
+            let jsonArray = array.map { SendableConverter.toJSON($0) }
+            return try? JSONSerialization.data(withJSONObject: jsonArray)
         } else if let dict = value as? [String: Any] {
             return try? JSONSerialization.data(withJSONObject: dict)
         } else if let dict = value as? [String: any Sendable] {
-            // Convert Sendable dict to Any dict for serialization
-            var anyDict: [String: Any] = [:]
-            for (key, val) in dict {
-                anyDict[key] = val
-            }
-            return try? JSONSerialization.data(withJSONObject: anyDict)
+            let jsonDict = dict.mapValues { SendableConverter.toJSON($0) }
+            return try? JSONSerialization.data(withJSONObject: jsonDict)
         }
         return nil
     }
@@ -257,20 +253,6 @@ public struct RequestAction: ActionImplementation {
 
     /// Convert Any to Sendable
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let int = value as? Int { return int }
-        if let double = value as? Double { return double }
-        if let bool = value as? Bool { return bool }
-        if let array = value as? [Any] {
-            return array.map { convertToSendable($0) }
-        }
-        if let dict = value as? [String: Any] {
-            var result: [String: any Sendable] = [:]
-            for (key, val) in dict {
-                result[key] = convertToSendable(val)
-            }
-            return result
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }

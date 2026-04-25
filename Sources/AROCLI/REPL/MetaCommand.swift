@@ -72,6 +72,7 @@ public final class MetaCommandRegistry: Sendable {
         register(SetCommand.self)
         register(ExportCommand.self)
         register(LoadCommand.self)
+        register(PluginCommand.self)
         register(QuitCommand.self)
 
         self.commands = cmds

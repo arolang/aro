@@ -1,129 +1,32 @@
 // ============================================================
 // HelloPlugin.swift
-// ARO Plugin - Swift Hello World Example
+// ARO Plugin - Swift Action Example (using AROPluginSDK)
 // ============================================================
+//
+// This plugin demonstrates the zero-boilerplate SDK pattern.
+// No @_cdecl, no JSON, no manual memory management.
+// The SDK auto-generates all C ABI exports.
 
 import Foundation
+import AROPluginKit
 
-/// A simple Swift plugin that provides greeting functionality
-///
-/// This plugin demonstrates how to create a Swift plugin for ARO.
-/// It provides custom actions: Greet and Farewell.
-public struct HelloPlugin {
-
-    /// Plugin metadata
-    public static let name = "plugin-swift-hello"
-    public static let version = "1.0.0"
-}
-
-// MARK: - C ABI Interface
-
-/// Returns plugin metadata as JSON string with custom action definitions
-@_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-    // Use explicit Foundation types to ensure correct bridging when loaded as dylib
-    // Swift Dictionary bridging can fail in cross-binary scenarios
-    let greetAction: NSDictionary = [
-        "name": "Greet",
-        "role": "own",
-        "verbs": ["greet", "hello"] as NSArray,
-        "prepositions": ["with", "for"] as NSArray
-    ]
-
-    let farewellAction: NSDictionary = [
-        "name": "Farewell",
-        "role": "own",
-        "verbs": ["farewell", "goodbye"] as NSArray,
-        "prepositions": ["with", "for"] as NSArray
-    ]
-
-    let info: NSDictionary = [
-        "name": "plugin-swift-hello",
-        "version": "1.0.0",
-        "actions": [greetAction, farewellAction] as NSArray
-    ]
-
-    guard let jsonData = try? JSONSerialization.data(withJSONObject: info),
-          let jsonString = String(data: jsonData, encoding: .utf8) else {
-        return nil
+/// Plugin registration — this is the ONLY setup needed.
+@AROExport
+private let plugin = AROPlugin(name: "plugin-swift-hello", version: "1.0.0", handle: "Greeting")
+    .action("Greet", verbs: ["greet"], role: "own", prepositions: ["with"],
+            description: "Generate a greeting message") { input in
+        let name = input.string("name")
+            ?? input.string("data")
+            ?? input.with.string("name")
+            ?? "World"
+        return .success(["greeting": "Hello, \(name)!"])
+    }
+    .action("Farewell", verbs: ["farewell"], role: "own", prepositions: ["with"],
+            description: "Generate a farewell message") { input in
+        let name = input.string("name")
+            ?? input.string("data")
+            ?? input.with.string("name")
+            ?? "World"
+        return .success(["farewell": "Goodbye, \(name)!"])
     }
 
-    return strdup(jsonString)
-}
-
-/// Execute a plugin action
-@_cdecl("aro_plugin_execute")
-public func aroPluginExecute(
-    action: UnsafePointer<CChar>?,
-    inputJson: UnsafePointer<CChar>?
-) -> UnsafeMutablePointer<CChar>? {
-    guard let action = action.map({ String(cString: $0) }),
-          let inputJson = inputJson.map({ String(cString: $0) }) else {
-        return strdup("{\"error\":\"Invalid input\"}")
-    }
-
-    guard let jsonData = inputJson.data(using: .utf8),
-          let input = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-        return strdup("{\"error\":\"Invalid JSON input\"}")
-    }
-
-    let result: [String: Any]
-    switch action {
-    case "greet", "hello":
-        result = HelloPlugin.greet(input: input)
-    case "farewell", "goodbye":
-        result = HelloPlugin.farewell(input: input)
-    default:
-        result = ["error": "Unknown action: \(action)"]
-    }
-
-    guard let resultData = try? JSONSerialization.data(withJSONObject: result),
-          let resultString = String(data: resultData, encoding: .utf8) else {
-        return strdup("{\"error\":\"Failed to serialize result\"}")
-    }
-
-    return strdup(resultString)
-}
-
-/// Free memory allocated by the plugin
-@_cdecl("aro_plugin_free")
-public func aroPluginFree(ptr: UnsafeMutablePointer<CChar>?) {
-    if let ptr = ptr {
-        free(ptr)
-    }
-}
-
-// MARK: - Action Implementations
-
-extension HelloPlugin {
-
-    // MARK: - Actions
-
-    /// Greet action - generates a personalized greeting
-    /// - Parameter input: Dictionary containing "name" key
-    /// - Returns: Greeting message
-    public static func greet(input: [String: Any]) -> [String: Any] {
-        let name = input["name"] as? String ?? "World"
-        let greeting = "Hello, \(name)!"
-
-        return [
-            "message": greeting,
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
-            "plugin": name
-        ]
-    }
-
-    /// Farewell action - generates a goodbye message
-    /// - Parameter input: Dictionary containing "name" key
-    /// - Returns: Farewell message
-    public static func farewell(input: [String: Any]) -> [String: Any] {
-        let name = input["name"] as? String ?? "World"
-        let farewell = "Goodbye, \(name)! See you soon!"
-
-        return [
-            "message": farewell,
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
-            "plugin": name
-        ]
-    }
-}

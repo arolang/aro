@@ -34,6 +34,9 @@ import FoundationNetworking
 ///     }
 /// }
 /// ```
+/// - Note: **Deprecated (ARO-0073).** New plugins should declare services in
+///   `aro_plugin_info` JSON and route through `aro_plugin_execute("service:<method>", ...)`.
+///   This protocol is retained for built-in services (HTTP) and will be removed in a future release.
 public protocol AROService: Sendable {
     /// Service name (e.g., "postgres", "http", "ffmpeg")
     static var name: String { get }
@@ -122,7 +125,6 @@ public final class ExternalServiceRegistry: @unchecked Sendable {
         do {
             try register(BuiltInHTTPService())
         } catch {
-            print("[ExternalServiceRegistry] Warning: Failed to register HTTP service: \(error)")
         }
     }
 
@@ -354,52 +356,17 @@ public struct BuiltInHTTPService: AROService {
 
     /// Convert a dictionary to Sendable-safe values
     private func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
-        var result: [String: any Sendable] = [:]
-        for (key, value) in dict {
-            result[key] = convertValueToSendable(value)
-        }
-        return result
+        SendableConverter.fromJSONDict(dict)
     }
 
     /// Convert an array to Sendable-safe values
     private func convertArrayToSendable(_ array: [Any]) -> [any Sendable] {
-        return array.map { convertValueToSendable($0) }
+        array.map { SendableConverter.fromJSON($0) }
     }
 
     /// Convert a single value to Sendable
     private func convertValueToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            // Check if it's a boolean (Apple platforms have CFBoolean APIs)
-            #if canImport(Darwin)
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
-                return num.boolValue
-            }
-            #else
-            // On Linux, check type encoding for boolean
-            let objCType = String(cString: num.objCType)
-            if objCType == "B" || objCType == "c" {
-                if num.intValue == 0 || num.intValue == 1 {
-                    return num.boolValue
-                }
-            }
-            #endif
-            // Check if it's an integer
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            return convertToSendable(dict)
-        case let array as [Any]:
-            return convertArrayToSendable(array)
-        case is NSNull:
-            return Optional<String>.none as any Sendable
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 
     public func shutdown() async {

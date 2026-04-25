@@ -151,11 +151,45 @@ Avoid mutable shared state. If your action needs configuration, receive it durin
 
 Custom actions must be registered with the action registry before they can be used. Registration tells the runtime which action implementation handles which verbs.
 
-Registration typically happens during application initialization, before any ARO code executes. For embedded applications, you register actions in your Swift startup code. For plugin-based actions, the plugin system handles registration.
+Registration typically happens during application initialization, before any ARO code executes. For embedded applications, you register actions in your Swift startup code. For plugin-based actions, the plugin system handles registration automatically.
 
 Registration is straightforward: you call the register method on the shared action registry, passing your action type. The runtime examines the type's static properties to learn its verbs and incorporates it into action resolution.
 
 Once registered, your action's verbs become available in ARO code. Statements using those verbs route to your implementation. The integration is seamless—users of your action need not know whether it is built-in or custom.
+
+### Plugin Input JSON
+
+When an action is invoked through a plugin, the runtime passes a rich input JSON payload that includes not only the primary data but also the full result and source descriptors, preposition, execution context, and `with` clause parameters:
+
+```json
+{
+  "data": "the primary object value",
+  "qualifier": "the result qualifier (e.g., sha256)",
+  "preposition": "from",
+  "result": {
+    "base": "digest",
+    "qualifiers": ["sha256"],
+    "specifiers": ["sha256"]
+  },
+  "source": {
+    "base": "password",
+    "specifiers": []
+  },
+  "_context": {
+    "requestId": "req-abc-123",
+    "featureSet": "Secure Password: User Registration",
+    "businessActivity": "User Registration"
+  },
+  "_with": {
+    "encoding": "hex",
+    "rounds": 10
+  }
+}
+```
+
+The `result` and `source` fields expose the full `ResultDescriptor` and `ObjectDescriptor` models. The `_context` field carries execution context information. The `_with` field contains parameters from the `with { }` clause as a nested object—these are no longer merged flat into the top-level input. Plugin code should read `with` parameters from `_with`, not from top-level keys.
+
+Note that `aro_plugin_execute` is **optional** for qualifier-only plugins. If your plugin provides only qualifiers (no actions or services), you do not need to implement this function at all.
 
 ---
 

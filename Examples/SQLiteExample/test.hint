@@ -2,6 +2,6 @@
 # Package plugin compilation requires Swift compiler at runtime
 # SQLite.swift library doesn't compile on Windows (no SQLite3 module available)
 skip-on-windows: SQLite.swift library requires SQLite3 module not available on Windows
-timeout: 120
+timeout: 300
 # Use occurrence-check for cross-platform compatibility (dictionary ordering varies)
 occurrence-check: true

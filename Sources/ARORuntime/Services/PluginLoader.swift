@@ -9,12 +9,31 @@ import Foundation
 import WinSDK
 #endif
 
+// On Linux, Swift-built .so files can crash the dynamic linker with RTLD_NOW
+// due to TLS exhaustion.  RTLD_LAZY defers symbol resolution past the critical
+// TLS allocation phase, and RTLD_GLOBAL lets the plugin share the host process's
+// already-loaded Swift runtime instead of pulling in a second copy.
+#if os(Linux)
+private let aroDlopenFlags: Int32 = RTLD_LAZY | RTLD_GLOBAL
+#else
+private let aroDlopenFlags: Int32 = Int32(RTLD_NOW | RTLD_LOCAL)
+#endif
+
 // MARK: - Plugin Loader
 
 /// Loads and manages dynamic plugins for ARO
 ///
+/// Plugins must export the C ABI defined in ARO-0073:
+/// - `aro_plugin_info` (required) — returns JSON metadata
+/// - `aro_plugin_execute` (required) — executes an action
+/// - `aro_plugin_qualifier` (optional) — executes a qualifier transformation
+/// - `aro_plugin_free` (optional) — frees memory allocated by the plugin
+///
+/// See `NativePluginHost` and `UnifiedPluginLoader` for the managed plugin path.
+///
 /// The PluginLoader discovers Swift plugin files in the `./plugins/` directory,
 /// compiles them to dynamic libraries, and loads them at runtime.
+/// It also provides compilation utilities used by `aro build`.
 ///
 /// ## Plugin Structure
 /// ```
@@ -23,36 +42,6 @@ import WinSDK
 /// ├── plugins/
 /// │   └── MyService.swift
 /// └── aro.yaml
-/// ```
-///
-/// ## Plugin File Format
-/// Each plugin must export an `aro_plugin_init` function that returns
-/// a JSON description of the services it provides.
-///
-/// ```swift
-/// import Foundation
-///
-/// // Service implementation - called via JSON interface
-/// @_cdecl("greeting_call")
-/// public func greetingCall(
-///     _ methodPtr: UnsafePointer<CChar>,
-///     _ argsPtr: UnsafePointer<CChar>,
-///     _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-/// ) -> Int32 {
-///     let method = String(cString: methodPtr)
-///     let argsJSON = String(cString: argsPtr)
-///
-///     // Parse args, execute method, return result
-///     // Return 0 for success, non-zero for error
-/// }
-///
-/// // Plugin initialization - returns service metadata as JSON
-/// @_cdecl("aro_plugin_init")
-/// public func pluginInit() -> UnsafePointer<CChar> {
-///     return """
-///     {"services": [{"name": "greeting", "symbol": "greeting_call"}]}
-///     """.withCString { strdup($0)! }
-/// }
 /// ```
 public final class PluginLoader: @unchecked Sendable {
     /// Shared instance
@@ -64,18 +53,8 @@ public final class PluginLoader: @unchecked Sendable {
     /// Loaded plugin handles (to prevent unloading)
     private var loadedPlugins: [String: UnsafeMutableRawPointer] = [:]
 
-    /// Registered plugin service functions
-    private var pluginFunctions: [String: PluginCallFunction] = [:]
-
     /// Lock for thread safety
     private let lock = NSLock()
-
-    /// Plugin call function type
-    typealias PluginCallFunction = @convention(c) (
-        UnsafePointer<CChar>,      // method
-        UnsafePointer<CChar>,      // args JSON
-        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>  // result JSON
-    ) -> Int32
 
     /// ARO-0043: Plugin system object read function type
     typealias PluginReadFunction = @convention(c) (
@@ -104,6 +83,8 @@ public final class PluginLoader: @unchecked Sendable {
     /// Registered C plugin execute functions
     private var cPluginFunctions: [String: (execute: CPluginExecuteFunction, free: CPluginFreeFunction?)] = [:]
 
+    // (Python plugin paths are stored in EmbeddedPythonPluginPaths.shared)
+
     private init() {
         // Use .aro-cache in current directory
         let currentDir = FileManager.default.currentDirectoryPath
@@ -113,8 +94,10 @@ public final class PluginLoader: @unchecked Sendable {
     // MARK: - Public API
 
     /// Load all plugins from the plugins directory
-    /// - Parameter directory: Base directory containing the `plugins/` folder
-    public func loadPlugins(from directory: URL) throws {
+    /// - Parameters:
+    ///   - directory: Base directory containing the `plugins/` folder
+    ///   - excluding: Directory names to skip (already managed by UnifiedPluginLoader)
+    public func loadPlugins(from directory: URL, excluding: Set<String> = []) throws {
         let pluginsDir = directory.appendingPathComponent("plugins")
 
         // Check if plugins directory exists
@@ -138,21 +121,45 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try loadPlugin(from: swiftFile)
             } catch {
-                print("[PluginLoader] Warning: Failed to load \(swiftFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load \(swiftFile.lastPathComponent): \(error)", subsystem: "plugins")
+            }
+        }
+
+        // Load pre-built dynamic libraries (.dylib, .so)
+        #if os(Windows)
+        let libExtension = "dll"
+        #elseif os(Linux)
+        let libExtension = "so"
+        #else
+        let libExtension = "dylib"
+        #endif
+        let dylibs = contents.filter { $0.pathExtension == libExtension }
+        for dylib in dylibs {
+            let name = dylib.deletingPathExtension().lastPathComponent
+                .replacingOccurrences(of: "lib", with: "")
+            do {
+                try loadDylib(at: dylib, name: name)
+            } catch {
+                AROLogger.warning("Failed to load \(dylib.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
 
         // Load Swift package plugins (directories with Package.swift)
+        // Skip directories already managed by UnifiedPluginLoader to prevent
+        // double-loading (and module-cache conflicts on case-insensitive mounts).
         for item in contents {
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
                isDirectory.boolValue {
+                if excluding.contains(item.lastPathComponent) {
+                    continue
+                }
                 let packageSwift = item.appendingPathComponent("Package.swift")
                 if FileManager.default.fileExists(atPath: packageSwift.path) {
                     do {
                         try loadPackagePlugin(from: item)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to load package plugin \(item.lastPathComponent): \(error)")
+                        AROLogger.warning("Failed to load package plugin \(item.lastPathComponent): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -238,7 +245,7 @@ public final class PluginLoader: @unchecked Sendable {
                     if found { break }
                 }
             } catch {
-                print("[PluginLoader] Warning: Failed to load managed plugin \(item.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load managed plugin \(item.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
     }
@@ -271,6 +278,251 @@ public final class PluginLoader: @unchecked Sendable {
         return legacyHandler
     }
 
+    /// Load an embedded Python plugin via the in-process Python interpreter.
+    ///
+    /// The plugin source is embedded as a string constant. It is extracted to the cache
+    /// directory and executed via the embedded Python interpreter (libpython linked into binary).
+    private func loadEmbeddedPythonPlugin(name: String, entry: EmbeddedPythonPluginEntry, namespace: String?, cacheDir: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if loadedPlugins[name] != nil { return }
+        loadedPlugins[name] = UnsafeMutableRawPointer(bitPattern: 2)  // sentinel for Python plugins
+
+        // Extract plugin source to cache
+        guard let (modulePath, moduleName) = EmbeddedPythonHost.shared.extractPluginSource(
+            name: name, source: entry.source, to: cacheDir
+        ) else {
+            print("[PluginLoader] Failed to extract Python plugin '\(name)' source")
+            return
+        }
+
+        // Call aro_plugin_info to get plugin metadata
+        guard let infoJSON = EmbeddedPythonHost.shared.callPluginFunction(
+            modulePath: modulePath,
+            moduleName: moduleName,
+            functionName: "aro_plugin_info"
+        ) else {
+            print("[PluginLoader] Failed to call aro_plugin_info for Python plugin '\(name)'")
+            return
+        }
+
+        // Store module info in the global registry for execute dispatch
+        EmbeddedPythonPluginPaths.shared.register(
+            name: name.lowercased(),
+            path: modulePath,
+            module: moduleName
+        )
+
+        // Register execute function (uses global lookup to avoid @convention(c) capture issues)
+        cPluginFunctions[name.lowercased()] = (
+            execute: embeddedPythonExecuteShim,
+            free: embeddedPythonFreeShim
+        )
+
+        // Register as AROService
+        let wrapper = CPluginServiceWrapper(name: name, loader: self)
+        try? ExternalServiceRegistry.shared.register(wrapper, withName: name)
+
+        // Parse plugin info and register actions/qualifiers
+        if let data = infoJSON.data(using: .utf8),
+           let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+            // Register with handle name
+            if let handle = info["handle"] as? String, handle.lowercased() != name.lowercased() {
+                cPluginFunctions[handle.lowercased()] = cPluginFunctions[name.lowercased()]
+                let handleWrapper = CPluginServiceWrapper(name: name, loader: self)
+                try? ExternalServiceRegistry.shared.register(handleWrapper, withName: handle)
+            }
+
+            // Register actions
+            let parsedActions = PluginInfoParser.parseActionList(from: info)
+            var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
+
+            for actionName in parsedActions.names {
+                let verbs = parsedActions.verbsMap[actionName] ?? [actionName.lowercased()]
+                for verb in verbs {
+                    let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                    let originalVerb = verb
+                    let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                        var input: [String: any Sendable] = [:]
+                        if let data = context.resolveAny(object.base) {
+                            input["data"] = data
+                            input["object"] = data
+                            input[object.base] = data
+                        }
+                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                            input.merge(withArgs) { _, new in new }
+                        }
+                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                        context.bind(result.base, value: pluginResult)
+                        return pluginResult
+                    }
+                    let registeredVerb = namespace.map { "\($0).\(normalizedVerb)" } ?? normalizedVerb
+                    entries.append((verb: registeredVerb, pluginName: nil, handler: handler))
+                }
+            }
+            PluginInfoParser.syncRegisterActions(entries)
+
+            // Register qualifiers
+            let qualifierDescriptors = PluginInfoParser.parseQualifierDescriptors(from: info)
+            if !qualifierDescriptors.isEmpty {
+                let qualPath = modulePath
+                let qualModule = moduleName
+                for descriptor in qualifierDescriptors {
+                    let qualName = descriptor.name
+                    let registration = QualifierRegistration(
+                        qualifier: descriptor.name,
+                        inputTypes: descriptor.inputTypes,
+                        pluginName: name,
+                        namespace: namespace,
+                        description: descriptor.description,
+                        acceptsParameters: descriptor.acceptsParameters,
+                        pluginHost: EmbeddedPythonQualifierHost(
+                            pluginName: name,
+                            modulePath: qualPath,
+                            moduleName: qualModule,
+                            qualifierName: qualName
+                        )
+                    )
+                    QualifierRegistry.shared.register(registration)
+                }
+            }
+        }
+    }
+
+    /// Load a statically-linked plugin using function pointers (no dlopen).
+    ///
+    /// Follows the same registration path as `loadCPlugin` but uses direct function
+    /// pointers instead of dlopen/dlsym. The plugin code is already linked into the binary.
+    private func loadStaticPlugin(name: String, entry: StaticPluginEntry, namespace: String?) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        // Check if already loaded
+        if loadedPlugins[name] != nil { return }
+
+        // Register as loaded (use a sentinel value since there is no dlopen handle)
+        loadedPlugins[name] = UnsafeMutableRawPointer(bitPattern: 1)
+
+        // Cast function pointers to C ABI types
+        let executeFunc: CPluginExecuteFunction? = entry.executeFunc.map { unsafeBitCast($0, to: CPluginExecuteFunction.self) }
+        let freeFunc: CPluginFreeFunction? = entry.freeFunc.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
+
+        // Store the execute function for action dispatch
+        if let executeFunc {
+            cPluginFunctions[name.lowercased()] = (execute: executeFunc, free: freeFunc)
+        }
+
+        // Register as AROService with the directory name
+        let wrapper = CPluginServiceWrapper(name: name, loader: self)
+        try? ExternalServiceRegistry.shared.register(wrapper, withName: name)
+
+        // Call aro_plugin_register if present (SDK plugins use lazy initializers)
+        if let initPtr = entry.initFunc {
+            let initFn = unsafeBitCast(initPtr, to: (@convention(c) () -> Void).self)
+            initFn()
+        }
+
+        // Parse plugin info to get actions and qualifiers (same as loadCPlugin)
+        if let infoPtr = entry.infoFunc {
+            typealias PluginInfoFunc = @convention(c) () -> UnsafeMutablePointer<CChar>?
+            let infoFunc = unsafeBitCast(infoPtr, to: PluginInfoFunc.self)
+            if let resultPtr = infoFunc() {
+                defer { freeFunc?(resultPtr) }
+                let infoJSON = String(cString: resultPtr)
+                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                    FileHandle.standardError.write("[PluginLoader] Static plugin '\(name)' info: \(infoJSON)\n".data(using: .utf8)!)
+                }
+
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+                    // Register with the plugin's handle/name from info JSON (for service routing)
+                    if let handle = info["handle"] as? String, handle.lowercased() != name.lowercased() {
+                        if let funcs = cPluginFunctions[name.lowercased()] {
+                            cPluginFunctions[handle.lowercased()] = funcs
+                        }
+                        let handleWrapper = CPluginServiceWrapper(name: name, loader: self)
+                        try? ExternalServiceRegistry.shared.register(handleWrapper, withName: handle)
+                    }
+                    if let infoName = info["name"] as? String, infoName.lowercased() != name.lowercased() {
+                        if let funcs = cPluginFunctions[name.lowercased()] {
+                            cPluginFunctions[infoName.lowercased()] = funcs
+                        }
+                        let nameWrapper = CPluginServiceWrapper(name: name, loader: self)
+                        try? ExternalServiceRegistry.shared.register(nameWrapper, withName: infoName)
+                    }
+
+                    // Register actions using shared parser
+                    let parsedActions = PluginInfoParser.parseActionList(from: info)
+                    var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
+
+                    for actionName in parsedActions.names {
+                        let verbs = parsedActions.verbsMap[actionName] ?? [actionName.lowercased()]
+
+                        for verb in verbs {
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+
+                            let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                var input: [String: any Sendable] = [:]
+                                if let data = context.resolveAny(object.base) {
+                                    input["data"] = data
+                                    input["object"] = data
+                                    input[object.base] = data
+                                }
+                                if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                    input.merge(withArgs) { _, new in new }
+                                }
+                                if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                    input.merge(exprArgs) { _, new in new }
+                                }
+                                let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                context.bind(result.base, value: pluginResult)
+                                return pluginResult
+                            }
+
+                            let registeredVerb: String
+                            if let ns = namespace {
+                                registeredVerb = "\(ns).\(normalizedVerb)"
+                            } else {
+                                registeredVerb = normalizedVerb
+                            }
+                            let pName: String? = nil
+                            entries.append((verb: registeredVerb, pluginName: pName, handler: handler))
+                        }
+                    }
+                    PluginInfoParser.syncRegisterActions(entries)
+
+                    // Register qualifiers using shared parser
+                    let qualifierDescriptors = PluginInfoParser.parseQualifierDescriptors(from: info)
+                    if !qualifierDescriptors.isEmpty, let qualFuncPtr = entry.qualifierFunc {
+                        let qualifierFunc = unsafeBitCast(qualFuncPtr, to: (@convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?).self)
+                        let host = CPluginQualifierHost(
+                            pluginName: name,
+                            qualifierFunc: qualifierFunc,
+                            freeFunc: freeFunc
+                        )
+
+                        for descriptor in qualifierDescriptors {
+                            let registration = QualifierRegistration(
+                                qualifier: descriptor.name,
+                                inputTypes: descriptor.inputTypes,
+                                pluginName: name,
+                                namespace: namespace,
+                                description: descriptor.description,
+                                acceptsParameters: descriptor.acceptsParameters,
+                                pluginHost: host
+                            )
+                            QualifierRegistry.shared.register(registration)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Load a C plugin dynamic library
     /// C plugins export aro_plugin_info() and aro_plugin_execute() functions
     /// - Parameters:
@@ -295,7 +547,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(path.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }
@@ -329,94 +581,78 @@ public final class PluginLoader: @unchecked Sendable {
         let wrapper = CPluginServiceWrapper(name: name, loader: self)
         try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
+        // Call aro_plugin_register / aro_plugin_init if present — SDK-based plugins
+        // use lazy static initializers that only run when explicitly triggered.
+        #if os(Windows)
+        let registerSymbol = GetProcAddress(handle, "aro_plugin_register")
+        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
+        #else
+        let registerSymbol = dlsym(handle, "aro_plugin_register")
+        let initSymbol = dlsym(handle, "aro_plugin_init")
+        #endif
+        if let registerSymbol {
+            let registerFunc = unsafeBitCast(registerSymbol, to: (@convention(c) () -> Void).self)
+            registerFunc()
+        } else if let initSymbol {
+            let pluginInitFunc = unsafeBitCast(initSymbol, to: (@convention(c) () -> Void).self)
+            pluginInitFunc()
+        }
+
         // Parse plugin info to get custom action definitions and qualifiers
         if let infoSymbol = infoSymbol {
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
                 let infoJSON = String(cString: infoPtr)
-                freeFunc?(infoPtr)
 
-                // Parse JSON to get actions and qualifiers
+                // Parse JSON to get actions and qualifiers using shared helpers
                 if let data = infoJSON.data(using: .utf8),
                    let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    // Register actions
-                    if let actions = info["actions"] as? [[String: Any]] {
-                        // Register each action verb as a dynamic handler
-                        // Use semaphore to ensure registration completes synchronously
-                        let semaphore = DispatchSemaphore(value: 0)
-                        var registrationCount = 0
+                    // Register actions using shared parser
+                    let parsedActions = PluginInfoParser.parseActionList(from: info)
+                    var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
-                        for actionDef in actions {
-                            // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
-                            let verbs: [String]
-                            if let v = actionDef["verbs"] as? [String], !v.isEmpty {
-                                verbs = v
-                            } else if let actionName = actionDef["name"] as? String {
-                                verbs = [actionName.lowercased()]
+                    for actionName in parsedActions.names {
+                        let verbs = parsedActions.verbsMap[actionName] ?? [actionName.lowercased()]
+
+                        for verb in verbs {
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+
+                            let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                var input: [String: any Sendable] = [:]
+                                if let data = context.resolveAny(object.base) {
+                                    input["data"] = data
+                                    input["object"] = data
+                                    input[object.base] = data
+                                }
+                                if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                    input.merge(withArgs) { _, new in new }
+                                }
+                                if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                    input.merge(exprArgs) { _, new in new }
+                                }
+                                let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                context.bind(result.base, value: pluginResult)
+                                return pluginResult
+                            }
+
+                            let registeredVerb: String
+                            if let ns = namespace {
+                                registeredVerb = "\(ns).\(normalizedVerb)"
                             } else {
-                                continue
+                                registeredVerb = normalizedVerb
                             }
-
-                            for verb in verbs {
-                                let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
-                                // Capture the original verb for plugin calls (may have hyphens)
-                                let originalVerb = verb
-
-                                let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
-                                    // Build input from context
-                                    var input: [String: any Sendable] = [:]
-                                    if let data = context.resolveAny(object.base) {
-                                        // Pass data under multiple keys for compatibility
-                                        input["data"] = data
-                                        input["object"] = data
-                                        // Also pass under the object's base name (e.g., "rows")
-                                        input[object.base] = data
-                                    }
-
-                                    // Add with clause arguments if present
-                                    if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                        input.merge(withArgs) { _, new in new }
-                                    }
-                                    if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                        input.merge(exprArgs) { _, new in new }
-                                    }
-
-                                    // Call the plugin with original verb (may have hyphens)
-                                    let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-
-                                    // Bind result
-                                    context.bind(result.base, value: pluginResult)
-
-                                    return pluginResult
-                                }
-
-                                // When a handler namespace is set, register only as "namespace.verb".
-                                // Without a handler, register only the plain verb.
-                                let registeredVerb: String
-                                if let ns = namespace {
-                                    registeredVerb = "\(ns).\(normalizedVerb)"
-                                } else {
-                                    registeredVerb = normalizedVerb
-                                }
-
-                                registrationCount += 1
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(verb: registeredVerb, handler: handler)
-                                    semaphore.signal()
-                                }
-                            }
-                        }
-
-                        // Wait for all registrations to complete
-                        for _ in 0..<registrationCount {
-                            semaphore.wait()
+                            let pName: String? = nil
+                            entries.append((verb: registeredVerb, pluginName: pName, handler: handler))
                         }
                     }
+                    PluginInfoParser.syncRegisterActions(entries)
 
-                    // Register qualifiers (plugin-provided value transformations)
-                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
-                        // Load aro_plugin_qualifier symbol
+                    // Register qualifiers using shared parser
+                    let qualifierDescriptors = PluginInfoParser.parseQualifierDescriptors(from: info)
+                    if !qualifierDescriptors.isEmpty {
                         #if os(Windows)
                         let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
                         #else
@@ -427,24 +663,20 @@ public final class PluginLoader: @unchecked Sendable {
                             typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
                             let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
 
-                            // Create a host wrapper for the plugin
                             let host = CPluginQualifierHost(
                                 pluginName: name,
                                 qualifierFunc: qualifierFunc,
                                 freeFunc: freeFunc
                             )
 
-                            // Register each qualifier
-                            for qualifierDef in qualifiers {
-                                guard let qualifierName = qualifierDef["name"] as? String else { continue }
-                                let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
-                                let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
-
+                            for descriptor in qualifierDescriptors {
                                 let registration = QualifierRegistration(
-                                    qualifier: qualifierName,
-                                    inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
+                                    qualifier: descriptor.name,
+                                    inputTypes: descriptor.inputTypes,
                                     pluginName: name,
                                     namespace: namespace,
+                                    description: descriptor.description,
+                                    acceptsParameters: descriptor.acceptsParameters,
                                     pluginHost: host
                                 )
                                 QualifierRegistry.shared.register(registration)
@@ -475,11 +707,14 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.serviceNotFound(serviceName)
         }
 
-        // Convert args to JSON
-        let argsData = try JSONSerialization.data(withJSONObject: args)
+        // Convert args to JSON — nest under _with for SDK-based plugins (ARO-0073)
+        var enrichedArgs: [String: any Sendable] = args
+        enrichedArgs["_with"] = args
+        let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // Call the plugin
+        // Pass method directly to aro_plugin_execute
+        // For service routing, CPluginServiceWrapper prepends "service:" before calling here
         let resultPtr = method.withCString { methodCStr in
             argsJSON.withCString { argsCStr in
                 pluginFuncs.execute(methodCStr, argsCStr)
@@ -491,10 +726,9 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.executionFailed(serviceName, method: method, message: "Plugin returned null")
         }
 
+        // Free via defer to prevent leaks if subsequent parsing throws
+        defer { pluginFuncs.free?(resultPtr) }
         let resultJSON = String(cString: resultPtr)
-
-        // Free the result memory if the plugin provides a free function
-        pluginFuncs.free?(resultPtr)
 
         // Check for error in response
         if resultJSON.contains("\"error\":") {
@@ -549,7 +783,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try loadDylib(at: dylibFile, name: pluginName)
             } catch {
-                print("[PluginLoader] Warning: Failed to load \(dylibFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to load \(dylibFile.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
     }
@@ -559,6 +793,53 @@ public final class PluginLoader: @unchecked Sendable {
     /// - Parameter binaryPath: Path to the executable binary
     public func loadPrecompiledManagedPlugins(relativeTo binaryPath: URL) throws {
         let binaryDir = binaryPath.deletingLastPathComponent()
+
+        // Priority 0: Load statically-linked plugins (function pointers, no dlopen)
+        if !staticPluginRegistry.isEmpty {
+            for (pluginName, entry) in staticPluginRegistry {
+                let namespace = parseHandlerFromPluginYAML(entry.yaml)
+                do {
+                    try loadStaticPlugin(name: pluginName, entry: entry, namespace: namespace)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to load static plugin '\(pluginName)': \(error)")
+                }
+            }
+        }
+
+        // Priority 0.5: Load embedded Python plugins (in-process via libpython)
+        if !embeddedPythonPluginRegistry.isEmpty && EmbeddedPythonHost.shared.isAvailable {
+            // Set up cache directory (keyed by a hash of the binary path)
+            let binaryHash = String(binaryPath.path.hashValue, radix: 16, uppercase: false)
+            let cacheDir = EmbeddedPythonHost.shared.setupCache(binaryHash: binaryHash)
+
+            // Extract stdlib if embedded
+            if let stdlibData = embeddedPythonStdlibZip {
+                _ = EmbeddedPythonHost.shared.extractStdlib(stdlibData, to: cacheDir)
+            }
+
+            // Extract deps if embedded
+            if let depsData = embeddedPythonDepsZip {
+                _ = EmbeddedPythonHost.shared.extractSitePackages(depsData, to: cacheDir)
+            }
+
+            // Initialize the embedded Python interpreter
+            let pythonHome = cacheDir.appendingPathComponent("lib")
+            if !FileManager.default.fileExists(atPath: pythonHome.path) {
+                // If no stdlib was embedded, use the cache dir itself as home
+                _ = EmbeddedPythonHost.shared.initialize(pythonHome: cacheDir)
+            } else {
+                _ = EmbeddedPythonHost.shared.initialize(pythonHome: pythonHome)
+            }
+
+            for (pluginName, entry) in embeddedPythonPluginRegistry {
+                let namespace = parseHandlerFromPluginYAML(entry.yaml)
+                do {
+                    try loadEmbeddedPythonPlugin(name: pluginName, entry: entry, namespace: namespace, cacheDir: cacheDir)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to load embedded Python plugin '\(pluginName)': \(error)")
+                }
+            }
+        }
 
         // Priority 1: Load plugins embedded in the binary (base64-encoded .so compiled into binary)
         if !embeddedPluginRegistry.isEmpty {
@@ -575,7 +856,7 @@ public final class PluginLoader: @unchecked Sendable {
 
             for (pluginName, embeddedData) in embeddedPluginRegistry {
                 guard let soData = Data(base64Encoded: embeddedData.base64So) else {
-                    print("[PluginLoader] Warning: Failed to decode embedded plugin '\(pluginName)'")
+                    AROLogger.warning("Failed to decode embedded plugin '\(pluginName)'", subsystem: "plugins")
                     continue
                 }
 
@@ -592,7 +873,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try loadCPlugin(at: soPath, name: pluginName, namespace: namespace)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to load embedded plugin '\(pluginName)': \(error)")
+                    AROLogger.warning("Failed to load embedded plugin '\(pluginName)': \(error)", subsystem: "plugins")
                 }
             }
         }
@@ -661,13 +942,19 @@ public final class PluginLoader: @unchecked Sendable {
                         options: [.skipsHiddenFiles]
                     )
 
-                    // Check for native libraries first
-                    for libFile in dirContents {
-                        if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
-                            found = true
-                            break
+                    // Check for native libraries
+                    let libFiles = dirContents.filter { $0.pathExtension == libraryExtension }
+                    if let pluginLib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
+                        // Pre-load dependency libraries (e.g. AROPluginSDK, AROPluginKit) so
+                        // the plugin .so can resolve its Swift runtime symbols via RTLD_GLOBAL.
+                        // Without this, dlopen of Swift-built plugins crashes on Linux (TLS).
+                        #if !os(Windows)
+                        for dep in libFiles where dep != pluginLib {
+                            _ = dlopen(dep.path, aroDlopenFlags)
                         }
+                        #endif
+                        try loadCPlugin(at: pluginLib, name: pluginName, namespace: pluginHandler)
+                        found = true
                     }
 
                     // If no native library found, check for Python plugins
@@ -682,7 +969,7 @@ public final class PluginLoader: @unchecked Sendable {
                         }
                     }
                 } catch {
-                    print("[PluginLoader] Warning: Failed to load managed plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to load managed plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
 
                 if found { break }
@@ -730,7 +1017,7 @@ public final class PluginLoader: @unchecked Sendable {
             do {
                 try compilePlugin(source: swiftFile, output: outputPath)
             } catch {
-                print("[PluginLoader] Warning: Failed to compile \(swiftFile.lastPathComponent): \(error)")
+                AROLogger.warning("Failed to compile \(swiftFile.lastPathComponent): \(error)", subsystem: "plugins")
             }
         }
 
@@ -747,7 +1034,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compilePackagePlugin(source: item, output: outputPath)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile package plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile package plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -817,7 +1104,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try compilePackagePlugin(source: item, output: outputLibPath)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to compile managed package plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to compile managed package plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
                 continue
             }
@@ -848,7 +1135,7 @@ public final class PluginLoader: @unchecked Sendable {
                             try compileMultipleSwiftFiles(sources: swiftFiles, output: outputLibPath)
                         }
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed Swift plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed Swift plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -869,7 +1156,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compileRustPlugin(projectDir: srcDir, outputDir: outputTargetDir, pluginName: pluginName)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed Rust plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                     continue
                 }
@@ -886,7 +1173,7 @@ public final class PluginLoader: @unchecked Sendable {
                     do {
                         try compileCPlugin(sources: cFiles, output: outputLibPath)
                     } catch {
-                        print("[PluginLoader] Warning: Failed to compile managed C plugin \(pluginName): \(error)")
+                        AROLogger.warning("Failed to compile managed C plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
                 }
             }
@@ -898,7 +1185,7 @@ public final class PluginLoader: @unchecked Sendable {
                 do {
                     try compileRustPlugin(projectDir: item, outputDir: outputTargetDir, pluginName: pluginName)
                 } catch {
-                    print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
+                    AROLogger.warning("Failed to compile managed Rust plugin \(pluginName): \(error)", subsystem: "plugins")
                 }
             }
 
@@ -1016,7 +1303,7 @@ public final class PluginLoader: @unchecked Sendable {
                 }
             }
             for await warning in group {
-                if let warning { print(warning) }
+                if let warning { AROLogger.warning(warning, subsystem: "plugins") }
             }
         }
     }
@@ -1073,7 +1360,7 @@ public final class PluginLoader: @unchecked Sendable {
                 }
             }
             for await warning in group {
-                if let warning { print(warning) }
+                if let warning { AROLogger.warning(warning, subsystem: "plugins") }
             }
         }
     }
@@ -1352,60 +1639,6 @@ public final class PluginLoader: @unchecked Sendable {
         try loadDylib(at: dylibPath, name: pluginName)
     }
 
-    /// Call a plugin service method
-    /// - Parameters:
-    ///   - serviceName: Service name
-    ///   - method: Method name
-    ///   - args: Arguments dictionary
-    /// - Returns: Result value
-    func callPlugin(
-        _ serviceName: String,
-        method: String,
-        args: [String: any Sendable]
-    ) throws -> any Sendable {
-        lock.lock()
-        let callFunc = pluginFunctions[serviceName.lowercased()]
-        lock.unlock()
-
-        guard let callFunc = callFunc else {
-            throw PluginError.serviceNotFound(serviceName)
-        }
-
-        // Convert args to JSON
-        let argsData = try JSONSerialization.data(withJSONObject: args)
-        let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
-
-        // Call the plugin
-        var resultPtr: UnsafeMutablePointer<CChar>?
-        let status = method.withCString { methodCStr in
-            argsJSON.withCString { argsCStr in
-                callFunc(methodCStr, argsCStr, &resultPtr)
-            }
-        }
-
-        // Check for error
-        if status != 0 {
-            let errorMsg = resultPtr.map { String(cString: $0) } ?? "Unknown error"
-            resultPtr.map { free($0) }
-            throw PluginError.executionFailed(serviceName, method: method, message: errorMsg)
-        }
-
-        // Parse result
-        guard let resultPtr = resultPtr else {
-            return [String: any Sendable]()
-        }
-
-        let resultJSON = String(cString: resultPtr)
-        free(resultPtr)
-
-        guard let resultData = resultJSON.data(using: .utf8),
-              let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
-            return resultJSON
-        }
-
-        return convertToSendable(result)
-    }
-
     // MARK: - Private
 
     /// Find the Swift executable (swift command) in PATH or common locations
@@ -1642,13 +1875,32 @@ public final class PluginLoader: @unchecked Sendable {
         // Possible library names: libCounterPlugin.dylib or CounterPlugin.dylib
         let libNames = ["lib\(name).\(ext)", "\(name).\(ext)"]
 
+        // Search a release directory for a matching library.
+        // First tries exact name matches, then falls back to any .dylib/.so file
+        // (SPM product names often differ from plugin directory names).
+        func searchReleaseDir(_ releaseDir: URL) -> URL? {
+            // Exact name match
+            for libName in libNames {
+                let path = releaseDir.appendingPathComponent(libName)
+                if FileManager.default.fileExists(atPath: path.path) {
+                    return path
+                }
+            }
+            // Fallback: any dynamic library in the directory
+            if let files = try? FileManager.default.contentsOfDirectory(
+                at: releaseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) {
+                if let lib = files.first(where: { $0.pathExtension == ext && $0.lastPathComponent.hasPrefix("lib") }) ?? files.first(where: { $0.pathExtension == ext }) {
+                    return lib
+                }
+            }
+            return nil
+        }
+
         // First, try the legacy path: .build/release/
         let legacyReleaseDir = buildDir.appendingPathComponent("release")
-        for libName in libNames {
-            let path = legacyReleaseDir.appendingPathComponent(libName)
-            if FileManager.default.fileExists(atPath: path.path) {
-                return path
-            }
+        if let found = searchReleaseDir(legacyReleaseDir) {
+            return found
         }
 
         // Next, search for arch-specific directories like:
@@ -1670,11 +1922,8 @@ public final class PluginLoader: @unchecked Sendable {
                     let dirName = item.lastPathComponent
                     if dirName.contains("-") && dirName != "checkouts" {
                         let releaseDir = item.appendingPathComponent("release")
-                        for libName in libNames {
-                            let path = releaseDir.appendingPathComponent(libName)
-                            if FileManager.default.fileExists(atPath: path.path) {
-                                return path
-                            }
+                        if let found = searchReleaseDir(releaseDir) {
+                            return found
                         }
                     }
                 }
@@ -1753,16 +2002,21 @@ public final class PluginLoader: @unchecked Sendable {
         process.currentDirectoryURL = packageDir
         process.arguments = ["build", "-c", "release"]
 
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
 
@@ -1786,23 +2040,62 @@ public final class PluginLoader: @unchecked Sendable {
     private func compilePackagePlugin(source: URL, output: URL) throws {
         let pluginName = source.lastPathComponent
 
+        // Check if the library is already built in the standard .build/ directory
+        // (e.g. from a prior `swift build` or `aro run`). Reuse it to avoid
+        // recompiling SwiftSyntax which takes several minutes.
+        #if os(Windows)
+        let ext = "dll"
+        #elseif os(Linux)
+        let ext = "so"
+        #else
+        let ext = "dylib"
+        #endif
+        if let existingLib = findBuiltLibrary(in: source.appendingPathComponent(".build"), name: pluginName, extension: ext) {
+            if FileManager.default.fileExists(atPath: output.path) {
+                try FileManager.default.removeItem(at: output)
+            }
+            try FileManager.default.copyItem(at: existingLib, to: output)
+            // Copy dependency libraries too
+            let buildDir = existingLib.deletingLastPathComponent()
+            let outputDir = output.deletingLastPathComponent()
+            if let siblings = try? FileManager.default.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
+                for sibling in siblings where sibling.pathExtension == ext && sibling != existingLib {
+                    let dest = outputDir.appendingPathComponent(sibling.lastPathComponent)
+                    if !FileManager.default.fileExists(atPath: dest.path) {
+                        try? FileManager.default.copyItem(at: sibling, to: dest)
+                    }
+                }
+            }
+            return
+        }
+
+        // Fall back to building with a dedicated scratch path to avoid module-cache
+        // conflicts on case-insensitive filesystem mounts (Docker virtiofs).
+        let scratchPath = source.appendingPathComponent(".build-aro")
+
         // Build the package using swift build
         let process = Process()
         let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
         process.executableURL = URL(fileURLWithPath: swiftPath)
         process.currentDirectoryURL = source
-        process.arguments = ["build", "-c", "release"]
+        process.arguments = ["build", "-c", "release", "--scratch-path", scratchPath.path]
 
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
+        // Capture both stdout and stderr so we get the full error on failure.
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
 
@@ -1814,14 +2107,13 @@ public final class PluginLoader: @unchecked Sendable {
         let libraryExtension = "dylib"
         #endif
 
-        // Find the built dynamic library
-        // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
+        // Find the built dynamic library in the scratch path
         guard let builtLibPath = findBuiltLibrary(
-            in: source.appendingPathComponent(".build"),
+            in: scratchPath,
             name: pluginName,
             extension: libraryExtension
         ) else {
-            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(source.appendingPathComponent(".build").path)")
+            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(scratchPath.path)")
         }
 
         // Copy to output location
@@ -1829,6 +2121,19 @@ public final class PluginLoader: @unchecked Sendable {
             try FileManager.default.removeItem(at: output)
         }
         try FileManager.default.copyItem(at: builtLibPath, to: output)
+
+        // Also copy dependency libraries (e.g. AROPluginKit) so dlopen can resolve them.
+        // Without these, loading the plugin .so crashes the dynamic linker.
+        let buildDir = builtLibPath.deletingLastPathComponent()
+        let outputDir = output.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
+            for sibling in siblings where sibling.pathExtension == libraryExtension && sibling != builtLibPath {
+                let dest = outputDir.appendingPathComponent(sibling.lastPathComponent)
+                if !FileManager.default.fileExists(atPath: dest.path) {
+                    try? FileManager.default.copyItem(at: sibling, to: dest)
+                }
+            }
+        }
     }
 
     /// Load a dynamic library and register its services
@@ -1850,7 +2155,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(path.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }
@@ -1886,11 +2191,24 @@ public final class PluginLoader: @unchecked Sendable {
             let wrapper = CPluginServiceWrapper(name: name, loader: self)
             try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
+            // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+            // file-scope initialization before querying aro_plugin_info.
+            #if os(Windows)
+            let registerSymbol = GetProcAddress(handle, "aro_plugin_register")
+            #else
+            let registerSymbol = dlsym(handle, "aro_plugin_register")
+            #endif
+            if let registerSymbol = registerSymbol {
+                typealias RegisterFunc = @convention(c) () -> Void
+                let registerFn = unsafeBitCast(registerSymbol, to: RegisterFunc.self)
+                registerFn()
+            }
+
             // Parse plugin info for custom actions
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
                 let infoJSON = String(cString: infoPtr)
-                freeFunc?(infoPtr)
 
                 // Parse JSON to get actions and qualifiers
                 if let data = infoJSON.data(using: .utf8),
@@ -1947,6 +2265,22 @@ public final class PluginLoader: @unchecked Sendable {
                         }
                     }
 
+                    // ARO-0073: Register under each declared service name
+                    if let services = info["services"] as? [[String: Any]] {
+                        for svcDef in services {
+                            if let svcName = svcDef["name"] as? String, svcName.lowercased() != name.lowercased() {
+                                self.cPluginFunctions[svcName.lowercased()] = (execute: executeFunc, free: freeFunc)
+                                let svcWrapper = CPluginServiceWrapper(name: svcName, loader: self)
+                                do {
+                                    try ExternalServiceRegistry.shared.register(svcWrapper, withName: svcName)
+                                    // debugPrint("[PluginLoader] Registered service '\(svcName)' for plugin '\(name)'")
+                                } catch {
+                                    // debugPrint("[PluginLoader] Service registration failed: \(error)")
+                                }
+                            }
+                        }
+                    }
+
                     // Register qualifiers (plugin-provided value transformations)
                     if let qualifiers = info["qualifiers"] as? [[String: Any]] {
                         // Load aro_plugin_qualifier symbol
@@ -1989,154 +2323,8 @@ public final class PluginLoader: @unchecked Sendable {
             return
         }
 
-        // Try legacy interface (aro_plugin_init)
-        #if os(Windows)
-        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
-        #else
-        let initSymbol = dlsym(handle, "aro_plugin_init")
-        #endif
-
-        guard let initSymbol = initSymbol else {
-            // No init function, try to load as simple service
-            // Look for a function named after the plugin
-            let serviceSymbol = "\(name.lowercased())_call"
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, serviceSymbol)
-            #else
-            let callSymbol = dlsym(handle, serviceSymbol)
-            #endif
-
-            if let callSymbol = callSymbol {
-                let callFunc = unsafeBitCast(callSymbol, to: PluginCallFunction.self)
-                pluginFunctions[name.lowercased()] = callFunc
-
-                // Register as AROService
-                let wrapper = PluginServiceWrapper(name: name, loader: self)
-                try ExternalServiceRegistry.shared.register(wrapper, withName: name)
-
-                return
-            }
-            throw PluginError.initFunctionNotFound(name)
-        }
-
-        // Call init function to get service metadata
-        typealias InitFunc = @convention(c) () -> UnsafePointer<CChar>
-        let initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
-        let metadataPtr = initFunc()
-        let metadataJSON = String(cString: metadataPtr)
-
-        // Parse metadata
-        guard let metadataData = metadataJSON.data(using: .utf8),
-              let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
-              let services = metadata["services"] as? [[String: Any]] else {
-            throw PluginError.invalidMetadata(name, message: "Invalid JSON metadata")
-        }
-
-        // Register each service
-        for service in services {
-            guard let serviceName = service["name"] as? String,
-                  let symbolName = service["symbol"] as? String else {
-                continue
-            }
-
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, symbolName)
-            #else
-            let callSymbol = dlsym(handle, symbolName)
-            #endif
-
-            guard let callSymbol = callSymbol else {
-                print("[PluginLoader] Warning: Symbol '\(symbolName)' not found in \(name)")
-                continue
-            }
-
-            let callFunc = unsafeBitCast(callSymbol, to: PluginCallFunction.self)
-            pluginFunctions[serviceName.lowercased()] = callFunc
-
-            // Register as AROService
-            let wrapper = PluginServiceWrapper(name: serviceName, loader: self)
-            try ExternalServiceRegistry.shared.register(wrapper, withName: serviceName)
-
-        }
-
-        // ARO-0043: Register system objects from plugin metadata
-        if let systemObjects = metadata["systemObjects"] as? [[String: Any]] {
-            for objDef in systemObjects {
-                guard let identifier = objDef["identifier"] as? String else {
-                    continue
-                }
-
-                let description = objDef["description"] as? String ?? "Plugin system object"
-
-                // Parse capabilities
-                var capabilities: SystemObjectCapabilities = []
-                if let caps = objDef["capabilities"] as? [String] {
-                    for cap in caps {
-                        switch cap.lowercased() {
-                        case "readable", "source":
-                            capabilities.insert(.readable)
-                        case "writable", "sink":
-                            capabilities.insert(.writable)
-                        default:
-                            break
-                        }
-                    }
-                }
-
-                // Get symbol names
-                let readSymbol = objDef["readSymbol"] as? String
-                let writeSymbol = objDef["writeSymbol"] as? String
-
-                // Load read function
-                var readFunc: PluginReadFunction? = nil
-                if let symbolName = readSymbol {
-                    #if os(Windows)
-                    let symbol = GetProcAddress(handle, symbolName)
-                    #else
-                    let symbol = dlsym(rawHandle, symbolName)
-                    #endif
-                    if let symbol = symbol {
-                        readFunc = unsafeBitCast(symbol, to: PluginReadFunction.self)
-                    }
-                }
-
-                // Load write function
-                var writeFunc: PluginWriteFunction? = nil
-                if let symbolName = writeSymbol {
-                    #if os(Windows)
-                    let symbol = GetProcAddress(handle, symbolName)
-                    #else
-                    let symbol = dlsym(rawHandle, symbolName)
-                    #endif
-                    if let symbol = symbol {
-                        writeFunc = unsafeBitCast(symbol, to: PluginWriteFunction.self)
-                    }
-                }
-
-                // Capture values as constants for the closure (Swift concurrency safety)
-                let capturedIdentifier = identifier
-                let capturedDescription = description
-                let capturedCapabilities = capabilities
-                let capturedReadFunc = readFunc
-                let capturedWriteFunc = writeFunc
-
-                // Register the system object with the registry
-                SystemObjectRegistry.shared.register(
-                    identifier,
-                    description: description,
-                    capabilities: capabilities
-                ) { _ in
-                    PluginSystemObjectWrapper(
-                        pluginIdentifier: capturedIdentifier,
-                        pluginDescription: capturedDescription,
-                        pluginCapabilities: capturedCapabilities,
-                        readFunc: capturedReadFunc,
-                        writeFunc: capturedWriteFunc
-                    )
-                }
-
-            }
-        }
+        // Plugin does not export the required aro_plugin_info / aro_plugin_execute symbols.
+        throw PluginError.initFunctionNotFound(name)
     }
 
     #if os(Windows)
@@ -2149,39 +2337,7 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Convert Any to Sendable
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            // Check if it's a boolean (Apple platforms have CFBoolean APIs)
-            #if canImport(Darwin)
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
-                return num.boolValue
-            }
-            #else
-            // On Linux, check type encoding for boolean
-            let objCType = String(cString: num.objCType)
-            if objCType == "B" || objCType == "c" {
-                if num.intValue == 0 || num.intValue == 1 {
-                    return num.boolValue
-                }
-            }
-            #endif
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        case let array as [Any]:
-            return array.map { convertToSendable($0) }
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 
     /// Unload all plugins
@@ -2198,7 +2354,6 @@ public final class PluginLoader: @unchecked Sendable {
             #endif
         }
         loadedPlugins.removeAll()
-        pluginFunctions.removeAll()
         pluginMetadata.removeAll()
     }
 
@@ -2372,52 +2527,58 @@ public final class PluginLoader: @unchecked Sendable {
         }
         defer { FreeLibrary(handle) }
         #else
-        guard let handle = dlopen(dylibPath.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(dylibPath.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }
         defer { dlclose(handle) }
         #endif
 
-        // Find init function
+        // Query plugin metadata via the new C ABI (aro_plugin_info)
         #if os(Windows)
-        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
+        let infoSymbol = GetProcAddress(handle, "aro_plugin_info")
+        let freeSymbol = GetProcAddress(handle, "aro_plugin_free")
         #else
-        let initSymbol = dlsym(handle, "aro_plugin_init")
+        let infoSymbol = dlsym(handle, "aro_plugin_info")
+        let freeSymbol = dlsym(handle, "aro_plugin_free")
         #endif
 
         var services: [LocalPluginService] = []
 
-        if let initSymbol = initSymbol {
-            // Call init to get metadata
-            typealias InitFunc = @convention(c) () -> UnsafePointer<CChar>
-            let initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
-            let metadataPtr = initFunc()
-            let metadataJSON = String(cString: metadataPtr)
+        if let infoSymbol = infoSymbol {
+            let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
+            let freeFunc: CPluginFreeFunction? = freeSymbol.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
 
-            // Parse metadata
-            if let metadataData = metadataJSON.data(using: .utf8),
-               let metadata = try? JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
-               let servicesArray = metadata["services"] as? [[String: Any]] {
-                for serviceDict in servicesArray {
-                    if let serviceName = serviceDict["name"] as? String {
-                        let methods = serviceDict["methods"] as? [String] ?? []
-                        services.append(LocalPluginService(name: serviceName, methods: methods))
+            if let infoPtr = infoFunc() {
+                defer { freeFunc?(infoPtr) }
+                let infoJSON = String(cString: infoPtr)
+
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+                    // Collect actions as services for display
+                    if let actions = info["actions"] as? [[String: Any]] {
+                        var verbs: [String] = []
+                        for actionDef in actions {
+                            if let v = actionDef["verbs"] as? [String] {
+                                verbs.append(contentsOf: v)
+                            } else if let actionName = actionDef["name"] as? String {
+                                verbs.append(actionName)
+                            }
+                        }
+                        if !verbs.isEmpty {
+                            services.append(LocalPluginService(name: name.lowercased(), methods: verbs))
+                        }
+                    }
+
+                    // Also include qualifiers
+                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
+                        let qualifierNames = qualifiers.compactMap { $0["name"] as? String }
+                        if !qualifierNames.isEmpty {
+                            services.append(LocalPluginService(name: "\(name.lowercased()).qualifiers", methods: qualifierNames))
+                        }
                     }
                 }
-            }
-        } else {
-            // Try simple service (function named after plugin)
-            let serviceSymbol = "\(name.lowercased())_call"
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, serviceSymbol)
-            #else
-            let callSymbol = dlsym(handle, serviceSymbol)
-            #endif
-
-            if callSymbol != nil {
-                // Plugin exports a simple service - methods unknown
-                services.append(LocalPluginService(name: name.lowercased(), methods: []))
             }
         }
 
@@ -2468,27 +2629,6 @@ public struct LocalPluginService: Sendable {
 
 // MARK: - Plugin Service Wrapper
 
-/// Wraps a plugin as an AROService
-private struct PluginServiceWrapper: AROService {
-    static let name: String = "_plugin_"
-
-    private let serviceName: String
-    private let loader: PluginLoader
-
-    init(name: String, loader: PluginLoader) {
-        self.serviceName = name
-        self.loader = loader
-    }
-
-    init() throws {
-        fatalError("PluginServiceWrapper requires name and loader")
-    }
-
-    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try loader.callPlugin(serviceName, method: method, args: args)
-    }
-}
-
 /// Wraps a C plugin as an AROService
 private struct CPluginServiceWrapper: AROService {
     static let name: String = "_c_plugin_"
@@ -2506,7 +2646,8 @@ private struct CPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try loader.callCPlugin(serviceName, method: method, args: args)
+        // ARO-0073: prepend "service:" for SDK-based plugins that dispatch by prefix
+        return try loader.callCPlugin(serviceName, method: "service:\(method)", args: args)
     }
 }
 
@@ -2528,7 +2669,7 @@ public enum PluginError: Error, CustomStringConvertible {
         case .loadFailed(let name, let message):
             return "Failed to load plugin '\(name)': \(message)"
         case .initFunctionNotFound(let name):
-            return "Plugin '\(name)' missing aro_plugin_init or <name>_call function"
+            return "Plugin '\(name)' missing required aro_plugin_info / aro_plugin_execute exports"
         case .invalidMetadata(let name, let message):
             return "Plugin '\(name)' has invalid metadata: \(message)"
         case .serviceNotFound(let name):
@@ -2630,8 +2771,8 @@ public struct PluginSystemObjectWrapper: SystemObject {
             return ""
         }
 
+        defer { resultPtr.deallocate() }
         let result = String(cString: resultPtr)
-        resultPtr.deallocate()
 
         // Parse JSON result
         if let data = result.data(using: .utf8),
@@ -2677,27 +2818,7 @@ public struct PluginSystemObjectWrapper: SystemObject {
 
     /// Convert Any to Sendable for JSON parsing
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (key, val) in dict {
-                result[key] = convertToSendable(val)
-            }
-            return result
-        case let arr as [Any]:
-            return arr.map { convertToSendable($0) }
-        case let bool as Bool:
-            return bool
-        default:
-            return "\(value)"
-        }
+        SendableConverter.fromJSON(value)
     }
 }
 
@@ -2725,9 +2846,9 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
         self.freeFunc = freeFunc
     }
 
-    func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
-        // Create input JSON
-        let qualifierInput = QualifierInput(value: input)
+    func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
+        // Create input JSON (ARO-0073: includes _with params)
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
 
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
@@ -2747,8 +2868,8 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
             )
         }
 
+        defer { freeFunc?(resultPtr) }
         let resultJSON = String(cString: resultPtr)
-        freeFunc?(resultPtr)
 
         // Parse output
         guard let resultData = resultJSON.data(using: .utf8) else {
@@ -2771,6 +2892,118 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
             )
         }
 
+        return result.value
+    }
+}
+
+/// Top-level @convention(c) shim for embedded Python plugin execution.
+/// Cannot be a closure because Swift 6 @convention(c) closures cannot capture.
+/// Instead, the action string is used as a routing key to look up the plugin's
+/// module path from EmbeddedPythonPluginPaths.
+private let embeddedPythonExecuteShim: PluginLoader.CPluginExecuteFunction = { actionPtr, inputPtr in
+    // The method comes as "service:<method>" — extract plugin name from routing context
+    // For now, iterate all registered Python plugins to find one that handles this action
+    let action = String(cString: actionPtr)
+    let input = String(cString: inputPtr)
+
+    // Try each registered Python plugin (typically there's only one per name)
+    // The correct plugin is already resolved by the CPluginServiceWrapper routing
+    // We need a way to know WHICH plugin this belongs to — use a thread-local or context
+    // Workaround: try all registered plugins and return first success
+    for (_, ref) in EmbeddedPythonPluginPaths.shared.allEntries() {
+        if let result = EmbeddedPythonHost.shared.callPluginFunction(
+            modulePath: ref.path,
+            moduleName: ref.module,
+            functionName: "aro_plugin_execute",
+            args: [action, input]
+        ) {
+            return result.withCString { strdup($0) }
+        }
+    }
+    return nil
+}
+
+/// Top-level free shim for embedded Python plugin results.
+private let embeddedPythonFreeShim: PluginLoader.CPluginFreeFunction = { ptr in
+    free(ptr)
+}
+
+/// Global thread-safe registry of embedded Python plugin paths.
+/// Avoids capturing Swift values in @convention(c) closures (which crashes the Swift 6 compiler).
+final class EmbeddedPythonPluginPaths: @unchecked Sendable {
+    static let shared = EmbeddedPythonPluginPaths()
+    private var paths: [String: (path: String, module: String)] = [:]
+    private let lock = NSLock()
+
+    func register(name: String, path: String, module: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        paths[name] = (path: path, module: module)
+    }
+
+    func lookup(_ name: String) -> (path: String, module: String)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return paths[name]
+    }
+
+    func allEntries() -> [(String, (path: String, module: String))] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(paths)
+    }
+}
+
+/// Qualifier host for embedded Python plugins (in-process via libpython)
+final class EmbeddedPythonQualifierHost: PluginQualifierHost, @unchecked Sendable {
+    let pluginName: String
+    private let modulePath: String
+    private let moduleName: String
+    private let qualifierName: String
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    init(pluginName: String, modulePath: String, moduleName: String, qualifierName: String) {
+        self.pluginName = pluginName
+        self.modulePath = modulePath
+        self.moduleName = moduleName
+        self.qualifierName = qualifierName
+    }
+
+    func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
+        let inputData = try encoder.encode(qualifierInput)
+        let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
+
+        guard let resultJSON = EmbeddedPythonHost.shared.callPluginFunction(
+            modulePath: modulePath,
+            moduleName: moduleName,
+            functionName: "aro_plugin_qualifier",
+            args: [qualifier, inputJSON]
+        ) else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Embedded Python plugin \(pluginName) returned nil for qualifier '\(qualifier)'"
+            )
+        }
+
+        guard let resultData = resultJSON.data(using: .utf8) else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Invalid result encoding from embedded Python plugin \(pluginName)"
+            )
+        }
+
+        let output = try decoder.decode(QualifierOutput.self, from: resultData)
+        if let error = output.error, !error.isEmpty {
+            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
+        }
+        guard let result = output.result else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "No result from embedded Python plugin \(pluginName)"
+            )
+        }
         return result.value
     }
 }

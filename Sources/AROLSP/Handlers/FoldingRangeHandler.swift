@@ -77,6 +77,17 @@ public struct FoldingRangeHandler: Sendable {
                         ))
                     }
                 }
+
+                // Add folding ranges for while loops
+                if let whileLoop = statement as? WhileLoop {
+                    if whileLoop.span.start.line < whileLoop.span.end.line {
+                        ranges.append(createFoldingRange(
+                            startLine: whileLoop.span.start.line - 1,
+                            endLine: whileLoop.span.end.line - 1,
+                            kind: "region"
+                        ))
+                    }
+                }
             }
         }
 

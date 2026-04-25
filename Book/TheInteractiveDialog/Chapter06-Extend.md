@@ -58,56 +58,57 @@ aro> :service stop http-a1b2
 HTTP server stopped
 ```
 
-## Loading Plugins
+## Installing Plugins from Git
 
-Plugins extend ARO with new actions:
+Plugins extend ARO with new actions. Install them directly from Git:
 
 ```
-aro> :plugin load ./Plugins/json-tools
-Loading plugin: json-tools
-  Type: rust-plugin
-  Actions: validate-json, format-json, minify-json
-Plugin loaded successfully
+aro> /plugin add git@github.com:arolang/plugin-rust-csv.git
+Plugin 'plugin-rust-csv' v1.0.0 installed and loaded (commit: 7b2e4f1)
+  [+] Rust plugin built
+Actions: ParseCSV, FormatCSV
+```
+
+Install a specific version:
+
+```
+aro> /plugin add git@github.com:arolang/plugin-swift-hello.git --ref v2.0.0
+Plugin 'plugin-swift-hello' v2.0.0 installed and loaded (commit: a3f9c21)
+  [+] Swift sources ready
+Actions: Greet
 ```
 
 Now use them:
 
 ```
-aro> Set the <data> to { name: "test", valid: true }.
-=> OK
-
-aro> <Validate-json> the <result> from the <data>.
-=> { valid: true, errors: [] }
+aro> Greet the <message> with "World".
+=> "Hello, World!"
 ```
 
 New verbs. New capabilities. Same syntax.
 
+The plugin is cloned, built, and loaded in one step. REPL plugins are stored in `~/.aro/repl-plugins/` and persist across sessions.
+
 ## Listing Plugins
 
 ```
-aro> :plugins
-┌─────────────┬──────┬─────────────────────────────┐
-│ Name        │ Type │ Actions                     │
-├─────────────┼──────┼─────────────────────────────┤
-│ json-tools  │ rust │ validate-json, format-json  │
-└─────────────┴──────┴─────────────────────────────┘
+aro> /plugin list
+Name               | Version | Handle | Status
+-------------------|---------|--------|-------
+plugin-rust-csv    | 1.0.0   | CSV    | loaded
+plugin-swift-hello | 2.0.0   | Hello  | loaded
 ```
 
-## Plugin Hot Reload
+## Removing Plugins
 
-Developing a plugin? Watch for changes:
+Unload a plugin from the session:
 
 ```
-aro> :plugin load ./Plugins/my-plugin --watch
-Plugin loaded with file watching enabled
-
-# Edit plugin source...
-
-[Plugin recompiled automatically]
-Reloaded: my-plugin (2 actions)
+aro> /plugin remove plugin-swift-hello
+Plugin 'plugin-swift-hello' unloaded
 ```
 
-Change code, test immediately. No restart needed.
+The actions disappear. The session continues.
 
 ## File Watching
 

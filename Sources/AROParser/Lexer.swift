@@ -198,7 +198,8 @@ public final class Lexer: @unchecked Sendable {
                 _ = advance()
                 addToken(.pipe, start: startLocation)
             } else {
-                throw LexerError.unexpectedCharacter("|", at: startLocation)
+                // Bare | used as qualifier chain separator inside <result: q1 | q2>
+                addToken(.bar, start: startLocation)
             }
 
         case ":":

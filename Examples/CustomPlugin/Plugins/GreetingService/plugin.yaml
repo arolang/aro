@@ -1,0 +1,16 @@
+name: greeting-service
+version: 1.0.0
+handle: Greeting
+description: A custom greeting service plugin demonstrating the AROPluginKit builder API
+author: ARO Team
+license: MIT
+provides:
+- type: swift-plugin
+  path: Sources/
+  handler: greeting
+build:
+  swift:
+    minimum-version: '5.9'
+    targets:
+    - name: GreetingService
+      path: Sources/

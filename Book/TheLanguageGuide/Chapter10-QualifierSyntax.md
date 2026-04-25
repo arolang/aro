@@ -157,7 +157,68 @@ Extract the <max-retries> from the <config: server.retry.max-attempts>.
 
 ---
 
-## 10.4 Type Annotations with `as`
+## 10.4 Qualifier Chaining
+
+Multiple qualifiers can be composed in a single expression using the pipe (`|`) operator. The runtime evaluates them left-to-right: each qualifier's output becomes the next qualifier's input.
+
+```aro
+(* Sort the list, then take the first 3 *)
+Compute the <top3: stats.sort | list.take> from the <scores> with { count: 3 }.
+
+(* Reverse, then pick a random element *)
+Compute the <surprise: collections.reverse | collections.pick-random> from the <items>.
+
+(* Chain built-in and plugin qualifiers *)
+Compute the <result: uppercase | collections.reverse> from the <words>.
+```
+
+Parameters from the `with` clause are forwarded to every qualifier in the chain. Each qualifier reads only the parameters it recognizes and ignores the rest.
+
+Chaining is supported for both plugin qualifiers and built-in qualifiers. The parser recognizes `|` within the specifier position of an expression.
+
+---
+
+## 10.4b Parameterized Plugin Qualifiers
+
+Plugin qualifiers can accept parameters via the `with` clause, just like the built-in `clip` and `take` qualifiers:
+
+```aro
+(* Pass { count: 5 } to the stats.top plugin qualifier *)
+Compute the <top-items: stats.top> from the <scores> with { count: 5 }.
+
+(* Pass truncation settings to a text plugin qualifier *)
+Compute the <preview: text.truncate> from the <description> with { maxLength: 100, suffix: "..." }.
+```
+
+The `with` clause parameters are passed to the qualifier function in the input JSON under the `_with` key:
+
+```json
+{
+  "value": [95, 87, 72, 100, 63, 91],
+  "type": "List",
+  "_with": { "count": 5 }
+}
+```
+
+A qualifier that does not declare `acceptsParameters: true` in its plugin manifest will receive an empty `_with` object. Parameters are only meaningful when the qualifier explicitly supports them.
+
+---
+
+## 10.4c Built-in Qualifiers in QualifierRegistry
+
+All built-in qualifiers (`hash`, `length`, `count`, `uppercase`, `lowercase`, `clip`, `take`, `date`, `format`, `distance`, `intersect`, `difference`, `union`) are now registered in `QualifierRegistry` alongside plugin qualifiers. This provides a single source of truth for all available qualifiers.
+
+You can inspect all registered qualifiers — built-in and plugin-provided — using:
+
+```bash
+aro actions list --qualifiers
+```
+
+The output lists each qualifier with its source (`built-in` or the plugin name), accepted input types, and whether it accepts parameters.
+
+---
+
+## 10.5 Type Annotations with `as`
 
 For data pipeline operations (Filter, Reduce, Map), you can optionally specify result types using the `as` keyword:
 
@@ -182,7 +243,7 @@ See ARO-0038 for the full specification.
 
 ---
 
-## 10.5 The Ambiguity Case
+## 10.6 The Ambiguity Case
 
 A natural question arises: what happens when data contains a field named like an operation?
 
@@ -217,7 +278,7 @@ This returns 42—the value of the `length` field.
 
 ---
 
-## 10.6 Best Practices
+## 10.7 Best Practices
 
 **Use descriptive base names with operation qualifiers:**
 

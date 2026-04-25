@@ -244,6 +244,213 @@ public struct SignatureHelpHandler: Sendable {
                 ParameterInfo(label: "data", documentation: "The data context for the template")
             ]
         ),
+
+        // Additional REQUEST actions
+        "Read": ActionSignature(
+            label: "Read the <result> from the <file: path>.",
+            documentation: "Reads content from a file. Supports auto-format detection (JSON, YAML, CSV).",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The file content"),
+                ParameterInfo(label: "file", documentation: "The file path to read from")
+            ]
+        ),
+        "Request": ActionSignature(
+            label: "Request the <result> from the <url> with { method: \"GET\" }.",
+            documentation: "Makes an HTTP request to a URL. Supports GET, POST, PUT, DELETE methods.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The HTTP response"),
+                ParameterInfo(label: "url", documentation: "The URL to request"),
+                ParameterInfo(label: "config", documentation: "Optional request configuration (method, headers, body)")
+            ]
+        ),
+        "Receive": ActionSignature(
+            label: "Receive the <result> from the <connection>.",
+            documentation: "Receives data from a socket connection or event stream.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The received data"),
+                ParameterInfo(label: "connection", documentation: "The connection to receive from")
+            ]
+        ),
+        "List": ActionSignature(
+            label: "List the <result> for the <directory: path>.",
+            documentation: "Lists contents of a directory.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The directory listing"),
+                ParameterInfo(label: "directory", documentation: "The directory path to list")
+            ]
+        ),
+        "Stat": ActionSignature(
+            label: "Stat the <result> for the <file: path>.",
+            documentation: "Retrieves file or directory metadata (size, dates, permissions).",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The metadata object"),
+                ParameterInfo(label: "file", documentation: "The file or directory path")
+            ]
+        ),
+        "Exists": ActionSignature(
+            label: "Exists the <result> for the <file: path>.",
+            documentation: "Checks if a file or directory exists. Returns a boolean.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "Boolean existence result"),
+                ParameterInfo(label: "file", documentation: "The file or directory path to check")
+            ]
+        ),
+
+        // Additional OWN actions
+        "Filter": ActionSignature(
+            label: "Filter the <result> from the <collection> where <field> is <value>.",
+            documentation: "Filters a collection based on a where clause condition.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The filtered collection"),
+                ParameterInfo(label: "collection", documentation: "The collection to filter"),
+                ParameterInfo(label: "where", documentation: "Filter condition (where field is value)")
+            ]
+        ),
+        "Sort": ActionSignature(
+            label: "Sort the <result> from the <collection>.",
+            documentation: "Sorts a collection. Use a by clause to specify the sort field.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The sorted collection"),
+                ParameterInfo(label: "collection", documentation: "The collection to sort")
+            ]
+        ),
+        "Map": ActionSignature(
+            label: "Map the <result> from the <collection>.",
+            documentation: "Transforms each element of a collection.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The transformed collection"),
+                ParameterInfo(label: "collection", documentation: "The collection to transform")
+            ]
+        ),
+        "Reduce": ActionSignature(
+            label: "Reduce the <result> from the <collection> with sum(<field>).",
+            documentation: "Reduces a collection to a single value using an aggregation function (sum, count, avg, min, max).",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The aggregated value"),
+                ParameterInfo(label: "collection", documentation: "The collection to reduce"),
+                ParameterInfo(label: "aggregation", documentation: "Aggregation function: sum, count, avg, min, max")
+            ]
+        ),
+        "Group": ActionSignature(
+            label: "Group the <result> from the <collection> by <field>.",
+            documentation: "Groups collection elements by a field value, creating a map of field value to list of items.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The grouped map"),
+                ParameterInfo(label: "collection", documentation: "The collection to group"),
+                ParameterInfo(label: "field", documentation: "The field to group by")
+            ]
+        ),
+        "Update": ActionSignature(
+            label: "Update the <result> with <data>.",
+            documentation: "Updates or modifies a value with new data.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The updated value"),
+                ParameterInfo(label: "data", documentation: "The data to update with")
+            ]
+        ),
+        "Delete": ActionSignature(
+            label: "Delete the <result> from the <repository>.",
+            documentation: "Deletes data from a repository or removes a file.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The deletion result"),
+                ParameterInfo(label: "repository", documentation: "The repository to delete from")
+            ]
+        ),
+        "Execute": ActionSignature(
+            label: "Execute the <result> with \"command\".",
+            documentation: "Executes a shell command and captures the output.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The command output"),
+                ParameterInfo(label: "command", documentation: "The shell command to execute")
+            ]
+        ),
+        "Call": ActionSignature(
+            label: "Call the <result> from the <service: method> with { args }.",
+            documentation: "Calls an external service or plugin action.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The call result"),
+                ParameterInfo(label: "service", documentation: "The service and method to invoke"),
+                ParameterInfo(label: "args", documentation: "Arguments to pass")
+            ]
+        ),
+        "Copy": ActionSignature(
+            label: "Copy the <result> from the <source: path> to <destination: path>.",
+            documentation: "Copies a file from source to destination.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The copy result"),
+                ParameterInfo(label: "source", documentation: "Source file path"),
+                ParameterInfo(label: "destination", documentation: "Destination file path")
+            ]
+        ),
+        "Move": ActionSignature(
+            label: "Move the <result> from the <source: path> to <destination: path>.",
+            documentation: "Moves a file from source to destination.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The move result"),
+                ParameterInfo(label: "source", documentation: "Source file path"),
+                ParameterInfo(label: "destination", documentation: "Destination file path")
+            ]
+        ),
+        "Merge": ActionSignature(
+            label: "Merge the <result> from the <source> with <other>.",
+            documentation: "Merges two collections or objects together.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The merged result"),
+                ParameterInfo(label: "source", documentation: "The base collection/object"),
+                ParameterInfo(label: "other", documentation: "The collection/object to merge with")
+            ]
+        ),
+
+        // Additional EXPORT actions
+        "Write": ActionSignature(
+            label: "Write <data> to the <file: path>.",
+            documentation: "Writes data to a file. Supports auto-format serialization (JSON, YAML, CSV).",
+            parameters: [
+                ParameterInfo(label: "data", documentation: "The data to write"),
+                ParameterInfo(label: "file", documentation: "The file path to write to")
+            ]
+        ),
+        "Broadcast": ActionSignature(
+            label: "Broadcast the <message> to the <socket-server>.",
+            documentation: "Broadcasts data to all connected socket or WebSocket clients.",
+            parameters: [
+                ParameterInfo(label: "message", documentation: "The message to broadcast"),
+                ParameterInfo(label: "target", documentation: "The server to broadcast through")
+            ]
+        ),
+
+        // SERVER actions
+        "Connect": ActionSignature(
+            label: "Connect to <host: \"address\"> with { port: 8080 }.",
+            documentation: "Establishes a TCP connection to a remote host.",
+            parameters: [
+                ParameterInfo(label: "host", documentation: "The host address to connect to"),
+                ParameterInfo(label: "port", documentation: "The port number")
+            ]
+        ),
+        "Close": ActionSignature(
+            label: "Close the <connection>.",
+            documentation: "Closes a socket connection or stops a server.",
+            parameters: [
+                ParameterInfo(label: "target", documentation: "The connection or server to close")
+            ]
+        ),
+        "Make": ActionSignature(
+            label: "Make the <result> to the <path: directory-path>.",
+            documentation: "Creates a directory with all intermediate directories (like mkdir -p).",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The created directory path"),
+                ParameterInfo(label: "path", documentation: "The directory path to create")
+            ]
+        ),
+        "Configure": ActionSignature(
+            label: "Configure the <service> with { key: value }.",
+            documentation: "Configures a service with runtime settings (timeouts, limits, etc.).",
+            parameters: [
+                ParameterInfo(label: "service", documentation: "The service to configure"),
+                ParameterInfo(label: "config", documentation: "Configuration key-value pairs")
+            ]
+        ),
     ]
 
     public init() {}

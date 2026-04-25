@@ -84,57 +84,61 @@ Plugins expose system objects by implementing a specific protocol. This section 
 
 ### Registration Mechanism
 
-When a plugin wants to provide a system object, it declares the capability in its `plugin.yaml` manifest:
+When a plugin wants to provide a system object, it declares the capability in the `aro_plugin_info()` response. The `system_objects` array lists each object the plugin registers:
 
-```yaml
-name: redis-plugin
-version: 1.0.0
-description: Redis system object for ARO
-
-provides:
-  - type: rust-plugin
-    path: src/
-    system-objects:
-      - name: redis
-        capabilities: [readable, writable]
-        config:
-          connection-url: "REDIS_URL"
+```json
+{
+  "name": "redis-plugin",
+  "version": "1.0.0",
+  "system_objects": [
+    {
+      "identifier": "redis",
+      "capabilities": ["readable", "writable", "enumerable"],
+      "description": "Redis key-value store access"
+    }
+  ]
+}
 ```
 
-The `system-objects` section tells ARO:
-- **name**: The identifier used in ARO code (`<redis: ...>`)
+The `system_objects` entries tell ARO:
+- **identifier**: The name used in ARO code (`<redis: ...>`)
 - **capabilities**: What operations are supported
-- **config**: Configuration options (environment variables, defaults)
+- **description**: Human-readable description shown in tooling
 
 ### The C ABI Interface
 
-System objects use the same C ABI as actions, with additional functions for read/write operations:
+System objects use the same C ABI as actions, with additional functions for read/write/list operations. All three functions return a heap-allocated JSON string directly. The caller frees the string with `aro_plugin_free`.
 
 ```c
-// Required: Plugin initialization
+// Required: Plugin initialization — declares system objects in JSON
 const char* aro_plugin_info(void);
 
 // System object read operation
-// Returns JSON result or error
-int32_t aro_object_read(
-    const char* object_name,   // e.g., "redis"
-    const char* qualifier,     // e.g., "session:user:123"
-    const char* options_json,  // Additional options
-    char** result_ptr          // Output: JSON result
+// Returns heap-allocated JSON result string (or error JSON)
+// Caller must free with aro_plugin_free
+char* aro_object_read(
+    const char* object_id,     // e.g., "redis"
+    const char* qualifier      // e.g., "session:user:123"
 );
 
 // System object write operation
-// Writes data to the system object
-int32_t aro_object_write(
-    const char* object_name,   // e.g., "redis"
+// Returns heap-allocated JSON result string (or error JSON)
+// Caller must free with aro_plugin_free
+char* aro_object_write(
+    const char* object_id,     // e.g., "redis"
     const char* qualifier,     // e.g., "session:user:123"
-    const char* data_json,     // Data to write
-    const char* options_json,  // Additional options
-    char** result_ptr          // Output: success/error JSON
+    const char* value_json     // JSON-encoded value to write
 );
 
-// Memory cleanup
-void aro_plugin_free(void* ptr);
+// System object list/enumerate operation
+// Returns heap-allocated JSON array string (or error JSON)
+// Caller must free with aro_plugin_free
+char* aro_object_list(
+    const char* pattern        // Glob pattern, e.g., "session:*"
+);
+
+// Memory cleanup — free any string returned by the plugin
+void aro_plugin_free(char* ptr);
 ```
 
 ### Capability Declarations
@@ -184,13 +188,9 @@ provides:
     path: src/
     build:
       cargo-target: cdylib
-    system-objects:
-      - name: redis
-        capabilities: [readable, writable, enumerable]
-        config:
-          connection-url: "REDIS_URL"
-          default-url: "redis://127.0.0.1:6379"
 ```
+
+> System objects are no longer declared in `plugin.yaml`. The plugin reports them at runtime through the `system_objects` array in `aro_plugin_info()`.
 
 ### The Cargo Configuration
 
@@ -264,8 +264,9 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
         "version": "1.0.0",
         "system_objects": [
             {
-                "name": "redis",
-                "capabilities": ["readable", "writable", "enumerable"]
+                "identifier": "redis",
+                "capabilities": ["readable", "writable", "enumerable"],
+                "description": "Redis key-value store access"
             }
         ]
     });
@@ -280,43 +281,31 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
 
 /// Read from Redis
 /// Qualifier is the Redis key
+/// Returns heap-allocated JSON string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_read(
-    object_name: *const c_char,
+    object_id: *const c_char,
     qualifier: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
+) -> *mut c_char {
+    let name = unsafe { CStr::from_ptr(object_id).to_str().unwrap_or("") };
     let key = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("") };
-    let options_str = unsafe { CStr::from_ptr(options_json).to_str().unwrap_or("{}") };
 
     if name != "redis" {
-        return set_error(result_ptr, "Unknown system object");
+        return json_error("Unknown system object");
     }
-
-    // Parse options
-    let options: Value = serde_json::from_str(options_str).unwrap_or(json!({}));
-    let data_type = options.get("type").and_then(|v| v.as_str()).unwrap_or("string");
 
     // Get connection
     let mut conn = match get_connection() {
         Ok(c) => c,
-        Err(e) => return set_error(result_ptr, &e)
+        Err(e) => return json_error(&e)
     };
 
-    // Read based on type
-    let result = match data_type {
-        "string" => read_string(&mut conn, key),
-        "hash" => read_hash(&mut conn, key),
-        "list" => read_list(&mut conn, key),
-        "set" => read_set(&mut conn, key),
-        _ => Err(format!("Unsupported Redis type: {}", data_type))
-    };
+    // Default to auto-detecting value type
+    let result = read_string(&mut conn, key);
 
     match result {
-        Ok(value) => set_result(result_ptr, &value),
-        Err(e) => set_error(result_ptr, &e)
+        Ok(value) => json_ok(&value),
+        Err(e) => json_error(&e)
     }
 }
 
@@ -379,49 +368,37 @@ fn read_set(conn: &mut Connection, key: &str) -> Result<Value, String> {
 // ============================================================
 
 /// Write to Redis
-/// Qualifier is the Redis key
+/// Qualifier is the Redis key; value_json is the JSON-encoded value
+/// Returns heap-allocated JSON result string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_write(
-    object_name: *const c_char,
+    object_id: *const c_char,
     qualifier: *const c_char,
-    data_json: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
+    value_json: *const c_char,
+) -> *mut c_char {
+    let name = unsafe { CStr::from_ptr(object_id).to_str().unwrap_or("") };
     let key = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("") };
-    let data_str = unsafe { CStr::from_ptr(data_json).to_str().unwrap_or("null") };
-    let options_str = unsafe { CStr::from_ptr(options_json).to_str().unwrap_or("{}") };
+    let data_str = unsafe { CStr::from_ptr(value_json).to_str().unwrap_or("null") };
 
     if name != "redis" {
-        return set_error(result_ptr, "Unknown system object");
+        return json_error("Unknown system object");
     }
 
-    // Parse data and options
+    // Parse value
     let data: Value = serde_json::from_str(data_str).unwrap_or(json!(data_str));
-    let options: Value = serde_json::from_str(options_str).unwrap_or(json!({}));
-
-    // Get optional TTL
-    let ttl: Option<u64> = options.get("ttl").and_then(|v| v.as_u64());
-    let data_type = options.get("type").and_then(|v| v.as_str()).unwrap_or("auto");
 
     // Get connection
     let mut conn = match get_connection() {
         Ok(c) => c,
-        Err(e) => return set_error(result_ptr, &e)
+        Err(e) => return json_error(&e)
     };
 
-    // Write based on type
-    let result = match data_type {
-        "hash" => write_hash(&mut conn, key, &data, ttl),
-        "list" => write_list(&mut conn, key, &data, ttl),
-        "set" => write_set(&mut conn, key, &data, ttl),
-        _ => write_string(&mut conn, key, &data, ttl)  // "auto" or "string"
-    };
+    // Auto-detect type from value shape
+    let result = write_string(&mut conn, key, &data, None);
 
     match result {
-        Ok(()) => set_result(result_ptr, &json!({"success": true, "key": key})),
-        Err(e) => set_error(result_ptr, &e)
+        Ok(()) => json_ok(&json!({"success": true, "key": key})),
+        Err(e) => json_error(&e)
     }
 }
 
@@ -525,66 +502,48 @@ fn write_set(conn: &mut Connection, key: &str, data: &Value, ttl: Option<u64>) -
 // Enumerable: List Keys
 // ============================================================
 
-/// List keys matching a pattern
-/// Qualifier is the glob pattern
+/// List keys matching a glob pattern
+/// Returns heap-allocated JSON array string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_list(
-    object_name: *const c_char,
-    qualifier: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
-    let pattern = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("*") };
-    let options_str = unsafe { CStr::from_ptr(options_json).to_str().unwrap_or("{}") };
-
-    if name != "redis" {
-        return set_error(result_ptr, "Unknown system object");
-    }
-
-    // Parse options
-    let options: Value = serde_json::from_str(options_str).unwrap_or(json!({}));
-    let limit: usize = options.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+    pattern: *const c_char,
+) -> *mut c_char {
+    let pattern_str = unsafe { CStr::from_ptr(pattern).to_str().unwrap_or("*") };
 
     // Get connection
     let mut conn = match get_connection() {
         Ok(c) => c,
-        Err(e) => return set_error(result_ptr, &e)
+        Err(e) => return json_error(&e)
     };
 
-    // Scan keys
+    // Scan keys matching pattern
     let keys: Vec<String> = redis::cmd("SCAN")
         .cursor_arg(0)
         .arg("MATCH")
-        .arg(pattern)
+        .arg(pattern_str)
         .arg("COUNT")
-        .arg(limit)
+        .arg(100usize)
         .query::<(u64, Vec<String>)>(&mut conn)
         .map(|(_, keys)| keys)
         .unwrap_or_default();
 
-    set_result(result_ptr, &json!(keys))
+    json_ok(&json!(keys))
 }
 
 // ============================================================
 // Helper Functions
 // ============================================================
 
-fn set_result(result_ptr: *mut *mut c_char, value: &Value) -> i32 {
-    let json_str = serde_json::to_string(value).unwrap();
-    unsafe {
-        *result_ptr = CString::new(json_str).unwrap().into_raw();
-    }
-    0
+/// Return a heap-allocated JSON string for a successful result
+fn json_ok(value: &Value) -> *mut c_char {
+    let json_str = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+    CString::new(json_str).unwrap().into_raw()
 }
 
-fn set_error(result_ptr: *mut *mut c_char, message: &str) -> i32 {
+/// Return a heap-allocated JSON error string
+fn json_error(message: &str) -> *mut c_char {
     let error = json!({"error": message});
-    let json_str = serde_json::to_string(&error).unwrap();
-    unsafe {
-        *result_ptr = CString::new(json_str).unwrap().into_raw();
-    }
-    1
+    CString::new(serde_json::to_string(&error).unwrap()).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -675,13 +634,9 @@ provides:
     path: src/
     build:
       cargo-target: cdylib
-    system-objects:
-      - name: elasticsearch
-        capabilities: [readable, writable, enumerable]
-        config:
-          connection-url: "ELASTICSEARCH_URL"
-          default-url: "http://localhost:9200"
 ```
+
+> System objects are declared in `aro_plugin_info()` at runtime, not in `plugin.yaml`.
 
 ### The Cargo Configuration
 
@@ -731,8 +686,9 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
         "version": "1.0.0",
         "system_objects": [
             {
-                "name": "elasticsearch",
-                "capabilities": ["readable", "writable", "enumerable"]
+                "identifier": "elasticsearch",
+                "capabilities": ["readable", "writable", "enumerable"],
+                "description": "Elasticsearch document store access"
             }
         ]
     });
@@ -746,23 +702,19 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
 // ============================================================
 
 /// Read from Elasticsearch
-/// Qualifier format: "index/document_id" or "index" (for search)
+/// Qualifier format: "index/document_id" or "index" (for match_all)
+/// Returns heap-allocated JSON string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_read(
-    object_name: *const c_char,
+    object_id: *const c_char,
     qualifier: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
+) -> *mut c_char {
+    let name = unsafe { CStr::from_ptr(object_id).to_str().unwrap_or("") };
     let qualifier_str = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("") };
-    let options_str = unsafe { CStr::from_ptr(options_json).to_str().unwrap_or("{}") };
 
     if name != "elasticsearch" {
-        return set_error(result_ptr, "Unknown system object");
+        return json_error("Unknown system object");
     }
-
-    let options: Value = serde_json::from_str(options_str).unwrap_or(json!({}));
 
     // Parse qualifier: "index/id" or "index"
     let parts: Vec<&str> = qualifier_str.splitn(2, '/').collect();
@@ -771,17 +723,14 @@ pub extern "C" fn aro_object_read(
 
     if let Some(id) = doc_id {
         // Get specific document
-        read_document(index, id, result_ptr)
-    } else if let Some(query) = options.get("query") {
-        // Search with query
-        search_documents(index, query, &options, result_ptr)
+        read_document(index, id)
     } else {
         // List all documents (simple match_all)
-        search_documents(index, &json!({"match_all": {}}), &options, result_ptr)
+        search_documents(index, &json!({"match_all": {}}), &json!({}))
     }
 }
 
-fn read_document(index: &str, id: &str, result_ptr: *mut *mut c_char) -> i32 {
+fn read_document(index: &str, id: &str) -> *mut c_char {
     let url = format!("{}/{}/_doc/{}", get_base_url(), index, id);
 
     match client().get(&url).send() {
@@ -791,21 +740,21 @@ fn read_document(index: &str, id: &str, result_ptr: *mut *mut c_char) -> i32 {
                     Ok(body) => {
                         // Return the _source field
                         let source = body.get("_source").cloned().unwrap_or(Value::Null);
-                        set_result(result_ptr, &source)
+                        json_ok(&source)
                     }
-                    Err(e) => set_error(result_ptr, &format!("Failed to parse response: {}", e))
+                    Err(e) => json_error(&format!("Failed to parse response: {}", e))
                 }
             } else if response.status().as_u16() == 404 {
-                set_result(result_ptr, &Value::Null)
+                json_ok(&Value::Null)
             } else {
-                set_error(result_ptr, &format!("Elasticsearch error: {}", response.status()))
+                json_error(&format!("Elasticsearch error: {}", response.status()))
             }
         }
-        Err(e) => set_error(result_ptr, &format!("Request failed: {}", e))
+        Err(e) => json_error(&format!("Request failed: {}", e))
     }
 }
 
-fn search_documents(index: &str, query: &Value, options: &Value, result_ptr: *mut *mut c_char) -> i32 {
+fn search_documents(index: &str, query: &Value, options: &Value) -> *mut c_char {
     let url = format!("{}/{}/_search", get_base_url(), index);
 
     let size = options.get("limit").and_then(|v| v.as_u64()).unwrap_or(10);
@@ -846,18 +795,18 @@ fn search_documents(index: &str, query: &Value, options: &Value, result_ptr: *mu
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
 
-                        set_result(result_ptr, &json!({
+                        json_ok(&json!({
                             "documents": hits,
                             "total": total
                         }))
                     }
-                    Err(e) => set_error(result_ptr, &format!("Failed to parse response: {}", e))
+                    Err(e) => json_error(&format!("Failed to parse response: {}", e))
                 }
             } else {
-                set_error(result_ptr, &format!("Elasticsearch error: {}", response.status()))
+                json_error(&format!("Elasticsearch error: {}", response.status()))
             }
         }
-        Err(e) => set_error(result_ptr, &format!("Request failed: {}", e))
+        Err(e) => json_error(&format!("Request failed: {}", e))
     }
 }
 
@@ -867,25 +816,24 @@ fn search_documents(index: &str, query: &Value, options: &Value, result_ptr: *mu
 
 /// Write to Elasticsearch
 /// Qualifier format: "index/document_id" or "index" (auto-generated ID)
+/// Returns heap-allocated JSON result string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_write(
-    object_name: *const c_char,
+    object_id: *const c_char,
     qualifier: *const c_char,
-    data_json: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
+    value_json: *const c_char,
+) -> *mut c_char {
+    let name = unsafe { CStr::from_ptr(object_id).to_str().unwrap_or("") };
     let qualifier_str = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("") };
-    let data_str = unsafe { CStr::from_ptr(data_json).to_str().unwrap_or("null") };
+    let data_str = unsafe { CStr::from_ptr(value_json).to_str().unwrap_or("null") };
 
     if name != "elasticsearch" {
-        return set_error(result_ptr, "Unknown system object");
+        return json_error("Unknown system object");
     }
 
     let data: Value = match serde_json::from_str(data_str) {
         Ok(v) => v,
-        Err(e) => return set_error(result_ptr, &format!("Invalid JSON: {}", e))
+        Err(e) => return json_error(&format!("Invalid JSON: {}", e))
     };
 
     // Parse qualifier: "index/id" or "index"
@@ -896,21 +844,17 @@ pub extern "C" fn aro_object_write(
     // Handle delete (null data)
     if data.is_null() {
         if let Some(id) = doc_id {
-            return delete_document(index, id, result_ptr);
+            return delete_document(index, id);
         } else {
-            return set_error(result_ptr, "Document ID required for deletion");
+            return json_error("Document ID required for deletion");
         }
     }
 
     // Index or update document
-    if let Some(id) = doc_id {
-        index_document(index, Some(id), &data, result_ptr)
-    } else {
-        index_document(index, None, &data, result_ptr)
-    }
+    index_document(index, doc_id, &data)
 }
 
-fn index_document(index: &str, id: Option<&str>, data: &Value, result_ptr: *mut *mut c_char) -> i32 {
+fn index_document(index: &str, id: Option<&str>, data: &Value) -> *mut c_char {
     let url = match id {
         Some(doc_id) => format!("{}/{}/_doc/{}", get_base_url(), index, doc_id),
         None => format!("{}/{}/_doc", get_base_url(), index)
@@ -929,38 +873,38 @@ fn index_document(index: &str, id: Option<&str>, data: &Value, result_ptr: *mut 
             if response.status().is_success() {
                 match response.json::<Value>() {
                     Ok(body) => {
-                        set_result(result_ptr, &json!({
+                        json_ok(&json!({
                             "success": true,
                             "_id": body.get("_id"),
                             "_index": body.get("_index"),
                             "result": body.get("result")
                         }))
                     }
-                    Err(e) => set_error(result_ptr, &format!("Failed to parse response: {}", e))
+                    Err(e) => json_error(&format!("Failed to parse response: {}", e))
                 }
             } else {
-                set_error(result_ptr, &format!("Elasticsearch error: {}", response.status()))
+                json_error(&format!("Elasticsearch error: {}", response.status()))
             }
         }
-        Err(e) => set_error(result_ptr, &format!("Request failed: {}", e))
+        Err(e) => json_error(&format!("Request failed: {}", e))
     }
 }
 
-fn delete_document(index: &str, id: &str, result_ptr: *mut *mut c_char) -> i32 {
+fn delete_document(index: &str, id: &str) -> *mut c_char {
     let url = format!("{}/{}/_doc/{}", get_base_url(), index, id);
 
     match client().delete(&url).send() {
         Ok(response) => {
             if response.status().is_success() || response.status().as_u16() == 404 {
-                set_result(result_ptr, &json!({
+                json_ok(&json!({
                     "success": true,
                     "deleted": response.status().is_success()
                 }))
             } else {
-                set_error(result_ptr, &format!("Elasticsearch error: {}", response.status()))
+                json_error(&format!("Elasticsearch error: {}", response.status()))
             }
         }
-        Err(e) => set_error(result_ptr, &format!("Request failed: {}", e))
+        Err(e) => json_error(&format!("Request failed: {}", e))
     }
 }
 
@@ -968,21 +912,14 @@ fn delete_document(index: &str, id: &str, result_ptr: *mut *mut c_char) -> i32 {
 // Enumerable: List Indices
 // ============================================================
 
+/// List index names matching a pattern
+/// Returns heap-allocated JSON array string; caller must free with aro_plugin_free
 #[no_mangle]
 pub extern "C" fn aro_object_list(
-    object_name: *const c_char,
-    qualifier: *const c_char,
-    options_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let name = unsafe { CStr::from_ptr(object_name).to_str().unwrap_or("") };
-    let pattern = unsafe { CStr::from_ptr(qualifier).to_str().unwrap_or("*") };
-
-    if name != "elasticsearch" {
-        return set_error(result_ptr, "Unknown system object");
-    }
-
-    let url = format!("{}/_cat/indices/{}?format=json", get_base_url(), pattern);
+    pattern: *const c_char,
+) -> *mut c_char {
+    let pattern_str = unsafe { CStr::from_ptr(pattern).to_str().unwrap_or("*") };
+    let url = format!("{}/_cat/indices/{}?format=json", get_base_url(), pattern_str);
 
     match client().get(&url).send() {
         Ok(response) => {
@@ -993,15 +930,15 @@ pub extern "C" fn aro_object_list(
                             .filter_map(|idx| idx.get("index").and_then(|i| i.as_str()))
                             .map(|s| s.to_string())
                             .collect();
-                        set_result(result_ptr, &json!(names))
+                        json_ok(&json!(names))
                     }
-                    Err(e) => set_error(result_ptr, &format!("Failed to parse response: {}", e))
+                    Err(e) => json_error(&format!("Failed to parse response: {}", e))
                 }
             } else {
-                set_error(result_ptr, &format!("Elasticsearch error: {}", response.status()))
+                json_error(&format!("Elasticsearch error: {}", response.status()))
             }
         }
-        Err(e) => set_error(result_ptr, &format!("Request failed: {}", e))
+        Err(e) => json_error(&format!("Request failed: {}", e))
     }
 }
 
@@ -1009,21 +946,16 @@ pub extern "C" fn aro_object_list(
 // Helper Functions
 // ============================================================
 
-fn set_result(result_ptr: *mut *mut c_char, value: &Value) -> i32 {
-    let json_str = serde_json::to_string(value).unwrap();
-    unsafe {
-        *result_ptr = CString::new(json_str).unwrap().into_raw();
-    }
-    0
+/// Return a heap-allocated JSON string for a successful result
+fn json_ok(value: &Value) -> *mut c_char {
+    let json_str = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+    CString::new(json_str).unwrap().into_raw()
 }
 
-fn set_error(result_ptr: *mut *mut c_char, message: &str) -> i32 {
+/// Return a heap-allocated JSON error string
+fn json_error(message: &str) -> *mut c_char {
     let error = json!({"error": message});
-    let json_str = serde_json::to_string(&error).unwrap();
-    unsafe {
-        *result_ptr = CString::new(json_str).unwrap().into_raw();
-    }
-    1
+    CString::new(serde_json::to_string(&error).unwrap()).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -1260,20 +1192,16 @@ mod tests {
         // Requires running Redis
         let object = CString::new("redis").unwrap();
         let qualifier = CString::new("nonexistent:key:12345").unwrap();
-        let options = CString::new("{}").unwrap();
-        let mut result: *mut c_char = std::ptr::null_mut();
 
-        let status = aro_object_read(
+        let result = aro_object_read(
             object.as_ptr(),
             qualifier.as_ptr(),
-            options.as_ptr(),
-            &mut result
         );
 
-        // Should succeed but return null
-        assert_eq!(status, 0);
+        assert!(!result.is_null());
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         let value: Value = serde_json::from_str(result_str).unwrap();
+        // Non-existent key returns null
         assert!(value.is_null());
 
         aro_plugin_free(result);

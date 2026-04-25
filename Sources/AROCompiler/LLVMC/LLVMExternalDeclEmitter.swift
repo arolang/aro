@@ -38,6 +38,13 @@ public final class LLVMExternalDeclEmitter {
     private var _setEmbeddedOpenapi: Function?
     private var _setEmbeddedTemplates: Function?
     private var _registerEmbeddedPlugin: Function?
+    private var _registerStaticPlugin: Function?
+    private var _registerEmbeddedPythonPlugin: Function?
+    private var _setPythonStdlib: Function?
+    private var _setPythonDeps: Function?
+
+    // Cached per-plugin static function declarations
+    private var staticPluginFunctions: [String: StaticPluginFunctions] = [:]
 
     // Variable operations
     private var _variableBindString: Function?
@@ -249,6 +256,35 @@ public final class LLVMExternalDeclEmitter {
         _registerEmbeddedPlugin = ctx.module.declareFunction(
             "aro_register_embedded_plugin",
             types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // void @aro_register_static_plugin(ptr name, ptr yaml, ptr info, ptr execute, ptr free, ptr qualifier, ptr init, ptr shutdown)
+        // Registers a statically-linked plugin with function pointers (no dlopen)
+        _registerStaticPlugin = ctx.module.declareFunction(
+            "aro_register_static_plugin",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr, ptr, ptr, ptr, ptr, ptr])
+        )
+
+        // void @aro_register_embedded_python_plugin(ptr name, ptr yaml, ptr source)
+        // Registers an embedded Python plugin with its source code
+        _registerEmbeddedPythonPlugin = ctx.module.declareFunction(
+            "aro_register_embedded_python_plugin",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // void @aro_set_python_stdlib(ptr data, i64 length)
+        // Sets the embedded Python stdlib zip data
+        let i64 = ctx.i64Type
+        _setPythonStdlib = ctx.module.declareFunction(
+            "aro_set_python_stdlib",
+            types.voidFunctionType(parameters: [ptr, i64])
+        )
+
+        // void @aro_set_python_deps(ptr data, i64 length)
+        // Sets the embedded Python deps zip data
+        _setPythonDeps = ctx.module.declareFunction(
+            "aro_set_python_deps",
+            types.voidFunctionType(parameters: [ptr, i64])
         )
     }
 
@@ -567,6 +603,63 @@ public final class LLVMExternalDeclEmitter {
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
     public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }
     public var registerEmbeddedPlugin: Function { _registerEmbeddedPlugin! }
+    public var registerStaticPlugin: Function { _registerStaticPlugin! }
+    public var registerEmbeddedPythonPlugin: Function { _registerEmbeddedPythonPlugin! }
+    public var setPythonStdlib: Function { _setPythonStdlib! }
+    public var setPythonDeps: Function { _setPythonDeps! }
+
+    /// Declare external symbols for a statically-linked plugin and return references.
+    ///
+    /// Each plugin's C ABI symbols are renamed with a unique prefix during compilation
+    /// (e.g., `aro_plugin_info` → `aro_static_GreetingService__aro_plugin_info`).
+    /// This method declares only the symbols that actually exist in the plugin.
+    public func declareStaticPluginExternals(pluginName: String, availableSymbols: Set<String>) -> StaticPluginFunctions {
+        if let cached = staticPluginFunctions[pluginName] { return cached }
+
+        let ptr = ctx.ptrType
+        let prefix = "aro_static_\(pluginName)__"
+
+        // Declare only symbols that actually exist; return null for the rest
+        var info: Function?
+        var execute: Function?
+        var free: Function?
+        var qualifier: Function?
+        var initFn: Function?
+        var shutdown: Function?
+
+        if availableSymbols.contains("aro_plugin_info") {
+            info = ctx.module.declareFunction("\(prefix)aro_plugin_info", types.functionType(parameters: [], returning: ptr))
+        }
+        if availableSymbols.contains("aro_plugin_execute") {
+            execute = ctx.module.declareFunction("\(prefix)aro_plugin_execute", types.functionType(parameters: [ptr, ptr], returning: ptr))
+        }
+        if availableSymbols.contains("aro_plugin_free") {
+            free = ctx.module.declareFunction("\(prefix)aro_plugin_free", types.voidFunctionType(parameters: [ptr]))
+        }
+        if availableSymbols.contains("aro_plugin_qualifier") {
+            qualifier = ctx.module.declareFunction("\(prefix)aro_plugin_qualifier", types.functionType(parameters: [ptr, ptr], returning: ptr))
+        }
+        // Prefer aro_plugin_register over aro_plugin_init (SDK plugins need register first)
+        if availableSymbols.contains("aro_plugin_register") {
+            initFn = ctx.module.declareFunction("\(prefix)aro_plugin_register", types.voidFunctionType(parameters: []))
+        } else if availableSymbols.contains("aro_plugin_init") {
+            initFn = ctx.module.declareFunction("\(prefix)aro_plugin_init", types.voidFunctionType(parameters: []))
+        }
+        if availableSymbols.contains("aro_plugin_shutdown") {
+            shutdown = ctx.module.declareFunction("\(prefix)aro_plugin_shutdown", types.voidFunctionType(parameters: []))
+        }
+
+        let funcs = StaticPluginFunctions(
+            info: info,
+            execute: execute,
+            free: free,
+            qualifier: qualifier,
+            initFn: initFn,
+            shutdown: shutdown
+        )
+        staticPluginFunctions[pluginName] = funcs
+        return funcs
+    }
 
     // Variable operations
     public var variableBindString: Function { _variableBindString! }
@@ -615,6 +708,17 @@ public final class LLVMExternalDeclEmitter {
 
     /// Dynamic action function for plugin-provided custom actions
     public var actionDynamic: Function { _actionDynamic! }
+}
+
+/// References to declared LLVM functions for a single statically-linked plugin.
+/// nil fields mean the plugin does not export that symbol.
+public struct StaticPluginFunctions {
+    public let info: Function?
+    public let execute: Function?
+    public let free: Function?
+    public let qualifier: Function?
+    public let initFn: Function?
+    public let shutdown: Function?
 }
 
 #endif

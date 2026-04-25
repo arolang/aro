@@ -413,4 +413,83 @@ public extension ExecutionContext {
         }
         return typed
     }
+
+    // MARK: - Path/Value Resolution Helper
+
+    /// Resolve a string value from a descriptor's specifiers and base, using the
+    /// standard ARO resolution order:
+    ///   1. First specifier resolved as a context variable
+    ///   2. Base resolved as a context variable
+    ///   3. Base used as a literal (unless it's a generic keyword like "file" or "directory")
+    ///   4. First specifier used as a literal
+    ///
+    /// - Parameters:
+    ///   - base: The descriptor's base identifier
+    ///   - specifiers: The descriptor's specifiers
+    ///   - excluding: Generic keywords that should not be treated as literal values
+    ///   - field: Human-readable field name for the error message
+    ///   - action: Action name for the error message
+    /// - Returns: The resolved string value
+    /// - Throws: ActionError.missingRequiredField if no value can be resolved
+    func resolveString(
+        base: String,
+        specifiers: [String],
+        excluding: Set<String>,
+        field: String,
+        action: String
+    ) throws -> String {
+        if let spec = specifiers.first, let v: String = resolve(spec) { return v }
+        if let v: String = resolve(base) { return v }
+        if !excluding.contains(base) { return base }
+        if let spec = specifiers.first { return spec }
+        throw ActionError.missingRequiredField(field: field, action: action)
+    }
+
+    // MARK: - Port Resolution Helper
+
+    /// Resolve a port number from context bindings and object specifiers, using
+    /// the standard ARO resolution order:
+    ///   1. `_with_` binding (Int directly, or dict with "port" key)
+    ///   2. `_literal_` binding (Int or parseable String)
+    ///   3. `_expression_` binding (Int)
+    ///   4. First object specifier (parseable as Int)
+    ///   5. Default value
+    ///
+    /// - Parameters:
+    ///   - specifiers: The object descriptor's specifiers
+    ///   - defaultPort: Fallback port if nothing resolves
+    ///   - envVar: Optional environment variable that overrides the resolved port
+    /// - Returns: The resolved port number
+    func resolvePort(
+        specifiers: [String],
+        defaultPort: Int,
+        envVar: String? = nil
+    ) -> Int {
+        var port = defaultPort
+
+        if let withValue = resolveAny("_with_") {
+            if let p = withValue as? Int {
+                port = p
+            } else if let config = withValue as? [String: any Sendable],
+                      let p = config["port"] as? Int {
+                port = p
+            }
+        } else if let p = resolveAny("_literal_") as? Int {
+            port = p
+        } else if let s = resolveAny("_literal_") as? String, let p = Int(s) {
+            port = p
+        } else if let p = resolveAny("_expression_") as? Int {
+            port = p
+        } else if let spec = specifiers.first, let p = Int(spec) {
+            port = p
+        }
+
+        if let envName = envVar,
+           let envVal = ProcessInfo.processInfo.environment[envName],
+           let p = Int(envVal) {
+            port = p
+        }
+
+        return port
+    }
 }

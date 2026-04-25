@@ -32,18 +32,13 @@ public struct ListAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get directory path from specifiers or base
-        let directoryPath: String
-        if let specifier = object.specifiers.first, let path: String = context.resolve(specifier) {
-            directoryPath = path
-        } else if let path: String = context.resolve(object.base) {
-            directoryPath = path
-        } else if object.base != "directory" {
-            directoryPath = object.base
-        } else if let specifier = object.specifiers.first {
-            directoryPath = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a directory path", action: "List")
-        }
+        let directoryPath = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["directory"],
+            field: "a directory path",
+            action: "List"
+        )
 
         // Check for pattern in specifiers (e.g., matching "*.aro")
         let pattern = result.specifiers.first { $0.contains("*") || $0.contains("?") }
@@ -344,18 +339,13 @@ public struct StatAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get path from specifiers or base
-        let path: String
-        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
-            path = resolvedPath
-        } else if let resolvedPath: String = context.resolve(object.base) {
-            path = resolvedPath
-        } else if object.base != "file" && object.base != "directory" {
-            path = object.base
-        } else if let specifier = object.specifiers.first {
-            path = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a file or directory path", action: "Stat")
-        }
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["file", "directory"],
+            field: "a file or directory path",
+            action: "Stat"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {
@@ -399,18 +389,13 @@ public struct ExistsAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get path from specifiers or base
-        let path: String
-        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
-            path = resolvedPath
-        } else if let resolvedPath: String = context.resolve(object.base) {
-            path = resolvedPath
-        } else if object.base != "file" && object.base != "directory" {
-            path = object.base
-        } else if let specifier = object.specifiers.first {
-            path = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a file or directory path", action: "Exists")
-        }
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["file", "directory"],
+            field: "a file or directory path",
+            action: "Exists"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {
@@ -476,18 +461,13 @@ public struct MakeAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get path from specifiers or base
-        let path: String
-        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
-            path = resolvedPath
-        } else if let resolvedPath: String = context.resolve(object.base) {
-            path = resolvedPath
-        } else if object.base != "path" {
-            path = object.base
-        } else if let specifier = object.specifiers.first {
-            path = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a path", action: "Make")
-        }
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["path"],
+            field: "a path",
+            action: "Make"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {
@@ -544,32 +524,22 @@ public struct CopyAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get source path from result specifiers
-        let sourcePath: String
-        if let specifier = result.specifiers.first, let path: String = context.resolve(specifier) {
-            sourcePath = path
-        } else if let path: String = context.resolve(result.base) {
-            sourcePath = path
-        } else if result.base != "file" && result.base != "directory" {
-            sourcePath = result.base
-        } else if let specifier = result.specifiers.first {
-            sourcePath = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a source path", action: "Copy")
-        }
+        let sourcePath = try context.resolveString(
+            base: result.base,
+            specifiers: result.specifiers,
+            excluding: ["file", "directory"],
+            field: "a source path",
+            action: "Copy"
+        )
 
         // Get destination path from object specifiers
-        let destPath: String
-        if let specifier = object.specifiers.first, let path: String = context.resolve(specifier) {
-            destPath = path
-        } else if let path: String = context.resolve(object.base) {
-            destPath = path
-        } else if object.base != "destination" {
-            destPath = object.base
-        } else if let specifier = object.specifiers.first {
-            destPath = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a destination path", action: "Copy")
-        }
+        let destPath = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["destination"],
+            field: "a destination path",
+            action: "Copy"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {
@@ -614,32 +584,22 @@ public struct MoveAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get source path from result specifiers
-        let sourcePath: String
-        if let specifier = result.specifiers.first, let path: String = context.resolve(specifier) {
-            sourcePath = path
-        } else if let path: String = context.resolve(result.base) {
-            sourcePath = path
-        } else if result.base != "file" && result.base != "directory" {
-            sourcePath = result.base
-        } else if let specifier = result.specifiers.first {
-            sourcePath = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a source path", action: "Move")
-        }
+        let sourcePath = try context.resolveString(
+            base: result.base,
+            specifiers: result.specifiers,
+            excluding: ["file", "directory"],
+            field: "a source path",
+            action: "Move"
+        )
 
         // Get destination path from object specifiers
-        let destPath: String
-        if let specifier = object.specifiers.first, let path: String = context.resolve(specifier) {
-            destPath = path
-        } else if let path: String = context.resolve(object.base) {
-            destPath = path
-        } else if object.base != "destination" {
-            destPath = object.base
-        } else if let specifier = object.specifiers.first {
-            destPath = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a destination path", action: "Move")
-        }
+        let destPath = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["destination"],
+            field: "a destination path",
+            action: "Move"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {
@@ -707,18 +667,13 @@ public struct AppendAction: ActionImplementation {
         }
 
         // Get file path from specifiers or base
-        let path: String
-        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
-            path = resolvedPath
-        } else if let resolvedPath: String = context.resolve(object.base) {
-            path = resolvedPath
-        } else if object.base != "file" {
-            path = object.base
-        } else if let specifier = object.specifiers.first {
-            path = specifier
-        } else {
-            throw ActionError.missingRequiredField(field: "a file path", action: "Append")
-        }
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["file"],
+            field: "a file path",
+            action: "Append"
+        )
 
         // Get file service
         guard let fileService = context.service(FileSystemService.self) else {

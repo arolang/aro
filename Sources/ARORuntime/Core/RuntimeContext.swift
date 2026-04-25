@@ -559,8 +559,9 @@ public actor RuntimeContext: ExecutionContext {
 
         // If it's an array of dictionaries (common case)
         if let dictArray = value as? [[String: any Sendable]] {
-            if T.self == [String: any Sendable].self {
-                return AROStream.from(dictArray as! [T])
+            if T.self == [String: any Sendable].self,
+               let typed = dictArray as? [T] {
+                return AROStream.from(typed)
             }
         }
 

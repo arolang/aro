@@ -178,6 +178,65 @@ public actor ActionRegistry {
         }
         return result
     }
+
+    // MARK: - Inspection Helpers
+
+    /// Summary of a built-in action for display/documentation purposes
+    public struct BuiltInActionInfo: Sendable {
+        /// The canonical display name (e.g. "Extract", "Compute")
+        public let name: String
+        /// Semantic role
+        public let role: ActionRole
+        /// All verbs that invoke this action
+        public let verbs: [String]
+        /// Valid prepositions
+        public let prepositions: [String]
+    }
+
+    /// Returns one `BuiltInActionInfo` per unique built-in action type, deduplicated
+    /// so that actions with multiple verbs appear only once.
+    public var allBuiltInActionInfos: [BuiltInActionInfo] {
+        var seen: Set<ObjectIdentifier> = []
+        var result: [BuiltInActionInfo] = []
+        for actionType in actions.values {
+            let id = ObjectIdentifier(actionType)
+            guard seen.insert(id).inserted else { continue }
+            let name = String(describing: actionType)
+                .replacingOccurrences(of: "Action", with: "")
+            let preps = actionType.validPrepositions.map { $0.rawValue }.sorted()
+            result.append(BuiltInActionInfo(
+                name: name,
+                role: actionType.role,
+                verbs: actionType.verbs.sorted(),
+                prepositions: preps
+            ))
+        }
+        return result.sorted { $0.name < $1.name }
+    }
+
+    /// Summary of a plugin (dynamic) action for display/documentation purposes
+    public struct PluginActionInfo: Sendable {
+        /// The registered verb
+        public let verb: String
+        /// Name of the plugin that registered this verb (nil for anonymous)
+        public let pluginName: String?
+    }
+
+    /// Returns one entry per registered dynamic (plugin) verb.
+    /// Each entry includes the plugin name if the verb was registered with `pluginName:`.
+    public var allPluginActionInfos: [PluginActionInfo] {
+        // Build an inverted map from verb → plugin name
+        var verbToPlugin: [String: String] = [:]
+        for (plugin, verbs) in pluginVerbs {
+            for verb in verbs {
+                verbToPlugin[verb] = plugin
+            }
+        }
+
+        return dynamicHandlers.keys.sorted().map { verb in
+            PluginActionInfo(verb: verb, pluginName: verbToPlugin[verb])
+        }
+    }
 }
 
 // MARK: - Action Execution Helper

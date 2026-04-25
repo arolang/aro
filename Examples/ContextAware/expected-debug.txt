@@ -1,4 +1,4 @@
-# Generated: Tue Feb 24 15:40:36 2026
+# Generated: Mon Apr 13 16:03:31 2026
 # Type: debug
 # Command: aro run ./Examples/ContextAware --debug
 ---
@@ -16,4 +16,4 @@ items: 3
 order-id: ORD-2024-001
 status: completed
 total: 249.99
-HTTP Server started on port __NUMBER__
+HTTP Server started on port 8081

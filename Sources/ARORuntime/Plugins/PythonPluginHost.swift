@@ -33,7 +33,7 @@ import Foundation
 /// Note: For production use with better performance, consider using PythonKit
 /// for direct Python embedding. This subprocess approach is simpler and more
 /// portable but has higher overhead per call.
-public final class PythonPluginHost: @unchecked Sendable {
+public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin name
     public let pluginName: String
 
@@ -41,7 +41,7 @@ public final class PythonPluginHost: @unchecked Sendable {
     ///
     /// Used as the prefix when registering qualifiers (e.g., "stats.sort")
     /// and actions (e.g., "markdown.tohtml"). Nil when no explicit handler is set.
-    private let qualifierNamespace: String?
+    public let qualifierNamespace: String?
 
     /// Path to the plugin
     public let pluginPath: URL
@@ -61,8 +61,14 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Registered actions
     private var actions: Set<String> = []
 
+    /// Maps verb → canonical action name for structured action descriptors (SDK format)
+    private var verbToActionName: [String: String] = [:]
+
     /// Qualifier registrations from this plugin
-    private var qualifierRegistrations: [QualifierRegistration] = []
+    public var qualifierRegistrations: [QualifierRegistration] = []
+
+    /// Subprocess timeout in seconds
+    private static let defaultTimeout: TimeInterval = 30
 
     /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
@@ -110,7 +116,7 @@ public final class PythonPluginHost: @unchecked Sendable {
         let script = """
         import sys
         import json
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_plugin_info
             info = aro_plugin_info()
@@ -133,58 +139,40 @@ public final class PythonPluginHost: @unchecked Sendable {
             throw PythonPluginError.loadFailed(pluginName, message: error)
         }
 
-        // Parse qualifiers array
-        var qualifierDescriptors: [PythonQualifierDescriptor] = []
-        if let qualifierObjects = json["qualifiers"] as? [[String: Any]] {
-            for qualifierObj in qualifierObjects {
-                if let qualifierName = qualifierObj["name"] as? String {
-                    // Parse input types
-                    var inputTypes: Set<QualifierInputType> = []
-                    if let typeStrings = qualifierObj["inputTypes"] as? [String] {
-                        for typeStr in typeStrings {
-                            if let inputType = QualifierInputType(rawValue: typeStr) {
-                                inputTypes.insert(inputType)
-                            }
-                        }
-                    }
-                    // Default to all types if none specified
-                    if inputTypes.isEmpty {
-                        inputTypes = Set(QualifierInputType.allCases)
-                    }
+        // Parse qualifiers and actions using shared helpers
+        let qualifierDescriptors = Self.parseQualifierDescriptors(from: json)
 
-                    let description = qualifierObj["description"] as? String
-
-                    qualifierDescriptors.append(PythonQualifierDescriptor(
-                        name: qualifierName,
-                        inputTypes: inputTypes,
-                        description: description
-                    ))
+        // Parse actions: supports both flat [String] (legacy) and structured [[String: Any]] (SDK)
+        // Python uses a flattened verb list with verb→action mapping for SDK format
+        var parsedActions: [String] = []
+        let parsedActionList = Self.parseActionList(from: json)
+        if !parsedActionList.verbsMap.isEmpty {
+            // SDK format: flatten verbs and build reverse mapping
+            for name in parsedActionList.names {
+                if let verbs = parsedActionList.verbsMap[name], !verbs.isEmpty {
+                    parsedActions.append(contentsOf: verbs)
+                    for verb in verbs {
+                        verbToActionName[verb] = name
+                    }
+                } else {
+                    parsedActions.append(name)
                 }
             }
+        } else {
+            parsedActions = parsedActionList.names
         }
 
         pluginInfo = PythonPluginInfo(
             name: json["name"] as? String ?? pluginName,
             version: json["version"] as? String ?? "1.0.0",
-            actions: json["actions"] as? [String] ?? [],
+            actions: parsedActions,
             qualifiers: qualifierDescriptors
         )
 
         actions = Set(pluginInfo?.actions ?? [])
 
-        // Register qualifiers with QualifierRegistry
-        for descriptor in qualifierDescriptors {
-            let registration = QualifierRegistration(
-                qualifier: descriptor.name,
-                inputTypes: descriptor.inputTypes,
-                pluginName: pluginName,
-                namespace: qualifierNamespace,
-                description: descriptor.description,
-                pluginHost: self
-            )
-            qualifierRegistrations.append(registration)
-            QualifierRegistry.shared.register(registration)
-        }
+        // Register qualifiers using shared helper
+        registerQualifiers(qualifierDescriptors)
     }
 
     // MARK: - Execution
@@ -197,15 +185,16 @@ public final class PythonPluginHost: @unchecked Sendable {
         // Escape JSON for Python string (using base64 to avoid escaping issues)
         let base64Input = inputData.base64EncodedString()
 
-        // Convert action name to snake_case for Python function
-        let pythonFuncName = toSnakeCase(action)
+        // Resolve verb → canonical action name (SDK format), then convert to snake_case
+        let resolvedAction = verbToActionName[action] ?? action
+        let pythonFuncName = toSnakeCase(resolvedAction)
 
         // Create execution script
         let script = """
         import sys
         import json
         import base64
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_action_\(pythonFuncName)
             input_json = base64.b64decode('\(base64Input)').decode('utf-8')
@@ -241,9 +230,7 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        // Use semaphore to ensure all registrations complete before returning
-        let semaphore = DispatchSemaphore(value: 0)
-        var registrationCount = 0
+        var entries: [(verb: String, pluginName: String, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
         for action in actions {
             // When a handler namespace is set, register only as "handler.verb".
@@ -260,39 +247,18 @@ public final class PythonPluginHost: @unchecked Sendable {
                 actionName: action,
                 host: self
             )
-
-            registrationCount += 1
-            Task {
-                await ActionRegistry.shared.registerDynamic(
-                    verb: registeredVerb,
-                    handler: wrapper.handle,
-                    pluginName: pluginName
-                )
-                semaphore.signal()
-            }
+            entries.append((verb: registeredVerb, pluginName: pluginName, handler: wrapper.handle))
         }
 
-        // Wait for all registrations to complete
-        for _ in 0..<registrationCount {
-            semaphore.wait()
-        }
+        syncRegisterActions(entries)
     }
 
     // MARK: - Unload
 
     /// Unload the plugin
     public func unload() {
-        // Unregister dynamic actions from ActionRegistry
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            await ActionRegistry.shared.unregisterPlugin(pluginName)
-            semaphore.signal()
-        }
-        semaphore.wait()
-
-        // Unregister qualifiers
-        QualifierRegistry.shared.unregisterPlugin(pluginName)
-        qualifierRegistrations.removeAll()
+        // Unregister from ActionRegistry and QualifierRegistry (shared logic)
+        unloadFromRegistries()
 
         actions.removeAll()
         pluginInfo = nil
@@ -311,7 +277,20 @@ public final class PythonPluginHost: @unchecked Sendable {
         process.standardError = errorPipe
 
         try process.run()
-        process.waitUntilExit()
+        defer { if process.isRunning { process.terminate() } }
+
+        // Wait with timeout to prevent hung plugins from blocking the runtime
+        let completed = process.waitWithTimeout(Self.defaultTimeout)
+        if !completed {
+            process.terminate()
+            // Give it a moment to terminate gracefully
+            Thread.sleep(forTimeInterval: 0.1)
+            if process.isRunning {
+                // Force kill if still running
+                process.interrupt()
+            }
+            throw PythonPluginError.timeout(pluginName, seconds: Int(Self.defaultTimeout))
+        }
 
         let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: outputData, encoding: .utf8) ?? ""
@@ -328,11 +307,31 @@ public final class PythonPluginHost: @unchecked Sendable {
     // MARK: - Python Discovery
 
     private static func findPython() -> String {
-        // Try common Python paths
+        // First, resolve python3 via which — picks up the user's preferred Python
+        // (e.g., Homebrew, pyenv, framework install) which likely has the ARO SDK
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["python3"]
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+        if let _ = try? whichProcess.run() {
+            whichProcess.waitUntilExit()
+            if whichProcess.terminationStatus == 0,
+               let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty,
+               FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        // Try common Python paths as fallback
         let candidates = [
-            "/usr/bin/python3",
-            "/usr/local/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
             "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
             "/usr/bin/python",
         ]
 
@@ -347,6 +346,17 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Escape a string for safe inclusion in a Python single-quoted string literal.
+    /// Handles backslashes, single quotes, newlines, carriage returns, and null bytes.
+    private func escapePythonString(_ s: String) -> String {
+        return s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\0", with: "\\0")
+    }
 
     /// Convert action name to Python function name (snake_case)
     /// Handles both kebab-case (to-html) and camelCase (toHtml)
@@ -369,55 +379,29 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
-        switch value {
-        case let str as String:
-            return str
-        case let num as NSNumber:
-            if floor(num.doubleValue) == num.doubleValue {
-                return num.intValue
-            }
-            return num.doubleValue
-        case let dict as [String: Any]:
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        case let arr as [Any]:
-            return arr.map { convertToSendable($0) }
-        case let bool as Bool:
-            return bool
-        default:
-            return String(describing: value)
-        }
+        SendableConverter.fromJSON(value)
     }
 }
 
-// MARK: - PluginQualifierHost Conformance
+// MARK: - Qualifier Execution
 
-extension PythonPluginHost: PluginQualifierHost {
+extension PythonPluginHost {
     /// Execute a qualifier transformation via the Python plugin
-    ///
-    /// - Parameters:
-    ///   - qualifier: The qualifier name (e.g., "pick-random")
-    ///   - input: The input value to transform
-    /// - Returns: The transformed value
-    /// - Throws: QualifierError on failure
-    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
-        // Create input JSON using QualifierInput
-        let qualifierInput = QualifierInput(value: input)
+    public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
+        // Create input JSON using QualifierInput (ARO-0073: includes _with params)
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
         let inputData = try encoder.encode(qualifierInput)
         let base64Input = inputData.base64EncodedString()
 
         // Convert qualifier name to snake_case for Python function
         let pythonQualifierName = toSnakeCase(qualifier)
 
-        // Create execution script that calls aro_plugin_qualifier
+        // Language-specific: call via Python subprocess
         let script = """
         import sys
         import json
         import base64
-        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        sys.path.insert(0, '\(escapePythonString(pluginPath.path))')
         try:
             from \(moduleName) import aro_plugin_qualifier
             input_json = base64.b64decode('\(base64Input)').decode('utf-8')
@@ -432,7 +416,7 @@ extension PythonPluginHost: PluginQualifierHost {
 
         let result = try runPython(script: script)
 
-        // Parse result as QualifierOutput
+        // Shared result decoding
         guard let resultData = result.data(using: .utf8) else {
             throw QualifierError.executionFailed(
                 qualifier: qualifier,
@@ -440,20 +424,7 @@ extension PythonPluginHost: PluginQualifierHost {
             )
         }
 
-        let output = try decoder.decode(QualifierOutput.self, from: resultData)
-
-        if let error = output.error {
-            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
-        }
-
-        guard let resultValue = output.result else {
-            throw QualifierError.executionFailed(
-                qualifier: qualifier,
-                message: "Plugin returned neither result nor error"
-            )
-        }
-
-        return resultValue.value
+        return try decodeQualifierResult(from: resultData, qualifier: qualifier, decoder: decoder)
     }
 }
 
@@ -463,21 +434,14 @@ struct PythonPluginInfo: Sendable {
     let name: String
     let version: String
     let actions: [String]
-    let qualifiers: [PythonQualifierDescriptor]
+    let qualifiers: [PluginQualifierDescriptor]
 
-    init(name: String, version: String, actions: [String], qualifiers: [PythonQualifierDescriptor] = []) {
+    init(name: String, version: String, actions: [String], qualifiers: [PluginQualifierDescriptor] = []) {
         self.name = name
         self.version = version
         self.actions = actions
         self.qualifiers = qualifiers
     }
-}
-
-/// Descriptor for a plugin-provided qualifier
-struct PythonQualifierDescriptor: Sendable {
-    let name: String
-    let inputTypes: Set<QualifierInputType>
-    let description: String?
 }
 
 // MARK: - Python Plugin Action Wrapper
@@ -540,6 +504,7 @@ public enum PythonPluginError: Error, CustomStringConvertible {
     case invalidInfo(String)
     case loadFailed(String, message: String)
     case executionFailed(String, action: String, message: String)
+    case timeout(String, seconds: Int)
     case pythonNotFound
 
     public var description: String {
@@ -552,8 +517,25 @@ public enum PythonPluginError: Error, CustomStringConvertible {
             return "Failed to load Python plugin '\(name)': \(message)"
         case .executionFailed(let name, let action, let message):
             return "Python plugin '\(name)' action '\(action)' failed: \(message)"
+        case .timeout(let name, let seconds):
+            return "Python plugin '\(name)' timed out after \(seconds) seconds"
         case .pythonNotFound:
             return "Python interpreter not found"
         }
+    }
+}
+
+// MARK: - Process Timeout Extension
+
+private extension Process {
+    /// Wait for the process to exit, returning true if it finished within the timeout.
+    func waitWithTimeout(_ timeout: TimeInterval) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        let workItem = DispatchWorkItem { [self] in
+            self.waitUntilExit()
+            semaphore.signal()
+        }
+        DispatchQueue.global().async(execute: workItem)
+        return semaphore.wait(timeout: .now() + timeout) == .success
     }
 }

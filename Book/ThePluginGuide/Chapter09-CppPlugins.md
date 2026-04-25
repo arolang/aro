@@ -33,9 +33,22 @@ The solution is `extern "C"`:
 // With extern "C":
 // Function is named exactly aro_plugin_info
 extern "C" {
+    /* REQUIRED */
     char* aro_plugin_info(void);
+    void  aro_plugin_free(char* ptr);
+
+    /* OPTIONAL: lifecycle hooks */
+    void  aro_plugin_init(void);
+    void  aro_plugin_shutdown(void);
+
+    /* OPTIONAL: only needed if providing actions or services */
     char* aro_plugin_execute(const char* action, const char* input_json);
-    void aro_plugin_free(char* ptr);
+
+    /* OPTIONAL: only needed if providing qualifiers */
+    char* aro_plugin_qualifier(const char* name, const char* input_json);
+
+    /* OPTIONAL: only needed if subscribing to events */
+    void  aro_plugin_on_event(const char* event_type, const char* data_json);
 }
 ```
 
@@ -43,6 +56,12 @@ The `extern "C"` block tells the compiler to:
 - Use C calling conventions
 - Don't mangle function names
 - Make functions visible to C code (and ARO)
+
+Key points for C++ plugins:
+- `aro_plugin_execute` uses a **2-parameter** signature returning `char*` directly. No out-pointer, no integer return code.
+- `aro_plugin_init` returns **`void`**. The old form that returned `char*` with service metadata is removed.
+- Exceptions **must not cross** the `extern "C"` boundary—always catch and convert (see section 9.7).
+- Services route through `aro_plugin_execute("service:<method>", input_json)`. No separate `_call` symbol.
 
 ## 9.3 Project Structure
 
@@ -297,17 +316,35 @@ double integrate(double (*f)(double), double a, double b, int n = 1000) {
 
 extern "C" {
 
+// REQUIRED: Return plugin metadata
 char* aro_plugin_info(void) {
     return to_c_string(
         "{"
         "\"name\":\"plugin-cpp-math\","
         "\"version\":\"1.0.0\","
-        "\"language\":\"cpp\","
-        "\"actions\":[\"statistics\",\"polynomial\",\"factorial\",\"fibonacci\"]"
+        "\"actions\":["
+        "  {\"name\":\"Statistics\",\"role\":\"own\",\"verbs\":[\"statistics\"],\"prepositions\":[\"from\"]},"
+        "  {\"name\":\"Polynomial\",\"role\":\"own\",\"verbs\":[\"polynomial\"],\"prepositions\":[\"from\",\"with\"]},"
+        "  {\"name\":\"Factorial\",\"role\":\"own\",\"verbs\":[\"factorial\"],\"prepositions\":[\"from\"]},"
+        "  {\"name\":\"Fibonacci\",\"role\":\"own\",\"verbs\":[\"fibonacci\"],\"prepositions\":[\"from\"]}"
+        "]"
         "}"
     );
 }
 
+// OPTIONAL: Lifecycle hooks
+void aro_plugin_init(void) {
+    // One-time initialization — returns void (not char*)
+}
+
+void aro_plugin_shutdown(void) {
+    // Cleanup on unload
+}
+
+// OPTIONAL: Action execution — only needed because this plugin provides actions
+// Note the 2-parameter signature: no out-pointer, returns char* directly.
+// The _with parameters from the ARO `with { }` clause are nested in input_json
+// under the "_with" key, not flat-merged with the primary value.
 char* aro_plugin_execute(const char* action, const char* input_json) {
     if (!action || !input_json) {
         return to_c_string(error_result("Null input"));
@@ -684,7 +721,7 @@ extern "C" char* aro_plugin_execute(const char* action, const char* input_json) 
 
 ## 9.7 Exception Safety Across the C Boundary
 
-Exceptions must not cross the `extern "C"` boundary—it causes undefined behavior. Always catch and convert:
+C++ exceptions must **not** propagate through `extern "C"` functions—this is undefined behavior. The `extern "C"` block acts as a hard boundary: every exported function must catch all exceptions before returning. Always catch and convert to a JSON error response:
 
 ```cpp
 extern "C" char* aro_plugin_execute(const char* action, const char* input_json) {
@@ -971,11 +1008,15 @@ build:
 
 C++ plugins combine C's ABI compatibility with modern language features:
 
-- **`extern "C"`** blocks export functions with C linkage
+- **`extern "C"`** blocks export functions with C linkage and no name mangling
+- **Required exports**: `aro_plugin_info` and `aro_plugin_free`
+- **`aro_plugin_execute`** is optional—only needed for actions and services; uses a **2-parameter** `(action, input_json) -> char*` signature
+- **`aro_plugin_init` / `aro_plugin_shutdown`** are optional `void` lifecycle hooks
+- **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`
+- **Exception handling**: exceptions must not cross `extern "C"` boundaries—always catch all and convert to JSON errors
 - **RAII** ensures automatic resource cleanup
 - **Smart pointers** manage dynamic memory safely
 - **Standard library** provides containers, algorithms, and utilities
-- **Exception handling** must not cross the C boundary—always catch and convert
 - **Libraries**: Eigen, OpenCV, Boost, and countless others are available
 
 The pattern is consistent: wrap C++ capabilities in a C interface, letting ARO interact with your sophisticated implementations through a simple, stable ABI.

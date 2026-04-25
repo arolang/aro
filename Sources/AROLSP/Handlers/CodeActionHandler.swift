@@ -15,14 +15,18 @@ public struct CodeActionHandler: Sendable {
     private static let knownVerbs: Set<String> = [
         // REQUEST
         "Extract", "Parse", "Retrieve", "Fetch", "Read", "Accept", "List", "Stat", "Exists",
+        "Receive", "Prompt", "Select", "Request",
         // OWN
-        "Create", "Compute", "Validate", "Compare", "Transform", "Filter", "Match", "Split", "Set", "Merge", "Copy", "Move", "Append",
+        "Create", "Compute", "Validate", "Compare", "Transform", "Filter", "Match", "Split",
+        "Set", "Merge", "Copy", "Move", "Append", "Update", "Sort", "Delete", "Join", "Map",
+        "Reduce", "Group", "Execute", "Call", "ParseHtml", "ParseLinkHeader", "Clear", "Render",
         // RESPONSE
-        "Return", "Throw",
+        "Return", "Throw", "Broadcast",
         // EXPORT
-        "Send", "Log", "Store", "Write", "Emit", "Publish", "CreateDirectory",
-        // LIFECYCLE
-        "Start", "Stop", "Keepalive", "Watch", "Configure", "Request",
+        "Send", "Log", "Store", "Write", "Emit", "Publish", "Notify", "Stream",
+        // SERVER
+        "Start", "Stop", "Keepalive", "Wait", "WaitForEvents", "Schedule", "Sleep",
+        "Listen", "Connect", "Close", "Make", "Watch", "Configure",
         // TEST
         "Given", "When", "Then", "Assert"
     ]

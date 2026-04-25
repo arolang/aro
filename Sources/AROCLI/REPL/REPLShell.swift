@@ -4,6 +4,7 @@
 // The main Read-Eval-Print Loop implementation
 
 import Foundation
+import ARORuntime
 import AROVersion
 import LineNoise
 #if canImport(Darwin)
@@ -64,6 +65,7 @@ public final class REPLShell: @unchecked Sendable {
     /// Run the REPL
     public func run() async {
         printWelcome()
+        loadInstalledPlugins()
         setupSignalHandlers()
         setupCompletion()
 
@@ -176,9 +178,11 @@ public final class REPLShell: @unchecked Sendable {
 
     /// Evaluate input and return result
     private func evaluate(_ input: String) async throws -> REPLResult {
-        // Meta-command
-        if input.hasPrefix(":") {
-            let cmdResult = try await commandRegistry.execute(input: input, session: session)
+        // Meta-command (: or / prefix)
+        if input.hasPrefix(":") || input.hasPrefix("/") {
+            // Normalise '/' prefix to ':' so the registry handles both uniformly
+            let normalised = input.hasPrefix("/") ? ":" + input.dropFirst() : input
+            let cmdResult = try await commandRegistry.execute(input: normalised, session: session)
             return convertCommandResult(cmdResult)
         }
 
@@ -254,7 +258,7 @@ public final class REPLShell: @unchecked Sendable {
     /// Print welcome message
     private func printWelcome() {
         print(colorize("ARO REPL", .bold) + " v\(AROVersion.shortVersion)")
-        print("Type " + colorize(":help", .cyan) + " for commands, " + colorize(":quit", .cyan) + " to exit")
+        print("Type " + colorize(":help", .cyan) + " or " + colorize("/help", .cyan) + " for commands, " + colorize(":quit", .cyan) + " to exit")
         print()
     }
 
@@ -390,6 +394,22 @@ public final class REPLShell: @unchecked Sendable {
         }
     }
 
+    /// Load previously installed REPL plugins from ~/.aro/repl-plugins/
+    private func loadInstalledPlugins() {
+        let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".aro/repl-plugins")
+        let pluginsDir = replPluginsDir.appendingPathComponent("Plugins")
+
+        guard FileManager.default.fileExists(atPath: pluginsDir.path) else { return }
+
+        do {
+            try UnifiedPluginLoader.shared.loadPlugins(from: replPluginsDir)
+        } catch {
+            // Non-fatal — warn but continue
+            print(colorize("Warning: ", .yellow) + "Failed to load installed plugins: \(error)")
+        }
+    }
+
     /// Setup signal handlers
     private func setupSignalHandlers() {
         // LineNoise handles Ctrl+C internally
@@ -405,12 +425,13 @@ public final class REPLShell: @unchecked Sendable {
             var completions: [String] = []
             let trimmed = currentBuffer.trimmingCharacters(in: .whitespaces)
 
-            // Complete meta-commands
-            if trimmed.hasPrefix(":") {
+            // Complete meta-commands (both : and / prefixes)
+            if trimmed.hasPrefix(":") || trimmed.hasPrefix("/") {
+                let prefix = String(trimmed.first!)
                 let partial = String(trimmed.dropFirst()).lowercased()
                 for name in self.commandRegistry.commandNames {
                     if name.lowercased().hasPrefix(partial) {
-                        completions.append(":\(name)")
+                        completions.append("\(prefix)\(name)")
                     }
                 }
             }

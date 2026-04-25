@@ -1,6 +1,7 @@
 name: plugin-swift-hello
 version: 1.0.0
-handle: Greeting
+handle: Greeting          # PascalCase namespace (ARO-0045); qualifiers: Greeting.x, actions: Greeting.Verb
+abi: ARO-0073             # Plugin ABI version this manifest and source target
 description: A simple Swift plugin that provides greeting functionality
 author: ARO Team
 license: MIT
@@ -12,7 +13,7 @@ source:
 provides:
 - type: swift-plugin
   path: Sources/
-  handler: greeting
+  # handler: greeting     # legacy field — use root-level handle: instead (ARO-0045)
 - type: aro-files
   path: features/
 build:

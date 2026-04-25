@@ -115,8 +115,9 @@ public struct CompletionHandler: Sendable {
             ("Publish", "EXPORT", "Publish symbol globally"),
             ("Notify", "EXPORT", "Notify a recipient with a message"),
 
-            // EXPORT actions
+            // EXPORT/OWN actions
             ("Stream", "EXPORT", "Stream data incrementally"),
+            ("Render", "OWN", "Render a Mustache-style template"),
 
             // SERVER actions
             ("Start", "SERVER", "Start a service"),

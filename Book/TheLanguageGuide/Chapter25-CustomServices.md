@@ -2,6 +2,8 @@
 
 *"When you need to talk to the outside world."*
 
+> **Deprecation notice:** The `AROService` protocol and `ServiceRegistry` described in this chapter are deprecated as of ARO-0073. Services are now declared in `aro_plugin_info` and routed through `aro_plugin_execute("service:<method>", input_json)`. The old pattern still works but will be removed before the 1.0 release. See Section 25.10 for the new approach and Chapter 26 for the full plugin ABI.
+
 ---
 
 ## 25.1 Actions vs Services: The Key Distinction
@@ -42,7 +44,9 @@ When you add a service, you are saying "this external system provides capabiliti
 
 ---
 
-## 25.2 The Service Protocol
+## 25.2 The Service Protocol (Legacy)
+
+> **Note:** This section describes the legacy `AROService` protocol, which is deprecated. For new plugins, declare services in `aro_plugin_info` instead. See Section 25.10 for the current approach.
 
 Services implement the `AROService` protocol. This protocol defines the contract between your service and the ARO runtime.
 
@@ -112,7 +116,9 @@ The protocol is simpler than ActionImplementation because services have a unifor
 </svg>
 </div>
 
-## 25.3 Implementing a Service
+## 25.3 Implementing a Service (Legacy)
+
+> **Note:** This section shows the legacy implementation pattern. For new code, see Section 25.10.
 
 Let us build a PostgreSQL service to illustrate the implementation pattern.
 
@@ -252,7 +258,9 @@ Once registered, your service is available through the Call action:
 
 ---
 
-## 25.5 Service Registration
+## 25.5 Service Registration (Legacy)
+
+> **Note:** The `ServiceRegistry` pattern below is deprecated. For new plugins, declare services in `aro_plugin_info` and they are registered automatically when the plugin loads. See Section 25.10.
 
 Services must be registered before use. Registration happens during application initialization:
 
@@ -267,8 +275,6 @@ func initializeServices() throws {
     try ServiceRegistry.shared.register(RabbitMQService())
 }
 ```
-
-For plugin-based services (covered in Chapter 21), registration happens automatically when the plugin loads.
 
 ---
 
@@ -451,6 +457,98 @@ The distinction: built-in actions are part of the ARO language and have dedicate
 | Database queries | Custom service | `Call from <postgres: query>` |
 | Message queues | Custom service | `Call from <rabbitmq: publish>` |
 | Cloud storage | Custom service | `Call from <s3: upload>` |
+
+---
+
+## 25.10 The New Service Pattern (ARO-0073)
+
+As of ARO-0073, services are declared in `aro_plugin_info` alongside actions and qualifiers. The runtime routes `Call the <result> from the <postgres: query>` to `aro_plugin_execute("service:query", input_json)`. No separate `AROService` protocol, no `ServiceRegistry`, no `aro_plugin_init` returning service metadata.
+
+### Declaring a Service in plugin.yaml and aro_plugin_info
+
+**plugin.yaml:**
+
+```yaml
+name: plugin-postgres
+version: 1.0.0
+handle: Postgres
+provides:
+  - type: swift-plugin
+    path: Sources/
+```
+
+**aro_plugin_info JSON (returned as a string from the C export):**
+
+```json
+{
+  "name": "plugin-postgres",
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "postgres",
+      "methods": ["query", "execute", "insert"],
+      "description": "PostgreSQL database service"
+    }
+  ]
+}
+```
+
+### Routing Service Calls Through aro_plugin_execute
+
+All service method calls arrive at `aro_plugin_execute` with the action name formatted as `"service:<method>"`:
+
+```c
+char* aro_plugin_execute(const char* action, const char* input_json) {
+    if (strncmp(action, "service:", 8) == 0) {
+        const char* method = action + 8;   // "query", "execute", "insert"
+        return dispatch_service_method(method, input_json);
+    }
+    // ... handle regular actions ...
+}
+```
+
+The `input_json` contains the same rich payload as any action call, with `_with` carrying the arguments from the ARO `with { }` clause:
+
+```json
+{
+  "data": null,
+  "_with": {
+    "sql": "SELECT * FROM users WHERE active = true"
+  }
+}
+```
+
+### Using the Service in ARO (unchanged)
+
+The ARO syntax for invoking services is identical whether using the old or new pattern:
+
+```aro
+(List Active Users: User Management) {
+    Call the <users> from the <postgres: query> with {
+        sql: "SELECT * FROM users WHERE active = true"
+    }.
+
+    Return an <OK: status> with <users>.
+}
+```
+
+### Lifecycle Hooks
+
+Stateful services that need to initialize connections or clean up resources use the new lifecycle hooks:
+
+```c
+void aro_plugin_init(void) {
+    // Open connection pool, load credentials, etc.
+    postgres_pool = pg_connect(getenv("DB_URL"));
+}
+
+void aro_plugin_shutdown(void) {
+    // Close connections, flush write buffers, etc.
+    pg_close(postgres_pool);
+}
+```
+
+`aro_plugin_init` is called once after the plugin loads. `aro_plugin_shutdown` is called before the plugin unloads. Both are optional — only implement them if your service needs stateful setup or teardown.
 
 ---
 

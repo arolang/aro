@@ -80,19 +80,25 @@ public struct ComputeAction: SynchronousAction {
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
+        // Qualifier chain — e.g., "stats.sort|list.take" evaluated left-to-right
+        if computationName.contains("|") {
+            let chain = computationName.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            if let chainResult = try context.container.qualifierRegistry.resolveChain(chain, value: input) {
+                context.bind(result.base, value: chainResult)
+                return chainResult
+            }
+        }
+
         // Plugin qualifier — synchronous when the qualifier registry is sync
-        if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input) {
+        // Pass with-clause parameters if present (bound as _with_ by FeatureSetExecutor)
+        let withParams: [String: any Sendable]? = context.resolveAny("_with_") as? [String: any Sendable]
+        if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input, withParams: withParams) {
             return pluginResult
         }
 
         // Date offset — synchronous
         if DateOffset.isOffsetPattern(computationName) {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)
-        }
-
-        // Computation service (plugin): needs async — fall back to Task path
-        if context.service(ComputationService.self) != nil {
-            throw NeedsAsyncExecution()
         }
 
         // Built-in computations — all synchronous except "count" on streaming input
@@ -221,11 +227,6 @@ public struct ComputeAction: SynchronousAction {
             "intersect", "difference", "union"
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
-
-        // Plugin compute service
-        if let computeService = context.service(ComputationService.self) {
-            return try await computeService.compute(named: computationName, input: input)
-        }
 
         // ARO-0051: Streaming count — materialize and rebind
         if let anyStreaming = input as? AnyStreamingValue {
@@ -580,11 +581,6 @@ public struct ValidateAction: ActionImplementation {
         let knownRules: Set<String> = ["required", "exists", "nonempty", "email", "numeric"]
         let ruleName = resolveOperationName(from: result, knownOperations: knownRules, fallback: "required")
 
-        // Look up validation service
-        if let validationService = context.service(ValidationService.self) {
-            return try await validationService.validate(value: value, rule: ruleName)
-        }
-
         // Built-in validations
         let isValid: Bool
         switch ruleName.lowercased() {
@@ -901,7 +897,7 @@ public struct CreateAction: ActionImplementation {
         // Debug: Log _to_ resolution for ARO-0041 diagnostics (enable with ARO_DEBUG=1)
         let endValue = context.resolveAny("_to_")
         if endValue == nil && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-            FileHandle.standardError.write("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".data(using: .utf8)!)
+            FileHandle.standardError.write(Data("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".utf8))
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {
             throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Create date-range")
@@ -1112,31 +1108,11 @@ public struct UpdateAction: SynchronousAction {
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let s = value as? String { return s }
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return d }
-        if let b = value as? Bool { return b }
-        if let arr = value as? [Any] { return arr.map { convertToSendable($0) } as [any Sendable] }
-        if let dict = value as? [String: Any] {
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict { result[k] = convertToSendable(v) }
-            return result
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }
 
 // MARK: - Supporting Types
-
-/// Computation service protocol
-public protocol ComputationService: Sendable {
-    func compute(named: String, input: Any) async throws -> any Sendable
-}
-
-/// Validation service protocol
-public protocol ValidationService: Sendable {
-    func validate(value: Any, rule: String) async throws -> ValidationResult
-}
 
 /// Result of a validation operation
 public struct ValidationResult: Sendable, Equatable {

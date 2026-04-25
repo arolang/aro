@@ -25,48 +25,69 @@ public struct RenameHandler: Sendable {
 
         let aroPosition = PositionConverter.fromLSP(position)
 
-        // Find the symbol at the position
         for analyzed in result.analyzedProgram.featureSets {
-            let fs = analyzed.featureSet
-
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check result
-                    if isPositionInSpan(aroPosition, aro.result.span) {
-                        let name = aro.result.base
-                        let lspRange = PositionConverter.toLSP(aro.result.span)
-                        return [
-                            "range": [
-                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
-                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
-                            ],
-                            "placeholder": name
-                        ]
-                    }
-
-                    // Check object
-                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                        let name = aro.object.noun.base
-                        let lspRange = PositionConverter.toLSP(aro.object.noun.span)
-                        return [
-                            "range": [
-                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
-                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
-                            ],
-                            "placeholder": name
-                        ]
-                    }
-
-                    // Check expression
-                    if let expr = aro.valueSource.asExpression {
-                        if let prepareResult = findPrepareRenameInExpression(expr, position: aroPosition) {
-                            return prepareResult
-                        }
-                    }
-                }
+            if let prepareResult = findPrepareRenameInStatements(analyzed.featureSet.statements, position: aroPosition) {
+                return prepareResult
             }
         }
 
+        return nil
+    }
+
+    private func findPrepareRenameInStatements(
+        _ statements: [Statement],
+        position: SourceLocation
+    ) -> [String: Any]? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if let result = findPrepareRenameInAROStatement(aro, position: position) {
+                    return result
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let result = findPrepareRenameInStatements(forEachLoop.body, position: position) { return result }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let result = findPrepareRenameInStatements(rangeLoop.body, position: position) { return result }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let result = findPrepareRenameInStatements(whileLoop.body, position: position) { return result }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let result = findPrepareRenameInStatements(caseClause.body, position: position) { return result }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if let result = findPrepareRenameInAROStatement(stage, position: position) { return result }
+                }
+            }
+        }
+        return nil
+    }
+
+    private func findPrepareRenameInAROStatement(_ aro: AROStatement, position: SourceLocation) -> [String: Any]? {
+        if isPositionInSpan(position, aro.result.span) {
+            let lspRange = PositionConverter.toLSP(aro.result.span)
+            return [
+                "range": [
+                    "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                    "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                ],
+                "placeholder": aro.result.base
+            ]
+        }
+        if isPositionInSpan(position, aro.object.noun.span) {
+            let lspRange = PositionConverter.toLSP(aro.object.noun.span)
+            return [
+                "range": [
+                    "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                    "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                ],
+                "placeholder": aro.object.noun.base
+            ]
+        }
+        if let expr = aro.valueSource.asExpression {
+            if let result = findPrepareRenameInExpression(expr, position: position) {
+                return result
+            }
+        }
         return nil
     }
 
@@ -85,81 +106,21 @@ public struct RenameHandler: Sendable {
 
         // Find the symbol name at the position
         var targetName: String?
-        var targetSpan: SourceSpan?
 
         for analyzed in result.analyzedProgram.featureSets {
-            let fs = analyzed.featureSet
-
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check result
-                    if isPositionInSpan(aroPosition, aro.result.span) {
-                        targetName = aro.result.base
-                        targetSpan = aro.result.span
-                        break
-                    }
-
-                    // Check object
-                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                        targetName = aro.object.noun.base
-                        targetSpan = aro.object.noun.span
-                        break
-                    }
-
-                    // Check expression
-                    if let expr = aro.valueSource.asExpression {
-                        if let (name, span) = findSymbolInExpression(expr, position: aroPosition) {
-                            targetName = name
-                            targetSpan = span
-                            break
-                        }
-                    }
-                }
+            if let (name, _) = findSymbolInStatements(analyzed.featureSet.statements, position: aroPosition) {
+                targetName = name
+                break
             }
-
-            if targetName != nil { break }
         }
 
         guard let symbolName = targetName else { return nil }
-        _ = targetSpan  // Used for validation, may be used for more precise matching later
 
         // Find all references to this symbol and create text edits
         var textEdits: [[String: Any]] = []
 
         for analyzed in result.analyzedProgram.featureSets {
-            let fs = analyzed.featureSet
-
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check result
-                    if aro.result.base == symbolName {
-                        textEdits.append(createTextEdit(span: aro.result.span, newText: newName))
-                    }
-
-                    // Check object
-                    if aro.object.noun.base == symbolName {
-                        textEdits.append(createTextEdit(span: aro.object.noun.span, newText: newName))
-                    }
-
-                    // Check expression
-                    if let expr = aro.valueSource.asExpression {
-                        textEdits.append(contentsOf: findEditsInExpression(expr, name: symbolName, newName: newName))
-                    }
-
-                    // Check where clause
-                    if let whereClause = aro.queryModifiers.whereClause {
-                        textEdits.append(contentsOf: findEditsInExpression(whereClause.value, name: symbolName, newName: newName))
-                    }
-                }
-
-                if let publish = statement as? PublishStatement {
-                    if publish.internalVariable == symbolName {
-                        // For publish statements, we need to handle differently
-                        // since the span covers the whole statement
-                        textEdits.append(createTextEdit(span: publish.span, newText: newName))
-                    }
-                }
-            }
+            textEdits.append(contentsOf: findEditsInStatements(analyzed.featureSet.statements, name: symbolName, newName: newName))
         }
 
         if textEdits.isEmpty {
@@ -216,6 +177,70 @@ public struct RenameHandler: Sendable {
         }
 
         return nil
+    }
+
+    private func findSymbolInStatements(_ statements: [Statement], position: SourceLocation) -> (String, SourceSpan)? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isPositionInSpan(position, aro.result.span) { return (aro.result.base, aro.result.span) }
+                if isPositionInSpan(position, aro.object.noun.span) { return (aro.object.noun.base, aro.object.noun.span) }
+                if let expr = aro.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let result = findSymbolInStatements(forEachLoop.body, position: position) { return result }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let result = findSymbolInStatements(rangeLoop.body, position: position) { return result }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let result = findSymbolInStatements(whileLoop.body, position: position) { return result }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let result = findSymbolInStatements(caseClause.body, position: position) { return result }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isPositionInSpan(position, stage.result.span) { return (stage.result.base, stage.result.span) }
+                    if isPositionInSpan(position, stage.object.noun.span) { return (stage.object.noun.base, stage.object.noun.span) }
+                    if let expr = stage.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
+                }
+            }
+        }
+        return nil
+    }
+
+    private func findEditsInStatements(_ statements: [Statement], name: String, newName: String) -> [[String: Any]] {
+        var edits: [[String: Any]] = []
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                edits.append(contentsOf: findEditsInAROStatement(aro, name: name, newName: newName))
+            } else if let publish = statement as? PublishStatement {
+                if publish.internalVariable == name {
+                    edits.append(createTextEdit(span: publish.span, newText: newName))
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                edits.append(contentsOf: findEditsInStatements(forEachLoop.body, name: name, newName: newName))
+            } else if let rangeLoop = statement as? RangeLoop {
+                edits.append(contentsOf: findEditsInStatements(rangeLoop.body, name: name, newName: newName))
+            } else if let whileLoop = statement as? WhileLoop {
+                edits.append(contentsOf: findEditsInStatements(whileLoop.body, name: name, newName: newName))
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    edits.append(contentsOf: findEditsInStatements(caseClause.body, name: name, newName: newName))
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    edits.append(contentsOf: findEditsInAROStatement(stage, name: name, newName: newName))
+                }
+            }
+        }
+        return edits
+    }
+
+    private func findEditsInAROStatement(_ aro: AROStatement, name: String, newName: String) -> [[String: Any]] {
+        var edits: [[String: Any]] = []
+        if aro.result.base == name { edits.append(createTextEdit(span: aro.result.span, newText: newName)) }
+        if aro.object.noun.base == name { edits.append(createTextEdit(span: aro.object.noun.span, newText: newName)) }
+        if let expr = aro.valueSource.asExpression { edits.append(contentsOf: findEditsInExpression(expr, name: name, newName: newName)) }
+        if let whereClause = aro.queryModifiers.whereClause { edits.append(contentsOf: findEditsInExpression(whereClause.value, name: name, newName: newName)) }
+        return edits
     }
 
     private func findSymbolInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> (String, SourceSpan)? {

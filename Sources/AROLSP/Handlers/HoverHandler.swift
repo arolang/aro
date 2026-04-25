@@ -32,47 +32,8 @@ public struct HoverHandler: Sendable {
             let fs = analyzed.featureSet
 
             // Check statements first (more specific)
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    if isPositionInSpan(aroPosition, aro.span) {
-                        // Check action
-                        if isPositionInSpan(aroPosition, aro.action.span) {
-                            let hoverContent = formatActionHover(aro.action, statement: aro, featureSet: fs, analyzed: analyzed)
-                            return createHoverResponse(hoverContent, range: aro.action.span)
-                        }
-
-                        // Check result
-                        if isPositionInSpan(aroPosition, aro.result.span) {
-                            let symbol = analyzed.symbolTable.lookup(aro.result.base)
-                            let hoverContent = formatVariableHover(
-                                aro.result.base,
-                                symbol: symbol,
-                                isResult: true,
-                                statement: aro,
-                                featureSet: fs,
-                                analyzed: analyzed
-                            )
-                            return createHoverResponse(hoverContent, range: aro.result.span)
-                        }
-
-                        // Check object
-                        if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                            let objectName = aro.object.noun.base
-                            let symbol = analyzed.symbolTable.lookup(objectName)
-                            let hoverContent = formatVariableHover(
-                                objectName,
-                                symbol: symbol,
-                                isResult: false,
-                                statement: aro,
-                                featureSet: fs,
-                                analyzed: analyzed
-                            )
-                            return createHoverResponse(hoverContent, range: aro.object.noun.span)
-                        }
-
-                        // Note: Preposition hover removed - Preposition enum doesn't have span info
-                    }
-                }
+            if let hover = findHoverInStatements(fs.statements, position: aroPosition, featureSet: fs, analyzed: analyzed) {
+                return hover
             }
 
             // Check feature set header (less specific, only if not in statements)
@@ -84,6 +45,88 @@ public struct HoverHandler: Sendable {
             }
         }
 
+        return nil
+    }
+
+    // MARK: - Statement Traversal
+
+    private func findHoverInStatements(
+        _ statements: [Statement],
+        position: SourceLocation,
+        featureSet: FeatureSet,
+        analyzed: AnalyzedFeatureSet
+    ) -> [String: Any]? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isPositionInSpan(position, aro.span) {
+                    if isPositionInSpan(position, aro.action.span) {
+                        let hoverContent = formatActionHover(aro.action, statement: aro, featureSet: featureSet, analyzed: analyzed)
+                        return createHoverResponse(hoverContent, range: aro.action.span)
+                    }
+                    if isPositionInSpan(position, aro.result.span) {
+                        let symbol = analyzed.symbolTable.lookup(aro.result.base)
+                        let hoverContent = formatVariableHover(
+                            aro.result.base, symbol: symbol, isResult: true,
+                            statement: aro, featureSet: featureSet, analyzed: analyzed
+                        )
+                        return createHoverResponse(hoverContent, range: aro.result.span)
+                    }
+                    if isPositionInSpan(position, aro.object.noun.span) {
+                        let objectName = aro.object.noun.base
+                        let symbol = analyzed.symbolTable.lookup(objectName)
+                        let hoverContent = formatVariableHover(
+                            objectName, symbol: symbol, isResult: false,
+                            statement: aro, featureSet: featureSet, analyzed: analyzed
+                        )
+                        return createHoverResponse(hoverContent, range: aro.object.noun.span)
+                    }
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let hover = findHoverInStatements(forEachLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                    return hover
+                }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let hover = findHoverInStatements(rangeLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                    return hover
+                }
+            } else if let whileLoop = statement as? WhileLoop {
+                if let hover = findHoverInStatements(whileLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                    return hover
+                }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let hover = findHoverInStatements(caseClause.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                        return hover
+                    }
+                }
+            } else if let pipeline = statement as? PipelineStatement {
+                for stage in pipeline.stages {
+                    if isPositionInSpan(position, stage.span) {
+                        if isPositionInSpan(position, stage.action.span) {
+                            let hoverContent = formatActionHover(stage.action, statement: stage, featureSet: featureSet, analyzed: analyzed)
+                            return createHoverResponse(hoverContent, range: stage.action.span)
+                        }
+                        if isPositionInSpan(position, stage.result.span) {
+                            let symbol = analyzed.symbolTable.lookup(stage.result.base)
+                            let hoverContent = formatVariableHover(
+                                stage.result.base, symbol: symbol, isResult: true,
+                                statement: stage, featureSet: featureSet, analyzed: analyzed
+                            )
+                            return createHoverResponse(hoverContent, range: stage.result.span)
+                        }
+                        if isPositionInSpan(position, stage.object.noun.span) {
+                            let objectName = stage.object.noun.base
+                            let symbol = analyzed.symbolTable.lookup(objectName)
+                            let hoverContent = formatVariableHover(
+                                objectName, symbol: symbol, isResult: false,
+                                statement: stage, featureSet: featureSet, analyzed: analyzed
+                            )
+                            return createHoverResponse(hoverContent, range: stage.object.noun.span)
+                        }
+                    }
+                }
+            }
+        }
         return nil
     }
 

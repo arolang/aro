@@ -149,6 +149,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
         // LineNoise for REPL line editing (arrow keys, history)
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
+        // Swift Log for structured logging
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
@@ -177,6 +179,7 @@ let package = Package(
                     "AROParser",
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "Logging", package: "swift-log"),
                 ] + runtimePlatformDependencies,
                 path: "Sources/ARORuntime"
             ),
@@ -185,6 +188,7 @@ let package = Package(
                 name: "AROCompiler",
                 dependencies: [
                     "AROParser",
+                    .product(name: "Logging", package: "swift-log"),
                 ] + compilerLLVMDependency,
                 path: "Sources/AROCompiler",
                 linkerSettings: llvmLinkerSettings
@@ -237,6 +241,7 @@ let package = Package(
                     "AROLM",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
+                    .product(name: "Logging", package: "swift-log"),
                 ] + cliLspDependency + askDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings

@@ -135,20 +135,6 @@ public struct StoreFileLoader: Sendable {
 
     /// Convert Any to Sendable recursively
     private func convertToSendable(_ value: Any) -> any Sendable {
-        if let str = value as? String { return str }
-        if let int = value as? Int { return int }
-        if let double = value as? Double { return double }
-        if let bool = value as? Bool { return bool }
-        if let array = value as? [Any] {
-            return array.map { convertToSendable($0) }
-        }
-        if let dict = value as? [String: Any] {
-            var result: [String: any Sendable] = [:]
-            for (k, v) in dict {
-                result[k] = convertToSendable(v)
-            }
-            return result
-        }
-        return String(describing: value)
+        SendableConverter.fromJSON(value)
     }
 }

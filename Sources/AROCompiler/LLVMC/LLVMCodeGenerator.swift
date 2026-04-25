@@ -22,6 +22,47 @@ public struct LLVMCodeGenerationResult {
     }
 }
 
+/// Metadata for a statically-linked plugin passed to LLVM IR generation.
+/// The object files are linked separately; the code generator only needs
+/// the plugin name, YAML, and which symbols exist.
+public struct StaticPluginIRInfo {
+    public let name: String
+    public let yaml: String
+    public let availableSymbols: Set<String>
+
+    public init(name: String, yaml: String, availableSymbols: Set<String>) {
+        self.name = name
+        self.yaml = yaml
+        self.availableSymbols = availableSymbols
+    }
+}
+
+/// Metadata for an embedded Python plugin passed to LLVM IR generation.
+public struct EmbeddedPythonPluginIRInfo {
+    public let name: String
+    public let yaml: String
+    public let source: String
+
+    public init(name: String, yaml: String, source: String) {
+        self.name = name
+        self.yaml = yaml
+        self.source = source
+    }
+}
+
+/// Embedded Python bundle data for LLVM IR generation.
+public struct PythonBundleIRInfo {
+    /// Zipped Python stdlib (nil if no Python plugins)
+    public let stdlibZipPath: String?
+    /// Zipped pip dependencies (nil if no requirements)
+    public let depsZipPath: String?
+
+    public init(stdlibZipPath: String? = nil, depsZipPath: String? = nil) {
+        self.stdlibZipPath = stdlibZipPath
+        self.depsZipPath = depsZipPath
+    }
+}
+
 /// LLVM Code Generator using the Swifty-LLVM API for type-safe IR generation
 /// with source-location-aware error messages
 public final class LLVMCodeGenerator {
@@ -34,8 +75,8 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
-    /// Break target block for the innermost while loop (nil when not inside a loop)
-    private var currentBreakBlock: BasicBlock?
+    /// Stack of break target blocks for nested loops (top = innermost loop)
+    private var breakBlockStack: [BasicBlock] = []
 
     // MARK: - Initialization
 
@@ -48,14 +89,20 @@ public final class LLVMCodeGenerator {
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
     ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0050)
-    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary
+    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary (legacy base64)
+    ///   - staticPlugins: Optional array of statically-linked plugin metadata (native plugins)
+    ///   - pythonPlugins: Optional array of embedded Python plugin metadata
+    ///   - pythonBundle: Optional Python stdlib/deps bundle paths
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
         program: AnalyzedProgram,
         openAPISpecJSON: String? = nil,
         templatesJSON: String? = nil,
-        embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil
+        embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil,
+        staticPlugins: [StaticPluginIRInfo]? = nil,
+        pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
+        pythonBundle: PythonBundleIRInfo? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
@@ -76,7 +123,7 @@ public final class LLVMCodeGenerator {
 
         // Collect and emit string constants
         let stringCollector = StringConstantCollector(context: ctx)
-        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
+        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins)
 
         // Generate feature set functions
         for analyzedFS in program.featureSets {
@@ -84,7 +131,15 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle)
+
+        // Fail explicitly if any errors were recorded during generation
+        if ctx.hasErrors {
+            let messages = ctx.errors.map(\.description).joined(separator: "\n")
+            throw LLVMCodeGenError.llvmInternalError(
+                message: "Code generation failed with \(ctx.errors.count) error(s):\n\(messages)"
+            )
+        }
 
         // Verify module
         try verifyModule()
@@ -260,39 +315,103 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Statement Generation
 
-    private func generateStatement(_ statement: Statement, index: Int, errorBlock: BasicBlock) {
-        switch statement {
-        case let aroStatement as AROStatement:
-            generateAROStatement(aroStatement, index: index, errorBlock: errorBlock)
-        case let matchStatement as MatchStatement:
-            generateMatchStatement(matchStatement, index: index, errorBlock: errorBlock)
-        case let forEachLoop as ForEachLoop:
-            generateForEachLoop(forEachLoop, index: index, errorBlock: errorBlock)
-        case let rangeLoop as RangeLoop:
-            generateRangeLoop(rangeLoop, index: index, errorBlock: errorBlock)
-        case let whileLoop as WhileLoop:
-            generateWhileLoop(whileLoop, index: index, errorBlock: errorBlock)
-        case is BreakStatement:
-            generateBreakStatement(index: index)
-        case let publishStatement as PublishStatement:
-            generatePublishStatement(publishStatement, index: index, errorBlock: errorBlock)
-        case let requireStatement as RequireStatement:
-            generateRequireStatement(requireStatement, index: index, errorBlock: errorBlock)
-        case let pipelineStatement as PipelineStatement:
-            // ARO-0067: A pipeline is just a sequence of ARO statements where
-            // each stage's object is the previous stage's result. The parser
-            // has already rewritten the stages to reference the chained names,
-            // so we can emit them sequentially like plain statements.
-            for (stageOffset, stage) in pipelineStatement.stages.enumerated() {
-                generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
+    /// Handler for a single concrete `Statement` subtype. Each handler performs
+    /// the (checked) downcast and delegates to the corresponding `generate...`
+    /// method on the generator instance it is given.
+    ///
+    /// Using a method-reference-style table (`(LLVMCodeGenerator) -> (...) -> Void`)
+    /// lets the dispatch stay a stored `static let` with no captured `self`,
+    /// no reference cycles, and no per-instance setup work — while still giving
+    /// us a single place to register new statement types (issue #170).
+    typealias StatementHandler = (LLVMCodeGenerator) -> (Statement, Int, BasicBlock) -> Void
+
+    // The handler table itself is immutable after initialization. The closures
+    // capture no shared mutable state (they only forward to instance methods
+    // on the `LLVMCodeGenerator` argument), so marking the stored table as
+    // `nonisolated(unsafe)` is sound under Swift 6 strict concurrency.
+    nonisolated(unsafe) private static let statementHandlers: [ObjectIdentifier: StatementHandler] = [
+        ObjectIdentifier(AROStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let aroStmt = stmt as? AROStatement else { return }
+                gen.generateAROStatement(aroStmt, index: index, errorBlock: errorBlock)
             }
-        default:
-            // Unsupported statement type
-            ctx.recordError(.invalidExpression(
-                description: "Unsupported statement type",
-                span: statement.span
-            ))
+        },
+        ObjectIdentifier(MatchStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let matchStmt = stmt as? MatchStatement else { return }
+                gen.generateMatchStatement(matchStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(ForEachLoop.self): { gen in
+            { stmt, index, errorBlock in
+                guard let forEachStmt = stmt as? ForEachLoop else { return }
+                gen.generateForEachLoop(forEachStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(RangeLoop.self): { gen in
+            { stmt, index, errorBlock in
+                guard let rangeStmt = stmt as? RangeLoop else { return }
+                gen.generateRangeLoop(rangeStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(WhileLoop.self): { gen in
+            { stmt, index, errorBlock in
+                guard let whileStmt = stmt as? WhileLoop else { return }
+                gen.generateWhileLoop(whileStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(BreakStatement.self): { gen in
+            { _, index, _ in
+                gen.generateBreakStatement(index: index)
+            }
+        },
+        ObjectIdentifier(PublishStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let publishStmt = stmt as? PublishStatement else { return }
+                gen.generatePublishStatement(publishStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(RequireStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let requireStmt = stmt as? RequireStatement else { return }
+                gen.generateRequireStatement(requireStmt, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(PipelineStatement.self): { gen in
+            { stmt, index, errorBlock in
+                // ARO-0067: A pipeline is just a sequence of ARO statements where
+                // each stage's object is the previous stage's result. The parser
+                // has already rewritten the stages to reference the chained names,
+                // so we can emit them sequentially like plain statements.
+                guard let pipeline = stmt as? PipelineStatement else { return }
+                for (stageOffset, stage) in pipeline.stages.enumerated() {
+                    gen.generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
+                }
+            }
+        },
+    ]
+
+    /// Return the set of statement metatypes that have a registered handler.
+    /// Used by the test suite to guard against regressions when new statement
+    /// types are added to the AST without a corresponding code-gen entry.
+    internal static var supportedStatementTypeIdentifiers: Set<ObjectIdentifier> {
+        Set(statementHandlers.keys)
+    }
+
+    private func generateStatement(_ statement: Statement, index: Int, errorBlock: BasicBlock) {
+        let key = ObjectIdentifier(type(of: statement))
+        if let handler = Self.statementHandlers[key] {
+            handler(self)(statement, index, errorBlock)
+            return
         }
+        // Unsupported statement type — record a fatal compilation error.
+        // This will cause generation to abort before LLVM module verification.
+        let typeName = String(describing: type(of: statement))
+        ctx.recordError(.invalidExpression(
+            description: "Statement type '\(typeName)' is not supported in compiled mode (aro build). "
+                + "Use interpreter mode (aro run) or add codegen support for this statement type.",
+            span: statement.span
+        ))
     }
 
     private func generateAROStatement(_ statement: AROStatement, index: Int, errorBlock: BasicBlock) {
@@ -1271,10 +1390,16 @@ public final class LLVMCodeGenerator {
             )
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1502,10 +1627,16 @@ public final class LLVMCodeGenerator {
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, bodyVarName], at: ctx.insertionPoint)
         }
 
+        // Push break target so inner BreakStatement knows where to jump
+        breakBlockStack.append(endBlock)
+
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
         }
+
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1559,16 +1690,15 @@ public final class LLVMCodeGenerator {
         ctx.setInsertionPoint(atEndOf: bodyBlock)
 
         // Push break target so inner BreakStatement knows where to jump
-        let savedBreakBlock = currentBreakBlock
-        currentBreakBlock = endBlock
+        breakBlockStack.append(endBlock)
 
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
             generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
 
-        // Restore outer break target
-        currentBreakBlock = savedBreakBlock
+        // Pop break target when leaving this loop
+        breakBlockStack.removeLast()
 
         // Loop back to condition (unless we already have a terminator)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
@@ -1585,9 +1715,9 @@ public final class LLVMCodeGenerator {
     }
 
     private func generateBreakStatement(index: Int) {
-        guard let breakBlock = currentBreakBlock else {
+        guard let breakBlock = breakBlockStack.last else {
             ctx.recordError(.invalidExpression(
-                description: "break used outside of while loop",
+                description: "break used outside of loop",
                 span: SourceSpan.unknown
             ))
             return
@@ -1796,7 +1926,7 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Main Function Generation
 
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1826,7 +1956,7 @@ public final class LLVMCodeGenerator {
             _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
         }
 
-        // Register embedded plugins (base64-encoded .so files compiled into the binary)
+        // Register embedded plugins (base64-encoded .so files compiled into the binary — Python only)
         if let plugins = embeddedPlugins {
             for plugin in plugins {
                 let nameStr = ctx.stringConstant(plugin.name)
@@ -1835,6 +1965,42 @@ public final class LLVMCodeGenerator {
                 _ = ctx.module.insertCall(externals.registerEmbeddedPlugin, on: [nameStr, yamlStr, base64Str], at: ip)
             }
         }
+
+        // Register statically-linked plugins (function pointers, no dlopen)
+        if let plugins = staticPlugins {
+            let nullPtr = ctx.ptrType.null
+            for plugin in plugins {
+                let nameStr = ctx.stringConstant(plugin.name)
+                let yamlStr = ctx.stringConstant(plugin.yaml)
+                let funcs = externals.declareStaticPluginExternals(pluginName: plugin.name, availableSymbols: plugin.availableSymbols)
+
+                // Pass function pointer or null for each slot
+                let infoArg: IRValue = funcs.info ?? nullPtr
+                let execArg: IRValue = funcs.execute ?? nullPtr
+                let freeArg: IRValue = funcs.free ?? nullPtr
+                let qualArg: IRValue = funcs.qualifier ?? nullPtr
+                let initArg: IRValue = funcs.initFn ?? nullPtr
+                let shutArg: IRValue = funcs.shutdown ?? nullPtr
+
+                _ = ctx.module.insertCall(externals.registerStaticPlugin, on: [
+                    nameStr, yamlStr, infoArg, execArg, freeArg, qualArg, initArg, shutArg
+                ], at: ip)
+            }
+        }
+
+        // Register embedded Python plugins (source code, executed in-process via libpython)
+        if let plugins = pythonPlugins {
+            for plugin in plugins {
+                let nameStr = ctx.stringConstant(plugin.name)
+                let yamlStr = ctx.stringConstant(plugin.yaml)
+                let sourceStr = ctx.stringConstant(plugin.source)
+                _ = ctx.module.insertCall(externals.registerEmbeddedPythonPlugin, on: [nameStr, yamlStr, sourceStr], at: ip)
+            }
+        }
+
+        // TODO: Embed Python stdlib and deps as binary data when pythonBundle is provided
+        // This requires LLVM IR binary constant support (not string constants)
+        // For now, the runtime extracts from the cache or uses system Python stdlib
 
         // Load precompiled plugins
         _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
@@ -2140,7 +2306,7 @@ private final class StringConstantCollector {
         self.ctx = context
     }
 
-    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
+    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil) {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
@@ -2167,6 +2333,23 @@ private final class StringConstantCollector {
                 _ = ctx.stringConstant(plugin.name)
                 _ = ctx.stringConstant(plugin.yaml)
                 _ = ctx.stringConstant(plugin.base64Library)
+            }
+        }
+
+        // Pre-register static plugin strings (name + yaml only, no base64)
+        if let plugins = staticPlugins {
+            for plugin in plugins {
+                _ = ctx.stringConstant(plugin.name)
+                _ = ctx.stringConstant(plugin.yaml)
+            }
+        }
+
+        // Pre-register embedded Python plugin strings (name + yaml + source)
+        if let plugins = pythonPlugins {
+            for plugin in plugins {
+                _ = ctx.stringConstant(plugin.name)
+                _ = ctx.stringConstant(plugin.yaml)
+                _ = ctx.stringConstant(plugin.source)
             }
         }
 

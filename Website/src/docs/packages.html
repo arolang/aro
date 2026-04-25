@@ -82,11 +82,15 @@ aro add https://github.com/arolang/csv-tools.git
 
 <span class="code-comment"># Add a specific version or branch</span>
 aro add git@github.com:arolang/csv-tools.git --ref v1.2.0
-aro add git@github.com:arolang/csv-tools.git --branch develop</code></pre>
+aro add git@github.com:arolang/csv-tools.git --branch develop
+
+<span class="code-comment"># Install into a specific application directory</span>
+aro add git@github.com:arolang/csv-tools.git -d ./MyApp</code></pre>
 
         <p>
             When you run <code>aro add</code>, ARO clones the repository, validates its
-            <code>plugin.yaml</code> manifest, and installs it into <code>Plugins/</code>.
+            <code>plugin.yaml</code> manifest, checks ARO version compatibility, compiles
+            native plugins, and installs everything into <code>Plugins/</code>.
         </p>
 
         <h3>Example Output</h3>
@@ -99,18 +103,16 @@ aro add git@github.com:arolang/csv-tools.git --branch develop</code></pre>
 &#x1F4C2; Reading plugin.yaml:
    Name:    csv-tools
    Version: 1.0.0
-   Found 3 .aro files (feature sets)
-   Found 2 Swift plugin sources
+   Found 1 .aro file set
+   Found 1 Swift plugin source
 
 &#x1F517; Installing to Plugins/csv-tools/
-   &#x2713; Registered 3 ARO feature sets
-   &#x2713; Compiled 2 Swift plugins
+   &#x2713; Compiled Swift plugin CSVTools
 
-&#x2705; Package "csv-tools" v1.0.0 installed successfully.
-   Available actions: FormatCSV, ValidateCSV, ParseCSV</code></pre>
+&#x2705; Package "csv-tools" v1.0.0 installed successfully.</code></pre>
 
         <h2>Managing Packages</h2>
-        <p>ARO provides commands to list, update, and remove installed packages:</p>
+        <p>ARO provides commands to list, update, check, and remove installed packages:</p>
 
         <pre><code><span class="code-comment"># List all installed packages</span>
 aro plugins list
@@ -121,20 +123,57 @@ aro plugins update
 <span class="code-comment"># Update a specific package</span>
 aro plugins update csv-tools
 
-<span class="code-comment"># Remove a package</span>
-aro remove csv-tools</code></pre>
+<span class="code-comment"># Check compatibility and lock file integrity</span>
+aro plugins check
+
+<span class="code-comment"># Validate plugin manifests and dependencies</span>
+aro plugins validate
+
+<span class="code-comment"># Recompile native plugins from source</span>
+aro plugins rebuild
+
+<span class="code-comment"># Generate documentation for a plugin</span>
+aro plugins docs csv-tools
+
+<span class="code-comment"># Export plugin sources for reproducible builds</span>
+aro plugins export
+
+<span class="code-comment"># Restore plugins from .aro-sources file</span>
+aro plugins restore
+
+<span class="code-comment"># Remove a package (prompts for confirmation)</span>
+aro remove csv-tools
+
+<span class="code-comment"># Remove without confirmation</span>
+aro remove csv-tools --force</code></pre>
+
+        <p>
+            All <code>aro plugins</code> subcommands accept a <code>-d</code> / <code>--directory</code>
+            flag to specify the application directory.
+        </p>
 
         <h3>Listing Installed Packages</h3>
+        <p>
+            ARO distinguishes between <strong>managed plugins</strong> (installed via <code>aro add</code>
+            into <code>Plugins/</code>) and <strong>local plugins</strong> (placed manually in
+            <code>plugins/</code>):
+        </p>
         <pre><code>$ aro plugins list
 
-Installed Plugins (from Plugins/):
+Managed Plugins (from Plugins/):
 &#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
  Name              Version  Source                    Provides
- csv-tools         1.0.0    git@github.com:...        3 .aro, 2 swift
- xml-validator     2.0.0    git@github.com:...        1 .aro, 1 rust
- my-local-plugin   0.1.0    (local)                   1 swift
+ csv-tools         1.0.0    github.com                1 .aro, 1 swift
+ xml-validator     2.0.0    github.com                1 rust
 &#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
- 3 plugins loaded, 0 warnings</code></pre>
+ 2 managed plugins
+
+Local Plugins (from plugins/):
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+ Source                          Service           Methods
+ MyPlugin.swift                  MyPluginService   doSomething
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+ 1 local plugin</code></pre>
 
         <h2>Using Package Features</h2>
         <p>
@@ -158,62 +197,87 @@ Installed Plugins (from Plugins/):
         <h2>Project Structure</h2>
         <p>
             After installing packages, your project structure will include a <code>Plugins/</code>
-            directory:
+            directory and a <code>plugins.lock</code> file:
         </p>
 
         <pre><code>MyProject/
 &#x251C;&#x2500;&#x2500; main.aro
 &#x251C;&#x2500;&#x2500; openapi.yaml
-&#x2514;&#x2500;&#x2500; Plugins/
-    &#x251C;&#x2500;&#x2500; csv-tools/               <span class="code-comment"># Installed via aro add</span>
-    &#x2502;   &#x251C;&#x2500;&#x2500; plugin.yaml          <span class="code-comment"># Package manifest</span>
-    &#x2502;   &#x251C;&#x2500;&#x2500; features/
-    &#x2502;   &#x2502;   &#x251C;&#x2500;&#x2500; csv-parser.aro
-    &#x2502;   &#x2502;   &#x2514;&#x2500;&#x2500; csv-formatter.aro
-    &#x2502;   &#x2514;&#x2500;&#x2500; Sources/
-    &#x2502;       &#x2514;&#x2500;&#x2500; CSVParser.swift
-    &#x2514;&#x2500;&#x2500; my-local-plugin/         <span class="code-comment"># Local plugin</span>
-        &#x251C;&#x2500;&#x2500; plugin.yaml
-        &#x2514;&#x2500;&#x2500; Sources/
-            &#x2514;&#x2500;&#x2500; MyPlugin.swift</code></pre>
+&#x251C;&#x2500;&#x2500; plugins.lock                 <span class="code-comment"># Lock file for reproducible builds</span>
+&#x251C;&#x2500;&#x2500; Plugins/                     <span class="code-comment"># Managed plugins (aro add)</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; csv-tools/
+&#x2502;   &#x2502;   &#x251C;&#x2500;&#x2500; plugin.yaml          <span class="code-comment"># Package manifest</span>
+&#x2502;   &#x2502;   &#x251C;&#x2500;&#x2500; features/
+&#x2502;   &#x2502;   &#x2502;   &#x2514;&#x2500;&#x2500; csv-parser.aro
+&#x2502;   &#x2502;   &#x2514;&#x2500;&#x2500; Sources/
+&#x2502;   &#x2502;       &#x2514;&#x2500;&#x2500; CSVParser.swift
+&#x2502;   &#x2514;&#x2500;&#x2500; xml-validator/
+&#x2502;       &#x251C;&#x2500;&#x2500; plugin.yaml
+&#x2502;       &#x2514;&#x2500;&#x2500; src/
+&#x2502;           &#x2514;&#x2500;&#x2500; lib.rs
+&#x2514;&#x2500;&#x2500; plugins/                     <span class="code-comment"># Local plugins (manual)</span>
+    &#x2514;&#x2500;&#x2500; MyPlugin.swift</code></pre>
 
         <div class="tip-box">
-            <h4>No Lockfile Needed</h4>
+            <h4>Lock File</h4>
             <p>
-                ARO uses the <code>Plugins/</code> directory as the single source of truth.
-                Each package's <code>plugin.yaml</code> contains all metadata including the
-                Git origin. Simply run <code>ls Plugins/</code> to see what's installed.
+                ARO generates a <code>plugins.lock</code> file for reproducible builds. It records
+                the exact commit hash and version for each managed plugin. Commit it alongside
+                your code so all team members get identical dependencies. Use
+                <code>aro plugins check</code> to verify lock file integrity.
             </p>
         </div>
+
+        <h3>Plugins/ vs plugins/</h3>
+        <p>
+            ARO loads plugins from two directories:
+        </p>
+        <ul>
+            <li><strong><code>Plugins/</code></strong> (uppercase) &mdash; Managed plugins installed via
+                <code>aro add</code>. Each subdirectory must contain a <code>plugin.yaml</code> manifest.</li>
+            <li><strong><code>plugins/</code></strong> (lowercase) &mdash; Local plugins for quick prototyping.
+                Supports bare <code>.swift</code> files or Swift packages without a manifest.</li>
+        </ul>
 
         <h2>Package Types</h2>
         <p>ARO packages can provide different types of content:</p>
 
         <table>
             <thead>
-                <tr><th>Type</th><th>Description</th></tr>
+                <tr><th>Type</th><th>Value in plugin.yaml</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr><td>ARO Feature Sets</td><td>Declarative feature sets and actions</td></tr>
-                <tr><td>Swift Plugins</td><td>Native Swift implementations</td></tr>
-                <tr><td>Rust Plugins</td><td>High-performance Rust code</td></tr>
-                <tr><td>C/C++ Plugins</td><td>System-level integrations</td></tr>
-                <tr><td>Python Plugins</td><td>Scripting and data science</td></tr>
-                <tr><td>Templates</td><td>Reusable templates</td></tr>
+                <tr><td>ARO Feature Sets</td><td><code>aro-files</code></td><td>Declarative feature sets and actions</td></tr>
+                <tr><td>Swift Plugins</td><td><code>swift-plugin</code></td><td>Native Swift implementations</td></tr>
+                <tr><td>Rust Plugins</td><td><code>rust-plugin</code></td><td>High-performance Rust code</td></tr>
+                <tr><td>C Plugins</td><td><code>c-plugin</code></td><td>C native plugins</td></tr>
+                <tr><td>C++ Plugins</td><td><code>cpp-plugin</code></td><td>C++ native plugins</td></tr>
+                <tr><td>Python Plugins</td><td><code>python-plugin</code></td><td>Scripting and data science</td></tr>
+                <tr><td>Templates</td><td><code>aro-templates</code></td><td>Reusable HTML templates</td></tr>
             </tbody>
         </table>
 
         <h2>Reproducible Builds</h2>
         <p>
-            You can commit your entire <code>Plugins/</code> directory to version control
-            for fully reproducible builds. This ensures all team members have identical
+            <strong>Option 1: Commit Plugins/</strong> &mdash; Commit the entire <code>Plugins/</code>
+            directory and <code>plugins.lock</code> to version control. All team members get identical
             dependencies without running <code>aro add</code>.
         </p>
 
         <p>
-            Alternatively, you can add <code>Plugins/</code> to <code>.gitignore</code> and
-            rely on the <code>source</code> entries in each <code>plugin.yaml</code> to restore
-            packages.
+            <strong>Option 2: Export and restore</strong> &mdash; Add <code>Plugins/</code> to
+            <code>.gitignore</code> and use the export/restore workflow:
+        </p>
+
+        <pre><code><span class="code-comment"># Export plugin sources to a file</span>
+aro plugins export              <span class="code-comment"># writes .aro-sources</span>
+
+<span class="code-comment"># Commit .aro-sources to version control, then on another machine:</span>
+aro plugins restore             <span class="code-comment"># reads .aro-sources, clones and installs all plugins</span></code></pre>
+
+        <p>
+            The <code>.aro-sources</code> file records each plugin's Git URL, ref, and commit hash,
+            so <code>aro plugins restore</code> can reproduce the exact same set of plugins.
         </p>
 
         <h2>Manual Installation</h2>

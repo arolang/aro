@@ -72,11 +72,19 @@ public struct InlayHintHandler: Sendable {
             for nested in rangeLoop.body {
                 hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
             }
+        } else if let whileLoop = statement as? WhileLoop {
+            for nested in whileLoop.body {
+                hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
+            }
         } else if let matchStmt = statement as? MatchStatement {
             for caseClause in matchStmt.cases {
                 for nested in caseClause.body {
                     hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
                 }
+            }
+        } else if let pipeline = statement as? PipelineStatement {
+            for stage in pipeline.stages {
+                hints.append(contentsOf: hintsForAROStatement(stage, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
             }
         }
 

@@ -212,8 +212,12 @@ struct CompileCommand: ParsableCommand {
         let printer = ASTPrinter()
 
         for result in programs where result.isSuccess {
-            let ast = try! result.program.accept(printer)
-            print(ast)
+            do {
+                let ast = try result.program.accept(printer)
+                print(ast)
+            } catch {
+                FileHandle.standardError.write(Data("Error printing AST: \(error)\n".utf8))
+            }
         }
     }
 }

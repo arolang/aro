@@ -164,6 +164,7 @@ public struct AROStatement: Statement {
 
     // MARK: - Legacy Initializer (Backward Compatibility)
 
+    @available(*, deprecated, message: "Use the grouped initializer instead")
     public init(
         action: Action,
         result: QualifiedNoun,
@@ -900,6 +901,11 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     // Specifiers are parsed from typeAnnotation as dot-separated property path
     public var specifiers: [String] {
         guard let type = typeAnnotation else { return [] }
+        // Qualifier chains (e.g., "stats.sort|list.take") are returned as a single element
+        // so that the runtime can detect and handle them via resolveChain.
+        if type.contains("|") {
+            return [type]
+        }
         // If it contains < it's a generic type like List<User>, return as single element
         if type.contains("<") {
             return [type]
@@ -915,6 +921,18 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         }
         // Split by dots for property path syntax (e.g., "customer.address.city")
         return type.split(separator: ".").map(String.init)
+    }
+
+    /// Whether this noun has a chained qualifier annotation (contains |)
+    public var isQualifierChain: Bool {
+        typeAnnotation?.contains("|") == true
+    }
+
+    /// Returns the individual qualifier names in a chain, or nil if not a chain.
+    /// For "stats.sort|list.take" returns ["stats.sort", "list.take"].
+    public var qualifierChain: [String]? {
+        guard let type = typeAnnotation, type.contains("|") else { return nil }
+        return type.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     public init(base: String, typeAnnotation: String? = nil, span: SourceSpan) {
@@ -1531,10 +1549,10 @@ public struct ASTPrinter: ASTVisitor {
         var printer = self
         printer.indent += 1
         for importDecl in node.imports {
-            result += try! importDecl.accept(printer)
+            result += (try? importDecl.accept(printer)) ?? ""
         }
         for featureSet in node.featureSets {
-            result += try! featureSet.accept(printer)
+            result += (try? featureSet.accept(printer)) ?? ""
         }
         return result
     }
@@ -1550,7 +1568,7 @@ public struct ASTPrinter: ASTVisitor {
         var printer = self
         printer.indent += 1
         for statement in node.statements {
-            result += try! statement.accept(printer)
+            result += (try? statement.accept(printer)) ?? ""
         }
         return result
     }
@@ -1590,7 +1608,7 @@ public struct ASTPrinter: ASTVisitor {
             var bodyPrinter = printer
             bodyPrinter.indent += 1
             for statement in caseClause.body {
-                result += try! statement.accept(bodyPrinter)
+                result += (try? statement.accept(bodyPrinter)) ?? ""
             }
         }
         if let otherwise = node.otherwise {
@@ -1598,7 +1616,7 @@ public struct ASTPrinter: ASTVisitor {
             var otherwisePrinter = printer
             otherwisePrinter.indent += 1
             for statement in otherwise {
-                result += try! statement.accept(otherwisePrinter)
+                result += (try? statement.accept(otherwisePrinter)) ?? ""
             }
         }
         return result
@@ -1622,7 +1640,7 @@ public struct ASTPrinter: ASTVisitor {
         printer.indent += 1
         result += "\(indentation())  Body:\n"
         for statement in node.body {
-            result += try! statement.accept(printer)
+            result += (try? statement.accept(printer)) ?? ""
         }
         return result
     }
@@ -1634,7 +1652,7 @@ public struct ASTPrinter: ASTVisitor {
         printer.indent += 1
         result += "\(indentation())  Body:\n"
         for statement in node.body {
-            result += try! statement.accept(printer)
+            result += (try? statement.accept(printer)) ?? ""
         }
         return result
     }
@@ -1652,7 +1670,7 @@ public struct ASTPrinter: ASTVisitor {
         printer.indent += 1
         result += "\(indentation())  Body:\n"
         for statement in node.body {
-            result += try! statement.accept(printer)
+            result += (try? statement.accept(printer)) ?? ""
         }
         return result
     }
@@ -1667,7 +1685,7 @@ public struct ASTPrinter: ASTVisitor {
             result += "\(printer.indentation())Stage \(index + 1):\n"
             var stagePrinter = printer
             stagePrinter.indent += 1
-            result += try! stage.accept(stagePrinter)
+            result += (try? stage.accept(stagePrinter)) ?? ""
         }
 
         return result
@@ -1687,7 +1705,7 @@ public struct ASTPrinter: ASTVisitor {
         var printer = self
         printer.indent += 1
         for element in node.elements {
-            result += try! element.accept(printer)
+            result += (try? element.accept(printer)) ?? ""
         }
         return result
     }
@@ -1699,7 +1717,7 @@ public struct ASTPrinter: ASTVisitor {
         for entry in node.entries {
             result += "\(printer.indentation())\(entry.key):\n"
             printer.indent += 1
-            result += try! entry.value.accept(printer)
+            result += (try? entry.value.accept(printer)) ?? ""
             printer.indent -= 1
         }
         return result
@@ -1713,8 +1731,8 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())Binary: \(node.op.rawValue)\n"
         var printer = self
         printer.indent += 1
-        result += try! node.left.accept(printer)
-        result += try! node.right.accept(printer)
+        result += (try? node.left.accept(printer)) ?? ""
+        result += (try? node.right.accept(printer)) ?? ""
         return result
     }
 
@@ -1722,7 +1740,7 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())Unary: \(node.op.rawValue)\n"
         var printer = self
         printer.indent += 1
-        result += try! node.operand.accept(printer)
+        result += (try? node.operand.accept(printer)) ?? ""
         return result
     }
 
@@ -1730,7 +1748,7 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())MemberAccess: .\(node.member)\n"
         var printer = self
         printer.indent += 1
-        result += try! node.base.accept(printer)
+        result += (try? node.base.accept(printer)) ?? ""
         return result
     }
 
@@ -1740,11 +1758,11 @@ public struct ASTPrinter: ASTVisitor {
         printer.indent += 1
         result += "\(printer.indentation())base:\n"
         printer.indent += 1
-        result += try! node.base.accept(printer)
+        result += (try? node.base.accept(printer)) ?? ""
         printer.indent -= 1
         result += "\(printer.indentation())index:\n"
         printer.indent += 1
-        result += try! node.index.accept(printer)
+        result += (try? node.index.accept(printer)) ?? ""
         return result
     }
 
@@ -1752,7 +1770,7 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())Grouped\n"
         var printer = self
         printer.indent += 1
-        result += try! node.expression.accept(printer)
+        result += (try? node.expression.accept(printer)) ?? ""
         return result
     }
 
@@ -1760,7 +1778,7 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())Exists\n"
         var printer = self
         printer.indent += 1
-        result += try! node.expression.accept(printer)
+        result += (try? node.expression.accept(printer)) ?? ""
         return result
     }
 
@@ -1768,7 +1786,7 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())TypeCheck: \(node.typeName)\n"
         var printer = self
         printer.indent += 1
-        result += try! node.expression.accept(printer)
+        result += (try? node.expression.accept(printer)) ?? ""
         return result
     }
 
@@ -1783,7 +1801,7 @@ public struct ASTPrinter: ASTVisitor {
             case .interpolation(let expr):
                 result += "\(printer.indentation())interpolation:\n"
                 printer.indent += 1
-                result += try! expr.accept(printer)
+                result += (try? expr.accept(printer)) ?? ""
                 printer.indent -= 1
             }
         }
