@@ -45,6 +45,8 @@ public struct HelpCommand: MetaCommand {
         Plugins:
           :plugin add <git-url>   Install and load a plugin from Git
           :plugin add <url> --ref <ref>  Install specific version
+          :plugin update <name>   Update plugin to latest version
+          :plugin update <name> --ref <ref>  Update to specific version
           :plugin list            List loaded plugins
           :plugin remove <name>   Unload a plugin
 
@@ -520,7 +522,7 @@ public struct LoadCommand: MetaCommand {
 public struct PluginCommand: MetaCommand {
     public static let name = "plugin"
     public static let aliases = ["plugins"]
-    public static let help = "Manage plugins (:plugin add <url>, :plugin list, :plugin remove <name>)"
+    public static let help = "Manage plugins (:plugin add <url>, :plugin list, :plugin update <name>, :plugin remove <name>)"
 
     public init() {}
 
@@ -529,6 +531,7 @@ public struct PluginCommand: MetaCommand {
             return .error("""
                 Usage:
                   :plugin add <git-url> [--ref <ref>]   Install and load a plugin
+                  :plugin update <name> [--ref <ref>]   Update a plugin to latest (or specific ref)
                   :plugin list                          List loaded plugins
                   :plugin remove <name>                 Unload a plugin
                 """)
@@ -537,12 +540,14 @@ public struct PluginCommand: MetaCommand {
         switch subcommand.lowercased() {
         case "add":
             return try await handleAdd(args: Array(args.dropFirst()), session: session)
+        case "update", "upgrade":
+            return try await handleUpdate(args: Array(args.dropFirst()))
         case "list", "ls":
             return handleList()
         case "remove", "rm":
             return handleRemove(args: Array(args.dropFirst()))
         default:
-            return .error("Unknown subcommand '\(subcommand)'. Use: add, list, remove")
+            return .error("Unknown subcommand '\(subcommand)'. Use: add, update, list, remove")
         }
     }
 
@@ -613,6 +618,69 @@ public struct PluginCommand: MetaCommand {
             if !actionNames.isEmpty {
                 output += "\nActions: \(actionNames.joined(separator: ", "))"
             }
+        }
+
+        return .output(output)
+    }
+
+    // MARK: - Update
+
+    private func handleUpdate(args: [String]) async throws -> MetaCommandResult {
+        guard let name = args.first else {
+            return .error("Usage: :plugin update <plugin-name> [--ref <ref>]")
+        }
+
+        // Parse optional --ref
+        var ref: String? = nil
+        if let refIndex = args.firstIndex(of: "--ref"), refIndex + 1 < args.count {
+            ref = args[refIndex + 1]
+        }
+
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let replPluginsDir = homeDir.appendingPathComponent(".aro/repl-plugins")
+
+        // Verify plugin is installed
+        let pluginDir = replPluginsDir
+            .appendingPathComponent("Plugins")
+            .appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: pluginDir.path) else {
+            return .error("Plugin '\(name)' is not installed. Use :plugin add to install it first.")
+        }
+
+        let pm = AROPackageManager.PackageManager(
+            applicationDirectory: replPluginsDir,
+            pluginsDirectory: replPluginsDir.appendingPathComponent("Plugins")
+        )
+
+        let result: AROPackageManager.UpdateResult
+        do {
+            result = try pm.update(name: name, ref: ref)
+        } catch {
+            return .error("Failed to update plugin: \(error)")
+        }
+
+        if !result.hasChanges {
+            return .output("Plugin '\(name)' is already up to date (v\(result.newVersion), commit: \(result.newCommit.prefix(7)))")
+        }
+
+        // Build status
+        var buildMessages: [String] = []
+        for buildResult in result.buildResults {
+            let icon = buildResult.success ? "+" : "x"
+            buildMessages.append("  [\(icon)] \(buildResult.message)")
+        }
+
+        // Reload the plugin in the running session
+        do {
+            try UnifiedPluginLoader.shared.reload(pluginName: name)
+        } catch {
+            return .error("Plugin updated on disk but failed to reload: \(error)")
+        }
+
+        var output = "Plugin '\(name)' updated: v\(result.oldVersion) -> v\(result.newVersion)"
+        output += " (commit: \(result.oldCommit.prefix(7)) -> \(result.newCommit.prefix(7)))"
+        if !buildMessages.isEmpty {
+            output += "\n" + buildMessages.joined(separator: "\n")
         }
 
         return .output(output)
