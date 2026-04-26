@@ -50,6 +50,8 @@ public struct ReturnAction: SynchronousAction {
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     data["data"] = AnySendable(jsonString)
                 } else {
+                    // Fallback: array could not be serialized to JSON (non-serializable elements)
+                    FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed, returning empty array\n".utf8))
                     data["data"] = AnySendable("[]")
                 }
             } else if let str = expr as? String {
@@ -161,6 +163,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[prefix] = AnySendable(jsonString)
             } else {
+                // Fallback: array could not be serialized to JSON (non-serializable elements)
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(prefix)', returning empty array\n".utf8))
                 data[prefix] = AnySendable("[]")
             }
         default:
@@ -210,6 +214,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[key] = AnySendable(jsonString)
             } else {
+                // Fallback: dict contains non-serializable values, use string description
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: dict serialization failed for '\(key)', using String(describing:)\n".utf8))
                 data[key] = AnySendable(String(describing: dict))
             }
         case let array as [Any]:
@@ -218,6 +224,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[key] = AnySendable(jsonString)
             } else {
+                // Fallback: array contains non-serializable values, use string description
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(key)', using String(describing:)\n".utf8))
                 data[key] = AnySendable(String(describing: array))
             }
         default:
@@ -433,8 +441,11 @@ public struct LogAction: ActionImplementation {
             // Apply specifiers (qualifiers) to the value
             // e.g., Log <numbers: reverse> applies the "reverse" qualifier
             for specifier in result.specifiers {
-                if let transformed = try? context.container.qualifierRegistry.resolve(specifier, value: value) {
-                    value = transformed
+                // Apply qualifier; skip on failure (qualifier may not apply to this type)
+                do {
+                    value = try context.container.qualifierRegistry.resolve(specifier, value: value)
+                } catch {
+                    FileHandle.standardError.write(Data("[LogAction] Warning: qualifier '\(specifier)' failed: \(error.localizedDescription)\n".utf8))
                 }
             }
             // Message from any variable type
@@ -861,12 +872,22 @@ public struct WriteAction: ActionImplementation {
             for (key, val) in dict {
                 anyDict[key] = val
             }
-            bodyData = (try? JSONSerialization.data(withJSONObject: anyDict)) ?? Data()
+            do {
+                bodyData = try JSONSerialization.data(withJSONObject: anyDict)
+            } catch {
+                FileHandle.standardError.write(Data("[WriteAction] Warning: dict serialization failed: \(error.localizedDescription)\n".utf8))
+                bodyData = Data()
+            }
             effectiveContentType = contentType ?? "application/json"
         } else if let array = value as? [any Sendable] {
             // Convert Sendable array to Any for JSON serialization
             let anyArray = array.map { $0 as Any }
-            bodyData = (try? JSONSerialization.data(withJSONObject: anyArray)) ?? Data()
+            do {
+                bodyData = try JSONSerialization.data(withJSONObject: anyArray)
+            } catch {
+                FileHandle.standardError.write(Data("[WriteAction] Warning: array serialization failed: \(error.localizedDescription)\n".utf8))
+                bodyData = Data()
+            }
             effectiveContentType = contentType ?? "application/json"
         } else {
             // Try to serialize any other value

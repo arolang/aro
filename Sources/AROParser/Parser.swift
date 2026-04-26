@@ -885,10 +885,7 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // Expect 'from' preposition
-        guard case .preposition(.from) = peek().kind else {
-            throw ParserError.unexpectedToken(expected: "'from'", got: peek())
-        }
-        advance()
+        try expectPreposition(.from, message: "'from'")
 
         // Skip optional article before source
         if case .article = peek().kind {
@@ -1167,14 +1164,12 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // consume 'from' (preposition)
-        if case .preposition(.from) = peek().kind { advance() }
-        else { throw ParserError.unexpectedToken(expected: "'from'", got: peek()) }
+        try expectPreposition(.from, message: "'from'")
 
         let fromExpr = try parseExpression()
 
         // consume 'to' (preposition)
-        if case .preposition(.to) = peek().kind { advance() }
-        else { throw ParserError.unexpectedToken(expected: "'to'", got: peek()) }
+        try expectPreposition(.to, message: "'to'")
 
         let toExpr = try parseExpression()
 
@@ -1527,7 +1522,16 @@ public final class Parser {
         }
         throw ParserError.unexpectedToken(expected: message, got: token)
     }
-    
+
+    /// Expects a specific preposition token and advances, or throws a consistent error.
+    @discardableResult
+    private func expectPreposition(_ expected: Preposition, message: String) throws -> Token {
+        if case .preposition(let p) = peek().kind, p == expected {
+            return advance()
+        }
+        throw ParserError.unexpectedToken(expected: message, got: peek())
+    }
+
     // MARK: - Error Recovery
     
     /// Synchronizes to the next feature set after an error
