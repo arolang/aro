@@ -1769,10 +1769,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
         isRunning = true
         print("HTTP Server started on port \(port)")
 
-        // Start accept loop in background
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.acceptLoop()
+        // Start accept loop on a dedicated thread — GCD utility QoS can
+        // delay dispatch under system load, causing accepted connections to stall
+        let server = self
+        let acceptThread = Thread {
+            server.acceptLoop()
         }
+        acceptThread.name = "aro.http.accept"
+        acceptThread.start()
 
         return true
     }
@@ -1803,14 +1807,22 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
             guard clientFd >= 0, isRunning else { continue }
 
-            // Handle client in background
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                self?.handleClient(fd: clientFd)
+            // Handle client on a dedicated thread
+            let server = self
+            let thread = Thread {
+                server.handleClient(fd: clientFd)
             }
+            thread.start()
         }
     }
 
     private func handleClient(fd: Int32) {
+        // Set recv timeout so blocking recv() calls don't hang threads indefinitely
+        var timeout = timeval()
+        timeout.tv_sec = 5
+        timeout.tv_usec = 0
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
         var buffer = [UInt8](repeating: 0, count: 8192)
         var totalData = Data()
 
@@ -1925,9 +1937,9 @@ public final class NativeHTTPServer: @unchecked Sendable {
         // Graceful socket close: signal end of transmission before closing
         // This prevents "Connection reset by peer" errors for some HTTP clients (like HTTP::Tiny)
         _ = shutdown(fd, Int32(SHUT_WR))
-        // Wait up to 10 ms for the client to drain; DispatchSemaphore avoids blocking a Dispatch thread
-        let drainWait = DispatchSemaphore(value: 0)
-        _ = drainWait.wait(timeout: .now() + 0.01)
+        // Brief drain: let the client read the response before closing
+        var drainBuf = [UInt8](repeating: 0, count: 64)
+        _ = recv(fd, &drainBuf, drainBuf.count, MSG_DONTWAIT)
         _ = systemClose(fd)
     }
 

@@ -161,12 +161,22 @@ public struct ExecConfig: Sendable {
 /// - `exec` (synonym)
 /// - `run` (synonym)
 /// - `shell` (synonym)
-public struct ExecuteAction: ActionImplementation {
+public struct ExecuteAction: ActionImplementation, SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["execute", "exec", "run", "shell"]
     public static let validPrepositions: Set<Preposition> = [.on, .with, .for]
 
     public init() {}
+
+    public func executeSynchronously(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) throws -> any Sendable {
+        try validatePreposition(object.preposition)
+        let config = try extractConfig(from: object, context: context)
+        return Self.runCommandSync(config).toDictionary()
+    }
 
     public func execute(
         result: ResultDescriptor,
@@ -174,17 +184,8 @@ public struct ExecuteAction: ActionImplementation {
         context: ExecutionContext
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
-
-        // Extract command configuration
         let config = try extractConfig(from: object, context: context)
-
-        // Execute the command
-        let execResult = await runCommand(config)
-
-        // Return result as dictionary - FeatureSetExecutor will bind it
-        // Individual fields (error, message, output, exitCode, command) are
-        // accessible via dot notation: <listing.error>, <listing.output>, etc.
-        return execResult.toDictionary()
+        return await runCommand(config).toDictionary()
     }
 
     // MARK: - Private Methods
@@ -279,29 +280,37 @@ public struct ExecuteAction: ActionImplementation {
     }
 
     private func runCommand(_ config: ExecConfig) async -> ExecResult {
+        // Run the entire process synchronously to avoid cooperative thread pool
+        // and GCD scheduling issues that cause intermittent hangs.
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Self.runCommandSync(config))
+            }
+        }
+    }
+
+    /// Fully synchronous process execution on a dedicated thread.
+    /// Reads pipes concurrently with process execution to prevent buffer deadlocks.
+    private static func runCommandSync(_ config: ExecConfig) -> ExecResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: config.shell)
         process.arguments = ["-c", config.command]
 
-        // Set working directory if specified
         if let workDir = config.workingDirectory {
             process.currentDirectoryURL = URL(fileURLWithPath: workDir)
         }
 
-        // Set environment
         var environment = ProcessInfo.processInfo.environment
         if let extraEnv = config.environment {
             environment.merge(extraEnv) { _, new in new }
         }
         process.environment = environment
 
-        // Set up pipes for output
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        // Start the process
         do {
             try process.run()
         } catch {
@@ -314,37 +323,32 @@ public struct ExecuteAction: ActionImplementation {
             )
         }
 
-        // Wait with timeout
-        let didTimeout = await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                process.waitUntilExit()
-                return false
-            }
+        // Close parent's write ends so reads get EOF when child exits
+        stdoutPipe.fileHandleForWriting.closeFile()
+        stderrPipe.fileHandleForWriting.closeFile()
 
-            group.addTask {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(config.timeout) * 1_000_000)
-                    if process.isRunning {
-                        process.terminate()
-                        return true
-                    }
-                } catch {
-                    // Task cancelled, process finished
-                }
-                return false
-            }
+        // Read pipes concurrently to prevent buffer deadlock for large output
+        var stdoutData = Data()
+        var stderrData = Data()
+        let readGroup = DispatchGroup()
 
-            // Wait for first result
-            if let timedOut = await group.next() {
-                group.cancelAll()
-                return timedOut
-            }
-            return false
+        readGroup.enter()
+        DispatchQueue.global().async {
+            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+        readGroup.enter()
+        DispatchQueue.global().async {
+            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
         }
 
-        // Read output
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        // Wait for process exit
+        process.waitUntilExit()
+        let didTimeout = false
+
+        // Wait for pipe reads to complete
+        readGroup.wait()
 
         let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
