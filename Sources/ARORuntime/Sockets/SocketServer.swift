@@ -12,6 +12,7 @@ public enum SocketError: Error, Sendable {
     case notConnected
     case connectionNotFound(String)
     case connectionFailed(String)
+    case connectionTimeout(host: String, port: Int)
     case encodingError
     case timeout
 }
@@ -25,6 +26,8 @@ extension SocketError: CustomStringConvertible {
             return "Connection not found: \(id)"
         case .connectionFailed(let reason):
             return "Connection failed: \(reason)"
+        case .connectionTimeout(let host, let port):
+            return "Connection to \(host):\(port) timed out"
         case .encodingError:
             return "String encoding error"
         case .timeout:
@@ -354,13 +357,16 @@ private final class SocketHandler: ChannelInboundHandler, @unchecked Sendable {
     }
 }
 
-// MARK: - Socket Client (BSD Sockets)
+// MARK: - Socket Client (Non-blocking BSD Sockets)
 
-/// Socket Client for outgoing TCP connections using BSD sockets.
+/// Socket Client for outgoing TCP connections using non-blocking BSD sockets.
 ///
 /// Uses POSIX BSD sockets directly instead of SwiftNIO so that it works
 /// in both interpreter mode (`aro run`) and compiled binary mode (`aro build`).
 /// SwiftNIO's MultiThreadedEventLoopGroup crashes with SIGSEGV in LLVM binaries.
+///
+/// All I/O is non-blocking with `poll()`-based timeouts to avoid starving
+/// the Swift async runtime thread pool.
 public final class AROSocketClient: @unchecked Sendable {
     // MARK: - Properties
 
@@ -368,8 +374,18 @@ public final class AROSocketClient: @unchecked Sendable {
     private var socketFd: Int32 = -1
     private let lock = NSLock()
     private var _isConnected = false
+    private var receiveTask: Task<Void, Never>?
 
     public let connectionId: String
+
+    /// Connection timeout in seconds (default: 30)
+    public var connectTimeout: Int = 30
+
+    /// Receive timeout in seconds per poll cycle (default: 30)
+    public var receiveTimeout: Int = 30
+
+    /// Receive buffer size in bytes (default: 8192)
+    public var receiveBufferSize: Int = 8192
 
     /// Whether the client is connected
     public var isConnected: Bool {
@@ -406,27 +422,16 @@ public final class AROSocketClient: @unchecked Sendable {
     }
 
     deinit {
+        receiveTask?.cancel()
         let fd = takeFd()
         if fd >= 0 { _ = bsdClose(fd) }
     }
 
     // MARK: - Connection
 
-    /// Connect to a server. Resolves hostname, connects, and starts the receive loop.
+    /// Connect to a server using non-blocking I/O with timeout.
+    /// Resolves hostname, connects with a deadline, and starts the receive loop.
     public func connect(host: String, port: Int) async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            DispatchQueue.global(qos: .utility).async { [self] in
-                do {
-                    try self.connectBlocking(host: host, port: port)
-                    cont.resume()
-                } catch {
-                    cont.resume(throwing: error)
-                }
-            }
-        }
-    }
-
-    private func connectBlocking(host: String, port: Int) throws {
         // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
         #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
@@ -435,6 +440,13 @@ public final class AROSocketClient: @unchecked Sendable {
         #endif
         guard fd >= 0 else {
             throw SocketError.connectionFailed("socket() failed (errno \(errno))")
+        }
+
+        // Set socket to non-blocking mode
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+            _ = bsdClose(fd)
+            throw SocketError.connectionFailed("fcntl() failed (errno \(errno))")
         }
 
         // Resolve host and port via getaddrinfo — handles both IPs and hostnames
@@ -454,6 +466,7 @@ public final class AROSocketClient: @unchecked Sendable {
         }
         defer { freeaddrinfo(res) }
 
+        // Non-blocking connect — returns immediately with EINPROGRESS
         let connectResult: Int32
         #if canImport(Darwin)
         connectResult = Darwin.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
@@ -461,9 +474,32 @@ public final class AROSocketClient: @unchecked Sendable {
         connectResult = Glibc.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
         #endif
 
-        guard connectResult == 0 else {
-            _ = bsdClose(fd)
-            throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
+        if connectResult != 0 {
+            guard errno == EINPROGRESS else {
+                _ = bsdClose(fd)
+                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
+            }
+
+            // Wait for connect to complete using poll() with timeout
+            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            let pollResult = poll(&pfd, 1, Int32(connectTimeout) * 1000)
+
+            if pollResult == 0 {
+                _ = bsdClose(fd)
+                throw SocketError.connectionTimeout(host: host, port: port)
+            } else if pollResult < 0 {
+                _ = bsdClose(fd)
+                throw SocketError.connectionFailed("poll() failed during connect (errno \(errno))")
+            }
+
+            // Check for connect error via SO_ERROR
+            var soError: Int32 = 0
+            var soLen = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &soLen)
+            if soError != 0 {
+                _ = bsdClose(fd)
+                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(soError))")
+            }
         }
 
         withLock {
@@ -478,18 +514,38 @@ public final class AROSocketClient: @unchecked Sendable {
             payload: ["connection": ["id": connectionId, "remoteAddress": "\(host):\(port)"] as [String: any Sendable]]
         ))
 
-        // Start receive loop on a background thread
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.receiveLoop()
+        // Start receive loop using structured concurrency instead of DispatchQueue
+        let bufSize = receiveBufferSize
+        let recvTimeout = receiveTimeout
+        receiveTask = Task.detached { [weak self] in
+            self?.receiveLoop(bufferSize: bufSize, timeoutSeconds: recvTimeout)
         }
     }
 
-    private func receiveLoop() {
-        var buffer = [UInt8](repeating: 0, count: 4096)
+    private func receiveLoop(bufferSize: Int, timeoutSeconds: Int) {
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        let timeoutMs = Int32(timeoutSeconds) * 1000
 
-        while true {
+        while !Task.isCancelled {
             let fd = getFd()
             guard fd >= 0 else { break }
+
+            // Use poll() to wait for data with timeout instead of blocking recv()
+            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let pollResult = poll(&pfd, 1, timeoutMs)
+
+            if pollResult == 0 {
+                // Timeout — continue polling (allows Task cancellation check)
+                continue
+            } else if pollResult < 0 {
+                if errno == EINTR { continue }  // Interrupted, retry
+                break
+            }
+
+            // Check for error/hangup conditions
+            if pfd.revents & Int16(POLLHUP) != 0 || pfd.revents & Int16(POLLERR) != 0 {
+                break
+            }
 
             let n = recv(fd, &buffer, buffer.count, 0)
             if n <= 0 { break }
@@ -515,6 +571,8 @@ public final class AROSocketClient: @unchecked Sendable {
 
     /// Disconnect from server
     public func disconnect() async throws {
+        receiveTask?.cancel()
+        receiveTask = nil
         let fd = takeFd()
         if fd >= 0 { _ = bsdClose(fd) }
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "disconnect requested"))
