@@ -327,19 +327,23 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
         stdoutPipe.fileHandleForWriting.closeFile()
         stderrPipe.fileHandleForWriting.closeFile()
 
-        // Read pipes concurrently to prevent buffer deadlock for large output
-        var stdoutData = Data()
-        var stderrData = Data()
+        // Read pipes concurrently to prevent buffer deadlock for large output.
+        // UnsafeMutablePointer used to satisfy Swift 6 Sendable requirements —
+        // the DispatchGroup.wait() ensures reads complete before pointers are read.
+        let stdoutBox = UnsafeMutablePointer<Data>.allocate(capacity: 1)
+        let stderrBox = UnsafeMutablePointer<Data>.allocate(capacity: 1)
+        stdoutBox.initialize(to: Data())
+        stderrBox.initialize(to: Data())
         let readGroup = DispatchGroup()
 
         readGroup.enter()
         DispatchQueue.global().async {
-            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            stdoutBox.pointee = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
             readGroup.leave()
         }
         readGroup.enter()
         DispatchQueue.global().async {
-            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            stderrBox.pointee = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             readGroup.leave()
         }
 
@@ -349,6 +353,10 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
 
         // Wait for pipe reads to complete
         readGroup.wait()
+        let stdoutData = stdoutBox.move()
+        let stderrData = stderrBox.move()
+        stdoutBox.deallocate()
+        stderrBox.deallocate()
 
         let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
