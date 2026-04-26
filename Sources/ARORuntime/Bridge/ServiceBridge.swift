@@ -1939,7 +1939,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
         _ = shutdown(fd, Int32(SHUT_WR))
         // Brief drain: let the client read the response before closing
         var drainBuf = [UInt8](repeating: 0, count: 64)
-        _ = recv(fd, &drainBuf, drainBuf.count, MSG_DONTWAIT)
+        _ = recv(fd, &drainBuf, drainBuf.count, Int32(MSG_DONTWAIT))
         _ = systemClose(fd)
     }
 
