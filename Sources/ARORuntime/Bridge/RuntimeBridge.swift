@@ -152,15 +152,8 @@ class AROCContextHandle: @unchecked Sendable {
         // Resolve templates/ relative to the binary's own directory so the binary
         // works regardless of which directory it is invoked from.
         let executablePath = CommandLine.arguments[0]
-        let binaryDir: String
-        if executablePath.hasPrefix("/") {
-            binaryDir = (executablePath as NSString).deletingLastPathComponent
-        } else {
-            let cwd = FileManager.default.currentDirectoryPath
-            let abs = (cwd as NSString).appendingPathComponent(executablePath)
-            binaryDir = ((abs as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
-        }
-        let templatesDirectory = (binaryDir as NSString).appendingPathComponent("templates")
+        let binaryDir = ToolResolver.resolveExecutableDirectory(executablePath)
+        let templatesDirectory = URL(fileURLWithPath: binaryDir).appendingPathComponent("templates").path
         let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
             actionRegistry: ActionRegistry.shared,
@@ -232,17 +225,8 @@ class AROCContextHandle: @unchecked Sendable {
         // Priority 2: Fall back to file loading (interpreter mode / development)
         if spec == nil {
             let executablePath = CommandLine.arguments[0]
-            let absolutePath: String
-            if executablePath.hasPrefix("/") {
-                absolutePath = executablePath
-            } else {
-                let cwd = FileManager.default.currentDirectoryPath
-                absolutePath = (cwd as NSString).appendingPathComponent(executablePath)
-            }
-
-            let resolvedPath = (absolutePath as NSString).resolvingSymlinksInPath
-            let binaryDir = (resolvedPath as NSString).deletingLastPathComponent
-            let openapiPath = (binaryDir as NSString).appendingPathComponent("openapi.yaml")
+            let binaryDir = ToolResolver.resolveExecutableDirectory(executablePath)
+            let openapiPath = URL(fileURLWithPath: binaryDir).appendingPathComponent("openapi.yaml").path
 
             if FileManager.default.fileExists(atPath: openapiPath) {
                 spec = try? OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
@@ -255,6 +239,7 @@ class AROCContextHandle: @unchecked Sendable {
             context.setSchemaRegistry(registry)
         }
     }
+
 }
 
 // MARK: - Global Storage
@@ -307,14 +292,7 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
 
         // Seed repositories from .store files (read-only in compiled binaries)
         let execPath = CommandLine.arguments[0]
-        let binDir: String
-        if execPath.hasPrefix("/") {
-            binDir = (execPath as NSString).deletingLastPathComponent
-        } else {
-            let cwd = FileManager.default.currentDirectoryPath
-            let abs = (cwd as NSString).appendingPathComponent(execPath)
-            binDir = ((abs as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
-        }
+        let binDir = ToolResolver.resolveExecutableDirectory(execPath)
         let storeLoader = StoreFileLoader()
         if let storeFiles = try? storeLoader.discover(in: URL(fileURLWithPath: binDir)) {
             let repoStorage = InMemoryRepositoryStorage.shared
