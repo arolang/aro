@@ -614,6 +614,29 @@ The `Proposals/` directory contains language specifications:
 
 All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.2 concurrency safety.
 
+## Error Handling
+
+The codebase follows these conventions:
+
+### throws vs Optional
+
+- **Boundaries** (parser entry points, action `execute()`, public API): Use `throws` with descriptive errors
+- **Internal lookups** (symbol table, registry queries): Return `Optional` — callers decide whether absence is an error
+- **SymbolTable**: Use `lookup()` for optional access, `lookupWithContext()` when a missing symbol is a hard error (it throws `SymbolLookupError` with scope chain context)
+
+### Parser errors
+
+- Use `expect(_:message:)` for single-token expectations
+- Use `expectPreposition(_:message:)` for preposition tokens
+- Use `expectIdentifier(message:)` for identifier-like tokens
+- Direct `throw ParserError.unexpectedToken(...)` is reserved for multi-token or complex pattern checks where the helpers don't apply
+
+### Silent fallbacks (`try?`)
+
+- Never use `try?` without documenting **why** the fallback is acceptable
+- When a `try?` fallback indicates data loss (e.g., returning `"[]"` for a failed array serialization), log a warning to stderr: `FileHandle.standardError.write(Data("[Component] Warning: ...\n".utf8))`
+- `try?` is acceptable for truly optional operations (e.g., best-effort cleanup in `deinit`, optional file deletion)
+
 ## Git Commits
 
 When creating git commits, do NOT include the Claude Code signature or co-author attribution in commit messages.
