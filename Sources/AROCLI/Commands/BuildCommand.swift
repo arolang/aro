@@ -811,6 +811,13 @@ struct BuildCommand: AsyncParsableCommand {
     private func findARORuntimeLibrary() -> String? {
         let fm = FileManager.default
 
+        // Environment variable override: ARO_LIB_PATH points directly to the library file
+        if let envPath = ProcessInfo.processInfo.environment["ARO_LIB_PATH"],
+           !envPath.isEmpty,
+           fm.fileExists(atPath: envPath) {
+            return envPath
+        }
+
         // Get the path to the aro executable itself
         let executablePath = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let executableDir = executablePath.deletingLastPathComponent()
@@ -1070,8 +1077,11 @@ struct BuildCommand: AsyncParsableCommand {
 
     #if os(macOS)
     private func runCodesignCommand(on binaryPath: String, identity: String, hardened: Bool) throws {
+        guard let codesignPath = ToolResolver.findTool("codesign", fallbackPaths: ["/usr/bin/codesign"]) else {
+            throw CodesignError.failed(status: -1)
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.executableURL = URL(fileURLWithPath: codesignPath)
         var args = ["--sign", identity, "--force"]
         if hardened {
             args += ["--options", "runtime"]
@@ -1095,8 +1105,11 @@ struct BuildCommand: AsyncParsableCommand {
     #endif
 
     private func runStripCommand(on binaryPath: String) throws {
+        guard let stripPath = ToolResolver.findTool("strip", fallbackPaths: ["/usr/bin/strip"]) else {
+            return  // strip is optional — skip silently if not found
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/strip")
+        process.executableURL = URL(fileURLWithPath: stripPath)
         #if os(macOS)
         // -S: Remove debug symbols only, keep global symbols for dynamic linking
         // -x: Remove local symbols (non-global)

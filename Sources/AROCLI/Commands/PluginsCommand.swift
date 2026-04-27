@@ -637,14 +637,10 @@ struct RebuildPlugins: ParsableCommand {
 
         let projectDir = cargoToml.deletingLastPathComponent()
 
-        let cargoPaths = [
+        guard let cargo = ToolResolver.findTool("cargo", envOverride: "ARO_CARGO_PATH", fallbackPaths: [
             "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
             "/root/.cargo/bin/cargo",
-            "/opt/homebrew/bin/cargo",
-            "/usr/local/bin/cargo",
-            "/usr/bin/cargo",
-        ]
-        guard let cargo = cargoPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        ]) else {
             throw RebuildError.toolNotFound("cargo")
         }
 
@@ -668,14 +664,16 @@ struct RebuildPlugins: ParsableCommand {
 
         let compiler: String
         if cpp {
-            let clangpp = ["/usr/bin/clang++", "/usr/bin/g++", "/usr/local/bin/clang++"]
-            guard let found = clangpp.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            guard let found = ToolResolver.findTool("clang++", envOverride: "ARO_CXX_PATH", fallbackPaths: [
+                "/usr/bin/clang++", "/usr/bin/g++",
+            ]) else {
                 throw RebuildError.toolNotFound("clang++")
             }
             compiler = found
         } else {
-            let clang = ["/usr/bin/clang", "/usr/bin/gcc", "/usr/local/bin/clang"]
-            guard let found = clang.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            guard let found = ToolResolver.findTool("clang", envOverride: "ARO_CC_PATH", fallbackPaths: [
+                "/usr/bin/clang", "/usr/bin/gcc",
+            ]) else {
                 throw RebuildError.toolNotFound("clang")
             }
             compiler = found
@@ -714,17 +712,11 @@ struct RebuildPlugins: ParsableCommand {
             throw RebuildError.sourceNotFound(pluginName, "No .swift files found")
         }
 
-        // Find swiftc
-        let swiftcPaths = ["/usr/bin/swiftc", "/usr/share/swift/usr/bin/swiftc",
-                           "/opt/swift/usr/bin/swiftc", "/opt/homebrew/bin/swiftc", "/usr/local/bin/swiftc"]
-        let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"]
-        let swiftcPath: String?
-        if let env = swiftcEnv, !env.isEmpty, FileManager.default.isExecutableFile(atPath: env) {
-            swiftcPath = env
-        } else {
-            swiftcPath = swiftcPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-        }
-        guard let swiftc = swiftcPath else {
+        // Find swiftc (SWIFTC env var is the established convention; ARO_SWIFTC_PATH also accepted)
+        guard let swiftc = ToolResolver.findTool("swiftc", envOverride: "SWIFTC", fallbackPaths: [
+            "/usr/share/swift/usr/bin/swiftc",
+            "/opt/swift/usr/bin/swiftc",
+        ]) ?? ToolResolver.findTool("swiftc", envOverride: "ARO_SWIFTC_PATH") else {
             throw RebuildError.toolNotFound("swiftc")
         }
 
