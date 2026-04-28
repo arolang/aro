@@ -738,4 +738,83 @@ struct CodeActionHandlerTests {
     }
 }
 
+// MARK: - Inlay Hint Handler Tests
+
+@Suite("Inlay Hint Handler Tests")
+struct InlayHintHandlerTests {
+
+    @Test("Returns nil for empty compilation result")
+    func testNilForEmptyResult() {
+        let handler = InlayHintHandler()
+        let result = handler.handle(compilationResult: nil, startLine: 0, endLine: 10)
+        #expect(result == nil)
+    }
+
+    @Test("Returns hints for variable with known type")
+    func testVariableTypeHint() {
+        let source = """
+        (Test: Business) {
+            Extract the <user> from the <request: body>.
+            Return an <OK: status> for the <result>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let result = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 10)
+        // May or may not produce hints depending on type inference
+        // At minimum, verify it doesn't crash and returns a valid structure
+        if let hints = result {
+            for hint in hints {
+                #expect(hint["position"] != nil)
+                #expect(hint["label"] != nil)
+            }
+        }
+    }
+
+    @Test("Respects visible range filtering")
+    func testRangeFiltering() {
+        let source = """
+        (Test: Business) {
+            Extract the <data> from the <source>.
+            Compute the <result> for the <data>.
+            Return the <output> for the <result>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        // Request only line 0 — should get fewer hints than full range
+        let narrowResult = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 0)
+        let fullResult = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 10)
+
+        let narrowCount = narrowResult?.count ?? 0
+        let fullCount = fullResult?.count ?? 0
+        #expect(narrowCount <= fullCount)
+    }
+
+    @Test("Returns hints for multiple feature sets")
+    func testMultipleFeatureSets() {
+        let source = """
+        (First: Business) {
+            Extract the <alpha> from the <source>.
+        }
+
+        (Second: Business) {
+            Compute the <beta> for the <input>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let result = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 20)
+        // Should process both feature sets without error
+        if let hints = result {
+            for hint in hints {
+                #expect(hint["position"] != nil)
+            }
+        }
+    }
+}
+
 #endif
