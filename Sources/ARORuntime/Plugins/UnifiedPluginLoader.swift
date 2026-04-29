@@ -383,37 +383,39 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             loadCondition.unlock()
             throw error
         case .pendingNative(let dir, let provide, let effectiveHandle):
-            // Claim the load slot
+            // Claim the load slot — waiters will spin on .loading until we broadcast
             lazyPlugins[pluginName] = .loading
             loadCondition.unlock()
 
             AROLogger.debug("Lazily loading native plugin '\(pluginName)'", subsystem: "plugins")
+            let host: NativePluginHost
             do {
-                let host = try NativePluginHost(
+                host = try NativePluginHost(
                     pluginPath: dir,
                     pluginName: pluginName,
                     config: provide,
                     qualifierNamespace: effectiveHandle
                 )
-                // Note: we do NOT call host.registerActions() here — lazy stubs are
-                // already registered in ActionRegistry and delegate here directly.
-                // host.init() does call loadPluginInfo() which registers qualifiers.
-
-                loadCondition.lock()
-                nativePlugins[pluginName] = host
-                lazyPlugins[pluginName] = .loadedNative(host)
-                loadCondition.broadcast()
-                loadCondition.unlock()
-
-                AROLogger.debug("Native plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
-                return host
             } catch {
+                // Mark as failed so waiters don't spin forever
                 loadCondition.lock()
                 lazyPlugins[pluginName] = .failed(error)
                 loadCondition.broadcast()
                 loadCondition.unlock()
                 throw error
             }
+            // Note: we do NOT call host.registerActions() here — lazy stubs are
+            // already registered in ActionRegistry and delegate here directly.
+            // host.init() does call loadPluginInfo() which registers qualifiers.
+
+            loadCondition.lock()
+            nativePlugins[pluginName] = host
+            lazyPlugins[pluginName] = .loadedNative(host)
+            loadCondition.broadcast()
+            loadCondition.unlock()
+
+            AROLogger.debug("Native plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
+            return host
         default:
             loadCondition.unlock()
             throw ActionError.runtimeError("Plugin '\(pluginName)' is not a lazy native plugin")
@@ -436,32 +438,35 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             loadCondition.unlock()
             throw error
         case .pendingPython(let dir, let provide, let effectiveHandle):
+            // Claim the load slot — waiters will spin on .loading until we broadcast
             lazyPlugins[pluginName] = .loading
             loadCondition.unlock()
 
             AROLogger.debug("Lazily loading Python plugin '\(pluginName)'", subsystem: "plugins")
+            let host: PythonPluginHost
             do {
-                let host = try PythonPluginHost(
+                host = try PythonPluginHost(
                     pluginPath: dir,
                     pluginName: pluginName,
                     config: provide,
                     qualifierNamespace: effectiveHandle
                 )
-                loadCondition.lock()
-                pythonPlugins[pluginName] = host
-                lazyPlugins[pluginName] = .loadedPython(host)
-                loadCondition.broadcast()
-                loadCondition.unlock()
-
-                AROLogger.debug("Python plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
-                return host
             } catch {
+                // Mark as failed so waiters don't spin forever
                 loadCondition.lock()
                 lazyPlugins[pluginName] = .failed(error)
                 loadCondition.broadcast()
                 loadCondition.unlock()
                 throw error
             }
+            loadCondition.lock()
+            pythonPlugins[pluginName] = host
+            lazyPlugins[pluginName] = .loadedPython(host)
+            loadCondition.broadcast()
+            loadCondition.unlock()
+
+            AROLogger.debug("Python plugin '\(pluginName)' loaded lazily", subsystem: "plugins")
+            return host
         default:
             loadCondition.unlock()
             throw ActionError.runtimeError("Plugin '\(pluginName)' is not a lazy Python plugin")
