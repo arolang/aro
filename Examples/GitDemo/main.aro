@@ -1,0 +1,53 @@
+(*
+ * ARO-0080 Git Actions Demo
+ *
+ * Demonstrates native Git operations from ARO code.
+ * Run from inside a Git repository:
+ *   aro run ./Examples/GitDemo
+ *
+ * Actions:
+ *   Retrieve  — get status, log, branch from <git>
+ *   Stage     — stage files to <git>
+ *   Commit    — create a commit to <git>
+ *   Tag       — create a tag for <git>
+ *   Clone     — clone a remote repo from <git>
+ *   Push/Pull — sync with remote (requires git CLI)
+ *   Checkout  — switch branches from <git>
+ *
+ * The <git> system object defaults to the current working
+ * directory. Use <git: "/path/to/repo"> for an explicit path.
+ *)
+
+(Application-Start: Git Demo) {
+    Log "=== ARO Git Actions Demo ===" to the <console>.
+    Log "" to the <console>.
+
+    (* 1. Retrieve repository status *)
+    Log "--- Repository Status ---" to the <console>.
+    Retrieve the <status> from the <git>.
+    Extract the <branch> from the <status: branch>.
+    Extract the <is-clean> from the <status: clean>.
+    Log "Branch: ${branch}" to the <console>.
+    Log "Clean: ${is-clean}" to the <console>.
+    Log "" to the <console>.
+
+    (* 2. Retrieve commit log *)
+    Log "--- Recent Commits ---" to the <console>.
+    Retrieve the <log> from the <git>.
+    For each <entry> in <log> {
+        Extract the <short> from the <entry: short>.
+        Extract the <message> from the <entry: message>.
+        Extract the <author> from the <entry: author>.
+        Log "${short} ${message} (${author})" to the <console>.
+    }
+    Log "" to the <console>.
+
+    (* 3. Retrieve current branch *)
+    Log "--- Current Branch ---" to the <console>.
+    Retrieve the <branch> from the <git>.
+    Log "On branch: ${branch}" to the <console>.
+
+    Log "" to the <console>.
+    Log "=== Demo complete ===" to the <console>.
+    Return an <OK: status> for the <startup>.
+}

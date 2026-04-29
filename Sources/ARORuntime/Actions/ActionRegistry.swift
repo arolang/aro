@@ -68,6 +68,9 @@ public actor ActionRegistry {
         register(TestActionsModule.actions)
         register(TerminalActionsModule.actions)
         register(SystemActionsModule.actions)
+        #if !os(Windows)
+        register(GitActionsModule.actions)
+        #endif
 
         return actions
     }

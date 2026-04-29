@@ -150,6 +150,7 @@ let package = Package(
                 name: "ARORuntime",
                 dependencies: [
                     "AROParser",
+                    "Clibgit2",
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "Logging", package: "swift-log"),
