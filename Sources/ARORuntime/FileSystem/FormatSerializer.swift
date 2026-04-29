@@ -766,61 +766,117 @@ public struct FormatSerializer: Sendable {
 
     // MARK: - Escape Functions
 
+    // MARK: - Single-pass escape functions (O(n) instead of O(n*m))
+
     private static func escapeJSON(_ str: String) -> String {
-        var result = str
-        result = result.replacingOccurrences(of: "\\", with: "\\\\")
-        result = result.replacingOccurrences(of: "\"", with: "\\\"")
-        result = result.replacingOccurrences(of: "\n", with: "\\n")
-        result = result.replacingOccurrences(of: "\r", with: "\\r")
-        result = result.replacingOccurrences(of: "\t", with: "\\t")
+        var result = ""
+        result.reserveCapacity(str.count + str.count / 8)
+        for char in str {
+            switch char {
+            case "\\": result += "\\\\"
+            case "\"": result += "\\\""
+            case "\n": result += "\\n"
+            case "\r": result += "\\r"
+            case "\t": result += "\\t"
+            default:   result.append(char)
+            }
+        }
         return result
     }
 
     private static func escapeXML(_ str: String) -> String {
-        var result = str
-        result = result.replacingOccurrences(of: "&", with: "&amp;")
-        result = result.replacingOccurrences(of: "<", with: "&lt;")
-        result = result.replacingOccurrences(of: ">", with: "&gt;")
-        result = result.replacingOccurrences(of: "\"", with: "&quot;")
-        result = result.replacingOccurrences(of: "'", with: "&apos;")
+        var result = ""
+        result.reserveCapacity(str.count + str.count / 4)
+        for char in str {
+            switch char {
+            case "&":  result += "&amp;"
+            case "<":  result += "&lt;"
+            case ">":  result += "&gt;"
+            case "\"": result += "&quot;"
+            case "'":  result += "&apos;"
+            default:   result.append(char)
+            }
+        }
         return result
     }
 
     private static func escapeTOML(_ str: String) -> String {
-        var result = str
-        result = result.replacingOccurrences(of: "\\", with: "\\\\")
-        result = result.replacingOccurrences(of: "\"", with: "\\\"")
-        result = result.replacingOccurrences(of: "\n", with: "\\n")
-        result = result.replacingOccurrences(of: "\t", with: "\\t")
+        var result = ""
+        result.reserveCapacity(str.count + str.count / 8)
+        for char in str {
+            switch char {
+            case "\\": result += "\\\\"
+            case "\"": result += "\\\""
+            case "\n": result += "\\n"
+            case "\t": result += "\\t"
+            default:   result.append(char)
+            }
+        }
         return result
     }
 
     private static func escapeCSV(_ str: String, delimiter: String, quoteChar: String = "\"") -> String {
-        if str.contains(delimiter) || str.contains(quoteChar) || str.contains("\n") {
-            // Escape quote characters by doubling them
-            let escaped = str.replacingOccurrences(of: quoteChar, with: quoteChar + quoteChar)
-            return quoteChar + escaped + quoteChar
+        let quoteCharacter = quoteChar.first ?? "\""
+        let delimCharacter = delimiter.first
+        var needsQuoting = false
+        for char in str {
+            if char == quoteCharacter || char == delimCharacter || char == "\n" {
+                needsQuoting = true
+                break
+            }
         }
-        return str
+        guard needsQuoting else { return str }
+        var result = ""
+        result.reserveCapacity(str.count + 4)
+        result.append(quoteCharacter)
+        for char in str {
+            if char == quoteCharacter {
+                result.append(quoteCharacter)
+            }
+            result.append(char)
+        }
+        result.append(quoteCharacter)
+        return result
     }
 
     private static func escapeMarkdown(_ str: String) -> String {
-        var result = str
-        result = result.replacingOccurrences(of: "|", with: "\\|")
-        result = result.replacingOccurrences(of: "\n", with: " ")
+        var result = ""
+        result.reserveCapacity(str.count)
+        for char in str {
+            switch char {
+            case "|":  result += "\\|"
+            case "\n": result += " "
+            default:   result.append(char)
+            }
+        }
         return result
     }
 
     private static func escapeHTML(_ str: String) -> String {
-        var result = str
-        result = result.replacingOccurrences(of: "&", with: "&amp;")
-        result = result.replacingOccurrences(of: "<", with: "&lt;")
-        result = result.replacingOccurrences(of: ">", with: "&gt;")
-        result = result.replacingOccurrences(of: "\"", with: "&quot;")
+        var result = ""
+        result.reserveCapacity(str.count + str.count / 4)
+        for char in str {
+            switch char {
+            case "&":  result += "&amp;"
+            case "<":  result += "&lt;"
+            case ">":  result += "&gt;"
+            case "\"": result += "&quot;"
+            default:   result.append(char)
+            }
+        }
         return result
     }
 
     private static func escapeSQL(_ str: String) -> String {
-        return str.replacingOccurrences(of: "'", with: "''")
+        var result = ""
+        result.reserveCapacity(str.count + str.count / 8)
+        for char in str {
+            if char == "'" {
+                result += "''"
+            } else {
+                result.append(char)
+            }
+        }
+        return result
     }
 }
