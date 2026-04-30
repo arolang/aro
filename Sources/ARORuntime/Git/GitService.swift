@@ -234,7 +234,15 @@ public final class GitService: @unchecked Sendable {
             defer { git_revwalk_free(walker) }
 
             git_revwalk_sorting(walker, GIT_SORT_TIME.rawValue)
-            git_revwalk_push_head(walker)
+
+            // push_head can fail in detached HEAD / shallow-clone CI checkouts;
+            // fall back to resolving HEAD manually via git_reference_name_to_id.
+            if git_revwalk_push_head(walker) != 0 {
+                var headOID = git_oid()
+                if git_reference_name_to_id(&headOID, repo, "HEAD") == 0 {
+                    git_revwalk_push(walker, &headOID)
+                }
+            }
 
             var entries: [GitLogEntry] = []
             var oid = git_oid()

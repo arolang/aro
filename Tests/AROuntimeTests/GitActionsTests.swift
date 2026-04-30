@@ -93,7 +93,7 @@ struct GitServiceTests {
         #expect(!entries.isEmpty)
         #expect(entries.count <= 5)
 
-        let first = entries[0]
+        let first = try #require(entries.first, "log returned no entries")
         #expect(!first.hash.isEmpty)
         #expect(first.hash.count == 40)
         #expect(first.short.count == 7)
