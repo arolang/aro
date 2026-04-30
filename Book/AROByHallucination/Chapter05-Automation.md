@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 5: Automation Everyone Understands
 
 > "A script that only its author can read is a liability. A script anyone on the team can read is an asset."
@@ -30,18 +32,24 @@ You can read the resulting `main.aro`, and so can the person sitting next to you
 
 ```aro
 (Application-Start: Nightly Report) {
-    Retrieve the <log-files> from the <filesystem> where path = "./logs" and extension = ".log".
+    Retrieve the <log-files> from the <filesystem>
+        where path = "./logs" and extension = ".log".
 
     For each <file> in <log-files> {
         Retrieve the <content> from the <file>.
-        Filter the <error-lines> from the <content> where line contains "ERROR".
-        Compute the <error-count: length> from the <error-lines>.
-        Publish as <counts> append <counts> with <error-count>.
+        Filter the <error-lines> from the <content>
+            where line contains "ERROR".
+        Compute the <error-count: length>
+            from the <error-lines>.
+        Publish as <counts> append <counts>
+            with <error-count>.
     }
 
     Compute the <total: sum> from the <counts>.
-    Compute the <report-text> from "Total errors: " ++ <total>.
-    Store the <report-text> to the <filesystem> where path = "./report.md".
+    Compute the <report-text>
+        from "Total errors: " ++ <total>.
+    Store the <report-text> to the <filesystem>
+        where path = "./report.md".
 
     Return an <OK: status> for the <report>.
 }
@@ -56,7 +64,9 @@ Anyone on the team can read that. Anyone on the team can edit it. The automation
 **Ask the assistant to fix a failing check.**
 
 ```bash
-aro ask --yes "run aro_check on ./Examples/UserService and fix any diagnostics"
+aro ask --yes \
+  "run aro_check on ./Examples/UserService \
+   and fix any diagnostics"
 ```
 
 This will, in order, call `aro_check`, read the offending files, edit them with `edit_file`, re-run the check, and stop when it passes or after 25 rounds of tool calls. The `--yes` flag auto-approves shell access so the loop can run without a human at the keyboard. The result is either a fixed directory or a context file you can open afterwards to see what was tried.
@@ -64,7 +74,9 @@ This will, in order, call `aro_check`, read the offending files, edit them with 
 **Generate boilerplate for a new operation.**
 
 ```bash
-aro ask --yes "add a feature set called deleteUser that handles DELETE /users/{id} in ./MyApp"
+aro ask --yes \
+  "add a feature set called deleteUser \
+   that handles DELETE /users/{id} in ./MyApp"
 ```
 
 The model will read `openapi.yaml`, extract the schema, write the new `.aro` file, and run `aro_check` to confirm it parses. Your job is to review the diff, not to write the boilerplate.
@@ -72,15 +84,19 @@ The model will read `openapi.yaml`, extract the schema, write the new `.aro` fil
 **Run on a shared endpoint.**
 
 ```bash
-ARO_LM_ENDPOINT=http://192.168.1.42:8080 aro ask --yes "check everything under Examples/"
+ARO_ASK_ENDPOINT=http://192.168.1.42:8080 \
+  aro ask --yes "check everything under Examples/"
 ```
 
-On CI servers, running `llama-server` per job is wasteful. Run it once, on a machine with a GPU, point every job at it with `ARO_LM_ENDPOINT`, and `aro ask` will happily use it over the network. The model never leaves your infrastructure, and every job gets a fast response.
+On CI servers, running `llama-server` per job is wasteful. Run it once, on a machine with a GPU, point every job at it with `ARO_ASK_ENDPOINT`, and `aro ask` will happily use it over the network. The model never leaves your infrastructure, and every job gets a fast response.
 
 **Explain changes in a PR.**
 
 ```bash
-aro ask --no-mcp "read the last five files modified in this branch and write a short PR summary" > pr-summary.md
+aro ask --no-mcp \
+  "read the last five files modified in this \
+   branch and write a short PR summary" \
+  > pr-summary.md
 ```
 
 The `--no-mcp` flag skips the MCP bridge boot for a small speedup; the command writes its output to a file you can paste into the PR description. Nothing fancy, just tedium deleted.

@@ -67,12 +67,14 @@ STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-4bit'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # TRAIN_ON_BASE controls whether to train from the base Qwen model (True) or
-# from the published fine-tuned ARO model (False).
+# from the previously-uploaded fine-tuned teacher on HuggingFace (False).
 #   True  → always use BASE_MODEL_ID (fresh training / new base model)
-#   False → use PREFERRED_MODEL_ID if available on HF, else fall back to BASE_MODEL_ID
+#   False → use TEACHER_MODEL_ID if available on HF, else fall back to BASE_MODEL_ID
+# After the first complete pipeline run, set to False for iterative improvement.
 TRAIN_ON_BASE = True
 
-PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'
+PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'       # distilled 8B student (for inference)
+TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-4bit'  # fine-tuned 30B teacher (for retraining)
 BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
 
 # Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
@@ -99,14 +101,17 @@ def resolve_model_id() -> tuple[str, bool]:
 
     When TRAIN_ON_BASE is True, always returns the base model — useful for
     initial training or switching to a new base architecture.
+
+    When False, checks for the previously-uploaded teacher model on HuggingFace
+    so each training cycle builds on the last one.
     """
     if TRAIN_ON_BASE:
         print(f'TRAIN_ON_BASE=True → using base model: {BASE_MODEL_ID}')
         return BASE_MODEL_ID, False
-    if _hf_model_exists(PREFERRED_MODEL_ID):
-        print(f'Fine-tuned model found: {PREFERRED_MODEL_ID}')
-        return PREFERRED_MODEL_ID, True
-    print(f'Fine-tuned model not found on HuggingFace, using base: {BASE_MODEL_ID}')
+    if _hf_model_exists(TEACHER_MODEL_ID):
+        print(f'Fine-tuned teacher found on HF: {TEACHER_MODEL_ID}')
+        return TEACHER_MODEL_ID, True
+    print(f'Teacher not found on HuggingFace, using base: {BASE_MODEL_ID}')
     return BASE_MODEL_ID, False
 
 

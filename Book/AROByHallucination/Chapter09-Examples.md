@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 9: Worked Examples
 
 > "Theory is what you know before you try it. Practice is what you know after."

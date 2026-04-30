@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 2: Training the Local
 
 > "The question is not whether a model can learn ARO. The question is how small it can be and still do it."
@@ -6,13 +8,15 @@
 
 ## 2.1 Why Small
 
-The fine-tuned model that ships with `aro ask` is not large. By the standards of 2026, it is small — a 4-bit quantised mixture-of-experts model with 30 billion total parameters but only 3 billion active per token, small enough to run comfortably on a laptop with unified memory or a mid-range GPU. This was not a compromise. It was the point.
+The fine-tuned model that ships with `aro ask` is not large. By the standards of 2026, it is small — a 4-bit quantised dense model with 8 billion parameters, small enough to run comfortably on a laptop with 8 GB of memory or a mid-range GPU. This was not a compromise. It was the point.
+
+Behind the scenes, a much larger teacher model — a 30-billion-parameter mixture-of-experts architecture — is fine-tuned on ARO and then used to *distil* its knowledge into the small model that ships to users. You never see the teacher. You get the student: fast, compact, and focused.
 
 A large model trained on ARO would be impressive. It would also be useless, because nobody would be able to run it. The decision to build a local assistant meant the decision to build a small one. Everything about the training pipeline was designed around that constraint. The goal was never "state of the art on general code". The goal was "good enough on ARO to make a working engineer faster".
 
 ## 2.2 What the Pipeline Does
 
-The training pipeline lives in the sibling project `ARO-Train`. It is a sequence of Jupyter notebooks — numbered `00` through `21` — that collect data, shape it into pairs, fine-tune a base model, and package the result. You do not need to run it to use `aro ask`. You only need to run it if you want to train your own variant.
+The training pipeline lives in the sibling project `ARO-Train`. It is a sequence of Jupyter notebooks — numbered `00` through `24` — that collect data, shape it into pairs, fine-tune a teacher model, distil it into a student, and package the result. You do not need to run it to use `aro ask`. You only need to run it if you want to train your own variant.
 
 In prose, the pipeline does the following:
 
@@ -22,7 +26,8 @@ In prose, the pipeline does the following:
 4. **Warm-starts a fine-tune** on a general base model — by default a 4-bit Qwen coder — using the pairs.
 5. **Runs a preference optimisation pass (DPO)** using pairs of good and bad ARO answers, so the model learns which of two superficially correct responses is the one a human would actually want.
 6. **Evaluates** the fine-tune against a fixed set of probe prompts, checks the output with `aro check`, and reports a syntax pass rate.
-7. **Packages** the resulting weights for distribution — both as an MLX bundle for Apple Silicon and a GGUF bundle for `llama.cpp`.
+7. **Distils** the large 30B teacher into a compact 8B student model, so users get fast inference without needing 16 GB of memory.
+8. **Packages** the resulting weights for distribution and uploads both the teacher (for future retraining) and the student (for users) to HuggingFace.
 
 The entire pipeline was written by the same method as the rest of ARO: a person asking a general model what each step should look like, reading the draft, running it, fixing it, and asking for the next step. The training script that produced `aro-coder-4bit` was itself the product of a long conversation with a model that did not know what ARO was, and that needed to be told.
 
@@ -56,14 +61,14 @@ It was not taught general web knowledge. The corpus is *just* the ARO project. A
 
 ## 2.5 Running the Model
 
-The fine-tune is published as `ARO-Lang/aro-coder-4bit` on Hugging Face. It is loaded automatically the first time you run `aro ask`. You do not need to run the training pipeline to use the model. You only need to install one of the supported runners — `llama-server`, `mlx_lm.server`, or any OpenAI-compatible endpoint — and the first `aro ask` invocation will offer to download the weights to `~/.cache/aro/models/`.
+The distilled student is published as `ARO-Lang/aro-coder-4bit` on Hugging Face. It is loaded automatically the first time you run `aro ask`. You do not need to run the training pipeline to use the model — the first `aro ask` invocation will offer to download the weights to `~/.cache/aro/ask/`.
 
-The interactive loop inside the training pipeline (notebook `21_chat.ipynb`) is the same loop that `aro ask` uses, in spirit: load the model, build a system prompt from the ARO knowledge base, pass user turns through the tokenizer, and stream back a reply. The difference is that `aro ask` does not require Python, does not require MLX, and does not require you to start Jupyter. It is the same brain in a simpler body.
+The interactive loop inside the training pipeline (notebook `24_chat.ipynb`) is the same loop that `aro ask` uses, in spirit: load the model, build a system prompt from the ARO knowledge base, pass user turns through the tokenizer, and stream back a reply. The difference is that `aro ask` does not require Python, does not require MLX, and does not require you to start Jupyter. It is the same brain in a simpler body.
 
 ## 2.6 A Note on Iteration
 
-One of the later notebooks in the pipeline is `19_iterative_loop.ipynb`. It does something that is easy to describe and hard to do well: it uses the *current* fine-tune to generate new training data for the *next* fine-tune. Every cycle, the model is asked to produce ARO programs for a list of prompts; the ones that pass `aro check` are added to the training set; the ones that fail are added to the DPO negative set. The next round of training learns from both.
+One of the later notebooks in the pipeline is `20_iterative_loop.ipynb`. It does something that is easy to describe and hard to do well: it uses the *current* fine-tune to generate new training data for the *next* fine-tune. Every cycle, the model is asked to produce ARO programs for a list of prompts; the ones that pass `aro check` are added to the training set; the ones that fail are added to the DPO negative set. The next round of training learns from both.
 
 This is a feedback loop. It is also the point where the story becomes recursive: the model is now helping train its own successor. Not autonomously — a human still runs the notebooks, reviews the outputs, and decides what to keep. But the leverage is enormous. A morning of curation turns into a weekend of training, which turns into a model that is better at helping you curate.
 
-The first version of `aro-coder-4bit` was bootstrapped from data generated by a general cloud model. The next version will be bootstrapped from data generated by the first version of `aro-coder-4bit`. The cloud model will, eventually, drop out of the loop entirely. That is the plan, and it is less far away than it sounds.
+The first version of `aro-coder-4bit` was bootstrapped from data generated by a general cloud model. Each subsequent version is bootstrapped from data generated by its predecessor — the teacher model is uploaded to HuggingFace after each training cycle, and the next cycle downloads it as its starting point instead of starting from vanilla Qwen. The cloud model has, for the most part, already dropped out of the loop.

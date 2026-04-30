@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 4: Habits
 
 > "A sharp tool makes the user faster; a well-habituated tool makes the user calmer."

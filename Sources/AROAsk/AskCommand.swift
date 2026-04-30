@@ -190,6 +190,7 @@ public struct AskCommand: AsyncParsableCommand {
         case "/fix":
             guard !args.isEmpty else {
                 print("Usage: aro ask /fix <path>")
+                print("  Runs aro check, diagnoses errors, fixes the code, and writes back.")
                 return
             }
             let session = AskSession(config: sessionConfig(cwd: cwd))
@@ -198,9 +199,8 @@ public struct AskCommand: AsyncParsableCommand {
             try await session.prepare(modelManager: manager)
             defer { Task { await session.shutdown() } }
             let path = args.joined(separator: " ")
-            let fixPrompt = "Read the file at \(path), run aro_check on its directory, diagnose any errors, and fix them using edit_file. Then re-run aro_check to verify."
-            let answer = try await session.ask(fixPrompt)
-            print(answer)
+            let result = try await session.fix(path: path)
+            print(result)
 
         case "/explain":
             guard !args.isEmpty else {
@@ -371,8 +371,8 @@ public struct AskCommand: AsyncParsableCommand {
             // Inline /fix, /explain, /docs, /plugin
             if trimmed.hasPrefix("/fix ") {
                 let path = String(trimmed.dropFirst("/fix ".count))
-                let answer = try await session.ask("Use the read_file tool to read \(path), then run aro_check, diagnose errors, fix them with edit_file, then re-verify.")
-                print(answer)
+                let result = try await session.fix(path: path)
+                print(result)
                 continue
             }
             if trimmed.hasPrefix("/explain ") {

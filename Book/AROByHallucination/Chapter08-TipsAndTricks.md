@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 8: Tips and Tricks
 
 > "Mastery is not knowing the tool's features. It is knowing which features to use when."
@@ -107,9 +109,9 @@ The fine-tune runs locally, and local inference has constraints that cloud infer
 
 **Temperature.** The default is `0.2`. Leave it there. Higher temperatures produce more creative prose but less accurate ARO. If you are asking for an explanation, `0.4` is fine. If you are asking for code, `0.2` or lower. The training data was terse and correct; the model performs best when it is not being asked to improvise.
 
-**Model selection.** The default `aro-coder-4bit` is a 4-bit quantised mixture-of-experts model — 30 billion parameters total, but only 3 billion active per token, so it runs lighter than the headline number suggests. If your machine still struggles — if tokens come out slowly, if the fan spins up — try a smaller variant if one is available. A slightly less capable model that responds in two seconds is more useful than a slightly more capable model that takes thirty.
+**Model selection.** The default `aro-coder-4bit` is a 4-bit quantised 8-billion-parameter dense model — about 4.5 GB on disk. It runs comfortably on any machine with 8 GB of memory. If tokens come out slowly or the fan spins up, check that you are using the right backend for your hardware (see section 3.2).
 
-**Backend.** On Apple Silicon, `mlx_lm.server` is faster than `llama-server` for the default model. On Linux with an NVIDIA GPU, `llama-server` with CUDA is faster. On CPU-only machines, both are slow, and the best optimisation is to point `ARO_LM_ENDPOINT` at a machine that has a GPU.
+**Backend.** On Apple Silicon, the native MLX backend runs in-process and is the fastest option. On Linux with an NVIDIA GPU, `llama-server` with CUDA is the way to go. On CPU-only machines, both are slow, and the best optimisation is to point `ARO_ASK_ENDPOINT` at a machine that has a GPU.
 
 **Context length.** Keep conversations short. The model's context window is 8192 tokens. A long conversation does not just degrade quality — it also slows inference, because every token of context has to be processed on every turn. `/clean` is a performance optimisation as much as a quality one.
 

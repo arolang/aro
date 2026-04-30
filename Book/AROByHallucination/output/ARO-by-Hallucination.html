@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>ARO by Haluzination</title>
+  <title>ARO by Hallucination</title>
   <style>
 
 span.smallcaps{font-variant: small-caps;}
@@ -89,7 +89,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; }
   <link rel="stylesheet" href="unix-style.css" />
 </head>
 <body>
-<h1 id="aro-by-haluzination">ARO by Haluzination</h1>
+<h1 id="aro-by-hallucination">ARO by Hallucination</h1>
 <p><em>A language built by a conversation, and how to continue the
 conversation yourself.</em></p>
 <hr />
@@ -100,12 +100,12 @@ It is the story of a language that was designed by talking with a
 machine, written by that machine, and then used to train
 <em>another</em> machine — one small enough to live on your laptop, and
 stubborn enough to keep talking back.</p>
-<p>The cover word — <em>haluzination</em> — is deliberate. It is the
-German spelling of “hallucination”, and it is what critics call it when
-an LLM makes something up. Most of ARO was made up first, in exactly
-that sense, during a conversation. Then it was checked, edited, pushed
-back on, compiled, broken, fixed, and eventually shipped. Hallucination
-is not the opposite of rigor. It is its starting condition.</p>
+<p>The cover word — <em>hallucination</em> — is what critics call it
+when an LLM makes something up. Most of ARO was made up first, in
+exactly that sense, during a conversation. Then it was checked, edited,
+pushed back on, compiled, broken, fixed, and eventually shipped.
+Hallucination is not the opposite of rigor. It is its starting
+condition.</p>
 <p>If you picked this up looking for the definitive list of actions or
 the specification of the type system, put it back down and pick up the
 Language Guide. If you picked it up because you want to understand
@@ -114,7 +114,7 @@ way — yes, sitting at a laptop, talking to a local model — keep
 reading.</p>
 <p>— The ARO team, April 2026</p>
 <header id="title-block-header">
-<h1 class="title">ARO by Haluzination</h1>
+<h1 class="title">ARO by Hallucination</h1>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -128,8 +128,8 @@ Write</a></li>
 Application</a></li>
 <li><a href="#the-problem-with-general-models" id="toc-the-problem-with-general-models">1.4 The Problem With General
 Models</a></li>
-<li><a href="#why-haluzination" id="toc-why-haluzination">1.5 Why
-“Haluzination”</a></li>
+<li><a href="#why-hallucination" id="toc-why-hallucination">1.5 Why
+“Hallucination”</a></li>
 </ul></li>
 <li><a href="#chapter-2-training-the-local" id="toc-chapter-2-training-the-local">Chapter 2: Training the Local</a>
 <ul>
@@ -172,7 +172,7 @@ Keep the Index Fresh</a></li>
 Before You Argue</a></li>
 <li><a href="#commit-messages-are-not-the-models-job" id="toc-commit-messages-are-not-the-models-job">4.7 Commit Messages Are
 Not the Model’s Job</a></li>
-<li><a href="#shorter-prompts-are-better" id="toc-shorter-prompts-are-better">4.8 Shorter Prompts Are
+<li><a href="#precise-prompts-are-better" id="toc-precise-prompts-are-better">4.8 Precise Prompts Are
 Better</a></li>
 </ul></li>
 <li><a href="#chapter-5-automation-everyone-understands" id="toc-chapter-5-automation-everyone-understands">Chapter 5: Automation
@@ -248,6 +248,18 @@ Service from Scratch</a></li>
 Scratch</a></li>
 <li><a href="#what-the-examples-show" id="toc-what-the-examples-show">9.4 What the Examples Show</a></li>
 </ul></li>
+<li><a href="#appendix-a-the-training-pipeline" id="toc-appendix-a-the-training-pipeline">Appendix A: The Training
+Pipeline</a>
+<ul>
+<li><a href="#a.1-prerequisites" id="toc-a.1-prerequisites">A.1
+Prerequisites</a></li>
+<li><a href="#a.2-the-notebooks" id="toc-a.2-the-notebooks">A.2 The
+Notebooks</a></li>
+<li><a href="#a.3-the-model-lifecycle" id="toc-a.3-the-model-lifecycle">A.3 The Model Lifecycle</a></li>
+<li><a href="#a.4-iterative-improvement" id="toc-a.4-iterative-improvement">A.4 Iterative Improvement</a></li>
+<li><a href="#a.5-key-configuration" id="toc-a.5-key-configuration">A.5
+Key Configuration</a></li>
+</ul></li>
 </ul>
 </nav>
 <h1 id="chapter-1-genesis">Chapter 1: Genesis</h1>
@@ -296,7 +308,7 @@ understanding what it was trying to do, and then correcting it by hand
 or by going back to the model with a tighter question.</p>
 <p>What made it work was not that the model was smart. It was that the
 language being built — ARO — was small. The grammar fits on one page.
-The action roles are four categories. The concurrency model follows one
+The action roles are five categories. The concurrency model follows one
 rule. When a component was wrong, the smallness of the language made the
 wrong part easy to see.</p>
 <p>The lesson was not “you can ship software without reading code”. The
@@ -322,9 +334,9 @@ It was the whole design.</p>
 Models</h2>
 <p>And yet — ARO has a problem with general models. The problem has two
 parts.</p>
-<p>The first part is vocabulary. There are four action roles, seventeen
-prepositions, and a few dozen built-in action verbs. The model that
-wrote the first version of ARO does not know any of them. It has to be
+<p>The first part is vocabulary. There are five action roles, ten
+prepositions, and fifty-four built-in action verbs. The model that wrote
+the first version of ARO does not know any of them. It has to be
 reminded, every time, which verbs exist and which prepositions they
 take. It tends to invent new ones when it runs out of patience. Invented
 verbs do not parse. Feature sets with invented verbs fail silently in
@@ -338,9 +350,9 @@ transcript of every engineering decision leaving their machine.</p>
 <p>The solution to both problems is obvious once you say it out loud:
 train a small model on ARO, and run it locally. The obvious solution is
 what this book is about.</p>
-<h2 id="why-haluzination">1.5 Why “Haluzination”</h2>
+<h2 id="why-hallucination">1.5 Why “Hallucination”</h2>
 <p>The title of the book is a joke with a sharp edge.
-<em>Haluzination</em> is what critics call it when an LLM makes
+<em>Hallucination</em> is what critics call it when an LLM makes
 something up. It is also, quite accurately, how ARO was born — a chain
 of well-placed hallucinations, each one checked and kept or thrown away.
 The derogatory use of the word “hallucination” assumes that making
@@ -362,10 +374,15 @@ how small it can be and still do it.”</p>
 <hr />
 <h2 id="why-small">2.1 Why Small</h2>
 <p>The fine-tuned model that ships with <code>aro ask</code> is not
-large. By the standards of 2026, it is small — a 4-bit quantised
-30-billion-parameter coder with enough of its weights shaved off to run
-comfortably on a laptop with unified memory or a mid-range GPU. This was
-not a compromise. It was the point.</p>
+large. By the standards of 2026, it is small — a 4-bit quantised dense
+model with 8 billion parameters, small enough to run comfortably on a
+laptop with 8 GB of memory or a mid-range GPU. This was not a
+compromise. It was the point.</p>
+<p>Behind the scenes, a much larger teacher model — a
+30-billion-parameter mixture-of-experts architecture — is fine-tuned on
+ARO and then used to <em>distil</em> its knowledge into the small model
+that ships to users. You never see the teacher. You get the student:
+fast, compact, and focused.</p>
 <p>A large model trained on ARO would be impressive. It would also be
 useless, because nobody would be able to run it. The decision to build a
 local assistant meant the decision to build a small one. Everything
@@ -375,10 +392,11 @@ enough on ARO to make a working engineer faster”.</p>
 <h2 id="what-the-pipeline-does">2.2 What the Pipeline Does</h2>
 <p>The training pipeline lives in the sibling project
 <code>ARO-Train</code>. It is a sequence of Jupyter notebooks — numbered
-<code>00</code> through <code>21</code> — that collect data, shape it
-into pairs, fine-tune a base model, and package the result. You do not
-need to run it to use <code>aro ask</code>. You only need to run it if
-you want to train your own variant.</p>
+<code>00</code> through <code>24</code> — that collect data, shape it
+into pairs, fine-tune a teacher model, distil it into a student, and
+package the result. You do not need to run it to use
+<code>aro ask</code>. You only need to run it if you want to train your
+own variant.</p>
 <p>In prose, the pipeline does the following:</p>
 <ol type="1">
 <li><strong>Collects a corpus</strong> from every authoritative source
@@ -391,8 +409,15 @@ structured file — the grammar, the list of actions with their verbs and
 prepositions, the canonical syntax, and the error philosophy.</li>
 <li><strong>Generates instruction/response pairs</strong> from the
 knowledge file, from the books, from the git history of the language,
-and from comments left in existing ARO applications. This is the bulk of
-the training data.</li>
+and from comments left in existing ARO applications. Every example and
+application ships with a <code>plan.md</code> — a detailed
+implementation plan — and the pipeline generates ten paraphrases of each
+plan, all paired with the same verified output. This teaches the model
+to recognise many different ways of asking for the same thing. The same
+ten-variant strategy is applied to every training pair in the pipeline:
+application prompts, code-to-comment explanations, and example-based
+code generation all produce ten instruction variants per ground-truth
+response.</li>
 <li><strong>Warm-starts a fine-tune</strong> on a general base model —
 by default a 4-bit Qwen coder — using the pairs.</li>
 <li><strong>Runs a preference optimisation pass (DPO)</strong> using
@@ -402,9 +427,12 @@ want.</li>
 <li><strong>Evaluates</strong> the fine-tune against a fixed set of
 probe prompts, checks the output with <code>aro check</code>, and
 reports a syntax pass rate.</li>
-<li><strong>Packages</strong> the resulting weights for distribution —
-both as an MLX bundle for Apple Silicon and a GGUF bundle for
-<code>llama.cpp</code>.</li>
+<li><strong>Distils</strong> the large 30B teacher into a compact 8B
+student model, so users get fast inference without needing 16 GB of
+memory.</li>
+<li><strong>Packages</strong> the resulting weights for distribution and
+uploads both the teacher (for future retraining) and the student (for
+users) to HuggingFace.</li>
 </ol>
 <p>The entire pipeline was written by the same method as the rest of
 ARO: a person asking a general model what each step should look like,
@@ -415,7 +443,7 @@ ARO was, and that needed to be told.</p>
 <p>The irony is load-bearing. A model that did not know ARO wrote the
 code that trained a model that does.</p>
 <h2 id="what-the-model-was-taught">2.3 What the Model Was Taught</h2>
-<p>The fine-tuned model learned four things, in roughly decreasing order
+<p>The fine-tuned model learned five things, in roughly decreasing order
 of how much pipeline time was spent on each:</p>
 <p><strong>The shape of every statement.</strong> Every line of ARO is
 <em>verb the &lt;result&gt; preposition [the] &lt;object&gt;</em>. The
@@ -423,12 +451,14 @@ model saw thousands of statements in that shape and learned to produce
 new ones in the same shape without dropping the angle brackets, without
 inventing prepositions, and without drifting into Python or Swift syntax
 halfway through.</p>
-<p><strong>The four action roles.</strong> REQUEST actions (Extract,
-Parse, Retrieve, Fetch) pull data from outside. OWN actions (Compute,
+<p><strong>The five action roles.</strong> REQUEST actions (Extract,
+Retrieve, Read, Fetch) pull data from outside. OWN actions (Compute,
 Validate, Compare, Create, Transform) work inside the process. RESPONSE
-actions (Return, Throw) hand data back. EXPORT actions (Publish, Store,
-Log, Send, Emit) push data out. The model learned which verbs live in
-which category, and which prepositions each verb actually takes.</p>
+actions (Return, Send, Log, Store) hand data back or persist it. EXPORT
+actions (Emit, Schedule) push data to external consumers. SERVER actions
+(Start, Stop, Connect, Listen) manage services and infrastructure. The
+model learned which verbs live in which category, and which prepositions
+each verb actually takes.</p>
 <p><strong>The feature set shape.</strong> A feature set is
 <code>(Name: Business Activity) { statements }</code>. Feature sets are
 triggered by events — HTTP requests, domain events, repository changes —
@@ -439,6 +469,13 @@ should happen.</p>
 the happy case. Errors are handled by the runtime. The model learned to
 resist adding defensive <code>when</code> guards, try/catch constructs,
 or error returns — because none of those exist in ARO.</p>
+<p><strong>What does not exist.</strong> A model trained only on correct
+examples will cheerfully invent plausible-sounding actions — Tail, Scan,
+Update, Query — that are not part of the language. The training pipeline
+includes explicit correction data: pairs where the user asks for a
+non-existent action and the model explains which real action to use
+instead. The validation pass rejects any generated sample that uses a
+verb not in the canonical action list.</p>
 <p>It was also taught, almost as an afterthought, how to wrap its output
 in markdown fences and how to cite the proposal number when asked about
 a design decision. These are small things. They compound into the
@@ -462,16 +499,14 @@ you to its general base model’s knowledge, which is stale and thin on
 ARO terms. Ask it about the EventBus and it will quote you the relevant
 proposal.</p>
 <h2 id="running-the-model">2.5 Running the Model</h2>
-<p>The fine-tune is published as <code>ARO-Lang/aro-coder-4bit</code> on
-Hugging Face. It is loaded automatically the first time you run
-<code>aro ask</code>. You do not need to run the training pipeline to
-use the model. You only need to install one of the supported runners —
-<code>llama-server</code>, <code>mlx_lm.server</code>, or any
-OpenAI-compatible endpoint — and the first <code>aro ask</code>
-invocation will offer to download the weights to
-<code>~/.cache/aro/models/</code>.</p>
+<p>The distilled student is published as
+<code>ARO-Lang/aro-coder-4bit</code> on Hugging Face. It is loaded
+automatically the first time you run <code>aro ask</code>. You do not
+need to run the training pipeline to use the model — the first
+<code>aro ask</code> invocation will offer to download the weights to
+<code>~/.cache/aro/ask/</code>.</p>
 <p>The interactive loop inside the training pipeline (notebook
-<code>21_chat.ipynb</code>) is the same loop that <code>aro ask</code>
+<code>24_chat.ipynb</code>) is the same loop that <code>aro ask</code>
 uses, in spirit: load the model, build a system prompt from the ARO
 knowledge base, pass user turns through the tokenizer, and stream back a
 reply. The difference is that <code>aro ask</code> does not require
@@ -479,7 +514,7 @@ Python, does not require MLX, and does not require you to start Jupyter.
 It is the same brain in a simpler body.</p>
 <h2 id="a-note-on-iteration">2.6 A Note on Iteration</h2>
 <p>One of the later notebooks in the pipeline is
-<code>19_iterative_loop.ipynb</code>. It does something that is easy to
+<code>20_iterative_loop.ipynb</code>. It does something that is easy to
 describe and hard to do well: it uses the <em>current</em> fine-tune to
 generate new training data for the <em>next</em> fine-tune. Every cycle,
 the model is asked to produce ARO programs for a list of prompts; the
@@ -493,11 +528,12 @@ and decides what to keep. But the leverage is enormous. A morning of
 curation turns into a weekend of training, which turns into a model that
 is better at helping you curate.</p>
 <p>The first version of <code>aro-coder-4bit</code> was bootstrapped
-from data generated by a general cloud model. The next version will be
-bootstrapped from data generated by the first version of
-<code>aro-coder-4bit</code>. The cloud model will, eventually, drop out
-of the loop entirely. That is the plan, and it is less far away than it
-sounds.</p>
+from data generated by a general cloud model. Each subsequent version is
+bootstrapped from data generated by its predecessor — the teacher model
+is uploaded to HuggingFace after each training cycle, and the next cycle
+downloads it as its starting point instead of starting from vanilla
+Qwen. The cloud model has, for the most part, already dropped out of the
+loop.</p>
 <h1 id="chapter-3-the-commands">Chapter 3: The Commands</h1>
 <blockquote>
 <p>“There is a difference between a tool you can use and a tool you
@@ -521,20 +557,24 @@ you have a token, set <code>HF_TOKEN</code>. Neither is required for the
 default model.</p>
 <h2 id="backends">3.2 Backends</h2>
 <p><code>aro ask</code> does not ship its own inference engine. It
-relies on a local runner. It will use whichever of the following it
-finds first, in order:</p>
+detects and uses whichever of the following it finds first, in
+order:</p>
 <ol type="1">
 <li><strong>Any OpenAI-compatible endpoint</strong> specified by
-<code>ARO_LM_ENDPOINT</code>. This is how you point <code>aro ask</code>
-at a shared inference server — an office GPU box, a colleague’s machine,
-a dev container. Set <code>ARO_LM_API_KEY</code> if the endpoint needs
-one.</li>
+<code>ARO_ASK_ENDPOINT</code>. This is how you point
+<code>aro ask</code> at a shared inference server — an office GPU box, a
+colleague’s machine, a dev container. Set <code>ARO_ASK_API_KEY</code>
+if the endpoint needs one.</li>
+<li><strong>Native MLX</strong> (macOS Apple Silicon only). In-process
+inference — no external server needed. This is the preferred backend on
+Apple Silicon and the fastest option.</li>
 <li><strong><code>llama-server</code></strong> from
-<code>llama.cpp</code>. Install with your package manager. This is the
-preferred backend on Linux and on Intel Macs.</li>
+<code>llama.cpp</code>. Install with your package manager or let
+<code>aro ask</code> download it automatically. This is the preferred
+backend on Linux.</li>
 <li><strong><code>mlx_lm.server</code></strong> from
-<code>mlx-lm</code>. Install with <code>pip install mlx-lm</code>. This
-is the preferred backend on Apple Silicon.</li>
+<code>mlx-lm</code>. A Python-based fallback on macOS if native MLX is
+not available.</li>
 </ol>
 <p>If none of these are available the command fails with a clear error,
 not a cryptic one. There is no “automatic fallback to cloud” — the whole
@@ -595,13 +635,16 @@ you which chunks of the project the model would see if it called
 <code>search_project</code> with the same query. Use it to understand
 why the model did or did not find the thing you expected it to find.</p>
 <p><strong><code>/fix</code></strong> is the one you will reach for most
-often. It runs <code>aro check</code> on the current directory, collects
-any diagnostics, and feeds them to the model as a prompt. The model
-reads the offending file, edits the broken line, and re-runs the check.
-It repeats until the check passes or it runs out of ideas. You can also
-pass a path: <code>/fix ./MyApp/users.aro</code>. The workflow it
-replaces — read error, open file, find line, fix it, re-run check —
-takes minutes by hand and seconds with <code>/fix</code>.</p>
+often. It works deterministically — no tool-calling loop, no hoping the
+model picks the right tool. It runs <code>aro check</code> directly,
+reads the source files, builds a focused prompt with the code and the
+exact error, asks the model for a fix, validates the fix with
+<code>aro check</code> in a temp directory, and writes the corrected
+files back only if validation passes. It repeats up to five times with
+decreasing temperature. You can pass a file or a directory:
+<code>/fix ./MyApp/users.aro</code> or <code>/fix ./MyApp</code>. The
+workflow it replaces — read error, open file, find line, fix it, re-run
+check — takes minutes by hand and seconds with <code>/fix</code>.</p>
 <p><strong><code>/explain</code></strong> is for reading code you did
 not write. Point it at a file and it produces a paragraph-level
 explanation of what each feature set does, what events trigger it, and
@@ -627,7 +670,7 @@ generates the OpenAPI spec. It is a starting point, not a final draft.
 Review it, adjust the schemas, and then let the model write the feature
 sets to match.</p>
 <h2 id="flags">3.5 Flags</h2>
-<p><code>aro ask</code> has five flags, and you will probably only ever
+<p><code>aro ask</code> has four flags, and you will probably only ever
 use two of them.</p>
 <ul>
 <li><strong><code>--model &lt;id&gt;</code></strong> — override the
@@ -708,10 +751,9 @@ artifact. The code is the artifact.</p>
 <p>The second most common mistake is pasting code into the prompt. Do
 not do this. The model has a tool — <code>read_file</code> — for
 precisely this reason. When you want the model to look at
-<code>Sources/AROParser/Lexer.swift</code>, do not paste the file. Say
-“read Sources/AROParser/Lexer.swift and summarise the tokenising
-strategy.” The model will call <code>read_file</code> and report
-back.</p>
+<code>users.aro</code>, do not paste the file. Say “read users.aro and
+explain how the validation works.” The model will call
+<code>read_file</code> and report back.</p>
 <p>The habit generalises. Never describe what a file contains when the
 model could just read it. Never describe what a directory contains when
 the model could just <code>list_dir</code> it. Never run a command
@@ -798,23 +840,25 @@ conversation. Write the commit message yourself. It will take you thirty
 seconds and will be better than anything the model produces. This is not
 a rule. It is a recommendation based on which battles are worth
 picking.</p>
-<h2 id="shorter-prompts-are-better">4.8 Shorter Prompts Are Better</h2>
-<p>The fine-tune likes short, direct prompts. “Write a feature set for
-<code>createUser</code> that validates the email and emits a
-<code>UserCreated</code> event” is better than “Could you please help me
-write a feature set that will create a user, and also make sure to
-validate that the email address they provide is in a valid format, and
-then after the user is created successfully, it would be good if we
+<h2 id="precise-prompts-are-better">4.8 Precise Prompts Are Better</h2>
+<p>For single feature sets, keep prompts short and direct. “Write a
+feature set for <code>createUser</code> that validates the email and
+emits a <code>UserCreated</code> event” is better than “Could you please
+help me write a feature set that will create a user, and also make sure
+to validate that the email address they provide is in a valid format,
+and then after the user is created successfully, it would be good if we
 could emit an event saying the user was created…”</p>
-<p>The reason is that the training data was terse. Every
-instruction/response pair in the fine-tune was short. The model learned
-that the shape of a request-to-<code>aro-coder</code> is: verb, subject,
-constraints, and nothing else. When you write in that shape, the model
-responds in kind. When you write long prompts, the model matches your
-style, and the reply gets longer and less focused.</p>
-<p>There is a useful test: if you can remove a word from your prompt
-without changing the meaning, remove it. The model will thank you by
-being more correct.</p>
+<p>But when you want a complete application — multiple files, an OpenAPI
+contract, event handlers, the full structure — give the model a detailed
+implementation plan. Describe the endpoints, the data models, the event
+flow, and the file layout. The model was trained on exactly this
+pattern: read a plan, produce every file. The more precise the plan, the
+closer the output is to what you want. A good plan names the feature
+sets, the event types, the repository names, and the API routes. A vague
+plan gets vague code.</p>
+<p>The rule in both cases is the same: say exactly what you mean, no
+more and no less. For a single feature set, that is one sentence. For a
+full application, that is a few paragraphs.</p>
 <h1 id="chapter-5-automation-everyone-understands">Chapter 5: Automation
 Everyone Understands</h1>
 <blockquote>
@@ -868,18 +912,24 @@ file.</li>
 person sitting next to you who does not write software. It will look
 like this:</p>
 <pre class="aro"><code>(Application-Start: Nightly Report) {
-    Retrieve the &lt;log-files&gt; from the &lt;filesystem&gt; where path = &quot;./logs&quot; and extension = &quot;.log&quot;.
+    Retrieve the &lt;log-files&gt; from the &lt;filesystem&gt;
+        where path = &quot;./logs&quot; and extension = &quot;.log&quot;.
 
     For each &lt;file&gt; in &lt;log-files&gt; {
         Retrieve the &lt;content&gt; from the &lt;file&gt;.
-        Filter the &lt;error-lines&gt; from the &lt;content&gt; where line contains &quot;ERROR&quot;.
-        Compute the &lt;error-count: length&gt; from the &lt;error-lines&gt;.
-        Publish as &lt;counts&gt; append &lt;counts&gt; with &lt;error-count&gt;.
+        Filter the &lt;error-lines&gt; from the &lt;content&gt;
+            where line contains &quot;ERROR&quot;.
+        Compute the &lt;error-count: length&gt;
+            from the &lt;error-lines&gt;.
+        Publish as &lt;counts&gt; append &lt;counts&gt;
+            with &lt;error-count&gt;.
     }
 
     Compute the &lt;total: sum&gt; from the &lt;counts&gt;.
-    Compute the &lt;report-text&gt; from &quot;Total errors: &quot; ++ &lt;total&gt;.
-    Store the &lt;report-text&gt; to the &lt;filesystem&gt; where path = &quot;./report.md&quot;.
+    Compute the &lt;report-text&gt;
+        from &quot;Total errors: &quot; ++ &lt;total&gt;.
+    Store the &lt;report-text&gt; to the &lt;filesystem&gt;
+        where path = &quot;./report.md&quot;.
 
     Return an &lt;OK: status&gt; for the &lt;report&gt;.
 }</code></pre>
@@ -890,7 +940,9 @@ library.</p>
 <p><code>aro ask</code> is scriptable. Here are patterns that have
 proven themselves:</p>
 <p><strong>Ask the assistant to fix a failing check.</strong></p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;run aro_check on ./Examples/UserService and fix any diagnostics&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="dt">\</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;run aro_check on ./Examples/UserService </span><span class="dt">\</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="st">   and fix any diagnostics&quot;</span></span></code></pre></div>
 <p>This will, in order, call <code>aro_check</code>, read the offending
 files, edit them with <code>edit_file</code>, re-run the check, and stop
 when it passes or after 25 rounds of tool calls. The <code>--yes</code>
@@ -898,20 +950,26 @@ flag auto-approves shell access so the loop can run without a human at
 the keyboard. The result is either a fixed directory or a context file
 you can open afterwards to see what was tried.</p>
 <p><strong>Generate boilerplate for a new operation.</strong></p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;add a feature set called deleteUser that handles DELETE /users/{id} in ./MyApp&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--yes</span> <span class="dt">\</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;add a feature set called deleteUser </span><span class="dt">\</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="st">   that handles DELETE /users/{id} in ./MyApp&quot;</span></span></code></pre></div>
 <p>The model will read <code>openapi.yaml</code>, extract the schema,
 write the new <code>.aro</code> file, and run <code>aro_check</code> to
 confirm it parses. Your job is to review the diff, not to write the
 boilerplate.</p>
 <p><strong>Run on a shared endpoint.</strong></p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="va">ARO_LM_ENDPOINT</span><span class="op">=</span>http://192.168.1.42:8080 <span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;check everything under Examples/&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="va">ARO_ASK_ENDPOINT</span><span class="op">=</span>http://192.168.1.42:8080 <span class="dt">\</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">aro</span> ask <span class="at">--yes</span> <span class="st">&quot;check everything under Examples/&quot;</span></span></code></pre></div>
 <p>On CI servers, running <code>llama-server</code> per job is wasteful.
 Run it once, on a machine with a GPU, point every job at it with
-<code>ARO_LM_ENDPOINT</code>, and <code>aro ask</code> will happily use
+<code>ARO_ASK_ENDPOINT</code>, and <code>aro ask</code> will happily use
 it over the network. The model never leaves your infrastructure, and
 every job gets a fast response.</p>
 <p><strong>Explain changes in a PR.</strong></p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--no-mcp</span> <span class="st">&quot;read the last five files modified in this branch and write a short PR summary&quot;</span> <span class="op">&gt;</span> pr-summary.md</span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aro</span> ask <span class="at">--no-mcp</span> <span class="dt">\</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;read the last five files modified in this </span><span class="dt">\</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="st">   branch and write a short PR summary&quot;</span> <span class="dt">\</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">&gt;</span> pr-summary.md</span></code></pre></div>
 <p>The <code>--no-mcp</code> flag skips the MCP bridge boot for a small
 speedup; the command writes its output to a file you can paste into the
 PR description. Nothing fancy, just tedium deleted.</p>
@@ -1002,8 +1060,9 @@ enough to run on a laptop with integrated graphics, in 2026, is roughly
 as capable on code as a flagship cloud model was two years earlier. The
 capability curve is not flat — the frontier is still in the cloud — but
 the <em>useful</em> line has dropped well below the laptop hardware of
-ordinary engineers. A 30-billion-parameter coder, 4-bit quantised, fits
-in memory on machines that cost less than a business-class flight.</p>
+ordinary engineers. An 8-billion-parameter coder — 4-bit quantised —
+fits in memory on machines that cost less than a business-class
+flight.</p>
 <p>The second is that we finally learned how to fine-tune for tasks. A
 model that knows a little bit about everything is less useful, on a
 specific domain, than a model that knows only that domain. The ARO
@@ -1490,17 +1549,16 @@ fine. If you are asking for code, <code>0.2</code> or lower. The
 training data was terse and correct; the model performs best when it is
 not being asked to improvise.</p>
 <p><strong>Model selection.</strong> The default
-<code>aro-coder-4bit</code> is a 4-bit quantised 30B model. If your
-machine struggles — if tokens come out slowly, if the fan spins up — try
-a smaller variant if one is available. A slightly less capable model
-that responds in two seconds is more useful than a slightly more capable
-model that takes thirty.</p>
-<p><strong>Backend.</strong> On Apple Silicon,
-<code>mlx_lm.server</code> is faster than <code>llama-server</code> for
-the default model. On Linux with an NVIDIA GPU,
-<code>llama-server</code> with CUDA is faster. On CPU-only machines,
-both are slow, and the best optimisation is to point
-<code>ARO_LM_ENDPOINT</code> at a machine that has a GPU.</p>
+<code>aro-coder-4bit</code> is a 4-bit quantised 8-billion-parameter
+dense model — about 4.5 GB on disk. It runs comfortably on any machine
+with 8 GB of memory. If tokens come out slowly or the fan spins up,
+check that you are using the right backend for your hardware (see
+section 3.2).</p>
+<p><strong>Backend.</strong> On Apple Silicon, the native MLX backend
+runs in-process and is the fastest option. On Linux with an NVIDIA GPU,
+<code>llama-server</code> with CUDA is the way to go. On CPU-only
+machines, both are slow, and the best optimisation is to point
+<code>ARO_ASK_ENDPOINT</code> at a machine that has a GPU.</p>
 <p><strong>Context length.</strong> Keep conversations short. The
 model’s context window is 8192 tokens. A long conversation does not just
 degrade quality — it also slows inference, because every token of
@@ -1823,5 +1881,177 @@ the boilerplate, the mechanical correctness. You handle the design, the
 naming, the business logic that only you know. Between the two of you, a
 working application emerges faster than either of you could produce
 alone.</p>
+<h1 id="appendix-a-the-training-pipeline">Appendix A: The Training
+Pipeline</h1>
+<blockquote>
+<p>“The pipeline is twenty-four notebooks, a config file, and a great
+deal of patience.”</p>
+</blockquote>
+<hr />
+<p>This appendix is for people who want to run the training pipeline
+themselves, extend it, or understand what each step does at a technical
+level. If you only want to use <code>aro ask</code>, you do not need any
+of this. Chapter 2 covers what the model learned and why; this appendix
+covers <em>how</em>.</p>
+<h2 id="a.1-prerequisites">A.1 Prerequisites</h2>
+<p>The pipeline runs on Apple Silicon (M1 or later) with at least 16 GB
+of unified memory. It uses MLX for local inference and fine-tuning. You
+will need:</p>
+<ul>
+<li>Python 3.12+ with <code>mlx-lm</code>, <code>matplotlib</code>,
+<code>transformers</code></li>
+<li>The <code>aro</code> binary on your PATH (for <code>aro check</code>
+and <code>aro run</code> validation)</li>
+<li>A HuggingFace account and <code>huggingface-cli login</code> (for
+model upload)</li>
+</ul>
+<p>The pipeline lives in <code>ARO-Train/Train/script/</code>. All
+notebooks share a common configuration through
+<code>config.py</code>.</p>
+<h2 id="a.2-the-notebooks">A.2 The Notebooks</h2>
+<h3 id="data-collection-nb00-nb02">Data Collection (NB00-NB02)</h3>
+<p><strong>NB00 (init)</strong> sets up the directory structure and
+configuration.</p>
+<p><strong>NB01 (corpus collection)</strong> indexes every source of
+truth: the 65 Examples, the Language Guide, the Book, the Proposals, the
+Wiki, and the runtime’s Swift source code for action metadata. Output: a
+manifest of ~400 items.</p>
+<p><strong>NB02 (knowledge extraction)</strong> parses the manifest into
+structured knowledge: 54 actions with their verbs and prepositions, 115
+examples with their source code, 61 proposals with Q&amp;A seeds.
+Output: <code>knowledge.json</code>.</p>
+<h3 id="training-pair-generation-nb03-nb13">Training Pair Generation
+(NB03-NB13)</h3>
+<p><strong>NB03 (LLM knowledge extraction)</strong> is the first
+notebook that calls the model. For each real example, book chapter, and
+proposal, it generates instruction/response pairs. It validates every
+generated code block with <code>aro check</code>, and when validation
+fails, feeds the error back to the model for up to two repair attempts.
+Bare code snippets from proposals are auto-wrapped in feature sets
+before checking. Output: ~700 pairs.</p>
+<p><strong>NB04 (warm-start fine-tune)</strong> trains the base model on
+all pairs collected so far. This gives the model enough ARO knowledge to
+generate useful code in later notebooks. The adapter is saved and loaded
+by every subsequent notebook. Training runs for two full epochs with
+batch size 4.</p>
+<p><strong>NB05 (actions training)</strong> generates pairs for every
+ARO action: usage examples, alias mappings, explanations, “which action”
+questions, and in-context feature sets. Also includes 16 static
+error-pattern pairs covering common mistakes (++ vs +, reserved
+prefixes, wrong prepositions). Output: ~350 pairs across 59 verbs.</p>
+<p><strong>NB06 (execution-grounded pairs)</strong> generates code that
+must actually <em>run</em>, not just parse. Four strategies: mutation of
+existing examples, recombination of two examples into one, spec-to-code
+from proposals, and readme-to-code from example descriptions. Every pair
+is validated with both <code>aro check</code> and <code>aro run</code>.
+Output: ~300 pairs.</p>
+<p><strong>NB07 (book Q&amp;A)</strong> extracts question/answer pairs
+from the Language Guide chapters.</p>
+<p><strong>NB08 (wiki training)</strong> mines the project wiki for
+training pairs.</p>
+<p><strong>NB09 (git training)</strong> mines real fix and refactor
+commits from the git history of ARO applications. A sanitisation step
+removes old-style <code>&lt;Verb&gt;</code> syntax and validates all
+code blocks with <code>aro check</code>.</p>
+<p><strong>NB10 (synthetic data generation)</strong> is the largest
+notebook. It generates 3,500+ samples across seven task types: code
+generation, debugging, correction, full application, fill-in-the-middle,
+syntax Q&amp;A, and code explanation. It also generates
+multi-feature-set “architecture” applications. A self-repair loop with
+targeted error hints fixes common syntax mistakes.</p>
+<p><strong>NB11 (function calling)</strong> teaches the model to invoke
+<code>aro ask</code> tools correctly. Training pairs cover direct tool
+calls (with correct JSON arguments), the <code>/fix</code> workflow
+chain (read → check → edit → verify), and tool selection for common
+tasks.</p>
+<p><strong>NB12-NB13 (application prompts, external repos)</strong>
+generate additional training pairs from application plan files and
+external ARO repositories.</p>
+<h3 id="validation-assembly-nb14-nb17">Validation &amp; Assembly
+(NB14-NB17)</h3>
+<p><strong>NB14-NB15 (comment extraction, validation)</strong> extract
+comments from existing code and validate all collected pairs.</p>
+<p><strong>NB16 (dataset assembly)</strong> combines all pairs into a
+single training dataset with train/validation/test splits.</p>
+<p><strong>NB17 (fine-tune)</strong> runs the full LoRA fine-tune on the
+assembled dataset.</p>
+<h3 id="optimisation-evaluation-nb18-nb20">Optimisation &amp; Evaluation
+(NB18-NB20)</h3>
+<p><strong>NB18 (DPO)</strong> runs Direct Preference Optimisation using
+chosen/rejected pairs built from <code>aro check</code> validation.</p>
+<p><strong>NB19 (evaluation)</strong> evaluates the model against a
+fixed set of probe prompts and reports syntax pass rates.</p>
+<p><strong>NB20 (iterative loop)</strong> uses the current model to
+generate new training data, validates it, adds passing samples to the
+training set and failing samples to the DPO negatives, then retrains.
+Multiple rounds.</p>
+<h3 id="distillation-release-nb21-nb24">Distillation &amp; Release
+(NB21-NB24)</h3>
+<p><strong>NB21 (distillation)</strong> distils the 30B teacher model
+into an 8B student. The teacher generates 5,000 validated outputs; the
+student is fine-tuned on the merged dataset.</p>
+<p><strong>NB22 (package)</strong> quantises the best model to 4-bit,
+generates a README, smoke-tests the output, and uploads both the
+distilled student (<code>ARO-Lang/aro-coder-4bit</code>) and the teacher
+(<code>ARO-Lang/aro-teacher-30b-4bit</code>) to HuggingFace.</p>
+<p><strong>NB23 (chat)</strong> is a live test environment for the
+packaged model.</p>
+<h2 id="a.3-the-model-lifecycle">A.3 The Model Lifecycle</h2>
+<p>The lifecycle flows top-to-bottom:</p>
+<ol type="1">
+<li><strong>Base model</strong> (Qwen 30B or previous teacher from
+HF)</li>
+<li><strong>Warm-start</strong> (NB04: LoRA on ~4,000 pairs)</li>
+<li><strong>Full fine-tune</strong> (NB17: LoRA on full dataset)</li>
+<li><strong>DPO</strong> (NB18: preference optimisation)</li>
+<li><strong>Iterative loop</strong> (NB20: generate, validate,
+retrain)</li>
+<li><strong>Upload teacher</strong> to
+<code>ARO-Lang/aro-teacher-30b-4bit</code></li>
+<li><strong>Distil</strong> 30B teacher into 8B student (NB21)</li>
+<li><strong>Upload student</strong> to
+<code>ARO-Lang/aro-coder-4bit</code></li>
+<li><strong>End user</strong> downloads <code>aro-coder-4bit</code> via
+<code>aro ask</code></li>
+</ol>
+<h2 id="a.4-iterative-improvement">A.4 Iterative Improvement</h2>
+<p>After the first complete pipeline run, set
+<code>TRAIN_ON_BASE = False</code> in <code>config.py</code>. On the
+next run, the pipeline will download the teacher model from HuggingFace
+instead of starting from vanilla Qwen. Each cycle builds on the previous
+one.</p>
+<p>The teacher model (<code>ARO-Lang/aro-teacher-30b-4bit</code>) is the
+full 30B model after all fine-tuning and DPO. The student model
+(<code>ARO-Lang/aro-coder-4bit</code>) is the distilled 8B version for
+everyday inference. Both are uploaded after each training cycle.</p>
+<h2 id="a.5-key-configuration">A.5 Key Configuration</h2>
+<dl>
+<dt><code>TRAIN_ON_BASE</code></dt>
+<dd>
+<code>True</code> for fresh start, <code>False</code> to resume from the
+HF teacher.
+</dd>
+<dt><code>MODEL_ID</code></dt>
+<dd>
+Resolved at import time. Used by all notebooks.
+</dd>
+<dt><code>TEACHER_MODEL_ID</code></dt>
+<dd>
+<code>ARO-Lang/aro-teacher-30b-4bit</code>
+</dd>
+<dt><code>PREFERRED_MODEL_ID</code></dt>
+<dd>
+<code>ARO-Lang/aro-coder-4bit</code> (distilled student)
+</dd>
+<dt><code>STUDENT_MODEL_ID</code></dt>
+<dd>
+<code>mlx-community/Qwen3-8B-4bit</code>
+</dd>
+<dt><code>BASE_MODEL_ID</code></dt>
+<dd>
+Vanilla Qwen 30B MoE (fallback)
+</dd>
+</dl>
+<p>All configuration lives in <code>Train/script/config.py</code>.</p>
 </body>
 </html>

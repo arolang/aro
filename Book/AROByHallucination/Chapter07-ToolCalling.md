@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 7: Tool Calling
 
 > "A model that can only talk is a lecturer. A model that can read, write, and run is a colleague."

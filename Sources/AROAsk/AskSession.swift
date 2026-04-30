@@ -501,6 +501,200 @@ public actor AskSession {
         }
         return labels
     }
+
+    // MARK: - Deterministic fix command
+
+    /// Deterministic fix: runs aro check, reads source, asks the model to fix,
+    /// validates the fix, and writes back. No tool calling — direct orchestration.
+    /// Returns a human-readable summary of what was fixed.
+    public func fix(path: String) async throws -> String {
+        guard let backend = backend else { throw LMBackendError.notStarted }
+
+        let fm = FileManager.default
+        let url = URL(fileURLWithPath: path, relativeTo: config.workingDirectory)
+        let resolvedPath = url.standardized.path
+
+        // Determine if path is a file or directory
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: resolvedPath, isDirectory: &isDir) else {
+            return "Error: \(resolvedPath) does not exist"
+        }
+
+        let appDir: URL
+        var aroFiles: [String: String] = [:]  // relative path → content
+
+        if isDir.boolValue {
+            appDir = url.standardized
+            // Read all .aro files in the directory
+            if let enumerator = fm.enumerator(at: appDir, includingPropertiesForKeys: nil) {
+                while let fileURL = enumerator.nextObject() as? URL {
+                    if fileURL.pathExtension == "aro" {
+                        let rel = fileURL.path.replacingOccurrences(of: appDir.path + "/", with: "")
+                        aroFiles[rel] = try String(contentsOf: fileURL, encoding: .utf8)
+                    }
+                }
+            }
+        } else {
+            appDir = url.standardized.deletingLastPathComponent()
+            let rel = url.standardized.lastPathComponent
+            aroFiles[rel] = try String(contentsOf: url.standardized, encoding: .utf8)
+        }
+
+        guard !aroFiles.isEmpty else {
+            return "No .aro files found at \(resolvedPath)"
+        }
+
+        // Step 1: Run aro check
+        let aroBin = ProcessRunner.which("aro") ?? CommandLine.arguments.first ?? "aro"
+        let checkResult = try ProcessRunner.runAndCapture(
+            executable: aroBin,
+            arguments: ["check", appDir.path],
+            timeout: 10
+        )
+
+        if checkResult.exitCode == 0 {
+            return "aro check passed — no errors to fix"
+        }
+
+        let error = (checkResult.stderr.isEmpty ? checkResult.stdout : checkResult.stderr)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        TerminalUI.printStatus("aro check found errors:\n\(String(error.prefix(300)))")
+
+        // Step 2: Build the fix prompt with full source + error
+        var sourceBlock = ""
+        for (name, content) in aroFiles.sorted(by: { $0.key < $1.key }) {
+            sourceBlock += "## \(name)\n```aro\n\(content)\n```\n\n"
+        }
+
+        let maxAttempts = 5
+        var currentSource = sourceBlock
+        var lastError = String(error.prefix(500))
+
+        for attempt in 1...maxAttempts {
+            TerminalUI.printStatus("Fix attempt \(attempt)/\(maxAttempts)...")
+
+            let fixPrompt = """
+            The following ARO code has errors:
+
+            \(currentSource)
+            Error from `aro check`:
+            ```
+            \(lastError)
+            ```
+
+            Fix ALL errors. Output the corrected code for each file using:
+            ## filename.aro
+            ```aro
+            <fixed code>
+            ```
+
+            Output ONLY the fixed code. No explanations.
+            """
+
+            let request = LMChatRequest(
+                model: config.model,
+                messages: [
+                    LMChatRequest.Message(role: "system", content: AskContext.defaultSystemPrompt),
+                    LMChatRequest.Message(role: "user", content: fixPrompt),
+                ],
+                tools: nil,
+                temperature: max(0.1, 0.3 - Double(attempt) * 0.05),
+                stream: false
+            )
+
+            let reply = try await backend.chat(request: request)
+            let output = reply.content ?? ""
+
+            // Parse fixed files from output
+            let blocks = extractAroBlocks(output)
+            guard !blocks.isEmpty else {
+                TerminalUI.printStatus("  No ```aro``` blocks in response — retrying")
+                continue
+            }
+
+            // Parse multi-file output (## filename.aro headers)
+            var fixedFiles: [String: String] = [:]
+            let filePattern = #"##\s+(\S+\.aro)\s*\n```aro\n([\s\S]*?)```"#
+            if let regex = try? NSRegularExpression(pattern: filePattern) {
+                let range = NSRange(output.startIndex..., in: output)
+                for match in regex.matches(in: output, range: range) {
+                    if let nameRange = Range(match.range(at: 1), in: output),
+                       let codeRange = Range(match.range(at: 2), in: output) {
+                        let name = String(output[nameRange])
+                        let code = String(output[codeRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        fixedFiles[name] = code
+                    }
+                }
+            }
+
+            // Fallback: if no headers, use first block as main.aro
+            if fixedFiles.isEmpty {
+                fixedFiles["main.aro"] = blocks[0]
+            }
+
+            // Step 3: Validate the fix with aro check
+            let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+            defer { try? fm.removeItem(at: tmpDir) }
+
+            for (name, code) in fixedFiles {
+                let dest = tmpDir.appendingPathComponent(name)
+                try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try code.write(to: dest, atomically: true, encoding: .utf8)
+            }
+            // Copy non-.aro files (openapi.yaml, .store) from original
+            if let enumerator = fm.enumerator(at: appDir, includingPropertiesForKeys: nil) {
+                while let fileURL = enumerator.nextObject() as? URL {
+                    if fileURL.pathExtension != "aro" && !fileURL.hasDirectoryPath {
+                        let rel = fileURL.path.replacingOccurrences(of: appDir.path + "/", with: "")
+                        let dest = tmpDir.appendingPathComponent(rel)
+                        try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? fm.copyItem(at: fileURL, to: dest)
+                    }
+                }
+            }
+
+            let verifyResult = try ProcessRunner.runAndCapture(
+                executable: aroBin,
+                arguments: ["check", tmpDir.path],
+                timeout: 10
+            )
+
+            if verifyResult.exitCode == 0 {
+                // Step 4: Write fixed files back
+                for (name, code) in fixedFiles {
+                    let dest = appDir.appendingPathComponent(name)
+                    try code.write(to: dest, atomically: true, encoding: .utf8)
+                }
+
+                // Save the repair pair for training
+                saveRepairLog([
+                    AskMessage(role: "assistant", content: sourceBlock),
+                    AskMessage(role: "user", content: "aro check error: \(lastError)"),
+                    AskMessage(role: "assistant", content: output),
+                ])
+
+                let fixed = fixedFiles.keys.sorted().joined(separator: ", ")
+                TerminalUI.printStatus("aro check passed after \(attempt) attempt(s)")
+                return "Fixed \(fixed) in \(attempt) attempt(s)"
+            }
+
+            // Update error for next attempt
+            lastError = (verifyResult.stderr.isEmpty ? verifyResult.stdout : verifyResult.stderr)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            lastError = String(lastError.prefix(500))
+
+            // Update source for next attempt (show the fixed code that still fails)
+            currentSource = ""
+            for (name, code) in fixedFiles.sorted(by: { $0.key < $1.key }) {
+                currentSource += "## \(name)\n```aro\n\(code)\n```\n\n"
+            }
+
+            TerminalUI.printStatus("  Still has errors: \(String(lastError.prefix(100)))")
+        }
+
+        return "Could not fix after \(maxAttempts) attempts. Last error:\n\(lastError)"
+    }
 }
 
 // MARK: - Message conversion

@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 1: Genesis
 
 > "There are two ways to write a language. One is to know exactly what you want. The other is to ask until you find out."

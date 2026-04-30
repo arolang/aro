@@ -13,6 +13,19 @@
       "context_length": 8192,
       "default_temperature": 0.2
     },
+    "ARO-Lang/aro-teacher-30b-4bit": {
+      "repo": "ARO-Lang/aro-teacher-30b-4bit",
+      "backend": "mlx",
+      "approximate_size_gb": 16.0,
+      "files": [
+        "config.json",
+        "tokenizer.json",
+        "tokenizer_config.json"
+      ],
+      "primary_file": "config.json",
+      "context_length": 8192,
+      "default_temperature": 0.2
+    },
     "ARO-Lang/aro-embed": {
       "repo": "ARO-Lang/aro-embed",
       "backend": "llama.cpp",

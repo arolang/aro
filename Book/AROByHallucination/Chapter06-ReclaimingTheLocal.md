@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 6: Reclaiming the Local
 
 > "Every generation of computing begins by promising the user control and ends by renting it back to them. Ours does not have to end that way."
@@ -16,7 +18,7 @@ This was not a conspiracy. It was the natural economic pull of a market in which
 
 Two things changed, more or less simultaneously.
 
-The first is that inference got dramatically cheaper. A model small enough to run on a laptop with integrated graphics, in 2026, is roughly as capable on code as a flagship cloud model was two years earlier. The capability curve is not flat — the frontier is still in the cloud — but the *useful* line has dropped well below the laptop hardware of ordinary engineers. A 30-billion-parameter mixture-of-experts coder — only 3 billion active per token — 4-bit quantised, fits in memory on machines that cost less than a business-class flight.
+The first is that inference got dramatically cheaper. A model small enough to run on a laptop with integrated graphics, in 2026, is roughly as capable on code as a flagship cloud model was two years earlier. The capability curve is not flat — the frontier is still in the cloud — but the *useful* line has dropped well below the laptop hardware of ordinary engineers. An 8-billion-parameter coder — 4-bit quantised — fits in memory on machines that cost less than a business-class flight.
 
 The second is that we finally learned how to fine-tune for tasks. A model that knows a little bit about everything is less useful, on a specific domain, than a model that knows only that domain. The ARO fine-tune is a sharp example: it is terrible at explaining kubernetes YAML, because it was never trained on it, but it is excellent at writing ARO feature sets, because that is all it was trained on. A team that knows its domain can build a specialised model that outperforms any general-purpose cloud model *on that domain*, for a fraction of the cost, on a machine they already own.
 

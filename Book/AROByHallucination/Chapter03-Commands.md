@@ -1,3 +1,5 @@
+\newpage
+
 # Chapter 3: The Commands
 
 > "There is a difference between a tool you can use and a tool you already know. This chapter is about closing that gap."
@@ -23,11 +25,12 @@ If you would rather put the cache somewhere else — a shared network drive, an 
 
 ## 3.2 Backends
 
-`aro ask` does not ship its own inference engine. It relies on a local runner. It will use whichever of the following it finds first, in order:
+`aro ask` does not ship its own inference engine. It detects and uses whichever of the following it finds first, in order:
 
-1. **Any OpenAI-compatible endpoint** specified by `ARO_LM_ENDPOINT`. This is how you point `aro ask` at a shared inference server — an office GPU box, a colleague's machine, a dev container. Set `ARO_LM_API_KEY` if the endpoint needs one.
-2. **`llama-server`** from `llama.cpp`. Install with your package manager. This is the preferred backend on Linux and on Intel Macs.
-3. **`mlx_lm.server`** from `mlx-lm`. Install with `pip install mlx-lm`. This is the preferred backend on Apple Silicon.
+1. **Any OpenAI-compatible endpoint** specified by `ARO_ASK_ENDPOINT`. This is how you point `aro ask` at a shared inference server — an office GPU box, a colleague's machine, a dev container. Set `ARO_ASK_API_KEY` if the endpoint needs one.
+2. **Native MLX** (macOS Apple Silicon only). In-process inference — no external server needed. This is the preferred backend on Apple Silicon and the fastest option.
+3. **`llama-server`** from `llama.cpp`. Install with your package manager or let `aro ask` download it automatically. This is the preferred backend on Linux.
+4. **`mlx_lm.server`** from `mlx-lm`. A Python-based fallback on macOS if native MLX is not available.
 
 If none of these are available the command fails with a clear error, not a cryptic one. There is no "automatic fallback to cloud" — the whole point of the local model is that it is local. You choose when to involve anyone else's machine.
 
@@ -82,7 +85,7 @@ A few of these are worth a paragraph of their own.
 
 **`/search`** is a debugging tool. It shows you which chunks of the project the model would see if it called `search_project` with the same query. Use it to understand why the model did or did not find the thing you expected it to find.
 
-**`/fix`** is the one you will reach for most often. It runs `aro check` on the current directory, collects any diagnostics, and feeds them to the model as a prompt. The model reads the offending file, edits the broken line, and re-runs the check. It repeats until the check passes or it runs out of ideas. You can also pass a path: `/fix ./MyApp/users.aro`. The workflow it replaces — read error, open file, find line, fix it, re-run check — takes minutes by hand and seconds with `/fix`.
+**`/fix`** is the one you will reach for most often. It works deterministically — no tool-calling loop, no hoping the model picks the right tool. It runs `aro check` directly, reads the source files, builds a focused prompt with the code and the exact error, asks the model for a fix, validates the fix with `aro check` in a temp directory, and writes the corrected files back only if validation passes. It repeats up to five times with decreasing temperature. You can pass a file or a directory: `/fix ./MyApp/users.aro` or `/fix ./MyApp`. The workflow it replaces — read error, open file, find line, fix it, re-run check — takes minutes by hand and seconds with `/fix`.
 
 **`/explain`** is for reading code you did not write. Point it at a file and it produces a paragraph-level explanation of what each feature set does, what events trigger it, and what data flows through it. It is not a substitute for reading the code yourself, but it is a good first pass when you inherit a project.
 
