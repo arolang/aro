@@ -3,11 +3,17 @@
 // ARORuntime - Async-by-default Action Execution Flag (Issue #55)
 // ============================================================
 //
-// Reads ARO_LAZY_ACTIONS once at runtime startup. Off by default in
-// Phase 1 — every call site that branches on this flag still defaults
-// to the eager (semaphore-blocking) path. Phase 2 onwards wires the
-// flag through ActionRunner / LLVMCodeGenerator. Phase 7 flips the
-// default and removes the flag entirely.
+// Phase 7: lazy mode is now the DEFAULT. Set ARO_LAZY_ACTIONS=0 (or
+// "off" / "false" / "no") to fall back to the eager path. Phases 1-6
+// landed all the supporting machinery (AROFuture, ActionTaskExecutor,
+// force points, TaskLocal slot ownership, slow-force diagnostics);
+// flipping the default makes the deadlock-free path the one users get
+// without opting in.
+//
+// The eager path is still in tree as the opt-out, so any regression
+// reachable only under lazy mode can be quickly mitigated by setting
+// the env var. A future cleanup can remove the eager path entirely
+// once the lazy path has soaked.
 
 import Foundation
 
@@ -15,18 +21,18 @@ public enum LazyActionMode {
 
     /// Whether async-by-default action execution is enabled.
     ///
-    /// Controlled by the `ARO_LAZY_ACTIONS` environment variable.
-    /// Recognized values: "1", "true", "yes" (case-insensitive). Anything
-    /// else — including the variable being unset — keeps the eager path.
+    /// Phase 7 flip: defaults to **true** when ARO_LAZY_ACTIONS is unset.
+    /// Recognized opt-out values: "0", "off", "false", "no" (case-insensitive).
+    /// Any other value (including "1", "true", "yes") keeps the lazy path on.
     public static let isEnabled: Bool = {
         guard let raw = ProcessInfo.processInfo.environment["ARO_LAZY_ACTIONS"] else {
-            return false
+            return true
         }
         switch raw.lowercased() {
-        case "1", "true", "yes":
-            return true
-        default:
+        case "0", "off", "false", "no":
             return false
+        default:
+            return true
         }
     }()
 }
