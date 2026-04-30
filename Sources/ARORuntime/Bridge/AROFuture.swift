@@ -125,8 +125,22 @@ public final class AROFuture: @unchecked Sendable {
     /// Safe to call from any thread, any number of times. After the first
     /// completion the result is memoized — subsequent calls return without
     /// blocking. Errors thrown by the underlying work are re-thrown.
+    ///
+    /// Phase 6 (Issue #55): if `ForceDiagnostics.warningBudgetSeconds` is
+    /// > 0 and the wait exceeds that budget, a one-line warning is emitted
+    /// to stderr identifying the binding and source location. Catches
+    /// almost-deadlocks before they become hangs — invaluable on Linux
+    /// where blocked-pthread stacks are unhelpful.
     public func force() throws -> any Sendable {
-        return try storage.wait()
+        let budget = ForceDiagnostics.effectiveBudget
+        guard budget > 0, !storage.isResolved else {
+            return try storage.wait()
+        }
+        return try storage.waitWithDiagnostics(
+            budget: budget,
+            bindingName: bindingName,
+            sourceLocation: sourceLocation
+        )
     }
 
     /// Async path for cooperative-pool callers (action task bodies, EventBus
@@ -187,6 +201,31 @@ private final class ResultStorage: @unchecked Sendable {
             return try r.get()
         }
     }
+
+    /// Phase 6: waits with a budget; if the wait exceeds the budget,
+    /// emits a single warning to stderr and continues waiting.
+    func waitWithDiagnostics(
+        budget: Double,
+        bindingName: String,
+        sourceLocation: String?
+    ) throws -> any Sendable {
+        let timeout = DispatchTime.now() + budget
+        if group.wait(timeout: timeout) == .timedOut {
+            let location = sourceLocation.map { " at \($0)" } ?? ""
+            let msg = "[AROFuture] Slow force: '\(bindingName)'\(location) — waited >\(String(format: "%.2f", budget))s, still pending\n"
+            ForceDiagnostics.warningHandler(msg)
+            // Continue waiting indefinitely — the warning is informational,
+            // not a deadline. A real deadlock will hang here, but the
+            // warning above is the diagnostic the operator needs.
+            group.wait()
+        }
+        return try lock.withLock {
+            guard let r = _result else {
+                throw AROFutureError.notResolved
+            }
+            return try r.get()
+        }
+    }
 }
 
 // MARK: - Errors
@@ -199,6 +238,56 @@ public enum AROFutureError: Error, CustomStringConvertible {
         case .notResolved:
             return "AROFuture: storage signalled completion without a result (internal invariant violation)"
         }
+    }
+}
+
+// MARK: - ForceDiagnostics (Issue #55, Phase 6)
+
+/// Configuration for slow-force warnings.
+///
+/// Reads `ARO_FORCE_WARN_SECONDS` once at startup. Default budget:
+///   - 5.0 seconds when ARO_LAZY_ACTIONS=1 is on (development feedback)
+///   - 0.0 (off) otherwise
+/// Set to "0" or "off" to disable explicitly. Values are seconds (Double).
+///
+/// On exceeded budget, AROFuture.force() prints a single line to stderr
+/// identifying the binding name and (if available) source location.
+/// The wait then continues indefinitely — this is a diagnostic aid, not
+/// a deadline. If a true deadlock follows, the warning is the breadcrumb
+/// the operator needs to find the bug, especially on Linux where blocked-
+/// pthread stack traces are unhelpful.
+public enum ForceDiagnostics {
+
+    public static let warningBudgetSeconds: Double = {
+        if let raw = ProcessInfo.processInfo.environment["ARO_FORCE_WARN_SECONDS"] {
+            switch raw.lowercased() {
+            case "0", "off", "false", "no":
+                return 0.0
+            default:
+                return Double(raw) ?? 0.0
+            }
+        }
+        // No explicit setting: enable a 5s budget when lazy mode is on,
+        // off otherwise (legacy users see no behaviour change).
+        return LazyActionMode.isEnabled ? 5.0 : 0.0
+    }()
+
+    /// Test-only override. Set to a non-nil value to use it instead of
+    /// the env-derived value. Resets to nil after the calling test.
+    /// Tests run serially; the unsafe annotation reflects that, not a
+    /// production-safe contract.
+    public nonisolated(unsafe) static var overrideBudget: Double? = nil
+
+    static var effectiveBudget: Double {
+        overrideBudget ?? warningBudgetSeconds
+    }
+
+    /// Hook for warning emission. Defaults to writing to stderr; tests
+    /// substitute a capture closure. Not @Sendable because tests may need
+    /// to mutate captured state — tests run serially, so this is fine in
+    /// practice. Use only at process scope (not under contention).
+    public nonisolated(unsafe) static var warningHandler: ((String) -> Void) = { msg in
+        FileHandle.standardError.write(Data(msg.utf8))
     }
 }
 
