@@ -281,18 +281,10 @@ public final class ActionRunner: @unchecked Sendable {
         // Yield pattern: release our execution pool slot while blocked so other
         // compiled code can run. Re-acquire after the action completes.
         // This prevents deadlock from cascading event chains.
-        let pool = CompiledExecutionPool.shared
-        let hadSlot = pool.threadHoldsSlot
-        if hadSlot {
-            pool.gate.signal()
-            pool.threadHoldsSlot = false
-        }
-
-        semaphore.wait()
-
-        if hadSlot {
-            pool.gate.wait()
-            pool.threadHoldsSlot = true
+        // Phase 5: slot ownership now lives on a TaskLocal — see
+        // CompiledExecutionPool.withYieldedSlot.
+        CompiledExecutionPool.shared.withYieldedSlot {
+            semaphore.wait()
         }
 
         if let error = holder.error {
@@ -361,6 +353,13 @@ public final class ActionRunner: @unchecked Sendable {
 /// blocked threads. The pool gates execution to `4 * CPU count` slots, and
 /// the yield pattern in executeSync/executeSyncWithResult releases slots
 /// while blocked on async actions, allowing other work to proceed.
+///
+/// Phase 5 (Issue #55): slot ownership migrated from
+/// `Thread.current.threadDictionary` to a `@TaskLocal`. The previous design
+/// was fragile under Swift Concurrency: a Task that suspends on one thread
+/// and resumes on another would see the wrong slot-ownership flag. The
+/// TaskLocal value is properly scoped to the current Task (or, in sync code,
+/// to the enclosing `withValue` closure).
 public final class CompiledExecutionPool: @unchecked Sendable {
     public static let shared = CompiledExecutionPool()
 
@@ -371,17 +370,46 @@ public final class CompiledExecutionPool: @unchecked Sendable {
     /// preventing GCD thread explosion when many events fire simultaneously
     public let submitQueue = DispatchQueue(label: "aro.compiled.submit")
 
-    /// Thread-local key for slot ownership
-    private static let holdsSlotKey = "aro.compiled.holdsSlot"
+    /// Whether the current scope owns a global execution slot.
+    /// Backed by a TaskLocal so the value follows Swift Concurrency tasks
+    /// across thread hops, and behaves as a stack-scoped flag in sync code.
+    @TaskLocal
+    public static var holdsSlot: Bool = false
 
     private init() {
         gate = DispatchSemaphore(value: 4 * ProcessInfo.processInfo.activeProcessorCount)
     }
 
-    /// Whether the current thread holds a global execution slot
+    /// Read the current slot-ownership flag. Equivalent to
+    /// `CompiledExecutionPool.holdsSlot` but lives on the instance for
+    /// call-site ergonomics.
+    @inline(__always)
     public var threadHoldsSlot: Bool {
-        get { Thread.current.threadDictionary[Self.holdsSlotKey] as? Bool ?? false }
-        set { Thread.current.threadDictionary[Self.holdsSlotKey] = newValue }
+        Self.holdsSlot
+    }
+
+    /// Mark the current scope as owning a slot for the duration of `body`.
+    /// Does NOT touch the gate counter — pair with `gate.wait()` /
+    /// `gate.signal()` at the call site if you need the counter.
+    public func withSlotOwnership<T>(_ body: () throws -> T) rethrows -> T {
+        try Self.$holdsSlot.withValue(true, operation: body)
+    }
+
+    /// Acquire a slot (gate.wait), mark ownership, run `body`, release on exit.
+    public func withAcquiredSlot<T>(_ body: () throws -> T) rethrows -> T {
+        gate.wait()
+        defer { gate.signal() }
+        return try Self.$holdsSlot.withValue(true, operation: body)
+    }
+
+    /// If the current scope holds a slot, release it for the duration of
+    /// `body` (which is typically a blocking wait), then re-acquire on
+    /// return. If not held, just runs `body` straight through.
+    public func withYieldedSlot<T>(_ body: () throws -> T) rethrows -> T {
+        guard Self.holdsSlot else { return try body() }
+        gate.signal()
+        defer { gate.wait() }
+        return try Self.$holdsSlot.withValue(false, operation: body)
     }
 }
 
@@ -470,17 +498,10 @@ extension ActionRunner {
                 context: context, holder: box, semaphore: semaphore
             )
 
-            // Yield pool slot while waiting (same as legacy path)
-            let pool = CompiledExecutionPool.shared
-            let hadSlot = pool.threadHoldsSlot
-            if hadSlot {
-                pool.gate.signal()
-                pool.threadHoldsSlot = false
-            }
-            semaphore.wait()
-            if hadSlot {
-                pool.gate.wait()
-                pool.threadHoldsSlot = true
+            // Yield pool slot while waiting (same as legacy path).
+            // Phase 5: slot ownership lives on a TaskLocal.
+            CompiledExecutionPool.shared.withYieldedSlot {
+                semaphore.wait()
             }
             return box.result
         }
@@ -509,18 +530,9 @@ extension ActionRunner {
         // Yield pattern: release our execution pool slot while blocked so other
         // compiled code can run. Re-acquire after the action completes.
         // This prevents deadlock from cascading event chains.
-        let pool = CompiledExecutionPool.shared
-        let hadSlot = pool.threadHoldsSlot
-        if hadSlot {
-            pool.gate.signal()
-            pool.threadHoldsSlot = false
-        }
-
-        semaphore.wait()
-
-        if hadSlot {
-            pool.gate.wait()
-            pool.threadHoldsSlot = true
+        // Phase 5: slot ownership lives on a TaskLocal.
+        CompiledExecutionPool.shared.withYieldedSlot {
+            semaphore.wait()
         }
 
         return holder.result
