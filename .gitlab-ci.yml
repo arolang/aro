@@ -121,12 +121,6 @@ build:linux:
       Cflags: -I${includedir}
       PKGCONFIG
   script:
-    # Debug build
-    - swift build -c debug
-
-    # Run tests again to ensure build is valid
-    - swift test --parallel
-
     # Generate version file
     - |
       VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")

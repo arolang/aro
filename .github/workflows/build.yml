@@ -113,12 +113,6 @@ jobs:
           Cflags: -I${includedir}
           PKGCONFIG
 
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
-
       - name: Generate version file
         run: |
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -262,12 +256,6 @@ jobs:
           Cflags: -I\${includedir}
           PKGCONFIG
           echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
-
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
 
       - name: Generate version file
         run: |
@@ -494,12 +482,6 @@ jobs:
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
-
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
 
       - name: Generate version file
         shell: bash
