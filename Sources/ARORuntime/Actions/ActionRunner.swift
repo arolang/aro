@@ -303,6 +303,37 @@ public final class ActionRunner: @unchecked Sendable {
         return holder.value
     }
 
+    // MARK: - Lazy Execution (Issue #55, Phase 2)
+
+    /// Build an AROFuture wrapping `executeAsync(...)`. The future's task
+    /// starts running on the cooperative pool immediately; the caller may
+    /// hold the handle without blocking. Forcing the handle (or awaiting
+    /// `future.value()`) materializes the result.
+    ///
+    /// Used by the C bridge under `ARO_LAZY_ACTIONS=1` for non-force-at-site
+    /// verbs.  See `LazyActionPolicy` for the force-at-site set.
+    public func executeLazy(
+        verb: String,
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext,
+        sourceLocation: String? = nil
+    ) -> AROFuture {
+        // Capture only Sendable-friendly values into the future closure.
+        let capturedVerb = verb
+        let capturedResult = result
+        let capturedObject = object
+        let capturedContext = context
+        return AROFuture(bindingName: result.base, sourceLocation: sourceLocation) { [self] in
+            return try await self.executeAsync(
+                verb: capturedVerb,
+                result: capturedResult,
+                object: capturedObject,
+                context: capturedContext
+            )
+        }
+    }
+
     // MARK: - Action Lookup
 
     /// Check if a verb has a registered action

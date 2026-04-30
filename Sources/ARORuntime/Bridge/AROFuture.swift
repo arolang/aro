@@ -91,6 +91,13 @@ public final class AROFuture: @unchecked Sendable {
         return try storage.wait()
     }
 
+    /// Async path for cooperative-pool callers (action task bodies, EventBus
+    /// handlers, etc.). Awaits the underlying Task without blocking a pthread.
+    /// Use this — not force() — from any `async` context.
+    public func value() async throws -> any Sendable {
+        return try await task.value
+    }
+
     /// True once the result is memoized; force() will not block.
     public var isResolved: Bool {
         storage.isResolved

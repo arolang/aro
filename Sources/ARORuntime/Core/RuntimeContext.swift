@@ -129,8 +129,18 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Variable Management
 
     public nonisolated func resolve<T: Sendable>(_ name: String) -> T? {
-        if let typedValue = variables[name], let value = typedValue.value as? T {
-            return value
+        if let typedValue = variables[name] {
+            // Issue #55, Phase 2: auto-force AROFuture so existing typed
+            // readers see the concrete value transparently.
+            if let future = typedValue.value as? AROFuture {
+                if let forced = try? future.force(), let typed = forced as? T {
+                    return typed
+                }
+                return nil
+            }
+            if let value = typedValue.value as? T {
+                return value
+            }
         }
         // Try parent context
         return parent?.resolve(name)
@@ -170,9 +180,43 @@ public actor RuntimeContext: ExecutionContext {
         }
 
         if let typedValue = variables[name] {
+            // Issue #55, Phase 2: a binding may hold an AROFuture under lazy mode.
+            // Synchronous resolve callers expect a concrete value, so we force
+            // here. This is a force-point that converts the consumer-of-binding
+            // pattern into a sync wait. Async-aware callers should use
+            // `resolveAnyAsync(_:)` to await without blocking a pthread.
+            if let future = typedValue.value as? AROFuture {
+                return (try? future.force()) ?? ""
+            }
             return typedValue.value
         }
         // Try parent context
+        return parent?.resolveAny(name)
+    }
+
+    /// Async variant of `resolveAny(_:)` that awaits AROFuture bindings via
+    /// `future.value()` instead of blocking. Use this from any `async` action
+    /// or task body so the cooperative pool doesn't have a thread tied up
+    /// blocking on another task on the same pool.
+    ///
+    /// Issue #55, Phase 2.
+    public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
+        // Magic variables short-circuit through the sync path — they don't
+        // produce futures.
+        if name == "now" || name == "contract" || name == "Contract"
+            || name == "http-server" || name == "httpServer"
+            || name == "metrics" || name == "application" {
+            return resolveAny(name)
+        }
+        if let typedValue = variables[name] {
+            if let future = typedValue.value as? AROFuture {
+                return try? await future.value()
+            }
+            return typedValue.value
+        }
+        if let runtimeParent = parent as? RuntimeContext {
+            return await runtimeParent.resolveAnyAsync(name)
+        }
         return parent?.resolveAny(name)
     }
 
