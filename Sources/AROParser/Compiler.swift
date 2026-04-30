@@ -45,8 +45,8 @@ public final class Compiler {
         diagnostics.clear()
 
         do {
-            // Phase 1: Lexical Analysis
-            let tokens = try Lexer.tokenize(source)
+            // Phase 1: Lexical Analysis (with error recovery via diagnostics)
+            let tokens = try Lexer.tokenize(source, diagnostics: diagnostics)
             
             // Phase 2: Parsing
             let parser = Parser(tokens: tokens, diagnostics: diagnostics)

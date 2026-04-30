@@ -1084,7 +1084,10 @@ public final class Parser {
             let concurrencyToken = peek()
             if case .intLiteral(let n) = concurrencyToken.kind {
                 advance()
-                concurrency = n
+                if n <= 0 {
+                    diagnostics.warning("Concurrency limit must be greater than 0, got \(n)", at: concurrencyToken.span.start)
+                }
+                concurrency = max(n, 1)
             } else {
                 throw ParserError.unexpectedToken(expected: "integer for concurrency", got: concurrencyToken)
             }
@@ -1364,10 +1367,15 @@ public final class Parser {
         // Check for range - the lexer produces intLiteral(-19) for "0-19" after the first "0"
         // So we look for a negative integer literal which indicates a range
         if case .intLiteral(let nextValue) = peek().kind, nextValue < 0 {
+            let rangeStart = firstValue
+            let rangeEnd = abs(nextValue)
             advance()
             // Convert negative to range: -19 means range end is 19
             result += "-"
-            result += String(abs(nextValue))
+            result += String(rangeEnd)
+            if rangeStart > rangeEnd {
+                diagnostics.warning("Range start (\(rangeStart)) is greater than end (\(rangeEnd))", at: peek().span.start)
+            }
         }
         // Check for explicit hyphen (in case lexer produces it separately)
         else if check(.hyphen) {
@@ -1378,6 +1386,9 @@ public final class Parser {
             }
             advance()
             result += String(endValue)
+            if firstValue > endValue {
+                diagnostics.warning("Range start (\(firstValue)) is greater than end (\(endValue))", at: peek().span.start)
+            }
         }
         // Check for pick (e.g., 0,3,7)
         else if check(.comma) {
