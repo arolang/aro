@@ -12,6 +12,43 @@ import Testing
 
 // MARK: - GitService Tests
 
+/// Creates a temporary git repo with a configurable number of commits.
+/// Returns the repo URL; caller must clean up via `defer`.
+private func makeTempRepo(commitCount: Int = 1) throws -> URL {
+    let tmpDir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("aro-git-test-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+
+    func git(_ args: String...) throws {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        p.arguments = Array(args)
+        p.currentDirectoryURL = tmpDir
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else {
+            throw GitServiceError.operationFailed(context: "test-setup", detail: "git \(args.joined(separator: " ")) failed")
+        }
+    }
+
+    try git("init")
+    try git("config", "user.email", "test@aro.dev")
+    try git("config", "user.name", "Test")
+
+    for i in 1...commitCount {
+        try "content \(i)".write(
+            to: tmpDir.appendingPathComponent("file\(i).txt"),
+            atomically: true, encoding: .utf8
+        )
+        try git("add", ".")
+        try git("commit", "-m", "Commit \(i)")
+    }
+
+    return tmpDir
+}
+
 @Suite("GitService Tests")
 struct GitServiceTests {
 
@@ -51,14 +88,16 @@ struct GitServiceTests {
         #expect(result.path.hasPrefix("/"))
     }
 
-    @Test("status returns valid status for current repo")
-    func testStatusCurrentRepo() throws {
+    @Test("status returns valid status")
+    func testStatus() throws {
         let git = GitService.shared
-        // The ARO project itself is a git repo
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let status = try git.status(in: cwd)
-        // branch may be nil in detached HEAD (e.g. CI runners)
+        let repo = try makeTempRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let status = try git.status(in: repo)
         #expect(status.commit != nil)
+        #expect(status.branch != nil)
+        #expect(status.clean == true)
     }
 
     @Test("status throws for non-repository directory")
@@ -74,38 +113,42 @@ struct GitServiceTests {
         }
     }
 
-    @Test("currentBranch returns branch name for current repo")
+    @Test("currentBranch returns branch name")
     func testCurrentBranch() throws {
         let git = GitService.shared
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let branch = try git.currentBranch(in: cwd)
-        // branch may be nil in detached HEAD (e.g. CI runners)
-        if let branch {
-            #expect(!branch.isEmpty)
-        }
+        let repo = try makeTempRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let branch = try git.currentBranch(in: repo)
+        #expect(branch != nil)
+        #expect(branch?.isEmpty == false)
     }
 
-    @Test("log returns entries for current repo")
+    @Test("log returns entries with correct fields")
     func testLog() throws {
         let git = GitService.shared
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let entries = try git.log(limit: 5, in: cwd)
-        #expect(!entries.isEmpty)
-        #expect(entries.count <= 5)
+        let repo = try makeTempRepo(commitCount: 3)
+        defer { try? FileManager.default.removeItem(at: repo) }
 
-        let first = try #require(entries.first, "log returned no entries")
-        #expect(!first.hash.isEmpty)
+        let entries = try git.log(limit: 5, in: repo)
+        #expect(entries.count == 3)
+
+        let first = try #require(entries.first)
         #expect(first.hash.count == 40)
         #expect(first.short.count == 7)
-        #expect(!first.message.isEmpty)
+        #expect(first.message == "Commit 3")
+        #expect(first.author == "Test")
+        #expect(first.email == "test@aro.dev")
     }
 
     @Test("log respects limit parameter")
     func testLogLimit() throws {
         let git = GitService.shared
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let one = try git.log(limit: 1, in: cwd)
-        let three = try git.log(limit: 3, in: cwd)
+        let repo = try makeTempRepo(commitCount: 5)
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let one = try git.log(limit: 1, in: repo)
+        let three = try git.log(limit: 3, in: repo)
         #expect(one.count == 1)
         #expect(three.count == 3)
     }
@@ -286,49 +329,24 @@ struct GitStageCommitTests {
     @Test("Stage and commit in a temp repo")
     func testStageAndCommit() throws {
         let git = GitService.shared
-        let tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aro-git-test-\(UUID().uuidString)")
+        // makeTempRepo creates an initialized repo with user config and one commit
+        let repo = try makeTempRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
 
-        // Init a bare repo via git CLI
-        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tmpDir) }
-
-        let initProc = Process()
-        initProc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        initProc.arguments = ["init", tmpDir.path]
-        initProc.standardOutput = FileHandle.nullDevice
-        initProc.standardError = FileHandle.nullDevice
-        try initProc.run()
-        initProc.waitUntilExit()
-        guard initProc.terminationStatus == 0 else { return }
-
-        // Configure user for commit
-        for args in [["config", "user.email", "test@aro.dev"], ["config", "user.name", "Test"]] {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = args
-            p.currentDirectoryURL = tmpDir
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            try p.run()
-            p.waitUntilExit()
-        }
-
-        // Create a file
-        try "Hello ARO".write(to: tmpDir.appendingPathComponent("test.txt"), atomically: true, encoding: .utf8)
+        // Create a new file
+        try "Hello ARO".write(to: repo.appendingPathComponent("test.txt"), atomically: true, encoding: .utf8)
 
         // Stage
-        try git.stage(files: ["."], in: tmpDir)
+        try git.stage(files: ["."], in: repo)
 
         // Commit
-        let result = try git.commit(message: "Initial commit", in: tmpDir)
-        #expect(!result.hash.isEmpty)
+        let result = try git.commit(message: "Second commit", in: repo)
         #expect(result.hash.count == 40)
         #expect(result.short.count == 7)
-        #expect(result.message == "Initial commit")
+        #expect(result.message == "Second commit")
 
         // Verify via status
-        let status = try git.status(in: tmpDir)
+        let status = try git.status(in: repo)
         #expect(status.clean == true)
         #expect(status.branch != nil)
     }
