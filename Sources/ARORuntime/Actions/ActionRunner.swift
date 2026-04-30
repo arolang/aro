@@ -443,6 +443,23 @@ extension ActionRunner {
             return syncResult
         }
 
+        // Issue #55, Phase 4: under lazy mode, run action work on
+        // ActionTaskExecutor (elastic GCD) instead of the cooperative pool.
+        // The C-bridge pthread blocks via AROFuture.force() — same blocking
+        // semantics as before, but action work can never starve the
+        // cooperative pool, eliminating cascading-emit deadlocks.
+        if LazyActionMode.isEnabled {
+            let future = self.executeLazy(
+                verb: verb, result: result, object: object, context: context
+            )
+            do {
+                let value = try future.force()
+                return .success(value)
+            } catch {
+                return .failure(String(describing: error))
+            }
+        }
+
         // Phase 2: if the context has an async driver channel, submit work there
         // instead of spawning a new Task.detached per call.
         if let channel = (context as? RuntimeContext)?.driverChannel {

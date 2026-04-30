@@ -1,14 +1,17 @@
 // ============================================================
 // AROFuture.swift
-// ARORuntime - Lazy Action Result Handle (Issue #55, Phase 1)
+// ARORuntime - Lazy Action Result Handle (Issue #55, Phases 1, 4)
 // ============================================================
 //
 // AROFuture is the foundation for async-by-default action execution.
 // Every action call (under ARO_LAZY_ACTIONS=1) returns an AROFuture
-// instead of an eager value. The underlying Task<any Sendable, Error>
-// runs on the cooperative pool. Forcing the future blocks exactly once,
-// at boundaries where a concrete value must escape (Return, Log, branch
-// conditions, feature-set exit, first-handler-read on emitted events).
+// instead of an eager value.
+//
+// Phase 4: the underlying Task runs on `ActionTaskExecutor`, a custom
+// TaskExecutor backed by GCD's elastic global queue, NOT on Swift's
+// cooperative pool. This eliminates cascading-emit deadlocks: even if
+// every action thread is blocked waiting on another future, GCD will
+// spawn additional threads to make progress.
 //
 // Refcount semantics: an AROFuture is reference-counted via Unmanaged
 // when handed across the C ABI. When the last reference is released,
@@ -20,6 +23,40 @@
 // blocks all waiters until the Task signals completion exactly once.
 
 import Foundation
+
+// MARK: - ActionTaskExecutor (Issue #55, Phase 4)
+
+/// TaskExecutor that runs action work on GCD's elastic global queue.
+///
+/// Why a custom executor: Swift's default cooperative pool has a fixed
+/// thread count. Cascading event chains (emit → handler → emit → ...)
+/// can fill it with semaphore-blocked threads, deadlocking the program.
+/// GCD's global queue is elastic — it spawns additional threads under
+/// load — so action work can't starve itself. Force points (the C bridge,
+/// the value-accessors) block their calling pthread on a DispatchGroup
+/// while this executor keeps making progress underneath.
+///
+/// Linux note: swift-corelibs-libdispatch implements `DispatchQueue.global`
+/// with the same elastic semantics, so the design ports unchanged.
+@available(macOS 15.0, *)
+public final class ActionTaskExecutor: TaskExecutor, @unchecked Sendable {
+    public static let shared = ActionTaskExecutor()
+
+    private let queue = DispatchQueue.global(qos: .userInitiated)
+
+    private init() {}
+
+    public func enqueue(_ job: consuming ExecutorJob) {
+        let unowned = UnownedJob(job)
+        queue.async { [unownedExecutor = self.asUnownedTaskExecutor()] in
+            unowned.runSynchronously(on: unownedExecutor)
+        }
+    }
+
+    public func asUnownedTaskExecutor() -> UnownedTaskExecutor {
+        UnownedTaskExecutor(ordinary: self)
+    }
+}
 
 // MARK: - AROFuture
 
@@ -44,7 +81,8 @@ public final class AROFuture: @unchecked Sendable {
     /// so the Task body doesn't need to capture self.
     private let storage: ResultStorage
 
-    /// Create a future that runs `work` on the cooperative pool.
+    /// Create a future that runs `work` on the action task executor
+    /// (GCD-backed, elastic), separate from Swift's cooperative pool.
     public init(
         bindingName: String,
         sourceLocation: String? = nil,
@@ -55,7 +93,7 @@ public final class AROFuture: @unchecked Sendable {
         self.sourceLocation = sourceLocation
         let storage = ResultStorage()
         self.storage = storage
-        self.task = Task(priority: priority) {
+        self.task = Task(executorPreference: ActionTaskExecutor.shared, priority: priority) {
             do {
                 let value = try await work()
                 storage.complete(.success(value))
