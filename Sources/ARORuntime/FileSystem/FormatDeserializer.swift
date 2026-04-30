@@ -508,12 +508,7 @@ public struct FormatDeserializer: Sendable {
     }
 
     private static func parseXMLScalar(_ value: String) -> any Sendable {
-        let unescaped = value
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&apos;", with: "'")
+        let unescaped = unescapeXML(value)
 
         if let intValue = Int(unescaped) {
             return intValue
@@ -603,11 +598,7 @@ public struct FormatDeserializer: Sendable {
         // String (quoted)
         if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"")) ||
            (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) {
-            return String(trimmed.dropFirst().dropLast())
-                .replacingOccurrences(of: "\\n", with: "\n")
-                .replacingOccurrences(of: "\\t", with: "\t")
-                .replacingOccurrences(of: "\\\"", with: "\"")
-                .replacingOccurrences(of: "\\\\", with: "\\")
+            return unescapeTOML(String(trimmed.dropFirst().dropLast()))
         }
 
         // Boolean
@@ -921,5 +912,51 @@ public struct FormatDeserializer: Sendable {
         }
 
         return trimmed
+    }
+
+    // MARK: - Single-pass unescape functions (O(n) instead of O(n*m))
+
+    private static func unescapeXML(_ str: String) -> String {
+        guard str.contains("&") else { return str }
+        var result = ""
+        result.reserveCapacity(str.count)
+        var i = str.startIndex
+        while i < str.endIndex {
+            if str[i] == "&" {
+                let rest = str[i...]
+                if rest.hasPrefix("&amp;")  { result += "&";  i = str.index(i, offsetBy: 5); continue }
+                if rest.hasPrefix("&lt;")   { result += "<";  i = str.index(i, offsetBy: 4); continue }
+                if rest.hasPrefix("&gt;")   { result += ">";  i = str.index(i, offsetBy: 4); continue }
+                if rest.hasPrefix("&quot;") { result += "\""; i = str.index(i, offsetBy: 6); continue }
+                if rest.hasPrefix("&apos;") { result += "'";  i = str.index(i, offsetBy: 6); continue }
+            }
+            result.append(str[i])
+            i = str.index(after: i)
+        }
+        return result
+    }
+
+    private static func unescapeTOML(_ str: String) -> String {
+        guard str.contains("\\") else { return str }
+        var result = ""
+        result.reserveCapacity(str.count)
+        var i = str.startIndex
+        while i < str.endIndex {
+            if str[i] == "\\" {
+                let next = str.index(after: i)
+                if next < str.endIndex {
+                    switch str[next] {
+                    case "n":  result += "\n"; i = str.index(after: next); continue
+                    case "t":  result += "\t"; i = str.index(after: next); continue
+                    case "\"": result += "\""; i = str.index(after: next); continue
+                    case "\\": result += "\\"; i = str.index(after: next); continue
+                    default: break
+                    }
+                }
+            }
+            result.append(str[i])
+            i = str.index(after: i)
+        }
+        return result
     }
 }
