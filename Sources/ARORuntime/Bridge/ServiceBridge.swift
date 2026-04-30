@@ -2554,11 +2554,11 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 for pair in queryString.split(separator: "&") {
                     let kv = pair.split(separator: "=", maxSplits: 1)
                     if kv.count == 2 {
-                        let key = String(kv[0]).removingPercentEncoding ?? String(kv[0])
-                        let value = String(kv[1]).removingPercentEncoding ?? String(kv[1])
+                        let key = decodeQueryComponent(String(kv[0]))
+                        let value = decodeQueryComponent(String(kv[1]))
                         queryParams[key] = value
                     } else if kv.count == 1 {
-                        let key = String(kv[0]).removingPercentEncoding ?? String(kv[0])
+                        let key = decodeQueryComponent(String(kv[0]))
                         queryParams[key] = ""
                     }
                 }

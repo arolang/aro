@@ -816,12 +816,22 @@ public func parseQueryString(_ query: String) -> [String: [String]] {
             rawKey = pairStr
             rawValue = ""
         }
-        let key = rawKey.removingPercentEncoding ?? rawKey
-        let value = rawValue.removingPercentEncoding ?? rawValue
+        let key = decodeQueryComponent(rawKey)
+        let value = decodeQueryComponent(rawValue)
         guard !key.isEmpty else { continue }
         result[key, default: []].append(value)
     }
     return result
+}
+
+/// Decode a single query string component (key or value).
+///
+/// Per the `application/x-www-form-urlencoded` spec, `+` represents a space.
+/// This must be replaced **before** percent-decoding so that a literal `+`
+/// encoded as `%2B` is not incorrectly turned into a space.
+public func decodeQueryComponent(_ raw: String) -> String {
+    let plusDecoded = raw.replacingOccurrences(of: "+", with: " ")
+    return plusDecoded.removingPercentEncoding ?? plusDecoded
 }
 
 // MARK: - Cookie Header Parsing
@@ -865,9 +875,8 @@ extension SchemaBinding {
         for pair in str.split(separator: "&") {
             let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
             if parts.count == 2 {
-                let key = parts[0].removingPercentEncoding ?? parts[0]
-                let value = (parts[1].removingPercentEncoding ?? parts[1])
-                    .replacingOccurrences(of: "+", with: " ")
+                let key = decodeQueryComponent(parts[0])
+                let value = decodeQueryComponent(parts[1])
                 if let existing = result[key] as? [String] {
                     result[key] = existing + [value]
                 } else if let existing = result[key] as? String {

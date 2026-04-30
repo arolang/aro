@@ -331,8 +331,8 @@ private final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler,
                 for pair in rawQueryString.split(separator: "&") {
                     let parts = pair.split(separator: "=", maxSplits: 1)
                     if parts.count == 2 {
-                        let key = String(parts[0]).removingPercentEncoding ?? String(parts[0])
-                        let value = String(parts[1]).removingPercentEncoding ?? String(parts[1])
+                        let key = decodeQueryComponent(String(parts[0]))
+                        let value = decodeQueryComponent(String(parts[1]))
                         queryParams[key] = value
                     }
                 }
