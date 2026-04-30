@@ -57,7 +57,7 @@ struct GitServiceTests {
         // The ARO project itself is a git repo
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let status = try git.status(in: cwd)
-        #expect(status.branch != nil)
+        // branch may be nil in detached HEAD (e.g. CI runners)
         #expect(status.commit != nil)
     }
 
@@ -79,9 +79,10 @@ struct GitServiceTests {
         let git = GitService.shared
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let branch = try git.currentBranch(in: cwd)
-        // We're on a branch (feat/223-git-actions or main)
-        #expect(branch != nil)
-        #expect(!branch!.isEmpty)
+        // branch may be nil in detached HEAD (e.g. CI runners)
+        if let branch {
+            #expect(!branch.isEmpty)
+        }
     }
 
     @Test("log returns entries for current repo")
