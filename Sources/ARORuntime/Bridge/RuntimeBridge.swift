@@ -2127,6 +2127,18 @@ final class AROCValue: @unchecked Sendable {
     func upgradeValue(_ newValue: any Sendable) { lock.withLock { _value = newValue } }
 
     init(value: any Sendable) { _value = value }
+
+    /// The boxed value with any AROFuture transparently forced (Issue #55,
+    /// phase 3). Use this from C ABI value-accessors so that a future
+    /// stored as the box payload materializes before being inspected.
+    /// Falls back to "" on force failure (matches resolveAny semantics).
+    var materializedValue: any Sendable {
+        let v = value
+        if let future = v as? AROFuture {
+            return (try? future.force()) ?? ""
+        }
+        return v
+    }
 }
 
 /// Free a value returned by aro_variable_resolve
@@ -2153,10 +2165,11 @@ public func aro_value_as_string(_ valuePtr: UnsafeMutableRawPointer?) -> UnsafeM
     guard let ptr = valuePtr else { return nil }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let str = boxed.value as? String {
+    let v = boxed.materializedValue
+    if let str = v as? String {
         return strdup(str)
     }
-    return strdup(String(describing: boxed.value))
+    return strdup(String(describing: v))
 }
 
 /// Concatenate two C strings and return the result
@@ -2466,11 +2479,12 @@ public func aro_value_as_int(
     guard let ptr = valuePtr, let out = outValue else { return 0 }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let intVal = boxed.value as? Int {
+    let v = boxed.materializedValue
+    if let intVal = v as? Int {
         out.pointee = Int64(intVal)
         return 1
     }
-    if let intVal = boxed.value as? Int64 {
+    if let intVal = v as? Int64 {
         out.pointee = intVal
         return 1
     }
@@ -2490,11 +2504,12 @@ public func aro_value_as_double(
     guard let ptr = valuePtr, let out = outValue else { return 0 }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let doubleVal = boxed.value as? Double {
+    let v = boxed.materializedValue
+    if let doubleVal = v as? Double {
         out.pointee = doubleVal
         return 1
     }
-    if let intVal = boxed.value as? Int {
+    if let intVal = v as? Int {
         out.pointee = Double(intVal)
         return 1
     }

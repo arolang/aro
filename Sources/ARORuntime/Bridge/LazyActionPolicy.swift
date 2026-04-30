@@ -25,19 +25,29 @@ public enum LazyActionPolicy {
     /// lazy mode. Inputs are forced before the action runs; the result
     /// is bound eagerly. Match against canonical verbs (post-canonicalize).
     ///
-    /// Phase 2 set (kept narrow on purpose):
+    /// Phase 2 set:
     ///   - return / throw — control flow / response materialization
     ///   - log            — observable stdout/stderr output
     ///   - publish        — exports a concrete value into GlobalSymbolRegistry
-    ///   - emit           — bus delivery; payload force is per-handler (phase 3)
+    ///   - emit           — bus delivery; payload force is per-handler
     ///                      but the bridge call itself stays eager so causality
     ///                      with publishAndTrack() handler-wait is preserved
+    ///
+    /// Phase 3 additions (branch consumers):
+    ///   - compare        — boolean output feeds an `if`/`when` branch
+    ///   - validate       — boolean output feeds an `if`/`when` branch
+    ///   - accept         — state-machine transition; consumed by branch
     public static let forceAtSiteVerbs: Set<String> = [
+        // Phase 2 — visible side effects / control flow
         "return",
         "throw",
         "log",
         "publish",
-        "emit"
+        "emit",
+        // Phase 3 — branch consumers
+        "compare",
+        "validate",
+        "accept"
     ]
 
     /// Returns true if this verb must execute eagerly at its statement

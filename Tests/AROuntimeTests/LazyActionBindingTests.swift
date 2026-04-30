@@ -85,7 +85,8 @@ final class LazyActionBindingTests: XCTestCase {
         XCTAssertFalse(LazyActionPolicy.forceAtSite("compute"))
         XCTAssertFalse(LazyActionPolicy.forceAtSite("retrieve"))
         XCTAssertFalse(LazyActionPolicy.forceAtSite("extract"))
-        XCTAssertFalse(LazyActionPolicy.forceAtSite("validate"))
+        // Note: `validate` was added to the force-at-site set in phase 3
+        // (branch consumers). Phase 3 tests assert that membership.
     }
 
     func testExecuteLazyReturnsRunningFuture() async throws {
