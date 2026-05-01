@@ -1,0 +1,5 @@
+# Test hints for GitDemo
+# Output is dynamic (current branch, commit log, clean status all vary by checkout),
+# so we only verify the static section markers via occurrence-check.
+mode: both
+occurrence-check: true

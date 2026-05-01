@@ -26,9 +26,9 @@
     Log "--- Repository Status ---" to the <console>.
     Retrieve the <status> from the <git>.
     Extract the <branch> from the <status: branch>.
-    Extract the <is-clean> from the <status: clean>.
+    Extract the <clean> from the <status: clean>.
     Log "Branch: ${branch}" to the <console>.
-    Log "Clean: ${is-clean}" to the <console>.
+    Log "Clean: ${clean}" to the <console>.
     Log "" to the <console>.
 
     (* 2. Retrieve commit log *)
@@ -42,12 +42,6 @@
     }
     Log "" to the <console>.
 
-    (* 3. Retrieve current branch *)
-    Log "--- Current Branch ---" to the <console>.
-    Retrieve the <branch> from the <git>.
-    Log "On branch: ${branch}" to the <console>.
-
-    Log "" to the <console>.
     Log "=== Demo complete ===" to the <console>.
     Return an <OK: status> for the <startup>.
 }
