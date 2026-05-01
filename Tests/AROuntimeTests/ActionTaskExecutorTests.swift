@@ -23,12 +23,18 @@ import XCTest
 
 final class ActionTaskExecutorTests: XCTestCase {
 
+    #if canImport(Darwin)
     func testExecutorPreferenceIsActiveInsideFutureBody() async throws {
         // Inside the future body, query whether ActionTaskExecutor is the
         // preferred task executor. Swift exposes this via task-local APIs;
         // we use a heuristic check — the work must run on a queue that is
         // _not_ the calling-thread queue (because TaskExecutor enqueues work
         // onto its own GCD queue).
+        //
+        // Darwin-only: `__dispatch_queue_get_label` is a Darwin libdispatch
+        // symbol; swift-corelibs-libdispatch on Linux does not export it.
+        // The cross-platform concurrency guarantees are covered by
+        // testManyConcurrentFuturesAllResolve and testCascadingForceDoesNotDeadlock.
         let callerQueue = String(cString: __dispatch_queue_get_label(nil))
 
         let future = AROFuture(bindingName: "exec-check") { @Sendable in
@@ -41,6 +47,7 @@ final class ActionTaskExecutorTests: XCTestCase {
         // It runs on a global concurrent queue (label like "com.apple.root.user-initiated-qos").
         XCTAssertNotEqual(result, callerQueue)
     }
+    #endif
 
     func testManyConcurrentFuturesAllResolve() async throws {
         // Spawn far more concurrent futures than the cooperative pool's
