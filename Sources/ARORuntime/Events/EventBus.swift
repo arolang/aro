@@ -102,9 +102,31 @@ public actor EventBus {
     /// handlers are still in flight, preventing unbounded growth of the list.
     private var flushContinuationStaleness: TimeInterval = 30
 
+    /// A continuation wrapper that ensures resume is called exactly once.
+    /// Swift continuations crash fatally on double-resume; this guard prevents
+    /// that when cleanup, timeout, and handler-completion race.
+    private final class SafeContinuation: Sendable {
+        nonisolated(unsafe) private var resumed = false
+        private let continuation: CheckedContinuation<Void, Never>
+
+        init(_ continuation: CheckedContinuation<Void, Never>) {
+            self.continuation = continuation
+        }
+
+        /// Resume the continuation if it hasn't been resumed yet.
+        /// Returns true if this call actually resumed, false if already resumed.
+        @discardableResult
+        func resumeOnce() -> Bool {
+            guard !resumed else { return false }
+            resumed = true
+            continuation.resume()
+            return true
+        }
+    }
+
     /// Flush continuations indexed by call-site UUID for targeted removal on timeout.
     /// Each entry carries a deadline so background cleanup can sweep expired ones.
-    private var flushContinuations: [UUID: (deadline: Date, continuation: CheckedContinuation<Void, Never>)] = [:]
+    private var flushContinuations: [UUID: (deadline: Date, continuation: SafeContinuation)] = [:]
 
     /// Shared instance
     public static let shared = EventBus()
@@ -184,7 +206,7 @@ public actor EventBus {
         if inFlightHandlers == 0 {
             let pending = flushContinuations
             flushContinuations.removeAll()
-            for (_, entry) in pending { entry.continuation.resume() }
+            for (_, entry) in pending { entry.continuation.resumeOnce() }
         }
     }
 
@@ -223,18 +245,19 @@ public actor EventBus {
 
     /// Register a continuation waiting for handlers to complete
     private func registerFlushContinuation(_ continuation: CheckedContinuation<Void, Never>, id: UUID) {
+        let safe = SafeContinuation(continuation)
         if inFlightHandlers == 0 {
-            continuation.resume()
+            safe.resumeOnce()
         } else {
             let deadline = Date().addingTimeInterval(flushContinuationStaleness)
-            flushContinuations[id] = (deadline: deadline, continuation: continuation)
+            flushContinuations[id] = (deadline: deadline, continuation: safe)
         }
     }
 
     /// Remove and resume a specific flush continuation (called on per-call timeout)
     private func removeFlushContinuation(id: UUID) {
         if let entry = flushContinuations.removeValue(forKey: id) {
-            entry.continuation.resume()
+            entry.continuation.resumeOnce()
         }
     }
 
@@ -245,7 +268,7 @@ public actor EventBus {
         let stale = flushContinuations.filter { $0.value.deadline < now }
         for (id, entry) in stale {
             flushContinuations.removeValue(forKey: id)
-            entry.continuation.resume()
+            entry.continuation.resumeOnce()
         }
     }
 
@@ -298,7 +321,7 @@ public actor EventBus {
         if inFlightHandlers == 0 {
             let pending = flushContinuations
             flushContinuations.removeAll()
-            for (_, entry) in pending { entry.continuation.resume() }
+            for (_, entry) in pending { entry.continuation.resumeOnce() }
         }
     }
 
