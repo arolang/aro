@@ -17,17 +17,29 @@ private final class EventBusResultBox<T>: @unchecked Sendable {
 
 // MARK: - Subscription Store
 
-/// Private actor that owns subscription storage.
-/// Swift's actor model provides static data-race safety and fair scheduling,
-/// replacing the previous nonisolated(unsafe) + NSLock pattern.
-private actor SubscriptionStore {
-    var subscriptionsByType: [String: [EventBus.Subscription]] = [:]
-    var wildcardSubscriptions: [EventBus.Subscription] = []
+/// Thread-safe subscription storage with synchronous add/remove.
+///
+/// `add` must complete before the call returns so that an event published
+/// immediately after `subscribe(...)` sees the new handler. The earlier
+/// actor-based design used a fire-and-forget `Task { await store.add(...) }`
+/// from the nonisolated `subscribe` shim, which left a window where an
+/// emit could miss the just-registered subscription — flaky in tests
+/// where Application-Start emits an event right after registration.
+///
+/// NSLock is sufficient: critical sections are tiny (dictionary mutation),
+/// there's no async work inside the lock, and contention is low compared
+/// to a per-call Task hop.
+private final class SubscriptionStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var subscriptionsByType: [String: [EventBus.Subscription]] = [:]
+    private var wildcardSubscriptions: [EventBus.Subscription] = []
     /// Side-map from subscription ID to its event type (or "*" for wildcard).
     /// Allows remove() to locate the correct bucket in O(1).
     private var idToType: [UUID: String] = [:]
 
     func add(_ subscription: EventBus.Subscription) {
+        lock.lock()
+        defer { lock.unlock() }
         idToType[subscription.id] = subscription.eventType
         if subscription.eventType == "*" {
             wildcardSubscriptions.append(subscription)
@@ -37,6 +49,8 @@ private actor SubscriptionStore {
     }
 
     func remove(_ id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
         guard let eventType = idToType.removeValue(forKey: id) else { return }
         if eventType == "*" {
             wildcardSubscriptions.removeAll { $0.id == id }
@@ -49,18 +63,24 @@ private actor SubscriptionStore {
     }
 
     func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
         wildcardSubscriptions.removeAll()
         subscriptionsByType.removeAll()
         idToType.removeAll()
     }
 
     func matching(for eventType: String) -> [EventBus.Subscription] {
+        lock.lock()
+        defer { lock.unlock() }
         let typeSubscriptions = subscriptionsByType[eventType] ?? []
         return typeSubscriptions + wildcardSubscriptions
     }
 
     var count: Int {
-        wildcardSubscriptions.count + subscriptionsByType.values.reduce(0) { $0 + $1.count }
+        lock.lock()
+        defer { lock.unlock() }
+        return wildcardSubscriptions.count + subscriptionsByType.values.reduce(0) { $0 + $1.count }
     }
 }
 
@@ -125,7 +145,7 @@ public actor EventBus {
     /// Internal async publish implementation
     private func publishInternal(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = await store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType)
         let allContinuations = Array(continuations.values)
 
         // Notify async stream subscribers
@@ -145,7 +165,7 @@ public actor EventBus {
     /// - Parameter event: The event to publish
     public func publishAndWait(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = await store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType)
 
         await withTaskGroup(of: Void.self) { group in
             for subscription in matchingSubscriptions {
@@ -160,7 +180,7 @@ public actor EventBus {
     /// This is used by EmitAction to ensure proper event sequencing
     public func publishAndTrack(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = await store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType)
 
         // Execute all handlers and wait for completion
         await withTaskGroup(of: Void.self) { group in
@@ -367,7 +387,7 @@ public actor EventBus {
             eventType: eventType,
             handler: handler
         )
-        Task { await store.add(subscription) }
+        store.add(subscription)
         return subscription.id
     }
 
@@ -434,16 +454,16 @@ public actor EventBus {
     /// Unsubscribe from events
     /// - Parameter id: The subscription ID returned from subscribe
     nonisolated public func unsubscribe(_ id: UUID) {
+        store.remove(id)
         Task {
-            await store.remove(id)
             await self.removeContinuation(id)
         }
     }
 
     /// Remove all subscriptions
     nonisolated public func unsubscribeAll() {
+        store.removeAll()
         Task {
-            await store.removeAll()
             await self.finishAndClearContinuations()
         }
     }
@@ -460,7 +480,7 @@ public actor EventBus {
     /// Number of active subscriptions
     public var subscriptionCount: Int {
         get async {
-            await store.count + continuations.count
+            store.count + continuations.count
         }
     }
 }
