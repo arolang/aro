@@ -246,7 +246,7 @@ Three handle types cross the boundary as opaque `UnsafeMutableRawPointer`:
 | `AROCRuntimeHandle` | `RuntimeBridge` instance | Shared runtime state |
 | `AROCDescriptorHandle` | `ResultDescriptor`/`ObjectDescriptor` | Statement metadata |
 
-**The synchronous bridge problem**: `@_cdecl` functions can't be `async`. But Swift runtime actions are async. The bridge blocks with a `DispatchSemaphore` until the async work completes. This works, but it risks deadlock under load (all threads blocked waiting for continuations that need threads to run). The mitigation: event handlers run on new pthreads, not GCD's cooperative pool, which has a 64-thread limit.
+**The synchronous bridge problem (and how it was solved)**: `@_cdecl` functions can't be `async`, but Swift runtime actions are async. ARO solves this with an `AROFuture` — `aro_action_*` returns immediately with a future handle, and force points (the value-accessors, the effectful verbs) block the C-bridge pthread on the future's `DispatchGroup` until the result is ready. The futures' tasks run on a custom `TaskExecutor` over GCD's elastic global queue, *not* the cooperative pool, so a blocked pthread cannot starve the work that would unblock it. Cascading event chains that previously risked deadlock now finish in milliseconds.
 
 **Platform types**: `Bool` is not the same on macOS and Linux at the C boundary. macOS passes it as 1 byte; Linux sometimes expects 4 bytes. All boolean results cross the bridge as `Int32` and are converted at each side.
 

@@ -323,6 +323,68 @@ Sources/AROCRuntime/
 +-- ServiceBridge.swift    # HTTP/File/Socket C interface
 ```
 
+### Async-by-Default Action Execution
+
+Action calls from compiled binaries are async-by-default. `aro_action_*`
+returns immediately — most calls return an `AROFuture` handle whose
+underlying Task is already running on a custom `TaskExecutor` (a
+GCD-backed elastic queue, distinct from Swift's cooperative pool). The
+calling pthread is not blocked; the binding slot now holds the future,
+not the materialized value.
+
+The runtime materializes the value at *force points*. There are three:
+
+1. **Sync value-accessors** (`aro_value_as_string`, `aro_value_as_int`,
+   `aro_value_as_double`). When the generated code reads a binding
+   that holds a future, the accessor blocks the calling pthread on the
+   future's `DispatchGroup` until the result is ready, then returns
+   the materialized scalar.
+2. **Force-at-site verbs** (see "Effect Ordering" below). The bridge
+   skips wrapping the result in a future and binds the materialized
+   value directly, so the next statement sees an eager value.
+3. **Explicit `aro_future_force(...)`**. Used by code that needs the
+   raw value of a binding without going through a typed accessor.
+
+Because force points block on the custom executor (not the cooperative
+pool), cascading event chains — `Emit` → handler → `Emit` → … — cannot
+starve themselves: the elastic queue spawns additional threads under
+load. This is the deadlock-free property described in issue #55.
+
+The slow-force diagnostic (`ARO_FORCE_WARN_SECONDS`, default 5s) emits
+a single line to stderr identifying the binding name and source
+location whenever a force exceeds the budget. The wait then continues
+indefinitely — the warning is informational, not a deadline. Set
+`ARO_FORCE_WARN_SECONDS=0` to disable; any positive number to
+override.
+
+### Effect Ordering Rule
+
+Lazy execution must not reorder *observable* side effects. The runtime
+guarantees this by tagging effectful verbs as **force-at-site**: they
+run synchronously at the call site with their inputs already
+materialized, and their result is bound eagerly so subsequent
+statements never see a deferred handle.
+
+| Verb | Why it's force-at-site |
+|------|------------------------|
+| `Log` | writes to stdout/stderr/template buffer/file |
+| `Return` / `Throw` | response materialization & control flow |
+| `Publish` | exports a concrete value into `GlobalSymbolRegistry` |
+| `Emit` | bus delivery; emitter waits for all matching handlers |
+| `Compare` / `Validate` / `Accept` | result feeds an `if` / `when` / state branch |
+
+For every other verb (`Extract`, `Compute`, `Retrieve`, `Transform`,
+…) the result is wrapped in an `AROFuture` and forced transparently
+when the next consumer reads it. Programs cannot tell the difference
+at the language level — laziness is an implementation strategy, not
+something users need to reason about.
+
+`Emit` is special: the verb itself is force-at-site (so the bus
+delivery and the handler wait happen at the call site), but it
+captures payload values *without* forcing them. The first handler to
+read a payload field forces the underlying future once, and the
+result is memoized for every other handler that reads the same field.
+
 ---
 
 ## 5. Runtime Function Table

@@ -767,11 +767,58 @@ The EventBus is the central hub for event routing in ARO applications.
 
 ### 7.3 Execution Semantics
 
-- Events are dispatched asynchronously
-- Multiple handlers can respond to the same event
-- Handlers run in isolation; failures don't affect other handlers
-- Handler execution order is undefined
-- The emitting feature set continues immediately (fire-and-forget)
+- Events are dispatched asynchronously to handlers; multiple handlers run
+  concurrently and in unspecified order.
+- Handlers run in isolation. A failure in one handler does not affect
+  the others.
+- The emitting feature set **waits** for every matching handler to
+  complete before continuing past the `Emit`. This preserves causality
+  and request/response flow — the next statement after `Emit` may rely
+  on side-effects the handlers performed (state mutation, repository
+  writes, logs).
+
+### 7.4 Lazy Action Execution and Effect Ordering
+
+Action results are produced lazily: most actions return a future that
+the next consuming action transparently forces. This is invisible to
+ARO code but matters for *effectful* actions whose observable side
+effects must happen at a specific point in the program.
+
+**The effect-ordering rule:** every effectful action implicitly forces
+its inputs at the call site. Effectful actions are exactly those that
+do something the rest of the program can observe — they are listed in
+the runtime's force-at-site set:
+
+| Verb | Effect |
+|------|--------|
+| `Log` | writes to stdout/stderr (or template buffer / file) |
+| `Return` | materializes the response value |
+| `Throw` | propagates an error |
+| `Publish` | exports a concrete value into the global symbol registry |
+| `Emit` | delivers a domain event and waits for handlers |
+| `Compare` / `Validate` / `Accept` | feed an `if` / `when` / state branch |
+
+For these verbs the upstream chain is fully resolved before the verb
+runs and the verb's own result is bound eagerly, so subsequent
+statements never see the lazy handle. Two concrete consequences:
+
+1. **`Log` reliably orders output.** `Log "starting"` then a slow
+   action then `Log "done"` always prints "starting" before "done",
+   even though the slow action would otherwise be deferred — `Log`
+   forces its inputs at the call site.
+
+2. **`Emit` payload values are lazy across handlers, eager at the
+   handler boundary.** The emitter captures the upstream future
+   without forcing it; the *first* handler to read a payload field
+   forces it once, and the result is memoized for every subsequent
+   handler. Handlers therefore see consistent values without paying
+   for the work N times when N handlers fire.
+
+Non-effectful actions (`Extract`, `Compute`, `Retrieve`, `Transform`,
+…) flow lazy handles through bindings until an effectful action
+consumes them. There is no observable difference at the language
+level — laziness is an implementation strategy, not a programming
+model the user has to think about.
 
 ---
 
