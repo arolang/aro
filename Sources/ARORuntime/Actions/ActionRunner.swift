@@ -200,101 +200,6 @@ public final class ActionRunner: @unchecked Sendable {
         )
     }
 
-    // MARK: - Sync Execution (for C bridge)
-
-    /// Thread-safe result holder for async-to-sync bridging
-    private final class ResultHolder: @unchecked Sendable {
-        private let lock = NSLock()
-        private var _value: (any Sendable)?
-        private var _error: Error?
-
-        var value: (any Sendable)? {
-            lock.lock()
-            defer { lock.unlock() }
-            return _value
-        }
-
-        var error: Error? {
-            lock.lock()
-            defer { lock.unlock() }
-            return _error
-        }
-
-        func setValue(_ value: any Sendable) {
-            lock.lock()
-            defer { lock.unlock() }
-            _value = value
-        }
-
-        func setError(_ error: Error) {
-            lock.lock()
-            defer { lock.unlock() }
-            _error = error
-        }
-    }
-
-    /// Execute an action synchronously by blocking on the async result
-    /// - Parameters:
-    ///   - verb: The action verb (will be canonicalized)
-    ///   - result: The result descriptor
-    ///   - object: The object descriptor
-    ///   - context: The execution context (must be a RuntimeContext)
-    /// - Returns: The action result, or nil if execution fails
-    ///
-    /// This method is designed for C interop where async execution is not possible.
-    /// It uses a semaphore to block until the async operation completes.
-    public func executeSync(
-        verb: String,
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) -> (any Sendable)? {
-        // Fast path: bypass Task.detached + semaphore for synchronous actions
-        let canonicalVerb = Self.canonicalizeVerb(verb)
-        if let syncResult = executeSynchronouslyIfSupported(
-            canonicalVerb: canonicalVerb, result: result, object: object, context: context
-        ) {
-            return syncResult.value
-        }
-
-        let holder = ResultHolder()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        // Use Task.detached to ensure the task runs on the concurrent executor
-        // rather than inheriting the current task context. This prevents deadlocks
-        // on Linux where the default Task might try to use the blocked thread.
-        Task.detached { @Sendable [self] in
-            do {
-                let result = try await self.executeAsync(
-                    verb: verb,
-                    result: result,
-                    object: object,
-                    context: context
-                )
-                holder.setValue(result)
-            } catch {
-                holder.setError(error)
-            }
-            semaphore.signal()
-        }
-
-        // Yield pattern: release our execution pool slot while blocked so other
-        // compiled code can run. Re-acquire after the action completes.
-        // This prevents deadlock from cascading event chains.
-        // Phase 5: slot ownership now lives on a TaskLocal — see
-        // CompiledExecutionPool.withYieldedSlot.
-        CompiledExecutionPool.shared.withYieldedSlot {
-            semaphore.wait()
-        }
-
-        if let error = holder.error {
-            _ = error
-            return nil
-        }
-
-        return holder.value
-    }
-
     // MARK: - Lazy Execution (Issue #55, Phase 2)
 
     /// Build an AROFuture wrapping `executeAsync(...)`. The future's task
@@ -302,8 +207,8 @@ public final class ActionRunner: @unchecked Sendable {
     /// hold the handle without blocking. Forcing the handle (or awaiting
     /// `future.value()`) materializes the result.
     ///
-    /// Used by the C bridge under `ARO_LAZY_ACTIONS=1` for non-force-at-site
-    /// verbs.  See `LazyActionPolicy` for the force-at-site set.
+    /// Used by the C bridge for non-force-at-site verbs. See
+    /// `LazyActionPolicy` for the force-at-site set.
     public func executeLazy(
         verb: String,
         result: ResultDescriptor,
@@ -432,24 +337,6 @@ public struct ActionRunnerResult: @unchecked Sendable {
 }
 
 extension ActionRunner {
-    /// Thread-safe result holder for ActionRunnerResult
-    private final class ActionResultHolder: @unchecked Sendable {
-        private let lock = NSLock()
-        private var _result: ActionRunnerResult = .failure("Unknown error")
-
-        var result: ActionRunnerResult {
-            lock.lock()
-            defer { lock.unlock() }
-            return _result
-        }
-
-        func setResult(_ result: ActionRunnerResult) {
-            lock.lock()
-            defer { lock.unlock() }
-            _result = result
-        }
-    }
-
     /// Execute an action and return a detailed result for C bridge
     /// - Parameters:
     ///   - verb: The action verb
@@ -463,7 +350,7 @@ extension ActionRunner {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> ActionRunnerResult {
-        // Fast path: bypass Task.detached + semaphore for synchronous actions
+        // Fast path: bypass the future for trivially-synchronous actions.
         let canonicalVerb = Self.canonicalizeVerb(verb)
         if let syncResult = executeSynchronouslyIfSupported(
             canonicalVerb: canonicalVerb, result: result, object: object, context: context
@@ -471,71 +358,19 @@ extension ActionRunner {
             return syncResult
         }
 
-        // Issue #55, Phase 4: under lazy mode, run action work on
-        // ActionTaskExecutor (elastic GCD) instead of the cooperative pool.
-        // The C-bridge pthread blocks via AROFuture.force() — same blocking
-        // semantics as before, but action work can never starve the
-        // cooperative pool, eliminating cascading-emit deadlocks.
-        if LazyActionMode.isEnabled {
-            let future = self.executeLazy(
-                verb: verb, result: result, object: object, context: context
-            )
-            do {
-                let value = try future.force()
-                return .success(value)
-            } catch {
-                return .failure(String(describing: error))
-            }
+        // Async actions run as an AROFuture on ActionTaskExecutor (elastic
+        // GCD). The C-bridge pthread blocks via AROFuture.force() — action
+        // work cannot starve the cooperative pool, so cascading-emit chains
+        // never deadlock. Issue #55 Phases 4 & 7.
+        let future = self.executeLazy(
+            verb: verb, result: result, object: object, context: context
+        )
+        do {
+            let value = try future.force()
+            return .success(value)
+        } catch {
+            return .failure(String(describing: error))
         }
-
-        // Phase 2: if the context has an async driver channel, submit work there
-        // instead of spawning a new Task.detached per call.
-        if let channel = (context as? RuntimeContext)?.driverChannel {
-            let box = ActionRunnerResultBox()
-            let semaphore = DispatchSemaphore(value: 0)
-            channel.submitAction(
-                verb: verb, result: result, object: object,
-                context: context, holder: box, semaphore: semaphore
-            )
-
-            // Yield pool slot while waiting (same as legacy path).
-            // Phase 5: slot ownership lives on a TaskLocal.
-            CompiledExecutionPool.shared.withYieldedSlot {
-                semaphore.wait()
-            }
-            return box.result
-        }
-
-        let holder = ActionResultHolder()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        // Use Task.detached to ensure the task runs on the concurrent executor
-        // rather than inheriting the current task context. This prevents deadlocks
-        // on Linux where the default Task might try to use the blocked thread.
-        Task.detached { @Sendable [self] in
-            do {
-                let value = try await self.executeAsync(
-                    verb: verb,
-                    result: result,
-                    object: object,
-                    context: context
-                )
-                holder.setResult(.success(value))
-            } catch {
-                holder.setResult(.failure(String(describing: error)))
-            }
-            semaphore.signal()
-        }
-
-        // Yield pattern: release our execution pool slot while blocked so other
-        // compiled code can run. Re-acquire after the action completes.
-        // This prevents deadlock from cascading event chains.
-        // Phase 5: slot ownership lives on a TaskLocal.
-        CompiledExecutionPool.shared.withYieldedSlot {
-            semaphore.wait()
-        }
-
-        return holder.result
     }
 
     /// Execute an action without waiting for completion (fire-and-forget)
@@ -617,37 +452,23 @@ extension ActionRunner {
     }
 }
 
-// MARK: - Per-Feature-Set Async Driver (Phase 2)
+// MARK: - Per-Feature-Set Async Driver
 
-/// Work item submitted by the C bridge for cooperative action dispatch.
-///
-/// The C feature set pthread submits a work item and blocks on `semaphore`.
-/// The driver Swift Task picks it up, calls `await executeAsync(...)`, stores
-/// the result, and signals `semaphore` — without spawning a new Task.
-public struct ActionDriverWorkItem: @unchecked Sendable {
-    public let verb: String
-    public let result: ResultDescriptor
-    public let object: ObjectDescriptor
-    public let context: ExecutionContext
-    public let holder: ActionRunnerResultBox
-    public let semaphore: DispatchSemaphore
-}
-
-/// Work item for cooperative directory iteration (Phase 3 pipelining).
+/// Work item for cooperative directory iteration.
 ///
 /// `aro_array_get_next_ctx` submits one of these per loop iteration so that
 /// `PipelinedDirectoryIterator.nextAsync()` is awaited on the cooperative pool
 /// rather than on the C pthread — letting the producer and consumer overlap.
+///
+/// (Issue #55 cleanup: the action-dispatch path that previously also used
+/// this channel is gone — `executeSyncWithResult` now blocks via
+/// `AROFuture.force()` on `ActionTaskExecutor`. The channel still earns its
+/// keep for directory iteration, where the producer Task and the consumer
+/// pthread need to interleave on the same cooperative pool.)
 public struct ArrayNextWorkItem: @unchecked Sendable {
     public let iterator: PipelinedDirectoryIterator
     public let holder: ActionRunnerResultBox
     public let semaphore: DispatchSemaphore
-}
-
-/// Unified work-item type for `ActionDriverChannel`.
-public enum DriverWorkItem: @unchecked Sendable {
-    case action(ActionDriverWorkItem)
-    case arrayNext(ArrayNextWorkItem)
 }
 
 /// Thread-safe box for `ActionRunnerResult` shared between the C bridge
@@ -668,37 +489,23 @@ public final class ActionRunnerResultBox: @unchecked Sendable {
     }
 }
 
-/// Single-producer, single-consumer channel used to ferry work items
-/// from the C feature set pthread to the cooperative driver Swift Task.
-///
-/// Accepts both action work items (via `submitAction`) and array-next items
-/// (via `submitArrayNext`).  Closed via `close()` after the C function returns;
-/// `next()` returns `nil` when the channel is drained and closed.
+/// Single-producer, single-consumer channel used to ferry array-next work
+/// items from the C feature set pthread to the cooperative driver Swift Task.
+/// Closed via `close()` after the C function returns; `next()` returns `nil`
+/// when the channel is drained and closed.
 public final class ActionDriverChannel: @unchecked Sendable {
     private let lock = NSLock()
-    private var queue: [DriverWorkItem] = []
-    private var waiter: CheckedContinuation<DriverWorkItem?, Never>? = nil
+    private var queue: [ArrayNextWorkItem] = []
+    private var waiter: CheckedContinuation<ArrayNextWorkItem?, Never>? = nil
     private var closed = false
 
     public init() {}
-
-    /// Submit an action work item from the C pthread.
-    public func submitAction(verb: String, result: ResultDescriptor, object: ObjectDescriptor,
-                             context: ExecutionContext, holder: ActionRunnerResultBox,
-                             semaphore: DispatchSemaphore) {
-        let item = ActionDriverWorkItem(verb: verb, result: result, object: object,
-                                       context: context, holder: holder, semaphore: semaphore)
-        enqueue(.action(item))
-    }
 
     /// Submit an array-next work item from `aro_array_get_next_ctx`.
     public func submitArrayNext(iterator: PipelinedDirectoryIterator,
                                 holder: ActionRunnerResultBox,
                                 semaphore: DispatchSemaphore) {
-        enqueue(.arrayNext(ArrayNextWorkItem(iterator: iterator, holder: holder, semaphore: semaphore)))
-    }
-
-    private func enqueue(_ item: DriverWorkItem) {
+        let item = ArrayNextWorkItem(iterator: iterator, holder: holder, semaphore: semaphore)
         lock.lock()
         if let cont = waiter {
             waiter = nil
@@ -712,12 +519,9 @@ public final class ActionDriverChannel: @unchecked Sendable {
 
     /// Receive the next work item on the driver Task.  Returns `nil` when the
     /// channel is closed and the queue is drained.
-    ///
-    /// Uses `withLock` (the Swift-6-safe scoped form) instead of bare `lock()`/`unlock()`
-    /// so the async-context concurrency checker is satisfied.
-    public func next() async -> DriverWorkItem? {
+    public func next() async -> ArrayNextWorkItem? {
         // Fast path: item already queued (synchronous, no suspension)
-        if let item = lock.withLock({ () -> DriverWorkItem? in
+        if let item = lock.withLock({ () -> ArrayNextWorkItem? in
             guard let item = queue.first else { return nil }
             queue.removeFirst()
             return item
@@ -729,7 +533,7 @@ public final class ActionDriverChannel: @unchecked Sendable {
 
         // Slow path: register a continuation, re-checking under lock to close the TOCTOU
         // window between the two withLock calls above.
-        return await withCheckedContinuation { (cont: CheckedContinuation<DriverWorkItem?, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<ArrayNextWorkItem?, Never>) in
             lock.withLock {
                 if let item = queue.first {
                     queue.removeFirst()
@@ -758,40 +562,23 @@ public final class ActionDriverChannel: @unchecked Sendable {
 }
 
 extension ActionRunner {
-    /// Drive all action calls for a single feature set invocation cooperatively.
+    /// Drive cooperative directory iteration for a single feature set.
     ///
     /// Called as `Task.detached { await ActionRunner.shared.driveFeatureSet(channel) }`
-    /// once per compiled feature set invocation.  The C feature set pthread submits
-    /// work items via `channel.submitAction/submitArrayNext()` and the driver processes
-    /// them cooperatively — no nested Task.detached per action or array iteration.
+    /// once per compiled feature set invocation. The C feature set pthread submits
+    /// `aro_array_get_next_ctx` items via `channel.submitArrayNext`; the driver
+    /// awaits the producer cooperatively so producer and consumer overlap.
     public func driveFeatureSet(channel: ActionDriverChannel) async {
-        while let item = await channel.next() {
-            switch item {
-            case .action(let actionItem):
-                do {
-                    let value = try await self.executeAsync(
-                        verb: actionItem.verb,
-                        result: actionItem.result,
-                        object: actionItem.object,
-                        context: actionItem.context
-                    )
-                    actionItem.holder.set(.success(value))
-                } catch {
-                    actionItem.holder.set(.failure(String(describing: error)))
-                }
-                actionItem.semaphore.signal()
-
-            case .arrayNext(let nextItem):
-                // Cooperative: await the next directory entry from the producer Task.
-                // The producer runs on a different cooperative-pool thread, so this
-                // await allows the producer to prefetch while the driver is suspended.
-                if let entry = await nextItem.iterator.nextAsync() {
-                    nextItem.holder.set(.success(entry as any Sendable))
-                } else {
-                    nextItem.holder.set(.failure("__exhausted__"))
-                }
-                nextItem.semaphore.signal()
+        while let nextItem = await channel.next() {
+            // Cooperative: await the next directory entry from the producer Task.
+            // The producer runs on a different cooperative-pool thread, so this
+            // await allows the producer to prefetch while the driver is suspended.
+            if let entry = await nextItem.iterator.nextAsync() {
+                nextItem.holder.set(.success(entry as any Sendable))
+            } else {
+                nextItem.holder.set(.failure("__exhausted__"))
             }
+            nextItem.semaphore.signal()
         }
     }
 }

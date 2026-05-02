@@ -232,17 +232,16 @@ private func executeAction(
                 if ctxHandle.context.exists(resultDesc.base) {
                     ctxHandle.context.unbind(resultDesc.base)
                 }
-                // Issue #55, Phase 2: under lazy mode, store the result as an
-                // AROFuture so consumers exercise the future-resolution path
-                // (resolveAny / resolve<T> auto-force). Phase 4 will replace
-                // the pre-resolved future with a deferred task on ForceWorkers
-                // — the binding shape stays the same, so consumers don't change.
+                // Store the result as an AROFuture so consumers exercise the
+                // future-resolution path (resolveAny / resolve<T> auto-force).
+                // Force-at-site verbs (Log, Return, branch consumers) bind the
+                // raw value so their effects are observable at the call site.
                 let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
-                if LazyActionMode.isEnabled && !LazyActionPolicy.forceAtSite(canonicalVerb) {
+                if LazyActionPolicy.forceAtSite(canonicalVerb) {
+                    ctxHandle.context.bind(resultDesc.base, value: value)
+                } else {
                     let future = AROFuture(resolved: value, bindingName: resultDesc.base)
                     ctxHandle.context.bind(resultDesc.base, value: future)
-                } else {
-                    ctxHandle.context.bind(resultDesc.base, value: value)
                 }
             }
         }

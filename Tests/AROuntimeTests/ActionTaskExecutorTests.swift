@@ -109,14 +109,4 @@ final class ActionTaskExecutorTests: XCTestCase {
         XCTAssertEqual(total, 56)
     }
 
-    func testLazyModeRoutesExecuteSyncThroughFuture() {
-        // executeSyncWithResult under lazy mode should produce the same
-        // result regardless of code path. This is a regression guard:
-        // the future-routed path must match the eager-path semantics.
-        // We can't toggle the env var mid-process, so this test just
-        // verifies that the lazy path *exists* — actual output equivalence
-        // is covered by the broader test suite running with both flag
-        // settings.
-        XCTAssertTrue(LazyActionMode.isEnabled || !LazyActionMode.isEnabled, "Compile/link sanity")
-    }
 }

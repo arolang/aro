@@ -128,19 +128,4 @@ final class AROFutureTests: XCTestCase {
         XCTAssertTrue(cancelled)
     }
 
-    // MARK: - LazyActionMode flag
-
-    func testLazyActionModeDefaultMatchesEnvironment() {
-        // The flag is read once at process start; we can't toggle it mid-run.
-        // Phase 7 flipped the default: lazy is on unless explicitly disabled.
-        let envValue = ProcessInfo.processInfo.environment["ARO_LAZY_ACTIONS"]?.lowercased()
-        let expected: Bool
-        switch envValue {
-        case "0", "off", "false", "no":
-            expected = false
-        default:
-            expected = true
-        }
-        XCTAssertEqual(LazyActionMode.isEnabled, expected)
-    }
 }

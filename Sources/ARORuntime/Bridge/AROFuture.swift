@@ -4,8 +4,8 @@
 // ============================================================
 //
 // AROFuture is the foundation for async-by-default action execution.
-// Every action call (under ARO_LAZY_ACTIONS=1) returns an AROFuture
-// instead of an eager value.
+// Every non-force-at-site action call returns an AROFuture instead of
+// an eager value (see LazyActionPolicy for the force-at-site set).
 //
 // Phase 4: the underlying Task runs on `ActionTaskExecutor`, a custom
 // TaskExecutor backed by GCD's elastic global queue, NOT on Swift's
@@ -245,10 +245,9 @@ public enum AROFutureError: Error, CustomStringConvertible {
 
 /// Configuration for slow-force warnings.
 ///
-/// Reads `ARO_FORCE_WARN_SECONDS` once at startup. Default budget:
-///   - 5.0 seconds when ARO_LAZY_ACTIONS=1 is on (development feedback)
-///   - 0.0 (off) otherwise
-/// Set to "0" or "off" to disable explicitly. Values are seconds (Double).
+/// Reads `ARO_FORCE_WARN_SECONDS` once at startup. Default budget: 5.0s.
+/// Set to "0" or "off" to disable; any positive number to override.
+/// Values are seconds (Double).
 ///
 /// On exceeded budget, AROFuture.force() prints a single line to stderr
 /// identifying the binding name and (if available) source location.
@@ -267,9 +266,9 @@ public enum ForceDiagnostics {
                 return Double(raw) ?? 0.0
             }
         }
-        // No explicit setting: enable a 5s budget when lazy mode is on,
-        // off otherwise (legacy users see no behaviour change).
-        return LazyActionMode.isEnabled ? 5.0 : 0.0
+        // Default: 5s slow-force warning budget. Set ARO_FORCE_WARN_SECONDS=0
+        // to disable; any positive number to override.
+        return 5.0
     }()
 
     /// Test-only override. Set to a non-nil value to use it instead of
