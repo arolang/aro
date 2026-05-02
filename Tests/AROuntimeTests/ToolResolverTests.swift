@@ -46,14 +46,11 @@ struct ToolResolverFindToolTests {
             return  // Skip if /usr/bin/true doesn't exist
         }
 
-        // Set env var
-        setenv("_ARO_TEST_TOOL_PATH", knownPath, 1)
-        defer { unsetenv("_ARO_TEST_TOOL_PATH") }
-
         let result = ToolResolver.findTool(
             "this-should-be-ignored",
             envOverride: "_ARO_TEST_TOOL_PATH",
-            fallbackPaths: ["/also/ignored"]
+            fallbackPaths: ["/also/ignored"],
+            environment: ["_ARO_TEST_TOOL_PATH": knownPath]
         )
         #expect(result == knownPath)
         #endif
@@ -61,24 +58,23 @@ struct ToolResolverFindToolTests {
 
     @Test("Empty env override is ignored")
     func testEmptyEnvIgnored() {
-        setenv("_ARO_TEST_EMPTY", "", 1)
-        defer { unsetenv("_ARO_TEST_EMPTY") }
-
         let result = ToolResolver.findTool(
             "this-should-not-exist-at-all",
-            envOverride: "_ARO_TEST_EMPTY"
+            envOverride: "_ARO_TEST_EMPTY",
+            environment: ["_ARO_TEST_EMPTY": ""]
         )
         #expect(result == nil)
     }
 
     @Test("Env override with nonexistent path falls through to which")
     func testEnvOverrideNonexistentFallsThrough() {
-        setenv("_ARO_TEST_BAD", "/nonexistent/binary", 1)
-        defer { unsetenv("_ARO_TEST_BAD") }
-
         #if !os(Windows)
         // Should fall through to which and find 'ls'
-        let result = ToolResolver.findTool("ls", envOverride: "_ARO_TEST_BAD")
+        let result = ToolResolver.findTool(
+            "ls",
+            envOverride: "_ARO_TEST_BAD",
+            environment: ["_ARO_TEST_BAD": "/nonexistent/binary"]
+        )
         #expect(result != nil)
         #endif
     }

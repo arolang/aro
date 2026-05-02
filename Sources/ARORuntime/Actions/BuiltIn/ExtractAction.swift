@@ -618,6 +618,38 @@ public struct RetrieveAction: ActionImplementation {
         // Get repository name
         let repoName = object.base
 
+        // Git: Retrieve the <status> from the <git>.
+        // Retrieve the <status> from the <git: "/path/to/repo">.
+        // Qualifiers select what to retrieve: status (default), log, branch
+        #if !os(Windows)
+        if repoName == "git" {
+            let git = GitService.shared
+            let qualifier = object.specifiers.first
+            let repoURL = git.resolveRepoPath(qualifier)
+
+            let subcommand = result.specifiers.first?.lowercased()
+                ?? result.base.lowercased()
+
+            switch subcommand {
+            case "log", "history":
+                let limit = (context.resolveAny("_expression_") as? [String: any Sendable])?["limit"] as? Int ?? 10
+                let entries = try git.log(limit: limit, in: repoURL)
+                let value = entries.map { $0.asDictionary }
+                context.bind(result.base, value: value)
+                return value
+            case "branch":
+                let branch = try git.currentBranch(in: repoURL) ?? "detached HEAD"
+                context.bind(result.base, value: branch)
+                return branch
+            default:
+                // Default: full status
+                let status = try git.status(in: repoURL)
+                context.bind(result.base, value: status.asDictionary)
+                return status.asDictionary
+            }
+        }
+        #endif
+
         // Special case: "system" object returns real system-wide metrics
         // Retrieve the <stats> from the <system>.
         // Retrieve the <cpu> from the <system: cpu>.

@@ -26,11 +26,12 @@ public enum ToolResolver {
     public static func findTool(
         _ name: String,
         envOverride: String? = nil,
-        fallbackPaths: [String] = []
+        fallbackPaths: [String] = [],
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String? {
         // 1. Environment variable override
         if let envKey = envOverride,
-           let envValue = ProcessInfo.processInfo.environment[envKey],
+           let envValue = environment[envKey],
            !envValue.isEmpty,
            FileManager.default.isExecutableFile(atPath: envValue) {
             return envValue
