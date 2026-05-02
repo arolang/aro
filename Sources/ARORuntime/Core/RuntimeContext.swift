@@ -194,6 +194,31 @@ public actor RuntimeContext: ExecutionContext {
         return parent?.resolveAny(name)
     }
 
+    /// Resolve a binding without forcing an AROFuture. Returns the AROFuture
+    /// itself when the binding holds one, otherwise the materialized value.
+    ///
+    /// Used by EmitAction to capture lazy payload handles into a DomainEvent
+    /// so the value is forced at *first handler read* (memoized for the rest)
+    /// instead of eagerly at emit time. See issue #55 — "Resolved Emit
+    /// semantics: payload materialization → force at first handler read."
+    ///
+    /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
+    /// fall through to the regular resolveAny path.
+    public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
+        if name == "now" || name == "contract" || name == "Contract"
+            || name == "http-server" || name == "httpServer"
+            || name == "metrics" || name == "application" {
+            return resolveAny(name)
+        }
+        if let typedValue = variables[name] {
+            return typedValue.value
+        }
+        if let runtimeParent = parent as? RuntimeContext {
+            return runtimeParent.resolveAnyRaw(name)
+        }
+        return parent?.resolveAny(name)
+    }
+
     /// Async variant of `resolveAny(_:)` that awaits AROFuture bindings via
     /// `future.value()` instead of blocking. Use this from any `async` action
     /// or task body so the cooperative pool doesn't have a thread tied up

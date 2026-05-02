@@ -126,6 +126,15 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Returns: The value if found, nil otherwise
     func resolveAny(_ name: String) -> (any Sendable)?
 
+    /// Resolve a binding without forcing an AROFuture. Used by EmitAction to
+    /// capture lazy payload handles in a DomainEvent so they are forced at
+    /// first handler read (memoized for the rest) — see issue #55, "Resolved
+    /// Emit semantics."
+    /// - Parameter name: The variable name to look up
+    /// - Returns: The AROFuture itself when the binding holds one, otherwise
+    ///   the materialized value (nil if no binding).
+    func resolveAnyRaw(_ name: String) -> (any Sendable)?
+
     /// Resolve a variable, throwing if not found
     /// - Parameter name: The variable name to look up
     /// - Returns: The value
@@ -316,6 +325,13 @@ public extension ExecutionContext {
             throw ActionError.undefinedVariable(name)
         }
         return value
+    }
+
+    /// Default implementation: fall back to `resolveAny`. Conformers that
+    /// store bindings as AROFutures (RuntimeContext) override this to return
+    /// the unforced future.
+    func resolveAnyRaw(_ name: String) -> (any Sendable)? {
+        resolveAny(name)
     }
 
     /// Default: the global container backed by all shared singletons.
