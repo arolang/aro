@@ -443,11 +443,11 @@ public struct GitStatus: Sendable {
 
     public var asDictionary: [String: any Sendable] {
         var dict: [String: any Sendable] = [
+            "branch": branch ?? "detached HEAD",
+            "commit": commit ?? "",
             "clean": clean,
             "files": files.map { $0 as [String: any Sendable] },
         ]
-        if let branch { dict["branch"] = branch }
-        if let commit { dict["commit"] = commit }
         return dict
     }
 }

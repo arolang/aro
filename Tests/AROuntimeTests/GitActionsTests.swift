@@ -173,12 +173,12 @@ struct GitStatusResultTests {
         #expect(dict["clean"] as? Bool == true)
     }
 
-    @Test("GitStatus asDictionary omits nil branch/commit")
+    @Test("GitStatus asDictionary substitutes detached HEAD for nil branch")
     func testAsDictionaryNils() {
         let status = GitStatus(branch: nil, commit: nil, clean: false, files: [["path": "file.txt", "status": "modified"]])
         let dict = status.asDictionary
-        #expect(dict["branch"] == nil)
-        #expect(dict["commit"] == nil)
+        #expect(dict["branch"] as? String == "detached HEAD")
+        #expect(dict["commit"] as? String == "")
         #expect(dict["clean"] as? Bool == false)
     }
 }
