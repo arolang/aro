@@ -20,9 +20,13 @@ import AROParser
 /// The FeatureSetExecutor processes statements within a feature set,
 /// managing variable bindings and action execution.
 ///
-/// By default, statements execute sequentially. When `enableParallelIO`
-/// is true, I/O operations may run in parallel based on data dependencies
-/// while maintaining sequential semantics (ARO-0011).
+/// Statements execute sequentially by source order, but action results
+/// are produced lazily under the lazy-handle model (issue #55): each
+/// non-effectful action returns an AROFuture that the next consumer
+/// transparently forces. This subsumes the older `enableParallelIO`
+/// data-flow scheduler — independent I/O calls overlap automatically
+/// when their futures are forced by downstream consumers, with no need
+/// for a separate DAG-builder.
 public final class FeatureSetExecutor: Sendable {
     // MARK: - Properties
 
@@ -30,9 +34,6 @@ public final class FeatureSetExecutor: Sendable {
     private let eventBus: EventBus
     private let globalSymbols: GlobalSymbolStorage
     private let expressionEvaluator: ExpressionEvaluator
-
-    /// Whether to enable parallel I/O optimization (ARO-0011)
-    public let enableParallelIO: Bool
 
     // Cached VerbSets — copied once at init to avoid repeated static-property indirection
     private let testVerbs: Set<String>
@@ -51,14 +52,12 @@ public final class FeatureSetExecutor: Sendable {
     public init(
         actionRegistry: ActionRegistry,
         eventBus: EventBus,
-        globalSymbols: GlobalSymbolStorage,
-        enableParallelIO: Bool = false
+        globalSymbols: GlobalSymbolStorage
     ) {
         self.actionRegistry = actionRegistry
         self.eventBus = eventBus
         self.globalSymbols = globalSymbols
         self.expressionEvaluator = ExpressionEvaluator()
-        self.enableParallelIO = enableParallelIO
         self.testVerbs = VerbSets.testVerbs
         self.requestVerbs = VerbSets.requestVerbs
         self.updateVerbs = VerbSets.updateVerbs
@@ -149,27 +148,17 @@ public final class FeatureSetExecutor: Sendable {
             context.bind("terminal", value: terminalDict, allowRebind: true)
         }
 
-        // Execute statements
+        // Execute statements sequentially by source order. Independent I/O
+        // overlaps automatically: non-effectful actions return AROFutures
+        // that the next consumer forces, so the runtime parallelises at
+        // the action level without a separate scheduler.
         do {
-            if enableParallelIO {
-                // ARO-0011: Data-flow driven parallel I/O execution
-                let scheduler = StatementScheduler()
-                _ = try await scheduler.execute(
-                    analyzedFeatureSet,
-                    context: context
-                ) { [self] statement, ctx in
-                    try await self.executeStatement(statement, context: ctx)
-                    return () as any Sendable
-                }
-            } else {
-                // Sequential execution (default)
-                for statement in featureSet.statements {
-                    try await executeStatement(statement, context: context)
+            for statement in featureSet.statements {
+                try await executeStatement(statement, context: context)
 
-                    // Check if we have a response (Return was called)
-                    if context.getResponse() != nil {
-                        break
-                    }
+                // Check if we have a response (Return was called)
+                if context.getResponse() != nil {
+                    break
                 }
             }
 

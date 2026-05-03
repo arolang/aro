@@ -482,13 +482,7 @@ public func aro_runtime_register_handler(
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
             let compiledThread = Thread {
-                pool.gate.wait()
-                pool.threadHoldsSlot = true
-                defer {
-                    pool.threadHoldsSlot = false
-                    pool.gate.signal()
-                }
-
+              pool.withAcquiredSlot {
                 // Track execution time for metrics
                 let startTime = Date()
                 let handlerName = "\(eventTypeStr) Handler"
@@ -548,6 +542,7 @@ public func aro_runtime_register_handler(
 
                 // Resume the async continuation
                 continuation.resume()
+              }
             }
             compiledThread.stackSize = 8 * 1024 * 1024
             compiledThread.start()
@@ -623,13 +618,7 @@ public func aro_register_repository_observer_with_guard(
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
             let compiledThread2 = Thread {
-                pool.gate.wait()
-                pool.threadHoldsSlot = true
-                defer {
-                    pool.threadHoldsSlot = false
-                    pool.gate.signal()
-                }
-
+              pool.withAcquiredSlot {
                 // Track execution time for metrics
                 let startTime = Date()
                 let observerName = "\(repositoryName) Observer"
@@ -697,6 +686,7 @@ public func aro_register_repository_observer_with_guard(
 
                 // Resume the async continuation
                 continuation.resume()
+              }
             }
             compiledThread2.stackSize = 8 * 1024 * 1024
             compiledThread2.start()
@@ -761,13 +751,7 @@ public func aro_runtime_register_state_transition_handler(
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
             let compiledThread3 = Thread {
-                pool.gate.wait()
-                pool.threadHoldsSlot = true
-                defer {
-                    pool.threadHoldsSlot = false
-                    pool.gate.signal()
-                }
-
+              pool.withAcquiredSlot {
                 let handlerName = "StateTransition Handler<\(guardKey):\(guardValue)>"
                 let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
 
@@ -804,6 +788,7 @@ public func aro_runtime_register_state_transition_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
+              }
             }
             compiledThread3.stackSize = 8 * 1024 * 1024
             compiledThread3.start()
@@ -871,13 +856,7 @@ public func aro_runtime_register_notification_handler(
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
             let compiledThread4 = Thread {
-                pool.gate.wait()
-                pool.threadHoldsSlot = true
-                defer {
-                    pool.threadHoldsSlot = false
-                    pool.gate.signal()
-                }
-
+              pool.withAcquiredSlot {
                 let handlerName = "NotificationSent Handler"
                 let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
 
@@ -917,6 +896,7 @@ public func aro_runtime_register_notification_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
+              }
             }
             compiledThread4.stackSize = 8 * 1024 * 1024
             compiledThread4.start()
@@ -2127,6 +2107,18 @@ final class AROCValue: @unchecked Sendable {
     func upgradeValue(_ newValue: any Sendable) { lock.withLock { _value = newValue } }
 
     init(value: any Sendable) { _value = value }
+
+    /// The boxed value with any AROFuture transparently forced (Issue #55,
+    /// phase 3). Use this from C ABI value-accessors so that a future
+    /// stored as the box payload materializes before being inspected.
+    /// Falls back to "" on force failure (matches resolveAny semantics).
+    var materializedValue: any Sendable {
+        let v = value
+        if let future = v as? AROFuture {
+            return (try? future.force()) ?? ""
+        }
+        return v
+    }
 }
 
 /// Free a value returned by aro_variable_resolve
@@ -2153,10 +2145,11 @@ public func aro_value_as_string(_ valuePtr: UnsafeMutableRawPointer?) -> UnsafeM
     guard let ptr = valuePtr else { return nil }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let str = boxed.value as? String {
+    let v = boxed.materializedValue
+    if let str = v as? String {
         return strdup(str)
     }
-    return strdup(String(describing: boxed.value))
+    return strdup(String(describing: v))
 }
 
 /// Concatenate two C strings and return the result
@@ -2466,11 +2459,12 @@ public func aro_value_as_int(
     guard let ptr = valuePtr, let out = outValue else { return 0 }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let intVal = boxed.value as? Int {
+    let v = boxed.materializedValue
+    if let intVal = v as? Int {
         out.pointee = Int64(intVal)
         return 1
     }
-    if let intVal = boxed.value as? Int64 {
+    if let intVal = v as? Int64 {
         out.pointee = intVal
         return 1
     }
@@ -2490,11 +2484,12 @@ public func aro_value_as_double(
     guard let ptr = valuePtr, let out = outValue else { return 0 }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    if let doubleVal = boxed.value as? Double {
+    let v = boxed.materializedValue
+    if let doubleVal = v as? Double {
         out.pointee = doubleVal
         return 1
     }
-    if let intVal = boxed.value as? Int {
+    if let intVal = v as? Int {
         out.pointee = Double(intVal)
         return 1
     }
@@ -2662,11 +2657,10 @@ public func aro_array_get_next(
             }
             sem.signal()
         }
-        let pool = CompiledExecutionPool.shared
-        let hadSlot = pool.threadHoldsSlot
-        if hadSlot { pool.gate.signal(); pool.threadHoldsSlot = false }
-        sem.wait()
-        if hadSlot { pool.gate.wait(); pool.threadHoldsSlot = true }
+        // Phase 5: slot ownership lives on a TaskLocal.
+        CompiledExecutionPool.shared.withYieldedSlot {
+            sem.wait()
+        }
         let res = box.result
         guard res.succeeded, let entry = res.value as? [String: any Sendable] else { return nil }
         statePtr.pointee &+= 1
@@ -2741,11 +2735,10 @@ public func aro_array_get_next_ctx(
     let sem = DispatchSemaphore(value: 0)
     channel.submitArrayNext(iterator: pipelined, holder: box, semaphore: sem)
 
-    let pool = CompiledExecutionPool.shared
-    let hadSlot = pool.threadHoldsSlot
-    if hadSlot { pool.gate.signal(); pool.threadHoldsSlot = false }
-    sem.wait()
-    if hadSlot { pool.gate.wait(); pool.threadHoldsSlot = true }
+    // Phase 5: slot ownership lives on a TaskLocal.
+    CompiledExecutionPool.shared.withYieldedSlot {
+        sem.wait()
+    }
 
     let res = box.result
     guard res.succeeded, let entry = res.value as? [String: any Sendable] else { return nil }
@@ -2914,12 +2907,9 @@ public func aro_parallel_for_each_execute(
     // Yield our gate slot for the duration of the parallel-for-each.
     // The calling thread just dispatches work and waits — it doesn't need
     // a gate slot. Freeing it allows iterations and handlers to use it.
-    let hadSlot = pool.threadHoldsSlot
-    if hadSlot {
-        pool.gate.signal()
-        pool.threadHoldsSlot = false
-    }
-
+    // Phase 5: slot ownership lives on a TaskLocal — the entire loop runs
+    // inside withYieldedSlot so the rejoin happens automatically on exit.
+    return pool.withYieldedSlot {
     for (index, item) in items.enumerated() {
         // Reconstruct context pointer
         guard let parentCtxPtr = UnsafeMutableRawPointer(bitPattern: ctxAddress) else {
@@ -2954,33 +2944,32 @@ public func aro_parallel_for_each_execute(
         // aro_action_* functions; pthreads don't count against GCD's dispatch limit.
         group.enter()
         let compiledThread5 = Thread {
-            pool.threadHoldsSlot = true
             defer {
-                pool.threadHoldsSlot = false
                 pool.gate.signal()
                 localLimit.signal()
                 group.leave()
             }
+            pool.withSlotOwnership {
+                // Reconstruct pointers
+                guard let fnPtr = UnsafeMutableRawPointer(bitPattern: bodyFnAddress),
+                      let childCtx = UnsafeMutableRawPointer(bitPattern: childAddress),
+                      let itemValue = UnsafeMutableRawPointer(bitPattern: itemAddress) else {
+                    errorBox.setError(RuntimeError("Invalid pointer reconstruction"))
+                    return
+                }
 
-            // Reconstruct pointers
-            guard let fnPtr = UnsafeMutableRawPointer(bitPattern: bodyFnAddress),
-                  let childCtx = UnsafeMutableRawPointer(bitPattern: childAddress),
-                  let itemValue = UnsafeMutableRawPointer(bitPattern: itemAddress) else {
-                errorBox.setError(RuntimeError("Invalid pointer reconstruction"))
-                return
+                let fn = unsafeBitCast(fnPtr, to: LoopBodyFunc.self)
+
+                // Call loop body function
+                let result = fn(childCtx, itemValue, Int64(index))
+
+                // Clean up
+                if let resultPtr = result {
+                    aro_value_free(resultPtr)
+                }
+                Unmanaged<AROCValue>.fromOpaque(itemValue).release()
+                aro_context_destroy(childCtx)
             }
-
-            let fn = unsafeBitCast(fnPtr, to: LoopBodyFunc.self)
-
-            // Call loop body function
-            let result = fn(childCtx, itemValue, Int64(index))
-
-            // Clean up
-            if let resultPtr = result {
-                aro_value_free(resultPtr)
-            }
-            Unmanaged<AROCValue>.fromOpaque(itemValue).release()
-            aro_context_destroy(childCtx)
         }
         compiledThread5.stackSize = 8 * 1024 * 1024
         compiledThread5.start()
@@ -2989,12 +2978,6 @@ public func aro_parallel_for_each_execute(
     // Wait for all iterations to complete
     group.wait()
 
-    // Re-acquire gate slot if we had one before the loop
-    if hadSlot {
-        pool.gate.wait()
-        pool.threadHoldsSlot = true
-    }
-
     // Check for errors
     if let error = errorBox.getError() {
         print("[ARO] Parallel loop error: \(error)")
@@ -3002,6 +2985,7 @@ public func aro_parallel_for_each_execute(
     }
 
     return 0
+    } // end withYieldedSlot
 }
 
 /// Evaluate a filter expression (where clause) for a value

@@ -232,7 +232,17 @@ private func executeAction(
                 if ctxHandle.context.exists(resultDesc.base) {
                     ctxHandle.context.unbind(resultDesc.base)
                 }
-                ctxHandle.context.bind(resultDesc.base, value: value)
+                // Store the result as an AROFuture so consumers exercise the
+                // future-resolution path (resolveAny / resolve<T> auto-force).
+                // Force-at-site verbs (Log, Return, branch consumers) bind the
+                // raw value so their effects are observable at the call site.
+                let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
+                if LazyActionPolicy.forceAtSite(canonicalVerb) {
+                    ctxHandle.context.bind(resultDesc.base, value: value)
+                } else {
+                    let future = AROFuture(resolved: value, bindingName: resultDesc.base)
+                    ctxHandle.context.bind(resultDesc.base, value: future)
+                }
             }
         }
         return boxResult(value)

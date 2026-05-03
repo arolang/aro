@@ -53,9 +53,7 @@ let analyzed = analyzer.analyze(program)
 | `VerbSets.swift` | ~45 | Canonical verb classification (shared by interpreter and compiler) |
 | `TypedValue.swift` | ~100 | Type-preserving value wrapper |
 | `OutputContext.swift` | ~50 | Output mode (.human, .machine, .developer) |
-| `StatementScheduler.swift` | ~100 | Statement scheduling utilities |
 | `BoundedSet.swift` | ~50 | Bounded set for deduplication |
-| `DependencyGraph.swift` | ~100 | Dependency graph utilities |
 
 ### Actions (`Actions/`)
 
