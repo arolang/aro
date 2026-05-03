@@ -16,6 +16,8 @@ Complete reference for all built-in actions in ARO.
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `Receive the <message> from the <event>.` |
 | **Execute** | REQUEST | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
+| **Pull** | REQUEST | Pull remote changes from `<git>` | `Pull the <updates> from the <git>.` |
+| **Clone** | REQUEST | Clone a remote Git repository | `Clone the <repo> from the <git> with { url: "...", path: "./out" }.` |
 | **Prompt** | TERMINAL | Prompt for text input | `Prompt the <name> with "Enter name: " from the <terminal>.` |
 | **Select** | TERMINAL | Present a selection menu | `Select the <env> from the <options> with "Choose: ".` |
 | **Clear** | TERMINAL | Clear the terminal screen | `Clear the <screen> for the <terminal>.` |
@@ -25,6 +27,8 @@ Complete reference for all built-in actions in ARO.
 | **Validate** | OWN | Check against rules | `Validate the <data> for the <schema>.` |
 | **Compare** | OWN | Compare values | `Compare the <hash> against the <stored>.` |
 | **Update** | OWN | Modify existing data | `Update the <user> with <changes>.` |
+| **Stage** | OWN | Stage files for Git commit | `Stage the <files> to the <git> with ".".` |
+| **Checkout** | OWN | Switch Git branches | `Checkout the <branch> from the <git> with "feature/x".` |
 | **Make** | OWN | Create directory | `Make the <dir> to the <path: "./out">.` |
 | **Copy** | OWN | Copy file/directory | `Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
 | **Move** | OWN | Move/rename file | `Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
@@ -45,6 +49,9 @@ Complete reference for all built-in actions in ARO.
 | **Send** | EXPORT | Send to destination | `Send the <email> to the <recipient>.` |
 | **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
 | **Publish** | EXPORT | Make globally available | `Publish as <config> <settings>.` |
+| **Commit** | EXPORT | Create a Git commit | `Commit the <result> to the <git> with "feat: add x".` |
+| **Push** | EXPORT | Push commits to Git remote | `Push the <result> to the <git>.` |
+| **Tag** | EXPORT | Create a Git tag | `Tag the <release> for the <git> with "v1.0.0".` |
 | **Notify** | EXPORT | Send notification | `Notify the <alert> to the <admin>.` |
 | **Delete** | EXPORT | Remove data | `Delete the <user> from the <users> where id = <id>.` |
 | **Start** | SERVICE | Start a service | `Start the <http-server> with <contract>.` |
@@ -132,11 +139,12 @@ Extract the <selection: 0,3,7> from the <list>.
 
 ### Retrieve
 
-Fetches data from a repository.
+Fetches data from a repository or from the `<git>` system object.
 
 **Syntax:**
 ```aro
 Retrieve the <result> from the <repository> [where <condition>].
+Retrieve the <status|log|branch> from the <git>.
 ```
 
 **Examples:**
@@ -145,7 +153,14 @@ Retrieve the <user> from the <user-repository>.
 Retrieve the <user> from the <user-repository> where id = <user-id>.
 Retrieve the <orders> from the <order-repository> where status = "pending".
 Retrieve the <products> from the <repository> where category = <cat> and active = true.
+
+(* Git: status, log, branch *)
+Retrieve the <status> from the <git>.
+Retrieve the <log>    from the <git>.
+Retrieve the <branch> from the <git>.
 ```
+
+See Chapter 48 for the full Git action surface.
 
 **Valid Prepositions:** `from`
 
@@ -1373,6 +1388,153 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 
 ---
 
+## GIT Actions
+
+Git actions operate on the `<git>` system object. With no qualifier, `<git>` refers to the current working directory; with a string qualifier (`<git: "/path">`) it points to an explicit repository. See Chapter 48 and [ARO-0080](../../Proposals/ARO-0080-git-actions.md).
+
+### Stage
+
+Stages files for the next Git commit.
+
+**Syntax:**
+```aro
+Stage the <files> to the <git> with <pathspec>.
+```
+
+**Examples:**
+```aro
+Stage the <files> to the <git> with ".".
+Stage the <files> to the <git> with "src/main.aro".
+Stage the <files> to the <git> with ["a.txt", "b.txt"].
+```
+
+**Valid Prepositions:** `to`, `for`
+
+---
+
+### Commit
+
+Creates a Git commit. Returns a commit object (`hash`, `short`, `message`, `author`) and emits `git.commit`.
+
+**Syntax:**
+```aro
+Commit the <result> to the <git> with <message>.
+```
+
+**Examples:**
+```aro
+Commit the <commit> to the <git> with "feat: add login flow".
+```
+
+**Valid Prepositions:** `to`, `with`
+
+---
+
+### Push
+
+Pushes local commits to the remote. Shells out to `git`. Emits `git.push`.
+
+**Syntax:**
+```aro
+Push the <result> to the <git> [with <ref>].
+```
+
+**Examples:**
+```aro
+Push the <result> to the <git>.
+```
+
+**Valid Prepositions:** `to`, `with`
+
+---
+
+### Pull
+
+Fetches and merges from the remote. Shells out to `git`. Emits `git.pull`.
+
+**Syntax:**
+```aro
+Pull the <result> from the <git>.
+```
+
+**Examples:**
+```aro
+Pull the <updates> from the <git>.
+```
+
+**Valid Prepositions:** `from`
+
+---
+
+### Clone
+
+Clones a remote repository. Shells out to `git`. Emits `git.clone`.
+
+**Syntax:**
+```aro
+Clone the <result> from the <git> with { url: <url>, path: <path> [, branch: <ref>] }.
+```
+
+**Examples:**
+```aro
+Clone the <repo> from the <git> with {
+    url: "https://github.com/user/repo.git",
+    path: "./cloned"
+}.
+
+Clone the <repo> from the <git> with {
+    url: "https://github.com/user/repo.git",
+    path: "./cloned",
+    branch: "main"
+}.
+```
+
+**Valid Prepositions:** `from`, `with`
+
+---
+
+### Checkout
+
+Switches branches. Emits `git.checkout`.
+
+**Syntax:**
+```aro
+Checkout the <result> from the <git> with <ref>.
+```
+
+**Examples:**
+```aro
+Checkout the <branch> from the <git> with "feature/new".
+Checkout the <branch> from the <git> with "main".
+```
+
+**Valid Prepositions:** `from`, `to`, `with`
+
+---
+
+### Tag
+
+Creates a Git tag at the current commit. Emits `git.tag`.
+
+**Syntax:**
+```aro
+Tag the <result> for the <git> with <name-or-object>.
+```
+
+**Examples:**
+```aro
+Tag the <release> for the <git> with "v1.0.0".
+
+Tag the <release> for the <git> with {
+    name: "v1.0.0",
+    message: "First stable release"
+}.
+```
+
+**Valid Prepositions:** `for`, `with`
+
+---
+
 ## Action Summary Table
 
 | Action | Role | Prepositions |
@@ -1429,3 +1591,10 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | When | TEST | - |
 | Then | TEST | - |
 | Assert | TEST | equals, contains |
+| Stage | GIT | to, for |
+| Commit | GIT | to, with |
+| Push | GIT | to, with |
+| Pull | GIT | from |
+| Clone | GIT | from, with |
+| Checkout | GIT | from, to, with |
+| Tag | GIT | for, with |

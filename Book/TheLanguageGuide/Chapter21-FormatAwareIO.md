@@ -374,17 +374,31 @@ Each format parses to an appropriate data structure:
 
 ### Bypassing Format Detection
 
-Sometimes you want to read a file as raw text without parsing. Use the `String` qualifier to bypass format detection:
+Sometimes you want to read a file as raw text without parsing. Use a `raw` (or equivalent) qualifier on the *result* to bypass format detection. The runtime accepts three spellings, in order of preference:
+
+| Qualifier      | Notes                              |
+|----------------|------------------------------------|
+| `raw`          | Preferred                          |
+| `String`       | Equivalent — reads as raw text     |
+| `as string`    | Legacy form, still supported       |
 
 ```aro
 (* Parse JSON to structured data *)
 Read the <config> from "./settings.json".
 
-(* Read raw JSON as string - no parsing *)
-Read the <raw-json: String> from "./settings.json".
+(* Read raw JSON as string — no parsing *)
+Read the <raw-json: raw>      from "./settings.json".
+Read the <raw-json: String>   from "./settings.json".
 ```
 
-This is useful when you need to inspect the raw content or pass it to an external system without modification.
+You can also pin a specific format explicitly with a format qualifier (`json`, `yaml`, `csv`, `xml`, `toml`, `tsv`, `markdown`, `html`, `text`, `sql`, `log`, `env`, `binary`):
+
+```aro
+(* Force YAML parsing on a .txt file *)
+Read the <config: yaml> from "./settings.txt".
+```
+
+Use `raw` when you want the file's exact bytes (useful for hashing, signing, or pass-through to an external system); use a format qualifier when the extension doesn't match the actual format on disk.
 
 ---
 

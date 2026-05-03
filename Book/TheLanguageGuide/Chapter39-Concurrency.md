@@ -147,38 +147,57 @@ Events naturally express concurrency:
 
 ## Runtime Optimization
 
-While you write synchronous-looking code, the ARO runtime executes operations **asynchronously** based on data dependencies. This is transparent to you.
+While you write synchronous-looking code, the ARO runtime executes operations **asynchronously** based on data dependencies. This is transparent to you. Lazy execution is the default — there is no opt-in flag.
 
 ### How It Works
 
-The runtime performs **data-flow driven execution**:
+The runtime performs **data-flow driven execution** using lazy futures (`AROFuture`):
 
-1. **Eager Start**: I/O operations begin immediately (non-blocking)
-2. **Dependency Tracking**: The runtime tracks which variables each statement needs
-3. **Lazy Synchronization**: Only wait for data when it's actually used
-4. **Preserved Semantics**: Results appear in statement order
+1. **Lazy bindings**: Most actions return a future-like handle instead of a finished value. The action's work is scheduled but the statement does not block.
+2. **Dependency tracking**: Each statement records which other handles it consumes.
+3. **Forced synchronization at use sites**: Reading a value forces it. Effectful actions — `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Store`, `Send`, `Write`, and so on — also force their inputs in declaration order, so observable side effects always appear in source order.
+4. **Auto-force on resolve**: Once a future resolves, the runtime also binds the resolved value under the plain variable name, so every later read is synchronous.
 
 ### Example
 
 ```aro
 (Process Config: File Handler) {
-    Open the <config-file> from the <path>.        (* 1. Starts file load *)
-    Compute the <hash> for the <request>.          (* 2. Runs immediately *)
-    Log <request> to the <console>.                 (* 3. Runs immediately *)
-    Parse the <config> from the <config-file>.     (* 4. Waits for file *)
-    Return an <OK: status> with <config>.
+    Read the <config-file> from "./config.json".   (* 1. Starts file load   *)
+    Compute the <hash> for the <request>.          (* 2. Runs immediately   *)
+    Log <request> to the <console>.                (* 3. Runs immediately   *)
+    Extract the <port> from the <config-file>.     (* 4. Forces the file    *)
+    Return an <OK: status> with <port>.
 }
 ```
 
 **What happens:**
 
-- Statement 1 kicks off file loading (async, returns immediately)
-- Statements 2 and 3 execute while the file loads in background
-- Statement 4 waits only if the file isn't ready yet
-- You see: synchronous execution
+- Statement 1 starts file loading and returns a future immediately
+- Statements 2 and 3 execute while the file loads in the background
+- Statement 4 reads from `<config-file>` for the first time, so the runtime forces it and waits if needed
+- You see: synchronous, source-ordered execution
 - Runtime does: parallel I/O with sequential semantics
 
 **Write synchronous code. Get async performance.**
+
+### What Forces a Value
+
+Most operations that *consume* a value also force it. The most common force points are:
+
+- Effectful actions: `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Store`, `Send`, `Write`, `Append`, `Notify`, `Broadcast`, and the Git mutating actions (`Commit`, `Push`, `Tag`, `Stage`).
+- Field access — `<obj: field>` and dotted paths — forces the parent value.
+- Comparisons and `when` guard evaluation force operands.
+- Iteration: `For each <x> in <list>` forces the list.
+- The end of a feature set: anything still pending is forced before the feature set returns, so handlers always reach a settled state.
+
+Pure transformations (`Compute`, `Transform`, `Map`, `Filter`, `Reduce`) propagate handles instead of forcing — they only force at the boundary where you actually consume the result.
+
+### Why This Matters
+
+Because forcing is implicit, you almost never have to think about it. The two cases worth knowing:
+
+- **Side effects appear in source order.** A series of `Log` lines or a `Log`-then-`Return` always run as written, even if the data they print was produced by a slow upstream `Request`.
+- **Errors surface where you read.** If a lazy action fails, the failure surfaces at the first force point — usually the next `Log`, `Return`, or field access. The error is reported with the source location of that read, not the original lazy statement.
 
 ## Event Emission
 

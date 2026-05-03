@@ -83,6 +83,7 @@ Chapter numbers in this file match the file names in `Book/TheLanguageGuide/`.
 45. **WebSockets** — Real-time bidirectional communication
 46. **Streaming Execution** — Process large datasets with constant memory
 47. **Terminal UI** — Interactive terminal applications, section compositor, keyboard handlers
+48. **Git Actions** — Native Git via libgit2: status, log, stage, commit, push/pull, clone, checkout, tag, and Git events
 
 ---
 
