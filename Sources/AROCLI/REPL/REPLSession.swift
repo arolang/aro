@@ -95,14 +95,21 @@ public final class REPLSession: @unchecked Sendable {
     /// The statement executor
     private let executor: FeatureSetExecutor
 
-    public init() {
+    /// The flag the session was constructed with. Persisted so that
+    /// `clear()` can rebuild the underlying RuntimeContext with the same
+    /// formatting behavior.
+    private let suppressLogPrefix: Bool
+
+    public init(suppressLogPrefix: Bool = false) {
+        self.suppressLogPrefix = suppressLogPrefix
         self.eventBus = EventBus()
         self.globalSymbols = GlobalSymbolStorage()
         self.context = RuntimeContext(
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus
+            eventBus: eventBus,
+            suppressLogPrefix: suppressLogPrefix
         )
 
         // Register services for REPL session
@@ -325,7 +332,8 @@ public final class REPLSession: @unchecked Sendable {
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus
+            eventBus: eventBus,
+            suppressLogPrefix: suppressLogPrefix
         )
 
         // Re-register services after context reset

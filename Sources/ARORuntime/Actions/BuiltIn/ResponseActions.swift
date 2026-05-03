@@ -364,7 +364,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -385,7 +385,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -492,8 +492,9 @@ public struct LogAction: ActionImplementation {
             formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
         case .human:
             // Readable format for CLI/console
-            // Compiled binaries get clean output without feature set prefix
-            if context.isCompiled {
+            // Compiled binaries and stdin-pipe scripts get clean output
+            // without the feature set prefix.
+            if context.isCompiled || context.suppressLogPrefix {
                 formattedMessage = message
             } else {
                 formattedMessage = "[\(context.featureSetName)] \(message)"

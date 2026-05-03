@@ -327,6 +327,9 @@ integration:repl:
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
     - chmod +x test_repl.pl
     - perl test_repl.pl
+    # Issue #200: stdin-pipe smoke tests
+    - chmod +x test_stdin.sh
+    - ./test_stdin.sh
   tags:
     - spencer
 
