@@ -156,11 +156,12 @@ public struct SchemaBinding {
 
     /// Validate schema composition keywords: allOf, anyOf, oneOf, not.
     /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool, Array, Dictionary)
-    /// which are all Sendable. This helper exists because `Sendable` is a marker protocol and cannot be used
-    /// in conditional casts (`as?`).
+    /// which are all Sendable. `Sendable` is a marker protocol (no witness table), so the existential
+    /// containers for `Any` and `any Sendable` are layout-compatible. We can't use `as?` (marker protocols
+    /// disallow conditional casts) and `as!` now triggers an "always succeeds" warning, so we bitcast.
     @inline(__always)
     private static func assumeSendable(_ value: Any) -> any Sendable {
-        value as! any Sendable
+        unsafeBitCast(value, to: (any Sendable).self)
     }
 
     private static func validateComposition(json: Any, schema: Schema, components: Components?) throws -> Any {
