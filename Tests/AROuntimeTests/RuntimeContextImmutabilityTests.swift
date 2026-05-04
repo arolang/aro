@@ -45,6 +45,25 @@ struct RuntimeContextImmutabilityTests {
         #expect(third == "third")
     }
 
+    @Test("suppressLogPrefix defaults to false and propagates to children")
+    func testSuppressLogPrefixPropagation() async throws {
+        let plain = RuntimeContext(featureSetName: "Plain")
+        #expect(plain.suppressLogPrefix == false)
+        #expect(plain.createChild(featureSetName: "Child").suppressLogPrefix == false)
+
+        let quiet = RuntimeContext(featureSetName: "Quiet", suppressLogPrefix: true)
+        #expect(quiet.suppressLogPrefix == true)
+
+        let quietChild = quiet.createChild(featureSetName: "QuietChild")
+        #expect(quietChild.suppressLogPrefix == true)
+
+        let quietChildWithActivity = quiet.createChild(
+            featureSetName: "QuietChild",
+            businessActivity: "Test"
+        )
+        #expect(quietChildWithActivity.suppressLogPrefix == true)
+    }
+
     @Test("Child contexts have independent immutability tracking")
     func testChildContextImmutabilityIndependence() async throws {
         let parent = RuntimeContext(featureSetName: "Parent")
