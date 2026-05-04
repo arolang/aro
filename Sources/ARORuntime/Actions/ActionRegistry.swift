@@ -92,6 +92,10 @@ public actor ActionRegistry {
     /// Dynamic action handlers for plugin-provided actions
     private var dynamicHandlers: [String: DynamicActionHandler] = [:]
 
+    /// Metadata for dynamic plugin actions, keyed by normalised verb.
+    /// Populated when a plugin supplies it via `registerDynamic(verb:handler:pluginName:metadata:)`.
+    private var dynamicMetadata: [String: PluginActionMetadata] = [:]
+
     /// Maps plugin name → normalised verb keys it registered (for bulk unregister)
     private var pluginVerbs: [String: Set<String>] = [:]
 
@@ -104,6 +108,35 @@ public actor ActionRegistry {
         ObjectDescriptor,
         ExecutionContext
     ) async throws -> any Sendable
+
+    /// Rich metadata for a plugin-provided action.
+    /// Carries the same shape as a built-in `BuiltInActionInfo` plus plugin origin.
+    public struct PluginActionMetadata: Sendable {
+        /// Semantic role of the action
+        public let role: ActionRole
+        /// Valid prepositions (e.g. ["from", "with"])
+        public let prepositions: [String]
+        /// Human-readable description
+        public let description: String?
+        /// PascalCase namespace handle (from `handle:` in plugin.yaml)
+        public let handle: String?
+        /// Version when this action was introduced
+        public let since: String?
+
+        public init(
+            role: ActionRole = .own,
+            prepositions: [String] = [],
+            description: String? = nil,
+            handle: String? = nil,
+            since: String? = nil
+        ) {
+            self.role = role
+            self.prepositions = prepositions
+            self.description = description
+            self.handle = handle
+            self.since = since
+        }
+    }
 
     /// Normalize action name by removing hyphens and lowercasing.
     /// Results are cached so repeated lookups of the same raw name are O(1).
@@ -119,13 +152,20 @@ public actor ActionRegistry {
     ///   - verb: The action verb
     ///   - handler: The handler function
     ///   - pluginName: Optional plugin name for bulk unregistration via `unregisterPlugin(_:)`
+    ///   - metadata: Optional rich metadata (role, prepositions, description, …) used by
+    ///     LSP/MCP completion and discovery layers. When omitted the action is still
+    ///     registered but appears with default metadata.
     public func registerDynamic(
         verb: String,
         handler: @escaping DynamicActionHandler,
-        pluginName: String? = nil
+        pluginName: String? = nil,
+        metadata: PluginActionMetadata? = nil
     ) {
         let key = normalizeActionName(verb)
         dynamicHandlers[key] = handler
+        if let metadata = metadata {
+            dynamicMetadata[key] = metadata
+        }
         if let name = pluginName {
             pluginVerbs[name, default: []].insert(key)
         }
@@ -137,6 +177,7 @@ public actor ActionRegistry {
         guard let verbs = pluginVerbs.removeValue(forKey: pluginName) else { return }
         for verb in verbs {
             dynamicHandlers.removeValue(forKey: verb)
+            dynamicMetadata.removeValue(forKey: verb)
         }
     }
 
@@ -160,11 +201,16 @@ public actor ActionRegistry {
         return actionType.init()
     }
 
-    /// Check if a verb is registered
+    /// Check if a verb is registered.
+    ///
+    /// Returns true for both built-in actions and dynamically-registered plugin
+    /// actions. The plugin lookup uses the same normalisation
+    /// (`replacingOccurrences(of: "-", with: "")` + lowercase) as `dynamicHandler(for:)`.
     /// - Parameter verb: The verb to check
-    /// - Returns: true if the verb has a registered implementation
+    /// - Returns: true if a built-in or dynamic plugin handler exists for this verb
     public func isRegistered(_ verb: String) -> Bool {
-        return actions[verb.lowercased()] != nil
+        if actions[verb.lowercased()] != nil { return true }
+        return dynamicHandlers[normalizeActionName(verb)] != nil
     }
 
     /// Get all registered verbs
@@ -223,6 +269,15 @@ public actor ActionRegistry {
         public let verb: String
         /// Name of the plugin that registered this verb (nil for anonymous)
         public let pluginName: String?
+        /// Optional rich metadata (role, prepositions, description, handle, since).
+        /// `nil` when the plugin registered without supplying metadata.
+        public let metadata: PluginActionMetadata?
+
+        public init(verb: String, pluginName: String?, metadata: PluginActionMetadata? = nil) {
+            self.verb = verb
+            self.pluginName = pluginName
+            self.metadata = metadata
+        }
     }
 
     /// Returns one entry per registered dynamic (plugin) verb.
@@ -237,7 +292,11 @@ public actor ActionRegistry {
         }
 
         return dynamicHandlers.keys.sorted().map { verb in
-            PluginActionInfo(verb: verb, pluginName: verbToPlugin[verb])
+            PluginActionInfo(
+                verb: verb,
+                pluginName: verbToPlugin[verb],
+                metadata: dynamicMetadata[verb]
+            )
         }
     }
 }

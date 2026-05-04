@@ -87,13 +87,34 @@ public struct MCPToolProvider: Sendable {
             ),
             MCPTool(
                 name: "aro_actions",
-                description: "List all available ARO actions with their roles, verbs, and valid prepositions.",
+                description: "List all available ARO actions with their roles, verbs, and valid prepositions. Pass 'directory' to also include plugin actions discovered under that workspace's Plugins/ folder.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "role": .object([
                             "type": .string("string"),
                             "description": .string("Filter by action role: request, own, response, export, server (optional)")
+                        ]),
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Workspace directory whose `Plugins/` folder should be loaded so plugin-supplied actions appear in the list (optional). When omitted, only built-ins are listed.")
+                        ])
+                    ])
+                ])
+            ),
+            MCPTool(
+                name: "aro_qualifiers",
+                description: "List all available ARO qualifiers (built-in and plugin-supplied). Pass 'directory' to load workspace plugins and surface their namespaced qualifiers.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "namespace": .object([
+                            "type": .string("string"),
+                            "description": .string("Filter to a single namespace (e.g. 'collections'). Empty string returns built-ins only. Optional.")
+                        ]),
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Workspace directory whose `Plugins/` folder should be loaded (optional).")
                         ])
                     ])
                 ])
@@ -140,7 +161,9 @@ public struct MCPToolProvider: Sendable {
         case "aro_examples":
             return executeExamples(arguments: arguments)
         case "aro_actions":
-            return executeActions(arguments: arguments)
+            return await executeActions(arguments: arguments)
+        case "aro_qualifiers":
+            return await executeQualifiers(arguments: arguments)
         case "aro_parse":
             return executeParse(arguments: arguments)
         case "aro_syntax":
@@ -532,154 +555,138 @@ public struct MCPToolProvider: Sendable {
         return MCPToolCallResult(content: [.text(output)])
     }
 
-    /// List all available actions
-    private func executeActions(arguments: JSONValue?) -> MCPToolCallResult {
+    /// List all available actions, sourced from the live `AROCatalog`.
+    /// When `directory:` is supplied, plugins from `<directory>/Plugins/` are
+    /// loaded into the shared registries first so plugin actions show up too.
+    private func executeActions(arguments: JSONValue?) async -> MCPToolCallResult {
         let roleFilter = arguments?["role"]?.stringValue?.lowercased()
+        let directory = arguments?["directory"]?.stringValue
 
-        struct ActionGroup {
-            let role: String
-            let title: String
-            let description: String
-            let actions: [(name: String, description: String, prepositions: String)]
-        }
-
-        let groups: [ActionGroup] = [
-            ActionGroup(
-                role: "request",
-                title: "REQUEST Actions (External → Internal)",
-                description: "Bring data into the feature set:",
-                actions: [
-                    ("Extract", "Get data from events, requests, parameters, path parameters", "from"),
-                    ("Retrieve", "Get data from repositories; supports `where field = value` and `default` fallback", "from"),
-                    ("Fetch", "Make HTTP GET requests to external services", "from"),
-                    ("Request", "Make HTTP requests (GET, POST, PUT, DELETE)", "from"),
-                    ("Read", "Read content from files", "from"),
-                    ("Receive", "Receive data from socket connections", "from"),
-                    ("Parse", "Parse structured data (JSON, HTML, XML, CSV)", "from"),
-                    ("ParseLinkHeader", "Parse HTTP Link header into pagination info", "from"),
-                ]
-            ),
-            ActionGroup(
-                role: "own",
-                title: "OWN Actions (Internal → Internal)",
-                description: "Transform data within the feature set:",
-                actions: [
-                    ("Compute", "Calculate values; supports arithmetic, length, uppercase, lowercase, hash, string concat (++)", "from, with"),
-                    ("Validate", "Check data against rules or schemas", "against, with"),
-                    ("Compare", "Compare two values; result is a boolean", "against"),
-                    ("Transform", "Convert data between types (int, float, string, bool)", "to, with"),
-                    ("Create", "Create new objects or collections", "with, from"),
-                    ("Update", "Update fields on an existing object", "in, with"),
-                    ("Delete", "Remove data from a collection", "from"),
-                    ("Filter", "Filter collections by predicate", "with, from"),
-                    ("Sort", "Sort collections by field", "with"),
-                    ("Split", "Split strings by delimiter or regex (`by /pattern/`)", "with, by"),
-                    ("Join", "Join list elements into a string with separator", "with"),
-                    ("Merge", "Merge two collections or objects", "with"),
-                ]
-            ),
-            ActionGroup(
-                role: "response",
-                title: "RESPONSE Actions (Internal → External)",
-                description: "Return results from the feature set:",
-                actions: [
-                    ("Return", "Return success with optional data (HTTP 200/201/etc via qualifier)", "for, with"),
-                    ("Throw", "Return an error response", "for"),
-                    ("Render", "Render a template and return the result", "from, with"),
-                ]
-            ),
-            ActionGroup(
-                role: "export",
-                title: "EXPORT Actions (Internal → External)",
-                description: "Send data outside the feature set:",
-                actions: [
-                    ("Log", "Write to console/logs", "to"),
-                    ("Store", "Save to repository (auto-generates `id`)", "in, into"),
-                    ("Write", "Write content to a file", "to"),
-                    ("Append", "Append content to a file", "to"),
-                    ("Send", "Send HTTP request or message to service/socket", "to"),
-                    ("Notify", "Send notification to target(s); dispatches NotificationSent events", "to, with"),
-                    ("Emit", "Emit a domain event to the event bus", "with"),
-                    ("Publish", "Make a variable globally visible across feature sets", "as"),
-                    ("Stream", "Stream data lazily to an output or pipe", "to, with"),
-                ]
-            ),
-            ActionGroup(
-                role: "server",
-                title: "SERVER Actions",
-                description: "Control servers, services, and timing:",
-                actions: [
-                    ("Start", "Start a server or service (http-server, file-monitor, socket-server)", "with"),
-                    ("Stop", "Stop a running service", "with"),
-                    ("Listen", "Listen for incoming connections on a port", "on"),
-                    ("Keepalive", "Keep the application running to process events (blocks until SIGINT/SIGTERM)", "for"),
-                    ("Schedule", "Schedule a repeating timer event every N seconds", "with"),
-                    ("Sleep", "Pause execution for N seconds", "for"),
-                    ("WaitForEvents", "Wait until all pending events are processed", "for"),
-                    ("Configure", "Configure runtime settings (timeout, retry, etc.)", "with"),
-                    ("Accept", "Accept a state transition for an entity (triggers StateTransition events)", "for"),
-                ]
-            ),
-        ]
-
-        var output = "# ARO Actions\n\n"
-        output += "ARO has \(groups.flatMap { $0.actions }.count)+ built-in actions organized by role.\n\n"
-
-        for group in groups {
-            if let filter = roleFilter, group.role != filter { continue }
-            output += "## \(group.title)\n"
-            output += "\(group.description)\n\n"
-            for action in group.actions {
-                output += "- **\(action.name)**: \(action.description). Prepositions: `\(action.prepositions)`\n"
-            }
-            output += "\n"
-        }
-
-        if roleFilter != nil && !groups.contains(where: { $0.role == roleFilter }) {
+        // Validate role early so we can return a friendly error.
+        let knownRoles: Set<String> = ["request", "own", "response", "export", "server"]
+        if let role = roleFilter, !knownRoles.contains(role) {
             return MCPToolCallResult(
                 content: [.text("Unknown role filter. Use: request, own, response, export, server")],
                 isError: true
             )
         }
 
-        // File system actions (always shown unless filtered to a different role)
-        if roleFilter == nil {
-            output += """
-            ## FILE Actions
-            File system operations:
+        // Optional plugin loading from the user's workspace. Errors are logged
+        // by the catalog and we continue with built-ins.
+        if let directory = directory {
+            let url = URL(fileURLWithPath: directory)
+            _ = await AROCatalog.shared.loadPluginsFromWorkspace(url)
+        }
 
-            - **List**: List directory contents. Prepositions: `from`
-            - **Stat**: Get file metadata (size, dates, permissions). Prepositions: `from`
-            - **Exists**: Check if a path exists. Prepositions: `for`
-            - **Make**: Create a directory. Prepositions: `for`
-            - **Copy**: Copy file to destination. Prepositions: `to`
-            - **Move**: Move/rename file. Prepositions: `to`
+        let role = roleFilter.flatMap(ActionRole.init(rawValue:))
+        let entries = await AROCatalog.shared.actions(role: role)
 
-            ## SOCKET Actions
-            TCP/WebSocket communication:
+        var output = "# ARO Actions\n\n"
+        output += "ARO has \(entries.count) action verb(s) available"
+        if let directory = directory {
+            output += " (workspace: `\(directory)`)"
+        }
+        output += ".\n\n"
 
-            - **Connect**: Connect to a TCP server. Prepositions: `to`
-            - **Broadcast**: Broadcast message to all connected clients. Prepositions: `to`
-            - **Close**: Close a connection. Prepositions: `for`
+        // Group by role for readability — the catalog gives us a flat list.
+        let order: [(ActionRole, String, String)] = [
+            (.request,  "REQUEST Actions (External → Internal)",  "Bring data into the feature set:"),
+            (.own,      "OWN Actions (Internal → Internal)",      "Transform data within the feature set:"),
+            (.response, "RESPONSE Actions (Internal → External)", "Return results from the feature set:"),
+            (.export,   "EXPORT Actions (Internal → External)",   "Send data outside the feature set:"),
+            (.server,   "SERVER Actions",                          "Control servers, services, and timing:"),
+        ]
 
-            ## TEST Actions
-            Testing framework (Given/When/Then):
+        for (role, title, blurb) in order {
+            if let filter = roleFilter, role.rawValue != filter { continue }
+            let group = entries.filter { $0.role == role && isBuiltIn($0) }
+            guard !group.isEmpty else { continue }
+            output += "## \(title)\n\(blurb)\n\n"
+            for entry in group {
+                output += renderEntryLine(entry)
+            }
+            output += "\n"
+        }
 
-            - **Given**: Set up test context. Prepositions: `with`
-            - **When**: Execute the action under test. Prepositions: `for`
-            - **Then**: Assert expected outcomes. Prepositions: `for`
-            - **Assert**: Make a specific assertion. Prepositions: `for`
-
-            ## SPECIAL Actions
-
-            - **Call**: Call an external plugin action. Prepositions: `with`
-            - **Execute**: Execute a system shell command. Prepositions: `with`
-            - **Include**: Include a template file. Prepositions: `from`
-
-            """
+        // Plugin actions get their own section so users can see what came from
+        // workspace plugins versus the runtime built-ins.
+        let pluginEntries = entries.filter { !isBuiltIn($0) }
+        if !pluginEntries.isEmpty && roleFilter == nil {
+            output += "## Plugin Actions\nProvided by plugins in this workspace:\n\n"
+            for entry in pluginEntries {
+                output += renderEntryLine(entry)
+            }
+            output += "\n"
         }
 
         return MCPToolCallResult(content: [.text(output)])
+    }
+
+    /// List all qualifiers (built-in + plugin), sourced from `AROCatalog`.
+    private func executeQualifiers(arguments: JSONValue?) async -> MCPToolCallResult {
+        let directory = arguments?["directory"]?.stringValue
+        let namespaceFilter = arguments?["namespace"]?.stringValue
+
+        if let directory = directory {
+            let url = URL(fileURLWithPath: directory)
+            _ = await AROCatalog.shared.loadPluginsFromWorkspace(url)
+        }
+
+        let entries = await AROCatalog.shared.qualifiers(namespace: namespaceFilter)
+
+        var output = "# ARO Qualifiers\n\n"
+        output += "Qualifiers transform values inline (`<value: qualifier>`). Plugin "
+        output += "qualifiers are namespaced (`<value: handle.qualifier>`).\n\n"
+
+        let builtIns = entries.filter { $0.namespace.isEmpty }
+        if !builtIns.isEmpty {
+            output += "## Built-in Qualifiers\n\n"
+            for entry in builtIns {
+                output += renderQualifierLine(entry)
+            }
+            output += "\n"
+        }
+
+        let pluginGroups = Dictionary(grouping: entries.filter { !$0.namespace.isEmpty }) { $0.namespace }
+        for namespace in pluginGroups.keys.sorted() {
+            output += "## Plugin Namespace: `\(namespace)`\n\n"
+            for entry in pluginGroups[namespace] ?? [] {
+                output += renderQualifierLine(entry)
+            }
+            output += "\n"
+        }
+
+        if entries.isEmpty {
+            output += "_No qualifiers matched the filter._\n"
+        }
+
+        return MCPToolCallResult(content: [.text(output)])
+    }
+
+    /// Render a single action entry as a markdown bullet.
+    private func renderEntryLine(_ entry: CatalogActionEntry) -> String {
+        let preps = entry.prepositions.isEmpty ? "—" : entry.prepositions.joined(separator: ", ")
+        let desc = entry.description ?? ""
+        var line = "- **\(entry.verb)**: \(desc) Prepositions: `\(preps)`"
+        if case .plugin(let name, let handle) = entry.origin {
+            let handleStr = handle.map { " · handle: `\($0)`" } ?? ""
+            line += " · _from plugin `\(name)`\(handleStr)_"
+        }
+        return line + "\n"
+    }
+
+    /// Render a single qualifier entry as a markdown bullet.
+    private func renderQualifierLine(_ entry: CatalogQualifierEntry) -> String {
+        let inputs = entry.inputTypes.isEmpty ? "any" : entry.inputTypes.joined(separator: ", ")
+        let params = entry.acceptsParameters ? " · accepts `with` parameters" : ""
+        let desc = entry.description ?? ""
+        return "- **\(entry.fullName)**: \(desc) (input: `\(inputs)`)\(params)\n"
+    }
+
+    /// True if a catalog entry came from the built-in runtime (not a plugin).
+    private func isBuiltIn(_ entry: CatalogActionEntry) -> Bool {
+        if case .builtin = entry.origin { return true }
+        return false
     }
 
     /// Parse ARO code to AST
@@ -1293,12 +1300,30 @@ public struct MCPToolProvider: Sendable {
 
         ## Plugin Qualifiers
 
-        Qualifiers are namespaced by `handler:` in plugin.yaml:
+        Plugin qualifiers are **namespaced** via the `handle:` (PascalCase, root-level)
+        or legacy `handler:` (inside `provides:`) field of plugin.yaml. Access them as
+        `<value: handle.qualifier>`:
 
         ```aro
         Compute the <sorted: stats.sort> from the <numbers>.
         Compute the <picked: collections.pick-random> from the <items>.
+        Log <numbers: collections.reverse> to the <console>.
         ```
+
+        Use the `aro_qualifiers` MCP tool to list every qualifier (built-in and
+        plugin-supplied) — pass `directory: <workspace>` to include qualifiers from
+        plugins under `<workspace>/Plugins/`.
+
+        ## Discovering Plugin Actions and Qualifiers
+
+        Both the LSP and MCP layers consult the live `ActionRegistry` and
+        `QualifierRegistry`. To make plugin actions/qualifiers visible:
+
+        - **MCP tools**: pass `directory: <workspace>` to `aro_actions` /
+          `aro_qualifiers` so the workspace's `Plugins/` folder is loaded.
+        - **LSP**: the editor's workspace root is captured during `initialize` and
+          plugins are loaded automatically on `initialized`. Completion and hover
+          will then surface plugin verbs as `Handle.Verb`.
 
         ## Installing Plugins
 

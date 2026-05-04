@@ -381,8 +381,14 @@ Each Feature Set has its own symbol table:
 - Type checking
 - Advanced conditional branching
 
+### Recently Landed
+- **Dynamic plugin actions/qualifiers in LSP & MCP** (Issue #225) — both layers
+  consult the live `ActionRegistry` / `QualifierRegistry` through the shared
+  `AROCatalog` service. The LSP loads plugins from the workspace's `Plugins/`
+  folder on `initialized`; the MCP `aro_actions` and `aro_qualifiers` tools
+  accept an optional `directory:` argument to discover plugins per workspace.
+
 ### Planned
-- LSP server
 - IDE integration
 - Additional built-in actions
 

@@ -1055,11 +1055,20 @@ do {
 When a plugin registers actions, the registry tracks which plugin each action belongs to:
 
 ```swift
-// Actions registered with pluginName are tracked for bulk removal
+// Actions registered with pluginName are tracked for bulk removal.
+// Pass `metadata:` so editor completion and the MCP `aro_actions` tool can
+// surface the verb's role, prepositions, and description.
 await ActionRegistry.shared.registerDynamic(
     verb: "parse-csv",
     handler: myHandler,
-    pluginName: "csv-processor"
+    pluginName: "csv-processor",
+    metadata: ActionRegistry.PluginActionMetadata(
+        role: .own,
+        prepositions: ["from", "with"],
+        description: "Parse CSV input into a list of rows.",
+        handle: "CSV",
+        since: "1.0.0"
+    )
 )
 
 // Remove all verbs registered by this plugin at once
@@ -1070,7 +1079,60 @@ Actions registered without a `pluginName` are not tracked and survive `unregiste
 
 ---
 
-## 26.14 Example Plugins
+## 26.14 Tooling Discovery (LSP and MCP)
+
+Both the ARO Language Server (`aro lsp`) and the ARO MCP server (`aro mcp`) consult the live runtime registries — `ActionRegistry` and `QualifierRegistry` — through a shared `AROCatalog` service. This means **plugin-supplied actions and qualifiers show up in editors and AI tools without any extra configuration** as long as they are declared in `plugin.yaml` or returned from `aro_plugin_info()`.
+
+### How Discovery Works
+
+When the LSP starts, it captures the workspace root from the LSP `initialize` request (`rootUri` and `workspaceFolders`). On `initialized`, it walks `<workspace>/Plugins/` and registers everything found into the runtime registries — the same code path `aro run` uses. Subsequent completion, hover, and diagnostics queries see plugin verbs as first-class citizens.
+
+For MCP tools, plugin loading is opt-in: pass `directory: <workspace>` to `aro_actions` or `aro_qualifiers` and the server will load that workspace's plugins before answering. This keeps the safe default ("just describe the language") for prompts that don't need plugins, while letting workspace-aware queries see the full picture.
+
+### Declaring Metadata
+
+The richer the metadata in `plugin.yaml` or `aro_plugin_info()`, the better the editor experience:
+
+```yaml
+# plugin.yaml
+name: plugin-rust-csv
+version: 1.0.0
+handle: CSV         # PascalCase — actions appear as CSV.ParseCsv
+
+provides:
+  - type: rust-plugin
+    path: src/
+    actions:
+      - name: ParseCsv
+        verbs: [parse-csv, parsecsv]
+        role: own                        # request | own | response | export | server
+        prepositions: [from, with]
+        description: "Parse CSV input into a list of rows."
+        since: "1.0.0"
+```
+
+Hover, completion `detail`, and `aro_actions` output all read from these fields. When `role` is omitted the catalog falls back to `own`; when `description` is omitted plugin verbs still appear in completion lists, just without a one-liner.
+
+### Verifying What the Tooling Sees
+
+Quickest way to confirm a plugin is visible to tooling:
+
+```bash
+# Built-ins only
+aro mcp call aro_actions
+
+# Built-ins + plugins from this workspace
+aro mcp call aro_actions --directory $(pwd)
+
+# Same for qualifiers
+aro mcp call aro_qualifiers --directory $(pwd)
+```
+
+In the LSP, type `<` to trigger completion and look for your plugin's verbs. Hovering on a plugin verb shows the `_Provided by plugin **<name>**_` line directly under the role description.
+
+---
+
+## 26.15 Example Plugins
 
 The ARO team maintains several reference plugins:
 
