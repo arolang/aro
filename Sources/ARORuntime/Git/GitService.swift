@@ -130,11 +130,13 @@ public final class GitService: @unchecked Sendable {
                 if file == "." {
                     var pattern = strdup("*")
                     defer { free(pattern) }
-                    var arr = git_strarray(strings: &pattern, count: 1)
-                    git_index_add_all(index, &arr, GIT_INDEX_ADD_DEFAULT.rawValue, nil, nil)
+                    withUnsafeMutablePointer(to: &pattern) { patternPtr in
+                        var arr = git_strarray(strings: patternPtr, count: 1)
+                        git_index_add_all(index, &arr, GIT_INDEX_ADD_DEFAULT.rawValue, nil, nil)
+                    }
                 } else {
                     file.withCString { pathCStr in
-                        git_index_add_bypath(index, pathCStr)
+                        _ = git_index_add_bypath(index, pathCStr)
                     }
                 }
             }
@@ -204,7 +206,7 @@ public final class GitService: @unchecked Sendable {
 
             var hashBuf = [CChar](repeating: 0, count: 41)
             git_oid_tostr(&hashBuf, 41, &commitOid)
-            let hash = String(cString: hashBuf)
+            let hash = hashBuf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
 
             let authorName: String
             if let namePtr = sig.pointee.name {
@@ -253,7 +255,7 @@ public final class GitService: @unchecked Sendable {
 
                 var hashBuf = [CChar](repeating: 0, count: 41)
                 git_oid_tostr(&hashBuf, 41, &oid)
-                let hash = String(cString: hashBuf)
+                let hash = hashBuf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
                 let msg = git_commit_message(commit).map { String(cString: $0) } ?? ""
                 let authorSig = git_commit_author(commit)
                 let authorName = authorSig?.pointee.name.map { String(cString: $0) } ?? "unknown"
@@ -398,7 +400,7 @@ public final class GitService: @unchecked Sendable {
             }
 
             // Update HEAD
-            refName.withCString { git_repository_set_head(repo, $0) }
+            refName.withCString { _ = git_repository_set_head(repo, $0) }
         }
     }
 
@@ -421,7 +423,7 @@ public final class GitService: @unchecked Sendable {
         guard let oid = git_reference_target(headRef) else { return nil }
         var buf = [CChar](repeating: 0, count: 41)
         git_oid_tostr(&buf, 41, oid)
-        return String(cString: buf)
+        return buf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
     }
 
     private func gitError(_ context: String) -> GitServiceError {
@@ -442,13 +444,12 @@ public struct GitStatus: Sendable {
     public let files: [[String: String]]
 
     public var asDictionary: [String: any Sendable] {
-        var dict: [String: any Sendable] = [
+        [
             "branch": branch ?? "detached HEAD",
             "commit": commit ?? "",
             "clean": clean,
             "files": files.map { $0 as [String: any Sendable] },
         ]
-        return dict
     }
 }
 
