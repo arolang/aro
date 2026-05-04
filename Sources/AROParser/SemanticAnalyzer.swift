@@ -133,6 +133,14 @@ public struct AnalyzedProgram: Sendable {
     /// Feature sets indexed by name for O(1) lookup (e.g. by HTTP operationId).
     public let byName: [String: AnalyzedFeatureSet]
 
+    /// Catalog of user-defined actions discovered in this program (ARO-0081).
+    /// Built during `analyze()` and consumed by:
+    /// - subsequent semantic-analysis passes (duplicate names, unknown calls,
+    ///   `from <value>` against actions without a `takes` clause);
+    /// - the runtime, which registers `Application.<Name>` verbs from this map
+    ///   before the entry point runs.
+    public let userActions: UserActionRegistry
+
     // MARK: - Pre-computed handler category indexes
 
     /// Feature sets whose business activity contains "Socket Event Handler".
@@ -156,10 +164,16 @@ public struct AnalyzedProgram: Sendable {
     /// Domain event handlers: contain " Handler" but not socket/websocket/file/keypress/application-end.
     public let domainHandlers: [AnalyzedFeatureSet]
 
-    public init(program: Program, featureSets: [AnalyzedFeatureSet], globalRegistry: GlobalSymbolRegistry) {
+    public init(
+        program: Program,
+        featureSets: [AnalyzedFeatureSet],
+        globalRegistry: GlobalSymbolRegistry,
+        userActions: UserActionRegistry = UserActionRegistry()
+    ) {
         self.program = program
         self.featureSets = featureSets
         self.globalRegistry = globalRegistry
+        self.userActions = userActions
         self.byActivity = Dictionary(grouping: featureSets, by: { $0.featureSet.businessActivity })
         var nameIndex: [String: AnalyzedFeatureSet] = [:]
         for fs in featureSets { nameIndex[fs.featureSet.name] = fs }
@@ -255,11 +269,16 @@ public final class SemanticAnalyzer {
         let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
         let events = EventAnalyzer(diagnostics: diagnostics)
+        let userActionAnalyzer = UserActionAnalyzer(diagnostics: diagnostics)
 
         var analyzedSets: [AnalyzedFeatureSet] = []
 
         // First pass: check for duplicate names
         dataFlow.detectDuplicateFeatureSetNames(program.featureSets)
+
+        // ARO-0081: build the user-action registry before per-feature-set analysis
+        // so subsequent passes can validate `Application.<Name>` calls.
+        let userActions = userActionAnalyzer.buildRegistry(program.featureSets)
 
         // Second pass: analyze each feature set
         for featureSet in program.featureSets {
@@ -286,10 +305,16 @@ public final class SemanticAnalyzer {
         // Fifth pass: detect orphaned event emissions
         events.detectOrphanedEventEmissions(analyzedSets)
 
+        // ARO-0081: validate `Application.<Name>` calls and framework-variable
+        // access inside Action bodies. Done last so duplicate-name diagnostics
+        // emitted by `buildRegistry` come before call-site diagnostics.
+        userActionAnalyzer.validateCalls(in: program.featureSets, registry: userActions)
+
         return AnalyzedProgram(
             program: program,
             featureSets: analyzedSets,
-            globalRegistry: globalRegistry
+            globalRegistry: globalRegistry,
+            userActions: userActions
         )
     }
 }
