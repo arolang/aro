@@ -292,7 +292,10 @@ public struct AskCommand: AsyncParsableCommand {
             let line: String?
             if let ln = ln {
                 do {
-                    let raw = try ln.getLine(prompt: "\(Style.green)ask>\(Style.reset) ")
+                    // Plain prompt: LineNoise counts every byte of ANSI
+                    // escapes as visible width and miscalculates the cursor
+                    // column, so the cursor jumps after the first keystroke.
+                    let raw = try ln.getLine(prompt: "ask> ")
                     print()
                     if !raw.trimmingCharacters(in: .whitespaces).isEmpty {
                         ln.addHistory(raw)

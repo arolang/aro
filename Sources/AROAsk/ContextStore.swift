@@ -56,24 +56,28 @@ public struct AskContext: Codable, Sendable {
         self.model = model
         self.created = Date()
         self.messages = [
-            AskMessage(role: "system", content: Self.resolvedSystemPrompt())
+            AskMessage(role: "system", content: Self.resolvedSystemPrompt(model: model))
         ]
     }
 
     /// Resolve the system prompt for this session, in priority order:
     ///   1. `$ARO_SYSTEM_PROMPT_FILE` env var (explicit path override)
     ///   2. `$cwd/aro_system_prompt.txt`     (project-specific override)
-    ///   3. `<exe>/../share/aro/aro_system_prompt.txt`  (installed builds)
-    ///   4. `<exe>/../../Train/release/aro_system_prompt.txt` (dev checkout)
-    ///   5. `defaultSystemPrompt` baked-in fallback
+    ///   3. HuggingFace cache for the configured model
+    ///      (`~/.cache/huggingface/hub/models--<org>--<name>/snapshots/.../`)
+    ///   4. `<exe>/../share/aro/aro_system_prompt.txt`  (installed builds)
+    ///   5. `<exe>/../../Train/release/aro_system_prompt.txt` (dev checkout)
+    ///   6. `defaultSystemPrompt` baked-in fallback
     ///
     /// The model was trained against the long version in
     /// `Train/release/aro_system_prompt.txt` (50+ worked examples + full
-    /// action reference). The baked-in default is a richer fallback than
-    /// the original ~30-line prompt, but still much shorter than what the
-    /// model expects, so loading the training prompt at runtime is the
-    /// most faithful behaviour.
-    public static func resolvedSystemPrompt() -> String {
+    /// action reference). NB24 packaging now copies that file INTO the
+    /// model directory so it ships with the HF upload and is available in
+    /// the HF cache after `huggingface-cli download`. Resolution searches
+    /// that cache before falling back to the baked-in default, so users
+    /// who only install via `aro ask` get the same prompt the model was
+    /// trained on.
+    public static func resolvedSystemPrompt(model: String? = nil) -> String {
         let fm = FileManager.default
 
         if let path = ProcessInfo.processInfo.environment["ARO_SYSTEM_PROMPT_FILE"],
@@ -88,6 +92,11 @@ public struct AskContext: Codable, Sendable {
         if fm.fileExists(atPath: cwdPrompt.path),
            let text = try? String(contentsOf: cwdPrompt, encoding: .utf8),
            !text.isEmpty {
+            return text
+        }
+
+        // HuggingFace cache for the configured model.
+        if let model = model, let text = readPromptFromHuggingFaceCache(model: model) {
             return text
         }
 
@@ -107,6 +116,50 @@ public struct AskContext: Codable, Sendable {
         }
 
         return defaultSystemPrompt
+    }
+
+    /// Look for `aro_system_prompt.txt` in the HuggingFace hub cache for
+    /// the given model id (`<org>/<name>` form). Searches all snapshots
+    /// (latest mtime first) and respects `$HF_HOME`.
+    private static func readPromptFromHuggingFaceCache(model: String) -> String? {
+        let fm = FileManager.default
+
+        // Cache root: $HF_HOME/hub or ~/.cache/huggingface/hub
+        let env = ProcessInfo.processInfo.environment
+        let hfHome: URL = {
+            if let h = env["HF_HOME"], !h.isEmpty {
+                return URL(fileURLWithPath: h)
+            }
+            let home = fm.homeDirectoryForCurrentUser
+            return home.appendingPathComponent(".cache/huggingface")
+        }()
+        let hubRoot = hfHome.appendingPathComponent("hub")
+
+        // models--<org>--<name>
+        let safeName = model.replacingOccurrences(of: "/", with: "--")
+        let modelCacheRoot = hubRoot.appendingPathComponent("models--" + safeName)
+        let snapshots = modelCacheRoot.appendingPathComponent("snapshots")
+        guard fm.fileExists(atPath: snapshots.path) else { return nil }
+
+        // Walk snapshots; most recent first.
+        let entries = (try? fm.contentsOfDirectory(
+            at: snapshots,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        )) ?? []
+        let sorted = entries.sorted { a, b in
+            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return da > db
+        }
+        for snap in sorted {
+            let candidate = snap.appendingPathComponent("aro_system_prompt.txt")
+            if fm.fileExists(atPath: candidate.path),
+               let text = try? String(contentsOf: candidate, encoding: .utf8),
+               !text.isEmpty {
+                return text
+            }
+        }
+        return nil
     }
 
     /// Richer baked-in fallback. Used only when no `aro_system_prompt.txt`
