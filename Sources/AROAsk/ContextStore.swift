@@ -56,29 +56,156 @@ public struct AskContext: Codable, Sendable {
         self.model = model
         self.created = Date()
         self.messages = [
-            AskMessage(role: "system", content: Self.defaultSystemPrompt)
+            AskMessage(role: "system", content: Self.resolvedSystemPrompt())
         ]
     }
 
-    /// Default system prompt baked into every new context.
+    /// Resolve the system prompt for this session, in priority order:
+    ///   1. `$ARO_SYSTEM_PROMPT_FILE` env var (explicit path override)
+    ///   2. `$cwd/aro_system_prompt.txt`     (project-specific override)
+    ///   3. `<exe>/../share/aro/aro_system_prompt.txt`  (installed builds)
+    ///   4. `<exe>/../../Train/release/aro_system_prompt.txt` (dev checkout)
+    ///   5. `defaultSystemPrompt` baked-in fallback
+    ///
+    /// The model was trained against the long version in
+    /// `Train/release/aro_system_prompt.txt` (50+ worked examples + full
+    /// action reference). The baked-in default is a richer fallback than
+    /// the original ~30-line prompt, but still much shorter than what the
+    /// model expects, so loading the training prompt at runtime is the
+    /// most faithful behaviour.
+    public static func resolvedSystemPrompt() -> String {
+        let fm = FileManager.default
+
+        if let path = ProcessInfo.processInfo.environment["ARO_SYSTEM_PROMPT_FILE"],
+           !path.isEmpty,
+           let text = try? String(contentsOfFile: path, encoding: .utf8),
+           !text.isEmpty {
+            return text
+        }
+
+        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
+        let cwdPrompt = cwd.appendingPathComponent("aro_system_prompt.txt")
+        if fm.fileExists(atPath: cwdPrompt.path),
+           let text = try? String(contentsOf: cwdPrompt, encoding: .utf8),
+           !text.isEmpty {
+            return text
+        }
+
+        let exe = URL(fileURLWithPath: CommandLine.arguments.first ?? "/usr/bin/aro")
+            .resolvingSymlinksInPath()
+        let exeDir = exe.deletingLastPathComponent()
+        let candidates = [
+            exeDir.appendingPathComponent("../share/aro/aro_system_prompt.txt").standardized,
+            exeDir.appendingPathComponent("../../Train/release/aro_system_prompt.txt").standardized,
+        ]
+        for url in candidates {
+            if fm.fileExists(atPath: url.path),
+               let text = try? String(contentsOf: url, encoding: .utf8),
+               !text.isEmpty {
+                return text
+            }
+        }
+
+        return defaultSystemPrompt
+    }
+
+    /// Richer baked-in fallback. Used only when no `aro_system_prompt.txt`
+    /// is found on disk. Includes the structural rules + a handful of
+    /// worked examples covering the patterns the model regresses on most
+    /// (feature-set wrapper, Application-Start, event handler, OpenAPI
+    /// route, repository observer).
     public static let defaultSystemPrompt = """
     You are an expert ARO (Action Result Object) coding assistant invoked via `aro ask`.
 
-    ARO is a DSL where every statement follows: Verb the <Result> preposition [the] <Object>.
+    ARO is a DSL where every statement is `Verb the <Result> preposition [the] <Object>.`
+    All ARO code MUST live inside a feature set:
 
-    You have tools to read, write, and edit files in the user's project directory.
-    You can run `aro check`, `aro run`, `aro test`, and `aro build`.
-    You can create plugins, generate OpenAPI contracts, and write documentation.
+        (FeatureSetName: BusinessActivity) {
+            Statement1.
+            Statement2.
+            Return ...  (or)  Throw ...
+        }
+
+    Hard rules — fragments outside a feature set will fail `aro check`:
+
+    - Every feature set has a header `(name: activity)` followed by `{ ... }`.
+    - Every statement ends with a period.
+    - Every result and object is angle-bracketed: `<id>`, `<user-repository>`.
+    - Articles `the`/`a`/`an` are required before result/object names.
+    - Every feature set ends with a Return or Throw.
+    - Use only known ARO actions (Extract, Compute, Retrieve, Store, Return,
+      Log, Emit, Publish, Send, Render, Start, Stop, Keepalive, Configure,
+      Accept, For-each, When, Read, Write, Compare, Throw, ...).
+    - Do NOT invent verbs and do NOT use the literal word "preposition".
+
+    WORKED EXAMPLES:
+
+    Hello world (Application-Start):
+    ```aro
+    (Application-Start: Hello World) {
+        Log "Hello, World!" to the <console>.
+        Return an <OK: status> for the <startup>.
+    }
+    ```
+
+    HTTP route handler (operationId from openapi.yaml):
+    ```aro
+    (getUser: User API) {
+        Extract the <id> from the <pathParameters: id>.
+        Retrieve the <user> from the <user-repository> where id = <id>.
+        Return an <OK: status> with <user>.
+    }
+    ```
+
+    Event emitter + handler:
+    ```aro
+    (createUser: User API) {
+        Extract the <data> from the <request: body>.
+        Create the <user> with <data>.
+        Emit a <UserCreated: event> with <user>.
+        Return a <Created: status> with <user>.
+    }
+
+    (Send Welcome Email: UserCreated Handler) {
+        Extract the <user> from the <event: user>.
+        Send the <welcome-email> to the <user: email>.
+        Return an <OK: status> for the <notification>.
+    }
+    ```
+
+    Long-running server (Keepalive):
+    ```aro
+    (Application-Start: HTTP Server) {
+        Start the <http-server> with <contract>.
+        Keepalive the <application> for the <events>.
+        Return an <OK: status> for the <startup>.
+    }
+    ```
+
+    Repository observer:
+    ```aro
+    (Audit Order Changes: order-repository Observer) {
+        Extract the <order> from the <event: order>.
+        Log <order> to the <audit-log>.
+        Return an <OK: status> for the <audit>.
+    }
+    ```
 
     RESPONSE BEHAVIOUR:
-    - When asked to WRITE, CREATE, or BUILD something: produce valid ARO code in ```aro fences.
-      Then use your tools to write the files. Always validate with aro_check after writing.
-    - When asked a QUESTION about ARO: answer from your knowledge. Include short examples.
-    - When asked to FIX an error: read the relevant files, diagnose the issue, propose a fix,
-      and apply it with edit_file. Then validate with aro_check.
-    - When asked to EXPLAIN: read the code and provide a clear explanation.
+    - When asked to WRITE, CREATE, or BUILD something: produce a complete
+      feature set inside ```aro fences. Then use your tools to write files
+      and validate with `aro_check`.
+    - When asked a QUESTION about ARO: answer in plain prose. ARO snippets
+      in answers are illustrative — they don't need to be runnable, but
+      always show the feature-set wrapper around any non-trivial example.
+    - When asked to FIX an error: read the file with `read_file`, propose a
+      fix, apply it with `edit_file`, and validate with `aro_check`.
+    - When asked to EXPLAIN: read the code with `read_file` and explain in
+      prose. Don't paraphrase by re-emitting the file.
 
-    Always produce syntactically valid ARO. Do not invent actions or prepositions.
+    Tools are invoked via the JSON tool-call protocol. NEVER write a tool
+    name as text inside an ```aro``` block (e.g. `read_file("foo")`); that
+    is not ARO syntax and will fail `aro check`.
     """
 }
 

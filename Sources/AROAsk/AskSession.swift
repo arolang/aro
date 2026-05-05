@@ -170,12 +170,16 @@ public actor AskSession {
 
             // If no tool calls, we have a final text reply — validate any ARO code
             guard let toolCalls = reply.toolCalls, !toolCalls.isEmpty else {
-                let finalText = reply.content ?? ""
+                let finalText = Self.stripThinking(reply.content ?? "")
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
                     context: &context,
                     tools: tools
                 )
+                // Make sure the cursor and ANSI state are clean before
+                // returning to the user. The model's stream can leave the
+                // terminal in a dimmed/hidden-cursor state.
+                TerminalUI.resetTerminal()
                 return validated
             }
 
@@ -215,8 +219,31 @@ public actor AskSession {
 
     // MARK: - Post-inference self-repair
 
-    /// Maximum number of aro-check → fix cycles before giving up.
-    private static let maxRepairAttempts = 5
+    /// Wall-clock budget for the repair loop. Once exceeded the loop bails
+    /// out with whatever the latest reply is, instead of burning ~60 s per
+    /// attempt times five attempts (= 5 minutes wasted) on hopeless cases.
+    private static let repairWallClockBudget: TimeInterval = 90
+
+    /// Per-attempt temperature schedule. Same temperature reproduces the
+    /// same wrong output, so the schedule widens monotonically. Capped at
+    /// 1.5 in the loop body so a high `config.temperature` baseline doesn't
+    /// run away.
+    private static let repairTempOffsets: [Double] = [0.0, 0.3, 0.6, 0.9]
+
+    /// Strip `<think>...</think>` blocks from model output. Some packaged
+    /// models follow the thinking-tag protocol but emit empty `<think></think>`
+    /// blocks, which previously leaked through to user output. Idempotent.
+    static func stripThinking(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"<think>[\s\S]*?</think>"#,
+            options: [.dotMatchesLineSeparators]
+        ) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        let stripped = regex.stringByReplacingMatches(
+            in: text, range: range, withTemplate: ""
+        )
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Extract ```aro code blocks from text.
     private func extractAroBlocks(_ text: String) -> [String] {
@@ -228,6 +255,50 @@ public actor AskSession {
             let block = String(text[r]).trimmingCharacters(in: .whitespacesAndNewlines)
             return block.isEmpty ? nil : block
         }
+    }
+
+    /// True when the raw reply contains a ```aro fenced block whose body
+    /// includes a feature-set header `(name: activity) {`. Q&A replies
+    /// often include short illustrative snippets that are valid ARO syntax
+    /// in context but not a runnable program; running `aro check` on those
+    /// produces a misleading FAIL, so we gate the repair loop on this
+    /// heuristic. Anchored on the ```aro\n fence so unfenced ARO-like
+    /// prose never triggers the loop.
+    private func containsCompleteProgram(in text: String) -> Bool {
+        let pattern = #"```aro\n[\s\S]*?\(\s*[\w\- ]+\s*:\s*[^)]+\)\s*\{"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let r = NSRange(text.startIndex..., in: text)
+        return regex.firstMatch(in: text, range: r) != nil
+    }
+
+    /// Detect when the model has inlined a tool call as text inside an
+    /// ```aro``` block (e.g. `read_file("foo.aro")`). This is not ARO
+    /// syntax — it's a sign the model failed to use the tool-call protocol.
+    /// Returning true tells the caller to skip aro check + emit a one-time
+    /// hint instead of running the repair loop.
+    private func looksLikeInlinedToolCall(_ block: String) -> Bool {
+        let toolNames = [
+            "read_file", "write_file", "edit_file", "list_dir", "grep",
+            "search_project", "aro_check", "aro_run", "aro_build", "aro_test",
+            "create_plugin", "generate_docs", "list_actions", "list_proposals",
+            "read_proposal", "parse_aro", "run_shell", "write_openapi",
+        ]
+        let pattern = #"\b(\#(toolNames.joined(separator: "|")))\s*\("#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let r = NSRange(block.startIndex..., in: block)
+        return regex.firstMatch(in: block, range: r) != nil
+    }
+
+    /// Render a short preview of a proposed fix for printing between
+    /// repair attempts. Keeps the first 3 + last 2 lines, dimmed.
+    private func previewCode(_ code: String) -> String {
+        let lines = code.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count > 6 else {
+            return lines.map { "  \($0)" }.joined(separator: "\n")
+        }
+        let head = lines.prefix(3).map { "  \($0)" }.joined(separator: "\n")
+        let tail = lines.suffix(2).map { "  \($0)" }.joined(separator: "\n")
+        return "\(head)\n  ... (\(lines.count - 5) more lines)\n\(tail)"
     }
 
     /// Run `aro check` on code. Returns (passed, errorMessage).
@@ -256,10 +327,19 @@ public actor AskSession {
         }
     }
 
-    /// If the model's reply contains ```aro blocks, validate them with aro check.
-    /// On failure, feed the error back and ask the model to fix it, up to
-    /// `maxRepairAttempts` times. The repair loop is printed to console but
-    /// collapsed to a single assistant message in the saved context.
+    /// If the model's reply contains a complete ARO program, validate it
+    /// with aro check. On failure feed the error back and ask the model to
+    /// fix it, up to `repairTempOffsets.count` times, varying temperature
+    /// across attempts. The repair loop is printed to console (with a
+    /// preview of each proposed fix) but collapsed to a single assistant
+    /// message in the saved context.
+    ///
+    /// Skips entirely when:
+    ///  - the reply has no ```aro``` blocks
+    ///  - the only blocks are illustrative fragments (no feature-set header)
+    ///  - the only blocks contain inlined tool-call syntax
+    /// Times out after `repairWallClockBudget` seconds regardless of
+    /// remaining attempts.
     private func selfRepairIfNeeded(
         text: String,
         context: inout AskContext,
@@ -267,18 +347,34 @@ public actor AskSession {
     ) async throws -> String {
         guard let backend = backend else { return text }
 
+        // Anchor on the ```aro\n fence + feature-set header. Q&A snippets
+        // without a feature-set wrapper never enter the repair loop —
+        // running aro check on a fragment FAILs misleadingly and burns
+        // retries on hopeless cases.
+        guard containsCompleteProgram(in: text) else { return text }
+
         let blocks = extractAroBlocks(text)
-        guard !blocks.isEmpty else { return text }  // no ARO code to validate
+        guard !blocks.isEmpty else { return text }
+
+        // Skip + hint if the model inlined a tool name as ARO text.
+        if blocks.contains(where: { looksLikeInlinedToolCall($0) }) {
+            TerminalUI.printStatus(
+                "ignored ```aro``` block containing inlined tool-call syntax — " +
+                "use the JSON tool-call protocol, not function-call text in code blocks"
+            )
+            return text
+        }
 
         let combined = blocks.joined(separator: "\n\n")
         let (passed, _) = runAroCheck(combined)
-        if passed { return text }  // already valid
+        if passed { return text }
 
-        // Track how many messages we had before the repair loop started
         let preRepairCount = context.messages.count
+        let totalAttempts = Self.repairTempOffsets.count
+        let deadline = Date().addingTimeInterval(Self.repairWallClockBudget)
 
         var currentText = text
-        for attempt in 1...Self.maxRepairAttempts {
+        for attempt in 1...totalAttempts {
             let aroCode = extractAroBlocks(currentText).joined(separator: "\n\n")
             let (ok, error) = runAroCheck(aroCode)
 
@@ -287,14 +383,26 @@ public actor AskSession {
                 break
             }
 
-            TerminalUI.printStatus("aro check failed (attempt \(attempt)/\(Self.maxRepairAttempts)): \(error.prefix(120))")
+            TerminalUI.printStatus("aro check failed (attempt \(attempt)/\(totalAttempts)): \(error.prefix(160))")
+            // Show the model's actual proposed code so the user can see
+            // what's being retried — previously this was silent and the
+            // user had no insight into why repair was failing.
+            if !aroCode.isEmpty {
+                TerminalUI.printStatus("proposed fix:\n\(previewCode(aroCode))")
+            }
 
-            if attempt == Self.maxRepairAttempts {
-                TerminalUI.printStatus("giving up after \(Self.maxRepairAttempts) repair attempts — returning last output")
+            if Date() >= deadline {
+                TerminalUI.printStatus(
+                    "repair budget of \(Int(Self.repairWallClockBudget))s exceeded — returning last output"
+                )
                 break
             }
 
-            // Feed error back to model
+            if attempt == totalAttempts {
+                TerminalUI.printStatus("giving up after \(totalAttempts) repair attempts — returning last output")
+                break
+            }
+
             let repairPrompt = """
             `aro check` found errors in the ARO code you produced:
 
@@ -302,26 +410,32 @@ public actor AskSession {
             \(error)
             ```
 
-            Fix the errors and output the corrected code.
+            Fix the errors and output the corrected code as a complete ARO
+            feature set wrapped in `(name: activity) { ... }` inside ```aro
+            fences. Do not write tool-call syntax inside the code block.
             """
 
             context.messages.append(AskMessage(role: "user", content: repairPrompt))
             try contextStore.save(context)
 
+            // Vary temperature across attempts. Same temperature reproduces
+            // the same wrong output, which is what the original loop did.
+            let temp = min(1.5, config.temperature + Self.repairTempOffsets[attempt - 1])
+
             let request = LMChatRequest(
                 model: config.model,
                 messages: context.messages.map { $0.toRequestMessage() },
                 tools: tools.isEmpty ? nil : tools,
-                temperature: config.temperature,
+                temperature: temp,
                 stream: false
             )
             let reply = try await backend.chat(request: request)
-            currentText = reply.content ?? currentText
+            currentText = Self.stripThinking(reply.content ?? currentText)
 
             let encodedToolCalls = try encodeToolCalls(reply.toolCalls)
             context.messages.append(AskMessage(
                 role: "assistant",
-                content: reply.content,
+                content: currentText,
                 toolCalls: encodedToolCalls
             ))
             try contextStore.save(context)

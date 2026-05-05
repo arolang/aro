@@ -150,6 +150,52 @@ def load_knowledge():
         return json.load(f)
 
 
+# Regex matching a feature-set header `(name: activity) {`. Used by training
+# notebooks AND the runtime CLI gate so the same definition of "complete
+# program" is applied everywhere. A reply containing only ARO statements
+# without this wrapper is a fragment — fragments fail `aro check` and must
+# not be used as code-generation training samples.
+import re as _re
+
+_FEATURESET_HEADER_RE = _re.compile(r"\(\s*[\w\- ]+\s*:\s*[^)]+\)\s*\{")
+
+
+def is_complete_program(text_or_blocks):
+    """True when at least one ```aro block in the input contains a feature
+    set header `(name: activity) {`. Accepts either a raw assistant reply
+    (string) or a list of pre-extracted block strings."""
+    if isinstance(text_or_blocks, str):
+        # Look for ```aro\n...``` and check the body
+        for m in _re.finditer(r"```aro\n([\s\S]*?)```", text_or_blocks):
+            if _FEATURESET_HEADER_RE.search(m.group(1)):
+                return True
+        return False
+    # list of block bodies (already stripped of fences)
+    return any(_FEATURESET_HEADER_RE.search(b) for b in text_or_blocks)
+
+
+def filter_complete_program_samples(samples, code_task_types=None):
+    """Drop code-generation/debugging samples whose assistant message has
+    no complete ARO program. Q&A and explanation samples pass through —
+    those expect fragments. Returns (kept, dropped_count)."""
+    if code_task_types is None:
+        code_task_types = {"code_generation", "debugging", "completion", "fim", "translation"}
+    kept = []
+    dropped = 0
+    for s in samples:
+        tt = s.get("task_type", "")
+        if tt not in code_task_types:
+            kept.append(s)
+            continue
+        msgs = s.get("messages") or []
+        asst = msgs[-1].get("content", "") if msgs and msgs[-1].get("role") == "assistant" else s.get("output", "")
+        if is_complete_program(asst):
+            kept.append(s)
+        else:
+            dropped += 1
+    return kept, dropped
+
+
 def valid_action_verbs(kb=None):
     """Return the set of all valid ARO action verbs (lowercased) from knowledge.json."""
     kb = kb or load_knowledge()

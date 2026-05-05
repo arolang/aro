@@ -137,6 +137,18 @@ public enum TerminalUI {
         stderr.write(Data("\(Style.dim)\(message)\(Style.reset)\n".utf8))
     }
 
+    /// Reset terminal state at the end of a session: clear any pending
+    /// ANSI styling, re-show the cursor, and emit a final newline. Models
+    /// that stream their own ANSI escape sequences (or that get truncated
+    /// mid-escape) can leave the terminal dimmed or with the cursor
+    /// hidden; this is a defensive cleanup so the user's next prompt
+    /// renders correctly.
+    public static func resetTerminal() {
+        let stderr = FileHandle.standardError
+        // SGR reset + show cursor + line erase right
+        stderr.write(Data("\u{001B}[0m\u{001B}[?25h\u{001B}[K".utf8))
+    }
+
     // MARK: - Download progress
 
     /// Render a download progress bar on stderr. Overwrites the current line.
