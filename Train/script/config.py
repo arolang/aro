@@ -63,7 +63,11 @@ DISTILL_MODELS_DIR = MODELS_DIR / 'distill'
 # ── Distillation ─────────────────────────────────────────────────────────────
 # The teacher is the best 30B MoE model produced by the pipeline (NB19/17/16).
 # The student is a smaller 8B dense Qwen3 model that learns from the teacher.
-STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-4bit'
+#
+# Use a non-quantized base. LoRA-on-4bit-base + fuse is fragile in MLX-LM and
+# has produced collapsed students (output of only `!`). BF16 is fully reliable;
+# fall back to `mlx-community/Qwen3-8B-8bit` (8.7 GB) if training OOMs.
+STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-bf16'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # TRAIN_ON_BASE controls whether to train from the base Qwen model (True) or
