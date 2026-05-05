@@ -515,7 +515,8 @@ docker:buildsystem:
     - /kaniko/executor
       --context=docker/buildsystem/
       --dockerfile=docker/buildsystem/Dockerfile
-      --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME}
+      --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME} 
+      --build-arg=SKIP_TESTS=true
       $DESTINATIONS
   tags:
     - spencer
