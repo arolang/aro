@@ -126,13 +126,19 @@ public final class Parser {
         }
         
         try expect(.colon, message: "':'")
-        
+
         // Parse business activity (space-separated identifiers)
-        let activity = try parseIdentifierSequence()
-        if activity.isEmpty {
+        let rawActivity = try parseIdentifierSequence()
+        if rawActivity.isEmpty {
             throw ParserError.missingBusinessActivity(at: peek().span.start)
         }
-        
+
+        // ARO-0081: User-defined actions use `Action [takes <field[: Type]>]` headers.
+        // `parseIdentifierSequence` collapses the header to "Action takes<field>" or
+        // "Action takes<field:Type>" — the angle-bracket suffix logic concatenates
+        // tokens between `<` and `>` without spaces. Recover the structured form here.
+        let (activity, userActionTakesField, userActionTakesType) = Self.splitUserActionHeader(rawActivity)
+
         try expect(.rightParen, message: "')'")
 
         // Parse optional when/where clause for feature set guards (e.g., Handler when/where condition)
@@ -170,8 +176,31 @@ public final class Parser {
             businessActivity: activity,
             statements: statements,
             whenCondition: whenCondition,
+            userActionTakesField: userActionTakesField,
+            userActionTakesType: userActionTakesType,
             span: startToken.span.merged(with: endToken.span)
         )
+    }
+
+    /// Decompose a raw activity string into `(activity, takesField, takesType)`.
+    ///
+    /// The lexer + `parseIdentifierSequence` collapses `Action takes <number: Integer>`
+    /// to `"Action takes<number:Integer>"`. This helper restores the structured
+    /// form and rejects malformed `takes` clauses without affecting non-Action
+    /// activities (which pass through unchanged).
+    static func splitUserActionHeader(_ raw: String) -> (activity: String, takes: String?, type: String?) {
+        let prefix = "Action takes<"
+        if raw.hasPrefix(prefix), raw.hasSuffix(">") {
+            let inner = String(raw.dropFirst(prefix.count).dropLast())
+            if let colonIdx = inner.firstIndex(of: ":") {
+                let field = String(inner[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+                let typeName = String(inner[inner.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+                return ("Action", field.isEmpty ? nil : field, typeName.isEmpty ? nil : typeName)
+            }
+            let field = inner.trimmingCharacters(in: .whitespaces)
+            return ("Action", field.isEmpty ? nil : field, nil)
+        }
+        return (raw, nil, nil)
     }
     
     // MARK: - Statement Parsing
