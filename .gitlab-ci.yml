@@ -72,7 +72,7 @@ test:
       Cflags: -I${includedir}
       PKGCONFIG
   script:
-    - swift test --parallel --num-workers 2
+    - swift test
   tags:
     - spencer
 
