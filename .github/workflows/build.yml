@@ -68,7 +68,7 @@ jobs:
           PKGCONFIG
 
       - name: Run tests
-        run: swift test --parallel
+        run: swift test --parallel --num-workers 2
 
   # ===========================================================================
   # Linux Build & Test
