@@ -579,7 +579,7 @@ public struct MCPToolProvider: Sendable {
         }
 
         let role = roleFilter.flatMap(ActionRole.init(rawValue:))
-        let entries = await AROCatalog.shared.actions(role: role)
+        let entries = AROCatalog.shared.actions(role: role)
 
         var output = "# ARO Actions\n\n"
         output += "ARO has \(entries.count) action verb(s) available"
@@ -632,7 +632,7 @@ public struct MCPToolProvider: Sendable {
             _ = await AROCatalog.shared.loadPluginsFromWorkspace(url)
         }
 
-        let entries = await AROCatalog.shared.qualifiers(namespace: namespaceFilter)
+        let entries = AROCatalog.shared.qualifiers(namespace: namespaceFilter)
 
         var output = "# ARO Qualifiers\n\n"
         output += "Qualifiers transform values inline (`<value: qualifier>`). Plugin "

@@ -37,6 +37,14 @@ public actor ActionRegistry {
     private init() {
         // Initialize with built-in actions (must be done in init for actor isolation)
         self.actions = Self.createBuiltInActions()
+        // Bootstrap the nonisolated read mirror so sync callers see built-ins
+        // before any async caller has had a chance to mutate the registry.
+        Self.publishMirror(
+            actions: actions,
+            dynamicHandlers: [:],
+            dynamicMetadata: [:],
+            pluginVerbs: [:]
+        )
     }
 
     // MARK: - Registration
@@ -81,12 +89,14 @@ public actor ActionRegistry {
         for verb in A.verbs {
             actions[verb.lowercased()] = action
         }
+        refreshMirror()
     }
 
     /// Unregister an action by verb
     /// - Parameter verb: The verb to unregister
     public func unregister(verb: String) {
         actions.removeValue(forKey: verb.lowercased())
+        refreshMirror()
     }
 
     /// Dynamic action handlers for plugin-provided actions
@@ -169,6 +179,7 @@ public actor ActionRegistry {
         if let name = pluginName {
             pluginVerbs[name, default: []].insert(key)
         }
+        refreshMirror()
     }
 
     /// Unregister all dynamic actions registered by a specific plugin.
@@ -179,6 +190,7 @@ public actor ActionRegistry {
             dynamicHandlers.removeValue(forKey: verb)
             dynamicMetadata.removeValue(forKey: verb)
         }
+        refreshMirror()
     }
 
     /// Get a dynamic action handler
@@ -245,22 +257,7 @@ public actor ActionRegistry {
     /// Returns one `BuiltInActionInfo` per unique built-in action type, deduplicated
     /// so that actions with multiple verbs appear only once.
     public var allBuiltInActionInfos: [BuiltInActionInfo] {
-        var seen: Set<ObjectIdentifier> = []
-        var result: [BuiltInActionInfo] = []
-        for actionType in actions.values {
-            let id = ObjectIdentifier(actionType)
-            guard seen.insert(id).inserted else { continue }
-            let name = String(describing: actionType)
-                .replacingOccurrences(of: "Action", with: "")
-            let preps = actionType.validPrepositions.map { $0.rawValue }.sorted()
-            result.append(BuiltInActionInfo(
-                name: name,
-                role: actionType.role,
-                verbs: actionType.verbs.sorted(),
-                prepositions: preps
-            ))
-        }
-        return result.sorted { $0.name < $1.name }
+        Self.buildBuiltInActionInfos(actions: actions)
     }
 
     /// Summary of a plugin (dynamic) action for display/documentation purposes
@@ -283,14 +280,89 @@ public actor ActionRegistry {
     /// Returns one entry per registered dynamic (plugin) verb.
     /// Each entry includes the plugin name if the verb was registered with `pluginName:`.
     public var allPluginActionInfos: [PluginActionInfo] {
-        // Build an inverted map from verb → plugin name
+        Self.buildPluginActionInfos(
+            dynamicHandlers: dynamicHandlers,
+            dynamicMetadata: dynamicMetadata,
+            pluginVerbs: pluginVerbs
+        )
+    }
+
+    // MARK: - Nonisolated Read Mirror
+    //
+    // Synchronous, lock-protected mirror of the inspection data above. Lets
+    // sync callers (LSP handlers, AROCatalog snapshots) read action metadata
+    // without going through `await`, which is what previously triggered the
+    // `Task { … }; semaphore.wait()` deadlock that starved the cooperative
+    // thread pool under `swift test --parallel`.
+    //
+    // The mirror is refreshed inside every mutating actor method, so async
+    // writers and sync readers stay consistent.
+
+    private static let _mirrorLock = NSLock()
+    nonisolated(unsafe) private static var _mirrorBuiltIns: [BuiltInActionInfo] = []
+    nonisolated(unsafe) private static var _mirrorPlugins: [PluginActionInfo] = []
+
+    /// Push the actor's current state into the read mirror.
+    /// Called from inside actor-isolated mutators.
+    private func refreshMirror() {
+        Self.publishMirror(
+            actions: actions,
+            dynamicHandlers: dynamicHandlers,
+            dynamicMetadata: dynamicMetadata,
+            pluginVerbs: pluginVerbs
+        )
+    }
+
+    private static func publishMirror(
+        actions: [String: any ActionImplementation.Type],
+        dynamicHandlers: [String: DynamicActionHandler],
+        dynamicMetadata: [String: PluginActionMetadata],
+        pluginVerbs: [String: Set<String>]
+    ) {
+        let builtIns = buildBuiltInActionInfos(actions: actions)
+        let plugins = buildPluginActionInfos(
+            dynamicHandlers: dynamicHandlers,
+            dynamicMetadata: dynamicMetadata,
+            pluginVerbs: pluginVerbs
+        )
+        _mirrorLock.lock()
+        _mirrorBuiltIns = builtIns
+        _mirrorPlugins = plugins
+        _mirrorLock.unlock()
+    }
+
+    private static func buildBuiltInActionInfos(
+        actions: [String: any ActionImplementation.Type]
+    ) -> [BuiltInActionInfo] {
+        var seen: Set<ObjectIdentifier> = []
+        var result: [BuiltInActionInfo] = []
+        for actionType in actions.values {
+            let id = ObjectIdentifier(actionType)
+            guard seen.insert(id).inserted else { continue }
+            let name = String(describing: actionType)
+                .replacingOccurrences(of: "Action", with: "")
+            let preps = actionType.validPrepositions.map { $0.rawValue }.sorted()
+            result.append(BuiltInActionInfo(
+                name: name,
+                role: actionType.role,
+                verbs: actionType.verbs.sorted(),
+                prepositions: preps
+            ))
+        }
+        return result.sorted { $0.name < $1.name }
+    }
+
+    private static func buildPluginActionInfos(
+        dynamicHandlers: [String: DynamicActionHandler],
+        dynamicMetadata: [String: PluginActionMetadata],
+        pluginVerbs: [String: Set<String>]
+    ) -> [PluginActionInfo] {
         var verbToPlugin: [String: String] = [:]
         for (plugin, verbs) in pluginVerbs {
             for verb in verbs {
                 verbToPlugin[verb] = plugin
             }
         }
-
         return dynamicHandlers.keys.sorted().map { verb in
             PluginActionInfo(
                 verb: verb,
@@ -298,6 +370,26 @@ public actor ActionRegistry {
                 metadata: dynamicMetadata[verb]
             )
         }
+    }
+
+    /// Synchronous, nonisolated snapshot of `allBuiltInActionInfos`.
+    /// Safe to call from any context including the cooperative thread pool —
+    /// reads are lock-protected, no actor hop required.
+    public nonisolated static var snapshotBuiltInActionInfos: [BuiltInActionInfo] {
+        // Force the singleton's lazy init so the mirror is populated even when
+        // a sync caller is the very first to touch the registry.
+        _ = ActionRegistry.shared
+        _mirrorLock.lock()
+        defer { _mirrorLock.unlock() }
+        return _mirrorBuiltIns
+    }
+
+    /// Synchronous, nonisolated snapshot of `allPluginActionInfos`.
+    public nonisolated static var snapshotPluginActionInfos: [PluginActionInfo] {
+        _ = ActionRegistry.shared
+        _mirrorLock.lock()
+        defer { _mirrorLock.unlock() }
+        return _mirrorPlugins
     }
 }
 

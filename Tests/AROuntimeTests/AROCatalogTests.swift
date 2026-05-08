@@ -14,7 +14,7 @@ struct AROCatalogTests {
 
     @Test("actions() exposes all built-in roles")
     func actionsExposesAllRoles() async {
-        let entries = await AROCatalog.shared.actions()
+        let entries = AROCatalog.shared.actions()
 
         // Built-ins should populate every role at least once.
         let roles = Set(entries.compactMap { entry -> ActionRole? in
@@ -30,7 +30,7 @@ struct AROCatalogTests {
 
     @Test("actions(role:) filters by semantic role")
     func actionsRoleFilter() async {
-        let response = await AROCatalog.shared.actions(role: .response)
+        let response = AROCatalog.shared.actions(role: .response)
         // Only RESPONSE-class verbs should be present.
         #expect(response.allSatisfy { $0.role == .response })
         // "Return" is canonically RESPONSE.
@@ -41,7 +41,7 @@ struct AROCatalogTests {
 
     @Test("Built-in actions carry descriptions")
     func builtInActionsHaveDescriptions() async {
-        let entries = await AROCatalog.shared.actions()
+        let entries = AROCatalog.shared.actions()
         let extract = entries.first { $0.verb.lowercased() == "extract" }
         #expect(extract?.description != nil)
     }
@@ -50,7 +50,7 @@ struct AROCatalogTests {
 
     @Test("qualifiers() returns built-in qualifiers")
     func qualifiersReturnsBuiltIns() async {
-        let entries = await AROCatalog.shared.qualifiers()
+        let entries = AROCatalog.shared.qualifiers()
         // BuiltInQualifierHost registers these; the catalog flattens namespace == "".
         let names = entries.map { $0.qualifier }
         #expect(names.contains("uppercase"))
@@ -60,7 +60,7 @@ struct AROCatalogTests {
 
     @Test("Built-in qualifiers have empty namespace")
     func builtInQualifiersAreUnnamespaced() async {
-        let entries = await AROCatalog.shared.qualifiers()
+        let entries = AROCatalog.shared.qualifiers()
         let upper = entries.first { $0.qualifier == "uppercase" }
         #expect(upper?.namespace == "")
         #expect(upper?.fullName == "uppercase")
@@ -93,7 +93,7 @@ struct AROCatalogTests {
             Task { await ActionRegistry.shared.unregisterPlugin("_catalog_test_plugin_") }
         }
 
-        let entries = await AROCatalog.shared.actions()
+        let entries = AROCatalog.shared.actions()
         let entry = entries.first { $0.verb.lowercased() == verb.lowercased() }
         #expect(entry != nil)
         #expect(entry?.role == .own)
@@ -132,7 +132,7 @@ struct AROCatalogTests {
             if case .builtin = $0.origin { return true }
             return false
         }.count
-        let asyncBuiltInCount = (await AROCatalog.shared.actions()).filter {
+        let asyncBuiltInCount = (AROCatalog.shared.actions()).filter {
             if case .builtin = $0.origin { return true }
             return false
         }.count

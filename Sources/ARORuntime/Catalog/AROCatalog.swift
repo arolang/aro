@@ -157,11 +157,19 @@ public actor AROCatalog {
 
     /// All known actions, optionally filtered by role.
     /// Built-ins come first, plugin actions follow, both sorted by name.
-    public func actions(role: ActionRole? = nil) async -> [CatalogActionEntry] {
+    ///
+    /// `nonisolated` so sync callers (LSP handlers, snapshot helpers) can
+    /// invoke this without spawning a Task and blocking on a semaphore — the
+    /// pattern that previously deadlocked the cooperative thread pool under
+    /// `swift test --parallel`. The underlying registries are themselves
+    /// thread-safe (`ActionRegistry` exposes a lock-protected mirror;
+    /// `QualifierRegistry` is a sync class), so we don't need actor isolation
+    /// here.
+    public nonisolated func actions(role: ActionRole? = nil) -> [CatalogActionEntry] {
         var entries: [CatalogActionEntry] = []
 
         // Built-ins from ActionRegistry, decorated with descriptions
-        let builtIns = await ActionRegistry.shared.allBuiltInActionInfos
+        let builtIns = ActionRegistry.snapshotBuiltInActionInfos
         for info in builtIns {
             // Each unique action type may register multiple verbs. Surface every
             // verb so completion can suggest "Retrieve" and "Fetch" separately
@@ -180,7 +188,7 @@ public actor AROCatalog {
         }
 
         // Plugin actions from ActionRegistry
-        let pluginInfos = await ActionRegistry.shared.allPluginActionInfos
+        let pluginInfos = ActionRegistry.snapshotPluginActionInfos
         for info in pluginInfos {
             // Skip namespaced duplicates ("hash.hash") — keep only the plain verb
             // since the catalog already records the handle separately.
@@ -206,7 +214,10 @@ public actor AROCatalog {
 
     /// All known qualifiers, optionally filtered by namespace.
     /// `namespace == nil` returns everything; pass `""` for built-ins only.
-    public func qualifiers(namespace: String? = nil) -> [CatalogQualifierEntry] {
+    ///
+    /// `nonisolated` for the same reason as `actions(role:)`: only reads from
+    /// the thread-safe `QualifierRegistry`, so no actor hop is required.
+    public nonisolated func qualifiers(namespace: String? = nil) -> [CatalogQualifierEntry] {
         var entries: [CatalogQualifierEntry] = []
 
         // QualifierRegistry already knows about both built-ins (registered as
@@ -252,37 +263,20 @@ public actor AROCatalog {
 
     // MARK: - Synchronous Snapshots
     //
-    // The LSP runs request handlers off a sync, blocking read loop and can't
-    // `await` the actor. These helpers spin up a transient task and block via
-    // a semaphore so callers stuck on a sync boundary still get a snapshot.
-    // Use sparingly — async callers should prefer `actions()` / `qualifiers()`.
+    // Direct nonisolated reads. The previous implementation spun a Task and
+    // blocked the caller on a `DispatchSemaphore` — under `swift test
+    // --parallel`, that pattern starved the cooperative thread pool and
+    // deadlocked the entire test run. Now that `actions()` / `qualifiers()`
+    // are themselves `nonisolated`, snapshots are plain function calls.
 
-    /// Synchronous snapshot of `actions(role:)`. Blocks the caller on a
-    /// `DispatchSemaphore` while the actor materialises the list.
+    /// Synchronous snapshot of `actions(role:)`.
     public nonisolated static func actionsSnapshot(role: ActionRole? = nil) -> [CatalogActionEntry] {
-        let box = SnapshotBox<[CatalogActionEntry]>()
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            let entries = await AROCatalog.shared.actions(role: role)
-            box.set(entries)
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return box.get() ?? []
+        AROCatalog.shared.actions(role: role)
     }
 
     /// Synchronous snapshot of `qualifiers(namespace:)`.
-    /// QualifierRegistry is not actor-isolated, so this is a direct call.
     public nonisolated static func qualifiersSnapshot(namespace: String? = nil) -> [CatalogQualifierEntry] {
-        let box = SnapshotBox<[CatalogQualifierEntry]>()
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            let entries = await AROCatalog.shared.qualifiers(namespace: namespace)
-            box.set(entries)
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return box.get() ?? []
+        AROCatalog.shared.qualifiers(namespace: namespace)
     }
 
     // MARK: - Helpers
@@ -293,25 +287,6 @@ public actor AROCatalog {
     private static func displayCase(_ verb: String) -> String {
         guard let first = verb.first else { return verb }
         return first.uppercased() + verb.dropFirst()
-    }
-}
-
-// MARK: - Snapshot Box (sync/async bridge)
-
-/// Thread-safe holder used by `actionsSnapshot` / `qualifiersSnapshot` to
-/// hand a Sendable result back from a Task to the blocking caller.
-final class SnapshotBox<T: Sendable>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: T?
-
-    func set(_ v: T) {
-        lock.lock(); defer { lock.unlock() }
-        value = v
-    }
-
-    func get() -> T? {
-        lock.lock(); defer { lock.unlock() }
-        return value
     }
 }
 
