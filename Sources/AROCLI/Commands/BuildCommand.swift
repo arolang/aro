@@ -181,24 +181,35 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Determine output paths
-        let baseName = output ?? appConfig.rootPath.lastPathComponent
+        // Determine output paths.
+        // --output may be a bare name (resolved against rootPath, in-place) or an
+        // absolute/relative path (out-of-place). Intermediate .ll/.o always stay in
+        // the workspace's .build dir keyed by the binary's filename, never the full
+        // path — otherwise an absolute --output produces nested junk dirs.
+        let outputArg = output ?? appConfig.rootPath.lastPathComponent
         let buildDir = appConfig.rootPath.appendingPathComponent(".build")
-        let llPath = buildDir.appendingPathComponent("\(baseName).ll")
-        let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
-        // Ensure binary path is absolute and standardized
+
         // On Windows, executables need .exe extension
         #if os(Windows)
-        let binaryName = baseName + ".exe"
+        let outputArgWithExt = outputArg.hasSuffix(".exe") ? outputArg : outputArg + ".exe"
         #else
-        let binaryName = baseName
+        let outputArgWithExt = outputArg
         #endif
-        let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
+
+        let binaryPath = URL(fileURLWithPath: outputArgWithExt, relativeTo: appConfig.rootPath)
+            .standardizedFileURL
+        let intermediateBaseName = binaryPath.deletingPathExtension().lastPathComponent
+        let llPath = buildDir.appendingPathComponent("\(intermediateBaseName).ll")
+        let objectPath = buildDir.appendingPathComponent("\(intermediateBaseName).o").path
 
         AROLogger.debug("Binary path: \(binaryPath.path)", subsystem: "build")
 
-        // Create build directory
+        // Create build directory and binary parent dir (needed when --output points outside rootPath)
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: binaryPath.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
 
         // Pre-compile managed plugins for inclusion in the binary.
         // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
@@ -365,13 +376,40 @@ struct BuildCommand: AsyncParsableCommand {
                         }
                     }
 
-                    // Strategy 2: Find .o from Rust cargo build
+                    // Strategy 2: Find .o from Rust cargo build.
+                    // Cargo can be in plugin root or in src/, and most plugins ship a
+                    // cdylib-only crate-type. Static linking needs a libfoo.a, so if no
+                    // staticlib is present we run `cargo rustc --crate-type=staticlib`
+                    // ourselves — Rust users no longer need to add `staticlib` manually.
                     if objectFiles.isEmpty {
-                        let cargoTarget = sourcePluginDir.appendingPathComponent("target/release")
-                        if let contents = try? FileManager.default.contentsOfDirectory(at: cargoTarget, includingPropertiesForKeys: nil) {
-                            // Rust produces a .a in target/release/
-                            if let aFile = contents.first(where: { $0.pathExtension == "a" && $0.lastPathComponent.hasPrefix("lib") }) {
+                        let cargoCandidates: [(project: URL, target: URL)] = [
+                            (sourcePluginDir, sourcePluginDir.appendingPathComponent("target/release")),
+                            (sourcePluginDir.appendingPathComponent("src"),
+                             sourcePluginDir.appendingPathComponent("src/target/release")),
+                        ]
+
+                        for candidate in cargoCandidates {
+                            let cargoToml = candidate.project.appendingPathComponent("Cargo.toml")
+                            guard FileManager.default.fileExists(atPath: cargoToml.path) else { continue }
+
+                            var aFile = findRustStaticLib(in: candidate.target)
+                            if aFile == nil {
+                                if verbose {
+                                    print("  No staticlib for '\(pluginName)', running cargo rustc --crate-type=staticlib")
+                                }
+                                do {
+                                    try produceRustStaticLib(at: candidate.project, verbose: verbose)
+                                } catch {
+                                    print("Error: cargo failed to produce staticlib for '\(pluginName)': \(error)")
+                                    print("  Hint: ensure cargo is on PATH and the crate compiles cleanly.")
+                                    throw ExitCode.failure
+                                }
+                                aFile = findRustStaticLib(in: candidate.target)
+                            }
+
+                            if let aFile {
                                 objectFiles = try symbolRenamer.extractObjectFiles(from: aFile.path, to: pluginWorkDir.path)
+                                break
                             }
                         }
                     }
@@ -410,8 +448,12 @@ struct BuildCommand: AsyncParsableCommand {
                     }
 
                     if objectFiles.isEmpty {
-                        if verbose { print("  Warning: No object files found for plugin '\(pluginName)', skipping") }
-                        continue
+                        print("Error: No object files found for plugin '\(pluginName)' — cannot statically link.")
+                        print("  Static linking requires .o files:")
+                        print("    • Rust:  cargo must be installed and the crate must build (`cargo rustc --crate-type=staticlib` is invoked automatically)")
+                        print("    • Swift: use a Package.swift so SPM produces .o files")
+                        print("    • C:     place .c files in the plugin's src/ or root directory")
+                        throw ExitCode.failure
                     }
 
                     // Rename plugin symbols to avoid collisions
@@ -425,8 +467,12 @@ struct BuildCommand: AsyncParsableCommand {
                     let availableSymbols = try symbolRenamer.discoverSymbols(in: renamedFiles, pluginName: pluginName)
 
                     if !availableSymbols.contains("aro_plugin_info") {
-                        if verbose { print("  Warning: Plugin '\(pluginName)' missing aro_plugin_info, skipping static link") }
-                        continue
+                        print("Error: Plugin '\(pluginName)' is missing the aro_plugin_info symbol — cannot statically link.")
+                        print("  Define aro_plugin_info() with C ABI:")
+                        print("    • Rust:  #[no_mangle] pub extern \"C\" fn aro_plugin_info() -> *mut c_char")
+                        print("    • C/C++: use the ARO_PLUGIN(...) macro from aro_plugin_sdk.h")
+                        print("    • Swift: apply @AROExport to your AROPlugin definition")
+                        throw ExitCode.failure
                     }
 
                     staticPluginInfos.append(StaticPluginInfo(
@@ -446,6 +492,9 @@ struct BuildCommand: AsyncParsableCommand {
                         print("  Static plugin '\(pluginName)' (\(totalSize) bytes, \(availableSymbols.count) symbols)")
                     }
                 }
+            } catch let exit as ExitCode {
+                // Plugin baking errors raised inside the loop should abort the build.
+                throw exit
             } catch {
                 print("Warning: Failed to compile managed plugins: \(error)")
             }
@@ -791,6 +840,23 @@ struct BuildCommand: AsyncParsableCommand {
             print("  \(embeddedPlugins.count) managed plugin(s) embedded in binary")
         }
 
+        // All managed plugins are now baked into the binary (statically linked or
+        // embedded). For out-of-place builds, drop the next-to-binary Plugins/ —
+        // shipping it duplicates the bake and can let the runtime re-invoke
+        // cargo/swift on a missing artifact. For in-place builds (source == output)
+        // we leave the user's source tree alone.
+        do {
+            let sourceResolved = sourceManagedPluginsDirEarly.standardizedFileURL.path
+            let outputResolved = outputManagedPluginsDirEarly.standardizedFileURL.path
+            if sourceResolved != outputResolved,
+               FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
+                try? FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
+                if verbose {
+                    print("  Cleaned next-to-binary Plugins/ (all plugins baked into binary)")
+                }
+            }
+        }
+
         let elapsed = Date().timeIntervalSince(startTime)
 
         AROLogger.debug("Binary created successfully", subsystem: "build")
@@ -1073,6 +1139,68 @@ struct BuildCommand: AsyncParsableCommand {
             featureSets: productionFeatureSets,
             globalRegistry: globalRegistry
         )
+    }
+
+    /// Locate a Rust staticlib (lib*.a) inside cargo's target/release directory.
+    private func findRustStaticLib(in dir: URL) -> URL? {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        return contents.first { $0.pathExtension == "a" && $0.lastPathComponent.hasPrefix("lib") }
+    }
+
+    /// Run `cargo rustc --release --crate-type=staticlib` to produce a libfoo.a.
+    /// Most ARO Rust plugins only declare `cdylib`, but static linking into the
+    /// host binary needs a staticlib — we build it transparently rather than
+    /// asking every plugin author to edit their Cargo.toml.
+    private func produceRustStaticLib(at projectDir: URL, verbose: Bool) throws {
+        let cargoCandidates = [
+            ProcessInfo.processInfo.environment["CARGO"],
+            "/root/.cargo/bin/cargo",
+            "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
+            "/usr/local/cargo/bin/cargo",
+            "/opt/homebrew/bin/cargo",
+            "/usr/local/bin/cargo",
+            "/usr/bin/cargo",
+        ].compactMap { $0 }
+
+        guard let cargoPath = cargoCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            throw StaticLibBuildError.cargoNotFound
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: cargoPath)
+        process.arguments = ["rustc", "--release", "--crate-type=staticlib"]
+        process.currentDirectoryURL = projectDir
+
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        process.standardOutput = verbose ? FileHandle.standardOutput : FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: errorData, encoding: .utf8) ?? "unknown error"
+            throw StaticLibBuildError.cargoFailed(message)
+        }
+    }
+
+    private enum StaticLibBuildError: Error, CustomStringConvertible {
+        case cargoNotFound
+        case cargoFailed(String)
+
+        var description: String {
+            switch self {
+            case .cargoNotFound:
+                return "cargo not found — install Rust to build Rust plugins, or set $CARGO"
+            case .cargoFailed(let msg):
+                return "cargo rustc --crate-type=staticlib failed: \(msg)"
+            }
+        }
     }
 
     #if os(macOS)
