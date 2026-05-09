@@ -66,7 +66,7 @@ public final class UserDefinedActionHost: @unchecked Sendable {
             let verb = "Application.\(name)"
             let captured = analyzed
             let capturedHost = self
-            await actionRegistryRef.registerDynamic(
+            actionRegistryRef.registerDynamic(
                 verb: verb,
                 handler: { result, object, context in
                     try await capturedHost.invoke(
@@ -84,7 +84,7 @@ public final class UserDefinedActionHost: @unchecked Sendable {
     /// Unregister every user-defined action. Used when reloading a program
     /// (currently only by tests) so a stale handler can't outlive its program.
     public func unregister() async {
-        await actionRegistryRef.unregisterPlugin(Self.pluginName)
+        actionRegistryRef.unregisterPlugin(Self.pluginName)
     }
 
     // MARK: - Invocation

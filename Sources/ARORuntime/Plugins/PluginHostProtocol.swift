@@ -154,11 +154,12 @@ public enum PluginInfoParser {
         return (names: actionNames, verbsMap: verbsMap, metadataMap: metadataMap)
     }
 
-    /// Register action verbs with the global `ActionRegistry` using
-    /// synchronised dispatch (semaphore pattern).
+    /// Register action verbs with the global `ActionRegistry`.
     ///
-    /// Usable by any code that needs synchronous action registration,
-    /// including `PluginLoader`.
+    /// `ActionRegistry` is now a lock-protected `final class`, so registration is a
+    /// straight sync call — no `Task { await … }; semaphore.wait()` bridge required.
+    /// (The previous bridge starved the cooperative thread pool under
+    /// `swift test --parallel`.)
     public static func syncRegisterActions(
         _ entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)]
     ) {
@@ -176,26 +177,13 @@ public enum PluginInfoParser {
             handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
         )]
     ) {
-        guard !entries.isEmpty else { return }
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var count = 0
-
         for entry in entries {
-            count += 1
-            Task {
-                await ActionRegistry.shared.registerDynamic(
-                    verb: entry.verb,
-                    handler: entry.handler,
-                    pluginName: entry.pluginName,
-                    metadata: entry.metadata
-                )
-                semaphore.signal()
-            }
-        }
-
-        for _ in 0..<count {
-            semaphore.wait()
+            ActionRegistry.shared.registerDynamic(
+                verb: entry.verb,
+                handler: entry.handler,
+                pluginName: entry.pluginName,
+                metadata: entry.metadata
+            )
         }
     }
 
@@ -293,14 +281,7 @@ extension PluginHostProtocol {
     /// Unregister this plugin from `ActionRegistry` and `QualifierRegistry`,
     /// then clear local qualifier registrations.
     public func unloadFromRegistries() {
-        let semaphore = DispatchSemaphore(value: 0)
-        let name = pluginName
-        Task {
-            await ActionRegistry.shared.unregisterPlugin(name)
-            semaphore.signal()
-        }
-        semaphore.wait()
-
+        ActionRegistry.shared.unregisterPlugin(pluginName)
         QualifierRegistry.shared.unregisterPlugin(pluginName)
         qualifierRegistrations.removeAll()
     }

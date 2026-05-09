@@ -310,15 +310,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     }
 
     /// Register action stubs in the ActionRegistry for manifest-declared actions.
+    ///
+    /// `ActionRegistry.registerDynamic` is now a sync call (lock-protected class),
+    /// so this is a straight loop. The previous `Task { await … }; semaphore.wait()`
+    /// bridge starved the cooperative thread pool under `swift test --parallel`.
     private func registerLazyActionStubs(
         pluginName: String,
         effectiveHandle: String?,
         actions: [ManifestActionEntry],
         isNative: Bool
     ) {
-        var semaphoreCount = 0
-        let semaphore = DispatchSemaphore(value: 0)
-
         for action in actions {
             let actionVerbs = action.verbs
 
@@ -346,36 +347,28 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     let capturedLoader = self
                     let capturedMetadata = metadata
 
-                    semaphoreCount += 1
-                    Task {
-                        await ActionRegistry.shared.registerDynamic(
-                            verb: registeredVerb,
-                            handler: { result, object, context in
-                                // Lazy-load on first invocation
-                                let input = Self.buildPluginInput(result: result, object: object, context: context)
-                                if isNative {
-                                    let host = try capturedLoader.ensureNativePluginLoaded(pluginName: capturedPlugin)
-                                    let output = try host.execute(action: capturedVerb, input: input)
-                                    context.bind(result.base, value: output)
-                                    return output
-                                } else {
-                                    let host = try capturedLoader.ensurePythonPluginLoaded(pluginName: capturedPlugin)
-                                    let output = try host.execute(action: capturedVerb, input: input)
-                                    context.bind(result.base, value: output)
-                                    return output
-                                }
-                            },
-                            pluginName: capturedPlugin,
-                            metadata: capturedMetadata
-                        )
-                        semaphore.signal()
-                    }
+                    ActionRegistry.shared.registerDynamic(
+                        verb: registeredVerb,
+                        handler: { result, object, context in
+                            // Lazy-load on first invocation
+                            let input = Self.buildPluginInput(result: result, object: object, context: context)
+                            if isNative {
+                                let host = try capturedLoader.ensureNativePluginLoaded(pluginName: capturedPlugin)
+                                let output = try host.execute(action: capturedVerb, input: input)
+                                context.bind(result.base, value: output)
+                                return output
+                            } else {
+                                let host = try capturedLoader.ensurePythonPluginLoaded(pluginName: capturedPlugin)
+                                let output = try host.execute(action: capturedVerb, input: input)
+                                context.bind(result.base, value: output)
+                                return output
+                            }
+                        },
+                        pluginName: capturedPlugin,
+                        metadata: capturedMetadata
+                    )
                 }
             }
-        }
-
-        for _ in 0..<semaphoreCount {
-            semaphore.wait()
         }
     }
 
