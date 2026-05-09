@@ -72,7 +72,12 @@ test:
       Cflags: -I${includedir}
       PKGCONFIG
   script:
-    - swift test
+    # `--num-workers 2` mirrors the GitHub Actions config and splits the 1700+
+    # tests across two executor processes. Bare `swift test` runs them all in
+    # one process; on this Kubernetes runner that consistently hangs whatever
+    # cooperative-pool budget the pod has, while `--num-workers 2` completes
+    # in a few minutes.
+    - swift test --parallel --num-workers 2
   tags:
     - spencer
 
