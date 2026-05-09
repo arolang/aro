@@ -322,6 +322,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         for action in actions {
             let actionVerbs = action.verbs
 
+            // Build metadata once per manifest action — registered against every
+            // verb (both plain and namespaced) so the catalog can answer hover,
+            // completion, and discovery queries without re-parsing the manifest.
+            let metadata = ActionRegistry.PluginActionMetadata(
+                role: parseActionRole(action.role),
+                prepositions: action.prepositions ?? [],
+                description: action.description,
+                handle: effectiveHandle,
+                since: action.since
+            )
 
             for verb in actionVerbs {
                 // Register both plain verb and namespaced verb (e.g. "hash" and "Hash.hash")
@@ -334,24 +344,30 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     let capturedVerb = verb
                     let capturedPlugin = pluginName
                     let capturedLoader = self
+                    let capturedMetadata = metadata
 
                     semaphoreCount += 1
                     Task {
-                        await ActionRegistry.shared.registerDynamic(verb: registeredVerb) { result, object, context in
-                            // Lazy-load on first invocation
-                            let input = Self.buildPluginInput(result: result, object: object, context: context)
-                            if isNative {
-                                let host = try capturedLoader.ensureNativePluginLoaded(pluginName: capturedPlugin)
-                                let output = try host.execute(action: capturedVerb, input: input)
-                                context.bind(result.base, value: output)
-                                return output
-                            } else {
-                                let host = try capturedLoader.ensurePythonPluginLoaded(pluginName: capturedPlugin)
-                                let output = try host.execute(action: capturedVerb, input: input)
-                                context.bind(result.base, value: output)
-                                return output
-                            }
-                        }
+                        await ActionRegistry.shared.registerDynamic(
+                            verb: registeredVerb,
+                            handler: { result, object, context in
+                                // Lazy-load on first invocation
+                                let input = Self.buildPluginInput(result: result, object: object, context: context)
+                                if isNative {
+                                    let host = try capturedLoader.ensureNativePluginLoaded(pluginName: capturedPlugin)
+                                    let output = try host.execute(action: capturedVerb, input: input)
+                                    context.bind(result.base, value: output)
+                                    return output
+                                } else {
+                                    let host = try capturedLoader.ensurePythonPluginLoaded(pluginName: capturedPlugin)
+                                    let output = try host.execute(action: capturedVerb, input: input)
+                                    context.bind(result.base, value: output)
+                                    return output
+                                }
+                            },
+                            pluginName: capturedPlugin,
+                            metadata: capturedMetadata
+                        )
                         semaphore.signal()
                     }
                 }
@@ -361,6 +377,14 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         for _ in 0..<semaphoreCount {
             semaphore.wait()
         }
+    }
+
+    /// Map a manifest role string ("own", "request", …) to `ActionRole`.
+    /// Falls back to `.own` for unknown values, matching the action runtime
+    /// default for plugin-supplied verbs.
+    private func parseActionRole(_ raw: String?) -> ActionRole {
+        guard let raw = raw?.lowercased() else { return .own }
+        return ActionRole(rawValue: raw) ?? .own
     }
 
     // MARK: - Lazy Load Execution
@@ -1073,15 +1097,15 @@ public struct ManifestActionEntry: Codable, Sendable {
     /// Canonical action name (e.g. "Hash", "Greet").
     public let name: String
     /// Verbs that invoke this action (e.g. ["hash", "digest"]).
-    let verbs: [String]
+    public let verbs: [String]
     /// Semantic role ("own", "request", "response", "export"). Optional.
-    let role: String?
+    public let role: String?
     /// Valid prepositions ("from", "with", …). Optional.
-    let prepositions: [String]?
+    public let prepositions: [String]?
     /// Human-readable description. Optional.
-    let description: String?
+    public let description: String?
     /// Version when this action was introduced. Optional.
-    let since: String?
+    public let since: String?
 }
 
 public struct UnifiedBuildConfig: Codable, Sendable {

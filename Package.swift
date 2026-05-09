@@ -236,6 +236,7 @@ let package = Package(
                 name: "AROLSP",
                 dependencies: [
                     "AROParser",
+                    "ARORuntime",
                 ] + lspTargetDependencies,
                 path: "Sources/AROLSP"
             ),

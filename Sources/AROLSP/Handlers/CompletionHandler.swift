@@ -6,6 +6,7 @@
 #if !os(Windows)
 import Foundation
 import AROParser
+import ARORuntime
 import LanguageServerProtocol
 
 /// Handles textDocument/completion requests
@@ -56,98 +57,28 @@ public struct CompletionHandler: Sendable {
 
     // MARK: - Action Completions
 
+    /// Build action completion items from the AROCatalog snapshot.
+    /// The catalog merges built-ins with plugin-supplied actions, so any plugin
+    /// loaded by the LSP at workspace init shows up automatically.
     private func actionCompletions() -> [[String: Any]] {
-        let actions: [(verb: String, role: String, detail: String)] = [
-            // REQUEST actions
-            ("Extract", "REQUEST", "Extract data from external source"),
-            ("Parse", "REQUEST", "Parse structured data"),
-            ("Retrieve", "REQUEST", "Retrieve from data store"),
-            ("Fetch", "REQUEST", "Fetch from remote source"),
-            ("Receive", "REQUEST", "Receive data from socket or event stream"),
-            ("Accept", "REQUEST", "Accept input"),
-            ("Read", "REQUEST", "Read file contents"),
-            ("Request", "REQUEST", "Make an HTTP request"),
-            ("List", "REQUEST", "List directory contents"),
-            ("Stat", "REQUEST", "Get file metadata"),
-            ("Exists", "REQUEST", "Check if file exists"),
-            ("Prompt", "REQUEST", "Prompt user for terminal input"),
-            ("Select", "REQUEST", "Present a terminal selection menu"),
-
-            // OWN actions
-            ("Create", "OWN", "Create new data"),
-            ("Compute", "OWN", "Compute derived value"),
-            ("Validate", "OWN", "Validate data"),
-            ("Compare", "OWN", "Compare values"),
-            ("Transform", "OWN", "Transform data structure"),
-            ("Update", "OWN", "Update or modify a value"),
-            ("Sort", "OWN", "Sort a collection"),
-            ("Set", "OWN", "Set a value"),
-            ("Merge", "OWN", "Merge data"),
-            ("Delete", "OWN", "Delete or remove data"),
-            ("Filter", "OWN", "Filter collection"),
-            ("Match", "OWN", "Match pattern"),
-            ("Split", "OWN", "Split string by delimiter or regex"),
-            ("Join", "OWN", "Join collection elements into a string"),
-            ("Map", "OWN", "Transform each element of a collection"),
-            ("Reduce", "OWN", "Reduce a collection to a single value"),
-            ("Group", "OWN", "Group collection by field value"),
-            ("Copy", "OWN", "Copy file"),
-            ("Move", "OWN", "Move file"),
-            ("Append", "OWN", "Append to file or collection"),
-            ("Execute", "OWN", "Execute a shell command"),
-            ("Call", "OWN", "Call an external service or plugin action"),
-            ("ParseHtml", "OWN", "Parse HTML into structured data"),
-            ("ParseLinkHeader", "OWN", "Parse Link header for pagination"),
-            ("Accept", "OWN", "Accept a state transition"),
-            ("Clear", "OWN", "Clear the terminal screen"),
-
-            // RESPONSE actions
-            ("Return", "RESPONSE", "Return result"),
-            ("Throw", "RESPONSE", "Throw error"),
-            ("Broadcast", "RESPONSE", "Broadcast to all socket clients"),
-
-            // EXPORT actions
-            ("Send", "EXPORT", "Send to external system"),
-            ("Log", "EXPORT", "Log message"),
-            ("Store", "EXPORT", "Store to data store"),
-            ("Write", "EXPORT", "Write to file"),
-            ("Emit", "EXPORT", "Emit event"),
-            ("Publish", "EXPORT", "Publish symbol globally"),
-            ("Notify", "EXPORT", "Notify a recipient with a message"),
-
-            // EXPORT/OWN actions
-            ("Stream", "EXPORT", "Stream data incrementally"),
-            ("Render", "OWN", "Render a Mustache-style template"),
-
-            // SERVER actions
-            ("Start", "SERVER", "Start a service"),
-            ("Stop", "SERVER", "Stop a service"),
-            ("Keepalive", "SERVER", "Keep application running"),
-            ("WaitForEvents", "SERVER", "Suspend until events are processed"),
-            ("Schedule", "SERVER", "Schedule a recurring action"),
-            ("Sleep", "SERVER", "Pause execution for a duration"),
-            ("Listen", "SERVER", "Listen on a socket port"),
-            ("Connect", "SERVER", "Connect to a socket server"),
-            ("Close", "SERVER", "Close a connection"),
-            ("Make", "SERVER", "Create a directory"),
-            ("Watch", "SERVER", "Watch for file system changes"),
-            ("Configure", "SERVER", "Configure a service"),
-
-            // TEST actions
-            ("Given", "TEST", "Test setup"),
-            ("When", "TEST", "Test action"),
-            ("Then", "TEST", "Test assertion"),
-            ("Assert", "TEST", "Assert condition"),
-        ]
-
-        return actions.map { action in
-            [
-                "label": action.verb,
+        let entries = AROCatalog.actionsSnapshot()
+        return entries.map { entry in
+            let detail = "[\(entry.role.rawValue.uppercased())] \(entry.description ?? "")"
+            var item: [String: Any] = [
+                "label": entry.verb,
                 "kind": 3,  // Function
-                "detail": "[\(action.role)] \(action.detail)",
-                "insertText": "\(action.verb)>",
+                "detail": detail,
+                "insertText": "\(entry.verb)>",
                 "insertTextFormat": 1  // PlainText
             ]
+            // Tag plugin-supplied actions so users see where the verb came from.
+            if case .plugin(let name, _) = entry.origin {
+                item["documentation"] = [
+                    "kind": "markdown",
+                    "value": "From plugin **\(name)**.\n\n\(entry.description ?? "")"
+                ]
+            }
+            return item
         }
     }
 
@@ -175,45 +106,58 @@ public struct CompletionHandler: Sendable {
 
     // MARK: - Qualifier Completions
 
+    /// Build qualifier completion items from the AROCatalog snapshot.
+    /// Built-in qualifiers appear bare (`uppercase`); plugin qualifiers appear
+    /// twice — once bare (`reverse`) and once namespaced (`collections.reverse`).
     private func qualifierCompletions() -> [[String: Any]] {
-        let qualifiers = [
-            ("status", "Return status code"),
-            ("body", "Request/response body"),
-            ("id", "Identifier"),
-            ("data", "Data payload"),
-            ("message", "Message content"),
-            ("error", "Error information"),
-            ("result", "Operation result"),
-            ("config", "Configuration"),
-            // List element specifiers (ARO-0038)
-            ("first", "First element of list"),
-            ("last", "Last element of list"),
+        var items: [[String: Any]] = []
+
+        for entry in AROCatalog.qualifiersSnapshot() {
+            let originLabel: String = {
+                if case .plugin(let name, _) = entry.origin { return " (plugin: \(name))" }
+                return ""
+            }()
+            let detail = (entry.description ?? "qualifier") + originLabel
+
+            // Bare form (e.g. "uppercase" or "reverse")
+            items.append([
+                "label": entry.qualifier,
+                "kind": 10,  // Property
+                "detail": detail,
+                "insertText": " \(entry.qualifier)>",
+                "insertTextFormat": 1
+            ])
+
+            // Namespaced form for plugin qualifiers (e.g. "collections.reverse")
+            if !entry.namespace.isEmpty {
+                items.append([
+                    "label": entry.fullName,
+                    "kind": 10,
+                    "detail": detail,
+                    "insertText": " \(entry.fullName)>",
+                    "insertTextFormat": 1
+                ])
+            }
+        }
+
+        // List element specifiers (ARO-0038) — these aren't true qualifiers in
+        // the registry but show up after `:` in completion contexts.
+        let specifiers: [(String, String)] = [
             ("0", "Last element (reverse index)"),
             ("1", "Second-to-last element"),
             ("2", "Third-to-last element"),
-            // Compute built-in operations (qualifier-as-name)
-            ("length", "String or collection length"),
-            ("count", "Element count"),
-            ("uppercase", "Convert to uppercase"),
-            ("lowercase", "Convert to lowercase"),
-            ("hash", "Hash value"),
-            // Terminal input
-            ("hidden", "Mask input (password entry)"),
-            // ParseHtml specifiers
-            ("markdown", "Convert HTML to Markdown"),
-            ("links", "Extract all hyperlinks"),
-            ("title", "Extract page title"),
         ]
-
-        return qualifiers.map { qualifier in
-            [
-                "label": qualifier.0,
-                "kind": 10,  // Property
-                "detail": qualifier.1,
-                "insertText": " \(qualifier.0)>",
+        for (label, detail) in specifiers {
+            items.append([
+                "label": label,
+                "kind": 10,
+                "detail": detail,
+                "insertText": " \(label)>",
                 "insertTextFormat": 1
-            ]
+            ])
         }
+
+        return items
     }
 
     // MARK: - Member Completions

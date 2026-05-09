@@ -64,6 +64,10 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Maps verb → canonical action name for structured action descriptors (SDK format)
     private var verbToActionName: [String: String] = [:]
 
+    /// Action metadata parsed from `aro_plugin_info()` (SDK format only).
+    /// Keyed by canonical action name; surfaced to ActionRegistry for catalog hover.
+    private var actionMetadataByName: [String: ActionRegistry.PluginActionMetadata] = [:]
+
     /// Qualifier registrations from this plugin
     public var qualifierRegistrations: [QualifierRegistration] = []
 
@@ -143,9 +147,10 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
         let qualifierDescriptors = Self.parseQualifierDescriptors(from: json)
 
         // Parse actions: supports both flat [String] (legacy) and structured [[String: Any]] (SDK)
-        // Python uses a flattened verb list with verb→action mapping for SDK format
+        // Python uses a flattened verb list with verb→action mapping for SDK format.
+        // Also captures per-action metadata so the catalog can serve completion/hover.
         var parsedActions: [String] = []
-        let parsedActionList = Self.parseActionList(from: json)
+        let parsedActionList = PluginInfoParser.parseActionListWithMetadata(from: json)
         if !parsedActionList.verbsMap.isEmpty {
             // SDK format: flatten verbs and build reverse mapping
             for name in parsedActionList.names {
@@ -161,6 +166,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
         } else {
             parsedActions = parsedActionList.names
         }
+        actionMetadataByName = parsedActionList.metadataMap
 
         pluginInfo = PythonPluginInfo(
             name: json["name"] as? String ?? pluginName,
@@ -230,7 +236,12 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        var entries: [(verb: String, pluginName: String, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
+        var entries: [(
+            verb: String,
+            pluginName: String,
+            metadata: ActionRegistry.PluginActionMetadata?,
+            handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
+        )] = []
 
         for action in actions {
             // When a handler namespace is set, register only as "handler.verb".
@@ -242,15 +253,34 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
                 registeredVerb = action
             }
 
+            // Resolve metadata via verbToActionName (since `actions` is a flattened
+            // verb set). Fill in the namespace handle from qualifierNamespace.
+            let canonicalName = verbToActionName[action] ?? action
+            let baseMeta = actionMetadataByName[canonicalName]
+            let metadata = baseMeta.map {
+                ActionRegistry.PluginActionMetadata(
+                    role: $0.role,
+                    prepositions: $0.prepositions,
+                    description: $0.description,
+                    handle: qualifierNamespace,
+                    since: $0.since
+                )
+            }
+
             let wrapper = PythonPluginActionWrapper(
                 pluginName: pluginName,
                 actionName: action,
                 host: self
             )
-            entries.append((verb: registeredVerb, pluginName: pluginName, handler: wrapper.handle))
+            entries.append((
+                verb: registeredVerb,
+                pluginName: pluginName,
+                metadata: metadata,
+                handler: wrapper.handle
+            ))
         }
 
-        syncRegisterActions(entries)
+        syncRegisterActionsWithMetadata(entries)
     }
 
     // MARK: - Unload
