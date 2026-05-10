@@ -8,4 +8,8 @@ skip-on-windows: HTTP server tests not supported on Windows CI
 # Delay between HTTP requests to allow observer events to complete.
 # Bumped from 0.2 → 0.5 because the GitHub macOS runner intermittently
 # dropped one observer's stdout for one event under CPU contention.
-request-delay: 0.5
+# Bumped again from 0.5 → 1.0 after another flake on macOS — three
+# observers each log to the same stdout asynchronously, and 0.5 s is
+# not always enough for all three observers' Tasks to flush before the
+# next HTTP request arrives.
+request-delay: 1.0
