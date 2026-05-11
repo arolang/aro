@@ -109,53 +109,23 @@ test:
   tags:
     - spencer
 
-# Socket-bound tests: AROSocketClient.connect uses blocking poll() inside
-# async functions; the AROWebSocketServer tests want NIO event-loop threads
-# the 1-vCPU pod can't spare. Same tests pass locally and on GitHub.
-# allow_failure so we don't block the pipeline on the runner pod's CPU
-# budget — the surface is still visible in the GitLab UI as red.
-test:sockets:
-  stage: test
-  image: swift:6.2-jammy
-  rules:
-    - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  cache:
-    key:
-      files:
-        - Package.resolved
-      prefix: swift-test
-    paths:
-      - .build/
-    policy: pull-push
-  allow_failure: true
-  timeout: 45m
-  before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq
-    - apt-get install -y -qq llvm-20-dev libzstd-dev
-    - |
-      cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
-      prefix=/usr/lib/llvm-20
-      exec_prefix=${prefix}
-      libdir=${prefix}/lib
-      includedir=${prefix}/include
-
-      Name: LLVM
-      Description: Low-level Virtual Machine compiler framework
-      Version: 20.1
-      Libs: -L${libdir} -lLLVM-20
-      Cflags: -I${includedir}
-      PKGCONFIG
-  script:
-    - swift test --parallel --num-workers 2 --filter "Socket"
-  tags:
-    - spencer
+# Socket / WebSocket / Broadcast tests are NOT run on GitLab.
+#
+# The Kubernetes runner pod (~1–2 vCPUs) gives the Swift cooperative
+# thread pool only 1–2 threads. AROSocketClient.connect calls blocking
+# poll() syscalls from inside async functions, and AROWebSocketServer
+# wants its own NIO event-loop threads. With many concurrent test
+# tasks all suspending on those blocking calls, the pool starves —
+# every test gets to "started" and nothing ever completes (jobs 80535,
+# 80454 timed out at 45m with zero completions).
+#
+# The full socket surface is exercised on GitHub (Linux + macOS) where
+# the runner has enough cores, and locally. Re-enable this job once
+# the runner is sized larger OR the blocking poll() paths are moved
+# to a dedicated executor.
+#
+# The `runtime-sz-no-sockets` shard above already excludes Socket from
+# the runtime test sweep, so this comment is the only marker left.
 
 # =============================================================================
 # Build Stage - Linux Release Build
