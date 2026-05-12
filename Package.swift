@@ -10,6 +10,9 @@ var lspDependencies: [Package.Dependency] = []
 var lspTargetDependencies: [Target.Dependency] = []
 var cliLspDependency: [Target.Dependency] = []
 var compilerLLVMDependency: [Target.Dependency] = []
+var mlxDependencies: [Package.Dependency] = []
+var askMLXTargetDependencies: [Target.Dependency] = []
+var askResources: [Resource] = [.copy("Resources/model-manifest.json")]
 
 #if os(Windows)
 // Windows-specific dependencies
@@ -67,6 +70,23 @@ compilerLLVMDependency = [
 ]
 #endif
 
+// MLX dependencies — macOS Apple Silicon only (Linux uses llama.cpp/CUDA)
+#if os(macOS)
+mlxDependencies = [
+    .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main"),
+    .package(url: "https://github.com/huggingface/swift-transformers.git", from: "0.1.8"),
+]
+askMLXTargetDependencies = [
+    .product(name: "MLXLLM", package: "mlx-swift-lm"),
+    .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+    .product(name: "Transformers", package: "swift-transformers"),
+]
+askResources = [
+    .copy("Resources/model-manifest.json"),
+    .copy("Resources/default.metallib"),
+]
+#endif
+
 // LLVM linker settings - pkg-config needs help finding LLVM
 #if os(macOS)
 import Foundation
@@ -120,7 +140,7 @@ let package = Package(
             targets: ["AROCLI"]
         )
     ],
-    dependencies: platformDependencies + lspDependencies + [
+    dependencies: platformDependencies + lspDependencies + mlxDependencies + [
         // Swift Argument Parser for CLI
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         // Yams for YAML parsing (OpenAPI contracts)
@@ -133,6 +153,13 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: {
+        // AROAsk dependencies (non-Windows)
+        #if !os(Windows)
+        let askDependency: [Target.Dependency] = ["AROAsk"]
+        #else
+        let askDependency: [Target.Dependency] = []
+        #endif
+
         // Core targets available on all platforms
         var targets: [Target] = [
             // Version information library
@@ -186,6 +213,23 @@ let package = Package(
                 ],
                 path: "Sources/AROPackageManager"
             ),
+            // Local LLM integration (aro lm subcommand)
+            .target(
+                name: "AROLM",
+                dependencies: [
+                    "AROParser",
+                    "ARORuntime",
+                    "AROVersion",
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                    .product(name: "Yams", package: "Yams"),
+                    .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "LineNoise", package: "linenoise-swift"),
+                ],
+                path: "Sources/AROLM",
+                resources: [
+                    .copy("Resources/model-manifest.json")
+                ]
+            ),
             // CLI tool
             .executableTarget(
                 name: "AROCLI",
@@ -195,10 +239,11 @@ let package = Package(
                     "ARORuntime",
                     "AROCompiler",
                     "AROPackageManager",
+                    "AROLM",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
                     .product(name: "Logging", package: "swift-log"),
-                ] + cliLspDependency,
+                ] + cliLspDependency + askDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings
             ),
@@ -226,6 +271,12 @@ let package = Package(
                 dependencies: ["AROPackageManager"],
                 path: "Tests/AROPackageManagerTests"
             ),
+            // AROLM tests
+            .testTarget(
+                name: "AROLMTests",
+                dependencies: ["AROLM"],
+                path: "Tests/AROLMTests"
+            ),
         ]
 
         // LSP targets - not available on Windows (no compatible library)
@@ -245,6 +296,23 @@ let package = Package(
                 name: "AROLSPTests",
                 dependencies: ["AROLSP", "AROParser"] + lspTargetDependencies,
                 path: "Tests/AROLSPTests"
+            ),
+            // AROAsk - local LLM coding assistant (`aro ask`)
+            // On macOS: native MLX inference (MLXLLM + Transformers)
+            // On Linux: llama-server (CUDA) or remote endpoint
+            .target(
+                name: "AROAsk",
+                dependencies: [
+                    "AROParser",
+                    "ARORuntime",
+                    "AROVersion",
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                    .product(name: "Yams", package: "Yams"),
+                    .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "LineNoise", package: "linenoise-swift"),
+                ] + askMLXTargetDependencies,
+                path: "Sources/AROAsk",
+                resources: askResources
             ),
         ])
         #endif

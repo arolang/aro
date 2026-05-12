@@ -1,0 +1,20 @@
+---
+title: "ARO by Hallucination"
+subtitle: "A language built by a conversation, and how to continue the conversation yourself"
+author: "ARO Language Project"
+date: "April 2026"
+version: "0.2.0"
+lang: en
+chapters:
+  - Cover.md
+  - Chapter01-Genesis.md
+  - Chapter02-TrainingTheLocal.md
+  - Chapter03-Commands.md
+  - Chapter04-Habits.md
+  - Chapter05-Automation.md
+  - Chapter06-ReclaimingTheLocal.md
+  - Chapter07-ToolCalling.md
+  - Chapter08-TipsAndTricks.md
+  - Chapter09-Examples.md
+  - AppendixA-TrainingPipeline.md
+---

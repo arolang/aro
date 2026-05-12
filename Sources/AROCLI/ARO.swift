@@ -11,6 +11,10 @@ import ARORuntime
 import AROCompiler
 import AROPackageManager
 import AROVersion
+import AROLM
+#if !os(Windows)
+import AROAsk
+#endif
 
 #if canImport(Darwin)
 import Darwin
@@ -106,11 +110,13 @@ struct ARO: AsyncParsableCommand {
             AddCommand.self,
             RemoveCommand.self,
             PluginsCommand.self,
+            LMCommand.self,
             ActionsCommand.self,
         ]
         #if !os(Windows)
         commands.append(LSPCommand.self)
         commands.append(MCPCommand.self)
+        commands.append(AskCommand.self)
         #endif
         return commands
     }
