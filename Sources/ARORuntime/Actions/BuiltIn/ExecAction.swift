@@ -347,24 +347,12 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
 
         // Wait for process exit
         process.waitUntilExit()
-        let didTimeout = false
 
         // Wait for pipe reads to complete
         readGroup.wait()
 
         let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        // Determine result
-        if didTimeout {
-            return ExecResult(
-                error: true,
-                message: "Command timed out after \(config.timeout)ms",
-                output: stdout.isEmpty ? stderr : stdout,
-                exitCode: -1,
-                command: config.command
-            )
-        }
 
         let exitCode = Int(process.terminationStatus)
         let hasError = exitCode != 0

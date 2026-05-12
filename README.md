@@ -114,6 +114,8 @@ Log <list: reverse> to the <console>.
 
 Write plugins in Swift, Rust, C, or Python. Qualifiers work in both interpreter and compiled binary modes.
 
+Plugin actions and qualifiers are also visible to editor tooling — the LSP loads plugins from `<workspace>/Plugins/` on `initialized`, and the MCP server's `aro_actions` / `aro_qualifiers` tools accept a `directory:` argument to surface workspace-specific plugins.
+
 ### Happy Path Philosophy
 
 Write only the success case. Errors are reported automatically in business terms. When a user cannot be retrieved, the message says exactly that.

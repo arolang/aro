@@ -1,0 +1,55 @@
+(* UserDefinedActions — Demonstrates ARO-0081 user-defined actions
+ *
+ * User-defined actions are feature sets whose business activity is `Action`.
+ * They become callable application-wide as `Application.<Name>`, with the
+ * same call-site syntax as plugin actions. Use them to factor reusable
+ * business logic without writing a plugin or going through the event bus.
+ *)
+
+(* DoubleValue — a one-argument action using the `takes` sugar slot.
+ * Callers can invoke it either positionally with `from <n>`
+ * or with an explicit object: `with { number: <n> }`.
+ *)
+(DoubleValue: Action takes <number>) {
+    Extract the <n> from the <input: number>.
+    Compute the <doubled> from <n> * 2.
+    (* Use the object-literal form so the caller can pull a named field
+     * out of the returned record via `<result: doubled>` *)
+    Return an <OK: status> with { doubled: <doubled> }.
+}
+
+(* SumAndDouble — composes another user-defined action.
+ * Demonstrates: object input form, `Application.` recursion-friendly call,
+ * and pulling a single field out of the returned object.
+ *)
+(SumAndDouble: Action) {
+    Extract the <a> from the <input: a>.
+    Extract the <b> from the <input: b>.
+    Compute the <sum> from <a> + <b>.
+
+    Application.DoubleValue the <inner> from <sum>.
+    Extract the <answer> from the <inner: doubled>.
+
+    Return an <OK: status> with { value: <answer> }.
+}
+
+(Application-Start: Custom Actions Demo) {
+    Log "=== User-Defined Actions Demo (ARO-0081) ===" to the <console>.
+
+    (* Sugar form: `from 5` — works because DoubleValue declares `takes <number>` *)
+    Application.DoubleValue the <d> from 5.
+    Extract the <doubled> from the <d: doubled>.
+    Log <doubled> to the <console>.   (* prints 10 *)
+
+    (* Object form: `with { ... }` — always works *)
+    Application.DoubleValue the <second> with { number: 7 }.
+    Extract the <second-doubled> from the <second: doubled>.
+    Log <second-doubled> to the <console>.   (* prints 14 *)
+
+    (* Composed call: SumAndDouble internally calls DoubleValue *)
+    Application.SumAndDouble the <answer> with { a: 3, b: 4 }.
+    Extract the <total> from the <answer: value>.
+    Log <total> to the <console>.   (* prints 14 *)
+
+    Return an <OK: status> for the <startup>.
+}

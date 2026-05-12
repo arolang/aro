@@ -322,7 +322,7 @@ public final class FeatureSetExecutor: Sendable {
             if statement.object.noun.base == "_expression_" {
                 // Check if the action needs to be executed (see VerbSets.swift for rationale per category)
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
-                let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
+                let hasDynamicHandler = actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     requestVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
@@ -338,7 +338,7 @@ public final class FeatureSetExecutor: Sendable {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
                     // Still need to get the action for side effects (like Return, Log, etc.)
-                    if let action = await actionRegistry.action(for: verb) {
+                    if let action = actionRegistry.action(for: verb) {
                         // For response actions, execute them with the expression result
                         if statement.action.semanticRole == .response {
                             _ = try await action.execute(
@@ -433,14 +433,14 @@ public final class FeatureSetExecutor: Sendable {
         do {
             // Get action implementation (try built-in first, then dynamic plugin actions)
             let result: any Sendable
-            if let action = await actionRegistry.action(for: verb) {
+            if let action = actionRegistry.action(for: verb) {
                 // Execute built-in action
                 result = try await action.execute(
                     result: resultDescriptor,
                     object: objectDescriptor,
                     context: context
                 )
-            } else if let dynamicHandler = await actionRegistry.dynamicHandler(for: verb) {
+            } else if let dynamicHandler = actionRegistry.dynamicHandler(for: verb) {
                 // Execute dynamic plugin action
                 result = try await dynamicHandler(resultDescriptor, objectDescriptor, context)
             } else {

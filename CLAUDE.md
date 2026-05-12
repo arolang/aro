@@ -504,6 +504,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 ├── Scoping/            # Publish as, business activity scope, framework vars, pipeline, loop isolation
 ├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
+├── UserDefinedActions/ # Application.<Name> callable actions (ARO-0081)
 │
 │   # Events & Lifecycle
 ├── EventExample/       # Custom event emission and handling
@@ -609,7 +610,8 @@ Proposals/              # Language specifications
 ├── ARO-0048-websocket.md
 ├── ARO-0051-streaming-execution.md
 ├── ARO-0073-store-files.md
-└── ARO-0080-git-actions.md
+├── ARO-0080-git-actions.md
+└── ARO-0081-user-defined-actions.md
 ```
 
 ## Language Proposals
@@ -655,6 +657,7 @@ The `Proposals/` directory contains language specifications:
 | **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
 | **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
 | **0080 Git Actions** | Native Git via libgit2: status, stage, commit, push, pull, clone, checkout, tag |
+| **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 
 ## Concurrency
 

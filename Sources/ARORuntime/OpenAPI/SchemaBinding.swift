@@ -154,13 +154,14 @@ public struct SchemaBinding {
         return parsedValue
     }
 
-    /// Validate schema composition keywords: allOf, anyOf, oneOf, not.
-    /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool, Array, Dictionary)
-    /// which are all Sendable. This helper exists because `Sendable` is a marker protocol and cannot be used
-    /// in conditional casts (`as?`).
+    /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool,
+    /// Array, Dictionary) which are all Sendable. `as?` is unavailable because `Sendable` is a
+    /// marker protocol, and a direct `as!` triggers an "always succeeds" warning. Routing through
+    /// a generic suppresses the warning while keeping the runtime cast that the original code did.
     @inline(__always)
     private static func assumeSendable(_ value: Any) -> any Sendable {
-        value as! any Sendable
+        func cast<T>(_ value: Any, to _: T.Type) -> T { value as! T }
+        return cast(value, to: (any Sendable).self)
     }
 
     private static func validateComposition(json: Any, schema: Schema, components: Components?) throws -> Any {

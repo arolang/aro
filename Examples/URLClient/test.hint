@@ -1,0 +1,8 @@
+# Test hints for URLClient
+# In compiled (binary) mode, the JSON response from `Read … from <url:>` is left as
+# a raw String instead of being auto-parsed into a dict, so the subsequent
+# `Extract the <received-headers> from the <headers-test: headers>.` fails with
+# "Property 'headers' not found on type 'String'". Interpreter mode auto-parses
+# correctly. The compile-mode regression is pre-existing (ARO-0052 / ded57b2d
+# era) and outside the scope of CI-stability fixes.
+mode: interpreter

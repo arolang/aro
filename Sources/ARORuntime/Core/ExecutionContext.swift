@@ -302,6 +302,11 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Whether execution is from a compiled binary (vs interpreter)
     var isCompiled: Bool { get }
 
+    /// Whether the Log action should omit the `[featureSetName]` prefix
+    /// in `.human` output. Used by stdin-pipe entry point so one-liners
+    /// produce clean output.
+    var suppressLogPrefix: Bool { get }
+
     // MARK: - Template Buffer (ARO-0050)
 
     /// Append content to the template output buffer
@@ -341,6 +346,9 @@ public extension ExecutionContext {
 
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
+
+    /// Default: show feature set prefix in Log output
+    var suppressLogPrefix: Bool { false }
 
     /// Default: no schema registry (no OpenAPI spec loaded)
     var schemaRegistry: SchemaRegistry? { nil }

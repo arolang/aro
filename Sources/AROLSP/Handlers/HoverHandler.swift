@@ -6,6 +6,7 @@
 #if !os(Windows)
 import Foundation
 import AROParser
+import ARORuntime
 import LanguageServerProtocol
 
 /// Handles textDocument/hover requests
@@ -180,18 +181,32 @@ public struct HoverHandler: Sendable {
 
         content += "**Semantic Role**: \(action.semanticRole.rawValue)\n\n"
 
-        // Add description based on semantic role
-        switch action.semanticRole {
-        case .request:
-            content += "*Extracts or retrieves data from external sources*\n\n"
-        case .own:
-            content += "*Processes or transforms data internally*\n\n"
-        case .response:
-            content += "*Returns data or produces output*\n\n"
-        case .export:
-            content += "*Exports data or makes it globally available*\n\n"
-        case .server:
-            content += "*Manages server or service infrastructure*\n\n"
+        // Catalog lookup — surfaces both built-in descriptions and plugin
+        // metadata (description, source plugin name) using the same source of
+        // truth as completion. Match case-insensitively against the verb.
+        let catalogEntry = AROCatalog.actionsSnapshot().first {
+            $0.verb.lowercased() == action.verb.lowercased()
+        }
+        if let entry = catalogEntry, let description = entry.description {
+            content += "\(description)\n\n"
+        } else {
+            // Fallback to the role-based blurb when nothing else is known.
+            switch action.semanticRole {
+            case .request:
+                content += "*Extracts or retrieves data from external sources*\n\n"
+            case .own:
+                content += "*Processes or transforms data internally*\n\n"
+            case .response:
+                content += "*Returns data or produces output*\n\n"
+            case .export:
+                content += "*Exports data or makes it globally available*\n\n"
+            case .server:
+                content += "*Manages server or service infrastructure*\n\n"
+            }
+        }
+        if let entry = catalogEntry, case .plugin(let name, let handle) = entry.origin {
+            let handleText = handle.map { " (handle: \($0))" } ?? ""
+            content += "_Provided by plugin **\(name)**\(handleText)._\n\n"
         }
 
         // Show context

@@ -68,7 +68,7 @@ jobs:
           PKGCONFIG
 
       - name: Run tests
-        run: swift test --parallel
+        run: swift test --parallel --num-workers 2
 
   # ===========================================================================
   # Linux Build & Test
@@ -738,7 +738,7 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           chmod +x test-examples.pl
-          perl test-examples.pl --verbose
+          perl test-examples.pl --verbose -j 4
 
       - name: Upload test results on failure
         if: failure()
@@ -991,7 +991,7 @@ jobs:
         run: |
           chmod +x test-examples.pl
           # Run tests with timeout to prevent hanging
-          perl test-examples.pl --verbose 2>&1 || {
+          perl test-examples.pl --verbose -j 4 2>&1 || {
             echo "=== Integration tests failed ==="
             echo "=== Checking testrun.log files for errors ==="
             find Examples -name "testrun.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null | head -500

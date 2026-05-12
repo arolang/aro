@@ -75,8 +75,9 @@ RUN swift build -c release \
     -Xswiftc -DCOMMIT_SHA=\"${COMMIT_SHA}\" \
     --static-swift-stdlib
 
-# Run tests to verify build
-RUN swift test --parallel
+# Run tests to verify build (skip when SKIP_TESTS=true)
+ARG SKIP_TESTS=false
+RUN if [ "$SKIP_TESTS" != "true" ]; then swift test --parallel --num-workers 2; fi
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime Environment
@@ -86,7 +87,6 @@ FROM swift:6.2-jammy AS runtime
 # Labels for container metadata
 LABEL org.opencontainers.image.title="ARO Programming Language"
 LABEL org.opencontainers.image.description="The ARO Programming Language - Speak Business. Write Code."
-LABEL org.opencontainers.image.vendor="Anthropic"
 LABEL org.opencontainers.image.source="https://github.com/arolang/aro"
 LABEL org.opencontainers.image.documentation="https://github.com/arolang/aro/blob/main/Documentation"
 

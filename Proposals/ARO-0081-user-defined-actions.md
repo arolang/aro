@@ -1,6 +1,6 @@
 # ARO-0081: User-Defined Actions
 
-- **Status:** Draft
+- **Status:** Accepted (implemented in [Issue #224](https://git.ausdertechnik.de/arolang/aro/-/issues/224))
 - **Author:** ARO Language Team
 - **Created:** 2026-05-03
 - **Related:** ARO-0001 (Language Fundamentals), ARO-0004 (Actions), ARO-0005 (Application Architecture), ARO-0045 (Package Manager — plugin handles)
@@ -117,22 +117,25 @@ If an action does not declare `takes`, callers must use `with { ... }`. Calling 
 
 ### 5. Output contract
 
-The action returns its result via the standard `Return ... with ...` form. The result variable bound at the call site holds the **entire returned object** — i.e., a record with the status field and the `with` payload merged:
+The action returns its result via the standard `Return ... with ...` form. The result variable bound at the call site holds the **entire returned object** — `status`, optional `reason`, and every field of the `with` payload, all flattened into one dict:
 
 ```aro
 (DoubleValue: Action takes <number>) {
     Extract the <n> from the <input: number>.
-    Compute the <result> from <n> * 2.
-    Return an <OK: status> with <result>.
+    Compute the <doubled> from <n> * 2.
+    (* Use the object-literal form so the caller can pull a named field *)
+    Return an <OK: status> with { doubled: <doubled> }.
 }
 
 (* caller *)
 Application.DoubleValue the <d> from 5.
-(* <d> is now { status: "OK", result: 10 } *)
-Extract the <doubled> from the <d: result>.
+(* <d> is now { status: "OK", doubled: 10 } *)
+Extract the <result> from the <d: doubled>.
 ```
 
 The caller always uses `Extract` to pull individual fields. This matches the plugin-action shape (see `Examples/GreetingPlugin/main.aro`) and keeps one mental model for all callable surfaces.
+
+> **Note:** when the body uses `Return an <OK: status> with <variable>` and `<variable>` resolves to a primitive (Int/Double/Bool/String), Return places the value under the `value` key — i.e. callers extract via `<d: value>`. Use the object-literal form `with { name: <variable> }` when you want a specific field name.
 
 ### 6. Body restrictions
 
@@ -165,13 +168,15 @@ No imports, no manifests, no aro.yaml entries are required. This matches how eve
 
 ## Worked Example
 
+See `Examples/UserDefinedActions/main.aro` for the runnable version.
+
 ```aro
 (* math.aro *)
 
 (DoubleValue: Action takes <number>) {
     Extract the <n> from the <input: number>.
-    Compute the <result> from <n> * 2.
-    Return an <OK: status> with <result>.
+    Compute the <doubled> from <n> * 2.
+    Return an <OK: status> with { doubled: <doubled> }.
 }
 
 (SumAndDouble: Action) {
@@ -180,30 +185,38 @@ No imports, no manifests, no aro.yaml entries are required. This matches how eve
     Compute the <sum> from <a> + <b>.
 
     (* Compose with another user-defined action *)
-    Application.DoubleValue the <doubled-result> from <sum>.
-    Extract the <result> from the <doubled-result: result>.
+    Application.DoubleValue the <inner> from <sum>.
+    Extract the <answer> from the <inner: doubled>.
 
-    Return an <OK: status> with <result>.
+    Return an <OK: status> with { value: <answer> }.
 }
 
 (* main.aro *)
 
 (Application-Start: Math Demo) {
     Application.SumAndDouble the <answer> with { a: 3, b: 4 }.
-    Extract the <value> from the <answer: result>.
-    Log <value> to the <console>.   (* prints 14 *)
+    Extract the <total> from the <answer: value>.
+    Log <total> to the <console>.   (* prints 14 *)
     Return an <OK: status> for the <startup>.
 }
 ```
 
 ---
 
-## Implementation Notes
+## Implementation Notes (as shipped)
 
-- **Parser**: extend feature set header to accept `Action [takes <ident[: Type]>]`. Reject `takes` for any other activity.
-- **Semantic analysis**: build a global `UserActionRegistry` keyed by name during the existing application-load pass; emit duplicate-name and unknown-call diagnostics there.
-- **Runtime**: implement a single `UserDefinedActionHost` that implements `ActionImplementation`, registered for every name in `UserActionRegistry`. On execution it constructs a fresh `ExecutionContext` for the callee, binds `<input>` to the argument object, runs the body via the existing `FeatureSetExecutor`, and returns the returned object.
-- **Framework-variable enforcement**: piggyback on the existing symbol resolution path — when the executor's context has no `request`/`event`/etc. bindings (because they were never installed for an `Action` invocation), references already fail. Promote that to a compile-time check by tagging known framework names.
+- **Parser** (`Sources/AROParser/Parser.swift`): the feature-set header now recognises `Action takes <ident[: Type]>`. The activity slot is folded by the existing identifier-sequence reader and `Parser.splitUserActionHeader` decomposes it back into `(activity, takes, type)`. The takes field is stored as `userActionTakesField` / `userActionTakesType` on `FeatureSet`.
+- **Semantic analysis** (`Sources/AROParser/UserActionAnalyzer.swift`, `Sources/AROParser/UserActionRegistry.swift`): a single pass builds a `UserActionRegistry` keyed by name and runs validation:
+  - duplicate-name detection,
+  - unknown `Application.<Name>` calls,
+  - `from <value>` against an action without `takes`,
+  - framework-variable access (`<request>`, `<event>`, `<pathParameters>`, `<queryParameters>`, `<response>`) inside an Action body.
+- **Runtime** (`Sources/ARORuntime/Actions/UserDefinedActionHost.swift`): a single `UserDefinedActionHost` is constructed by `ExecutionEngine.execute` and registers every action under the verb `Application.<Name>` via `ActionRegistry.registerDynamic`. The handler:
+  - reads `_with_` / `_expression_` / `_literal_` **locally** on the caller's context (parent-walk would leak the outer call's input into nested calls),
+  - synthesises `<input>` from the sugar field when present,
+  - spawns a fresh `RuntimeContext` parented to the caller (services and globals stay accessible; framework variables are not copied),
+  - runs the body via the standard `FeatureSetExecutor`,
+  - flattens the resulting `Response` into `[String: Sendable]` so callers `Extract` fields exactly like plugin actions.
 - **No new ABI work**: user-defined actions are pure ARO; no plugin SDK changes are required.
 
 ## Future Extensions (out of scope)
