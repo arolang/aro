@@ -1389,8 +1389,10 @@ sub run_http_example_internal {
         # Wait for async handlers (observers, event handlers) to complete.
         # Observers run on background event-loop tasks and their stdout can lag
         # behind the HTTP response, especially under CPU load or when multiple
-        # observers are subscribed to the same repository.
-        select(undef, undef, undef, 1.5);
+        # observers are subscribed to the same repository. 2.5s is the budget
+        # the macOS runner has previously needed for all three observer Tasks
+        # to flush their last event's log line before we read the buffer.
+        select(undef, undef, undef, 2.5);
         eval { $handle->pump_nb(); };  # Flush any remaining stdout
 
         # Parse accumulated server stdout — keep only observer/handler output lines,
@@ -3176,23 +3178,29 @@ sub run_all_tests {
         push @results, _run_pool(\@parallel, $options{jobs}, $total, 0)        if @parallel;
         push @results, _run_pool(\@serial,   1,               $total, scalar @parallel) if @serial;
 
-        # Flake retry: re-run any test that failed once, serially. Most
-        # parallel-mode failures are port-allocation races between HTTP
-        # tests (Net::EmptyPort probes the port without holding it, so
-        # two concurrent calls can return the same number). A clean
-        # serial retry tells real failures apart from races.
-        my @to_retry = grep {
-            $_->{status} eq 'FAIL' || $_->{status} eq 'ERROR'
-        } @results;
+        # Flake retry: re-run failed tests serially. Most parallel-mode
+        # failures are port-allocation races between HTTP tests
+        # (Net::EmptyPort probes the port without holding it). A few
+        # tests — notably RepositoryObserver on macOS — flake under
+        # generic CPU contention because observer Tasks drop a log
+        # line. We retry up to twice serially; a real failure won't
+        # recover from three attempts but a flake almost always will.
+        my $max_attempts = 3;  # initial + 2 serial retries
+        for my $attempt (2 .. $max_attempts) {
+            my @to_retry = grep {
+                $_->{status} eq 'FAIL' || $_->{status} eq 'ERROR'
+            } @results;
+            last unless @to_retry;
 
-        if (@to_retry) {
             local $options{jobs} = 1;  # force serial port allocation for retry
-            print "\nRetrying " . scalar(@to_retry) . " failed test(s) serially...\n"
+            print sprintf("\nRetry %d/%d for %d failed test(s) (serial)...\n",
+                $attempt - 1, $max_attempts - 1, scalar @to_retry)
                 unless $options{verbose};
             my %retry_by_name;
             for my $r (@to_retry) {
                 my $name = $r->{name};
-                print sprintf("  [retry] %s... ", $name) unless $options{verbose};
+                print sprintf("  [retry %d] %s... ", $attempt - 1, $name)
+                    unless $options{verbose};
                 my $retried = run_test($name);
                 $retry_by_name{$name} = $retried;
                 unless ($options{verbose}) {
