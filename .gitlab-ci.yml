@@ -71,41 +71,11 @@ test:
       Libs: -L${libdir} -lLLVM-20
       Cflags: -I${includedir}
       PKGCONFIG
-  parallel:
-    matrix:
-      # The Kubernetes runner pod is sized to ~1–2 vCPUs, which gives the
-      # Swift cooperative thread pool only 1–2 threads. Running all 1700+
-      # tests in a single process consistently deadlocks (jobs 80376 /
-      # 80383 / 80390 / 80402 / 80492 all hung partway through). Sharding
-      # by test target / suite letter range keeps each pod's workload
-      # below the pool-starvation threshold.
-      #
-      # Socket / WebSocket / BroadcastAction tests are pulled out into the
-      # separate `test:sockets` job — those use blocking `poll()` syscalls
-      # and NIO event loops that the constrained pod can't service even
-      # in isolation. Same suite passes locally and on GitHub.
-      - SHARD:
-          - parser
-          - lsp
-          - packagemgr
-          - runtime-ad
-          - runtime-el
-          - runtime-mr
-          - runtime-sz-no-sockets
+  # Socket / WebSocket / BroadcastAction tests are skipped: they use blocking
+  # poll() syscalls and NIO event loops the constrained K8s pod can't service.
+  # Same suite passes locally and on GitHub.
   script:
-    - |
-      case "$SHARD" in
-        parser)                FILTER=("--filter" "^AROParserTests") ;;
-        lsp)                   FILTER=("--filter" "^AROLSPTests") ;;
-        packagemgr)            FILTER=("--filter" "^AROPackageManagerTests") ;;
-        runtime-ad)            FILTER=("--filter" "^AROuntimeTests\\.[A-D]") ;;
-        runtime-el)            FILTER=("--filter" "^AROuntimeTests\\.[E-L]") ;;
-        runtime-mr)            FILTER=("--filter" "^AROuntimeTests\\.[M-R]") ;;
-        runtime-sz-no-sockets) FILTER=("--filter" "^AROuntimeTests\\.[S-Z]" "--skip" "Socket") ;;
-        *)                     echo "Unknown shard: $SHARD" >&2; exit 1 ;;
-      esac
-      echo "Running shard '$SHARD' with: ${FILTER[*]}"
-      swift test --parallel --num-workers 2 "${FILTER[@]}"
+    - swift test --parallel --num-workers 2 --skip "Socket"
   tags:
     - spencer
 
@@ -343,7 +313,9 @@ integration:linux:
     - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18766/v1/forecast").read()[:120])'
 
     - chmod +x test-examples.pl
-    - perl test-examples.pl --verbose
+    # K8s runner pod is small (~1–2 vCPUs); -j 2 gets a real speedup
+    # without thrashing the cooperative pool.
+    - perl test-examples.pl --verbose -j 2
   artifacts:
     when: on_failure
     name: test-failures-linux
