@@ -306,6 +306,21 @@ struct BuildCommand: AsyncParsableCommand {
                         continue
                     }
 
+                    // Skip plugins that declare no native code (e.g. aro-files-only
+                    // plugins that ship feature sets and nothing to statically link).
+                    // Without this guard, the hard-error path below fires on any
+                    // plugin that legitimately has no .o files to bake.
+                    let hasNativeType = yamlContent.contains("swift-plugin")
+                        || yamlContent.contains("c-plugin")
+                        || yamlContent.contains("cpp-plugin")
+                        || yamlContent.contains("rust-plugin")
+                    if !hasNativeType {
+                        if verbose {
+                            print("  Skipping '\(pluginName)' — no native plugin code to statically link")
+                        }
+                        continue
+                    }
+
                     // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
                     var objectFiles: [String] = []
 
@@ -328,10 +343,14 @@ struct BuildCommand: AsyncParsableCommand {
                     // Determine which directory contains the Package.swift for --show-bin-path
                     let packageDir = FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("Package.swift").path) ? pluginDir : sourcePluginDir
                     if FileManager.default.fileExists(atPath: spmBuildDir.path) {
-                        // Use `swift build --show-bin-path` to find the correct build directory
+                        // Use `swift build --show-bin-path` to find the correct build directory.
+                        // `/usr/bin/swift` does not exist on every host — the Linux CI image
+                        // installs Swift to /usr/share/swift/usr/bin — so probe known locations
+                        // and respect a $SWIFT override before giving up.
                         var binPath: String? = nil
+                        let swiftPath = Self.resolveSwiftExecutable() ?? "/usr/bin/swift"
                         let showBinProcess = Process()
-                        showBinProcess.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+                        showBinProcess.executableURL = URL(fileURLWithPath: swiftPath)
                         showBinProcess.arguments = ["build", "-c", "release", "--show-bin-path", "--scratch-path", spmBuildDir.path]
                         showBinProcess.currentDirectoryURL = packageDir
                         let binPipe = Pipe()
@@ -414,9 +433,15 @@ struct BuildCommand: AsyncParsableCommand {
                         }
                     }
 
-                    // Strategy 3: Find .o from direct C compilation
+                    // Strategy 3: Find .o from direct C compilation. Also search
+                    // the source plugin dir: compileSingleManagedPlugin only writes
+                    // a .dylib to the output, so any pre-existing .o files live
+                    // alongside the C sources in the source tree.
                     if objectFiles.isEmpty {
-                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        let searchDirs = [
+                            pluginDir, pluginDir.appendingPathComponent("src"),
+                            sourcePluginDir, sourcePluginDir.appendingPathComponent("src"),
+                        ]
                         for searchDir in searchDirs {
                             guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
                             let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
@@ -424,9 +449,26 @@ struct BuildCommand: AsyncParsableCommand {
                         }
                     }
 
-                    // Strategy 4: Recompile from .c source files to .o
+                    // Strategy 4: Recompile from .c source files to .o. Search the
+                    // source plugin dir too (the output dir only holds the .dylib),
+                    // and pass -I for include/ so headers like aro_plugin_sdk.h
+                    // resolve — same lookup NativePluginHost uses.
                     if objectFiles.isEmpty {
-                        let searchDirs = [pluginDir, pluginDir.appendingPathComponent("src")]
+                        let searchDirs = [
+                            pluginDir, pluginDir.appendingPathComponent("src"),
+                            sourcePluginDir, sourcePluginDir.appendingPathComponent("src"),
+                        ]
+                        var includeFlags: [String] = []
+                        for root in [pluginDir, sourcePluginDir] {
+                            let rootInc = root.appendingPathComponent("include")
+                            if FileManager.default.fileExists(atPath: rootInc.path) {
+                                includeFlags.append("-I\(rootInc.path)")
+                            }
+                            let srcInc = root.appendingPathComponent("src/include")
+                            if FileManager.default.fileExists(atPath: srcInc.path) {
+                                includeFlags.append("-I\(srcInc.path)")
+                            }
+                        }
                         for searchDir in searchDirs {
                             guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
                             let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
@@ -435,7 +477,7 @@ struct BuildCommand: AsyncParsableCommand {
                                 let oPath = pluginWorkDir.appendingPathComponent(cFile.deletingPathExtension().lastPathComponent + ".o").path
                                 let compileProcess = Process()
                                 compileProcess.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
-                                compileProcess.arguments = ["-c", "-fPIC", "-O2", "-o", oPath, cFile.path]
+                                compileProcess.arguments = ["-c", "-fPIC", "-O2"] + includeFlags + ["-o", oPath, cFile.path]
                                 compileProcess.standardOutput = FileHandle.nullDevice
                                 compileProcess.standardError = FileHandle.nullDevice
                                 try? compileProcess.run()
@@ -444,6 +486,7 @@ struct BuildCommand: AsyncParsableCommand {
                                     objectFiles.append(oPath)
                                 }
                             }
+                            if !objectFiles.isEmpty { break }
                         }
                     }
 
@@ -1139,6 +1182,25 @@ struct BuildCommand: AsyncParsableCommand {
             featureSets: productionFeatureSets,
             globalRegistry: globalRegistry
         )
+    }
+
+    /// Locate the `swift` executable across known install paths so
+    /// `swift build --show-bin-path` works on hosts where /usr/bin/swift
+    /// does not exist (notably the Linux CI image at /usr/share/swift).
+    static func resolveSwiftExecutable() -> String? {
+        if let env = ProcessInfo.processInfo.environment["SWIFT"],
+           !env.isEmpty,
+           FileManager.default.isExecutableFile(atPath: env) {
+            return env
+        }
+        let candidates = [
+            "/usr/bin/swift",
+            "/usr/local/bin/swift",
+            "/usr/share/swift/usr/bin/swift",
+            "/opt/swift/usr/bin/swift",
+            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     /// Locate a Rust staticlib (lib*.a) inside cargo's target/release directory.
