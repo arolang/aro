@@ -389,6 +389,36 @@ if &lt;validation&gt; is failed then {
         <pre><code><span class="code-keyword">Assert</span> the &lt;value&gt; equals &lt;expected&gt;.
 <span class="code-keyword">Assert</span> the &lt;list&gt; contains &lt;item&gt;.</code></pre>
 
+        <h2>Git Actions</h2>
+        <p>Native version control via libgit2 (ARO-0080). The <code>&lt;git&gt;</code> system object defaults to the current working directory; use <code>&lt;git: "/path"&gt;</code> for an explicit repository.</p>
+
+        <h3>Status, Log, Branch</h3>
+        <p>Inspect the working tree using Retrieve:</p>
+        <pre><code><span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;status&gt;</span> from the &lt;git&gt;.
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;log&gt;</span> from the &lt;git&gt;.
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;branch&gt;</span> from the &lt;git&gt;.</code></pre>
+
+        <h3>Stage and Commit</h3>
+        <p>Stage files and create commits:</p>
+        <pre><code><span class="code-keyword">Stage</span> the &lt;files&gt; to the &lt;git&gt; with <span class="code-string">"."</span>.
+<span class="code-keyword">Commit</span> the <span class="code-result">&lt;result&gt;</span> to the &lt;git&gt; with <span class="code-string">"feat: add feature"</span>.</code></pre>
+
+        <h3>Pull and Push</h3>
+        <p>Synchronise with remotes (delegates to the git CLI):</p>
+        <pre><code><span class="code-keyword">Pull</span> the <span class="code-result">&lt;updates&gt;</span> from the &lt;git&gt;.
+<span class="code-keyword">Push</span> the <span class="code-result">&lt;result&gt;</span> to the &lt;git&gt;.</code></pre>
+
+        <h3>Clone, Checkout, Tag</h3>
+        <p>Branching, tagging, and cloning repositories:</p>
+        <pre><code><span class="code-keyword">Clone</span> the <span class="code-result">&lt;repo&gt;</span> from the &lt;git&gt; with {
+    url: <span class="code-string">"https://github.com/user/repo.git"</span>,
+    path: <span class="code-string">"./cloned"</span>
+}.
+<span class="code-keyword">Checkout</span> the <span class="code-result">&lt;branch&gt;</span> from the &lt;git&gt; with <span class="code-string">"feature/new"</span>.
+<span class="code-keyword">Tag</span> the <span class="code-result">&lt;release&gt;</span> for the &lt;git&gt; with <span class="code-string">"v1.0.0"</span>.</code></pre>
+
+        <p>Git actions emit events for reactive workflows: <code>GitCommit</code>, <code>GitPush</code>, <code>GitPull</code>, <code>GitCheckout</code>, <code>GitTag</code>, <code>GitClone</code>.</p>
+
         <h2>Action Patterns</h2>
 
         <h3>Extract-Process-Return</h3>
