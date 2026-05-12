@@ -221,13 +221,6 @@ public struct ComputeAction: SynchronousAction {
         guard let input = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
-        let knownComputations: Set<String> = [
-            "hash", "length", "count", "uppercase", "lowercase", "identity",
-            "clip", "take", "date", "format", "distance",
-            "intersect", "difference", "union"
-        ]
-        let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
-
         // ARO-0051: Streaming count — materialize and rebind
         if let anyStreaming = input as? AnyStreamingValue {
             let materialized = try await anyStreaming.materialize()

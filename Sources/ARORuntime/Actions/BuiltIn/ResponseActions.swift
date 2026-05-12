@@ -50,6 +50,8 @@ public struct ReturnAction: SynchronousAction {
                    let jsonString = String(data: jsonData, encoding: .utf8) {
                     data["data"] = AnySendable(jsonString)
                 } else {
+                    // Fallback: array could not be serialized to JSON (non-serializable elements)
+                    FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed, returning empty array\n".utf8))
                     data["data"] = AnySendable("[]")
                 }
             } else if let str = expr as? String {
@@ -161,6 +163,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[prefix] = AnySendable(jsonString)
             } else {
+                // Fallback: array could not be serialized to JSON (non-serializable elements)
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(prefix)', returning empty array\n".utf8))
                 data[prefix] = AnySendable("[]")
             }
         default:
@@ -210,6 +214,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[key] = AnySendable(jsonString)
             } else {
+                // Fallback: dict contains non-serializable values, use string description
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: dict serialization failed for '\(key)', using String(describing:)\n".utf8))
                 data[key] = AnySendable(String(describing: dict))
             }
         case let array as [Any]:
@@ -218,6 +224,8 @@ public struct ReturnAction: SynchronousAction {
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 data[key] = AnySendable(jsonString)
             } else {
+                // Fallback: array contains non-serializable values, use string description
+                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(key)', using String(describing:)\n".utf8))
                 data[key] = AnySendable(String(describing: array))
             }
         default:
@@ -356,7 +364,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -377,7 +385,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -433,8 +441,11 @@ public struct LogAction: ActionImplementation {
             // Apply specifiers (qualifiers) to the value
             // e.g., Log <numbers: reverse> applies the "reverse" qualifier
             for specifier in result.specifiers {
-                if let transformed = try? context.container.qualifierRegistry.resolve(specifier, value: value) {
-                    value = transformed
+                // Apply qualifier; skip on failure (qualifier may not apply to this type)
+                do {
+                    value = try context.container.qualifierRegistry.resolve(specifier, value: value)
+                } catch {
+                    FileHandle.standardError.write(Data("[LogAction] Warning: qualifier '\(specifier)' failed: \(error.localizedDescription)\n".utf8))
                 }
             }
             // Message from any variable type
@@ -481,8 +492,9 @@ public struct LogAction: ActionImplementation {
             formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
         case .human:
             // Readable format for CLI/console
-            // Compiled binaries get clean output without feature set prefix
-            if context.isCompiled {
+            // Compiled binaries and stdin-pipe scripts get clean output
+            // without the feature set prefix.
+            if context.isCompiled || context.suppressLogPrefix {
                 formattedMessage = message
             } else {
                 formattedMessage = "[\(context.featureSetName)] \(message)"
@@ -861,12 +873,22 @@ public struct WriteAction: ActionImplementation {
             for (key, val) in dict {
                 anyDict[key] = val
             }
-            bodyData = (try? JSONSerialization.data(withJSONObject: anyDict)) ?? Data()
+            do {
+                bodyData = try JSONSerialization.data(withJSONObject: anyDict)
+            } catch {
+                FileHandle.standardError.write(Data("[WriteAction] Warning: dict serialization failed: \(error.localizedDescription)\n".utf8))
+                bodyData = Data()
+            }
             effectiveContentType = contentType ?? "application/json"
         } else if let array = value as? [any Sendable] {
             // Convert Sendable array to Any for JSON serialization
             let anyArray = array.map { $0 as Any }
-            bodyData = (try? JSONSerialization.data(withJSONObject: anyArray)) ?? Data()
+            do {
+                bodyData = try JSONSerialization.data(withJSONObject: anyArray)
+            } catch {
+                FileHandle.standardError.write(Data("[WriteAction] Warning: array serialization failed: \(error.localizedDescription)\n".utf8))
+                bodyData = Data()
+            }
             effectiveContentType = contentType ?? "application/json"
         } else {
             // Try to serialize any other value
@@ -1210,10 +1232,17 @@ public struct EmitAction: ActionImplementation {
             payloadKey = "data" // Default fallback
         }
 
-        // Check for literal value first (from "with" clause)
+        // Issue #55, "Resolved Emit semantics": store payload values **without
+        // forcing AROFutures**, so the value is materialized at first handler
+        // read (memoized via AROFuture's ResultStorage) instead of eagerly at
+        // emit time. resolveAnyRaw returns the future itself; resolveAny would
+        // auto-force it.
+        //
+        // Literals don't go through resolveAny so they're never AROFutures,
+        // but we still keep the same source of truth for consistency.
         if let literalValue = context.resolveAny("_literal_") {
             payload[payloadKey] = literalValue
-        } else if object.base == "_expression_", let exprValue = context.resolveAny("_expression_") {
+        } else if object.base == "_expression_", let exprValue = context.resolveAnyRaw("_expression_") {
             let exprName: String = context.resolve("_expression_name_") ?? ""
             if exprName.isEmpty, let dictValue = exprValue as? [String: any Sendable] {
                 // Object literal expression `with { key: val, ... }` — spread dict directly as payload
@@ -1223,7 +1252,7 @@ public struct EmitAction: ActionImplementation {
                 // Variable reference expression — wrap with the variable name as key
                 payload[exprName.isEmpty ? "data" : exprName] = exprValue
             }
-        } else if let payloadValue = context.resolveAny(object.base) {
+        } else if let payloadValue = context.resolveAnyRaw(object.base) {
             // Named variable payload - wrap with the payload key
             // This allows handlers to extract with: <Extract> the <user> from the <event: user>
             payload[payloadKey] = payloadValue

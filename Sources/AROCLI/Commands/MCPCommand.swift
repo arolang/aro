@@ -53,8 +53,16 @@ struct MCPCommand: AsyncParsableCommand {
         await server.run()
     }
 
-    /// Try to find the ARO installation path
+    /// Try to find the ARO installation path.
+    /// Checks `ARO_BASE_PATH` env var first, then well-known locations.
     private func findAROBasePath() -> String? {
+        // Environment variable override
+        if let envPath = ProcessInfo.processInfo.environment["ARO_BASE_PATH"],
+           !envPath.isEmpty,
+           FileManager.default.fileExists(atPath: ToolResolver.join(envPath, "Proposals")) {
+            return envPath
+        }
+
         // Check common locations
         let candidates = [
             // Development: current directory
@@ -67,7 +75,7 @@ struct MCPCommand: AsyncParsableCommand {
         ]
 
         for candidate in candidates {
-            let proposalsPath = (candidate as NSString).appendingPathComponent("Proposals")
+            let proposalsPath = ToolResolver.join(candidate, "Proposals")
             if FileManager.default.fileExists(atPath: proposalsPath) {
                 return candidate
             }

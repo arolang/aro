@@ -154,13 +154,14 @@ public struct SchemaBinding {
         return parsedValue
     }
 
-    /// Validate schema composition keywords: allOf, anyOf, oneOf, not.
-    /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool, Array, Dictionary)
-    /// which are all Sendable. This helper exists because `Sendable` is a marker protocol and cannot be used
-    /// in conditional casts (`as?`).
+    /// Convert Any to `any Sendable` — safe for JSON-compatible types (String, Int, Double, Bool,
+    /// Array, Dictionary) which are all Sendable. `as?` is unavailable because `Sendable` is a
+    /// marker protocol, and a direct `as!` triggers an "always succeeds" warning. Routing through
+    /// a generic suppresses the warning while keeping the runtime cast that the original code did.
     @inline(__always)
     private static func assumeSendable(_ value: Any) -> any Sendable {
-        value as! any Sendable
+        func cast<T>(_ value: Any, to _: T.Type) -> T { value as! T }
+        return cast(value, to: (any Sendable).self)
     }
 
     private static func validateComposition(json: Any, schema: Schema, components: Components?) throws -> Any {
@@ -816,12 +817,22 @@ public func parseQueryString(_ query: String) -> [String: [String]] {
             rawKey = pairStr
             rawValue = ""
         }
-        let key = rawKey.removingPercentEncoding ?? rawKey
-        let value = rawValue.removingPercentEncoding ?? rawValue
+        let key = decodeQueryComponent(rawKey)
+        let value = decodeQueryComponent(rawValue)
         guard !key.isEmpty else { continue }
         result[key, default: []].append(value)
     }
     return result
+}
+
+/// Decode a single query string component (key or value).
+///
+/// Per the `application/x-www-form-urlencoded` spec, `+` represents a space.
+/// This must be replaced **before** percent-decoding so that a literal `+`
+/// encoded as `%2B` is not incorrectly turned into a space.
+public func decodeQueryComponent(_ raw: String) -> String {
+    let plusDecoded = raw.replacingOccurrences(of: "+", with: " ")
+    return plusDecoded.removingPercentEncoding ?? plusDecoded
 }
 
 // MARK: - Cookie Header Parsing
@@ -865,9 +876,8 @@ extension SchemaBinding {
         for pair in str.split(separator: "&") {
             let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
             if parts.count == 2 {
-                let key = parts[0].removingPercentEncoding ?? parts[0]
-                let value = (parts[1].removingPercentEncoding ?? parts[1])
-                    .replacingOccurrences(of: "+", with: " ")
+                let key = decodeQueryComponent(parts[0])
+                let value = decodeQueryComponent(parts[1])
                 if let existing = result[key] as? [String] {
                     result[key] = existing + [value]
                 } else if let existing = result[key] as? String {

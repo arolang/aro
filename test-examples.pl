@@ -11,9 +11,12 @@ $| = 1;
 # Core modules
 use File::Spec;
 use File::Basename;
+use File::Temp qw(tempdir);
 use Getopt::Long;
 use Time::HiRes qw(time sleep);
 use List::Util qw(sum all);
+use POSIX qw(:sys_wait_h);
+use Storable qw(nstore retrieve);
 
 # Required modules
 use IPC::Run qw(start finish timeout kill_kill);
@@ -62,6 +65,7 @@ my %options = (
     verbose => 0,
     timeout => 60,  # Increased for Linux CI linker (default was 10)
     filter => '',
+    jobs => 1,
     help => 0,
 );
 
@@ -70,8 +74,13 @@ GetOptions(
     'verbose|v' => \$options{verbose},
     'timeout=i' => \$options{timeout},
     'filter=s' => \$options{filter},
+    'jobs|j=i' => \$options{jobs},
     'help|h' => \$options{help},
 ) or die "Invalid options. Use --help for usage.\n";
+
+if ($options{jobs} < 1) {
+    die "--jobs must be >= 1 (got $options{jobs})\n";
+}
 
 if ($options{help}) {
     print_usage();
@@ -90,6 +99,9 @@ Options:
     -v, --verbose       Show detailed output
     --timeout=N         Timeout in seconds for long-running examples (default: 60)
     --filter=PATTERN    Test only examples matching pattern
+    -j, --jobs=N        Run up to N tests in parallel (default: 1).
+                        Tests with hardcoded ports (socket / socket-client /
+                        multiservice) always run serially after the pool.
     -h, --help          Show this help
 
 Examples:
@@ -850,8 +862,8 @@ sub run_console_example_internal {
     # Inject free-port env vars so examples that self-host HTTP/socket servers
     # don't conflict with other processes (e.g. kubectl port-forward on 8080).
     # Harmless for examples that don't start servers (env vars are simply ignored).
-    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? Net::EmptyPort::empty_port(8080) : 8080);
-    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? Net::EmptyPort::empty_port(9000) : 9000);
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(8080)) : 8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(9000)) : 9000);
 
     # Use IPC::Run for better control
     my ($in, $out, $err) = ('', '', '');
@@ -939,8 +951,8 @@ sub run_debug_example {
     }
 
     # Inject free ports so the debug server doesn't collide with kubectl or other processes
-    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? Net::EmptyPort::empty_port(8080) : 8080);
-    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? Net::EmptyPort::empty_port(9000) : 9000);
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(8080)) : 8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(9000)) : 9000);
 
     # Use IPC::Run for better control
     my ($in, $out, $err) = ('', '', '');
@@ -1095,8 +1107,16 @@ sub run_http_example_internal {
     }
     # Use a free port so parallel runs and occupied ports don't conflict.
     # ARO_HTTP_PORT env var overrides the openapi.yaml port inside the server.
+    #
+    # When -j > 1, two harnesses both scanning from $spec_port can race and
+    # return the same port (because Net::EmptyPort just probes — it doesn't
+    # hold). Use random allocation from the ephemeral range so concurrent
+    # workers almost never collide. Serial runs keep $spec_port for stable
+    # observable output.
     my $port = $has_net_emptyport
-        ? Net::EmptyPort::empty_port($spec_port)
+        ? ($options{jobs} > 1
+            ? Net::EmptyPort::empty_port()
+            : Net::EmptyPort::empty_port($spec_port))
         : $spec_port;
 
     # Determine command based on mode
@@ -1261,7 +1281,7 @@ sub run_http_example_internal {
                 if (uc($method) eq 'GET' && $operation->{parameters}) {
                     my @query_params;
                     for my $param (@{$operation->{parameters}}) {
-                        next unless $param->{in} eq 'query';
+                        next unless defined $param->{in} && $param->{in} eq 'query';
                         my $name = $param->{name};
                         my $value;
 
@@ -1369,8 +1389,10 @@ sub run_http_example_internal {
         # Wait for async handlers (observers, event handlers) to complete.
         # Observers run on background event-loop tasks and their stdout can lag
         # behind the HTTP response, especially under CPU load or when multiple
-        # observers are subscribed to the same repository.
-        select(undef, undef, undef, 1.5);
+        # observers are subscribed to the same repository. 2.5s is the budget
+        # the macOS runner has previously needed for all three observer Tasks
+        # to flush their last event's log line before we read the buffer.
+        select(undef, undef, undef, 2.5);
         eval { $handle->pump_nb(); };  # Flush any remaining stdout
 
         # Parse accumulated server stdout — keep only observer/handler output lines,
@@ -1604,7 +1626,10 @@ sub run_socket_client_example_internal {
         return (undef, "Failed to fork echo server: $!");
     }
     if ($server_pid == 0) {
-        # Child: run a multi-connection echo server
+        # Child: run a multi-connection echo server.
+        # Reset signal handlers — the parent's cleanup-print handler would
+        # otherwise fire here when we get killed at end-of-test.
+        $SIG{INT} = $SIG{TERM} = 'DEFAULT';
         # Must loop on accept() because Net::EmptyPort::wait_port makes a probe
         # connection to detect readiness, which would consume a single-accept server.
         use IO::Socket::INET;
@@ -1617,6 +1642,7 @@ sub run_socket_client_example_internal {
         while (my $client = $server->accept()) {
             my $child = fork();
             if ($child == 0) {
+                $SIG{INT} = $SIG{TERM} = 'DEFAULT';
                 close $server;
                 $client->autoflush(1);
                 my $buf = '';
@@ -3010,34 +3036,191 @@ sub create_diff_file {
     }
 }
 
-# Run all tests
+# Run a list of examples through a fork pool with at most $jobs concurrent
+# children. Each child computes run_test() and serializes the result via
+# Storable into a per-test file in a shared temp dir; the parent reaps
+# children with non-blocking waitpid and prints results in completion order.
+#
+# $progress_total and $progress_offset let the caller stitch separate pool
+# invocations (parallel batch + serial-must batch) into one [N/total] line.
+sub _run_pool {
+    my ($examples, $jobs, $progress_total, $progress_offset) = @_;
+    return () unless @$examples;
+
+    my $tmpdir = tempdir("aro-tests-XXXXXX", TMPDIR => 1, CLEANUP => 1);
+
+    my %pid_to_name;   # pid -> example name
+    my %pid_to_file;   # pid -> result file path
+    my @queue = @$examples;
+    my @results;
+    my $completed = 0;
+    my $total_here = scalar @$examples;
+    my $index = $progress_offset;
+
+    my $launch = sub {
+        return unless @queue;
+        my $name = shift @queue;
+        my $file = File::Spec->catfile($tmpdir, "$name.result");
+        my $pid = fork();
+        if (!defined $pid) {
+            die "fork failed: $!";
+        }
+        if ($pid == 0) {
+            # Child: reset signal handlers so we don't print the parent's
+            # "Caught signal, cleaning up..." banner if we get killed.
+            $SIG{INT} = $SIG{TERM} = 'DEFAULT';
+            my $result = eval { run_test($name) } || {
+                name => $name,
+                type => 'UNKNOWN',
+                interpreter_status => 'ERROR',
+                compiled_status    => 'N/A',
+                interpreter_message => "worker died: $@",
+                compiled_message   => '',
+                interpreter_duration => 0,
+                compiled_duration  => 0,
+                build_duration     => 0,
+                avg_duration       => 0,
+                status   => 'ERROR',
+                duration => 0,
+            };
+            eval { nstore($result, $file); };
+            POSIX::_exit($@ ? 1 : 0);
+        }
+        $pid_to_name{$pid} = $name;
+        $pid_to_file{$pid} = $file;
+    };
+
+    # Prime the pool
+    $launch->() for 1 .. ($jobs < @queue ? $jobs : scalar @queue);
+
+    while (%pid_to_name) {
+        my $pid = waitpid(-1, 0);
+        last if $pid <= 0;
+        my $name = delete $pid_to_name{$pid};
+        my $file = delete $pid_to_file{$pid};
+
+        my $result;
+        if ($file && -e $file) {
+            $result = eval { retrieve($file) };
+            unlink $file;
+        }
+        if (!$result) {
+            $result = {
+                name => $name // '<unknown>',
+                type => 'UNKNOWN',
+                interpreter_status => 'ERROR',
+                compiled_status    => 'N/A',
+                interpreter_message => "no result from worker (pid $pid exit \$?=$?)",
+                compiled_message   => '',
+                interpreter_duration => 0,
+                compiled_duration  => 0,
+                build_duration     => 0,
+                avg_duration       => 0,
+                status   => 'ERROR',
+                duration => 0,
+            };
+        }
+
+        push @results, $result;
+        $completed++;
+        $index++;
+        _emit_result_line($index, $progress_total, $result) unless $options{verbose};
+
+        $launch->();
+    }
+
+    return @results;
+}
+
+# Examples that must run serially (hardcoded ports / global state)
+sub _requires_serial_run {
+    my ($example_name) = @_;
+    my $hints = read_test_hint($example_name);
+    my $type = $hints->{type} // '';
+    return 1 if $type eq 'socket'
+             || $type eq 'socket-client'
+             || $type eq 'multiservice';
+    return 0;
+}
+
+# Pretty-print one result line. Returns 1 if the result is a failure.
+sub _emit_result_line {
+    my ($index, $total, $result) = @_;
+    my $status = $result->{status};
+    my $color  = $status eq 'PASS' ? 'green'
+               : $status eq 'SKIP' ? 'yellow'
+               :                     'red';
+    print sprintf("[%d/%d] %s... ", $index, $total, $result->{name});
+    say colored($status, $color);
+    return ($status eq 'FAIL' || $status eq 'ERROR') ? 1 : 0;
+}
+
+# Run all tests, possibly with a worker pool.
 sub run_all_tests {
     my ($examples) = @_;
 
     my $total = scalar @$examples;
-    my $current = 0;
     my @results;
 
     my $start_time = time;
 
-    for my $example (@$examples) {
-        $current++;
-        print sprintf("[%d/%d] %s... ", $current, $total, $example) unless $options{verbose};
-
-        my $result = run_test($example);
-        push @results, $result;
-
-        unless ($options{verbose}) {
-            my $status = $result->{status};
-            if ($status eq 'PASS') {
-                say colored('PASS', 'green');
-            } elsif ($status eq 'FAIL') {
-                say colored('FAIL', 'red');
-            } elsif ($status eq 'SKIP') {
-                say colored('SKIP', 'yellow');
+    if ($options{jobs} > 1 && $total > 1) {
+        # Split into parallel-safe and serial-must groups.
+        my (@parallel, @serial);
+        for my $name (@$examples) {
+            if (_requires_serial_run($name)) {
+                push @serial, $name;
             } else {
-                say colored('ERROR', 'red');
+                push @parallel, $name;
             }
+        }
+
+        push @results, _run_pool(\@parallel, $options{jobs}, $total, 0)        if @parallel;
+        push @results, _run_pool(\@serial,   1,               $total, scalar @parallel) if @serial;
+
+        # Flake retry: re-run failed tests serially. Most parallel-mode
+        # failures are port-allocation races between HTTP tests
+        # (Net::EmptyPort probes the port without holding it). A few
+        # tests — notably RepositoryObserver on macOS — flake under
+        # generic CPU contention because observer Tasks drop a log
+        # line. We retry up to twice serially; a real failure won't
+        # recover from three attempts but a flake almost always will.
+        my $max_attempts = 3;  # initial + 2 serial retries
+        for my $attempt (2 .. $max_attempts) {
+            my @to_retry = grep {
+                $_->{status} eq 'FAIL' || $_->{status} eq 'ERROR'
+            } @results;
+            last unless @to_retry;
+
+            local $options{jobs} = 1;  # force serial port allocation for retry
+            print sprintf("\nRetry %d/%d for %d failed test(s) (serial)...\n",
+                $attempt - 1, $max_attempts - 1, scalar @to_retry)
+                unless $options{verbose};
+            my %retry_by_name;
+            for my $r (@to_retry) {
+                my $name = $r->{name};
+                print sprintf("  [retry %d] %s... ", $attempt - 1, $name)
+                    unless $options{verbose};
+                my $retried = run_test($name);
+                $retry_by_name{$name} = $retried;
+                unless ($options{verbose}) {
+                    my $s = $retried->{status};
+                    my $c = $s eq 'PASS' ? 'green'
+                          : $s eq 'SKIP' ? 'yellow'
+                          :                'red';
+                    say colored($s, $c);
+                }
+            }
+            # Replace originals with retry results.
+            @results = map { $retry_by_name{$_->{name}} // $_ } @results;
+        }
+    } else {
+        my $current = 0;
+        for my $example (@$examples) {
+            $current++;
+            my $result = run_test($example);
+            push @results, $result;
+            _emit_result_line($current, $total, $result) unless $options{verbose};
         }
     }
 

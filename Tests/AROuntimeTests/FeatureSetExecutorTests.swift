@@ -13,31 +13,17 @@ import Testing
 @Suite("Feature Set Executor Tests")
 struct FeatureSetExecutorTests {
 
-    func createExecutor(enableParallelIO: Bool = false) -> FeatureSetExecutor {
+    func createExecutor() -> FeatureSetExecutor {
         FeatureSetExecutor(
             actionRegistry: ActionRegistry.shared,
             eventBus: EventBus(),
-            globalSymbols: GlobalSymbolStorage(),
-            enableParallelIO: enableParallelIO
+            globalSymbols: GlobalSymbolStorage()
         )
     }
 
     @Test("Executor initialization")
     func testExecutorInit() {
-        let executor = createExecutor()
-        #expect(executor.enableParallelIO == false)
-    }
-
-    @Test("Executor with parallel IO enabled")
-    func testExecutorParallelIO() {
-        let executor = createExecutor(enableParallelIO: true)
-        #expect(executor.enableParallelIO == true)
-    }
-
-    @Test("Enable parallel IO property")
-    func testEnableParallelIOProperty() {
-        let executor = createExecutor(enableParallelIO: true)
-        #expect(executor.enableParallelIO == true)
+        _ = createExecutor()
     }
 
     @Test("Executor can be created with custom dependencies")
@@ -46,13 +32,11 @@ struct FeatureSetExecutorTests {
         let eventBus = EventBus()
         let globalSymbols = GlobalSymbolStorage()
 
-        let executor = FeatureSetExecutor(
+        _ = FeatureSetExecutor(
             actionRegistry: registry,
             eventBus: eventBus,
             globalSymbols: globalSymbols
         )
-
-        #expect(executor.enableParallelIO == false)
     }
 }
 

@@ -113,13 +113,19 @@ public final class Lexer: @unchecked Sendable {
 
     // MARK: - Initialization
     
-    public init(source: String) {
+    /// Optional diagnostics collector for error recovery.
+    /// When set, invalid characters emit a diagnostic and are skipped
+    /// instead of throwing, allowing the lexer to report multiple errors.
+    private let diagnostics: DiagnosticCollector?
+
+    public init(source: String, diagnostics: DiagnosticCollector? = nil) {
         self.source = source
         self.utf8 = Array(source.utf8)
         self.pos = 0
         // ARO-0115: Cache the next byte position for O(1) peekNext()
         self.nextPos = Self.advanceBytePos(0, in: Array(source.utf8))
         self.location = SourceLocation()
+        self.diagnostics = diagnostics
     }
     
     // MARK: - Public Interface
@@ -259,6 +265,8 @@ public final class Lexer: @unchecked Sendable {
             if peek() == "=" {
                 _ = advance()
                 addToken(.bangEqual, start: startLocation)
+            } else if let diagnostics {
+                diagnostics.error("Unexpected character '!'", at: startLocation)
             } else {
                 throw LexerError.unexpectedCharacter(char, at: startLocation)
             }
@@ -281,6 +289,9 @@ public final class Lexer: @unchecked Sendable {
                 try scanIdentifierOrKeyword(start: startLocation)
             } else if char.isNumber {
                 try scanNumber(start: startLocation, negative: false)
+            } else if let diagnostics {
+                diagnostics.error("Unexpected character '\(char)'", at: startLocation)
+                // Skip the invalid character and continue lexing
             } else {
                 throw LexerError.unexpectedCharacter(char, at: startLocation)
             }
@@ -962,8 +973,8 @@ public final class Lexer: @unchecked Sendable {
 
 extension Lexer {
     /// Creates a lexer and tokenizes the source in one step
-    public static func tokenize(_ source: String) throws -> [Token] {
-        try Lexer(source: source).tokenize()
+    public static func tokenize(_ source: String, diagnostics: DiagnosticCollector? = nil) throws -> [Token] {
+        try Lexer(source: source, diagnostics: diagnostics).tokenize()
     }
 }
 

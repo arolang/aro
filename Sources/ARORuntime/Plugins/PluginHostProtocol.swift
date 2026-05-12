@@ -104,56 +104,86 @@ public enum PluginInfoParser {
     ///
     /// Supports both legacy flat format and structured SDK format:
     /// - Flat: `"actions": ["greet", "farewell"]`
-    /// - Structured: `"actions": [{ "name": "Greet", "verbs": ["greet", "hello"] }]`
+    /// - Structured: `"actions": [{ "name": "Greet", "verbs": ["greet", "hello"], "role": "own", "prepositions": ["from"], "description": "...", "since": "1.0.0" }]`
     ///
     /// - Returns: Tuple of (action names, verbs map from name → verbs)
     public static func parseActionList(from dict: [String: Any]) -> (names: [String], verbsMap: [String: [String]]) {
+        let parsed = parseActionListWithMetadata(from: dict)
+        return (names: parsed.names, verbsMap: parsed.verbsMap)
+    }
+
+    /// Like `parseActionList` but also extracts the metadata (role, prepositions,
+    /// description, since) declared per-action in the structured format. The
+    /// returned `metadataMap` is keyed by action name; flat-format actions get
+    /// no entries (callers should fall back to `.own` / no description).
+    public static func parseActionListWithMetadata(from dict: [String: Any]) -> (
+        names: [String],
+        verbsMap: [String: [String]],
+        metadataMap: [String: ActionRegistry.PluginActionMetadata]
+    ) {
         var actionNames: [String] = []
         var verbsMap: [String: [String]] = [:]
+        var metadataMap: [String: ActionRegistry.PluginActionMetadata] = [:]
 
         if let flatActions = dict["actions"] as? [String] {
             actionNames = flatActions
         } else if let structuredActions = dict["actions"] as? [[String: Any]] {
             for actionObj in structuredActions {
-                if let actionName = actionObj["name"] as? String {
-                    actionNames.append(actionName)
-                    if let verbs = actionObj["verbs"] as? [String] {
-                        verbsMap[actionName] = verbs
-                    }
+                guard let actionName = actionObj["name"] as? String else { continue }
+                actionNames.append(actionName)
+                if let verbs = actionObj["verbs"] as? [String] {
+                    verbsMap[actionName] = verbs
                 }
+
+                let roleString = (actionObj["role"] as? String)?.lowercased() ?? "own"
+                let role = ActionRole(rawValue: roleString) ?? .own
+                let prepositions = actionObj["prepositions"] as? [String] ?? []
+                let description = actionObj["description"] as? String
+                let since = actionObj["since"] as? String
+
+                metadataMap[actionName] = ActionRegistry.PluginActionMetadata(
+                    role: role,
+                    prepositions: prepositions,
+                    description: description,
+                    handle: nil, // host fills this in from qualifierNamespace
+                    since: since
+                )
             }
         }
 
-        return (names: actionNames, verbsMap: verbsMap)
+        return (names: actionNames, verbsMap: verbsMap, metadataMap: metadataMap)
     }
 
-    /// Register action verbs with the global `ActionRegistry` using
-    /// synchronised dispatch (semaphore pattern).
+    /// Register action verbs with the global `ActionRegistry`.
     ///
-    /// Usable by any code that needs synchronous action registration,
-    /// including `PluginLoader`.
+    /// `ActionRegistry` is now a lock-protected `final class`, so registration is a
+    /// straight sync call — no `Task { await … }; semaphore.wait()` bridge required.
+    /// (The previous bridge starved the cooperative thread pool under
+    /// `swift test --parallel`.)
     public static func syncRegisterActions(
         _ entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)]
     ) {
-        guard !entries.isEmpty else { return }
+        syncRegisterActionsWithMetadata(entries.map { (verb: $0.verb, pluginName: $0.pluginName, metadata: nil, handler: $0.handler) })
+    }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        var count = 0
-
+    /// Metadata-aware variant of `syncRegisterActions`. Use this when the host
+    /// has parsed `aro_plugin_info()` and can supply role/prepositions so the
+    /// catalog (and LSP/MCP layers reading it) gets a proper hover card.
+    public static func syncRegisterActionsWithMetadata(
+        _ entries: [(
+            verb: String,
+            pluginName: String?,
+            metadata: ActionRegistry.PluginActionMetadata?,
+            handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
+        )]
+    ) {
         for entry in entries {
-            count += 1
-            Task {
-                await ActionRegistry.shared.registerDynamic(
-                    verb: entry.verb,
-                    handler: entry.handler,
-                    pluginName: entry.pluginName
-                )
-                semaphore.signal()
-            }
-        }
-
-        for _ in 0..<count {
-            semaphore.wait()
+            ActionRegistry.shared.registerDynamic(
+                verb: entry.verb,
+                handler: entry.handler,
+                pluginName: entry.pluginName,
+                metadata: entry.metadata
+            )
         }
     }
 
@@ -232,19 +262,26 @@ extension PluginHostProtocol {
         PluginInfoParser.syncRegisterActions(entries.map { ($0.verb, $0.pluginName, $0.handler) })
     }
 
+    /// Metadata-aware variant for hosts that know per-action metadata.
+    public func syncRegisterActionsWithMetadata(
+        _ entries: [(
+            verb: String,
+            pluginName: String,
+            metadata: ActionRegistry.PluginActionMetadata?,
+            handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
+        )]
+    ) {
+        PluginInfoParser.syncRegisterActionsWithMetadata(entries.map {
+            (verb: $0.verb, pluginName: $0.pluginName, metadata: $0.metadata, handler: $0.handler)
+        })
+    }
+
     // MARK: Unload
 
     /// Unregister this plugin from `ActionRegistry` and `QualifierRegistry`,
     /// then clear local qualifier registrations.
     public func unloadFromRegistries() {
-        let semaphore = DispatchSemaphore(value: 0)
-        let name = pluginName
-        Task {
-            await ActionRegistry.shared.unregisterPlugin(name)
-            semaphore.signal()
-        }
-        semaphore.wait()
-
+        ActionRegistry.shared.unregisterPlugin(pluginName)
         QualifierRegistry.shared.unregisterPlugin(pluginName)
         qualifierRegistrations.removeAll()
     }

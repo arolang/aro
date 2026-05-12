@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -68,7 +68,7 @@ jobs:
           PKGCONFIG
 
       - name: Run tests
-        run: swift test --parallel
+        run: swift test --parallel --num-workers 2
 
   # ===========================================================================
   # Linux Build & Test
@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -112,12 +112,6 @@ jobs:
           Libs: -L${libdir} -lLLVM-20
           Cflags: -I${includedir}
           PKGCONFIG
-
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
 
       - name: Generate version file
         run: |
@@ -222,7 +216,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -262,12 +256,6 @@ jobs:
           Cflags: -I\${includedir}
           PKGCONFIG
           echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
-
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
 
       - name: Generate version file
         run: |
@@ -494,12 +482,6 @@ jobs:
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
-
-      - name: Build
-        run: swift build -c debug
-
-      - name: Run tests
-        run: swift test --parallel
 
       - name: Generate version file
         shell: bash
@@ -756,7 +738,7 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           chmod +x test-examples.pl
-          perl test-examples.pl --verbose
+          perl test-examples.pl --verbose -j 4
 
       - name: Upload test results on failure
         if: failure()
@@ -1009,7 +991,7 @@ jobs:
         run: |
           chmod +x test-examples.pl
           # Run tests with timeout to prevent hanging
-          perl test-examples.pl --verbose 2>&1 || {
+          perl test-examples.pl --verbose -j 4 2>&1 || {
             echo "=== Integration tests failed ==="
             echo "=== Checking testrun.log files for errors ==="
             find Examples -name "testrun.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null | head -500

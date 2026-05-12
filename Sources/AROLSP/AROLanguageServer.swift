@@ -6,6 +6,7 @@
 #if !os(Windows)
 import Foundation
 import AROParser
+import ARORuntime
 import LanguageServerProtocol
 #if canImport(Darwin)
 import Darwin
@@ -35,6 +36,28 @@ public final class AROLanguageServer: Sendable {
     private let inlayHintHandler: InlayHintHandler
 
     private let debugMode: Bool
+
+    /// Workspace folders captured during `initialize`. Used by the catalog to
+    /// load plugins from `<workspace>/Plugins/` so plugin-supplied actions and
+    /// qualifiers show up in completion/hover.
+    private let workspaceState = WorkspaceState()
+
+    /// Thread-safe workspace tracking. The LSP class is `final class Sendable`,
+    /// so mutation goes through this serialised box.
+    private final class WorkspaceState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var roots: [URL] = []
+
+        func setRoots(_ urls: [URL]) {
+            lock.lock(); defer { lock.unlock() }
+            roots = urls
+        }
+
+        var allRoots: [URL] {
+            lock.lock(); defer { lock.unlock() }
+            return roots
+        }
+    }
 
     // MARK: - Initialization
 
@@ -204,7 +227,13 @@ public final class AROLanguageServer: Sendable {
         case "initialize":
             result = handleInitializeSync(params: params)
 
-        case "initialized", "textDocument/didOpen", "textDocument/didChange",
+        case "initialized":
+            // Client is ready; load workspace plugins now so subsequent
+            // completion/hover sees plugin-provided actions and qualifiers.
+            loadWorkspacePluginsAsync()
+            return nil
+
+        case "textDocument/didOpen", "textDocument/didChange",
              "textDocument/didClose", "textDocument/didSave", "$/cancelRequest":
             // Notifications - handle but don't respond
             handleNotificationSync(method: method, params: params)
@@ -280,6 +309,7 @@ public final class AROLanguageServer: Sendable {
 
     private func handleInitializeSync(params: Any?) -> [String: Any] {
         log("Initialize request received")
+        captureWorkspaceRoots(from: params)
         return [
             "capabilities": capabilitiesDict,
             "serverInfo": [
@@ -287,6 +317,63 @@ public final class AROLanguageServer: Sendable {
                 "version": "1.3.0"
             ]
         ]
+    }
+
+    /// Read `rootUri` and `workspaceFolders[].uri` from the LSP `initialize`
+    /// params and stash them. Used later to discover `<workspace>/Plugins/`.
+    private func captureWorkspaceRoots(from params: Any?) {
+        var roots: [URL] = []
+        if let dict = params as? [String: Any] {
+            if let rootUri = dict["rootUri"] as? String, let url = uriToURL(rootUri) {
+                roots.append(url)
+            } else if let rootPath = dict["rootPath"] as? String {
+                roots.append(URL(fileURLWithPath: rootPath))
+            }
+            if let folders = dict["workspaceFolders"] as? [[String: Any]] {
+                for folder in folders {
+                    if let uri = folder["uri"] as? String, let url = uriToURL(uri) {
+                        roots.append(url)
+                    }
+                }
+            }
+        }
+        // Deduplicate while preserving order
+        var seen: Set<URL> = []
+        let unique = roots.filter { seen.insert($0.standardizedFileURL).inserted }
+        workspaceState.setRoots(unique)
+        if !unique.isEmpty {
+            log("Workspace roots: \(unique.map { $0.path })")
+        }
+    }
+
+    /// Decode an LSP `file://` URI to a `URL`, accepting both the canonical
+    /// `file:///path` form and the bare path form some clients send.
+    private func uriToURL(_ uri: String) -> URL? {
+        if uri.hasPrefix("file://") {
+            return URL(string: uri)
+        }
+        if uri.hasPrefix("/") {
+            return URL(fileURLWithPath: uri)
+        }
+        return nil
+    }
+
+    /// Load plugins from each workspace `Plugins/` directory into the shared
+    /// AROCatalog so completion/hover sees plugin-provided actions and qualifiers.
+    /// Runs off the calling thread so `initialized` can return immediately.
+    private func loadWorkspacePluginsAsync() {
+        let roots = workspaceState.allRoots
+        guard !roots.isEmpty else { return }
+        let debug = self.debugMode
+
+        Task.detached {
+            for root in roots {
+                let loaded = await AROCatalog.shared.loadPluginsFromWorkspace(root)
+                if loaded && debug {
+                    FileHandle.standardError.write(Data("[aro-lsp] Loaded plugins from \(root.path)/Plugins\n".utf8))
+                }
+            }
+        }
     }
 
     private func handleNotificationSync(method: String, params: Any?) {
@@ -754,7 +841,9 @@ public final class AROLanguageServer: Sendable {
             result = await handleInitialize(params: params)
 
         case "initialized":
-            // Notification, no response needed
+            // Client is ready; load workspace plugins now so subsequent
+            // completion/hover sees plugin-provided actions and qualifiers.
+            loadWorkspacePluginsAsync()
             return nil
 
         case "shutdown":
@@ -849,6 +938,7 @@ public final class AROLanguageServer: Sendable {
 
     private func handleInitialize(params: Any?) async -> [String: Any] {
         log("Initialize request received")
+        captureWorkspaceRoots(from: params)
         return [
             "capabilities": capabilitiesDict,
             "serverInfo": [

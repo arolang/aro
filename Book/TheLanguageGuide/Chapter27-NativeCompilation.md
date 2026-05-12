@@ -64,6 +64,8 @@ Binary size depends on the complexity of your application and whether optimizati
 Startup time improves significantly with native binaries. Interpreted execution must parse source files and compile them to an internal representation before running. Native binaries skip this phase, starting execution immediately. For applications that start frequently—command-line tools, serverless functions—this improvement is meaningful.
 Runtime performance for I/O-bound workloads (most ARO applications) is similar between interpreted and native execution. The bottleneck is usually I/O—network requests, database queries, file operations—not the execution of ARO statements. For compute-heavy workloads, native compilation may provide some improvement.
 Memory usage is typically lower for native binaries because they do not maintain the interpreter infrastructure. This can be significant for memory-constrained environments.
+
+Compiled binaries use the same async-by-default action execution model as the interpreter. Action calls return immediately—the calling thread is not blocked on async work—and the runtime materializes values only when an effectful action consumes them. This eliminates the cooperative-pool deadlock that older versions of ARO could hit on cascading event chains, and it lets independent actions overlap without you having to express the parallelism explicitly. The behaviour is invisible at the language level: the same ARO source produces the same observable output regardless of mode, because effectful verbs (`Log`, `Return`, `Throw`, `Publish`, `Emit`, `Compare`, `Validate`, `Accept`) force their inputs at the call site. See Chapter 13 §13.13 for the complete effect-ordering rule.
 ---
 
 ## 27.6 Deployment

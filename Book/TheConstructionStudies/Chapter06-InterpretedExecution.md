@@ -81,7 +81,7 @@ All actor method calls must be `await`-ed. This propagates up the call stack, ma
 
 ### EventBus as Actor
 
-EventBus is also an actor. It provides both `nonisolated` entry points for synchronous publishing (fire-and-forget via `Task`) and actor-isolated methods for coordinated operations like `publishAndWait` and `awaitPendingEvents`.
+EventBus is also an actor, but its `SubscriptionStore` is a lock-backed class so `subscribe()` can register handlers synchronously — an event emitted on the very next instruction is guaranteed to find the new handler. Async coordination (`publishAndWait`, `publishAndTrack`, `awaitPendingEvents`) stays actor-isolated and uses `withTaskGroup` to run handlers concurrently while the bus tracks the in-flight count.
 
 ---
 

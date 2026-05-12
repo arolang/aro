@@ -2214,11 +2214,9 @@ public final class PluginLoader: @unchecked Sendable {
                 if let data = infoJSON.data(using: .utf8),
                    let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    // Register actions
+                    // Register actions. ActionRegistry is now a sync class; no
+                    // Task+semaphore bridge required.
                     if let actions = info["actions"] as? [[String: Any]] {
-                        let semaphore = DispatchSemaphore(value: 0)
-                        var registrationCount = 0
-
                         for actionDef in actions {
                             // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
                             let verbs: [String]
@@ -2231,37 +2229,29 @@ public final class PluginLoader: @unchecked Sendable {
                             }
 
                             for verb in verbs {
-                                registrationCount += 1
                                 let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
                                 let originalVerb = verb
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(
-                                        verb: normalizedVerb,
-                                        handler: { result, object, context in
-                                            var input: [String: any Sendable] = [:]
-                                            if let data = context.resolveAny(object.base) {
-                                                input["data"] = data
-                                                input["object"] = data
-                                                input[object.base] = data
-                                            }
-                                            if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                                input.merge(withArgs) { _, new in new }
-                                            }
-                                            if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                                input.merge(exprArgs) { _, new in new }
-                                            }
-                                            let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-                                            context.bind(result.base, value: pluginResult)
-                                            return pluginResult
+                                ActionRegistry.shared.registerDynamic(
+                                    verb: normalizedVerb,
+                                    handler: { result, object, context in
+                                        var input: [String: any Sendable] = [:]
+                                        if let data = context.resolveAny(object.base) {
+                                            input["data"] = data
+                                            input["object"] = data
+                                            input[object.base] = data
                                         }
-                                    )
-                                    semaphore.signal()
-                                }
+                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                            input.merge(withArgs) { _, new in new }
+                                        }
+                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                            input.merge(exprArgs) { _, new in new }
+                                        }
+                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                        context.bind(result.base, value: pluginResult)
+                                        return pluginResult
+                                    }
+                                )
                             }
-                        }
-
-                        for _ in 0..<registrationCount {
-                            semaphore.wait()
                         }
                     }
 

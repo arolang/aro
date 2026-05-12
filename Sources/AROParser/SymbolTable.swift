@@ -212,6 +212,24 @@ public indirect enum DataType: Sendable, Equatable, CustomStringConvertible {
     }
 }
 
+// MARK: - Symbol Lookup Error
+
+/// Error returned by `lookupWithContext()` when a symbol cannot be found.
+/// Provides scope context to help callers produce actionable diagnostics.
+public enum SymbolLookupError: Error, Sendable, CustomStringConvertible {
+    /// The symbol was not found in any reachable scope.
+    /// `searchedScopes` lists the scope names that were checked.
+    case notFound(name: String, searchedScopes: [String])
+
+    public var description: String {
+        switch self {
+        case .notFound(let name, let scopes):
+            let scopeList = scopes.isEmpty ? "no scopes" : scopes.joined(separator: " → ")
+            return "Symbol '\(name)' not found (searched: \(scopeList))"
+        }
+    }
+}
+
 // MARK: - Symbol Table
 
 /// A scoped symbol table
@@ -243,6 +261,27 @@ public final class SymbolTable: Sendable, CustomStringConvertible {
         return parent?.lookup(name)
     }
     
+    /// Looks up a symbol by name, throwing with scope context on failure.
+    /// Use this at boundaries where a missing symbol is an error (e.g. semantic analysis).
+    /// For internal/optional lookups, continue using `lookup(_:)`.
+    public func lookupWithContext(_ name: String) throws -> Symbol {
+        if let symbol = lookup(name) {
+            return symbol
+        }
+        throw SymbolLookupError.notFound(name: name, searchedScopes: scopeChain)
+    }
+
+    /// Returns the chain of scope names from this scope up to the root.
+    private var scopeChain: [String] {
+        var chain = [scopeName]
+        var current = parent
+        while let p = current {
+            chain.append(p.scopeName)
+            current = p.parent
+        }
+        return chain
+    }
+
     /// Looks up a symbol only in this scope
     public func lookupLocal(_ name: String) -> Symbol? {
         _symbols[name]

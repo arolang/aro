@@ -1,0 +1,12 @@
+# Type: console
+# Command: aro run ./Examples/GitDemo
+# Note: occurrence-check — branch name, clean flag, and commit log
+# all vary depending on the working tree, so only structural markers are asserted.
+---
+=== ARO Git Actions Demo ===
+--- Repository Status ---
+Branch:
+Clean:
+--- Recent Commits ---
+=== Demo complete ===
+startup

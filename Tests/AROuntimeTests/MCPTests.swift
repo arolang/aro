@@ -144,6 +144,7 @@ struct MCPTests {
             #expect(toolNames.contains("aro_compile"))
             #expect(toolNames.contains("aro_examples"))
             #expect(toolNames.contains("aro_actions"))
+            #expect(toolNames.contains("aro_qualifiers"))
             #expect(toolNames.contains("aro_parse"))
             #expect(toolNames.contains("aro_syntax"))
         }
@@ -204,6 +205,43 @@ struct MCPTests {
             #expect(text.contains("Retrieve"))
             // OWN actions should not appear
             #expect(!text.contains("Compute"))
+        }
+
+        @Test("aro_actions rejects unknown role filter")
+        func aroActionsRejectsUnknownRole() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_actions",
+                arguments: .object(["role": .string("nonsense")])
+            )
+            #expect(result.isError == true)
+            #expect(result.content.first?.text?.contains("Unknown role filter") == true)
+        }
+
+        @Test("aro_qualifiers lists built-in qualifiers")
+        func aroQualifiersListsBuiltIns() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(name: "aro_qualifiers", arguments: nil)
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("ARO Qualifiers"))
+            // A few built-ins that QualifierRegistry.registerBuiltIns() registers:
+            #expect(text.contains("uppercase"))
+            #expect(text.contains("lowercase"))
+            #expect(text.contains("hash"))
+        }
+
+        @Test("aro_qualifiers with namespace filter excludes others")
+        func aroQualifiersWithNamespaceFilter() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_qualifiers",
+                arguments: .object(["namespace": .string("")])
+            )
+            // Empty namespace = built-ins only; "Plugin Namespace:" header should
+            // not appear because no plugin entries match.
+            let text = result.content.first?.text ?? ""
+            #expect(!text.contains("Plugin Namespace:"))
         }
 
         @Test("aro_examples returns example list")

@@ -26,7 +26,7 @@ The event bus is the runtime component that makes this work. It receives events 
 The event bus maintains a registry of handlers organized by event type. When the application starts, the runtime scans all feature sets, identifies those whose business activity matches the handler pattern, and registers them with the bus. This registration happens automatically based on naming conventions.
 When a feature set executes an Emit action, the runtime creates an event object containing the event name and payload data. This object is delivered to the event bus, which looks up all handlers registered for that event type. Each matching handler receives the event and executes independently.
 The bus provides delivery guarantees within a single application instance. When you emit an event, all registered handlers will eventually execute. However, the order of execution is not guaranteed—handlers may run in any sequence. If you need guaranteed ordering, you must express it through event chaining where each handler emits an event that triggers the next step.
-Handler execution is isolated. Each handler runs in its own context with its own symbol table. A failure in one handler does not affect other handlers for the same event. The emitting feature set is also isolated—it completes regardless of whether handlers succeed or fail. This fire-and-forget semantics makes event emission a non-blocking operation that does not wait for handlers to complete.
+Handler execution is isolated. Each handler runs in its own context with its own symbol table. A failure in one handler does not affect other handlers for the same event. The emitter waits for every matching handler to finish before continuing past the `Emit` statement—so the next statement can rely on side effects the handlers performed—but it does not see whether they succeeded. Each handler's outcome stays isolated from the others, which is what prevents cascading failures.
 ---
 
 ## 13.3 Event Matching
@@ -107,7 +107,7 @@ Be cautious of circular chains where A triggers B triggers A. This creates an in
 ## 13.8 Error Handling in Events
 
 Error handling for events differs from synchronous execution. When a handler fails, the error is logged with full context, but the failure does not propagate to the emitter or to other handlers. Each handler succeeds or fails independently.
-This design reflects the fire-and-forget nature of event emission. The emitting feature set has already moved on by the time handlers execute. It cannot meaningfully handle handler failures because it has already returned its result. The isolation is intentional—it prevents cascading failures and keeps the emitter's behavior predictable.
+The emitting feature set waits for every matching handler to finish before continuing past the `Emit` statement, but it does not see whether they succeeded. The wait keeps causality intact—the next statement after `Emit` can rely on side effects the handlers performed (state mutation, repository writes, log lines)—while still isolating each handler's outcome from the others. This is intentional: it prevents cascading failures and keeps the emitter's behaviour predictable.
 For scenarios where handler success is critical, you need different patterns. You might use synchronous validation before emitting the event, checking conditions that would cause handler failure. You might use compensating events where failure handlers emit events that trigger recovery. You might move critical operations into the emitting feature set itself rather than relying on handlers.
 The runtime logs all handler failures. You can configure alerts based on these logs to notify operators when handlers are failing. The logs include the event type, handler name, error message, and full context, providing the information needed to diagnose and fix issues.
 ---
@@ -354,6 +354,32 @@ Event recording and replay serves several practical purposes:
 **Development**: Replay production event streams in development environments to test new handlers against realistic data patterns. This helps ensure that new code works correctly with real-world event sequences.
 
 The recording mechanism is transparent to your ARO code. You do not need to modify feature sets to enable recording—it happens automatically when you provide the `--record` flag. This separation keeps your business logic clean while providing powerful debugging and analysis capabilities.
+
+---
+
+## 13.13 Lazy Execution and Effect Ordering
+
+Most ARO actions are evaluated lazily under the hood. When you write `Compute the <discount> from <price> * 0.10`, the runtime does not necessarily run that multiplication right then—it returns a future that the next consuming action transparently forces. Laziness lets the runtime batch work, parallelise independent computations, and avoid wasting cycles on values nothing reads.
+
+You almost never need to think about this. The places where it would matter—observable side effects—are handled by the **effect-ordering rule**: every effectful action implicitly forces its inputs at the call site, so output happens in the order you wrote it.
+
+The effectful actions are:
+
+| Verb | What it observes |
+|------|------------------|
+| `Log` | writes to stdout, stderr, or a template buffer |
+| `Return` / `Throw` | materializes the response and propagates control flow |
+| `Publish` | exports a concrete value into the global symbol registry |
+| `Emit` | delivers the event and waits for handlers |
+| `Compare` / `Validate` / `Accept` | feeds an `if` / `when` / state-machine branch |
+
+These verbs run synchronously at their statement position. Any upstream futures are forced before the verb runs, and the verb's own result is bound eagerly so the next statement never sees a deferred handle. So `Log "starting"`, then a slow `Retrieve`, then `Log "done"` always prints "starting" before "done"—even though the `Retrieve` would otherwise be deferred—because each `Log` forces its inputs before writing.
+
+`Emit` is a special case worth understanding. The `Emit` verb itself is force-at-site (the bus delivery and the handler wait happen at the call site), but it captures payload values *without* forcing them. The first handler that reads a payload field forces the underlying future once; the result is memoized for every subsequent handler. So when ten handlers all read `<event: user>`, the upstream computation runs exactly once.
+
+The non-effectful actions—`Extract`, `Compute`, `Retrieve`, `Transform`, `Filter`, and so on—all flow lazy handles through bindings. There is no observable difference at the language level. You write the same code; the runtime decides when to run the work.
+
+If a force takes unusually long (default: more than five seconds) the runtime emits a single line to stderr identifying the binding name and source location. This is purely diagnostic—the wait then continues indefinitely—but it lets you spot pathological waits before they become hangs. Set `ARO_FORCE_WARN_SECONDS=0` to disable the warning, or any positive number to override the budget.
 
 ---
 

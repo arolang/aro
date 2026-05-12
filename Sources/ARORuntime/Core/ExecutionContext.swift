@@ -126,6 +126,15 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Returns: The value if found, nil otherwise
     func resolveAny(_ name: String) -> (any Sendable)?
 
+    /// Resolve a binding without forcing an AROFuture. Used by EmitAction to
+    /// capture lazy payload handles in a DomainEvent so they are forced at
+    /// first handler read (memoized for the rest) — see issue #55, "Resolved
+    /// Emit semantics."
+    /// - Parameter name: The variable name to look up
+    /// - Returns: The AROFuture itself when the binding holds one, otherwise
+    ///   the materialized value (nil if no binding).
+    func resolveAnyRaw(_ name: String) -> (any Sendable)?
+
     /// Resolve a variable, throwing if not found
     /// - Parameter name: The variable name to look up
     /// - Returns: The value
@@ -293,6 +302,11 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Whether execution is from a compiled binary (vs interpreter)
     var isCompiled: Bool { get }
 
+    /// Whether the Log action should omit the `[featureSetName]` prefix
+    /// in `.human` output. Used by stdin-pipe entry point so one-liners
+    /// produce clean output.
+    var suppressLogPrefix: Bool { get }
+
     // MARK: - Template Buffer (ARO-0050)
 
     /// Append content to the template output buffer
@@ -318,6 +332,13 @@ public extension ExecutionContext {
         return value
     }
 
+    /// Default implementation: fall back to `resolveAny`. Conformers that
+    /// store bindings as AROFutures (RuntimeContext) override this to return
+    /// the unforced future.
+    func resolveAnyRaw(_ name: String) -> (any Sendable)? {
+        resolveAny(name)
+    }
+
     /// Default: the global container backed by all shared singletons.
     /// Conformers that need test isolation should store and return a
     /// per-instance `RuntimeContainer`.
@@ -325,6 +346,9 @@ public extension ExecutionContext {
 
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
+
+    /// Default: show feature set prefix in Log output
+    var suppressLogPrefix: Bool { false }
 
     /// Default: no schema registry (no OpenAPI spec loaded)
     var schemaRegistry: SchemaRegistry? { nil }

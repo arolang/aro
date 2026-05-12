@@ -126,13 +126,19 @@ public final class Parser {
         }
         
         try expect(.colon, message: "':'")
-        
+
         // Parse business activity (space-separated identifiers)
-        let activity = try parseIdentifierSequence()
-        if activity.isEmpty {
+        let rawActivity = try parseIdentifierSequence()
+        if rawActivity.isEmpty {
             throw ParserError.missingBusinessActivity(at: peek().span.start)
         }
-        
+
+        // ARO-0081: User-defined actions use `Action [takes <field[: Type]>]` headers.
+        // `parseIdentifierSequence` collapses the header to "Action takes<field>" or
+        // "Action takes<field:Type>" — the angle-bracket suffix logic concatenates
+        // tokens between `<` and `>` without spaces. Recover the structured form here.
+        let (activity, userActionTakesField, userActionTakesType) = Self.splitUserActionHeader(rawActivity)
+
         try expect(.rightParen, message: "')'")
 
         // Parse optional when/where clause for feature set guards (e.g., Handler when/where condition)
@@ -170,8 +176,31 @@ public final class Parser {
             businessActivity: activity,
             statements: statements,
             whenCondition: whenCondition,
+            userActionTakesField: userActionTakesField,
+            userActionTakesType: userActionTakesType,
             span: startToken.span.merged(with: endToken.span)
         )
+    }
+
+    /// Decompose a raw activity string into `(activity, takesField, takesType)`.
+    ///
+    /// The lexer + `parseIdentifierSequence` collapses `Action takes <number: Integer>`
+    /// to `"Action takes<number:Integer>"`. This helper restores the structured
+    /// form and rejects malformed `takes` clauses without affecting non-Action
+    /// activities (which pass through unchanged).
+    static func splitUserActionHeader(_ raw: String) -> (activity: String, takes: String?, type: String?) {
+        let prefix = "Action takes<"
+        if raw.hasPrefix(prefix), raw.hasSuffix(">") {
+            let inner = String(raw.dropFirst(prefix.count).dropLast())
+            if let colonIdx = inner.firstIndex(of: ":") {
+                let field = String(inner[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+                let typeName = String(inner[inner.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+                return ("Action", field.isEmpty ? nil : field, typeName.isEmpty ? nil : typeName)
+            }
+            let field = inner.trimmingCharacters(in: .whitespaces)
+            return ("Action", field.isEmpty ? nil : field, nil)
+        }
+        return (raw, nil, nil)
     }
     
     // MARK: - Statement Parsing
@@ -885,10 +914,7 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // Expect 'from' preposition
-        guard case .preposition(.from) = peek().kind else {
-            throw ParserError.unexpectedToken(expected: "'from'", got: peek())
-        }
-        advance()
+        try expectPreposition(.from, message: "'from'")
 
         // Skip optional article before source
         if case .article = peek().kind {
@@ -1087,7 +1113,10 @@ public final class Parser {
             let concurrencyToken = peek()
             if case .intLiteral(let n) = concurrencyToken.kind {
                 advance()
-                concurrency = n
+                if n <= 0 {
+                    diagnostics.warning("Concurrency limit must be greater than 0, got \(n)", at: concurrencyToken.span.start)
+                }
+                concurrency = max(n, 1)
             } else {
                 throw ParserError.unexpectedToken(expected: "integer for concurrency", got: concurrencyToken)
             }
@@ -1167,14 +1196,12 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // consume 'from' (preposition)
-        if case .preposition(.from) = peek().kind { advance() }
-        else { throw ParserError.unexpectedToken(expected: "'from'", got: peek()) }
+        try expectPreposition(.from, message: "'from'")
 
         let fromExpr = try parseExpression()
 
         // consume 'to' (preposition)
-        if case .preposition(.to) = peek().kind { advance() }
-        else { throw ParserError.unexpectedToken(expected: "'to'", got: peek()) }
+        try expectPreposition(.to, message: "'to'")
 
         let toExpr = try parseExpression()
 
@@ -1369,10 +1396,15 @@ public final class Parser {
         // Check for range - the lexer produces intLiteral(-19) for "0-19" after the first "0"
         // So we look for a negative integer literal which indicates a range
         if case .intLiteral(let nextValue) = peek().kind, nextValue < 0 {
+            let rangeStart = firstValue
+            let rangeEnd = abs(nextValue)
             advance()
             // Convert negative to range: -19 means range end is 19
             result += "-"
-            result += String(abs(nextValue))
+            result += String(rangeEnd)
+            if rangeStart > rangeEnd {
+                diagnostics.warning("Range start (\(rangeStart)) is greater than end (\(rangeEnd))", at: peek().span.start)
+            }
         }
         // Check for explicit hyphen (in case lexer produces it separately)
         else if check(.hyphen) {
@@ -1383,6 +1415,9 @@ public final class Parser {
             }
             advance()
             result += String(endValue)
+            if firstValue > endValue {
+                diagnostics.warning("Range start (\(firstValue)) is greater than end (\(endValue))", at: peek().span.start)
+            }
         }
         // Check for pick (e.g., 0,3,7)
         else if check(.comma) {
@@ -1527,7 +1562,16 @@ public final class Parser {
         }
         throw ParserError.unexpectedToken(expected: message, got: token)
     }
-    
+
+    /// Expects a specific preposition token and advances, or throws a consistent error.
+    @discardableResult
+    private func expectPreposition(_ expected: Preposition, message: String) throws -> Token {
+        if case .preposition(let p) = peek().kind, p == expected {
+            return advance()
+        }
+        throw ParserError.unexpectedToken(expected: message, got: peek())
+    }
+
     // MARK: - Error Recovery
     
     /// Synchronizes to the next feature set after an error
