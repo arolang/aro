@@ -312,10 +312,10 @@ integration:linux:
     - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18765/v1/forecast").read()[:120])'
     - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18766/v1/forecast").read()[:120])'
 
-    - chmod +x test-examples.pl
+    - chmod +x Tests/IntegrationTestsRunner/run-tests.pl
     # K8s runner pod is small (~1–2 vCPUs); -j 2 gets a real speedup
     # without thrashing the cooperative pool.
-    - perl test-examples.pl --verbose -j 2
+    - perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j 2
   artifacts:
     when: on_failure
     name: test-failures-linux

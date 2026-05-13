@@ -240,7 +240,7 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | `Tests/AROParserTests/` | Lexer, parser, AST tests |
 | `Tests/ARORuntimeTests/` | Action, context, event tests |
 | `Tests/AROCompilerTests/` | IR generation tests |
-| `Tests/AROIntegrationTests/` | End-to-end tests |
+| `Tests/IntegrationTestsRunner/` | End-to-end example tests (run + build modes) |
 | `Examples/` | Working example applications |
 
 ---
