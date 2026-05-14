@@ -173,8 +173,14 @@ public struct ParseHtmlAction: ActionImplementation {
         case "markdown":
             return try parseHtmlToMarkdown(input)
 
+        case "page":
+            // Single-parse mode — title + markdown + links from one SwiftSoup parse.
+            // Callers that need all three (e.g. a crawler) save a full DOM parse
+            // per page versus running `markdown` and `links` separately.
+            return try parseHtmlPage(input)
+
         default:
-            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["links", "content", "text", "markdown"])
+            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["links", "content", "text", "markdown", "page"])
         }
     }
 
@@ -223,7 +229,22 @@ public struct ParseHtmlAction: ActionImplementation {
     /// Extract HTML content and convert to Markdown
     private func parseHtmlToMarkdown(_ html: String) throws -> [String: any Sendable] {
         let doc = try SwiftSoup.parse(html)
+        let (title, markdown) = try extractTitleAndMarkdown(from: doc)
+        return ["title": title, "markdown": markdown]
+    }
 
+    /// Single-parse extraction of title + markdown + links.
+    /// Equivalent to running `markdown` and `links` modes back-to-back but
+    /// parses the DOM once instead of twice.
+    private func parseHtmlPage(_ html: String) throws -> [String: any Sendable] {
+        let doc = try SwiftSoup.parse(html)
+        let (title, markdown) = try extractTitleAndMarkdown(from: doc)
+        let links: [String] = try doc.select("a[href]").array().compactMap { try $0.attr("href") }
+        return ["title": title, "markdown": markdown, "links": links]
+    }
+
+    /// Shared helper: extract title and main-content markdown from a parsed document.
+    private func extractTitleAndMarkdown(from doc: Document) throws -> (title: String, markdown: String) {
         let title = (try doc.select("title").first()?.text())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // Find main content area
@@ -243,8 +264,7 @@ public struct ParseHtmlAction: ActionImplementation {
         } else {
             markdown = ""
         }
-
-        return ["title": title, "markdown": markdown]
+        return (title, markdown)
     }
 
     /// Clean up markdown output by normalizing whitespace
@@ -259,10 +279,10 @@ public struct ParseHtmlAction: ActionImplementation {
         let lines = result.components(separatedBy: "\n")
         result = lines.map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }.joined(separator: "\n")
 
-        // Collapse 3+ consecutive blank lines into 2
-        while result.contains("\n\n\n") {
-            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-        }
+        // Collapse 3+ consecutive newlines into 2 in a single regex pass.
+        // The earlier `while contains/replace` loop was O(n²) on whitespace-heavy
+        // pages — each iteration replaced one overlap at a time.
+        result = result.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
 
         // Remove blank lines at start and end
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
