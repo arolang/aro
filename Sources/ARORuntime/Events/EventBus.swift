@@ -8,6 +8,37 @@ import Foundation
 /// Default timeout in seconds for waiting on event handlers to complete
 public let AROEventHandlerDefaultTimeout: TimeInterval = 10.0
 
+/// Synchronously-mutable counter for fire-and-forget publishes that have
+/// been initiated but whose `publishInternal` Task has not yet incremented
+/// the actor's `inFlightHandlers`. Without this, `publish()` can return,
+/// the calling handler can finish, and `awaitPendingEvents()` can see
+/// `inFlightHandlers == 0` and let the runtime exit — all before the
+/// fire-and-forget Task even gets scheduled. NSLock + Int is fine: the
+/// critical section is one arithmetic op and contention is low.
+fileprivate final class EventBusPendingPublishCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count: Int = 0
+
+    func increment() {
+        lock.lock(); count += 1; lock.unlock()
+    }
+
+    /// Decrement; return true iff the counter reached zero.
+    @discardableResult
+    func decrement() -> Bool {
+        lock.lock()
+        count -= 1
+        let zero = (count == 0)
+        lock.unlock()
+        return zero
+    }
+
+    var isZero: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return count == 0
+    }
+}
+
 /// Result box for synchronous bridge methods
 /// Semaphore ensures no actual data races occur
 private final class EventBusResultBox<T>: @unchecked Sendable {
@@ -97,6 +128,12 @@ public actor EventBus {
     /// These are long-lived services that can generate events asynchronously
     private var activeEventSources: Int = 0
 
+    /// Tracks fire-and-forget publishes from the moment `publish()` is called
+    /// until `publishInternal()` has finished registering subscriptions in
+    /// `inFlightHandlers`. Both must be zero before `awaitPendingEvents()` may
+    /// resume — see the type's doc comment.
+    private nonisolated let pendingFireAndForgetPublishes = EventBusPendingPublishCounter()
+
     /// Configurable staleness timeout for flush continuations (default: 30 s).
     /// Stale continuations are resumed and removed after this interval even if
     /// handlers are still in flight, preventing unbounded growth of the list.
@@ -139,12 +176,34 @@ public actor EventBus {
     /// This is nonisolated for compatibility with existing synchronous code
     /// - Parameter event: The event to publish
     nonisolated public func publish(_ event: any RuntimeEvent) {
+        // Pre-increment a synchronously-visible counter so awaitPendingEvents
+        // cannot exit between publish() returning and publishInternal running.
+        pendingFireAndForgetPublishes.increment()
         Task {
             await self.publishInternal(event)
+            let drained = self.pendingFireAndForgetPublishes.decrement()
+            // If our decrement drained the pending counter, the actor may
+            // already think it's idle and have parked flush continuations.
+            // Re-check inside the actor and resume them if appropriate.
+            if drained {
+                await self.checkFlushReadiness()
+            }
         }
     }
 
-    /// Internal async publish implementation
+    /// Internal async publish implementation.
+    ///
+    /// Each subscription gets a Task. Tracks `inFlightHandlers` so
+    /// `awaitPendingEvents` waits for fire-and-forget work as well as
+    /// publishAndTrack work. The pending-publish counter on `publish()`
+    /// (incremented before this Task is even scheduled) bridges the race
+    /// between publish() returning and this Task starting to run.
+    ///
+    /// We deliberately do NOT cap concurrency here: most fire-and-forget
+    /// publishes are lightweight system events (FeatureSetStarted, etc.)
+    /// with no subscribers — a global cap would backpressure those and
+    /// blow up the queue. Bound resource-heavy work (HTTP fetches) at the
+    /// action layer instead (see HTTPClient.sharedLimiter).
     private func publishInternal(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
         let matchingSubscriptions = await store.matching(for: eventType)
@@ -157,9 +216,32 @@ public actor EventBus {
 
         // Notify callback subscribers
         for subscription in matchingSubscriptions {
+            inFlightHandlers += 1
             Task {
                 await subscription.handler(event)
+                await self.fireForgetHandlerCompleted()
             }
+        }
+    }
+
+    /// Decrement in-flight tracking after a fire-and-forget handler completes.
+    private func fireForgetHandlerCompleted() {
+        inFlightHandlers -= 1
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
+            let pending = flushContinuations
+            flushContinuations.removeAll()
+            for (_, entry) in pending { entry.continuation.resumeOnce() }
+        }
+    }
+
+    /// Wake any waiting flush continuations if both counters have drained.
+    /// Called from the publish() task path after the pending-publish counter
+    /// reaches zero, so the actor can recheck and signal completion.
+    private func checkFlushReadiness() {
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
+            let pending = flushContinuations
+            flushContinuations.removeAll()
+            for (_, entry) in pending { entry.continuation.resumeOnce() }
         }
     }
 
@@ -203,7 +285,7 @@ public actor EventBus {
     /// Called when a handler completes - decrements counter and notifies waiters
     private func handlerCompleted() {
         inFlightHandlers -= 1
-        if inFlightHandlers == 0 {
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
             let pending = flushContinuations
             flushContinuations.removeAll()
             for (_, entry) in pending { entry.continuation.resumeOnce() }
@@ -246,7 +328,7 @@ public actor EventBus {
     /// Register a continuation waiting for handlers to complete
     private func registerFlushContinuation(_ continuation: CheckedContinuation<Void, Never>, id: UUID) {
         let safe = SafeContinuation(continuation)
-        if inFlightHandlers == 0 {
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
             safe.resumeOnce()
         } else {
             let deadline = Date().addingTimeInterval(flushContinuationStaleness)
@@ -290,6 +372,19 @@ public actor EventBus {
         inFlightHandlers
     }
 
+    /// True iff there is no in-flight or pending event work whatsoever —
+    /// neither tracked handlers (`inFlightHandlers`) nor fire-and-forget
+    /// publishes that haven't yet reached `publishInternal`. The shutdown
+    /// loop in ExecutionEngine uses this instead of the raw handler count
+    /// to avoid exiting during a brief lull between fan-out waves.
+    nonisolated public func isQuiescent() async -> Bool {
+        return await self.computeQuiescent()
+    }
+
+    private func computeQuiescent() -> Bool {
+        return inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero
+    }
+
     /// Register a pending handler (for fire-and-forget tasks)
     /// Call before spawning a task that will execute event handlers
     nonisolated public func registerPendingHandler() {
@@ -318,7 +413,7 @@ public actor EventBus {
             return
         }
         inFlightHandlers -= 1
-        if inFlightHandlers == 0 {
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
             let pending = flushContinuations
             flushContinuations.removeAll()
             for (_, entry) in pending { entry.continuation.resumeOnce() }
