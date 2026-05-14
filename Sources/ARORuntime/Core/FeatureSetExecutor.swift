@@ -877,8 +877,12 @@ public final class FeatureSetExecutor: Sendable {
 
         // Execute loop body for each item
         if loop.isParallel {
-            // Parallel execution
-            let concurrency = loop.concurrency ?? items.count
+            // Parallel execution.
+            // Default cap prevents pathological fan-out — without an explicit
+            // `with <concurrency: N>` clause this used to spawn one Task per
+            // item, so a page with 500 links spawned 500 Tasks. Falls back to
+            // a multiple of the core count when the program does not specify.
+            let concurrency = loop.concurrency ?? min(items.count, max(4, ProcessInfo.processInfo.activeProcessorCount * 4))
             try await withThrowingTaskGroup(of: Void.self) { group in
                 var activeCount = 0
                 for (index, item) in items.enumerated() {
@@ -1323,6 +1327,18 @@ public final class Runtime: @unchecked Sendable {
     /// - Returns: true if all handlers completed, false if timeout occurred
     public func awaitPendingEvents(timeout: TimeInterval = 10.0) async -> Bool {
         return await eventBus.awaitPendingEvents(timeout: timeout)
+    }
+
+    /// True iff the event bus has no in-flight handlers and no pending
+    /// fire-and-forget publishes. Used by shutdown loops to confirm the
+    /// runtime really has drained between awaitPendingEvents timeouts.
+    public func isQuiescent() async -> Bool {
+        return await eventBus.isQuiescent()
+    }
+
+    /// Pass-through to the event bus's in-flight handler count.
+    public func getPendingHandlerCount() async -> Int {
+        return await eventBus.getPendingHandlerCount()
     }
 
     /// Stop the runtime
