@@ -53,9 +53,7 @@ let analyzed = analyzer.analyze(program)
 | `VerbSets.swift` | ~45 | Canonical verb classification (shared by interpreter and compiler) |
 | `TypedValue.swift` | ~100 | Type-preserving value wrapper |
 | `OutputContext.swift` | ~50 | Output mode (.human, .machine, .developer) |
-| `StatementScheduler.swift` | ~100 | Statement scheduling utilities |
 | `BoundedSet.swift` | ~50 | Bounded set for deduplication |
-| `DependencyGraph.swift` | ~100 | Dependency graph utilities |
 
 ### Actions (`Actions/`)
 
@@ -242,7 +240,7 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | `Tests/AROParserTests/` | Lexer, parser, AST tests |
 | `Tests/ARORuntimeTests/` | Action, context, event tests |
 | `Tests/AROCompilerTests/` | IR generation tests |
-| `Tests/AROIntegrationTests/` | End-to-end tests |
+| `Tests/IntegrationTestsRunner/` | End-to-end example tests (run + build modes) |
 | `Examples/` | Working example applications |
 
 ---

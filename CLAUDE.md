@@ -34,6 +34,9 @@ aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
+aro lm "prompt"       # Ask the local LLM coding assistant (aro lm)
+aro lm                # Start the interactive aro lm REPL
+aro lm /index         # (Re)build the project retrieval index
 ```
 
 ## Architecture
@@ -194,10 +197,10 @@ Do not use it for production code, it is terribly insecure.
 ### Action Semantic Roles
 
 Actions are classified by data flow direction:
-- **REQUEST** (Extract, Parse, Retrieve, Fetch): External → Internal
-- **OWN** (Compute, Validate, Compare, Create, Transform): Internal → Internal
+- **REQUEST** (Extract, Parse, Retrieve, Fetch, Pull, Clone): External → Internal
+- **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
 - **RESPONSE** (Return, Throw): Internal → External
-- **EXPORT** (Publish, Store, Log, Send, Emit): Makes symbols globally accessible or exports data
+- **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
 
 ## Services
 
@@ -206,6 +209,7 @@ Built-in services available at runtime:
 - **AROHTTPClient**: AsyncHTTPClient-based HTTP client
 - **AROFileSystemService**: File I/O with FileMonitor watching
 - **AROSocketServer** / **AROSocketClient**: TCP communication
+- **GitService**: Native Git operations via libgit2 (ARO-0080)
 
 ## Plugin System
 
@@ -388,6 +392,45 @@ The `Keepalive` action:
 - Allows the event loop to process incoming events
 - Enables graceful shutdown with Ctrl+C
 
+### Git Actions (ARO-0080)
+
+Native version control via libgit2. The `<git>` system object defaults to the current working directory; use `<git: "/path">` for an explicit repository.
+
+```aro
+(* Status, log, branch via Retrieve *)
+Retrieve the <status> from the <git>.
+Retrieve the <log> from the <git>.
+Retrieve the <branch> from the <git>.
+
+(* Stage and commit *)
+Stage the <files> to the <git> with ".".
+Commit the <result> to the <git> with "feat: add feature".
+
+(* Remote operations (requires git CLI) *)
+Pull the <updates> from the <git>.
+Push the <result> to the <git>.
+
+(* Branching and tagging *)
+Checkout the <branch> from the <git> with "feature/new".
+Tag the <release> for the <git> with "v1.0.0".
+
+(* Clone *)
+Clone the <repo> from the <git> with { url: "https://github.com/user/repo.git", path: "./cloned" }.
+```
+
+| Action | Verb | Role | Prepositions |
+|--------|------|------|-------------|
+| Status/Log/Branch | `Retrieve` | REQUEST | from |
+| Stage | `Stage` | OWN | to, for |
+| Commit | `Commit` | EXPORT | to, with |
+| Pull | `Pull` | REQUEST | from |
+| Push | `Push` | EXPORT | to, with |
+| Clone | `Clone` | REQUEST | from, with, to |
+| Checkout | `Checkout` | OWN | from, to, with |
+| Tag | `Tag` | EXPORT | for, with |
+
+Git actions emit events: `GitCommit`, `GitPush`, `GitPull`, `GitCheckout`, `GitTag`, `GitClone`.
+
 ## Creating Custom Actions
 
 ```swift
@@ -438,6 +481,7 @@ Sources/
 │   ├── OpenAPI/        # Contract-first routing (OpenAPISpec, RouteRegistry)
 │   ├── Plugins/        # Plugin hosts (Native, Python, Swift)
 │   ├── Services/       # PluginLoader, UnifiedPluginLoader
+│   ├── Git/            # GitService (libgit2), GitEvents (ARO-0080)
 │   └── Application/    # App lifecycle, ApplicationLoader
 ├── AROCompiler/        # Native compilation (LLVM code generation)
 │   ├── LLVMCodeGenerator.swift  # AST to LLVM IR transformation
@@ -463,6 +507,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 ├── Scoping/            # Publish as, business activity scope, framework vars, pipeline, loop isolation
 ├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
+├── UserDefinedActions/ # Application.<Name> callable actions (ARO-0081)
 │
 │   # Events & Lifecycle
 ├── EventExample/       # Custom event emission and handling
@@ -497,6 +542,9 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
+│
+│   # Git
+├── GitDemo/            # Native Git operations (status, log, stage, commit)
 │
 │   # Sockets & Services
 ├── EchoSocket/         # TCP socket server
@@ -564,7 +612,9 @@ Proposals/              # Language specifications
 ├── ARO-0047-command-line-parameters.md
 ├── ARO-0048-websocket.md
 ├── ARO-0051-streaming-execution.md
-└── ARO-0073-store-files.md
+├── ARO-0073-store-files.md
+├── ARO-0080-git-actions.md
+└── ARO-0081-user-defined-actions.md
 ```
 
 ## Language Proposals
@@ -609,6 +659,8 @@ The `Proposals/` directory contains language specifications:
 | **0050 Template Engine** | Mustache-style templates, Render action |
 | **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
 | **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
+| **0080 Git Actions** | Native Git via libgit2: status, stage, commit, push, pull, clone, checkout, tag |
+| **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 
 ## Concurrency
 

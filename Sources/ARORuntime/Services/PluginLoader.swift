@@ -1171,7 +1171,7 @@ public final class PluginLoader: @unchecked Sendable {
                     // Compile C files to dylib
                     let outputLibPath = outputSrcDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
                     do {
-                        try compileCPlugin(sources: cFiles, output: outputLibPath)
+                        try compileCPlugin(sources: cFiles, output: outputLibPath, pluginRoot: item)
                     } catch {
                         AROLogger.warning("Failed to compile managed C plugin \(pluginName): \(error)", subsystem: "plugins")
                     }
@@ -1434,7 +1434,7 @@ public final class PluginLoader: @unchecked Sendable {
                 let outputSrcDir = outputPluginDir.appendingPathComponent("src")
                 try FileManager.default.createDirectory(at: outputSrcDir, withIntermediateDirectories: true)
                 let outputLibPath = outputSrcDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
-                try compileCPlugin(sources: cFiles, output: outputLibPath)
+                try compileCPlugin(sources: cFiles, output: outputLibPath, pluginRoot: item)
             }
         }
 
@@ -1515,7 +1515,7 @@ public final class PluginLoader: @unchecked Sendable {
     }
 
     /// Compile C source files to a dynamic library
-    private func compileCPlugin(sources: [URL], output: URL) throws {
+    private func compileCPlugin(sources: [URL], output: URL, pluginRoot: URL? = nil) throws {
         // Find clang/gcc
         let compiler: String
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
@@ -1530,6 +1530,23 @@ public final class PluginLoader: @unchecked Sendable {
         args.append(contentsOf: sources.map { $0.path })
         args.append("-shared")
         args.append("-fPIC")
+
+        // Add include search paths. The C SDK ships as a header users include
+        // via `#include "aro_plugin_sdk.h"`, and plugins typically place it in
+        // `include/` next to `src/`. Without -I, clang can't find it.
+        // Mirrors NativePluginHost.compileCPlugin so build-time and runtime
+        // compiles agree on header lookup.
+        if let pluginRoot {
+            let rootInclude = pluginRoot.appendingPathComponent("include")
+            if FileManager.default.fileExists(atPath: rootInclude.path) {
+                args.append("-I\(rootInclude.path)")
+            }
+            let srcInclude = pluginRoot.appendingPathComponent("src/include")
+            if FileManager.default.fileExists(atPath: srcInclude.path) {
+                args.append("-I\(srcInclude.path)")
+            }
+        }
+
         args.append("-o")
         args.append(output.path)
 
@@ -2214,11 +2231,9 @@ public final class PluginLoader: @unchecked Sendable {
                 if let data = infoJSON.data(using: .utf8),
                    let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    // Register actions
+                    // Register actions. ActionRegistry is now a sync class; no
+                    // Task+semaphore bridge required.
                     if let actions = info["actions"] as? [[String: Any]] {
-                        let semaphore = DispatchSemaphore(value: 0)
-                        var registrationCount = 0
-
                         for actionDef in actions {
                             // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
                             let verbs: [String]
@@ -2231,37 +2246,29 @@ public final class PluginLoader: @unchecked Sendable {
                             }
 
                             for verb in verbs {
-                                registrationCount += 1
                                 let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
                                 let originalVerb = verb
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(
-                                        verb: normalizedVerb,
-                                        handler: { result, object, context in
-                                            var input: [String: any Sendable] = [:]
-                                            if let data = context.resolveAny(object.base) {
-                                                input["data"] = data
-                                                input["object"] = data
-                                                input[object.base] = data
-                                            }
-                                            if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                                input.merge(withArgs) { _, new in new }
-                                            }
-                                            if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                                input.merge(exprArgs) { _, new in new }
-                                            }
-                                            let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-                                            context.bind(result.base, value: pluginResult)
-                                            return pluginResult
+                                ActionRegistry.shared.registerDynamic(
+                                    verb: normalizedVerb,
+                                    handler: { result, object, context in
+                                        var input: [String: any Sendable] = [:]
+                                        if let data = context.resolveAny(object.base) {
+                                            input["data"] = data
+                                            input["object"] = data
+                                            input[object.base] = data
                                         }
-                                    )
-                                    semaphore.signal()
-                                }
+                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                            input.merge(withArgs) { _, new in new }
+                                        }
+                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                            input.merge(exprArgs) { _, new in new }
+                                        }
+                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                        context.bind(result.base, value: pluginResult)
+                                        return pluginResult
+                                    }
+                                )
                             }
-                        }
-
-                        for _ in 0..<registrationCount {
-                            semaphore.wait()
                         }
                     }
 

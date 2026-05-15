@@ -1,6 +1,12 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
 type: multiservice
+# mode: interpreter — compiled mode diverges from interpreter:
+# socket welcome lines arrive before the harness's client subscribes
+# (race only at compiled speed), and file events emit FILE MODIFIED
+# instead of FILE CREATED / FILE DELETED. Both are real runtime
+# parity gaps; revisit once the file-monitor + socket bring-up are
+# fixed rather than papering over with per-platform expected files.
 mode: interpreter
 timeout: 20
 skip-on-windows: Multi-service tests not supported on Windows CI

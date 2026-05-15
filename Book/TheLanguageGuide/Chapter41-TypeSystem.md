@@ -9,9 +9,37 @@ ARO has four built-in primitive types:
 | Type | Description | Literal Examples |
 |------|-------------|-----------------|
 | `String` | Text | `"hello"` (regular), `'world'` (raw) |
-| `Integer` | Whole numbers | `42`, `-17`, `0xFF` |
-| `Float` | Decimal numbers | `3.14`, `2.5e10` |
+| `Integer` | Whole numbers | `42`, `-17`, `0xFF`, `1_000_000` |
+| `Float` | Decimal numbers | `3.14`, `2.5e10`, `1_299.99`, `3.141_592` |
 | `Boolean` | True/False | `true`, `false` |
+
+### Numeric Literals
+
+Numeric literals support several bases and an optional underscore separator for readability:
+
+```aro
+(* Decimal *)
+Compute the <million> from 1_000_000.
+Compute the <price>   from 1_299.99.
+Compute the <pi>      from 3.141_592_653.
+Compute the <sci>     from 6.022_141_5e23.
+
+(* Hexadecimal *)
+Compute the <color>   from 0xFF_00_FF.
+
+(* Binary *)
+Compute the <flags>   from 0b1111_0000.
+```
+
+Rules for underscore separators (ARO-0052 / ARO-0056):
+
+- Underscores may appear **between digits**.
+- Underscores may **not** appear at the start or end of a numeric literal, immediately before or after the decimal point, or adjacent to the exponent marker.
+- Underscores are stripped during parsing — they have no runtime effect, they are purely a readability aid.
+
+Valid: `1_000`, `0xFF_FF_FF`, `0b1111_0000`, `3.141_592e10`.
+
+Invalid: `_123`, `123_`, `123_.456`, `1e_10`.
 
 ### String Literals
 

@@ -219,11 +219,14 @@ actions:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Action identifier |
-| `description` | No | Human-readable description |
-| `role` | No | Semantic role: `request`, `own`, `response`, `export` |
+| `description` | No | Human-readable description (shown in editor hover and `aro_actions` MCP output) |
+| `role` | No | Semantic role: `request`, `own`, `response`, `export`, `server` |
 | `verbs` | No | Verbs that trigger this action (enables `<Hash>` syntax) |
 | `prepositions` | No | Valid prepositions for this action |
+| `since` | No | Version when the action was introduced (informational, surfaced in tooling) |
 | `arguments` | No | Argument schema with types and defaults |
+
+The `description`, `role`, `prepositions`, and `since` fields are also consumed by the LSP and the MCP `aro_actions` / `aro_qualifiers` tools — the richer the manifest, the better the editor experience for downstream users.
 
 **Roles:**
 - `request`: External → Internal (Extract, Retrieve, Fetch)

@@ -1,0 +1,85 @@
+ARO Action Reference — One example line per action
+===================================================
+
+REQUEST actions (data flows from external source into the feature set)
+-----------------------------------------------------------------------
+Extract the <id> from the <pathParameters: id>.
+Retrieve the <user> from the <user-repository> where id = <user-id>.
+Receive the <packet> from the <socket: message>.
+Read the <content> from the <config-file>.
+Request the <response> from the <api-url>.
+List the <entries> from the <uploads-directory>.
+Stat the <info> for the <document-path>.
+Exists the <found> for the <backup-file>.
+Prompt the <username> with "Enter your username:".
+Select the <action> from the <menu-options>.
+Stream the <events> from the <event-source>.
+
+OWN actions (data stays inside the feature set, transforms or decisions)
+------------------------------------------------------------------------
+Compute the <total> from <price> * <quantity>.
+Validate the <valid> for the <email-address>.
+Compare the <match> against the <expected-hash>.
+Transform the <upper: uppercase> from the <message>.
+Create the <user> with <registration-data>.
+Update the <profile> with <changes>.
+Sort the <sorted-users> for the <users>.
+Merge the <combined> with <list-a> from <list-b>.
+Delete the <updated-cart> from the <item> in <cart>.
+Map the <names> from the <users>.
+Reduce the <total-price: sum> from the <line-items>.
+Filter the <adults> from the <applicants>.
+Call the <result> from the <payment-service>.
+Execute the <output> with "git log --oneline -5".
+Parse the <document> from the <html-content>.
+Accept the <order> on the <placed-state>.
+Join the <sentence> from the <words>.
+Split the <segments> from the <csv-line> by /,/.
+Sleep the <pause> for 2.
+
+RESPONSE actions (data exits the feature set to the caller)
+-----------------------------------------------------------
+Return an <OK: status> with <user>.
+Throw a <NotFound: error> for the <user>.
+
+EXPORT actions (data persists, broadcasts, or is made globally visible)
+-----------------------------------------------------------------------
+Store the <user> into the <user-repository>.
+Publish as <app-config> <config>.
+Log <message> to the <console>.
+Send the <welcome> to the <connection>.
+Emit a <UserCreated: event> with <user>.
+Notify the <recipient> with "Your order has shipped.".
+Write the <report> to the <output-file>.
+Append the <entry> to the <audit-log>.
+Schedule the <heartbeat> with 30.
+
+FILE actions (file system operations)
+--------------------------------------
+Make the <uploads> at the <uploads-path>.
+Copy the <backup> to the <backup-destination>.
+Move the <archive> to the <archive-path>.
+
+TERMINAL actions (interactive terminal UI)
+------------------------------------------
+Clear the <display> for the <terminal>.
+Show the <panel> for the <terminal>.
+Render the <screen> to the <terminal>.
+Repaint the <header> at the <terminal>.
+
+SERVICE actions (long-running infrastructure)
+---------------------------------------------
+Start the <http-server> with <contract>.
+Stop the <http-server> with <application>.
+Listen the <incoming> on the <event-channel>.
+Keepalive the <application> for the <events>.
+Connect the <connection> to the <server-address>.
+Broadcast the <notification> to the <socket-server>.
+Close the <session> with <connection>.
+
+TEST actions (testing framework)
+---------------------------------
+Given the <context> with <test-user>.
+When the <response> from the <createUser>.
+Then the <created-user> with <expected-user>.
+Assert the <valid> for the <email-result>.

@@ -1,7 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # test-examples-in-docker.sh
-# Runs test-examples.pl in a Swift 6.2 Docker container with all dependencies
+# Runs Tests/IntegrationTestsRunner in a Swift 6.2 Docker container with
+# all dependencies installed.
 # =============================================================================
 
 set -e
@@ -108,7 +109,7 @@ file .build/release/aro
 .build/release/aro --version || .build/release/aro --help | head -3
 
 echo ""
-echo "=== Running test-examples.pl ==="
+echo "=== Running integration tests ==="
 . $HOME/.cargo/env
-./test-examples.pl 2>&1
+./Tests/IntegrationTestsRunner/run-tests.pl 2>&1
 '

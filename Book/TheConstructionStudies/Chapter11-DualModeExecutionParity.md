@@ -202,7 +202,7 @@ When adding a new action that fires events:
 5. **Detect the business activity** in `LLVMCodeGenerator.registerEventHandlers` (before generic `hasSuffix(" Handler")`)
 6. **Spread guard fields** into the DomainEvent payload if the handler has a `when` condition
 7. **Add or update an example** with `mode: both` and `occurrence-check: true`
-8. **Run** `swift build -c release && ./test-examples.pl`
+8. **Run** `swift build -c release && ./Tests/IntegrationTestsRunner/run-tests.pl`
 
 ---
 

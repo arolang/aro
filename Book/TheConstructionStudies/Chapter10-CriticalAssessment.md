@@ -81,23 +81,13 @@ Even non-programmers can follow the logic.
 
 ---
 
-### Synchronous Action Execution
+### Synchronous Action Execution (resolved, issue #55)
 
-**Problem**: Actions block their calling thread in compiled binaries.
+**Original problem**: Actions blocked their calling thread in compiled binaries via `DispatchSemaphore.wait()`, since `@_cdecl` functions cannot be `async`. Cascading event chains could fill Swift's cooperative pool with blocked pthreads waiting for continuations that needed those very threads to run — a deadlock.
 
-**Technical Cause**: `@_cdecl` functions cannot be `async`. We use `DispatchSemaphore.wait()` to block until async work completes.
+**Resolution**: `aro_action_*` now returns immediately with an `AROFuture` handle whose underlying Task runs on a custom `TaskExecutor` over GCD's elastic global queue, not the cooperative pool. Force points (typed value-accessors and effectful verbs) block the C-bridge pthread on the future's `DispatchGroup`, but action work cannot starve itself: GCD spawns additional threads under load. Cascading-emit chains that previously risked deadlock now finish in milliseconds.
 
-**Impact**: Risk of thread pool exhaustion and deadlocks under load.
-
-**Example deadlock scenario**:
-1. Compiled handler starts on thread A
-2. Handler action calls async service
-3. Async service needs thread A (which is blocked)
-4. Deadlock
-
-**Current Mitigation**: Event handlers run on GCD threads, not the Swift cooperative executor.
-
-**Potential Fix**: Design a custom async-compatible C bridge, or use libdispatch more carefully.
+The effect-ordering rule preserves the language-level guarantee that observable side effects happen in source order: `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Compare`, `Validate`, and `Accept` are tagged force-at-site, so each forces its inputs before running and binds its result eagerly. Non-effectful verbs flow lazy handles through bindings; the next consumer forces transparently. See ARO-0009 §4 for the full lazy-execution model and §13.13 of the Language Guide for the user-facing contract.
 
 ---
 

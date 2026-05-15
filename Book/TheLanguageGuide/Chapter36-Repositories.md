@@ -1019,19 +1019,28 @@ The filename determines the repository name:
 | `config.store` | `config-repository` |
 | `products.store` | `products-repository` |
 
-### Read-Only Stores (Default)
+### File Format
 
-A `.store` file is **read-only by default** — it seeds the repository at startup, but runtime `Store` and `Delete` operations only modify the in-memory repository and never write back to the file.
+Every `.store` file is a YAML **list of objects**. Each top-level entry becomes one repository row. Comments and blank lines are allowed; deeply nested values work as long as they are valid YAML.
 
 ```yaml
 # products.store
 - id: p1
   name: Widget
   price: 9.99
+  tags: [hardware, hand-tool]
+
 - id: p2
   name: Gadget
   price: 24.99
+  tags: [hardware, electronics]
 ```
+
+Files in any subdirectory of the application root are discovered automatically — they don't have to live next to `main.aro`.
+
+### Read-Only Stores (Default)
+
+A `.store` file is **read-only by default** — it seeds the repository at startup, but runtime `Store` and `Delete` operations only modify the in-memory repository and never write back to the file.
 
 ```aro
 (Application-Start: My App) {
@@ -1069,6 +1078,14 @@ chmod o+w sessions.store
 ```
 
 On the next application start, any data in `sessions.store` is loaded, and any new `Store` operations against `sessions-repository` will be persisted back.
+
+You can confirm which stores are writable with `ls -l`:
+
+```bash
+$ ls -l *.store
+-rw-r--r--  1 user  staff  245  products.store    # read-only
+-rw-r--rw-  1 user  staff  102  sessions.store    # writable (other-write set)
+```
 
 ### Crash Behavior
 

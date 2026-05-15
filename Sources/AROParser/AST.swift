@@ -72,21 +72,49 @@ public struct FeatureSet: ASTNode {
     public let businessActivity: String
     public let statements: [Statement]
     public let whenCondition: (any Expression)?
+    /// User-defined action sugar slot (ARO-0081).
+    ///
+    /// When the activity is `Action`, the optional `takes <field[: Type]>` clause
+    /// in the header declares a single positional parameter that callers may pass
+    /// using `from <value>`. When non-nil this feature set is callable as
+    /// `Application.<name>` and `from <value>` synthesises an input object with
+    /// `{ field: value }`.
+    public let userActionTakesField: String?
+    /// Optional type annotation for the `takes` field (e.g. "Integer").
+    public let userActionTakesType: String?
     public let span: SourceSpan
 
-    public init(name: String, businessActivity: String, statements: [Statement], whenCondition: (any Expression)? = nil, span: SourceSpan) {
+    public init(
+        name: String,
+        businessActivity: String,
+        statements: [Statement],
+        whenCondition: (any Expression)? = nil,
+        userActionTakesField: String? = nil,
+        userActionTakesType: String? = nil,
+        span: SourceSpan
+    ) {
         self.name = name
         self.businessActivity = businessActivity
         self.statements = statements
         self.whenCondition = whenCondition
+        self.userActionTakesField = userActionTakesField
+        self.userActionTakesType = userActionTakesType
         self.span = span
     }
 
     public var description: String {
         let whenDesc = whenCondition != nil ? " when ..." : ""
-        return "FeatureSet(\(name): \(businessActivity)\(whenDesc), \(statements.count) statements)"
+        let takesDesc = userActionTakesField.map { " takes <\($0)>" } ?? ""
+        return "FeatureSet(\(name): \(businessActivity)\(takesDesc)\(whenDesc), \(statements.count) statements)"
     }
-    
+
+    /// True when this feature set is a user-defined action (ARO-0081).
+    /// User-defined actions live under the `Application.` handle and are invoked
+    /// like plugin actions: `Application.<Name> the <result> with { ... }.`
+    public var isUserAction: Bool {
+        businessActivity == "Action"
+    }
+
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
         try visitor.visit(self)
     }

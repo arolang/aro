@@ -94,10 +94,10 @@ aro build ./Examples/SQLiteExample
 
 ```bash
 # Generate expected output
-./test-examples.pl --generate SQLiteExample
+./Tests/IntegrationTestsRunner/run-tests.pl --generate SQLiteExample
 
 # Run automated test
-./test-examples.pl SQLiteExample
+./Tests/IntegrationTestsRunner/run-tests.pl SQLiteExample
 ```
 
 ---

@@ -100,6 +100,18 @@ public actor ExecutionEngine {
             throw ActionError.entryPointNotFound(entryPoint)
         }
 
+        // ARO-0081: Register user-defined actions before the entry point runs.
+        // This makes `Application.<Name>` callable from anywhere in the program,
+        // including from inside Application-Start itself. The host is kept
+        // alive for the duration of the run via the engine's strong reference.
+        let userActionHost = UserDefinedActionHost(
+            analyzedProgram: program,
+            globalSymbols: globalSymbols,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus
+        )
+        await userActionHost.register()
+
         // Emit application start event
         eventBus.publish(ApplicationStartedEvent(applicationName: entryPoint))
 

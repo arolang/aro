@@ -114,6 +114,8 @@ Log <list: reverse> to the <console>.
 
 Write plugins in Swift, Rust, C, or Python. Qualifiers work in both interpreter and compiled binary modes.
 
+Plugin actions and qualifiers are also visible to editor tooling — the LSP loads plugins from `<workspace>/Plugins/` on `initialized`, and the MCP server's `aro_actions` / `aro_qualifiers` tools accept a `directory:` argument to surface workspace-specific plugins.
+
 ### Happy Path Philosophy
 
 Write only the success case. Errors are reported automatically in business terms. When a user cannot be retrieved, the message says exactly that.
@@ -128,6 +130,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Interpreter (`aro run`) | ✅ | ✅ | ✅ |
 | Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
 | Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
+| Local LLM assistant (`aro lm`) | ✅ | ✅ | ✅⁶ |
 | **Networking** |
 | HTTP Server | ✅ | ✅ | ✅¹ |
 | HTTP Client | ✅ | ✅ | ✅ |
@@ -149,6 +152,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ³ LanguageServerProtocol library doesn't support Windows yet
 ⁴ LLVM not available in Windows CI environment
 ⁵ `URL.lines` not available on Windows; use `Read` + `Split` instead
+⁶ Requires `llama-server`, `mlx_lm.server`, or `$ARO_LM_ENDPOINT` to be reachable
 
 ## Quick Start
 
@@ -316,26 +320,27 @@ Run integration tests for all examples (two-phase: interpreter + native binary):
 
 ```bash
 # Run all examples
-./test-examples.pl
+./Tests/IntegrationTestsRunner/run-tests.pl
 
 # Run specific examples
-./test-examples.pl HelloWorld Calculator HTTPServer
+./Tests/IntegrationTestsRunner/run-tests.pl HelloWorld Calculator HTTPServer
 
 # Verbose output
-./test-examples.pl --verbose
+./Tests/IntegrationTestsRunner/run-tests.pl --verbose
 
 # Filter by pattern
-./test-examples.pl --filter=HTTP
+./Tests/IntegrationTestsRunner/run-tests.pl --filter=HTTP
+
+# Parallel execution (socket-port tests still serialise after the pool)
+./Tests/IntegrationTestsRunner/run-tests.pl -j 4
 ```
 
-The integration test framework is modular and located in `Tests/AROIntegrationTests/`:
-- 17 modules organized by responsibility
-- Two-phase testing (run + build)
-- Automatic type detection (console, HTTP, socket, file)
-- Pattern matching with placeholders
-- 109 unit tests validating framework behavior
-
-See `Tests/AROIntegrationTests/README.md` for complete documentation.
+The integration test framework is modular and located in `Tests/IntegrationTestsRunner/`:
+- 18 modules under `lib/AROTest/` organized by responsibility
+- Each example runs in both interpreter (`aro run`) and compiled (`aro build`) mode
+- Automatic type detection (console, HTTP, socket, file, multi-context)
+- Pattern matching with placeholders (`__TIMESTAMP__`, `__UUID__`, ...)
+- Fork-based worker pool with flake-retry for parallel runs
 
 ## Examples
 

@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -68,7 +68,7 @@ jobs:
           PKGCONFIG
 
       - name: Run tests
-        run: swift test --parallel
+        run: swift test --parallel --num-workers 2
 
   # ===========================================================================
   # Linux Build & Test
@@ -90,7 +90,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -216,7 +216,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -737,8 +737,8 @@ jobs:
       - name: Run integration tests
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          chmod +x test-examples.pl
-          perl test-examples.pl --verbose
+          chmod +x Tests/IntegrationTestsRunner/run-tests.pl
+          perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j 4
 
       - name: Upload test results on failure
         if: failure()
@@ -989,9 +989,9 @@ jobs:
 
       - name: Run integration tests
         run: |
-          chmod +x test-examples.pl
+          chmod +x Tests/IntegrationTestsRunner/run-tests.pl
           # Run tests with timeout to prevent hanging
-          perl test-examples.pl --verbose 2>&1 || {
+          perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j 4 2>&1 || {
             echo "=== Integration tests failed ==="
             echo "=== Checking testrun.log files for errors ==="
             find Examples -name "testrun.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null | head -500
@@ -1149,7 +1149,7 @@ jobs:
           Write-Host "Current directory: $(Get-Location)"
           Write-Host "ARO_BIN: $env:ARO_BIN"
 
-          perl test-examples.pl --verbose
+          perl Tests/IntegrationTestsRunner/run-tests.pl --verbose
 
       - name: Upload test results on failure
         if: failure()

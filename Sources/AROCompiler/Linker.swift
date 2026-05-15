@@ -440,6 +440,14 @@ public final class CCompiler {
         }
         args.append("-lSystem")
 
+        // libgit2 (Homebrew). libARORuntime.a references git_* symbols from
+        // the GitService implementation; without -lgit2 the link fails.
+        if let libgit2Dir = findLibgit2Dir() {
+            args.append("-L\(libgit2Dir)")
+            args.append("-Wl,-rpath,\(libgit2Dir)")
+        }
+        args.append("-lgit2")
+
         // Dead code stripping (macOS specific)
         if options.deadStrip {
             args.append("-Wl,-dead_strip")
@@ -516,6 +524,7 @@ public final class CCompiler {
         args.append("-lstdc++")  // C++ standard library for BoringSSL
         args.append("-lz")       // zlib for compression
         args.append("-lxml2")    // libxml2 for Kanna HTML/XML parsing
+        args.append("-lgit2")    // libgit2 for Git actions
 
         // Export symbols to dynamic symbol table for dlsym lookup
         // Required for HTTP binaries to find compiled feature set functions at runtime
@@ -831,6 +840,23 @@ public final class CCompiler {
     /// Public accessor for Swift library path (for debugging)
     public func getSwiftLibPath() -> String? {
         return findSwiftLibPath()
+    }
+
+    /// Locate the directory containing libgit2.dylib on macOS (Homebrew).
+    /// Returns nil if libgit2 is on the default search path or cannot be found —
+    /// callers still append `-lgit2` and let clang resolve it.
+    private func findLibgit2Dir() -> String? {
+        let candidates = [
+            "/opt/homebrew/lib",       // Apple Silicon Homebrew
+            "/usr/local/lib",          // Intel Homebrew / manual install
+            "/opt/local/lib",          // MacPorts
+        ]
+        for dir in candidates {
+            if FileManager.default.fileExists(atPath: "\(dir)/libgit2.dylib") {
+                return dir
+            }
+        }
+        return nil
     }
 
     private func findSwiftLibPath() -> String? {

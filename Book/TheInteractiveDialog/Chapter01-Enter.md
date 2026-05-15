@@ -61,6 +61,28 @@ Or simply press `Ctrl+D` on an empty line. The REPL closes, and you return to yo
 
 But don't leave yet. We've only just begun.
 
+## A One-Liner Path In
+
+Sometimes you don't want a session—just an answer. When `aro` is invoked with no arguments and stdin is piped from another command or file, it reads the source, evaluates it through the same REPL session, and exits. No prompt, no banner, no feature-set prefix on Log output.
+
+```bash
+$ echo 'Log "Hello World" to the <console>.' | aro
+Hello World
+```
+
+Multi-line input works the same way and shares one evaluation context, so variables flow from one statement to the next:
+
+```bash
+$ aro <<'ARO'
+Compute the <x> from 21.
+Compute the <doubled> from <x> * 2.
+Log <doubled> to the <console>.
+ARO
+42
+```
+
+This is the REPL with the lights off. Useful for quick experiments, shell pipelines, and editor "send selection to ARO" integrations.
+
 ---
 
 **Next: Chapter 2 — Speak**

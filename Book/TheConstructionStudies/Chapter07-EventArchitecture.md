@@ -4,7 +4,7 @@
 
 ARO uses a centralized publish-subscribe pattern for inter-component communication. The EventBus decouples event producers from consumers, enabling reactive programming without tight coupling.
 
-The bus is a Swift actor holding a list of subscriptions (each with an event type string, a unique ID, and a handler closure), a set of AsyncStream continuations for stream-based subscribers, and a counter for in-flight handlers. Nonisolated entry points provide fire-and-forget publishing without awaiting the actor.
+The bus is a Swift actor whose subscription storage is a synchronously-accessed class guarded by an `NSLock`. The actor isolates async coordination state — AsyncStream continuations and the in-flight handler counter — while the lock-backed store lets `subscribe()` register a handler before its caller continues, closing a race where an event published immediately after subscription could miss its just-registered handler. Nonisolated entry points wrap the lock-backed paths so synchronous callers don't pay for an actor hop on every call.
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -390,9 +390,11 @@ In plain terms: you can't safely check "are we done?" and then decide to wait se
 
 ## Concurrency Design
 
-EventBus is a Swift actor. Nonisolated entry points like `publish()` and `subscribe()` spawn fire-and-forget tasks that hop into the actor, keeping the caller's path fast. Actor-isolated methods like `publishAndWait()` and `awaitPendingEvents()` provide coordination when needed.
+EventBus is a Swift actor with a lock-backed `SubscriptionStore`. `subscribe()` registers handlers synchronously through the store, so an event published in the very next instruction is guaranteed to see the new handler — there is no scheduled `Task` to outrun. Async coordination still goes through the actor: `publishAndWait()`, `publishAndTrack()`, and `awaitPendingEvents()` are actor-isolated and use `withTaskGroup` to run handlers concurrently while the bus tracks the in-flight count.
 
-Handlers run via `Task` on the cooperative executor. For compiled binaries, a `CompiledExecutionPool` gates concurrent execution to prevent thread exhaustion under intensive event cascades.
+Handlers run via `Task` on the cooperative executor. Compiled binaries use the same path; a `CompiledExecutionPool` gates concurrent feature-set entry points to keep server bursts bounded.
+
+Action work itself runs on `ActionTaskExecutor` — a custom `TaskExecutor` over GCD's elastic global queue, separate from the cooperative pool. Handlers that emit and force values therefore can never starve the cooperative pool: GCD will spawn additional threads to make progress. This is what made cascading event chains deadlock-free under issue #55.
 
 ---
 

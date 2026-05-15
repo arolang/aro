@@ -364,7 +364,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -385,7 +385,7 @@ public struct LogAction: ActionImplementation {
             for try await item in stream.stream {
                 let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
                 let formattedMessage: String
-                if context.isCompiled {
+                if context.isCompiled || context.suppressLogPrefix {
                     formattedMessage = formatted
                 } else {
                     formattedMessage = "[\(context.featureSetName)] \(formatted)"
@@ -492,8 +492,9 @@ public struct LogAction: ActionImplementation {
             formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
         case .human:
             // Readable format for CLI/console
-            // Compiled binaries get clean output without feature set prefix
-            if context.isCompiled {
+            // Compiled binaries and stdin-pipe scripts get clean output
+            // without the feature set prefix.
+            if context.isCompiled || context.suppressLogPrefix {
                 formattedMessage = message
             } else {
                 formattedMessage = "[\(context.featureSetName)] \(message)"
@@ -1231,10 +1232,17 @@ public struct EmitAction: ActionImplementation {
             payloadKey = "data" // Default fallback
         }
 
-        // Check for literal value first (from "with" clause)
+        // Issue #55, "Resolved Emit semantics": store payload values **without
+        // forcing AROFutures**, so the value is materialized at first handler
+        // read (memoized via AROFuture's ResultStorage) instead of eagerly at
+        // emit time. resolveAnyRaw returns the future itself; resolveAny would
+        // auto-force it.
+        //
+        // Literals don't go through resolveAny so they're never AROFutures,
+        // but we still keep the same source of truth for consistency.
         if let literalValue = context.resolveAny("_literal_") {
             payload[payloadKey] = literalValue
-        } else if object.base == "_expression_", let exprValue = context.resolveAny("_expression_") {
+        } else if object.base == "_expression_", let exprValue = context.resolveAnyRaw("_expression_") {
             let exprName: String = context.resolve("_expression_name_") ?? ""
             if exprName.isEmpty, let dictValue = exprValue as? [String: any Sendable] {
                 // Object literal expression `with { key: val, ... }` — spread dict directly as payload
@@ -1244,7 +1252,7 @@ public struct EmitAction: ActionImplementation {
                 // Variable reference expression — wrap with the variable name as key
                 payload[exprName.isEmpty ? "data" : exprName] = exprValue
             }
-        } else if let payloadValue = context.resolveAny(object.base) {
+        } else if let payloadValue = context.resolveAnyRaw(object.base) {
             // Named variable payload - wrap with the payload key
             // This allows handlers to extract with: <Extract> the <user> from the <event: user>
             payload[payloadKey] = payloadValue

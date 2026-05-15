@@ -5,5 +5,12 @@ occurrence-check: true
 include-server-output: true
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
-# Delay between HTTP requests to allow observer events to complete
-request-delay: 0.2
+# Delay between HTTP requests to allow observer events to complete.
+# Bumped from 0.2 → 0.5 → 1.0 → 2.0 across successive macOS flakes —
+# three observers each log to the same stdout asynchronously after
+# every repository event, and the macOS runner's scheduler will drop
+# one of the three Tasks' output under CPU contention even with -j 1.
+# 2.0 s costs ~10 extra seconds on this one test (negligible vs the
+# retry cycle this test triggered previously) and gives every observer
+# room to flush before the next HTTP request lands.
+request-delay: 2.0

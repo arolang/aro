@@ -53,6 +53,12 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether this is a compiled binary execution
     private nonisolated let _isCompiled: Bool
 
+    /// When true, Log actions in `.human` output context omit the
+    /// `[featureSetName]` prefix. Used by the stdin-pipe entry point so
+    /// piped one-liners produce clean output, e.g.
+    /// `echo 'Log "Hi" to the <console>.' | aro` -> `Hi`.
+    private nonisolated let _suppressLogPrefix: Bool
+
     /// Phase 2 async driver channel — set once at context init time by
     /// AROCContextHandle for compiled binary feature sets.  When non-nil,
     /// ActionRunner.executeSyncWithResult submits work here instead of
@@ -100,7 +106,8 @@ public actor RuntimeContext: ExecutionContext {
         parent: ExecutionContext? = nil,
         isCompiled: Bool = false,
         isTemplateContext: Bool = false,
-        driverChannel: ActionDriverChannel? = nil
+        driverChannel: ActionDriverChannel? = nil,
+        suppressLogPrefix: Bool = false
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
@@ -108,6 +115,7 @@ public actor RuntimeContext: ExecutionContext {
         self._outputContext = outputContext
         self._isCompiled = isCompiled
         self._isTemplateContext = isTemplateContext
+        self._suppressLogPrefix = suppressLogPrefix
         self.driverChannel = driverChannel
         self.parent = parent
 
@@ -129,8 +137,18 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Variable Management
 
     public nonisolated func resolve<T: Sendable>(_ name: String) -> T? {
-        if let typedValue = variables[name], let value = typedValue.value as? T {
-            return value
+        if let typedValue = variables[name] {
+            // Issue #55, Phase 2: auto-force AROFuture so existing typed
+            // readers see the concrete value transparently.
+            if let future = typedValue.value as? AROFuture {
+                if let forced = try? future.force(), let typed = forced as? T {
+                    return typed
+                }
+                return nil
+            }
+            if let value = typedValue.value as? T {
+                return value
+            }
         }
         // Try parent context
         return parent?.resolve(name)
@@ -170,9 +188,68 @@ public actor RuntimeContext: ExecutionContext {
         }
 
         if let typedValue = variables[name] {
+            // Issue #55, Phase 2: a binding may hold an AROFuture under lazy mode.
+            // Synchronous resolve callers expect a concrete value, so we force
+            // here. This is a force-point that converts the consumer-of-binding
+            // pattern into a sync wait. Async-aware callers should use
+            // `resolveAnyAsync(_:)` to await without blocking a pthread.
+            if let future = typedValue.value as? AROFuture {
+                return (try? future.force()) ?? ""
+            }
             return typedValue.value
         }
         // Try parent context
+        return parent?.resolveAny(name)
+    }
+
+    /// Resolve a binding without forcing an AROFuture. Returns the AROFuture
+    /// itself when the binding holds one, otherwise the materialized value.
+    ///
+    /// Used by EmitAction to capture lazy payload handles into a DomainEvent
+    /// so the value is forced at *first handler read* (memoized for the rest)
+    /// instead of eagerly at emit time. See issue #55 — "Resolved Emit
+    /// semantics: payload materialization → force at first handler read."
+    ///
+    /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
+    /// fall through to the regular resolveAny path.
+    public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
+        if name == "now" || name == "contract" || name == "Contract"
+            || name == "http-server" || name == "httpServer"
+            || name == "metrics" || name == "application" {
+            return resolveAny(name)
+        }
+        if let typedValue = variables[name] {
+            return typedValue.value
+        }
+        if let runtimeParent = parent as? RuntimeContext {
+            return runtimeParent.resolveAnyRaw(name)
+        }
+        return parent?.resolveAny(name)
+    }
+
+    /// Async variant of `resolveAny(_:)` that awaits AROFuture bindings via
+    /// `future.value()` instead of blocking. Use this from any `async` action
+    /// or task body so the cooperative pool doesn't have a thread tied up
+    /// blocking on another task on the same pool.
+    ///
+    /// Issue #55, Phase 2.
+    public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
+        // Magic variables short-circuit through the sync path — they don't
+        // produce futures.
+        if name == "now" || name == "contract" || name == "Contract"
+            || name == "http-server" || name == "httpServer"
+            || name == "metrics" || name == "application" {
+            return resolveAny(name)
+        }
+        if let typedValue = variables[name] {
+            if let future = typedValue.value as? AROFuture {
+                return try? await future.value()
+            }
+            return typedValue.value
+        }
+        if let runtimeParent = parent as? RuntimeContext {
+            return await runtimeParent.resolveAnyAsync(name)
+        }
         return parent?.resolveAny(name)
     }
 
@@ -387,7 +464,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            suppressLogPrefix: _suppressLogPrefix
         )
     }
 
@@ -402,7 +480,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            suppressLogPrefix: _suppressLogPrefix
         )
     }
 
@@ -424,7 +503,8 @@ public actor RuntimeContext: ExecutionContext {
             container: container,
             parent: self,
             isCompiled: _isCompiled,
-            isTemplateContext: true
+            isTemplateContext: true,
+            suppressLogPrefix: _suppressLogPrefix
         )
     }
 
@@ -467,6 +547,10 @@ public actor RuntimeContext: ExecutionContext {
 
     public nonisolated var isCompiled: Bool {
         _isCompiled
+    }
+
+    public nonisolated var suppressLogPrefix: Bool {
+        _suppressLogPrefix
     }
 
     // MARK: - Template Buffer (ARO-0050)

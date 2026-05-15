@@ -53,7 +53,7 @@ LLVM-Generated Code (native)
   <text x="155" y="165" class="title" text-anchor="middle">@_cdecl Bridge Functions</text>
   <text x="40" y="185" class="label">@_cdecl("aro_action_log")</text>
   <text x="40" y="200" class="label">public func aro_action_log(...)</text>
-  <text x="40" y="215" class="label">  → ActionRunner.shared.executeSync()</text>
+  <text x="40" y="215" class="label">  → executeSyncWithResult()</text>
 
   <!-- Swift Runtime -->
   <rect x="30" y="250" width="250" height="80" rx="5" class="box swift"/>

@@ -898,9 +898,12 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         let language = dict["language"] as? String ?? "native"
 
         // Parse actions using shared helper (supports both flat and structured formats)
-        let parsedActions = Self.parseActionList(from: dict)
+        // The metadata-aware variant also pulls role/prepositions/description so
+        // the catalog can serve completion/hover for plugin verbs.
+        let parsedActions = PluginInfoParser.parseActionListWithMetadata(from: dict)
         let actionNames = parsedActions.names
         let verbsMap = parsedActions.verbsMap
+        let actionMetadata = parsedActions.metadataMap
 
         // Parse qualifiers using shared helper
         let qualifierDescriptors = Self.parseQualifierDescriptors(from: dict)
@@ -969,12 +972,26 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             deprecations: deprecationList
         )
 
-        // Create action descriptors
+        // Create action descriptors. Stamp the namespace handle onto every entry
+        // so `registerActions()` can register a uniform `PluginActionMetadata`
+        // even though `parseActionListWithMetadata` itself doesn't know the
+        // namespace (that comes from plugin.yaml, not aro_plugin_info JSON).
         for actionName in actionNames {
+            let baseMeta = actionMetadata[actionName]
+            let meta = baseMeta.map {
+                ActionRegistry.PluginActionMetadata(
+                    role: $0.role,
+                    prepositions: $0.prepositions,
+                    description: $0.description,
+                    handle: qualifierNamespace,
+                    since: $0.since
+                )
+            }
             actions[actionName] = NativeActionDescriptor(
                 name: actionName,
                 inputSchema: nil,
-                outputSchema: nil
+                outputSchema: nil,
+                metadata: meta
             )
         }
 
@@ -1057,7 +1074,12 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        var entries: [(verb: String, pluginName: String, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
+        var entries: [(
+            verb: String,
+            pluginName: String,
+            metadata: ActionRegistry.PluginActionMetadata?,
+            handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
+        )] = []
 
         for (name, descriptor) in actions {
             // Get verbs for this action (or use the action name itself as a fallback)
@@ -1086,12 +1108,17 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
                         host: self,
                         descriptor: descriptor
                     )
-                    entries.append((verb: registeredVerb, pluginName: pluginName, handler: wrapper.handle))
+                    entries.append((
+                        verb: registeredVerb,
+                        pluginName: pluginName,
+                        metadata: descriptor.metadata,
+                        handler: wrapper.handle
+                    ))
                 }
             }
         }
 
-        syncRegisterActions(entries)
+        syncRegisterActionsWithMetadata(entries)
     }
 
     // MARK: - Unload
@@ -1359,6 +1386,15 @@ struct NativeActionDescriptor: Sendable {
     let name: String
     let inputSchema: String?
     let outputSchema: String?
+    /// Optional metadata parsed from `aro_plugin_info()` for catalog/discovery.
+    let metadata: ActionRegistry.PluginActionMetadata?
+
+    init(name: String, inputSchema: String?, outputSchema: String?, metadata: ActionRegistry.PluginActionMetadata? = nil) {
+        self.name = name
+        self.inputSchema = inputSchema
+        self.outputSchema = outputSchema
+        self.metadata = metadata
+    }
 }
 
 /// Service descriptor (ARO-0073)
