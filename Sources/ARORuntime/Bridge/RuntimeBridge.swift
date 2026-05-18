@@ -428,9 +428,29 @@ public func aro_runtime_await_pending_events(_ runtimePtr: UnsafeMutableRawPoint
     // Use Task.detached to ensure the task runs on the concurrent executor
     // rather than inheriting the current task context. This prevents deadlocks
     // on Linux where the default Task might try to use the blocked thread.
+    //
+    // Loops with stall detection so long-running cascades (e.g. a crawler
+    // driven by fire-and-forget repository observers) aren't cut off after
+    // the per-call timeout. Uses `isQuiescent` rather than the raw handler
+    // count so we don't exit during the lull between fan-out waves while
+    // fire-and-forget publishes are queued but haven't yet incremented
+    // in-flight tracking. Bails only when the pending count stops decreasing
+    // across two windows — that's the signal that work has stalled.
     Task.detached { @Sendable in
-        let result = await runtimeHandle.runtime.awaitPendingEvents(timeout: timeout)
-        resultBox.set(result)
+        var previousPending = -1
+        var finalResult = true
+        while true {
+            let completed = await runtimeHandle.runtime.awaitPendingEvents(timeout: timeout)
+            if completed { finalResult = true; break }
+            if await runtimeHandle.runtime.isQuiescent() { finalResult = true; break }
+            let pending = await runtimeHandle.runtime.getPendingHandlerCount()
+            if pending == previousPending {
+                finalResult = false
+                break
+            }
+            previousPending = pending
+        }
+        resultBox.set(finalResult)
         semaphore.signal()
     }
 

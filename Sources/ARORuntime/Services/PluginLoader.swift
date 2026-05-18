@@ -454,6 +454,21 @@ public final class PluginLoader: @unchecked Sendable {
                         try? ExternalServiceRegistry.shared.register(nameWrapper, withName: infoName)
                     }
 
+                    // ARO-0073: also register every service declared in aro_plugin_info
+                    // (the SDK's .service("foo", ...) entries) so `<foo: method>` resolves
+                    // even when the service name differs from plugin/handle/info-name.
+                    if let serviceObjects = info["services"] as? [[String: Any]] {
+                        for serviceObj in serviceObjects {
+                            guard let svcName = serviceObj["name"] as? String,
+                                  svcName.lowercased() != name.lowercased() else { continue }
+                            if let funcs = cPluginFunctions[name.lowercased()] {
+                                cPluginFunctions[svcName.lowercased()] = funcs
+                            }
+                            let svcWrapper = CPluginServiceWrapper(name: name, loader: self)
+                            try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcName)
+                        }
+                    }
+
                     // Register actions using shared parser
                     let parsedActions = PluginInfoParser.parseActionList(from: info)
                     var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []

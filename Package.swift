@@ -38,7 +38,7 @@ platformDependencies = [
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
     // FileMonitor for file system watching
-    .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.0.0"),
+    .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.1.0"),
     // LLVM C API bindings for type-safe IR generation (Issue #53)
     // Swifty-LLVM requires Swift 6.2 and LLVM 20
     .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),

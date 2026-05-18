@@ -181,11 +181,27 @@ public actor ExecutionEngine {
             _enteredWaitState = context.isWaiting
 
             // CRITICAL: Wait for all in-flight event handlers to complete
-            // This ensures events emitted during Application-Start finish executing
-            let completed = await eventBus.awaitPendingEvents(timeout: AROEventHandlerDefaultTimeout)
-            if !completed {
+            // This ensures events emitted during Application-Start finish executing.
+            //
+            // Loops with stall detection so long-running cascades (e.g. a
+            // crawler that keeps emitting from observer handlers) aren't cut
+            // off after the per-call timeout. Uses `isQuiescent` rather than
+            // the bare handler count so we don't exit in the brief lull
+            // between fan-out waves while fire-and-forget publishes are
+            // queued but haven't yet incremented in-flight tracking.
+            // Bails only when the pending count stops decreasing across two
+            // windows — that's the signal that work has stalled.
+            var previousPending = -1
+            while true {
+                let completed = await eventBus.awaitPendingEvents(timeout: AROEventHandlerDefaultTimeout)
+                if completed { break }
+                if await eventBus.isQuiescent() { break }
                 let pending = await eventBus.getPendingHandlerCount()
-                print("[WARNING] \(pending) event handler(s) did not complete within \(AROEventHandlerDefaultTimeout)s timeout")
+                if pending == previousPending {
+                    print("[WARNING] \(pending) event handler(s) stalled — no progress within \(AROEventHandlerDefaultTimeout)s")
+                    break
+                }
+                previousPending = pending
             }
 
             return response

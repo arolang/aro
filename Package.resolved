@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KrisSimon/FileMonitor.git",
       "state" : {
-        "revision" : "20e90f32e5c88f840e83dc1bb3bf6db096a80d13",
-        "version" : "2.0.0"
+        "revision" : "798d49acf0beffab5a2edb59021f93df3b4b389b",
+        "version" : "2.1.0"
       }
     },
     {
