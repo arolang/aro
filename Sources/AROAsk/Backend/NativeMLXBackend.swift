@@ -60,11 +60,9 @@ private struct TokenizerBridge: MLXLMCommon.Tokenizer, @unchecked Sendable {
             for (k, v) in msg { result[k] = "\(v)" }
             return result
         }
-        let anyTools: [[String: Any]]? = tools?.map { tool in
-            var result: [String: Any] = [:]
-            for (k, v) in tool { result[k] = v }
-            return result
-        }
+        // swift-transformers 1.3+ types `tools:` as `[ToolSpec]?` where
+        // `ToolSpec == [String: any Sendable]` — pass the input as-is.
+        let anyTools: [[String: any Sendable]]? = tools
 
         // Try with the model's built-in template first
         do {

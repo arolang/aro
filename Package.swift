@@ -74,7 +74,9 @@ compilerLLVMDependency = [
 #if os(macOS)
 mlxDependencies = [
     .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main"),
-    .package(url: "https://github.com/huggingface/swift-transformers.git", from: "0.1.8"),
+    // 1.3.0+ avoids a Swift 6.2.1 SIL OwnershipModelEliminator crash that
+    // 0.1.8 triggered while compiling Tokenizers' LeavesWithCommonPrefixIterator.
+    .package(url: "https://github.com/huggingface/swift-transformers.git", from: "1.3.0"),
 ]
 askMLXTargetDependencies = [
     .product(name: "MLXLLM", package: "mlx-swift-lm"),

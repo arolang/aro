@@ -1,5 +1,5 @@
 {
-  "originHash" : "b2eba3731a3446423beb1f9e89dedc3b3c9c18f8ace5b49f99334bab584833b8",
+  "originHash" : "162c36c64a589611a68f1286a117f6cbd32c33c568dd40e3579c3630ed5e4b2c",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -11,21 +11,21 @@
       }
     },
     {
+      "identity" : "eventsource",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/EventSource.git",
+      "state" : {
+        "revision" : "a3a85a85214caf642abaa96ae664e4c772a59f6e",
+        "version" : "1.4.1"
+      }
+    },
+    {
       "identity" : "filemonitor",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KrisSimon/FileMonitor.git",
       "state" : {
         "revision" : "798d49acf0beffab5a2edb59021f93df3b4b389b",
         "version" : "2.1.0"
-      }
-    },
-    {
-      "identity" : "jinja",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/johnmai-dev/Jinja",
-      "state" : {
-        "revision" : "5c0a87846dfd36ca6621795ad2f09fdaab82b739",
-        "version" : "1.3.0"
       }
     },
     {
@@ -79,7 +79,7 @@
       "location" : "https://github.com/ml-explore/mlx-swift-lm.git",
       "state" : {
         "branch" : "main",
-        "revision" : "7f169f9587b9fc41a506f092a4ec4d69367e4ed5"
+        "revision" : "5b7e543e70c47e99f8f38886752fcb49b3388226"
       }
     },
     {
@@ -191,6 +191,24 @@
       }
     },
     {
+      "identity" : "swift-huggingface",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/huggingface/swift-huggingface.git",
+      "state" : {
+        "revision" : "b721959445b617d0bf03910b2b4aced345fd93bf",
+        "version" : "0.9.0"
+      }
+    },
+    {
+      "identity" : "swift-jinja",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/huggingface/swift-jinja.git",
+      "state" : {
+        "revision" : "0b67ecb79139f6addef8699eff3622808aa6c7dc",
+        "version" : "2.3.6"
+      }
+    },
+    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
@@ -276,8 +294,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-syntax.git",
       "state" : {
-        "revision" : "0687f71944021d616d34d922343dcef086855920",
-        "version" : "600.0.1"
+        "revision" : "9de99a78f099e59caf2b2beec65a4c45d54b2081",
+        "version" : "603.0.1"
       }
     },
     {
@@ -294,8 +312,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-transformers.git",
       "state" : {
-        "revision" : "8a83416cc00ab07a5de9991e6ad817a9b8588d20",
-        "version" : "0.1.15"
+        "revision" : "2fa33e1f5e7131a7fc64c28e6d161dcec0d24820",
+        "version" : "1.3.3"
       }
     },
     {
@@ -323,6 +341,15 @@
       "state" : {
         "revision" : "51b5127c7fb6ffac106ad6d199aaa33c5024895f",
         "version" : "6.2.0"
+      }
+    },
+    {
+      "identity" : "yyjson",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ibireme/yyjson.git",
+      "state" : {
+        "revision" : "8b4a38dc994a110abaec8a400615567bd996105f",
+        "version" : "0.12.0"
       }
     }
   ],
