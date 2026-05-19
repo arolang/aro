@@ -7,13 +7,32 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 echo "=== Running ARO tests in Swift 6.2 Docker container ==="
 echo ""
 
 docker run --rm -v "$SCRIPT_DIR:/workspace" -w /workspace swift:6.2-jammy bash -c '
 set -e
+
+# Copy the workspace from the (slow, inotify-broken) host bind-mount to a
+# native overlayfs path inside the container, then run everything from
+# there. Docker Desktop on macOS uses virtiofs/gRPC FUSE which (a) does
+# not propagate inotify events — breaks FileWatcher — and (b) is slow for
+# the many small-file ops that SwiftSyntax compilation does, which times
+# out plugin examples like GreetingPlugin.
+echo "=== Copying workspace to native filesystem (avoids virtiofs limits) ==="
+mkdir -p /aro
+# tar streams the bind mount into the overlayfs once, filtering out the macOS
+# build artefacts up front. cp/tar are pre-installed; rsync is not, and
+# `apt-get install rsync` here would fail (no apt-get update yet).
+tar -C /workspace -cf - \
+    --exclude=".build" \
+    --exclude=".build-aro" \
+    --exclude="target" \
+    --exclude="*.dylib" \
+    . | tar -C /aro -xf -
+cd /aro
 
 echo "=== Installing base dependencies ==="
 apt-get update -qq
@@ -36,6 +55,7 @@ apt-get install -y -qq \
     libgit2-dev \
     cpanminus \
     build-essential \
+    rsync \
     > /dev/null 2>&1
 
 echo "=== Installing LLVM 20 from official apt repository ==="
@@ -80,14 +100,16 @@ echo ""
 echo "=== Cleaning build directory ==="
 rm -rf .build
 
-# Clean Rust build artifacts from plugin directories (macOS dylibs will not work on Linux)
+# Clean Rust build artifacts from plugin directories (macOS dylibs will not work on Linux).
+# Use -ipath so we also catch the lowercase legacy `plugins/` directories
+# (ExternalService, SQLiteExample, ZipService).
 echo "=== Cleaning Rust plugin artifacts ==="
-find Examples -type d -name target -path "*/Plugins/*" -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
+find Examples -type d -name target -ipath "*/plugins/*" -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
 
 # Clean macOS-built plugin libraries and SPM build caches (wrong arch for Linux)
 echo "=== Cleaning plugin build artifacts ==="
-find Examples -path "*/Plugins/*" \( -name "*.dylib" -o -name "*.so" \) -print0 2>/dev/null | xargs -0 rm -f 2>/dev/null || true
-find Examples -path "*/Plugins/*" -type d \( -name ".build" -o -name ".build-aro" \) -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
+find Examples -ipath "*/plugins/*" \( -name "*.dylib" -o -name "*.so" \) -print0 2>/dev/null | xargs -0 rm -f 2>/dev/null || true
+find Examples -ipath "*/plugins/*" -type d \( -name ".build" -o -name ".build-aro" \) -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
 
 # Clean macOS compiled binaries from Examples directories (Mach-O will not run on Linux)
 echo "=== Cleaning macOS example binaries ==="
@@ -96,7 +118,7 @@ find Examples -maxdepth 2 -type f -executable ! -name "*.sh" ! -name "*.pl" ! -n
 # Fix git ownership issues in Docker (mounted volume has different owner)
 # Use || true since git may fail in git worktree environments where the parent repo path
 # is not accessible inside the container
-git config --global --add safe.directory /workspace || true
+git config --global --add safe.directory /aro || true
 git config --global --add safe.directory "*" || true
 
 echo ""
@@ -111,5 +133,16 @@ file .build/release/aro
 echo ""
 echo "=== Running integration tests ==="
 . $HOME/.cargo/env
+
+# Copy test artifacts (logs, diffs) back to the bind-mount on exit so the
+# host can inspect them after the container stops.
+sync_results() {
+    rsync -a --include="*/" \
+        --include="testrun.log" --include="expected.diff" --include="expected.binary.diff" \
+        --exclude="*" \
+        /aro/Examples/ /workspace/Examples/ 2>/dev/null || true
+}
+trap sync_results EXIT
+
 ./Tests/IntegrationTestsRunner/run-tests.pl 2>&1
 '
