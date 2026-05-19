@@ -1623,9 +1623,15 @@ public final class PluginSymbolRenamer {
     }
 
     /// Extract .o files from a static archive (.a)
+    ///
+    /// Prefer `llvm-ar` over `/usr/bin/ar`. cargo's static archives use the GNU/SysV
+    /// extended-filename format; macOS BSD `ar` silently extracts zero files (exit 0)
+    /// from those, which the caller then misreports as "No object files found".
     public func extractObjectFiles(from archivePath: String, to outputDir: String) throws -> [String] {
+        let arPath = findArchiver()
+
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ar")
+        process.executableURL = URL(fileURLWithPath: arPath)
         process.arguments = ["x", archivePath]
         process.currentDirectoryURL = URL(fileURLWithPath: outputDir)
 
@@ -1647,6 +1653,37 @@ public final class PluginSymbolRenamer {
         return contents
             .filter { $0.hasSuffix(".o") }
             .map { "\(outputDir)/\($0)" }
+    }
+
+    private func findArchiver() -> String {
+        let candidates = [
+            "/opt/homebrew/opt/llvm@20/bin/llvm-ar",
+            "/opt/homebrew/opt/llvm/bin/llvm-ar",
+            "/usr/local/opt/llvm/bin/llvm-ar",
+            "/usr/bin/llvm-ar-20",
+            "/usr/bin/llvm-ar",
+            "/usr/local/bin/llvm-ar",
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        // PATH lookup
+        let which = Process()
+        which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        which.arguments = ["llvm-ar"]
+        let pipe = Pipe()
+        which.standardOutput = pipe
+        which.standardError = FileHandle.nullDevice
+        if (try? which.run()) != nil {
+            which.waitUntilExit()
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let out, !out.isEmpty, FileManager.default.isExecutableFile(atPath: out) {
+                return out
+            }
+        }
+        // Fall back to BSD ar — fine for archives without GNU extended filenames.
+        return "/usr/bin/ar"
     }
 
     // MARK: - Private

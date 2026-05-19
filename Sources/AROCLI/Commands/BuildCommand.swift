@@ -324,8 +324,13 @@ struct BuildCommand: AsyncParsableCommand {
                     // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
                     var objectFiles: [String] = []
 
-                    // Create a working directory for this plugin's renamed object files
+                    // Create a working directory for this plugin's renamed object files.
+                    // Wipe it on every build: extractObjectFiles lists every .o in the
+                    // dir, so leftover renamed files from a previous build would be
+                    // treated as fresh extracts and renamed-again, producing duplicate
+                    // symbols at link time.
                     let pluginWorkDir = staticBuildDir.appendingPathComponent(pluginName)
+                    try? FileManager.default.removeItem(at: pluginWorkDir)
                     try? FileManager.default.createDirectory(at: pluginWorkDir, withIntermediateDirectories: true)
 
                     // Strategy 1: Find .o files from SPM build directory (Swift package plugins)
