@@ -987,6 +987,25 @@ jobs:
             fi
           done
 
+      - name: Compile Rust plugins
+        run: |
+          # Pre-warm cargo for Rust plugins. The first build downloads the
+          # crate index + crate-rust-csv's transitive deps (serde, csv,
+          # aro-plugin-sdk) and compiles them. On cold macOS runners that
+          # takes well over the test runner's 60-second per-build timeout
+          # window, so aro build gets SIGTERM'd mid-cargo and reports
+          # BUILD_FAILURE with empty stderr/stdout. Build dylib + staticlib
+          # here so aro build's later cargo invocations are no-ops.
+          source "$HOME/.cargo/env"
+          for plugin_dir in \
+            Examples/CSVProcessor/Plugins/plugin-rust-csv; do
+            if [ -f "$plugin_dir/Cargo.toml" ]; then
+              echo "=== Building $plugin_dir ==="
+              (cd "$plugin_dir" && cargo build --release 2>&1 | tail -3) || true
+              (cd "$plugin_dir" && cargo rustc --release --crate-type=staticlib 2>&1 | tail -3) || true
+            fi
+          done
+
       - name: Run integration tests
         run: |
           chmod +x Tests/IntegrationTestsRunner/run-tests.pl
