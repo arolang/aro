@@ -44,9 +44,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/clang-20 /usr/bin/clang \
     && rm -rf /var/lib/apt/lists/*
 
-# Restore the real ldconfig after apt-get (was replaced for QEMU arm64 compatibility)
+# Restore the real ldconfig after apt-get (was replaced for QEMU arm64 compatibility).
+# The cache refresh itself can segfault under QEMU user-space emulation, but
+# apt-get's per-package post-install scripts already linked everything we need,
+# so tolerate a non-zero ldconfig exit here.
 RUN if [ -f /sbin/ldconfig.real-bak ]; then \
-      mv /sbin/ldconfig.real-bak /sbin/ldconfig && ldconfig; \
+      mv /sbin/ldconfig.real-bak /sbin/ldconfig && (ldconfig || true); \
     fi
 
 # Create pkg-config file for LLVM
