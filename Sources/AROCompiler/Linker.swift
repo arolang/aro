@@ -1588,6 +1588,22 @@ public final class PluginSymbolRenamer {
         // ~400-file archive that's 400 fork+execs of /usr/bin/nm taking
         // long enough on a slow CI runner that the test harness's per-build
         // timeout fires mid-loop and SIGTERMs the build.
+        //
+        // Route nm's stdout to a temp file rather than a Pipe: the combined
+        // output for ~400 files is tens of MB of text, far bigger than a
+        // pipe's 64 KB kernel buffer, and `process.waitUntilExit()` won't
+        // drain the pipe — nm blocks waiting for a reader, aro blocks
+        // waiting for nm. Classic SIGPIPE-style deadlock.
+        let tmpFile = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("aro-nm-\(UUID().uuidString).txt")
+        FileManager.default.createFile(atPath: tmpFile.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+
+        guard let outHandle = FileHandle(forWritingAtPath: tmpFile.path) else {
+            return []
+        }
+        defer { try? outHandle.close() }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/nm")
         #if os(macOS)
@@ -1595,18 +1611,19 @@ public final class PluginSymbolRenamer {
         #else
         process.arguments = ["-g", "--defined-only"] + objectFiles  // global, defined-only (Linux)
         #endif
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
+        process.standardOutput = outHandle
         process.standardError = FileHandle.nullDevice
 
         try process.run()
         process.waitUntilExit()
+        try? outHandle.close()
 
         // nm prints whatever symbols it could read; non-zero status often
         // just means one of the files failed to parse. Read what we have.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
+        guard let data = try? Data(contentsOf: tmpFile),
+              let output = String(data: data, encoding: .utf8) else {
+            return []
+        }
 
         var found: Set<String> = []
         for sym in Self.pluginSymbols {
