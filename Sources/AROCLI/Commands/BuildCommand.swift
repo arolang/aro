@@ -324,6 +324,16 @@ struct BuildCommand: AsyncParsableCommand {
                     // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
                     var objectFiles: [String] = []
 
+                    // Diagnostic trace via FileHandle.standardError — bypasses stdio
+                    // buffering so it survives even abrupt exits. Helps diagnose CI
+                    // failures that show empty stdout/stderr.
+                    func _trace(_ msg: String) {
+                        if let data = "[bake \(pluginName)] \(msg)\n".data(using: .utf8) {
+                            FileHandle.standardError.write(data)
+                        }
+                    }
+                    _trace("start; yaml types: swift=\(yamlContent.contains("swift-plugin")) c=\(yamlContent.contains("c-plugin")) rust=\(yamlContent.contains("rust-plugin"))")
+
                     // Create a working directory for this plugin's renamed object files.
                     // Wipe it on every build: extractObjectFiles lists every .o in the
                     // dir, so leftover renamed files from a previous build would be
@@ -332,6 +342,7 @@ struct BuildCommand: AsyncParsableCommand {
                     let pluginWorkDir = staticBuildDir.appendingPathComponent(pluginName)
                     try? FileManager.default.removeItem(at: pluginWorkDir)
                     try? FileManager.default.createDirectory(at: pluginWorkDir, withIntermediateDirectories: true)
+                    _trace("workdir ready: \(pluginWorkDir.path)")
 
                     // Strategy 1: Find .o files from SPM build directory (Swift package plugins)
                     // After `swift build`, .o files are in .build/<triple>/release/<Module>.build/*.o
@@ -406,6 +417,7 @@ struct BuildCommand: AsyncParsableCommand {
                     // staticlib is present we run `cargo rustc --crate-type=staticlib`
                     // ourselves — Rust users no longer need to add `staticlib` manually.
                     if objectFiles.isEmpty {
+                        _trace("strategy 2 (cargo) start")
                         let cargoCandidates: [(project: URL, target: URL)] = [
                             (sourcePluginDir, sourcePluginDir.appendingPathComponent("target/release")),
                             (sourcePluginDir.appendingPathComponent("src"),
@@ -415,8 +427,10 @@ struct BuildCommand: AsyncParsableCommand {
                         for candidate in cargoCandidates {
                             let cargoToml = candidate.project.appendingPathComponent("Cargo.toml")
                             guard FileManager.default.fileExists(atPath: cargoToml.path) else { continue }
+                            _trace("cargo candidate: \(candidate.project.path)")
 
                             var aFile = findRustStaticLib(in: candidate.target)
+                            _trace("findRustStaticLib in \(candidate.target.path) -> \(aFile?.path ?? "nil")")
                             if aFile == nil {
                                 if verbose {
                                     print("  No staticlib for '\(pluginName)', running cargo rustc --crate-type=staticlib")
@@ -426,13 +440,17 @@ struct BuildCommand: AsyncParsableCommand {
                                 } catch {
                                     print("Error: cargo failed to produce staticlib for '\(pluginName)': \(error)")
                                     print("  Hint: ensure cargo is on PATH and the crate compiles cleanly.")
+                                    _trace("cargo failed: \(error)")
                                     throw ExitCode.failure
                                 }
                                 aFile = findRustStaticLib(in: candidate.target)
+                                _trace("post-cargo findRustStaticLib -> \(aFile?.path ?? "nil")")
                             }
 
                             if let aFile {
+                                _trace("extractObjectFiles from \(aFile.path)")
                                 objectFiles = try symbolRenamer.extractObjectFiles(from: aFile.path, to: pluginWorkDir.path)
+                                _trace("extracted \(objectFiles.count) .o files")
                                 break
                             }
                         }
@@ -496,6 +514,7 @@ struct BuildCommand: AsyncParsableCommand {
                     }
 
                     if objectFiles.isEmpty {
+                        _trace("FAIL: no object files after all strategies")
                         print("Error: No object files found for plugin '\(pluginName)' — cannot statically link.")
                         print("  Static linking requires .o files:")
                         print("    • Rust:  cargo must be installed and the crate must build (`cargo rustc --crate-type=staticlib` is invoked automatically)")
@@ -505,16 +524,21 @@ struct BuildCommand: AsyncParsableCommand {
                     }
 
                     // Rename plugin symbols to avoid collisions
+                    _trace("renamePluginSymbols on \(objectFiles.count) files")
                     let renamedFiles = try symbolRenamer.renamePluginSymbols(
                         objectFiles: objectFiles,
                         pluginName: pluginName,
                         outputDir: pluginWorkDir.path
                     )
+                    _trace("renamed \(renamedFiles.count) files")
 
                     // Discover which symbols this plugin actually exports
                     let availableSymbols = try symbolRenamer.discoverSymbols(in: renamedFiles, pluginName: pluginName)
+                    _trace("discoverSymbols found \(availableSymbols.count) plugin symbols")
 
                     if !availableSymbols.contains("aro_plugin_info") {
+                        let symbolsCsv = availableSymbols.sorted().joined(separator: ",")
+                        _trace("FAIL: aro_plugin_info symbol missing; symbols=\(symbolsCsv)")
                         print("Error: Plugin '\(pluginName)' is missing the aro_plugin_info symbol — cannot statically link.")
                         print("  Define aro_plugin_info() with C ABI:")
                         print("    • Rust:  #[no_mangle] pub extern \"C\" fn aro_plugin_info() -> *mut c_char")
@@ -522,6 +546,7 @@ struct BuildCommand: AsyncParsableCommand {
                         print("    • Swift: apply @AROExport to your AROPlugin definition")
                         throw ExitCode.failure
                     }
+                    _trace("static plugin baked OK")
 
                     staticPluginInfos.append(StaticPluginInfo(
                         name: pluginName,
