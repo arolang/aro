@@ -1038,8 +1038,15 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_execute")
         }
 
-        // Serialize input to JSON
-        let inputData = try JSONSerialization.data(withJSONObject: input)
+        // ARO-0073: SDK plugins read parameters from input["_with"] (see ActionInput.with
+        // and Params in aro-plugin-sdk-swift). The legacy dlopen path enriches in
+        // PluginLoader.callCPlugin; mirror it here so plugins loaded through
+        // UnifiedPluginLoader see the same envelope. Without this, services like
+        // <zip: compress> get the args at the top level but the SDK can't find them
+        // and reports "Missing required argument: files".
+        var envelope: [String: any Sendable] = input
+        envelope["_with"] = input
+        let inputData = try JSONSerialization.data(withJSONObject: envelope)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
         // Call the plugin

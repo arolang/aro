@@ -1,7 +1,11 @@
 # Test hints for ZipService
 # Package plugin compilation requires Swift compiler at runtime
 # Zip library requires zlib.h which is not available on Windows CI
-skip-on-windows: Zip library requires zlib which is not installed on Windows CI
 timeout: 300
-# Use occurrence-check for order-independent matching (dictionary output order varies)
-occurrence-check: true
+# Wipe any archive from a previous run so the test really verifies that THIS
+# run created it (not a stale artifact left in the source tree).
+pre-script: rm -f Examples/ZipService/content/archive.zip
+# After aro finishes, verify the archive was actually created, is a real zip,
+# and contains both source files. `unzip -tq` exits non-zero on any CRC
+# mismatch or structural damage, so it doubles as a corruption check.
+test-script: test -s Examples/ZipService/content/archive.zip && unzip -tq Examples/ZipService/content/archive.zip && unzip -l Examples/ZipService/content/archive.zip | grep -q 'file1.txt' && unzip -l Examples/ZipService/content/archive.zip | grep -q 'file2.txt'
