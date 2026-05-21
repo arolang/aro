@@ -100,7 +100,63 @@ HTTP server and client, file system operations with directory watching, and TCP 
 
 ### Extensible Actions
 
-When the 50+ built-in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
+When the 60+ built-in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
+
+### User Defined Actions
+
+Factor reusable business logic into a feature set with the activity `Action`, then call it from anywhere as `Application.<Name>` — no plugin, no event bus.
+
+```aro
+(DoubleValue: Action takes <number>) {
+    <Extract> the <n> from the <input: number>.
+    <Compute> the <doubled> from <n> * 2.
+    <Return> an <OK: status> with { doubled: <doubled> }.
+}
+
+(Application-Start: Demo) {
+    Application.DoubleValue the <result> from 21.
+    <Extract> the <answer> from the <result: doubled>.
+    <Log> <answer> to the <console>.
+    <Return> an <OK: status> for the <startup>.
+}
+```
+
+### Native Git
+
+Version control without shelling out. `<git>` defaults to the current repository; pass an explicit path for anything else.
+
+```aro
+<Retrieve> the <status> from the <git>.
+<Stage> the <files> to the <git> with ".".
+<Commit> the <result> to the <git> with "feat: add feature".
+<Push> the <result> to the <git>.
+```
+
+Status, log, stage, commit, pull, push, clone, checkout, and tag all run in-process via libgit2 — and emit corresponding `GitCommit` / `GitPush` / `GitPull` events you can subscribe to.
+
+### Lazy Action Execution
+
+Actions return future handles and run on a dedicated executor; values are forced the first time something reads them. Independent results overlap automatically while effects keep source order within a feature set — no annotations, no explicit `await`s, no async-colour to manage.
+
+### AI Coding Assistant
+
+`aro ask` is a local LLM coding assistant with tool calling and project-aware indexing — runs on Apple Silicon GPU via MLX on macOS, llama-server (auto-downloaded) on Linux, or any OpenAI-compatible endpoint via `$ARO_LM_ENDPOINT`.
+
+```bash
+aro ask                       # interactive
+aro ask "fix the broken test in Examples/Calculator"
+aro lm "explain ARO scoping"  # one-shot batch prompt
+```
+
+### Editor & Agent Integration
+
+`aro lsp` ships a Language Server that loads plugins from `<workspace>/Plugins/` on `initialized` and surfaces plugin actions and qualifiers in completion, hover, and diagnostics. `aro mcp` ships the same project as an MCP server — `aro_actions` and `aro_qualifiers` accept a `directory:` argument so AI agents see workspace-local plugins too.
+
+### Piped Source
+
+```bash
+echo '<Log> "Hi from a pipe" to the <console>.' | aro
+```
 
 ### Plugin Qualifiers
 
@@ -130,7 +186,10 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Interpreter (`aro run`) | ✅ | ✅ | ✅ |
 | Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
 | Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
-| Local LLM assistant (`aro lm`) | ✅ | ✅ | ✅⁶ |
+| AI coding assistant (`aro ask`) | ✅⁷ | ✅⁶ | ✅⁶ |
+| LLM prompts (`aro lm`) | ✅ | ✅ | ✅⁶ |
+| MCP server (`aro mcp`) | ✅ | ✅ | ✅ |
+| Native Git actions (libgit2) | ✅ | ✅ | ✅ |
 | **Networking** |
 | HTTP Server | ✅ | ✅ | ✅¹ |
 | HTTP Client | ✅ | ✅ | ✅ |
@@ -153,6 +212,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ⁴ LLVM not available in Windows CI environment
 ⁵ `URL.lines` not available on Windows; use `Read` + `Split` instead
 ⁶ Requires `llama-server`, `mlx_lm.server`, or `$ARO_LM_ENDPOINT` to be reachable
+⁷ macOS Apple Silicon runs the model natively via MLX (no Python, no subprocess)
 
 ## Quick Start
 
@@ -344,7 +404,7 @@ The integration test framework is modular and located in `Tests/IntegrationTests
 
 ## Examples
 
-The `Examples/` directory contains 50+ working applications demonstrating various ARO features:
+The `Examples/` directory contains 65+ working applications demonstrating various ARO features:
 
 | Category | Examples |
 |----------|----------|
@@ -357,7 +417,8 @@ The `Examples/` directory contains 50+ working applications demonstrating variou
 | **File System** | FileOperations, FileWatcher, FileChecks, FileMetadata, DirectoryLister, DirectoryReplicator, DirectoryReplicatorEvents, FormatAwareIO |
 | **Networking** | EchoSocket, SocketClient, SimpleChat |
 | **Date & Time** | DateTimeDemo, DateRangeDemo |
-| **Advanced** | CustomPlugin, ModulesExample, ContextAware, ConfigurableTimeout, SinkSyntax, AssertDemo, ParallelForEach |
+| **Advanced** | CustomPlugin, ModulesExample, ContextAware, ConfigurableTimeout, SinkSyntax, AssertDemo, ParallelForEach, UserDefinedActions |
+| **Version Control** | GitDemo (status, log, stage, commit, push, pull, clone, checkout, tag) |
 | **Plugin Qualifiers** | QualifierPlugin (Swift), QualifierPluginC (C), QualifierPluginPython (Python) |
 | **Full Applications** | SystemMonitor, ZipService, SQLiteExample, ReceiveData |
 

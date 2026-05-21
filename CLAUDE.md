@@ -34,9 +34,23 @@ aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
-aro lm "prompt"       # Ask the local LLM coding assistant (aro lm)
-aro lm                # Start the interactive aro lm REPL
-aro lm /index         # (Re)build the project retrieval index
+echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
+
+aro repl                 # Start the interactive ARO REPL
+aro test ./MyApp         # Run colocated tests (ARO-0015)
+aro new plugin foo       # Scaffold a new plugin
+aro add github:org/repo  # Install a plugin from Git
+aro plugins              # List installed plugins
+aro actions              # List built-in and plugin actions
+aro lsp                  # Start the Language Server (stdio)
+aro mcp                  # Start the MCP server (Model Context Protocol)
+
+aro lm "prompt"          # Batch prompt the local LLM (aro lm)
+aro lm                   # Start the interactive aro lm REPL
+aro lm /index            # (Re)build the project retrieval index
+aro ask                  # Interactive AI coding assistant with tool calling
+aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
+                         # llama-server on Linux (auto-downloaded)
 ```
 
 ## Architecture
@@ -201,6 +215,53 @@ Actions are classified by data flow direction:
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
 - **RESPONSE** (Return, Throw): Internal → External
 - **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
+
+### Lazy Execution (Default)
+
+Actions return an `AROFuture` handle rather than the resolved value. Work runs
+on a dedicated `ActionTaskExecutor` and is **forced** the first time something
+reads the value — typically a Return, an Emit payload extraction, a When
+guard, a `with` expression, or an export. Sequential reads happen in source
+order; independent results overlap. The eager path and `ARO_LAZY_ACTIONS` flag
+have been removed — lazy is the only model.
+
+Effects (Log, Store, Emit, Commit, Send, Push, Stage, …) keep source order
+within a feature set: the runtime forces any pending future its arguments
+depend on before the effect runs. Slow-force diagnostics surface when a
+read blocks on a future for longer than the configured threshold (see
+`AROFuture` / `ActionTaskExecutor` in `ARORuntime/Core/`).
+
+### User-Defined Actions (ARO-0081)
+
+A feature set whose business activity is `Action` becomes callable
+application-wide as `Application.<Name>`. Use this instead of writing a
+plugin or hopping through the event bus when you want reusable inline
+logic.
+
+```aro
+(DoubleValue: Action takes <number>) {
+    Extract the <n> from the <input: number>.
+    Compute the <doubled> from <n> * 2.
+    Return an <OK: status> with { doubled: <doubled> }.
+}
+
+(SumAndDouble: Action) {
+    Extract the <a> from the <input: a>.
+    Extract the <b> from the <input: b>.
+    Compute the <sum> from <a> + <b>.
+    Application.DoubleValue the <inner> from <sum>.
+    Extract the <result> from the <inner: doubled>.
+    Return an <OK: status> with <result>.
+}
+
+(* Call site uses the same shape as plugin actions: *)
+Application.SumAndDouble the <res> from { a: 3, b: 4 }.
+```
+
+`takes <name>` is sugar for a single positional argument extracted as
+`input.<name>`. Without `takes`, callers pass an object literal via `with`.
+The return value follows the standard Return action shape; the caller pulls
+named fields off it the same way they would for any other record.
 
 ## Services
 
