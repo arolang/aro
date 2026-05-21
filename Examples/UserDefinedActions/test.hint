@@ -1,0 +1,6 @@
+# User-defined actions (ARO-0081) are registered by the interpreter's
+# Application discovery pass. The LLVM compilation path does not yet
+# emit dispatch glue for Application.<Name> calls, so the compiled
+# binary aborts with "Unknown action verb: 'application.doublevalue'".
+# Run interpreter-only until the compiler gains UDA support.
+mode: interpreter
