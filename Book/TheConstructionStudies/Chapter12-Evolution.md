@@ -325,5 +325,17 @@ If you're building on ARO, or building something like it:
 
 ---
 
+## Postscript: Three Bets Since the First Edition
+
+Three structural decisions landed after this chapter was first written, and each is worth a line for the next implementer.
+
+**Actions became lazy by default.** Statements no longer run when the parser reaches them; they return `AROFuture` handles and run on a dedicated `ActionTaskExecutor`. Reads force, effects keep source order automatically. The eager path and the `ARO_LAZY_ACTIONS` opt-in are both gone — there's only one execution model now. The lesson learned along the way: introducing a parallel execution model behind a flag means you maintain both forever. Flip the default once you're confident, then delete the old code. Anything else is a forever fork.
+
+**User-defined actions joined the verb table without becoming verbs.** ARO-0081 lets a feature set declare its business activity as `Action`; callers reach it as `Application.<Name>` with the same `from`/`with` shapes as plugin actions. The implementation lives entirely above the existing parser and dispatch — no new statement form, no new lexer state. Adding a language feature without adding a syntax was the point.
+
+**Git became a service, not a shell-out.** ARO-0080 promoted `Stage` / `Commit` / `Push` / `Pull` / `Clone` / `Checkout` / `Tag` to first-class actions backed by libgit2. The C-shim for libgit2 was the smallest non-Swift dependency we'd accept, and it pays for itself the first time someone uses ARO to commit from inside an ARO program — closing the loop the construction notes circled around for three iterations.
+
+---
+
 *End of The Construction Studies*
 

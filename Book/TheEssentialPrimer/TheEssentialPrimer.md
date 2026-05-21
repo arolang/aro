@@ -294,7 +294,47 @@ This dual-mode architecture — interpreter for development, native binary for d
 
 ---
 
-## 6. The Plugin System
+## 6. Lazy Execution
+
+Action statements no longer execute when the parser reaches them. Each action call returns an `AROFuture` handle and the actual work runs on a dedicated `ActionTaskExecutor`. Values are **forced** the first time something reads them — typically a `Return`, an `Emit` payload extraction, a `When` guard, a `with`-expression argument, or an export. Sequential reads happen in source order; independent results overlap automatically. Effects (`Log`, `Store`, `Emit`, `Commit`, …) preserve source order within a feature set: the runtime forces any pending future the effect's arguments depend on before the effect runs.
+
+The result is a language where parallelism is the default but the syntax has no async colour. There is no `await`, no `async` keyword on feature sets, no promise-chaining. The code reads as if it were sequential; the runtime decides what can overlap.
+
+## 7. User-Defined Actions
+
+A feature set whose business activity is exactly `Action` becomes a **user-defined action** (ARO-0081), callable application-wide as `Application.<Name>`:
+
+```aro
+(DoubleValue: Action takes <number>) {
+    Extract the <n> from the <input: number>.
+    Compute the <doubled> from <n> * 2.
+    Return an <OK: status> with { doubled: <doubled> }.
+}
+
+(Application-Start: Demo) {
+    Application.DoubleValue the <result> from 21.
+    Extract the <answer> from the <result: doubled>.
+    Log <answer> to the <console>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+The call site uses the same `from` / `with` shapes as plugin actions, so the same mental model covers built-ins, plugins, and ARO-defined actions. The `takes <name>` sugar on the feature-set header declares a single positional argument extracted as `input.<name>`. Without `takes`, callers pass an object literal via `with`.
+
+## 8. Native Git
+
+Version control is part of the action vocabulary, not a shell-out. The `<git>` system object defaults to the current working directory; `<git: "/path">` points to an explicit repository. The runtime uses libgit2 under the hood for read operations and the `git` CLI for `Push`/`Pull` (which need credential handling libgit2 does not provide).
+
+```aro
+Retrieve the <status> from the <git>.
+Stage the <files> to the <git> with ".".
+Commit the <result> to the <git> with "feat: add feature".
+Push the <result> to the <git>.
+```
+
+Each Git action emits a corresponding event (`git.commit`, `git.push`, `git.pull`, `git.checkout`, `git.tag`, `git.clone`), so the rest of the application can react to repository state without polling. See ARO-0080 for the full action surface.
+
+## 9. The Plugin System
 
 When the built-in vocabulary of sixty-one actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory, either manually or via the package manager (`aro add`).
 
@@ -329,7 +369,7 @@ Qualifiers are namespaced by the plugin handle (declared as the root-level `hand
 
 ---
 
-## 7. Domain Analysis
+## 10. Domain Analysis
 
 ARO's constraints are not universally beneficial. Understanding where they help and where they hurt determines when the language is the right choice.
 
@@ -361,7 +401,7 @@ The following table summarises the assessment:
 
 ---
 
-## 8. Honest Limitations
+## 11. Honest Limitations
 
 ARO is beta software. The following limitations are current facts, not future risks.
 
@@ -377,7 +417,7 @@ ARO is beta software. The following limitations are current facts, not future ri
 
 ---
 
-## 9. Getting Started
+## 12. Getting Started
 
 An ARO application is a directory. The minimal structure is a single `.aro` file containing one `Application-Start` feature set:
 
@@ -430,7 +470,7 @@ The plugin is compiled on installation and available to all feature sets in the 
 
 ---
 
-## 10. Summary
+## 13. Summary
 
 ARO is a language built around three commitments: statements read like sentences, programs run as events, and errors report themselves.
 

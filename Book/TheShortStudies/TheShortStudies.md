@@ -307,6 +307,7 @@ The `mode: both` test directive is the defense mechanism. Every example runs in 
 | 0.7 | DomainEvent co-publishing; 81/85 examples run `mode: both` |
 | 0.7.1 | Integer division parity; KeyboardService binary mode; SocketClient (#134 open) |
 | 0.8.0 | PipelineStatement (9 types); KeyPress/WebSocket handlers (7 handler types); package manager (`aro add`/`aro remove`); LSP server; terminal UI subsystem |
+| 0.9.x | Lazy action execution (`AROFuture` + `ActionTaskExecutor`); user-defined actions (`Application.<Name>`, ARO-0081); native Git via libgit2 (ARO-0080); MCP server (`aro mcp`); `aro ask` coding assistant with native MLX inference on Apple Silicon; piped source on stdin |
 
 **For the next implementer:**
 

@@ -87,6 +87,14 @@ The installation output shows what's happening:
 ✅ Package "plugin-crypto" v1.0.0 installed successfully.
 ```
 
+### Editor and AI-agent visibility
+
+Plugin actions, qualifiers, and their metadata are exposed to tooling automatically. The Language Server (`aro lsp`) loads plugins from `<workspace>/Plugins/` on `initialized` and surfaces them in completion, hover, and diagnostics. The MCP server (`aro mcp`) ships the same information through the `aro_actions` and `aro_qualifiers` tools, each of which accepts a `directory:` argument so an AI agent can see workspace-local plugins. The richer your `description`, `role`, `prepositions`, and `since` fields are, the better that downstream experience.
+
+### How plugins ship with compiled binaries
+
+`aro build` discovers every plugin under `Plugins/` (and the legacy `plugins/`), compiles each one, and statically links the result into the application binary — including Rust plugins, which are linked through `.a` archives extracted with `llvm-ar` and renamed with `llvm-objcopy` to avoid symbol collisions. The compiled binary is self-contained: there is no next-to-binary `Plugins/` to ship.
+
 ## 3.3 Using Plugin Actions
 
 Plugins provide **custom actions** that work like built-in ARO verbs. Once installed, you use them with natural ARO syntax:

@@ -4,6 +4,12 @@ Complete reference of all 70 ARO actions organized by category.
 
 > Git actions (`Stage`, `Commit`, `Push`, `Pull`, `Clone`, `Checkout`, `Tag`) operate on the `<git>` system object and emit `git.commit`, `git.push`, `git.pull`, `git.checkout`, `git.tag`, `git.clone` events. See [ARO-0080](../../Proposals/ARO-0080-git-actions.md) and Chapter 48 of TheLanguageGuide.
 
+> Plugin actions are namespaced via the plugin's `handle:` (PascalCase). For example, a plugin with `handle: Markdown` exposing a `ToHTML` action is called as `Markdown.ToHTML the <html> from <source>.`. See ThePluginGuide.
+
+> **User-defined actions** are feature sets whose business activity is `Action`. They become callable application-wide as `Application.<Name>` and accept the same `from`/`with` shapes as plugin actions. Use the `takes <name>` sugar on the feature-set header to declare a single positional argument. See [ARO-0081](../../Proposals/ARO-0081-user-defined-actions.md) and Chapter 6 of TheLanguageGuide.
+
+> **Execution model**: Action calls return `AROFuture` handles and run on a dedicated executor. Values force the first time something reads them (Return, Emit payloads, When guards, with-expressions, exports). Effects keep source order within a feature set; independent results overlap. No `await` annotations required — the laziness is invisible at the call site.
+
 | **Action**    | **Category**      | **Semantic Role** | **Description**                                           |
 | ------------- | ----------------- | ----------------- | --------------------------------------------------------- |
 | **Accept**    | Protocol          | OWN               | Acknowledges or agrees to a state transition.<br>`Accept the <order: placed>.` |

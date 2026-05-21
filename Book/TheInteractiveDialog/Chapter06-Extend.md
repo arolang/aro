@@ -127,6 +127,48 @@ Feature set registered for file events
 
 Touch a file in `./data`. See the log appear.
 
+## Reusable Inline Actions
+
+Repeated logic does not have to become a plugin. A feature set whose business activity is `Action` is callable as `Application.<Name>` from anywhere in the session:
+
+```
+aro> (Doubled: Action takes <number>) {
+(Doubled)> Extract the <n> from the <input: number>.
+(Doubled)> Compute the <out> from <n> * 2.
+(Doubled)> Return an <OK: status> with { value: <out> }.
+(Doubled)> }
+User-defined action registered: Application.Doubled
+
+aro> Application.Doubled the <r> from 21.
+aro> Extract the <answer> from the <r: value>.
+aro> Log <answer> to the <console>.
+42
+```
+
+The same call shape works for built-ins, plugin actions, and user-defined actions — `Application.<Name>` is just one more namespace.
+
+## Repository Operations
+
+`<git>` is available without setup. Run `<Retrieve>` against it to read state, or use `<Stage>`/`<Commit>`/`<Push>` to mutate:
+
+```
+aro> Retrieve the <status> from the <git>.
+aro> Extract the <branch> from the <status: branch>.
+aro> Log "On branch: ${<branch>}" to the <console>.
+On branch: main
+```
+
+Each git action emits an event (`git.commit`, `git.push`, …) so handlers in the same session can react.
+
+## The Coding Assistant
+
+For longer or more exploratory work, exit the REPL and run `aro ask` — a project-aware coding assistant with tool calling:
+
+```
+aro> :q
+$ aro ask "show me how to extract a path parameter from an HTTP request"
+```
+
 ---
 
 **Next: Chapter 7 — Depart**

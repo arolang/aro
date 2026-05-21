@@ -225,15 +225,16 @@ Help others learn by writing examples. Real-world use cases are especially valua
 
 ## 14.6 The Road Ahead
 
-ARO is young. The language will evolve. Some things that may change:
+ARO is young, but the surface is filling in fast. Since this book was first written, the language gained:
 
-- Better error messages and debugging
-- Package management for code sharing
-- More built-in actions
-- IDE integration with LSP
-- Persistent storage options
+- **Native Git actions** (ARO-0080) — `<Retrieve>` status/log/branch, `<Stage>`, `<Commit>`, `<Push>`, `<Pull>`, `<Clone>`, `<Checkout>`, `<Tag>` on the `<git>` system object, via libgit2.
+- **User-defined actions** (ARO-0081) — feature sets whose business activity is `Action` are callable as `Application.<Name>` from anywhere in the application. Reusable inline logic without a plugin or an event-bus detour.
+- **Lazy execution** — actions return future handles and are forced the first time something reads the value. Independent results overlap automatically; effects keep source order. No `await` to type, no async colour to manage.
+- **`aro ask`** — an in-process AI coding assistant with tool calling. Runs natively on Apple Silicon via MLX, on Linux via auto-downloaded `llama-server`, or against any OpenAI-compatible endpoint via `$ARO_LM_ENDPOINT`.
+- **Editor & agent integration** — `aro lsp` ships language-server support, `aro mcp` exposes the same data over Model Context Protocol; both pick up workspace plugin actions and qualifiers on `initialized`.
+- **Piped source** — `echo '<Log> "Hi" to the <console>.' | aro` evaluates piped ARO on stdin. Handy for one-liners and pipelines.
 
-By learning ARO now, you are part of shaping its future. Your feedback matters.
+Other directions still in progress: better error messages and debugging, package management for code sharing, more built-in actions, persistent storage options. By learning ARO now, you are part of shaping its future. Your feedback matters.
 
 ---
 

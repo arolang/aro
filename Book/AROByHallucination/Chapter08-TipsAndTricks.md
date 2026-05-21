@@ -116,3 +116,12 @@ The fine-tune runs locally, and local inference has constraints that cloud infer
 **Context length.** Keep conversations short. The model's context window is 8192 tokens. A long conversation does not just degrade quality — it also slows inference, because every token of context has to be processed on every turn. `/clean` is a performance optimisation as much as a quality one.
 
 **Indexing.** Run `/index` once after cloning a project. The retrieval index lets the model find relevant files without scanning the whole directory tree, which saves tool calls and time. A project with an index gets better answers faster than one without.
+
+## 8.8 Asking About New Language Features
+
+The training corpus only covers the language up to the snapshot the model was distilled from. Anything newer is *outside* the model's competence, and it will improvise — usually badly. Treat the following as known blind spots and either run `/index` after pulling a recent ARO release, or paste the relevant chapter into the conversation manually:
+
+- **User-defined actions** (ARO-0081). A feature set whose business activity is `Action` is callable as `Application.<Name>`. If the model writes `Call the <r> via Application.MyAction with …` it is hallucinating — show it Chapter 6 of TheLanguageGuide.
+- **Native Git actions** (ARO-0080). `<Retrieve> the <status> from the <git>`, `<Stage>`, `<Commit>`, `<Push>`, etc., run via libgit2. The model may try to `<Execute>` git as a shell command — that still works but is no longer the idiomatic form.
+- **Lazy execution**. Actions return future handles and are forced on first read. The model may volunteer `await` annotations from other languages; those do not exist in ARO. Effects keep source order automatically.
+- **Piped source.** `echo '<Log> "x" to the <console>.' | aro` evaluates piped source. Handy for one-liners; the model rarely suggests it on its own.

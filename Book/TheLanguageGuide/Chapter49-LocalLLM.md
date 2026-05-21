@@ -1,4 +1,4 @@
-# Chapter 48: The Local LLM (`aro lm`)
+# Chapter 49: The Local LLM (`aro lm` and `aro ask`)
 
 > "The best documentation is a conversation that remembers where you left off."
 
@@ -35,7 +35,7 @@ If none of these are available, `aro lm` prints a clear error. There is no other
 
 ---
 
-## 48.3 Asking the First Question
+## 49.3 Asking the First Question
 
 The simplest form is one-shot: everything after `aro lm` is treated as a prompt.
 
@@ -57,6 +57,18 @@ lm> now show me a Compute example using qualifier-as-name
 …
 lm> /quit
 ```
+
+### `aro ask` — the coding assistant variant
+
+`aro lm` is the conversation-oriented entry point: it knows about ARO, replies in ARO, and keeps `.context`. `aro ask` is the same model wired up as an actual coding assistant — it has tool-calling, plans edits, runs `aro check` / `aro test` against your project, and proposes patches.
+
+```bash
+$ aro ask                           # interactive
+$ aro ask "fix the broken test in Examples/Calculator"
+$ aro ask /fix                      # auto-repair the last failure
+```
+
+On macOS Apple Silicon, `aro ask` runs the model **natively in-process** via MLX — no Python, no subprocess, no server. On Linux it auto-downloads `llama-server` and proxies through it. Either way, set `$ARO_LM_ENDPOINT` to an OpenAI-compatible URL to override the local model.
 
 ---
 
