@@ -1581,44 +1581,47 @@ public final class PluginSymbolRenamer {
     ///   - pluginName: The plugin name used in the prefix
     /// - Returns: Set of original symbol names that exist (e.g., ["aro_plugin_info", "aro_plugin_execute"])
     public func discoverSymbols(in objectFiles: [String], pluginName: String) throws -> Set<String> {
+        guard !objectFiles.isEmpty else { return [] }
+
+        // Single nm invocation across every input file. The previous
+        // implementation forked nm per .o file — for a Rust plugin's
+        // ~400-file archive that's 400 fork+execs of /usr/bin/nm taking
+        // long enough on a slow CI runner that the test harness's per-build
+        // timeout fires mid-loop and SIGTERMs the build.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/nm")
+        #if os(macOS)
+        process.arguments = ["-gU"] + objectFiles  // global, defined-only (macOS)
+        #else
+        process.arguments = ["-g", "--defined-only"] + objectFiles  // global, defined-only (Linux)
+        #endif
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        // nm prints whatever symbols it could read; non-zero status often
+        // just means one of the files failed to parse. Read what we have.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return [] }
+
         var found: Set<String> = []
-
-        for file in objectFiles {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/nm")
+        for sym in Self.pluginSymbols {
+            let renamed = Self.renamedSymbol(plugin: pluginName, original: sym)
+            // nm output format: "address T symbolName" (macOS prepends _)
             #if os(macOS)
-            process.arguments = ["-gU", file]  // global, defined-only (macOS)
-            #else
-            process.arguments = ["-g", "--defined-only", file]  // global, defined-only (Linux)
-            #endif
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else { continue }
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else { continue }
-
-            for sym in Self.pluginSymbols {
-                let renamed = Self.renamedSymbol(plugin: pluginName, original: sym)
-                // nm output format: "address T symbolName" (macOS prepends _)
-                #if os(macOS)
-                if output.contains("_\(renamed)") {
-                    found.insert(sym)
-                }
-                #else
-                if output.contains(renamed) {
-                    found.insert(sym)
-                }
-                #endif
+            if output.contains("_\(renamed)") {
+                found.insert(sym)
             }
+            #else
+            if output.contains(renamed) {
+                found.insert(sym)
+            }
+            #endif
         }
-
         return found
     }
 
