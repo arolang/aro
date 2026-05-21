@@ -3,7 +3,10 @@ package com.arolang.aro.run;
 public enum AROCommandType {
     RUN("run", "Run"),
     BUILD("build", "Build"),
-    CHECK("check", "Check");
+    CHECK("check", "Check"),
+    TEST("test", "Test"),
+    REPL("repl", "REPL"),
+    ASK("ask", "Ask (AI assistant)");
 
     private final String command;
     private final String displayName;

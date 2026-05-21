@@ -1505,3 +1505,106 @@ facts:
     category: "Philosophy"
     headline: "9 statement types. That's the whole language."
     explanation: "AROStatement, PublishStatement, MatchStatement, ForEachLoop, RangeLoop, WhileLoop, BreakStatement, PipelineStatement, RequireStatement. Constraint is the feature."
+
+  # ===== WEEK 66: User-Defined Actions (ARO-0081) =====
+  - id: "66-1"
+    week: 66
+    day: 1
+    category: "Syntax"
+    headline: "(Doubled: Action takes <number>) { ... }"
+    explanation: "A feature set with business activity 'Action' becomes a user-defined action. Callable as Application.Doubled. Reusable inline logic without a plugin or an event-bus detour."
+
+  - id: "66-2"
+    week: 66
+    day: 2
+    category: "Syntax"
+    headline: "Application.Doubled the <r> from 21."
+    explanation: "User-defined actions accept the same from/with shapes as plugin actions. 'takes <name>' sugar declares one positional argument extracted as input.<name>. Without it, callers pass an object literal via 'with'."
+
+  - id: "66-3"
+    week: 66
+    day: 3
+    category: "Philosophy"
+    headline: "Built-ins, plugins, user-defined — one call shape"
+    explanation: "Compute, Markdown.ToHTML, Application.Doubled — same syntax, same semantics, same call site. The user-defined action mechanism (ARO-0081) is a thin extension on top of plugin action dispatch, not a new feature."
+
+  # ===== WEEK 67: Native Git (ARO-0080) =====
+  - id: "67-1"
+    week: 67
+    day: 1
+    category: "Git"
+    headline: "Retrieve the <status> from the <git>."
+    explanation: "Native Git via libgit2 — no shell-out. <git> defaults to the current working directory; <git: \"/path\"> targets an explicit repository. Status, log, and branch all read in-process."
+
+  - id: "67-2"
+    week: 67
+    day: 2
+    category: "Git"
+    headline: "Stage / Commit / Push / Pull / Clone / Checkout / Tag"
+    explanation: "Seven Git actions on <git>. Each emits a corresponding event (git.commit, git.push, git.pull, …). Use the events to wire automation: a CI bot that tags after a green test run, an audit log that records every commit."
+
+  - id: "67-3"
+    week: 67
+    day: 3
+    category: "Git"
+    headline: "Commit the <result> to the <git> with \"feat: add feature\"."
+    explanation: "Commit takes a message via 'with'. Stage adds files. Push goes through the git CLI for credential handling. Pull is read-side via libgit2. The whole release dance fits in five lines of ARO."
+
+  # ===== WEEK 68: Lazy Execution =====
+  - id: "68-1"
+    week: 68
+    day: 1
+    category: "Runtime"
+    headline: "Actions return future handles, not values."
+    explanation: "Statements no longer execute when the parser reaches them. Each action call schedules work on a dedicated executor and returns an AROFuture. Independent calls overlap automatically."
+
+  - id: "68-2"
+    week: 68
+    day: 2
+    category: "Runtime"
+    headline: "Reads force; effects keep source order."
+    explanation: "Return, Emit payload extractions, When guards, with-expressions and exports force the future they touch. Log/Store/Emit/Commit force their arguments in declaration order so observable side effects always appear in source order."
+
+  - id: "68-3"
+    week: 68
+    day: 3
+    category: "Runtime"
+    headline: "No await. No async colour. No promise chaining."
+    explanation: "Lazy execution is the only model — the eager path and the ARO_LAZY_ACTIONS flag are both gone. The syntax is unchanged: the runtime decides what overlaps, you describe what should happen."
+
+  # ===== WEEK 69: aro ask =====
+  - id: "69-1"
+    week: 69
+    day: 1
+    category: "Tooling"
+    headline: "aro ask \"fix the broken test in Examples/Calculator\""
+    explanation: "Local AI coding assistant with tool calling. Reads files, runs aro check / aro test, proposes patches. Runs natively on Apple Silicon via MLX; auto-downloads llama-server on Linux; obeys $ARO_LM_ENDPOINT for any OpenAI-compatible URL."
+
+  - id: "69-2"
+    week: 69
+    day: 2
+    category: "Tooling"
+    headline: "aro lm vs. aro ask"
+    explanation: "aro lm is the conversational entry point — terse, ARO-fluent, remembers .context across runs. aro ask is the same model wired up as a coding assistant with project awareness and tool calling. Same training corpus, two interfaces."
+
+  # ===== WEEK 70: Editor & Agent Integration =====
+  - id: "70-1"
+    week: 70
+    day: 1
+    category: "Tooling"
+    headline: "aro lsp — plugins visible in completion + hover"
+    explanation: "The Language Server loads plugins from <workspace>/Plugins/ on initialized and surfaces their actions, qualifiers, and metadata in completion, hover, and diagnostics. Richer plugin manifests mean a richer editor experience."
+
+  - id: "70-2"
+    week: 70
+    day: 2
+    category: "Tooling"
+    headline: "aro mcp — the same project for AI agents"
+    explanation: "Model Context Protocol server exposes aro_actions and aro_qualifiers tools. Both accept a directory: argument so an AI agent picks up workspace-local plugins. Same data as the LSP, MCP-shaped."
+
+  - id: "70-3"
+    week: 70
+    day: 3
+    category: "Tooling"
+    headline: "echo '<Log> \"hi\" to the <console>.' | aro"
+    explanation: "Piped source on stdin. aro evaluates whatever it reads. Useful for one-liners, shell pipelines, and CI smoke tests that don't justify a project directory."

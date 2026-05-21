@@ -65,6 +65,29 @@
             </p>
         </header>
 
+        <div class="callout">
+            <p><strong>Three ways to extend the verb table:</strong></p>
+            <ol>
+                <li><a href="#user-defined-actions">User-defined actions</a> — a feature set whose business activity is <code>Action</code> becomes callable as <code>Application.&lt;Name&gt;</code>. No Swift required.</li>
+                <li><a href="../docs/packages.html">Plugins</a> — Swift / Rust / C / Python packages installed via <code>aro add</code>; namespaced via the plugin's <code>handle:</code>.</li>
+                <li>Custom Swift actions compiled into the runtime — this page.</li>
+            </ol>
+        </div>
+
+        <h2 id="user-defined-actions">User-Defined Actions (ARO-0081)</h2>
+        <p>The simplest extension lives entirely in ARO. Declare a feature set with the business activity <code>Action</code> and it becomes callable application-wide as <code>Application.&lt;Name&gt;</code>:</p>
+
+        <pre><code><span class="code-keyword">(DoubleValue: Action takes</span> &lt;number&gt;<span class="code-keyword">) {</span>
+    <span class="code-keyword">Extract</span> the &lt;n&gt; <span class="code-keyword">from</span> the &lt;input: number&gt;.
+    <span class="code-keyword">Compute</span> the &lt;doubled&gt; <span class="code-keyword">from</span> &lt;n&gt; * 2.
+    <span class="code-keyword">Return</span> an &lt;OK: status&gt; <span class="code-keyword">with</span> { doubled: &lt;doubled&gt; }.
+<span class="code-keyword">}</span>
+
+<span class="code-comment">(* Call from any other feature set: *)</span>
+<span class="code-keyword">Application.DoubleValue</span> the &lt;r&gt; <span class="code-keyword">from</span> 21.</code></pre>
+
+        <p>The <code>takes &lt;name&gt;</code> sugar declares a single positional argument extracted as <code>input.&lt;name&gt;</code>. Without it, callers pass an object literal via <code>with</code>. The call shape is identical to built-in and plugin actions — same parser, same dispatch, no new syntax. See <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0081-user-defined-actions.md">ARO-0081</a> for the full specification.</p>
+
         <h2>Understanding Actions</h2>
         <p>In ARO, every statement follows the Action-Result-Object pattern:</p>
 

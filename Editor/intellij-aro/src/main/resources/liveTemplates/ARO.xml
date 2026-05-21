@@ -177,4 +177,39 @@
             <option name="OTHER" value="true"/>
         </context>
     </template>
+
+    <template name="uda" value="($NAME$: Action takes &lt;$PARAM$&gt;) {&#10;    Extract the &lt;$PARAM$&gt; from the &lt;input: $PARAM$&gt;.&#10;    $END$&#10;    Return an &lt;OK: status&gt; with { result: &lt;$PARAM$&gt; }.&#10;}" description="User-Defined Action (ARO-0081)" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;ActionName&quot;" alwaysStopAt="true"/>
+        <variable name="PARAM" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="udacall" value="Application.$NAME$ the &lt;$RESULT$&gt; from $ARG$." description="Call a User-Defined Action" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;ActionName&quot;" alwaysStopAt="true"/>
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="ARG" expression="" defaultValue="&quot;0&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="gitcommit" value="Stage the &lt;files&gt; to the &lt;git&gt; with &quot;.&quot;.&#10;Commit the &lt;$RESULT$&gt; to the &lt;git&gt; with &quot;$MESSAGE$&quot;." description="Stage + Commit via libgit2 (ARO-0080)" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="MESSAGE" expression="" defaultValue="&quot;commit message&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="gitstatus" value="Retrieve the &lt;status&gt; from the &lt;git&gt;.&#10;Extract the &lt;branch&gt; from the &lt;status: branch&gt;.&#10;Extract the &lt;clean&gt; from the &lt;status: clean&gt;." description="Git Status (ARO-0080)" toReformat="true" toShortenFQNames="true">
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
 </templateSet>
