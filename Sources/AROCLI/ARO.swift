@@ -31,8 +31,12 @@ struct ARO: AsyncParsableCommand {
         // aro is launched as a subprocess (test runner, CI harness) and exits
         // non-zero before flushing — the parent sees an empty stderr/stdout and
         // can't diagnose the failure.
-        setlinebuf(stdout)
-        setlinebuf(stderr)
+        //
+        // setvbuf takes a fd-derived FILE*; obtain via fdopen rather than the
+        // libc globals to avoid Swift 6 strict-concurrency `var stdout`/`var
+        // stderr` shared-mutable-state errors on Linux.
+        if let out = fdopen(1, "w") { setvbuf(out, nil, _IOLBF, 0) }
+        if let err = fdopen(2, "w") { setvbuf(err, nil, _IOLBF, 0) }
 
         LoggingSystem.bootstrap { label in
             var handler = StreamLogHandler.standardError(label: label)
