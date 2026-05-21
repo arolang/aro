@@ -26,6 +26,14 @@ import Glibc
 struct ARO: AsyncParsableCommand {
     /// Bootstrap the logging system before any subcommand runs.
     private static let _bootstrapLogging: Void = {
+        // Force line-buffered stdio. The default is line-buffered for terminals
+        // but FULLY-buffered for pipes, which loses crucial error output when
+        // aro is launched as a subprocess (test runner, CI harness) and exits
+        // non-zero before flushing — the parent sees an empty stderr/stdout and
+        // can't diagnose the failure.
+        setlinebuf(stdout)
+        setlinebuf(stderr)
+
         LoggingSystem.bootstrap { label in
             var handler = StreamLogHandler.standardError(label: label)
             handler.logLevel = .info
