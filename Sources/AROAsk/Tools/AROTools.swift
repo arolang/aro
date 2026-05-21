@@ -259,7 +259,7 @@ public enum AROTools {
             parameters: params
         ) { _ in
             let registry = ActionRegistry.shared
-            let byRole = await registry.actionsByRole
+            let byRole = registry.actionsByRole
 
             var lines: [String] = []
             let roleOrder: [ActionRole] = [.request, .own, .response, .export, .server]
@@ -270,7 +270,7 @@ public enum AROTools {
                 // Deduplicate: group verbs by their action type
                 var seen = Set<String>()
                 for verb in verbs.sorted() {
-                    guard let action = await registry.action(for: verb) else { continue }
+                    guard let action = registry.action(for: verb) else { continue }
                     let allVerbs = type(of: action).verbs.sorted().joined(separator: ", ")
                     guard !seen.contains(allVerbs) else { continue }
                     seen.insert(allVerbs)

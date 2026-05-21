@@ -56,11 +56,11 @@ struct ListActions: AsyncParsableCommand {
         }
 
         // -- Built-in Actions --
-        let builtIns = await ActionRegistry.shared.allBuiltInActionInfos
+        let builtIns = ActionRegistry.shared.allBuiltInActionInfos
         printBuiltInActions(builtIns)
 
         // -- Plugin Actions --
-        let pluginActions = await ActionRegistry.shared.allPluginActionInfos
+        let pluginActions = ActionRegistry.shared.allPluginActionInfos
         if !pluginActions.isEmpty {
             printPluginActions(pluginActions)
         }

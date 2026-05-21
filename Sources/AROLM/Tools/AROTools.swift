@@ -190,7 +190,7 @@ public enum AROTools {
             description: "Return the verbs of all actions registered in the ARO runtime.",
             parameters: params
         ) { _ in
-            let verbs = await ActionRegistry.shared.registeredVerbs
+            let verbs = ActionRegistry.shared.registeredVerbs
             return verbs.sorted().joined(separator: "\n")
         }
     }

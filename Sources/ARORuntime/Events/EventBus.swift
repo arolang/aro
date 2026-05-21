@@ -239,7 +239,7 @@ public actor EventBus {
             inFlightHandlers += 1
             Task {
                 await subscription.handler(event)
-                await self.fireForgetHandlerCompleted()
+                self.fireForgetHandlerCompleted()
             }
         }
     }
