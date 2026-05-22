@@ -148,7 +148,7 @@ Actions return future handles and run on a dedicated executor; values are forced
 ```bash
 aro ask                       # interactive
 aro ask "fix the broken test in Examples/Calculator"
-aro lm "explain ARO scoping"  # one-shot batch prompt
+aro ask "explain ARO scoping" # one-shot prompt
 ```
 
 ### Editor & Agent Integration
@@ -190,7 +190,6 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
 | Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
 | AI coding assistant (`aro ask`) | ✅⁷ | ✅⁶ | ✅⁶ |
-| LLM prompts (`aro lm`) | ✅ | ✅ | ✅⁶ |
 | MCP server (`aro mcp`) | ✅ | ✅ | ✅ |
 | Native Git actions (libgit2) | ✅ | ✅ | ✅ |
 | **Networking** |

@@ -1580,13 +1580,6 @@ facts:
     headline: "aro ask \"fix the broken test in Examples/Calculator\""
     explanation: "Local AI coding assistant with tool calling. Reads files, runs aro check / aro test, proposes patches. Runs natively on Apple Silicon via MLX; auto-downloads llama-server on Linux; obeys $ARO_LM_ENDPOINT for any OpenAI-compatible URL."
 
-  - id: "69-2"
-    week: 69
-    day: 2
-    category: "Tooling"
-    headline: "aro lm vs. aro ask"
-    explanation: "aro lm is the conversational entry point — terse, ARO-fluent, remembers .context across runs. aro ask is the same model wired up as a coding assistant with project awareness and tool calling. Same training corpus, two interfaces."
-
   # ===== WEEK 70: Editor & Agent Integration =====
   - id: "70-1"
     week: 70

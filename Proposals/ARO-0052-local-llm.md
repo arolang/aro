@@ -1,8 +1,16 @@
 # ARO-0052: Local LLM Integration (`aro lm`)
 
-**Status:** Draft
+**Status:** Superseded by `aro ask` (0.10.0)
 **Author:** ARO team
 **Related:** ARO-0005 (Application Architecture), ARO-0008 (I/O Services)
+
+> **Note:** The `aro lm` subcommand described below was removed in 0.10.0.
+> The local-LLM functionality lives in `aro ask`, which adds tool calling and
+> project-aware retrieval on top of the same fine-tuned model and the same
+> three-tier backend strategy (`$ARO_ASK_ENDPOINT` → native MLX on macOS →
+> `llama-server`). See `Book/TheLanguageGuide/Chapter49-LocalLLM.md` for the
+> shipped behaviour. The rest of this proposal is preserved as historical
+> design context.
 
 ## 1. Motivation
 

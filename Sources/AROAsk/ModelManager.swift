@@ -24,10 +24,31 @@ public struct ModelEntry: Codable, Sendable {
     }
 }
 
-/// Manifest bundled in Resources/model-manifest.json.
+/// Manifest of known models. Embedded directly in the binary so a standalone
+/// install (Homebrew, scp'd binary) doesn't need an SPM resource bundle next
+/// to the executable.
 public struct ModelManifest: Codable, Sendable {
     public var models: [ModelEntry]
 }
+
+private let embeddedModelManifestJSON: String = #"""
+{
+  "models": [
+    {
+      "model_id": "ARO-Lang/aro-coder-4bit",
+      "primary_file": "config.json",
+      "backend": "auto",
+      "context_length": 8192
+    },
+    {
+      "model_id": "ARO-Lang/aro-teacher-30b-4bit",
+      "primary_file": "config.json",
+      "backend": "auto",
+      "context_length": 8192
+    }
+  ]
+}
+"""#
 
 /// Downloads, caches and locates Hugging Face models.
 public actor ModelManager {
@@ -49,13 +70,8 @@ public actor ModelManager {
         self.cacheDir = base
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
 
-        // Load bundled manifest
-        if let url = Bundle.module.url(forResource: "model-manifest", withExtension: "json"),
-           let data = try? Data(contentsOf: url) {
-            self.manifest = try JSONDecoder().decode(ModelManifest.self, from: data)
-        } else {
-            self.manifest = ModelManifest(models: [])
-        }
+        let data = Data(embeddedModelManifestJSON.utf8)
+        self.manifest = try JSONDecoder().decode(ModelManifest.self, from: data)
     }
 
     public func entry(for modelId: String) throws -> ModelEntry {

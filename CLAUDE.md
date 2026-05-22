@@ -47,9 +47,6 @@ aro actions              # List built-in and plugin actions
 aro lsp                  # Start the Language Server (stdio)
 aro mcp                  # Start the MCP server (Model Context Protocol)
 
-aro lm "prompt"          # Batch prompt the local LLM (aro lm)
-aro lm                   # Start the interactive aro lm REPL
-aro lm /index            # (Re)build the project retrieval index
 aro ask                  # Interactive AI coding assistant with tool calling
 aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
                          # llama-server on Linux (auto-downloaded)

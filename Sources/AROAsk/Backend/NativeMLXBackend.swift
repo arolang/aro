@@ -377,81 +377,48 @@ public actor NativeMLXBackend: LMBackend {
 
     // MARK: - Metal shader library setup
 
-    /// Extract the embedded Metal shader library to where MLX expects it.
+    /// Verify the Metal shader library is somewhere MLX can find it.
     ///
-    /// MLX looks for `mlx.metallib` colocated with the binary, then
-    /// `mlx-swift_Cmlx.bundle/default.metallib` in loaded bundles.
-    /// We extract the embedded metallib to both locations (binary dir +
-    /// cache fallback) so it works in all deployment scenarios.
+    /// Lookup order:
+    ///  1. `mlx.metallib` colocated with the binary
+    ///     (dev builds, scp installs, and the Homebrew install path —
+    ///     the formula symlinks `bin/mlx.metallib` to `share/aro/mlx.metallib`)
+    ///  2. `mlx-swift_Cmlx.bundle/default.metallib` next to the binary
+    ///     (SwiftPM bundle layout from a local `swift build`)
+    ///  3. `../share/aro/mlx.metallib` relative to the binary
+    ///     (Homebrew layout directly, in case the `bin/` symlink is absent)
+    ///  4. `~/.cache/aro/mlx/mlx.metallib` (user-populated fallback)
+    ///
+    /// Throws a clean error if none are present.
     private static func ensureMetalLib() throws {
-        // Check if metallib is already in place next to the binary
+        let fm = FileManager.default
         let binaryDir = URL(fileURLWithPath: CommandLine.arguments[0])
             .deletingLastPathComponent()
-        let colocatedPath = binaryDir.appendingPathComponent("mlx.metallib")
-        if FileManager.default.fileExists(atPath: colocatedPath.path) {
+        let candidates = [
+            binaryDir.appendingPathComponent("mlx.metallib"),
+            binaryDir
+                .appendingPathComponent("mlx-swift_Cmlx.bundle")
+                .appendingPathComponent("default.metallib"),
+            binaryDir
+                .deletingLastPathComponent()
+                .appendingPathComponent("share/aro/mlx.metallib"),
+            fm.homeDirectoryForCurrentUser
+                .appendingPathComponent(".cache/aro/mlx/mlx.metallib"),
+        ]
+
+        if candidates.contains(where: { fm.fileExists(atPath: $0.path) }) {
             return
         }
 
-        // Check the SPM bundle location (development builds)
-        let spmBundlePath = binaryDir
-            .appendingPathComponent("mlx-swift_Cmlx.bundle")
-            .appendingPathComponent("default.metallib")
-        if FileManager.default.fileExists(atPath: spmBundlePath.path) {
-            return
-        }
-
-        // Find the embedded metallib resource
-        guard let resourceURL = Bundle.module.url(
-            forResource: "default", withExtension: "metallib"
-        ) else {
-            throw LMBackendError.invalidResponse(
-                "Embedded default.metallib not found in AROAsk bundle. "
-                + "Rebuild with: tools/build-metallib.sh"
-            )
-        }
-
-        // Try to write next to the binary (fastest lookup for MLX)
-        let fm = FileManager.default
-        do {
-            try fm.copyItem(at: resourceURL, to: colocatedPath)
-            return
-        } catch {
-            // Binary directory may be read-only (e.g. /usr/local/bin/)
-        }
-
-        // Fallback: create the SPM bundle in the binary directory
-        let bundleDir = binaryDir.appendingPathComponent("mlx-swift_Cmlx.bundle")
-        do {
-            try fm.createDirectory(at: bundleDir, withIntermediateDirectories: true)
-            try fm.copyItem(at: resourceURL, to: spmBundlePath)
-            return
-        } catch {
-            // Still can't write next to binary
-        }
-
-        // Last resort: write to cache and symlink
-        let cacheDir = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("aro")
-            .appendingPathComponent("mlx")
-        try fm.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        let cachedLib = cacheDir.appendingPathComponent("mlx.metallib")
-        if !fm.fileExists(atPath: cachedLib.path) {
-            try fm.copyItem(at: resourceURL, to: cachedLib)
-        }
-
-        // Try to symlink from the binary directory
-        do {
-            try fm.createSymbolicLink(at: colocatedPath, withDestinationURL: cachedLib)
-        } catch {
-            // If even symlinking fails, MLX will fail at init time with
-            // a clear error about the missing metallib.
-            FileHandle.standardError.write(Data(
-                "warning: could not place mlx.metallib next to the aro binary. "
-                .appending("Copy \(cachedLib.path) to \(binaryDir.path) manually.\n")
-                .utf8
-            ))
-        }
+        let searched = candidates.map { "  " + $0.path }.joined(separator: "\n")
+        throw LMBackendError.invalidResponse(
+            """
+            MLX Metal shader library not found. Looked in:
+            \(searched)
+            Build it with: tools/build-metallib.sh
+            then copy the result to one of the paths above.
+            """
+        )
     }
 }
 

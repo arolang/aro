@@ -314,6 +314,16 @@ jobs:
           swift build -c release
           swift build -c release --product ARORuntime
 
+      - name: Build MLX Metal shader library
+        run: |
+          # Compile the MLX Metal kernels (shipped by mlx-swift) into a
+          # single mlx.metallib. `aro ask`'s native MLX backend needs this
+          # next to the binary at runtime; the macOS release tarball
+          # bundles it and Homebrew links it into share/aro/.
+          tools/build-metallib.sh release
+          cp .build/release/mlx-swift_Cmlx.bundle/default.metallib mlx.metallib
+          ls -lh mlx.metallib
+
       - name: Verify CLI
         run: |
           .build/release/aro --help
@@ -452,6 +462,7 @@ jobs:
           mkdir -p aro-dist
           cp .build/release/aro aro-dist/
           cp .build/arm64-apple-macosx/release/libARORuntime.a aro-dist/
+          cp mlx.metallib aro-dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -1296,7 +1307,7 @@ jobs:
           # macOS
           cd artifacts/aro-macos-arm64
           chmod +x aro
-          tar -czvf ../aro-macos-arm64.tar.gz aro libARORuntime.a
+          tar -czvf ../aro-macos-arm64.tar.gz aro libARORuntime.a mlx.metallib
           cd ../..
 
           # Windows (optional — only if the build was enabled)
@@ -1400,6 +1411,7 @@ jobs:
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz | tar xz
             sudo mv aro /usr/local/bin/
             sudo mv libARORuntime.a /usr/local/lib/
+            sudo mv mlx.metallib /usr/local/bin/   # next to `aro` for `aro ask`
             ```
 
             **Linux**
@@ -1450,6 +1462,10 @@ jobs:
             echo '  def install'
             echo '    bin.install "aro"'
             echo '    lib.install "libARORuntime.a"'
+            echo '    # Ship the MLX Metal shader library next to the binary so'
+            echo '    # `aro ask` can find it without an extra search path.'
+            echo '    (share/"aro").install "mlx.metallib"'
+            echo '    bin.install_symlink share/"aro/mlx.metallib"'
             echo '  end'
             echo ''
             echo '  test do'

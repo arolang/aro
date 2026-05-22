@@ -12,7 +12,6 @@ var cliLspDependency: [Target.Dependency] = []
 var compilerLLVMDependency: [Target.Dependency] = []
 var mlxDependencies: [Package.Dependency] = []
 var askMLXTargetDependencies: [Target.Dependency] = []
-var askResources: [Resource] = [.copy("Resources/model-manifest.json")]
 
 #if os(Windows)
 // Windows-specific dependencies
@@ -82,10 +81,6 @@ askMLXTargetDependencies = [
     .product(name: "MLXLLM", package: "mlx-swift-lm"),
     .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
     .product(name: "Transformers", package: "swift-transformers"),
-]
-askResources = [
-    .copy("Resources/model-manifest.json"),
-    .copy("Resources/default.metallib"),
 ]
 #endif
 
@@ -215,23 +210,6 @@ let package = Package(
                 ],
                 path: "Sources/AROPackageManager"
             ),
-            // Local LLM integration (aro lm subcommand)
-            .target(
-                name: "AROLM",
-                dependencies: [
-                    "AROParser",
-                    "ARORuntime",
-                    "AROVersion",
-                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                    .product(name: "Yams", package: "Yams"),
-                    .product(name: "Crypto", package: "swift-crypto"),
-                    .product(name: "LineNoise", package: "linenoise-swift"),
-                ],
-                path: "Sources/AROLM",
-                resources: [
-                    .copy("Resources/model-manifest.json")
-                ]
-            ),
             // CLI tool
             .executableTarget(
                 name: "AROCLI",
@@ -241,7 +219,6 @@ let package = Package(
                     "ARORuntime",
                     "AROCompiler",
                     "AROPackageManager",
-                    "AROLM",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
                     .product(name: "Logging", package: "swift-log"),
@@ -272,12 +249,6 @@ let package = Package(
                 name: "AROPackageManagerTests",
                 dependencies: ["AROPackageManager"],
                 path: "Tests/AROPackageManagerTests"
-            ),
-            // AROLM tests
-            .testTarget(
-                name: "AROLMTests",
-                dependencies: ["AROLM"],
-                path: "Tests/AROLMTests"
             ),
         ]
 
@@ -313,8 +284,7 @@ let package = Package(
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
                 ] + askMLXTargetDependencies,
-                path: "Sources/AROAsk",
-                resources: askResources
+                path: "Sources/AROAsk"
             ),
         ])
         #endif

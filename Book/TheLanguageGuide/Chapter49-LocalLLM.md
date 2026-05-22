@@ -1,99 +1,93 @@
-# Chapter 49: The Local LLM (`aro lm` and `aro ask`)
+# Chapter 49: The Local Coding Assistant (`aro ask`)
 
 > "The best documentation is a conversation that remembers where you left off."
 
 ---
 
-## 48.1 Why a Local Coding Assistant?
+## 49.1 Why a Local Coding Assistant?
 
 Most coding assistants live in the cloud. They see your source, your history, and the questions you ask. They also fail at ARO, because almost nothing about ARO exists in their training data — the action vocabulary, the qualifier-as-name syntax, the contract-first HTTP model, and the "code is the error message" philosophy are all unique to this language.
 
-`aro lm` solves both problems. It ships as a CLI subcommand of `aro`, runs a fine-tuned model on your own machine, and persists the conversation next to your source code. No cloud, no usage quota, no surprise bills. When you close your laptop and open it two days later, the conversation is still there.
+`aro ask` solves both problems. It ships as a CLI subcommand of `aro`, runs a fine-tuned model on your own machine, and persists the conversation next to your source code. No cloud, no usage quota, no surprise bills. When you close your laptop and open it two days later, the conversation is still there.
 
 ---
 
-## 48.2 Installing the Model
+## 49.2 Installing the Model
 
-The first time you run `aro lm`, it will offer to download the default model from Hugging Face.
+The first time you run `aro ask`, it will offer to download the default model from Hugging Face.
 
 ```
-$ aro lm "write a hello world feature set"
+$ aro ask "write a hello world feature set"
 Model 'ARO-Lang/aro-coder-4bit' (~4.5 GB) is not installed. Download from Hugging Face? [y/N] y
-model.gguf: 100%
+model.safetensors: 100%
 ...
 ```
 
-The cache lives at `~/.cache/aro/models/<repo>/`. Set `$HF_HOME` to put it somewhere else. If the model is gated, set `$HF_TOKEN` and `aro lm` will use it as a bearer token for the download.
+The cache lives at `~/.cache/aro/ask/<repo>/`. Set `$HF_HOME` to put it somewhere else. If the model is gated, set `$HF_TOKEN` and `aro ask` will use it as a bearer token for the download.
 
-You need a local runner to actually execute inference. `aro lm` auto-detects these in order:
+`aro ask` picks a backend automatically:
 
-1. **`$ARO_LM_ENDPOINT`** — any OpenAI-compatible URL. Useful for pointing `aro lm` at a shared inference server or another local runner you already trust.
-2. **`llama-server`** — part of `llama.cpp`. Install via your package manager (`brew install llama.cpp`, `apt install llama.cpp`).
-3. **`mlx_lm.server`** — part of `mlx-lm`. Install with `pip install mlx-lm`. Works only on Apple Silicon.
+1. **`$ARO_ASK_ENDPOINT`** — any OpenAI-compatible URL. Useful for pointing `aro ask` at a shared inference server or another local runner you already trust. Set `$ARO_ASK_API_KEY` if the endpoint expects one.
+2. **Native MLX** (macOS Apple Silicon only) — runs the model **in-process** via MLX. No Python, no subprocess, no server. The Metal shader library ships next to the binary in the Homebrew install and the release tarball.
+3. **`llama-server`** — part of `llama.cpp`. On Linux this is auto-downloaded on first run. On macOS install via `brew install llama.cpp`.
 
-If none of these are available, `aro lm` prints a clear error. There is no other fallback.
+If none of these is available, `aro ask` prints a clear error. There is no other fallback.
 
 ---
 
 ## 49.3 Asking the First Question
 
-The simplest form is one-shot: everything after `aro lm` is treated as a prompt.
+The simplest form is one-shot: everything after `aro ask` is treated as a prompt.
 
 ```bash
-$ aro lm "write a feature set that returns OK for GET /health"
+$ aro ask "write a feature set that returns OK for GET /health"
 ```
 
 The assistant replies with ARO source, optionally wrapped in markdown fences, and writes the conversation to `.context` in the current directory. Run the same command a second time and the previous turn is part of the context — the model "remembers" what it just told you.
 
-Running `aro lm` with no arguments drops you into an interactive REPL. The prompt is `lm>`. Type `/quit` (or press Ctrl+D) to exit.
+Running `aro ask` with no arguments drops you into an interactive REPL. Type `/quit` (or press Ctrl+D) to exit.
 
 ```
-$ aro lm
-aro lm — backend: llama.cpp, model: ARO-Lang/aro-coder-4bit
+$ aro ask
+aro ask — backend: native-mlx, model: ARO-Lang/aro-coder-4bit
 type /quit to exit, /help for commands
-lm> explain the difference between Compute and Transform
+> explain the difference between Compute and Transform
 …
-lm> now show me a Compute example using qualifier-as-name
+> now show me a Compute example using qualifier-as-name
 …
-lm> /quit
+> /quit
 ```
-
-### `aro ask` — the coding assistant variant
-
-`aro lm` is the conversation-oriented entry point: it knows about ARO, replies in ARO, and keeps `.context`. `aro ask` is the same model wired up as an actual coding assistant — it has tool-calling, plans edits, runs `aro check` / `aro test` against your project, and proposes patches.
-
-```bash
-$ aro ask                           # interactive
-$ aro ask "fix the broken test in Examples/Calculator"
-$ aro ask /fix                      # auto-repair the last failure
-```
-
-On macOS Apple Silicon, `aro ask` runs the model **natively in-process** via MLX — no Python, no subprocess, no server. On Linux it auto-downloads `llama-server` and proxies through it. Either way, set `$ARO_LM_ENDPOINT` to an OpenAI-compatible URL to override the local model.
 
 ---
 
-## 48.4 Slash Commands
+## 49.4 Slash Commands
 
 Slash commands work the same way in one-shot and REPL mode. In one-shot mode the command is the first argument; in the REPL it's typed at the prompt.
 
 | Command              | What it does                                                       |
 |----------------------|--------------------------------------------------------------------|
+| `/help`              | Show all slash commands.                                          |
+| `/fix <path>`        | Read, diagnose, and fix errors in the given file.                  |
+| `/explain <path>`    | Explain what an `.aro` file does in plain English.                 |
+| `/docs <path>`       | Generate documentation for an ARO application.                     |
+| `/plugin <name>`     | Scaffold a new plugin interactively.                               |
+| `/openapi`           | Generate an `openapi.yaml` from a description.                     |
 | `/clean`             | Delete `.context` in the current directory. Start fresh.           |
 | `/show`              | Print a short summary of the current conversation.                 |
 | `/tools`             | List every tool the model can call, including MCP-bridged ones.    |
-| `/model`             | Print the active model, its path, and the selected backend.       |
-| `/mcp`               | List the MCP servers currently bridged into the session.          |
+| `/model`             | Print the active model, its path, the selected backend, and whether an update is available. |
+| `/mcp`               | List the MCP servers currently bridged into the session.           |
 | `/index`             | Walk the project and (re)build the retrieval index.                |
-| `/search <query>`    | Debug retrieval: print the top 5 matches for a query.             |
-| `/quit`              | Leave the REPL.                                                   |
+| `/search <query>`    | Debug retrieval: print the top matches for a query.                |
+| `/quit`              | Leave the REPL.                                                    |
 
 Slash commands that don't talk to the model (`/clean`, `/tools`, `/model`, `/mcp`, `/index`, `/search`, `/show`) are fast — they don't start the backend runner.
 
 ---
 
-## 48.5 Tool Calling
+## 49.5 Tool Calling
 
-`aro lm` isn't a glorified autocomplete. It can read your files, run your toolchain, and search the specification. It does this by calling *tools* — small, sandboxed functions the model invokes during a turn. Every tool call is logged to `.context` so you can see exactly what happened after the fact.
+`aro ask` isn't a glorified autocomplete. It can read your files, run your toolchain, and search the specification. It does this by calling *tools* — small, sandboxed functions the model invokes during a turn. Every tool call is logged to `.context` so you can see exactly what happened after the fact.
 
 ### Built-in tools
 
@@ -113,7 +107,7 @@ Slash commands that don't talk to the model (`/clean`, `/tools`, `/model`, `/mcp
 | `list_actions`       | List every registered action verb                          |
 | `list_proposals`     | List proposals in the `Proposals/` directory               |
 | `read_proposal`      | Read a proposal by number (e.g. `0001`, `0052`)            |
-| `search_project`     | Semantic search over the project index                    |
+| `search_project`     | Semantic search over the project index                     |
 
 ### Sandboxing
 
@@ -124,8 +118,8 @@ All file and shell tools are scoped to the current working directory. `read_file
 `run_shell` asks you for approval on every call:
 
 ```
-[aro lm] approve shell command? [y/N]
-  swift test --filter AROLMTests
+[aro ask] approve shell command? [y/N]
+  swift test --filter AROAskTests
 >
 ```
 
@@ -133,9 +127,9 @@ Pass `--yes` to auto-approve everything — handy for non-interactive CI-like in
 
 ---
 
-## 48.6 MCP Bridging
+## 49.6 MCP Bridging
 
-ARO already ships an MCP server (`aro mcp`). `aro lm` bridges it into the same tool registry the built-ins use, so any tool the ARO runtime exposes via MCP is immediately available to the model — with no changes to `aro lm` itself.
+ARO already ships an MCP server (`aro mcp`). `aro ask` bridges it into the same tool registry the built-ins use, so any tool the ARO runtime exposes via MCP is immediately available to the model — with no changes to `aro ask` itself.
 
 You can add more MCP servers per project by editing `.context`:
 
@@ -147,18 +141,18 @@ mcp_servers:
     args: [--stdio]
 ```
 
-Run `aro lm /mcp` to see which bridges are live, and `aro lm /tools` to see every tool — both built-in and bridged — in one list.
+Run `aro ask /mcp` to see which bridges are live, and `aro ask /tools` to see every tool — both built-in and bridged — in one list. Pass `--no-mcp` to skip MCP entirely.
 
 ---
 
-## 48.7 Project Retrieval
+## 49.7 Project Retrieval
 
-Large projects don't fit in a context window, and cramming the whole repo into the system prompt wastes tokens on files the model doesn't need. `aro lm` instead indexes the project and lets the model pull relevant chunks via the `search_project` tool.
+Large projects don't fit in a context window, and cramming the whole repo into the system prompt wastes tokens on files the model doesn't need. `aro ask` instead indexes the project and lets the model pull relevant chunks via the `search_project` tool.
 
 To build the index:
 
 ```bash
-$ aro lm /index
+$ aro ask /index
 indexed 842 chunks
 ```
 
@@ -167,7 +161,7 @@ The index is stored at `.context.index/vectors.json`. It's a flat cosine-similar
 Debug retrieval by searching directly:
 
 ```bash
-$ aro lm /search "openapi contract"
+$ aro ask /search "openapi contract"
 Examples/UserService/openapi.yaml:1-80  (0.712)
 Book/TheLanguageGuide/Chapter17-OpenAPI.md:1-80  (0.643)
 ...
@@ -177,7 +171,7 @@ When the model asks for help with something project-specific, it can now call `s
 
 ---
 
-## 48.8 Good Habits
+## 49.8 Good Habits
 
 A few practices that make the difference between a useful assistant and a frustrating one.
 
@@ -191,48 +185,49 @@ A few practices that make the difference between a useful assistant and a frustr
 
 **Use `parse_aro` for speculative edits.** It's the fastest way to have the model validate syntax before writing to disk.
 
-**Stay in-project.** The path guard will stop the model from escaping the working directory, but you can make its life easier by running `aro lm` from the root of your application.
+**Stay in-project.** The path guard will stop the model from escaping the working directory, but you can make its life easier by running `aro ask` from the root of your application.
 
 ---
 
-## 48.9 Automation Patterns
+## 49.9 Automation Patterns
 
-`aro lm --yes <prompt>` is scriptable. A few patterns worth knowing:
+`aro ask --yes <prompt>` is scriptable. A few patterns worth knowing:
 
 **Check a new feature**:
 ```bash
-aro lm --yes "run aro_check on ./Examples/UserService and fix any diagnostics"
+aro ask --yes "run aro_check on ./Examples/UserService and fix any diagnostics"
 ```
 
 **Generate boilerplate for a new operationId**:
 ```bash
-aro lm --yes "add a feature set called deleteUser that handles DELETE /users/{id} in ./MyApp"
+aro ask --yes "add a feature set called deleteUser that handles DELETE /users/{id} in ./MyApp"
 ```
 
 **Explain a proposal to a new contributor**:
 ```bash
-aro lm --no-mcp "summarise ARO-0018 in three bullets" > data-pipelines.md
+aro ask --no-mcp "summarise ARO-0018 in three bullets" > data-pipelines.md
 ```
 
 **Use a shared endpoint in CI**:
 ```bash
-ARO_LM_ENDPOINT=http://192.168.1.42:8080 aro lm --yes "check examples/"
+ARO_ASK_ENDPOINT=http://192.168.1.42:8080 aro ask --yes "check examples/"
 ```
 
 ---
 
-## 48.10 When Something Goes Wrong
+## 49.10 When Something Goes Wrong
 
-- **`No LM backend is available`** — install `llama-server`, `mlx_lm.server`, or set `$ARO_LM_ENDPOINT`.
-- **Runner never starts** — set `ARO_LM_VERBOSE=1` to see its stdout/stderr on your terminal instead of `/dev/null`.
+- **`No LM backend available`** — install `llama-server`, ensure the macOS Metal shader library is present (see below), or set `$ARO_ASK_ENDPOINT`.
+- **`MLX Metal shader library not found`** — the error lists exactly which paths were searched. The Homebrew install ships the library at `share/aro/mlx.metallib` (symlinked into `bin/`). For a manually-installed binary, drop `mlx.metallib` next to `aro` or into `~/.cache/aro/mlx/`. Rebuild from source with `tools/build-metallib.sh release` if needed.
+- **Backend runner never starts** — set `ARO_ASK_VERBOSE=1` to see its stdout/stderr on your terminal instead of `/dev/null`.
 - **Model download stalls** — the download is resumable. Re-run the same command; files already fully present are skipped.
-- **Tool call failed with "Path outside the working directory"** — the model tried to escape the sandbox. Rephrase so it stays in-project, or change directories before launching `aro lm`.
+- **Tool call failed with "Path outside the working directory"** — the model tried to escape the sandbox. Rephrase so it stays in-project, or change directories before launching `aro ask`.
 
 ---
 
-## 48.11 Summary
+## 49.11 Summary
 
-`aro lm` is a local, ARO-aware coding assistant that:
+`aro ask` is a local, ARO-aware coding assistant that:
 
 - Runs a fine-tuned model on your machine
 - Persists conversations per directory in a human-readable `.context` file
