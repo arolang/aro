@@ -505,12 +505,15 @@ public final class CCompiler {
 
             if usingSwiftc {
                 // swiftc needs -Xlinker format for rpath
+                // The swiftLibPath rpath has to be there in BOTH modes: Foundation
+                // on Linux is dynamic regardless of --static, so the loader has
+                // to find libFoundation.so somewhere. Only the $ORIGIN rpath is
+                // mode-specific (it pairs with the --dynamic .so bundling).
+                args.append("-Xlinker")
+                args.append("-rpath")
+                args.append("-Xlinker")
+                args.append(swiftLibPath)
                 if !useStatic {
-                    args.append("-Xlinker")
-                    args.append("-rpath")
-                    args.append("-Xlinker")
-                    args.append(swiftLibPath)
-                    // Look beside the binary for bundled .so files.
                     args.append("-Xlinker")
                     args.append("-rpath")
                     args.append("-Xlinker")
@@ -541,10 +544,11 @@ public final class CCompiler {
                 args.append("-lFoundationEssentials")
                 args.append("-lFoundationNetworking")
             } else {
-                // clang uses -Wl format for rpath
+                // clang uses -Wl format for rpath. Same logic as the swiftc
+                // branch above: swiftLibPath rpath in both modes (Foundation
+                // stays dynamic on Linux), $ORIGIN only in --dynamic mode.
+                args.append("-Wl,-rpath,\(swiftLibPath)")
                 if !useStatic {
-                    args.append("-Wl,-rpath,\(swiftLibPath)")
-                    // Look beside the binary for bundled .so files (for `--dynamic`).
                     args.append("-Wl,-rpath,$ORIGIN")
                 }
 
