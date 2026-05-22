@@ -525,6 +525,7 @@ public final class CCompiler {
                 args.append("-lswift_Concurrency")
                 args.append("-lswiftGlibc")
                 args.append("-lswiftDispatch")
+                args.append("-ldispatch")             // libdispatch — libswiftDispatch references dispatch_group_async et al.
                 args.append("-lBlocksRuntime")
                 args.append("-lswift_StringProcessing")
                 args.append("-lswift_RegexParser")
@@ -567,6 +568,7 @@ public final class CCompiler {
                 args.append("-lswift_Concurrency")
                 args.append("-lswiftGlibc")
                 args.append("-lswiftDispatch")
+                args.append("-ldispatch")             // libdispatch — libswiftDispatch references dispatch_group_async et al.
                 args.append("-lBlocksRuntime")
                 args.append("-lswift_StringProcessing")
                 args.append("-lswift_RegexParser")
