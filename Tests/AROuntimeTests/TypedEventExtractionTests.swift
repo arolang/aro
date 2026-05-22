@@ -90,7 +90,7 @@ struct TypedEventExtractionTests {
 
     @Test("lowercase qualifier is NOT detected as schema name")
     func testLowercaseNotSchema() async throws {
-        let action = ExtractAction()
+        _ = ExtractAction()
         let context = RuntimeContext(featureSetName: "Test")
 
         // Create schema
@@ -105,7 +105,7 @@ struct TypedEventExtractionTests {
         ] as [String: any Sendable])
 
         // Extract with lowercase qualifier - should be property access, not schema
-        let (result, object) = createDescriptors(
+        _ = createDescriptors(
             resultBase: "value",
             resultSpecifiers: ["extractlinksEvent"],
             objectBase: "data"
@@ -407,7 +407,7 @@ struct TypedEventExtractionTests {
         ] as [String: any Sendable])
 
         // lowercase specifier = property access
-        let (result, object) = createDescriptors(
+        _ = createDescriptors(
             resultBase: "email",
             resultSpecifiers: ["email"],
             objectBase: "user"

@@ -82,7 +82,7 @@ struct AROCatalogTests {
             since: "1.0.0"
         )
 
-        await ActionRegistry.shared.registerDynamic(
+        ActionRegistry.shared.registerDynamic(
             verb: verb,
             handler: { _, _, _ in NSNull() },
             pluginName: "_catalog_test_plugin_",
@@ -90,7 +90,7 @@ struct AROCatalogTests {
         )
         defer {
             // Clean up so other tests don't see this verb.
-            Task { await ActionRegistry.shared.unregisterPlugin("_catalog_test_plugin_") }
+            ActionRegistry.shared.unregisterPlugin("_catalog_test_plugin_")
         }
 
         let entries = AROCatalog.shared.actions()
@@ -108,16 +108,16 @@ struct AROCatalogTests {
     }
 
     @Test("ActionRegistry.isRegistered sees dynamic plugin verbs")
-    func isRegisteredFindsDynamicVerbs() async {
+    func isRegisteredFindsDynamicVerbs() {
         let verb = "issue225_isregistered_xyz"
-        await ActionRegistry.shared.registerDynamic(
+        ActionRegistry.shared.registerDynamic(
             verb: verb,
             handler: { _, _, _ in NSNull() },
             pluginName: "_isregistered_test_"
         )
-        defer { Task { await ActionRegistry.shared.unregisterPlugin("_isregistered_test_") } }
+        defer { ActionRegistry.shared.unregisterPlugin("_isregistered_test_") }
 
-        let registered = await ActionRegistry.shared.isRegistered(verb)
+        let registered = ActionRegistry.shared.isRegistered(verb)
         #expect(registered == true)
     }
 

@@ -16,7 +16,7 @@ final class StatementCodeGenTests: XCTestCase {
     // MARK: - Helpers
 
     /// Compile ARO source all the way to LLVM IR text.
-    private func generateIR(_ source: String, file: StaticString = #file, line: UInt = #line) throws -> String {
+    private func generateIR(_ source: String, file: StaticString = #filePath, line: UInt = #line) throws -> String {
         let compiler = Compiler()
         let result = compiler.compile(source)
 

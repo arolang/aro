@@ -43,7 +43,7 @@ final class LLVMCodeGeneratorTests: XCTestCase {
         let action = Action(verb: "Log", span: dummySpan)
         let result = QualifiedNoun(base: "message", specifiers: [], span: dummySpan)
         let objectClause = ObjectClause(preposition: .for, noun: QualifiedNoun(base: "console", specifiers: [], span: dummySpan))
-        let aroStatement = AROStatement(action: action, result: result, object: objectClause, literalValue: .string("Hello"), span: dummySpan)
+        let aroStatement = AROStatement(action: action, result: result, object: objectClause, valueSource: .literal(.string("Hello")), span: dummySpan)
 
         let featureSet = FeatureSet(
             name: "Application-Start",
