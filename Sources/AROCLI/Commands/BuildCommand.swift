@@ -36,6 +36,12 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Release build (optimize + size + strip)")
     var release: Bool = false
 
+    @Flag(name: .customLong("static"), help: "Statically link the Swift runtime into the binary (default; one self-contained file)")
+    var staticLink: Bool = false
+
+    @Flag(name: .customLong("dynamic"), help: "Dynamically link the Swift runtime and copy required .so files next to the binary (rpath=$ORIGIN)")
+    var dynamicLink: Bool = false
+
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
 
@@ -773,11 +779,20 @@ struct BuildCommand: AsyncParsableCommand {
 
         AROLogger.debug("CCompiler created", subsystem: "build")
 
+        // --static and --dynamic are mutually exclusive; --dynamic wins if both
+        // are set (caller asked for dynamic explicitly). Default is static.
+        if staticLink && dynamicLink {
+            print("Error: --static and --dynamic are mutually exclusive.")
+            throw ExitCode.failure
+        }
+        let effectiveLinkMode: CCompiler.LinkMode = dynamicLink ? .dynamicLink : .staticLink
+
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
             optimizeForSize: effectiveSize,
             strip: effectiveStrip,
-            deadStrip: effectiveStrip || effectiveSize  // Enable dead stripping when stripping or optimizing for size
+            deadStrip: effectiveStrip || effectiveSize,  // Enable dead stripping when stripping or optimizing for size
+            linkMode: effectiveLinkMode
         )
 
         AROLogger.debug("LinkOptions created", subsystem: "build")
@@ -819,6 +834,22 @@ struct BuildCommand: AsyncParsableCommand {
             }
             try? runStripCommand(on: binaryPath.path)
         }
+
+        // Bundle Swift runtime .so files next to the binary when --dynamic
+        // (Linux only). The binary already has rpath=$ORIGIN, so the loader
+        // picks them up at runtime — no system Swift install needed.
+        #if os(Linux)
+        if effectiveLinkMode == .dynamicLink {
+            let bundleDir = binaryPath.deletingLastPathComponent()
+            if verbose {
+                print("Bundling Swift runtime libraries into \(bundleDir.path)...")
+            }
+            let copied = bundleSwiftRuntimeSOs(into: bundleDir, verbose: verbose)
+            if verbose {
+                print("  \(copied) Swift/Foundation .so files copied")
+            }
+        }
+        #endif
 
         // Code signing (macOS only)
         #if os(macOS)
@@ -1296,6 +1327,82 @@ struct BuildCommand: AsyncParsableCommand {
         var status: Int32 {
             switch self { case .failed(let s): return s }
         }
+    }
+    #endif
+
+    #if os(Linux)
+    /// Copy the Swift / Foundation `.so` files required by the linked binary
+    /// into `destination`. Returns the number of files actually copied.
+    ///
+    /// Used by `--dynamic` mode so the produced binary plus the `.so`s next to
+    /// it form a self-contained deployment unit — no system Swift install
+    /// needed on the target.
+    private func bundleSwiftRuntimeSOs(into destination: URL, verbose: Bool) -> Int {
+        // The same list the linker pulled in. Suffix .so.5 / .so.6 etc. is
+        // resolved by also copying the unversioned symlink target.
+        let names = [
+            "libswiftCore",
+            "libswift_Concurrency",
+            "libswiftGlibc",
+            "libswiftDispatch",
+            "libBlocksRuntime",
+            "libswift_StringProcessing",
+            "libswift_RegexParser",
+            "libswiftSwiftOnoneSupport",
+            "libFoundation",
+            "libFoundationEssentials",
+            "libFoundationNetworking",
+            "libdispatch",
+            "libicudataswift",
+            "libicui18nswift",
+            "libicuucswift",
+        ]
+        guard let swiftLibPath = findSwiftLibPath() else {
+            FileHandle.standardError.write(Data("[bundle] swift lib path not found; skipping\n".utf8))
+            return 0
+        }
+        let fm = FileManager.default
+        var copied = 0
+        let dirContents = (try? fm.contentsOfDirectory(atPath: swiftLibPath)) ?? []
+        for name in names {
+            // Match libfoo.so, libfoo.so.X, libfoo.so.X.Y to handle versioned
+            // SONAMEs the runtime loader expects.
+            let candidates = dirContents.filter { $0.hasPrefix("\(name).so") }
+            for entry in candidates {
+                let src = URL(fileURLWithPath: swiftLibPath).appendingPathComponent(entry)
+                let dst = destination.appendingPathComponent(entry)
+                try? fm.removeItem(at: dst)
+                do {
+                    // Resolve symlinks so the destination has the actual file,
+                    // not a dangling link into /usr/share/swift.
+                    let resolved = src.resolvingSymlinksInPath()
+                    try fm.copyItem(at: resolved, to: dst)
+                    copied += 1
+                    if verbose {
+                        print("    \(entry)")
+                    }
+                } catch {
+                    if verbose {
+                        print("    (skip) \(entry): \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        return copied
+    }
+
+    /// Locate the Swift dynamic library directory the same way the linker does.
+    private func findSwiftLibPath() -> String? {
+        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"],
+           FileManager.default.fileExists(atPath: envPath) {
+            return envPath
+        }
+        let candidates = [
+            "/usr/share/swift/usr/lib/swift/linux",
+            "/usr/lib/swift/linux",
+            "/usr/local/lib/swift/linux",
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0) }
     }
     #endif
 

@@ -278,22 +278,42 @@ public final class CCompiler {
     }
 
     /// Linker options for size and stripping
+    /// How the Swift runtime is bound to the produced binary.
+    ///
+    /// - `staticLink`: link Swift libraries as static archives (`.a`) so the
+    ///   binary runs on machines without Swift installed. On Linux this maps to
+    ///   `-Wl,-Bstatic -lswiftCore ... -Wl,-Bdynamic` against the toolchain's
+    ///   `swift_static/linux/` directory. (libc / pthread / libgit2 still link
+    ///   dynamically — a fully static binary requires the static-linux-musl
+    ///   SDK; see `aro build --static --target linux-musl` once implemented.)
+    /// - `dynamicLink`: link Swift libraries as shared objects (`.so`) and
+    ///   embed `$ORIGIN` in the rpath so the loader looks next to the binary.
+    ///   The build step then copies the required `.so`s alongside the
+    ///   executable, producing a self-contained directory.
+    public enum LinkMode: String, Sendable {
+        case staticLink
+        case dynamicLink
+    }
+
     public struct LinkOptions {
         public var optimize: Bool = false
         public var optimizeForSize: Bool = false
         public var strip: Bool = false
         public var deadStrip: Bool = false
+        public var linkMode: LinkMode = .staticLink
 
         public init(
             optimize: Bool = false,
             optimizeForSize: Bool = false,
             strip: Bool = false,
-            deadStrip: Bool = false
+            deadStrip: Bool = false,
+            linkMode: LinkMode = .staticLink
         ) {
             self.optimize = optimize
             self.optimizeForSize = optimizeForSize
             self.strip = strip
             self.deadStrip = deadStrip
+            self.linkMode = linkMode
         }
     }
 
@@ -461,36 +481,82 @@ public final class CCompiler {
 
             FileHandle.standardError.write(Data("[LINKER] Swift lib path: \(swiftLibPath)\n".utf8))
             FileHandle.standardError.write(Data("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".utf8))
+            FileHandle.standardError.write(Data("[LINKER] Link mode: \(options.linkMode.rawValue)\n".utf8))
+
+            // The toolchain ships static archives next to the .so directory:
+            //   <swiftLibPath>/swift/linux       <- .so files (dynamic)
+            //   <swiftLibPath>/swift_static/linux <- .a files (static)
+            // `findSwiftLibPath` returns the dynamic dir; derive the static
+            // sibling so `--static` links against the archives.
+            let swiftStaticLibPath = swiftLibPath
+                .replacingOccurrences(of: "/swift/linux", with: "/swift_static/linux")
+            let staticAvailable = options.linkMode == .staticLink
+                && FileManager.default.fileExists(atPath: swiftStaticLibPath)
+                && FileManager.default.fileExists(atPath: "\(swiftStaticLibPath)/libswiftCore.a")
+            if options.linkMode == .staticLink && !staticAvailable {
+                FileHandle.standardError.write(Data("[LINKER] --static requested but swift_static/linux not found at \(swiftStaticLibPath); falling back to dynamic link with $ORIGIN rpath.\n".utf8))
+            }
+            let useStatic = staticAvailable
 
             args.append("-L\(swiftLibPath)")
+            if useStatic {
+                args.append("-L\(swiftStaticLibPath)")
+            }
 
             if usingSwiftc {
                 // swiftc needs -Xlinker format for rpath
+                // The swiftLibPath rpath has to be there in BOTH modes: Foundation
+                // on Linux is dynamic regardless of --static, so the loader has
+                // to find libFoundation.so somewhere. Only the $ORIGIN rpath is
+                // mode-specific (it pairs with the --dynamic .so bundling).
                 args.append("-Xlinker")
                 args.append("-rpath")
                 args.append("-Xlinker")
                 args.append(swiftLibPath)
+                if !useStatic {
+                    args.append("-Xlinker")
+                    args.append("-rpath")
+                    args.append("-Xlinker")
+                    args.append("$ORIGIN")
+                }
 
-                // CRITICAL: Explicitly link Swift runtime libraries when linking object files
-                // swiftc doesn't automatically link these when given .o files instead of .swift files
-                // These must come AFTER -lARORuntime so linker can resolve symbols
-                args.append("-lswiftGlibc")           // Platform library (POSIX/Glibc)
-                args.append("-lswiftDispatch")        // Grand Central Dispatch
-                args.append("-lBlocksRuntime")        // Blocks runtime
-                args.append("-lswift_Concurrency")    // Swift Concurrency (TaskLocal)
-                args.append("-lFoundation")           // Foundation framework
-                args.append("-lFoundationEssentials") // Foundation essentials
-                args.append("-lFoundationNetworking") // HTTP/networking
+                if useStatic {
+                    args.append("-Xlinker")
+                    args.append("-Bstatic")
+                }
+                args.append("-lswiftCore")
+                args.append("-lswift_Concurrency")
+                args.append("-lswiftGlibc")
+                args.append("-lswiftDispatch")
+                args.append("-ldispatch")             // libdispatch — libswiftDispatch references dispatch_group_async et al.
+                args.append("-lBlocksRuntime")
                 args.append("-lswift_StringProcessing")
                 args.append("-lswift_RegexParser")
+                if useStatic {
+                    args.append("-Xlinker")
+                    args.append("-Bdynamic")
+                }
+                // Foundation on Linux is dynamic-only: it depends on libcurl /
+                // libxml / libicu and is not shipped in swift_static. Keep it
+                // dynamic in both modes; the bundling pass in BuildCommand
+                // copies it next to the binary for `--dynamic`.
+                args.append("-lFoundation")
+                args.append("-lFoundationEssentials")
+                args.append("-lFoundationNetworking")
             } else {
-                // clang uses -Wl format for rpath
+                // clang uses -Wl format for rpath. Same logic as the swiftc
+                // branch above: swiftLibPath rpath in both modes (Foundation
+                // stays dynamic on Linux), $ORIGIN only in --dynamic mode.
                 args.append("-Wl,-rpath,\(swiftLibPath)")
+                if !useStatic {
+                    args.append("-Wl,-rpath,$ORIGIN")
+                }
 
                 // CRITICAL: When using clang to link Swift code, we need swiftrt.o
                 // This object file initializes the Swift runtime (metadata registration, etc.)
                 // Without it, the binary will hang during Swift runtime bootstrap
-                let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
+                let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: useStatic ? swiftStaticLibPath : swiftLibPath)
+                    ?? findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
                 if let rtPath = swiftRTPath {
                     FileHandle.standardError.write(Data("[LINKER] Found swiftrt.o at: \(rtPath)\n".utf8))
                     // swiftrt.o must be linked FIRST to initialize Swift runtime before any Swift code runs
@@ -499,20 +565,25 @@ public final class CCompiler {
                     FileHandle.standardError.write(Data("[LINKER] WARNING: swiftrt.o not found - binary may hang\n".utf8))
                 }
 
-                // CRITICAL: Explicitly link Swift runtime libraries when using clang
-                // These must come AFTER -lARORuntime so linker can resolve symbols
-                // Order matters: Core must be first, then platform libs, then others
+                if useStatic {
+                    args.append("-Wl,-Bstatic")
+                }
                 args.append("-lswiftCore")
                 args.append("-lswift_Concurrency")
-                args.append("-lswiftGlibc")           // Platform library (POSIX/Glibc)
-                args.append("-lswiftDispatch")        // Grand Central Dispatch
-                args.append("-lBlocksRuntime")        // Blocks runtime
-                args.append("-lFoundation")           // Foundation framework
-                args.append("-lFoundationEssentials") // Foundation essentials
-                args.append("-lFoundationNetworking") // HTTP/networking
+                args.append("-lswiftGlibc")
+                args.append("-lswiftDispatch")
+                args.append("-ldispatch")             // libdispatch — libswiftDispatch references dispatch_group_async et al.
+                args.append("-lBlocksRuntime")
                 args.append("-lswift_StringProcessing")
                 args.append("-lswift_RegexParser")
                 args.append("-lswiftSwiftOnoneSupport")
+                if useStatic {
+                    args.append("-Wl,-Bdynamic")
+                }
+                // Foundation stays dynamic on Linux (see comment in swiftc branch).
+                args.append("-lFoundation")
+                args.append("-lFoundationEssentials")
+                args.append("-lFoundationNetworking")
             }
         } else {
             FileHandle.standardError.write(Data("[LINKER] WARNING: Swift library path not found\n".utf8))

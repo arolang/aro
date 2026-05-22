@@ -6,6 +6,8 @@ timeout: 300
 # run created it (not a stale artifact left in the source tree).
 pre-script: rm -f Examples/ZipService/content/archive.zip
 # After aro finishes, verify the archive was actually created, is a real zip,
-# and contains both source files. `unzip -tq` exits non-zero on any CRC
-# mismatch or structural damage, so it doubles as a corruption check.
-test-script: test -s Examples/ZipService/content/archive.zip && unzip -tq Examples/ZipService/content/archive.zip && unzip -l Examples/ZipService/content/archive.zip | grep -q 'file1.txt' && unzip -l Examples/ZipService/content/archive.zip | grep -q 'file2.txt'
+# and contains both source files. Use python3 -m zipfile (stdlib, present on
+# every modern Linux distro and on macOS — unzip isn't always installed on
+# minimal CI runners). `-t` runs an integrity / CRC check; `-l` lists the
+# contents we then grep.
+test-script: test -s Examples/ZipService/content/archive.zip && python3 -m zipfile -t Examples/ZipService/content/archive.zip && python3 -m zipfile -l Examples/ZipService/content/archive.zip | grep -q 'file1.txt' && python3 -m zipfile -l Examples/ZipService/content/archive.zip | grep -q 'file2.txt'

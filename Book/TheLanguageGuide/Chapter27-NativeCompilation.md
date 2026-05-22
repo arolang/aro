@@ -55,6 +55,25 @@ The binary produced by `aro build` is fully self-contained. The following assets
 - **Plugins** (`Plugins/`): Native plugins (C, Rust, Swift) are compiled and statically linked into the binary via symbol renaming — no `dlopen`, no temporary files. Python plugins are embedded with their source code and executed in-process via an embedded Python interpreter (`libpython3` linked into the binary) — no Python installation needed on the target machine, no subprocess overhead.
 
 This means the output of `aro build` is a single executable file. You do not need to deploy `openapi.yaml`, `templates/`, or `Plugins/` alongside it.
+
+### Linux: `--static` (default) vs `--dynamic`
+
+The Swift runtime — `libswiftCore.so`, `libswift_Concurrency.so`, `libFoundation.so`, etc. — is the one piece that does *not* live inside `libARORuntime.a`. On Linux this means a freshly compiled binary will refuse to start on a machine without Swift installed:
+
+```
+./MyApp: error while loading shared libraries: libswiftCore.so: cannot open shared object file: No such file or directory
+```
+
+`aro build` solves this two ways:
+
+| Flag | Behaviour | Output |
+|------|-----------|--------|
+| `--static` *(default)* | Links Swift libraries as static archives from the toolchain's `swift_static/linux/` directory. | Single binary. Foundation still loads dynamically on Linux (no static Foundation upstream); the system's `libFoundation.so` is required. |
+| `--dynamic` | Links Swift libraries as `.so`s and embeds `rpath=$ORIGIN`. The build step copies every required `.so` next to the binary. | Directory: `myapp/{myapp, libswiftCore.so.5, libFoundation.so, …}`. Self-contained. |
+
+Both modes accept the same source. Pick `--dynamic` when you want a directory you can `tar` and drop onto any glibc-class Linux box; pick `--static` (the default) when you want a single file *and* you control the target image enough to be sure Foundation is installed (e.g. running on `ghcr.io/arolang/aro-runtime`, an Ubuntu container with the Swift runtime layer, etc.). The two flags are mutually exclusive.
+
+macOS binaries don't have this problem in practice — Swift libraries are part of every Apple toolchain install — and the flags are accepted but no-ops there.
 ---
 
 ## 27.5 Binary Size and Performance
