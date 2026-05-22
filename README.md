@@ -82,9 +82,12 @@ Feature sets respond to events rather than being called directly. Emit an event 
 Compile to standalone binaries. No runtime installation required on target systems.
 
 ```bash
-aro build ./MyApp
+aro build ./MyApp              # one self-contained binary (default: --static)
+aro build ./MyApp --dynamic    # binary + bundled libswift*.so / libFoundation*.so next to it
 ./MyApp
 ```
+
+On Linux, `--static` links the Swift runtime as static archives so the binary runs without a system Swift install. `--dynamic` keeps the Swift libraries as `.so`s and embeds `rpath=$ORIGIN` so the loader picks them up from the same directory as the binary — useful when targeting Linux distributions where Foundation isn't preinstalled. See [Guide-Linux-Deployment](https://git.ausdertechnik.de/arolang/aro/-/wikis/Guide-Linux-Deployment).
 
 ### Built in Services
 

@@ -34,6 +34,8 @@ aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
+aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linux: Foundation still dynamic.)
+aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to the binary; rpath=$ORIGIN.
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 aro repl                 # Start the interactive ARO REPL
