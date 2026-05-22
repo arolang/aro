@@ -320,7 +320,7 @@ jobs:
           # single mlx.metallib. `aro ask`'s native MLX backend needs this
           # next to the binary at runtime; the macOS release tarball
           # bundles it and Homebrew links it into share/aro/.
-          tools/build-metallib.sh release
+          bash tools/build-metallib.sh release
           cp .build/release/mlx-swift_Cmlx.bundle/default.metallib mlx.metallib
           ls -lh mlx.metallib
 
