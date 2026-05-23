@@ -55,7 +55,15 @@ public struct AskCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Sampling temperature (default 0.2)")
     public var temperature: Double = 0.2
 
+    @Flag(name: [.short, .long], help: "Print backend chatter (model loading, runner stdout/stderr). Sets ARO_ASK_VERBOSE.")
+    public var verbose: Bool = false
+
     public func run() async throws {
+        // Backends read ARO_ASK_VERBOSE from the environment to decide
+        // whether to surface model-load and runner output. The flag is
+        // just sugar for setting it.
+        if verbose { setenv("ARO_ASK_VERBOSE", "1", 1) }
+
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 
         let firstWord = prompt.first ?? ""

@@ -142,9 +142,12 @@ public actor NativeMLXBackend: LMBackend {
         // as a resource and extract it to where MLX expects to find it.
         try Self.ensureMetalLib()
 
-        FileHandle.standardError.write(
-            Data("  Loading model \(modelIdentifier)...\n".utf8)
-        )
+        let verbose = ProcessInfo.processInfo.environment["ARO_ASK_VERBOSE"] != nil
+        if verbose {
+            FileHandle.standardError.write(
+                Data("  Loading model \(modelIdentifier)...\n".utf8)
+            )
+        }
 
         let tokenizerLoader = HFTokenizerLoader()
 
@@ -156,7 +159,9 @@ public actor NativeMLXBackend: LMBackend {
             using: tokenizerLoader
         )
 
-        FileHandle.standardError.write(Data("  Model loaded.\n".utf8))
+        if verbose {
+            FileHandle.standardError.write(Data("  Model loaded.\n".utf8))
+        }
     }
 
     public func stop() async {
