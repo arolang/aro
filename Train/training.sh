@@ -110,4 +110,10 @@ echo "    kernel:    ${KERNEL_NAME}"
 echo
 
 cd "${SCRIPT_DIR}"
-exec "${PYTHON}" -m jupyter nbconvert "${EXEC_FLAGS[@]}" "${EXTRA_ARGS[@]}" "${META_NB}"
+# `set -u` blows up on `"${EXTRA_ARGS[@]}"` when the array is empty.
+# `${EXTRA_ARGS[@]+...}` only expands when the variable is set, which
+# both keeps strict mode and preserves correct quoting per argument.
+exec "${PYTHON}" -m jupyter nbconvert \
+    "${EXEC_FLAGS[@]}" \
+    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
+    "${META_NB}"
