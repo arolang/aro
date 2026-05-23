@@ -72,13 +72,43 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Pick a python that has jupyter installed. Prefer the project's venv if
-# one exists; otherwise use system python3.
-PYTHON="${PYTHON:-python3}"
-if ! "${PYTHON}" -c 'import jupyter' 2>/dev/null; then
-  echo "Jupyter not found in ${PYTHON}; installing nbconvert + nbclient + nbformat..."
-  "${PYTHON}" -m pip install -q nbconvert nbclient nbformat ipykernel
+# ── Virtualenv + requirements management ──────────────────────────────────
+# Every run uses Train/.venv with the exact stack pinned in
+# Train/requirements.txt. Creating a venv is idempotent: we recreate it
+# only when missing; we run `pip install -r` every time but pip skips
+# packages already at the right version, so the cost on warm runs is just
+# the wheel-cache lookup.
+#
+# Set ARO_TRAIN_PYTHON to override the bootstrap python (the one that
+# *creates* the venv). The venv's own python is used for everything else.
+
+VENV_DIR="${SCRIPT_DIR}/.venv"
+REQS_FILE="${SCRIPT_DIR}/requirements.txt"
+BOOTSTRAP_PYTHON="${ARO_TRAIN_PYTHON:-python3}"
+
+if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+  echo "==> Creating venv at ${VENV_DIR}"
+  "${BOOTSTRAP_PYTHON}" -m venv "${VENV_DIR}"
 fi
+
+PYTHON="${VENV_DIR}/bin/python"
+
+# Always upgrade pip first — old pips silently drop newer wheel formats
+# and confuse the error reporting later in the install.
+"${PYTHON}" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
+
+if [[ -f "${REQS_FILE}" ]]; then
+  echo "==> Installing/upgrading requirements from ${REQS_FILE#${SCRIPT_DIR}/}"
+  "${PYTHON}" -m pip install --quiet --upgrade -r "${REQS_FILE}"
+else
+  echo "warning: ${REQS_FILE} missing; falling back to minimal install"
+  "${PYTHON}" -m pip install --quiet nbconvert nbclient nbformat ipykernel
+fi
+
+# Register a Jupyter kernel inside the venv so nbconvert can resolve
+# 'python3' to *our* interpreter instead of the system one. Idempotent.
+"${PYTHON}" -m ipykernel install --user --name=aro-train --display-name='ARO Train' \
+    >/dev/null 2>&1 || true
 
 # Forward SKIP / STOP_ON_FAILURE into the meta notebook via env vars. The
 # meta notebook reads them at runtime (the cell sets defaults only when
@@ -86,9 +116,9 @@ fi
 [[ -n "${SKIP}" ]] && export ARO_TRAIN_SKIP="${SKIP}"
 [[ -n "${STOP_ON_FAILURE}" ]] && export ARO_TRAIN_STOP_ON_FAILURE="${STOP_ON_FAILURE}"
 
-# Pick the kernel name. nbconvert defaults to 'python3'; if you maintain a
-# named project kernel, set KERNEL_NAME=<name> before invoking.
-KERNEL_NAME="${KERNEL_NAME:-python3}"
+# Default to the venv kernel we just registered so notebook cells run
+# with the requirements.txt environment, not the system one.
+KERNEL_NAME="${KERNEL_NAME:-aro-train}"
 
 EXEC_FLAGS=(
   --to notebook

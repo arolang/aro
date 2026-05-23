@@ -175,3 +175,4 @@ core
 # aro ask session state — per-directory conversation cache
 .context
 .context.index/
+Train/.venv/

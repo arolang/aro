@@ -1,0 +1,28 @@
+# Python dependencies for the ARO training pipeline.
+#
+# Installed automatically into Train/.venv by `Train/training.sh`. Pin only
+# where a specific version is load-bearing (see comments). Otherwise use
+# the latest stable so we pick up bug fixes for free.
+
+# ── Notebook execution ───────────────────────────────────────────────────
+jupyter
+nbconvert
+nbclient
+nbformat
+ipykernel
+ipywidgets
+IPython
+
+# ── Data / plotting helpers ──────────────────────────────────────────────
+numpy
+matplotlib
+tqdm
+PyYAML
+
+# ── Hugging Face stack (model downloads, tokenizer, chat templates) ──────
+huggingface_hub
+transformers
+
+# ── MLX (Apple Silicon only — pip silently skips on Linux/Windows) ───────
+mlx; sys_platform == "darwin"
+mlx-lm; sys_platform == "darwin"
