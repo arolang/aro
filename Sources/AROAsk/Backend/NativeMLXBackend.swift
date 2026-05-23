@@ -190,12 +190,21 @@ public actor NativeMLXBackend: LMBackend {
             ] as MLXLMCommon.ToolSpec
         }
 
-        // Build generation parameters
+        // Build generation parameters.
+        //
+        // Qwen3-Coder runs in "thinking mode" by default: it emits a
+        // `<think>...</think>` block of internal reasoning, then the actual
+        // answer (or tool call). Code-gen prompts with tools attached can
+        // easily burn 2-4k tokens just thinking, and our system prompt +
+        // tool schemas already consume ~3k of the prompt budget. 4096 was
+        // not enough headroom and the model frequently got cut off mid-
+        // `<think>` with no visible output. Qwen3-Coder's context window
+        // is 32k+, so 16k of output budget is safe.
         var genParams = GenerateParameters(
             temperature: Float(request.temperature ?? 0.2),
             topP: 0.9
         )
-        genParams.maxTokens = 4096
+        genParams.maxTokens = 16384
 
         // Prepare input with chat template and tools
         let userInput = UserInput(
@@ -218,7 +227,15 @@ public actor NativeMLXBackend: LMBackend {
                 break
             }
         }
-        let fullText = accumulated
+        // Strip the Qwen3 thinking block before any further parsing —
+        // tool-call regexes and the user-visible text both want the
+        // post-thinking answer, not the internal reasoning.
+        // Also normalise the missing-space-before-`<` bug the base model
+        // bakes into ARO output (mirrors the training-pipeline fix in
+        // Train/script/config.py::_normalize_aro_whitespace).
+        let fullText = normalizeAROWhitespace(
+            in: stripThinkingBlock(from: accumulated)
+        )
 
         // Parse tool calls from the generated text
         let detectedToolCalls = parseToolCalls(from: fullText)
@@ -238,6 +255,42 @@ public actor NativeMLXBackend: LMBackend {
             content: fullText,
             toolCalls: nil
         )
+    }
+
+    /// Insert the missing space before `<lower` that the base model bakes
+    /// into ARO output (`Log "x" to the<console>.` → `... to <console>.`).
+    /// Canonical ARO always has whitespace before `<` for system objects,
+    /// qualifiers and variables, so the regex is unconditionally safe.
+    /// Mirrors `Train/script/config.py::_normalize_aro_whitespace` so the
+    /// runtime patch and the next training run converge.
+    private static let missingSpaceBeforeAngle: NSRegularExpression = {
+        // Force-try is fine — the pattern is a compile-time literal.
+        try! NSRegularExpression(pattern: #"(\w)<([a-z])"#)
+    }()
+
+    private func normalizeAROWhitespace(in text: String) -> String {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Self.missingSpaceBeforeAngle.stringByReplacingMatches(
+            in: text, range: range, withTemplate: "$1 <$2"
+        )
+    }
+
+    /// Remove the Qwen3 `<think>...</think>` reasoning block from the model's
+    /// output. If the closing tag is missing (generation was truncated mid-
+    /// think — shouldn't happen with the bumped token budget, but defend
+    /// anyway), drop everything from `<think>` to end-of-string so the user
+    /// sees an empty response rather than a wall of internal monologue.
+    private func stripThinkingBlock(from text: String) -> String {
+        if let closeRange = text.range(of: "</think>") {
+            var stripped = String(text[closeRange.upperBound...])
+            if stripped.hasPrefix("\n") { stripped.removeFirst() }
+            return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let openRange = text.range(of: "<think>") {
+            return String(text[..<openRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
     }
 
     // MARK: - Tool call parsing

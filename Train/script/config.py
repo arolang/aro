@@ -396,6 +396,40 @@ def clean_notebook_pairs(notebook_tag: str) -> int:
     return removed
 
 
+# ---------------------------------------------------------------------------
+# Training-pair normalisation
+#
+# The Qwen3-Coder base model — and therefore any pair the model generates as
+# synthetic data (NB05/06/10/12/etc.) — sometimes emits ARO with the space
+# missing before an angle-bracket token: `Log "x" to the<console>.`
+# Canonical ARO always has whitespace before `<` for system objects,
+# qualifiers and variables. Insert the missing space here so every saved
+# pair lands clean in `pairs.jsonl` regardless of which notebook produced it.
+# Hand-written corpus already has the space, so this regex is a no-op there.
+# ---------------------------------------------------------------------------
+
+_MISSING_SPACE_BEFORE_ANGLE_RE = _re.compile(r'(\w)<([a-z])')
+
+
+def _normalize_aro_whitespace(text: str) -> str:
+    """Insert the missing space before `<lower` in ARO source strings."""
+    return _MISSING_SPACE_BEFORE_ANGLE_RE.sub(r'\1 <\2', text)
+
+
+def _normalize_pair(pair: dict) -> dict:
+    """Apply `_normalize_aro_whitespace` to every string field in a pair."""
+    for key in ('instruction', 'output', 'input', 'prompt', 'response'):
+        v = pair.get(key)
+        if isinstance(v, str):
+            pair[key] = _normalize_aro_whitespace(v)
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in msgs:
+            if isinstance(msg, dict) and isinstance(msg.get('content'), str):
+                msg['content'] = _normalize_aro_whitespace(msg['content'])
+    return pair
+
+
 def save_notebook_pair(notebook_tag: str, pair: dict) -> bool:
     """
     Append a single training pair to PAIRS_FILE with the notebook tag.
@@ -403,6 +437,7 @@ def save_notebook_pair(notebook_tag: str, pair: dict) -> bool:
     Returns True if written.
     """
     pair['notebook'] = notebook_tag
+    pair = _normalize_pair(pair)
     PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(PAIRS_FILE, 'a') as f:
         f.write(json.dumps(pair) + '\n')
@@ -420,5 +455,6 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict]) -> int:
     with open(PAIRS_FILE, 'a') as f:
         for pair in pairs:
             pair['notebook'] = notebook_tag
+            pair = _normalize_pair(pair)
             f.write(json.dumps(pair) + '\n')
     return len(pairs)
