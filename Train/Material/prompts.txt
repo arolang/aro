@@ -1,0 +1,207 @@
+How to sum two numbers?
+How to log a message to the console?
+How to write a hello world application in ARO?
+How to read a file in ARO?
+How to write to a file in ARO?
+How to compute the length of a string?
+How to convert a string to uppercase?
+How to convert a string to lowercase?
+How to compute the hash of a password?
+How to multiply two numbers?
+How to subtract two numbers?
+How to divide two numbers?
+How to compute the remainder of a division?
+How to compare two values?
+How to check if a number is greater than another?
+How to compute the average of a list of numbers?
+How to count the items in a list?
+How to reverse a list?
+How to sort a list?
+How to filter a list by a condition?
+How to iterate over a list?
+How to extract a field from an object?
+How to publish a variable across feature sets?
+How to emit a custom event?
+How to handle a custom event?
+How to start an HTTP server?
+How to handle a GET route?
+How to handle a POST route?
+How to extract a path parameter from a request?
+How to extract a query parameter from a request?
+How to extract the body of a request?
+How to return an OK status?
+How to return a Created status?
+How to return a NotFound status?
+How to stop an HTTP server gracefully?
+How to keep an application alive to process events?
+How to read JSON from a file?
+How to write JSON to a file?
+How to parse YAML?
+How to read a CSV file?
+How to copy a file from source to destination?
+How to move a file?
+How to delete a file?
+How to check if a file exists?
+How to get file metadata like size and modified date?
+How to list files in a directory?
+How to watch a directory for file changes?
+How to read environment variables?
+How to read command line parameters?
+How to render a template?
+How to log structured data?
+How to run a TCP socket server?
+How to connect to a TCP socket?
+How to send a message over a WebSocket?
+How to store an item in a repository?
+How to retrieve an item from a repository by id?
+How to update an item in a repository?
+How to delete an item from a repository?
+How to observe changes on a repository?
+How to use a state machine in ARO?
+How to accept a state transition?
+How to define a user-defined action callable from other feature sets?
+How to invoke a user-defined action?
+How to fetch a URL?
+How to send an HTTP POST request?
+How to retry a failed external call?
+How to schedule a recurring task?
+How to compute a date in the future?
+How to format a date as a string?
+How to parse a date from a string?
+How to use git status in ARO?
+How to commit changes via the git system object?
+How to stage files before committing?
+How to push to a remote?
+How to clone a repository?
+How to checkout a branch?
+How to tag a release?
+How to write an Application-Start feature set?
+How to write an Application-End handler for graceful shutdown?
+How to validate input data?
+How to throw an error in ARO?
+How to define a conditional branch with a when guard?
+How to do a for-each loop?
+How to do a parallel for-each?
+How to merge two collections?
+How to compute the union of two sets?
+How to compute the intersection of two sets?
+How to compute the difference of two sets?
+How to group a list of records by a field?
+How to compute the sum of a list of numbers?
+How to compute the max of a list of numbers?
+How to compute the min of a list of numbers?
+How to use a plugin qualifier?
+How to call a plugin action?
+How to use a store file for seed data?
+How to configure a runtime setting?
+How to log to a metrics counter?
+How to expose Prometheus metrics?
+How to read from stdin in ARO?
+How to compute the absolute value of a number?
+How to round a number?
+How to compute the square of a number?
+How to compose multiple actions in a pipeline?
+How to chain transformations on a list?
+Write a feature set that logs "Hello, World!" to the console.
+Show me an ARO Application-Start that starts an HTTP server.
+Give me an example of a Compute action that adds two integers.
+Explain the Action Compute.
+Explain the difference between Extract and Retrieve.
+What does the Keepalive action do?
+Why does every feature set need a Return or Throw?
+Tell me about ARO's qualifier-as-name syntax.
+List every built-in ARO action verb.
+Summarize the contract-first HTTP model in ARO.
+Why is `<console>` written with angle brackets?
+Walk through the lifecycle of an event in ARO.
+Translate this Python snippet to ARO: `total = sum(prices) * 1.19`.
+Translate this JSON config schema into an ARO feature set that loads it.
+Convert a Go HTTP handler that returns user JSON into the equivalent ARO feature set.
+Refactor this ARO code to use the qualifier-as-name form: `Compute the length from the message.`
+Rewrite this feature set so the variable names follow ARO's hyphenated lowercase convention.
+Convert this synchronous file read into the lazy / future-based ARO pattern.
+Make this feature set publish its result so other feature sets can read it.
+Split this 30-line feature set into two smaller ones connected by a custom event.
+Find the bug in this code: `(Sum: Example) { Compute the <sum> as <a> + <b>. Return an <OK: status> with <sum>. }`
+Find the bug: `(Greet: Example) { Log "Hi" to <console>. Return. }`
+Find the bug: `(getUser: Users API) { Extract the <id> from the <pathParameters.id>. Return an <OK: status> with <id>. }`
+What's wrong with: `Compute the <total> from <price> * <qty>` (missing the trailing period)?
+Diagnose the parser error: "Expected preposition, but got +".
+Diagnose: "Variables are immutable — cannot rebind <count>". Suggest the fix.
+The compiler complains "is-valid" is an invalid identifier. What's wrong and how do I fix it?
+The model wrote `Compute the <total> for the <items>` and aro check fails. Which preposition is wrong?
+Explain why this fails aro check: `Return <OK: status>.` (missing article).
+Hi.
+Help.
+Help me with ARO.
+I want to learn ARO. Where should I start?
+I'm new to ARO. What do I need to know first?
+What is ARO?
+Tell me everything about ARO.
+What makes ARO different from other DSLs?
+Why would I use ARO over plain Python or Go?
+Is ARO compiled or interpreted?
+Does ARO support concurrency?
+Does ARO have a type system?
+Is there a REPL for ARO?
+Where do I download ARO?
+Quick — show me a one-line ARO program.
+Smallest possible ARO application?
+ARO hello world, please.
+Give me the canonical ARO hello world.
+Append a Log line to this feature set.
+Insert a Compute step that doubles a value between Extract and Return.
+Add error handling (Throw) to this feature set.
+Remove the unused Log statement from this feature set.
+Refactor: extract the Compute into its own Application.<Name> action.
+Rename `<sum>` to `<total>` consistently across this code.
+Show me a feature set that watches a directory and logs every change.
+Show me a feature set that fetches a URL and stores the response in a repository.
+Show me a feature set with a `when` guard.
+Show me an event handler for a custom `OrderShipped` event.
+Show me a repository observer.
+Show me an Application-End handler for graceful shutdown.
+Show me a feature set that uses a plugin qualifier.
+Show me how to call a user-defined action from another feature set.
+Show me a complete OrderService application with create / get / list routes.
+Show me an HTTP client that POSTs JSON to an external endpoint.
+Generate an openapi.yaml for a simple todo list API with create, list, complete, delete.
+Generate the operationId handlers for the openapi.yaml I just gave you.
+Generate the feature set names I need from this openapi.yaml.
+Scaffold a new feature set called `archiveOrder` that emits an OrderArchived event.
+Scaffold a webhook receiver that validates the signature and stores the event.
+Scaffold a CSV import job that parses lines and writes records into a repository.
+Why is `String concatenation: ++` (not `+`)?
+Compare `Stage` and `Commit` in the git system object.
+Compare `Emit` and `Publish` — when do I use each?
+Compare `For-each` with `When` — are they interchangeable?
+What's the role classification of `Extract`?
+Which built-in actions are REQUEST role?
+Which built-in actions are EXPORT role?
+What does "Sink syntax" mean (ARO-0043)?
+What's ARO-0081?
+What's ARO-0080?
+Are there any deprecated actions I should avoid?
+ELI5: what's a feature set?
+ELI5: explain the "code is the error message" philosophy.
+ELI5: why are ARO variables immutable?
+Quick sanity check: is `Log <text> to the <console>.` valid ARO?
+Quick sanity check: does ARO have `if/else`?
+Quick sanity check: can I have two `Application-Start` feature sets in one app?
+Idiomatic ARO for: "send a notification email after a user signs up".
+Idiomatic ARO for: "every 5 minutes, fetch a weather API and log the temperature".
+Idiomatic ARO for: "watch ./inbox for new .csv files and import them".
+Idiomatic ARO for: "deduplicate a list of records by id, keeping the latest".
+Idiomatic ARO for: "split a CSV row and log each field".
+Idiomatic ARO for: "compute SHA256 of a password and store it".
+ARO snippet that uses the date system object.
+ARO snippet that uses a state machine to model an order lifecycle.
+ARO snippet that demonstrates lazy / streaming evaluation.
+ARO snippet that uses parallel for-each with a concurrency limit.
+ARO snippet that intersects two sets.
+ARO snippet for a Mustache-style template render.
+Best practice: where should I put my openapi.yaml in a multi-file app?
+Best practice: naming convention for repository names?
+Best practice: when should I split a feature set into two?
+Best practice: how do I test an event handler in isolation?
+Code review: what's wrong stylistically with `(do_stuff: x) { Compute the X from the <a> + the <b>. }`?

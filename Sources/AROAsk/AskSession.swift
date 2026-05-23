@@ -157,7 +157,7 @@ public actor AskSession {
                 temperature: config.temperature,
                 stream: false
             )
-            let reply = try await backend.chat(request: request)
+            var reply = try await backend.chat(request: request)
 
             // Verbose mode: dump the raw model output (including `<think>`)
             // to stderr so the user can see what the model was reasoning
@@ -175,13 +175,68 @@ public actor AskSession {
             // conversations and the model goes off the rails. The MLX
             // backend also strips internally; this is the choke point for
             // non-MLX backends (llama-server, remote, OpenAI).
-            let stripped = stripThinking(reply.content ?? "")
-            if stripped.truncatedDuringThinking {
+            var stripped = stripThinking(reply.content ?? "")
+
+            // Auto-retry: when the model stalls in `<think>` with no body
+            // (it emitted just the opening tag and nothing after), retry
+            // once with /no_think prepended to bypass reasoning entirely.
+            // The model usually produces a direct answer the second time.
+            // Skip the retry if the user already asked for /no_think.
+            if stripped.truncatedDuringThinking
+                && Self.thinkingTail(reply.content ?? "") == nil
+                && !prompt.hasPrefix("/no_think") {
                 TerminalUI.printStatus(
-                    "model spent its token budget thinking and produced no answer — " +
-                    "try `aro ask --no-think \"<prompt>\"` to skip the reasoning step, " +
-                    "or `aro ask -v` to see what it was thinking about"
+                    "model stalled while thinking — retrying with /no_think…"
                 )
+                var retryMessages = context.messages
+                if let lastUser = retryMessages.lastIndex(where: { $0.role == "user" }) {
+                    let orig = retryMessages[lastUser].content ?? ""
+                    if !orig.hasPrefix("/no_think") {
+                        retryMessages[lastUser] = AskMessage(
+                            role: "user",
+                            content: "/no_think " + orig
+                        )
+                    }
+                }
+                let retryRequest = LMChatRequest(
+                    model: config.model,
+                    messages: retryMessages.map { $0.toRequestMessage() },
+                    tools: tools.isEmpty ? nil : tools,
+                    temperature: config.temperature,
+                    stream: false
+                )
+                let retryReply = try await backend.chat(request: retryRequest)
+                if Self.isVerbose, let raw = retryReply.content, !raw.isEmpty {
+                    FileHandle.standardError.write(Data(
+                        "\n=== model raw output (retry) ===\n\(raw)\n=== end raw ===\n\n".utf8
+                    ))
+                }
+                let retryStripped = stripThinking(retryReply.content ?? "")
+                if !retryStripped.text.isEmpty || !(retryReply.toolCalls ?? []).isEmpty {
+                    reply = retryReply
+                    stripped = retryStripped
+                }
+            }
+
+            if stripped.truncatedDuringThinking {
+                // Retry didn't help (or wasn't run). Surface the tail of
+                // the reasoning block as a best-effort explanation —
+                // partial reasoning is almost always more informative than
+                // a bare "I ran out of tokens" warning.
+                let fallback = Self.thinkingTail(reply.content ?? "")
+                if let fallback, !fallback.isEmpty {
+                    TerminalUI.printStatus(
+                        "model didn't finalise an answer — showing its reasoning instead. " +
+                        "Use `aro ask --no-think \"<prompt>\"` for a direct reply."
+                    )
+                    stripped = StrippedReply(text: fallback, truncatedDuringThinking: false)
+                } else {
+                    TerminalUI.printStatus(
+                        "model spent its token budget thinking and produced no answer — " +
+                        "try `aro ask --no-think \"<prompt>\"` to skip the reasoning step, " +
+                        "or `aro ask -v` to see what it was thinking about"
+                    )
+                }
             }
 
             // Persist assistant turn (stripped)
@@ -248,6 +303,30 @@ public actor AskSession {
     /// user can see what the model was thinking about.
     static var isVerbose: Bool {
         ProcessInfo.processInfo.environment["ARO_ASK_VERBOSE"] != nil
+    }
+
+    /// Pull the contents of a `<think>...</think>` block (or the trailing
+    /// open-but-unclosed `<think>` block from a truncated generation) out
+    /// of a raw model reply. Used as a fallback "explanation" when the
+    /// model spent its whole budget reasoning and never produced a clean
+    /// answer — surfacing the reasoning is almost always more useful than
+    /// a bare "I ran out of tokens" warning.
+    ///
+    /// Returns the last ~600 chars (prefixed with `…` if truncated) so the
+    /// user gets the most recent line of reasoning rather than the opening
+    /// preamble. Returns nil if there's no `<think>` content to show.
+    static func thinkingTail(_ raw: String, maxChars: Int = 600) -> String? {
+        guard let openRange = raw.range(of: "<think>") else { return nil }
+        let after = raw[openRange.upperBound...]
+        let endIndex = after.range(of: "</think>")?.lowerBound ?? after.endIndex
+        let body = String(after[..<endIndex])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+        if body.count > maxChars {
+            let tail = body.suffix(maxChars)
+            return "…" + String(tail)
+        }
+        return body
     }
 
     // MARK: - Post-inference self-repair
