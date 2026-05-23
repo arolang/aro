@@ -171,3 +171,7 @@ core
 /Examples/GroupDemo/GroupDemo
 /Examples/StoreFileDemo/StoreFileDemo
 /Examples/UserDefinedActions/UserDefinedActions
+
+# aro ask session state — per-directory conversation cache
+.context
+.context.index/
