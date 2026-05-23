@@ -227,35 +227,26 @@ public actor NativeMLXBackend: LMBackend {
                 break
             }
         }
-        // Strip the Qwen3 thinking block before any further parsing —
-        // tool-call regexes must not match speculative tool calls the
-        // model wrote inside its reasoning. Also normalise the
-        // missing-space-before-`<` bug the base model bakes into ARO
-        // output (mirrors Train/script/config.py::_normalize_aro_whitespace).
-        // `stripThinking` is the module-level shared helper; AskSession
-        // runs it again at the call site, idempotently, so the
-        // truncatedDuringThinking signal still reaches the user.
-        let fullText = normalizeAROWhitespace(
-            in: stripThinking(accumulated).text
-        )
+        // Normalise the missing-space-before-`<` bug the base model bakes
+        // into ARO output (mirrors Train/script/config.py).
+        let normalized = normalizeAROWhitespace(in: accumulated)
 
-        // Parse tool calls from the generated text
-        let detectedToolCalls = parseToolCalls(from: fullText)
+        // Tool-call parsing uses a thinking-stripped local copy so it can't
+        // pick up speculative tool calls the model wrote inside its
+        // reasoning. The returned `content` keeps the raw `<think>` block —
+        // AskSession strips it on the way out, which lets it surface the
+        // "model burned its budget thinking" warning when the post-strip
+        // text is empty. If we stripped here, AskSession would see empty
+        // text with no `<think>` tag and the truncation signal would be
+        // lost.
+        let textForToolParsing = stripThinking(normalized).text
+        let detectedToolCalls = parseToolCalls(from: textForToolParsing)
 
-        if !detectedToolCalls.isEmpty {
-            // Strip tool call markup from the text content
-            let cleanedText = stripToolCallMarkup(from: fullText)
-            return LMChatResponse.Choice.Message(
-                role: "assistant",
-                content: cleanedText.isEmpty ? nil : cleanedText,
-                toolCalls: detectedToolCalls
-            )
-        }
-
+        let cleanedText = stripToolCallMarkup(from: normalized)
         return LMChatResponse.Choice.Message(
             role: "assistant",
-            content: fullText,
-            toolCalls: nil
+            content: cleanedText.isEmpty ? nil : cleanedText,
+            toolCalls: detectedToolCalls.isEmpty ? nil : detectedToolCalls
         )
     }
 
