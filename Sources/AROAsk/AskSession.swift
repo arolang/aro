@@ -173,6 +173,7 @@ public actor AskSession {
                 let finalText = Self.stripThinking(reply.content ?? "")
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
+                    originalUserRequest: prompt,
                     context: &context,
                     tools: tools
                 )
@@ -342,6 +343,7 @@ public actor AskSession {
     /// remaining attempts.
     private func selfRepairIfNeeded(
         text: String,
+        originalUserRequest: String,
         context: inout AskContext,
         tools: [LMToolDefinition]
     ) async throws -> String {
@@ -404,15 +406,28 @@ public actor AskSession {
             }
 
             let repairPrompt = """
+            The user's original request was:
+
+            \(originalUserRequest)
+
             `aro check` found errors in the ARO code you produced:
 
             ```
             \(error)
             ```
 
-            Fix the errors and output the corrected code as a complete ARO
-            feature set wrapped in `(name: activity) { ... }` inside ```aro
-            fences. Do not write tool-call syntax inside the code block.
+            Fix the syntax errors WITHOUT changing what the code does.
+            Every action the user asked for must remain in the program —
+            do not delete a Compute, Extract, Log, Emit or Return just to
+            make `aro check` pass. If "add two numbers" was the request,
+            the addition step must still be there. If the existing approach
+            cannot be made syntactically valid while doing what the user
+            asked, rewrite using a different action that achieves the same
+            behaviour — but do not silently drop the behaviour itself.
+
+            Output the corrected code as a complete ARO feature set wrapped
+            in `(name: activity) { ... }` inside ```aro fences. Do not write
+            tool-call syntax inside the code block.
             """
 
             context.messages.append(AskMessage(role: "user", content: repairPrompt))
