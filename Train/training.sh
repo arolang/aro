@@ -117,8 +117,10 @@ fi
 [[ -n "${STOP_ON_FAILURE}" ]] && export ARO_TRAIN_STOP_ON_FAILURE="${STOP_ON_FAILURE}"
 
 # Default to the venv kernel we just registered so notebook cells run
-# with the requirements.txt environment, not the system one.
-KERNEL_NAME="${KERNEL_NAME:-aro-train}"
+# with the requirements.txt environment, not the system one. Export so
+# child subprocesses (the meta notebook spawns one per child notebook
+# via `jupyter nbconvert --execute`) inherit the same choice.
+export KERNEL_NAME="${KERNEL_NAME:-aro-train}"
 
 EXEC_FLAGS=(
   --to notebook
