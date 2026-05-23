@@ -205,3 +205,23 @@ Best practice: naming convention for repository names?
 Best practice: when should I split a feature set into two?
 Best practice: how do I test an event handler in isolation?
 Code review: what's wrong stylistically with `(do_stuff: x) { Compute the X from the <a> + the <b>. }`?
+How to extract a typed integer field from an event?
+How to extract a typed string field from an event?
+How to guard a handler so it only fires on a specific state value?
+How to dispatch two handlers off the same event by state?
+How to render a Mustache template with a single placeholder?
+How to render a template with a loop over an array?
+How to use sink syntax to put an expression in the result position?
+How to configure the HTTP client timeout?
+How to read command-line parameters in an Application-Start?
+How to increment a Prometheus counter metric?
+How to use a plugin qualifier from the Collections handle?
+How to call a plugin action like Markdown.ToHTML?
+How to build a complete multi-file user service with openapi.yaml and main.aro?
+How to build an order service with a ship route that transitions state and emits an event?
+How to build a file-watcher application that imports CSV rows into a repository?
+How to build an event-driven order flow with two handlers reacting to the same event?
+How to build a blog posts API with a repository observer that audits new posts?
+How to use a store file for read-only seed data?
+How to publish a variable so other feature sets can read it?
+How to send a typed body to an HTTP POST endpoint?

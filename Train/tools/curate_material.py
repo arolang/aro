@@ -45,8 +45,16 @@ def aro_check(code: str) -> tuple[bool, str]:
         return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
 
 
-# Tiny structural sanity check before we bother spawning aro.
-_FEATURE_SET_RE = re.compile(r'\([\w\- ]+:\s*[\w\- ]+(?:\s+takes\s+<[\w\-]+>)?\s*\)\s*\{')
+# Tiny structural sanity check before we bother spawning aro. Accepts:
+#   (Name: Activity) {                        — basic
+#   (Name: Action takes <arg>) {              — user-defined actions
+#   (Name: X Handler) when <field> == "x" {   — state guards
+#   (Name: Activity)\n{                       — header + body on separate lines
+_FEATURE_SET_RE = re.compile(
+    r'\([\w\- ]+:\s*[\w\- ]+(?:\s+takes\s+<[\w\-]+>)?\s*\)'
+    r'(?:\s+when\s+[^{]+)?\s*\{',
+    re.DOTALL,
+)
 
 
 def structurally_ok(code: str) -> bool:
@@ -986,9 +994,453 @@ E.add('Log only when a boolean flag is true.',
       '}', 'when_guard')
 
 
+# ── Multi-file examples ────────────────────────────────────────────────────
+# Material was previously almost all single-file snippets. Real ARO apps
+# have main.aro + openapi.yaml + per-feature .aro files; the model needs
+# to learn that layout. Each entry below specifies a `files` dict; the
+# validator writes them all to a tempdir and runs `aro check` against
+# the directory (matching how `aro run ./MyApp/` actually loads the app).
+#
+# The serialized `output` field uses `## filename` headers so the model
+# learns to emit one fenced block per file, in the order it would write
+# them. That's the same convention `aro ask --openapi` already follows.
+
+class MultiFileExamples(list):
+    def add(self, instruction, files, category='multi_file'):
+        self.append({
+            'instruction': instruction.strip(),
+            'files': files,
+            'category': category,
+            'task_type': 'multi_file_application',
+        })
+
+
+MF = MultiFileExamples()
+
+# OpenAPI service — users CRUD
+MF.add(
+    'Build a complete ARO HTTP service for managing users: list, get by id, '
+    'create, delete. Include openapi.yaml and main.aro with operationId '
+    'handlers.',
+    {
+        'openapi.yaml':
+            'openapi: 3.0.3\n'
+            'info:\n  title: User API\n  version: 1.0.0\n'
+            'paths:\n'
+            '  /users:\n'
+            '    get:\n      operationId: listUsers\n'
+            '    post:\n      operationId: createUser\n'
+            '  /users/{id}:\n'
+            '    get:\n      operationId: getUser\n'
+            '    delete:\n      operationId: deleteUser\n',
+        'main.aro':
+            '(Application-Start: User Service) {\n'
+            '    Log "Starting User Service" to the <console>.\n'
+            '    Start the <http-server> with {}.\n'
+            '    Keepalive the <application> for the <events>.\n'
+            '    Return an <OK: status> for the <startup>.\n'
+            '}\n'
+            '\n'
+            '(listUsers: User API) {\n'
+            '    Retrieve the <users> from the <user-repository>.\n'
+            '    Return an <OK: status> with <users>.\n'
+            '}\n'
+            '\n'
+            '(getUser: User API) {\n'
+            '    Extract the <id> from the <pathParameters: id>.\n'
+            '    Retrieve the <user> from the <user-repository> where <id> is <id>.\n'
+            '    Return an <OK: status> with <user>.\n'
+            '}\n'
+            '\n'
+            '(createUser: User API) {\n'
+            '    Extract the <user> from the <request: body>.\n'
+            '    Store the <user> into the <user-repository>.\n'
+            '    Emit a <UserCreated: event> with <user>.\n'
+            '    Return a <Created: status> with <user>.\n'
+            '}\n'
+            '\n'
+            '(deleteUser: User API) {\n'
+            '    Extract the <id> from the <pathParameters: id>.\n'
+            '    Delete the <user> from the <user-repository> where <id> is <id>.\n'
+            '    Return an <OK: status> for the <deletion>.\n'
+            '}\n',
+    },
+)
+
+# Orders service with state machine + event handler
+MF.add(
+    'Build an order service with create / get / ship routes. The ship route '
+    'transitions the order to "shipped" and emits an OrderShipped event. '
+    'Include openapi.yaml, main.aro and handlers.aro.',
+    {
+        'openapi.yaml':
+            'openapi: 3.0.3\n'
+            'info:\n  title: Orders API\n  version: 1.0.0\n'
+            'paths:\n'
+            '  /orders:\n'
+            '    post: { operationId: createOrder }\n'
+            '  /orders/{id}:\n'
+            '    get:  { operationId: getOrder }\n'
+            '  /orders/{id}/ship:\n'
+            '    post: { operationId: shipOrder }\n',
+        'main.aro':
+            '(Application-Start: Orders) {\n'
+            '    Start the <http-server> with {}.\n'
+            '    Keepalive the <application> for the <events>.\n'
+            '    Return an <OK: status> for the <startup>.\n'
+            '}\n'
+            '\n'
+            '(createOrder: Orders) {\n'
+            '    Extract the <order> from the <request: body>.\n'
+            '    Store the <order> into the <order-repository>.\n'
+            '    Return a <Created: status> with <order>.\n'
+            '}\n'
+            '\n'
+            '(getOrder: Orders) {\n'
+            '    Extract the <id> from the <pathParameters: id>.\n'
+            '    Retrieve the <order> from the <order-repository> where <id> is <id>.\n'
+            '    Return an <OK: status> with <order>.\n'
+            '}\n'
+            '\n'
+            '(shipOrder: Orders) {\n'
+            '    Extract the <id> from the <pathParameters: id>.\n'
+            '    Retrieve the <order> from the <order-repository> where <id> is <id>.\n'
+            '    Accept the <transition> for the <order> with "shipped".\n'
+            '    Emit an <OrderShipped: event> with <order>.\n'
+            '    Return an <OK: status> with <order>.\n'
+            '}\n',
+        'handlers.aro':
+            '(Notify Shipment: OrderShipped Handler) {\n'
+            '    Extract the <order> from the <event: order>.\n'
+            '    Log <order> to the <console>.\n'
+            '    Return an <OK: status> for the <notification>.\n'
+            '}\n',
+    },
+)
+
+# File-watcher pipeline (no openapi)
+MF.add(
+    'Build a file-watcher application that monitors ./inbox for new CSV files '
+    'and stores each row into a row-repository. Include main.aro and importer.aro.',
+    {
+        'main.aro':
+            '(Application-Start: CSV Importer) {\n'
+            '    Log "Watching ./inbox" to the <console>.\n'
+            '    Start the <file-monitor> with { directory: "./inbox" }.\n'
+            '    Keepalive the <application> for the <events>.\n'
+            '    Return an <OK: status> for the <startup>.\n'
+            '}\n',
+        'importer.aro':
+            '(Process Upload: File Event Handler) {\n'
+            '    Extract the <path> from the <event: path>.\n'
+            '    Read the <rows> from the <file: path>.\n'
+            '    for each <row> in <rows> {\n'
+            '        Store the <row> into the <row-repository>.\n'
+            '    }\n'
+            '    Return an <OK: status> for the <processing>.\n'
+            '}\n',
+    },
+)
+
+# Event-driven app: order placed → confirmation email + inventory adjust
+MF.add(
+    'Build an event-driven order app. The createOrder route stores the '
+    'order and emits OrderPlaced. Two handlers react: one sends a '
+    'confirmation email, one decrements inventory. Include openapi.yaml, '
+    'main.aro and handlers.aro.',
+    {
+        'openapi.yaml':
+            'openapi: 3.0.3\n'
+            'info:\n  title: Orders\n  version: 1.0.0\n'
+            'paths:\n  /orders:\n    post: { operationId: createOrder }\n',
+        'main.aro':
+            '(Application-Start: Orders) {\n'
+            '    Start the <http-server> with {}.\n'
+            '    Keepalive the <application> for the <events>.\n'
+            '    Return an <OK: status> for the <startup>.\n'
+            '}\n'
+            '\n'
+            '(createOrder: Orders) {\n'
+            '    Extract the <order> from the <request: body>.\n'
+            '    Store the <order> into the <order-repository>.\n'
+            '    Emit an <OrderPlaced: event> with <order>.\n'
+            '    Return a <Created: status> with <order>.\n'
+            '}\n',
+        'handlers.aro':
+            '(Send Confirmation: OrderPlaced Handler) {\n'
+            '    Extract the <order> from the <event: order>.\n'
+            '    Send the <confirmation> to the <order: email>.\n'
+            '    Return an <OK: status> for the <notification>.\n'
+            '}\n'
+            '\n'
+            '(Adjust Inventory: OrderPlaced Handler) {\n'
+            '    Extract the <order> from the <event: order>.\n'
+            '    Retrieve the <item> from the <inventory-repository> where <id> is <order>.\n'
+            '    Store the <item> into the <inventory-repository>.\n'
+            '    Return an <OK: status> for the <adjustment>.\n'
+            '}\n',
+    },
+)
+
+# Posts API with comments observer
+MF.add(
+    'Build a blog posts API with create and list routes. Add a repository '
+    'observer that audits every new post by logging it. Include '
+    'openapi.yaml, main.aro and observer.aro.',
+    {
+        'openapi.yaml':
+            'openapi: 3.0.3\n'
+            'info:\n  title: Blog\n  version: 1.0.0\n'
+            'paths:\n'
+            '  /posts:\n'
+            '    get:  { operationId: listPosts }\n'
+            '    post: { operationId: createPost }\n',
+        'main.aro':
+            '(Application-Start: Blog) {\n'
+            '    Start the <http-server> with {}.\n'
+            '    Keepalive the <application> for the <events>.\n'
+            '    Return an <OK: status> for the <startup>.\n'
+            '}\n'
+            '\n'
+            '(listPosts: Blog) {\n'
+            '    Retrieve the <posts> from the <post-repository>.\n'
+            '    Return an <OK: status> with <posts>.\n'
+            '}\n'
+            '\n'
+            '(createPost: Blog) {\n'
+            '    Extract the <post> from the <request: body>.\n'
+            '    Store the <post> into the <post-repository>.\n'
+            '    Return a <Created: status> with <post>.\n'
+            '}\n',
+        'observer.aro':
+            '(Audit Post: post-repository Observer) {\n'
+            '    Extract the <post> from the <event: post>.\n'
+            '    Log <post> to the <console>.\n'
+            '    Return an <OK: status> for the <audit>.\n'
+            '}\n',
+    },
+)
+
+
+# Validation for multi-file: write files to a tempdir, run `aro check`
+# against the directory. Output gets serialized as `## filename` blocks.
+
+def _serialize_multi_file(files):
+    parts = []
+    for fname, content in files.items():
+        lang = 'yaml' if fname.endswith('.yaml') or fname.endswith('.yml') else 'aro'
+        parts.append(f'## {fname}\n```{lang}\n{content.strip()}\n```')
+    return '\n\n'.join(parts)
+
+
+def validate_multi_file(examples):
+    kept, failed = [], []
+    for ex in examples:
+        files = ex['files']
+        with tempfile.TemporaryDirectory() as tmp:
+            for fname, content in files.items():
+                (Path(tmp) / fname).write_text(content)
+            try:
+                r = subprocess.run(
+                    [str(ARO_BIN), 'check', tmp],
+                    capture_output=True, text=True, timeout=15,
+                )
+                ok = r.returncode == 0
+                err = (r.stderr or r.stdout).strip()[:500]
+            except Exception as exc:
+                ok, err = False, str(exc)[:300]
+        if ok:
+            kept.append({
+                'instruction': ex['instruction'],
+                'output': _serialize_multi_file(files),
+                'category': ex['category'],
+                'task_type': ex['task_type'],
+            })
+        else:
+            failed.append((ex, err))
+    return kept, failed
+
+
+# ── Gap-coverage examples for features Material previously missed ──────────
+# These cover: typed event extraction (ARO-0046), state guards (ARO-0022),
+# template engine details, store files, metrics, sink syntax (ARO-0043),
+# plugin qualifier calls, configurable runtime, parameters, websocket
+# handler (uses the openapi-driven websocket pattern), context-aware
+# formatting.
+
+# Typed event extraction (ARO-0046)
+E.add('Use typed event extraction to pull a strongly-typed field out of an event payload.',
+      '(Process Order: OrderCreated Handler) {\n'
+      '    Extract the <total: Integer> from the <event: total>.\n'
+      '    Log <total> to the <console>.\n'
+      '    Return an <OK: status> with <total>.\n'
+      '}', 'typed_event')
+
+E.add('Extract a string field out of an event with a type hint.',
+      '(Greet User: UserSignedUp Handler) {\n'
+      '    Extract the <name: String> from the <event: name>.\n'
+      '    Log <name> to the <console>.\n'
+      '    Return an <OK: status> with <name>.\n'
+      '}', 'typed_event')
+
+E.add('Extract a typed sub-object out of an event.',
+      '(Audit Payment: PaymentReceived Handler) {\n'
+      '    Extract the <amount: Integer> from the <event: amount>.\n'
+      '    Extract the <currency: String> from the <event: currency>.\n'
+      '    Log <amount> to the <console>.\n'
+      '    Log <currency> to the <console>.\n'
+      '    Return an <OK: status> for the <audit>.\n'
+      '}', 'typed_event')
+
+# State guards (ARO-0022) — guard a handler on a field value
+E.add('Guard a handler so it only fires when the event status field equals "paid".',
+      '(Ship Paid Order: OrderUpdated Handler) when <status> == "paid" {\n'
+      '    Extract the <order> from the <event: order>.\n'
+      '    Log <order> to the <console>.\n'
+      '    Return an <OK: status> with <order>.\n'
+      '}', 'state_guard')
+
+E.add('Use a state guard so a handler only runs for events where priority equals "urgent".',
+      '(Page Oncall: TicketCreated Handler) when <priority> == "urgent" {\n'
+      '    Extract the <ticket> from the <event: ticket>.\n'
+      '    Send the <page> to the <oncall: phone>.\n'
+      '    Return an <OK: status> for the <page>.\n'
+      '}', 'state_guard')
+
+E.add('Two handlers for the same event, dispatched by state guard.',
+      '(Trial Welcome: UserSignedUp Handler) when <plan> == "trial" {\n'
+      '    Extract the <user> from the <event: user>.\n'
+      '    Send the <trial-email> to the <user: email>.\n'
+      '    Return an <OK: status> for the <notification>.\n'
+      '}\n\n'
+      '(Pro Welcome: UserSignedUp Handler) when <plan> == "pro" {\n'
+      '    Extract the <user> from the <event: user>.\n'
+      '    Send the <pro-email> to the <user: email>.\n'
+      '    Return an <OK: status> for the <notification>.\n'
+      '}', 'state_guard')
+
+# Template engine (ARO-0050)
+E.add('Render a Mustache-style template with a single placeholder.',
+      '(RenderGreeting: Example) {\n'
+      '    Create the <template> with "Hello, {{name}}!".\n'
+      '    Create the <data> with { name: "Ada" }.\n'
+      '    Render the <html> from the <template> with <data>.\n'
+      '    Return an <OK: status> with <html>.\n'
+      '}', 'template')
+
+E.add('Render an HTML invoice from a template and an order object.',
+      '(RenderInvoice: Example) {\n'
+      '    Create the <template> with "<h1>Invoice #{{id}}</h1><p>Total: {{total}}</p>".\n'
+      '    Create the <data> with { id: 42, total: 199 }.\n'
+      '    Render the <html> from the <template> with <data>.\n'
+      '    Return an <OK: status> with <html>.\n'
+      '}', 'template')
+
+E.add('Render a template that loops over a list of items.',
+      '(RenderItems: Example) {\n'
+      '    Create the <template> with "{{#items}}- {{name}}\\n{{/items}}".\n'
+      '    Create the <data> with { items: [\n'
+      '        { name: "Widget" },\n'
+      '        { name: "Gadget" }\n'
+      '    ] }.\n'
+      '    Render the <text> from the <template> with <data>.\n'
+      '    Return an <OK: status> with <text>.\n'
+      '}', 'template')
+
+# Sink syntax (ARO-0043)
+E.add('Use sink syntax to put a computed expression in the result position.',
+      '(SinkDemo: Example) {\n'
+      '    Create the <a> with 3.\n'
+      '    Create the <b> with 4.\n'
+      '    Return an <OK: status> with <a> + <b>.\n'
+      '}', 'sink_syntax')
+
+# Configure runtime (ARO-0035)
+E.add('Configure the HTTP client timeout before issuing a request.',
+      '(SlowRequest: Example) {\n'
+      '    Configure the <http-client> with { timeout: 60 }.\n'
+      '    Create the <api-url> with "https://example.com".\n'
+      '    Request the <response> from the <api-url>.\n'
+      '    Return an <OK: status> with <response>.\n'
+      '}', 'configure')
+
+E.add('Configure the file monitor with a specific directory and start it.',
+      '(Application-Start: Watcher) {\n'
+      '    Configure the <monitor-config> with { directory: "./inbox" }.\n'
+      '    Start the <file-monitor> with <monitor-config>.\n'
+      '    Keepalive the <application> for the <events>.\n'
+      '    Return an <OK: status> for the <startup>.\n'
+      '}', 'configure')
+
+# Metrics (ARO-0044)
+E.add('Increment a Prometheus counter on every request.',
+      '(handleRequest: API) {\n'
+      '    Log 1 to the <metric: requests-total>.\n'
+      '    Return an <OK: status> for the <request>.\n'
+      '}', 'metrics')
+
+E.add('Record a request duration to a histogram metric.',
+      '(handleSearch: API) {\n'
+      '    Extract the <query> from the <queryParameters: q>.\n'
+      '    Retrieve the <results> from the <search-repository>.\n'
+      '    Log <results> to the <metric: search-results>.\n'
+      '    Return an <OK: status> with <results>.\n'
+      '}', 'metrics')
+
+# Parameters (ARO-0047)
+E.add('Read command-line parameters at startup.',
+      '(Application-Start: CLI Tool) {\n'
+      '    Parameters the <args> for the <application>.\n'
+      '    Log <args> to the <console>.\n'
+      '    Return an <OK: status> for the <startup>.\n'
+      '}', 'parameters')
+
+# Plugin qualifier call (handle.qualifier form)
+E.add('Use a Collections plugin qualifier to pick a random list element.',
+      '(PickRandom: Example) {\n'
+      '    Create the <items> with ["a", "b", "c"].\n'
+      '    Compute the <pick: Collections.pick-random> from <items>.\n'
+      '    Return an <OK: status> with <pick>.\n'
+      '}', 'plugin_qualifier')
+
+E.add('Use a stats plugin qualifier to sort numbers.',
+      '(SortViaPlugin: Example) {\n'
+      '    Create the <nums> with [3, 1, 2].\n'
+      '    Compute the <sorted: stats.sort> from <nums>.\n'
+      '    Return an <OK: status> with <sorted>.\n'
+      '}', 'plugin_qualifier')
+
+# Plugin action call (Handle.Verb form)
+E.add('Call a plugin action that renders Markdown to HTML.',
+      '(RenderMD: Example) {\n'
+      '    Create the <md> with "# Title".\n'
+      '    Markdown.ToHTML the <html> from <md>.\n'
+      '    Return an <OK: status> with <html>.\n'
+      '}', 'plugin_action')
+
+# Context-aware formatting (ARO-0031)
+E.add('Use context-aware formatting so the same result renders differently for console vs HTTP.',
+      '(handleStatus: API) {\n'
+      '    Retrieve the <status> from the <system-status>.\n'
+      '    Return an <OK: status> with <status>.\n'
+      '}', 'context_aware')
+
+
 def main():
-    print(f'generated {len(E)} candidate examples', flush=True)
+    print(f'generated {len(E)} single-file + {len(MF)} multi-file candidates', flush=True)
     kept, failed = validate_and_filter(E)
+    mf_kept, mf_failed = validate_multi_file(MF)
+    print(f'  single-file passed: {len(kept)}', flush=True)
+    print(f'  multi-file passed:  {len(mf_kept)}', flush=True)
+    print(f'  failed (dropped):   {len(failed) + len(mf_failed)}', flush=True)
+    kept.extend(mf_kept)
+
+    # Fall through to the original write logic, but accept the merged list.
+    _run_main_write(kept, failed + [(ex, err, '\n\n'.join(ex['files'].values()))
+                                     for ex, err in mf_failed])
+
+
+def _run_main_write(kept, failed):
     print(f'  passed `aro check`: {len(kept)}', flush=True)
     print(f'  failed (dropped):  {len(failed)}', flush=True)
 
