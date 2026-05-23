@@ -160,6 +160,133 @@ import re as _re
 _FEATURESET_HEADER_RE = _re.compile(r"\(\s*[\w\- ]+\s*:\s*[^)]+\)\s*\{")
 
 
+# ── Semantic alignment gate ────────────────────────────────────────────────
+# Mirrors the gate added inside NB10. Any notebook that synthesises code via
+# the base model should pipe each (instruction, code) pair through this
+# helper before saving — otherwise hallucinated pairs (code is valid ARO
+# but doesn't address the instruction) silently poison the training set.
+#
+# The judge is the same base model already loaded by the calling notebook
+# — pass in its `chat` function (the one that takes a messages list and
+# returns a string). Conservative behaviour: any answer that doesn't start
+# with NO keeps the pair, so a single uncertain judgment never drops a
+# genuine success.
+
+_ALIGNMENT_JUDGE_SYSTEM_PROMPT = (
+    'You are a strict code review judge. Compare a natural-language '
+    "instruction to an ARO code snippet and decide whether the code "
+    "carries out the instruction's main purpose. Be lenient on style "
+    'and naming; strict on whether the requested behaviour is actually '
+    'performed. If the instruction asks to add two numbers, the code '
+    'must contain the addition. If the instruction asks to log a value, '
+    'the code must contain a Log. Respond on a single line in the form '
+    '`YES: <reason>` or `NO: <reason>`. If genuinely unsure, answer YES.'
+)
+
+
+def _extract_aro_blocks(text):
+    return [b.strip() for b in _re.findall(r'```aro\n(.*?)```', text or '', _re.DOTALL) if b.strip()]
+
+
+def semantic_alignment_check(instruction, output, chat_fn, max_tokens=160):
+    """Ask the base model whether `output`'s ARO code carries out
+    `instruction`'s main purpose. `output` may be a raw code block or a
+    response containing ```aro``` fences.
+
+    `chat_fn` is the calling notebook's already-loaded chat helper —
+    something with signature `chat(messages, max_tokens=..., temp=...) -> str`.
+
+    Returns (aligned: bool, judge_reason: str). Returns (True, 'skipped:
+    empty') when there's no code to judge, so callers can pipe everything
+    through this without special-casing prose-only outputs.
+    """
+    blocks = _extract_aro_blocks(output)
+    code = '\n\n'.join(blocks) if blocks else (output or '').strip()
+    if not code:
+        return True, 'skipped: empty code'
+    try:
+        response = chat_fn(
+            [
+                {'role': 'system', 'content': _ALIGNMENT_JUDGE_SYSTEM_PROMPT},
+                {'role': 'user', 'content':
+                    f'Instruction:\n{instruction}\n\n'
+                    f'Generated ARO code:\n```aro\n{code}\n```\n\n'
+                    "Does the code carry out the instruction's main purpose?"},
+            ],
+            max_tokens=max_tokens,
+            temp=0.0,
+        )
+    except TypeError:
+        # Older chat_fn signatures don't accept `temp=`; fall back.
+        response = chat_fn(
+            [
+                {'role': 'system', 'content': _ALIGNMENT_JUDGE_SYSTEM_PROMPT},
+                {'role': 'user', 'content':
+                    f'Instruction:\n{instruction}\n\n'
+                    f'Generated ARO code:\n```aro\n{code}\n```\n\n'
+                    "Does the code carry out the instruction's main purpose?"},
+            ],
+            max_tokens=max_tokens,
+        )
+    head = (response or '').strip().lstrip('`').split('\n', 1)[0].strip().lower()
+    aligned = not head.startswith('no')
+    return aligned, (response or '').strip()[:240]
+
+
+def semantic_alignment_filter(pairs, model, tokenizer, mlx_generate, make_sampler,
+                              max_tokens=120, label=''):
+    """Run every pair in `pairs` through the base model as a judge, dropping
+    pairs where the model says the code doesn't address the instruction.
+
+    Designed for notebooks that have already loaded the model (NB05, NB11,
+    etc.) — pass in the live handles instead of re-loading.
+
+    Returns (kept_pairs, n_dropped). Prose-only pairs (no ARO code in the
+    `output` field) pass through unchanged — judge skips them.
+    """
+    kept = []
+    dropped = 0
+    n = len(pairs)
+    for idx, p in enumerate(pairs):
+        instr = (p.get('instruction') or '').strip()
+        out   = (p.get('output') or '').strip()
+        if not instr or not out:
+            kept.append(p)
+            continue
+        code = '\n\n'.join(_extract_aro_blocks(out)) or out
+        if not code.strip():
+            kept.append(p)
+            continue
+        msgs = [
+            {'role': 'system', 'content': _ALIGNMENT_JUDGE_SYSTEM_PROMPT},
+            {'role': 'user', 'content':
+                f'Instruction:\n{instr}\n\n'
+                f'Generated ARO code:\n```aro\n{code}\n```\n\n'
+                "Does the code carry out the instruction's main purpose?"},
+        ]
+        text = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        prompt_tokens = tokenizer.encode(text)
+        response = mlx_generate(
+            model, tokenizer,
+            prompt=prompt_tokens,
+            max_tokens=max_tokens,
+            sampler=make_sampler(temp=0.0),
+            verbose=False,
+        ).strip()
+        head = response.lstrip('`').split('\n', 1)[0].strip().lower()
+        if head.startswith('no'):
+            dropped += 1
+            if dropped <= 5:
+                tag = f' [{label}]' if label else ''
+                print(f'  semantic-gate drop{tag}: {response[:100]}', flush=True)
+        else:
+            kept.append(p)
+        if (idx + 1) % 25 == 0:
+            print(f'  semantic-gate: judged {idx + 1}/{n} '
+                  f'(kept {len(kept)}, dropped {dropped})', flush=True)
+    return kept, dropped
+
+
 def is_complete_program(text_or_blocks):
     """True when at least one ```aro block in the input contains a feature
     set header `(name: activity) {`. Accepts either a raw assistant reply
