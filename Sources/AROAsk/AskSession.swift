@@ -159,24 +159,31 @@ public actor AskSession {
             )
             let reply = try await backend.chat(request: request)
 
-            // Persist assistant turn
+            // Strip thinking BEFORE persisting — anything saved to .context
+            // is replayed verbatim on the next turn, so leaking raw `<think>`
+            // (especially an unclosed one from a truncation) poisons future
+            // conversations and the model goes off the rails. The MLX
+            // backend also strips internally; this is the choke point for
+            // non-MLX backends (llama-server, remote, OpenAI).
+            let stripped = stripThinking(reply.content ?? "")
+            if stripped.truncatedDuringThinking {
+                TerminalUI.printStatus(
+                    "model spent its token budget thinking and produced no answer — " +
+                    "try a shorter or more concrete prompt, or break the task into steps"
+                )
+            }
+
+            // Persist assistant turn (stripped)
             let encodedToolCalls = try encodeToolCalls(reply.toolCalls)
             context.messages.append(AskMessage(
                 role: "assistant",
-                content: reply.content,
+                content: stripped.text.isEmpty ? nil : stripped.text,
                 toolCalls: encodedToolCalls
             ))
             try contextStore.save(context)
 
             // If no tool calls, we have a final text reply — validate any ARO code
             guard let toolCalls = reply.toolCalls, !toolCalls.isEmpty else {
-                let stripped = stripThinking(reply.content ?? "")
-                if stripped.truncatedDuringThinking {
-                    TerminalUI.printStatus(
-                        "model spent its token budget thinking and produced no answer — " +
-                        "try a shorter or more concrete prompt, or break the task into steps"
-                    )
-                }
                 let finalText = stripped.text
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
