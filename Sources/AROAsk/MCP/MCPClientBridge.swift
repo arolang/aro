@@ -108,60 +108,62 @@ public actor MCPClientBridge {
         return String(describing: response["result"] ?? "no result")
     }
 
-    // MARK: - JSON-RPC
+    // MARK: - JSON-RPC (newline-delimited per MCP stdio transport)
 
     private func sendRequest(method: String, params: Any) async throws -> [String: Any] {
         requestId += 1
         let id = requestId
-        let message: [String: Any] = [
+        try writeMessage([
             "jsonrpc": "2.0",
             "id": id,
             "method": method,
             "params": params
-        ]
-        let data = try JSONSerialization.data(withJSONObject: message)
-        let header = "Content-Length: \(data.count)\r\n\r\n"
-        guard let s = stdin else { throw AskToolError.executionFailed("MCP stdin closed") }
-        s.write(Data(header.utf8))
-        s.write(data)
+        ])
 
-        // Read response (simplified: reads one response)
         guard let out = stdout else { throw AskToolError.executionFailed("MCP stdout closed") }
         return try readJsonRpcMessage(from: out)
     }
 
     private func sendNotification(method: String) throws {
-        let message: [String: Any] = [
+        try writeMessage([
             "jsonrpc": "2.0",
             "method": method
-        ]
+        ])
+    }
+
+    private func writeMessage(_ message: [String: Any]) throws {
+        // MCP stdio: one JSON message per line, no headers. JSON itself
+        // MUST NOT contain embedded newlines, so .withoutEscapingSlashes
+        // is fine — JSONSerialization never inserts `\n` into output.
         let data = try JSONSerialization.data(withJSONObject: message)
-        let header = "Content-Length: \(data.count)\r\n\r\n"
-        guard let s = stdin else { return }
-        s.write(Data(header.utf8))
+        guard let s = stdin else { throw AskToolError.executionFailed("MCP stdin closed") }
         s.write(data)
+        s.write(Data("\n".utf8))
     }
 
     private func readJsonRpcMessage(from handle: FileHandle) throws -> [String: Any] {
-        // Read headers until blank line
-        var headerData = Data()
+        // Read up to and including the next `\n`. Buffering byte-by-byte is
+        // fine here: each MCP exchange is request/response, so we read at
+        // most one message per call and the messages are small.
+        var lineData = Data()
         while true {
             let byte = handle.readData(ofLength: 1)
-            if byte.isEmpty { throw AskToolError.executionFailed("MCP EOF") }
-            headerData.append(byte)
-            if headerData.count >= 4 {
-                let suffix = headerData.suffix(4)
-                if suffix == Data("\r\n\r\n".utf8) { break }
+            if byte.isEmpty {
+                // Surface what we got so far — usually empty, but a partial
+                // line points at a server crash mid-write.
+                let preview = String(data: lineData, encoding: .utf8)?.prefix(200) ?? ""
+                throw AskToolError.executionFailed(
+                    preview.isEmpty
+                        ? "MCP EOF"
+                        : "MCP EOF after partial line: \(preview)"
+                )
             }
+            if byte == Data("\n".utf8) { break }
+            lineData.append(byte)
         }
-        let headerStr = String(data: headerData, encoding: .utf8) ?? ""
-        guard let match = headerStr.range(of: #"Content-Length:\s*(\d+)"#, options: .regularExpression),
-              let length = Int(headerStr[match].split(separator: ":").last?.trimmingCharacters(in: .whitespaces) ?? "") else {
-            throw AskToolError.executionFailed("MCP: no Content-Length header")
-        }
-
-        let bodyData = handle.readData(ofLength: length)
-        guard let json = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+        // Strip a trailing \r if the server happens to send CRLF.
+        if lineData.last == 0x0D { lineData.removeLast() }
+        guard let json = try JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
             throw AskToolError.executionFailed("MCP: invalid JSON response")
         }
         return json
