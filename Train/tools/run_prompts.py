@@ -35,15 +35,16 @@ import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-PROMPTS = ROOT / 'prompts.txt'
-CANONICAL = ROOT / 'canonical.json'
-RAW_DIR = ROOT / 'raw'
-CORRECT_LOG = ROOT / 'correct.log'
+TOOLS_DIR = Path(__file__).resolve().parent
+MATERIAL_DIR = TOOLS_DIR.parent / 'Material'
+PROMPTS = MATERIAL_DIR / 'prompts.txt'
+CANONICAL = MATERIAL_DIR / 'canonical.json'
+RAW_DIR = MATERIAL_DIR / 'raw'
+CORRECT_LOG = MATERIAL_DIR / 'correct.log'
 
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_ARO = str(ROOT.parent.parent / '.build/release/aro')
+DEFAULT_ARO = str(TOOLS_DIR.parent.parent / '.build/release/aro')
 
 # Words that, if absent from the prompt, indicate the model shouldn't be
 # inventing an HTTP request context. Used by the "hallucinated request"
@@ -225,7 +226,7 @@ def main():
                 'judge_reason': rec['judge_reason'],
                 'has_canonical_answer': rec['expected'] is not None,
             }
-            (ROOT / f'{rec["slug"]}.json').write_text(
+            (MATERIAL_DIR / f'{rec["slug"]}.json').write_text(
                 json.dumps(pair, indent=2, ensure_ascii=False) + '\n')
             if rec['expected'] is None:
                 no_canonical += 1

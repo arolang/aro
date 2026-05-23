@@ -7,9 +7,9 @@ otherwise dropped. The validated set lands in `curated.jsonl` in the
 training-pair format the rest of the pipeline already understands.
 
 Run:
-    python3 Train/Material/curate.py
-    # writes Train/Material/curated.jsonl
-    # logs failures to Train/Material/curated_failures.log
+    python3 Train/tools/curate_material.py
+    # writes Train/Material/curated.jsonl     (data)
+    # writes Train/tools/curated_failures.log (build artefact)
 """
 from __future__ import annotations
 
@@ -20,13 +20,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-ARO_BIN = ROOT.parent.parent / '.build/release/aro'
+TOOLS_DIR = Path(__file__).resolve().parent
+MATERIAL_DIR = TOOLS_DIR.parent / 'Material'
+ARO_BIN = TOOLS_DIR.parent.parent / '.build/release/aro'
 if not ARO_BIN.exists():
-    ARO_BIN = ROOT.parent.parent / '.build/debug/aro'
+    ARO_BIN = TOOLS_DIR.parent.parent / '.build/debug/aro'
 
-OUT_FILE = ROOT / 'curated.jsonl'
-FAIL_LOG = ROOT / 'curated_failures.log'
+# Validated training pairs land in Material/ (data only). The
+# failures log is a build artefact and stays alongside the script.
+OUT_FILE = MATERIAL_DIR / 'curated.jsonl'
+FAIL_LOG = TOOLS_DIR / 'curated_failures.log'
 
 
 # ── Validation ─────────────────────────────────────────────────────────────
