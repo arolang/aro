@@ -12,6 +12,7 @@
 #if canImport(MLXLLM)
 
 import Foundation
+import Darwin
 import MLXLLM
 import MLXLMCommon
 import Tokenizers
@@ -392,8 +393,7 @@ public actor NativeMLXBackend: LMBackend {
     /// Throws a clean error if none are present.
     private static func ensureMetalLib() throws {
         let fm = FileManager.default
-        let binaryDir = URL(fileURLWithPath: CommandLine.arguments[0])
-            .deletingLastPathComponent()
+        let binaryDir = currentExecutableURL().deletingLastPathComponent()
         let candidates = [
             binaryDir.appendingPathComponent("mlx.metallib"),
             binaryDir
@@ -419,6 +419,27 @@ public actor NativeMLXBackend: LMBackend {
             then copy the result to one of the paths above.
             """
         )
+    }
+
+    /// Absolute, symlink-resolved URL of the running executable.
+    ///
+    /// `CommandLine.arguments[0]` is whatever the shell handed us — often
+    /// just `"aro"` when invoked via $PATH — and `URL(fileURLWithPath:)`
+    /// resolves that against the CWD, which silently anchors every search
+    /// path to the user's project directory instead of the binary. Ask the
+    /// kernel for the actual executable path instead.
+    private static func currentExecutableURL() -> URL {
+        var size = UInt32(PATH_MAX)
+        var buffer = [CChar](repeating: 0, count: Int(size))
+        if _NSGetExecutablePath(&buffer, &size) != 0 {
+            // Path didn't fit; resize and retry once.
+            buffer = [CChar](repeating: 0, count: Int(size))
+            guard _NSGetExecutablePath(&buffer, &size) == 0 else {
+                return URL(fileURLWithPath: CommandLine.arguments[0])
+            }
+        }
+        let raw = String(cString: buffer)
+        return URL(fileURLWithPath: raw).resolvingSymlinksInPath()
     }
 }
 
