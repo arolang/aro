@@ -1,0 +1,13 @@
+{
+  "prompt": "How to define a conditional branch with a when guard?",
+  "slug": "how_to_define_a_conditional_branch_with_a_when_guard",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Append `when <cond>` to a statement to gate it.\n\n```aro\n(Guarded: Example) {\n    Create the <count> with 5.\n    Log \"big\" to the <console> when <count> > 3.\n    Return an <OK: status> for the <check>.\n}\n```",
+  "elapsed_s": 4.0,
+  "returncode": 0,
+  "timed_out": false
+}

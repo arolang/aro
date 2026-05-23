@@ -1,0 +1,13 @@
+{
+  "prompt": "How to check if a file exists?",
+  "slug": "how_to_check_if_a_file_exists",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Exists` action.\n\n```aro\n(FileExists: Example) {\n    Create the <path> with \"data.json\".\n    Exists the <present> from the <file: path>.\n    Return an <OK: status> with <present>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

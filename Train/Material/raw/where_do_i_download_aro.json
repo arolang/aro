@@ -1,0 +1,13 @@
+{
+  "prompt": "Where do I download ARO?",
+  "slug": "where_do_i_download_aro",
+  "actual": "ARO is an open-source project hosted on GitHub. You can download the latest version from the official repository. Here are the steps to download ARO:\n\n1. Go to the official GitHub repository: https://github.com/ARO/ARO\n2. Click on the \"Code\" button and select \"Download ZIP\" to download the latest release.\n3. Extract the downloaded ZIP file to a directory of your choice.\n4. Add the directory to your PATH environment variable so that you can run ARO from any location.\n\nOnce you have downloaded ARO, you can use it to run, compile, and test your applications.",
+  "model_raw": "<think>\n\n</think>\n\nARO is an open-source project hosted on GitHub. You can download the latest version from the official repository. Here are the steps to download ARO:\n\n1. Go to the official GitHub repository: https://github.com/ARO/ARO\n2. Click on the \"Code\" button and select \"Download ZIP\" to download the latest release.\n3. Extract the downloaded ZIP file to a directory of your choice.\n4. Add the directory to your PATH environment variable so that you can run ARO from any location.\n\nOnce you have downloaded ARO, you can use it to run, compile, and test your applications.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "macOS: `brew tap arolang/aro && brew install aro`. Linux: download from the latest release at https://github.com/arolang/aro/releases or build from source with `swift build -c release`.",
+  "elapsed_s": 5.3,
+  "returncode": 0,
+  "timed_out": false
+}

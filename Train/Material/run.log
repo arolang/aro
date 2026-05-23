@@ -1,0 +1,215 @@
+running 207 prompts against /Users/kris/Projects/ARO/ARO-Lang/.build/release/aro
+[  1/207] no_code            (2.8s) — How to sum two numbers?
+[  2/207] no_code            (1.9s) — How to log a message to the console?
+[  3/207] no_output          (3.2s) — How to write a hello world application in ARO?
+[  4/207] no_code            (1.9s) — How to read a file in ARO?
+[  5/207] no_code            (2.0s) — How to write to a file in ARO?
+[  6/207] no_code            (2.0s) — How to compute the length of a string?
+[  7/207] no_code            (2.0s) — How to convert a string to uppercase?
+[  8/207] no_code            (2.1s) — How to convert a string to lowercase?
+[  9/207] no_code            (2.1s) — How to compute the hash of a password?
+[ 10/207] no_code            (2.2s) — How to multiply two numbers?
+[ 11/207] no_code            (2.2s) — How to subtract two numbers?
+[ 12/207] no_code            (2.2s) — How to divide two numbers?
+[ 13/207] no_code            (2.2s) — How to compute the remainder of a division?
+[ 14/207] no_code            (2.3s) — How to compare two values?
+[ 15/207] no_code            (2.3s) — How to check if a number is greater than another?
+[ 16/207] no_code            (2.4s) — How to compute the average of a list of numbers?
+[ 17/207] no_code            (2.4s) — How to count the items in a list?
+[ 18/207] no_code            (2.4s) — How to reverse a list?
+[ 19/207] no_code            (2.4s) — How to sort a list?
+[ 20/207] no_code            (2.6s) — How to filter a list by a condition?
+[ 21/207] no_code            (2.6s) — How to iterate over a list?
+[ 22/207] no_code            (2.6s) — How to extract a field from an object?
+[ 23/207] no_code            (2.6s) — How to publish a variable across feature sets?
+[ 24/207] no_code            (2.7s) — How to emit a custom event?
+[ 25/207] no_code            (2.6s) — How to handle a custom event?
+[ 26/207] no_code            (2.6s) — How to start an HTTP server?
+[ 27/207] no_code            (2.7s) — How to handle a GET route?
+[ 28/207] no_code            (2.7s) — How to handle a POST route?
+[ 29/207] no_code            (2.7s) — How to extract a path parameter from a request?
+[ 30/207] no_code            (2.7s) — How to extract a query parameter from a request?
+[ 31/207] no_code            (2.7s) — How to extract the body of a request?
+[ 32/207] no_code            (2.8s) — How to return an OK status?
+[ 33/207] no_code            (2.8s) — How to return a Created status?
+[ 34/207] no_code            (2.8s) — How to return a NotFound status?
+[ 35/207] no_code            (2.8s) — How to stop an HTTP server gracefully?
+[ 36/207] no_code            (2.9s) — How to keep an application alive to process events?
+[ 37/207] no_code            (2.8s) — How to read JSON from a file?
+[ 38/207] no_code            (2.9s) — How to write JSON to a file?
+[ 39/207] no_code            (2.9s) — How to parse YAML?
+[ 40/207] no_code            (2.9s) — How to read a CSV file?
+[ 41/207] no_code            (2.9s) — How to copy a file from source to destination?
+[ 42/207] no_code            (2.9s) — How to move a file?
+[ 43/207] no_code            (2.9s) — How to delete a file?
+[ 44/207] no_code            (2.9s) — How to check if a file exists?
+[ 45/207] no_code            (2.9s) — How to get file metadata like size and modified date?
+[ 46/207] no_code            (2.9s) — How to list files in a directory?
+[ 47/207] no_code            (2.9s) — How to watch a directory for file changes?
+[ 48/207] no_code            (2.9s) — How to read environment variables?
+[ 49/207] no_code            (3.0s) — How to read command line parameters?
+[ 50/207] no_code            (2.9s) — How to render a template?
+[ 51/207] no_code            (3.0s) — How to log structured data?
+[ 52/207] no_code            (3.2s) — How to run a TCP socket server?
+[ 53/207] no_code            (3.0s) — How to connect to a TCP socket?
+[ 54/207] no_code            (3.0s) — How to send a message over a WebSocket?
+[ 55/207] no_code            (3.0s) — How to store an item in a repository?
+[ 56/207] no_code            (3.0s) — How to retrieve an item from a repository by id?
+[ 57/207] no_code            (3.0s) — How to update an item in a repository?
+[ 58/207] no_code            (3.1s) — How to delete an item from a repository?
+[ 59/207] no_code            (3.2s) — How to observe changes on a repository?
+[ 60/207] no_code            (3.2s) — How to use a state machine in ARO?
+[ 61/207] no_code            (3.2s) — How to accept a state transition?
+[ 62/207] no_code            (3.2s) — How to define a user-defined action callable from other feat
+[ 63/207] no_code            (3.3s) — How to invoke a user-defined action?
+[ 64/207] no_code            (3.3s) — How to fetch a URL?
+[ 65/207] no_code            (3.4s) — How to send an HTTP POST request?
+[ 66/207] no_code            (3.4s) — How to retry a failed external call?
+[ 67/207] no_code            (3.5s) — How to schedule a recurring task?
+[ 68/207] no_code            (3.5s) — How to compute a date in the future?
+[ 69/207] no_code            (3.6s) — How to format a date as a string?
+[ 70/207] no_code            (3.5s) — How to parse a date from a string?
+[ 71/207] no_code            (3.6s) — How to use git status in ARO?
+[ 72/207] no_code            (3.6s) — How to commit changes via the git system object?
+[ 73/207] no_code            (3.7s) — How to stage files before committing?
+[ 74/207] no_code            (3.7s) — How to push to a remote?
+[ 75/207] no_code            (3.7s) — How to clone a repository?
+[ 76/207] no_code            (3.8s) — How to checkout a branch?
+[ 77/207] no_code            (3.8s) — How to tag a release?
+[ 78/207] no_code            (3.9s) — How to write an Application-Start feature set?
+[ 79/207] no_code            (3.9s) — How to write an Application-End handler for graceful shutdow
+[ 80/207] no_code            (3.9s) — How to validate input data?
+[ 81/207] no_code            (3.9s) — How to throw an error in ARO?
+[ 82/207] no_code            (4.0s) — How to define a conditional branch with a when guard?
+[ 83/207] no_code            (4.0s) — How to do a for-each loop?
+[ 84/207] no_code            (4.0s) — How to do a parallel for-each?
+[ 85/207] no_code            (4.1s) — How to merge two collections?
+[ 86/207] no_code            (4.1s) — How to compute the union of two sets?
+[ 87/207] no_code            (4.1s) — How to compute the intersection of two sets?
+[ 88/207] no_code            (4.2s) — How to compute the difference of two sets?
+[ 89/207] no_code            (4.2s) — How to group a list of records by a field?
+[ 90/207] no_code            (4.2s) — How to compute the sum of a list of numbers?
+[ 91/207] no_code            (4.3s) — How to compute the max of a list of numbers?
+[ 92/207] no_code            (4.3s) — How to compute the min of a list of numbers?
+[ 93/207] no_code            (4.3s) — How to use a plugin qualifier?
+[ 94/207] no_code            (4.4s) — How to call a plugin action?
+[ 95/207] no_code            (4.3s) — How to use a store file for seed data?
+[ 96/207] no_code            (4.3s) — How to configure a runtime setting?
+[ 97/207] no_code            (4.3s) — How to log to a metrics counter?
+[ 98/207] no_code            (4.4s) — How to expose Prometheus metrics?
+[ 99/207] no_code            (4.4s) — How to read from stdin in ARO?
+[100/207] no_code            (4.4s) — How to compute the absolute value of a number?
+[101/207] no_code            (4.4s) — How to round a number?
+[102/207] no_code            (4.5s) — How to compute the square of a number?
+[103/207] no_code            (4.5s) — How to compose multiple actions in a pipeline?
+[104/207] no_code            (4.5s) — How to chain transformations on a list?
+[105/207] ok            (5.0s) — Write a feature set that logs "Hello, World!" to the console
+[106/207] ok            (5.1s) — Show me an ARO Application-Start that starts an HTTP server.
+[107/207] hallucinated_request (22.8s) — Give me an example of a Compute action that adds two integer
+[108/207] no_output          (303.3s) — Explain the Action Compute.
+[109/207] no_code            (4.9s) — Explain the difference between Extract and Retrieve.
+[110/207] no_code            (5.2s) — What does the Keepalive action do?
+[111/207] no_code            (5.4s) — Why does every feature set need a Return or Throw?
+[112/207] no_code            (5.5s) — Tell me about ARO's qualifier-as-name syntax.
+[113/207] no_code            (5.5s) — List every built-in ARO action verb.
+[114/207] no_code            (5.6s) — Summarize the contract-first HTTP model in ARO.
+[115/207] no_code            (5.6s) — Why is `<console>` written with angle brackets?
+[116/207] no_code            (9.0s) — Walk through the lifecycle of an event in ARO.
+[117/207] fails_aro_check    (25.3s) — Translate this Python snippet to ARO: `total = sum(prices) *
+[118/207] ok            (6.4s) — Translate this JSON config schema into an ARO feature set th
+[119/207] fails_aro_check    (23.9s) — Convert a Go HTTP handler that returns user JSON into the eq
+[120/207] hallucinated_request (6.6s) — Refactor this ARO code to use the qualifier-as-name form: `C
+[121/207] hallucinated_request (9.3s) — Rewrite this feature set so the variable names follow ARO's 
+[122/207] hallucinated_request (4.9s) — Convert this synchronous file read into the lazy / future-ba
+[123/207] hallucinated_request (4.9s) — Make this feature set publish its result so other feature se
+[124/207] no_output          (4.8s) — Split this 30-line feature set into two smaller ones connect
+[125/207] fails_aro_check    (15.7s) — Find the bug in this code: `(Sum: Example) { Compute the <su
+[126/207] ok            (6.4s) — Find the bug: `(Greet: Example) { Log "Hi" to <console>. Ret
+[127/207] ok            (3.5s) — Find the bug: `(getUser: Users API) { Extract the <id> from 
+[128/207] no_feature_set     (3.5s) — What's wrong with: `Compute the <total> from <price> * <qty>
+[129/207] no_feature_set     (4.4s) — Diagnose the parser error: "Expected preposition, but got +"
+[130/207] hallucinated_request (9.2s) — Diagnose: "Variables are immutable — cannot rebind <count>".
+[131/207] fails_aro_check    (15.2s) — The compiler complains "is-valid" is an invalid identifier. 
+[132/207] no_feature_set     (3.9s) — The model wrote `Compute the <total> for the <items>` and ar
+[133/207] no_feature_set     (4.1s) — Explain why this fails aro check: `Return <OK: status>.` (mi
+[134/207] no_code            (3.5s) — Hi.
+[135/207] no_code            (3.3s) — Help.
+[136/207] no_code            (3.4s) — Help me with ARO.
+[137/207] hallucinated_request (39.4s) — I want to learn ARO. Where should I start?
+[138/207] no_code            (50.0s) — I'm new to ARO. What do I need to know first?
+[139/207] no_feature_set     (10.2s) — What is ARO?
+[140/207] no_output          (302.9s) — Tell me everything about ARO.
+[141/207] no_code            (13.9s) — What makes ARO different from other DSLs?
+[142/207] no_code            (16.5s) — Why would I use ARO over plain Python or Go?
+[143/207] no_code            (5.5s) — Is ARO compiled or interpreted?
+[144/207] fails_aro_check    (17.6s) — Does ARO support concurrency?
+[145/207] no_feature_set     (7.4s) — Does ARO have a type system?
+[146/207] no_feature_set     (6.9s) — Is there a REPL for ARO?
+[147/207] no_code            (5.3s) — Where do I download ARO?
+[148/207] no_code            (4.1s) — Quick — show me a one-line ARO program.
+[149/207] ok            (4.3s) — Smallest possible ARO application?
+[150/207] ok            (4.0s) — ARO hello world, please.
+[151/207] ok            (3.9s) — Give me the canonical ARO hello world.
+[152/207] ok            (4.1s) — Append a Log line to this feature set.
+[153/207] fails_aro_check    (18.1s) — Insert a Compute step that doubles a value between Extract a
+[154/207] fails_aro_check    (18.6s) — Add error handling (Throw) to this feature set.
+[155/207] fails_aro_check    (19.1s) — Remove the unused Log statement from this feature set.
+[156/207] fails_aro_check    (20.7s) — Refactor: extract the Compute into its own Application.<Name
+[157/207] fails_aro_check    (22.3s) — Rename `<sum>` to `<total>` consistently across this code.
+[158/207] ok            (5.0s) — Show me a feature set that watches a directory and logs ever
+[159/207] ok            (4.8s) — Show me a feature set that fetches a URL and stores the resp
+[160/207] fails_aro_check    (21.3s) — Show me a feature set with a `when` guard.
+[161/207] ok            (5.3s) — Show me an event handler for a custom `OrderShipped` event.
+[162/207] ok            (5.4s) — Show me a repository observer.
+[163/207] ok            (5.2s) — Show me an Application-End handler for graceful shutdown.
+[164/207] hallucinated_request (5.3s) — Show me a feature set that uses a plugin qualifier.
+[165/207] fails_aro_check    (25.1s) — Show me how to call a user-defined action from another featu
+[166/207] fails_aro_check    (31.5s) — Show me a complete OrderService application with create / ge
+[167/207] fails_aro_check    (29.7s) — Show me an HTTP client that POSTs JSON to an external endpoi
+[168/207] no_output          (15.0s) — Generate an openapi.yaml for a simple todo list API with cre
+[169/207] no_output          (15.0s) — Generate the operationId handlers for the openapi.yaml I jus
+[170/207] fails_aro_check    (34.9s) — Generate the feature set names I need from this openapi.yaml
+[171/207] no_output          (9.5s) — Scaffold a new feature set called `archiveOrder` that emits 
+[172/207] no_output          (6.1s) — Scaffold a webhook receiver that validates the signature and
+[173/207] fails_aro_check    (17.5s) — Scaffold a CSV import job that parses lines and writes recor
+[174/207] no_code            (3.9s) — Why is `String concatenation: ++` (not `+`)?
+[175/207] no_code            (7.0s) — Compare `Stage` and `Commit` in the git system object.
+[176/207] no_code            (6.9s) — Compare `Emit` and `Publish` — when do I use each?
+[177/207] no_code            (6.2s) — Compare `For-each` with `When` — are they interchangeable?
+[178/207] no_code            (4.6s) — What's the role classification of `Extract`?
+[179/207] no_code            (5.4s) — Which built-in actions are REQUEST role?
+[180/207] no_code            (5.5s) — Which built-in actions are EXPORT role?
+[181/207] no_code            (6.3s) — What does "Sink syntax" mean (ARO-0043)?
+[182/207] no_code            (6.2s) — What's ARO-0081?
+[183/207] no_code            (6.4s) — What's ARO-0080?
+[184/207] no_code            (6.4s) — Are there any deprecated actions I should avoid?
+[185/207] no_code            (5.2s) — ELI5: what's a feature set?
+[186/207] no_code            (5.1s) — ELI5: explain the "code is the error message" philosophy.
+[187/207] no_code            (4.9s) — ELI5: why are ARO variables immutable?
+[188/207] no_code            (4.7s) — Quick sanity check: is `Log <text> to the <console>.` valid 
+[189/207] no_feature_set     (5.2s) — Quick sanity check: does ARO have `if/else`?
+[190/207] no_code            (5.3s) — Quick sanity check: can I have two `Application-Start` featu
+[191/207] ok            (5.2s) — Idiomatic ARO for: "send a notification email after a user s
+[192/207] fails_aro_check    (19.5s) — Idiomatic ARO for: "every 5 minutes, fetch a weather API and
+[193/207] fails_aro_check    (23.2s) — Idiomatic ARO for: "watch ./inbox for new .csv files and imp
+[194/207] fails_aro_check    (22.2s) — Idiomatic ARO for: "deduplicate a list of records by id, kee
+[195/207] fails_aro_check    (23.1s) — Idiomatic ARO for: "split a CSV row and log each field".
+[196/207] fails_aro_check    (23.5s) — Idiomatic ARO for: "compute SHA256 of a password and store i
+[197/207] fails_aro_check    (23.0s) — ARO snippet that uses the date system object.
+[198/207] fails_aro_check    (30.2s) — ARO snippet that uses a state machine to model an order life
+[199/207] fails_aro_check    (25.2s) — ARO snippet that demonstrates lazy / streaming evaluation.
+[200/207] fails_aro_check    (24.3s) — ARO snippet that uses parallel for-each with a concurrency l
+[201/207] fails_aro_check    (25.9s) — ARO snippet that intersects two sets.
+[202/207] ok            (9.0s) — ARO snippet for a Mustache-style template render.
+[203/207] no_code            (4.5s) — Best practice: where should I put my openapi.yaml in a multi
+[204/207] no_code            (3.9s) — Best practice: naming convention for repository names?
+[205/207] no_code            (4.9s) — Best practice: when should I split a feature set into two?
+[206/207] ok            (6.7s) — Best practice: how do I test an event handler in isolation?
+[207/207] no_output          (302.7s) — Code review: what's wrong stylistically with `(do_stuff: x) 
+
+=== summary ===
+  total:                 207
+  correct (logged):      17
+  wrong (with canonical): 190
+  wrong (no canonical):  0  ← fill in canonical.json then rerun
+  cached / skipped:      0

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to fetch a URL?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Request` against the `<http-client>`.\n\n```aro\n(FetchURL: Example) {\n    Create the <url> with \"https://example.com\".\n    Request the <response> from the <http-client> at <url>.\n    Return an <OK: status> with <response>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

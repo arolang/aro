@@ -1,0 +1,9 @@
+{
+  "prompt": "How to convert a string to lowercase?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Compute` action with the `lowercase` qualifier.\n\n```aro\n(Soften: Example) {\n    Compute the <lower: lowercase> from the <message>.\n    Return an <OK: status> with <lower>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

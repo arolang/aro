@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me a feature set with a `when` guard.",
+  "slug": "show_me_a_feature_set_with_a_when_guard",
+  "actual": "```aro\n(WhenGuard: Example) {\n    Extract the <status> from the <request: status>.\n    Return the<OK: status> for the <result>.\n    Return the<NOT_FOUND: status> for the <result> when the <status> is 404.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(WhenGuard: Example) {\n    Extract the <status> from the <request: status>.\n    Return the<OK: status> for the <result>.\n    Return the<NOT_FOUND: status> for the <result> when the <status> is 404.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "```aro\n(GuardedLog: Example) {\n    Create the <count> with 10.\n    Log \"high\" to the <console> when <count> > 5.\n    Return an <OK: status> for the <check>.\n}\n```",
+  "elapsed_s": 21.3,
+  "returncode": 0,
+  "timed_out": false
+}

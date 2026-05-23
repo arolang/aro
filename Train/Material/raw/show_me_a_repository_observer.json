@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me a repository observer.",
+  "slug": "show_me_a_repository_observer",
+  "actual": "```aro\n(Audit Order Changes: order-repository Observer) {\n    Extract the <order> from the <event: order>.\n    Log \"Order changed!\" to the <audit-log>.\n    Return an<OK: status> for the <audit>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Audit Order Changes: order-repository Observer) {\n    Extract the <order> from the <event: order>.\n    Log \"Order changed!\" to the <audit-log>.\n    Return an<OK: status> for the <audit>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Audit Orders: order-repository Observer) {\n    Extract the <order> from the <event: order>.\n    Log <order> to the <console>.\n    Return an <OK: status> for the <audit>.\n}\n```",
+  "elapsed_s": 5.4,
+  "returncode": 0,
+  "timed_out": false
+}

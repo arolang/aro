@@ -1,0 +1,9 @@
+{
+  "prompt": "Explain the difference between Extract and Retrieve.",
+  "actual": "The `Extract` action pulls a value from the current context, such as from the request body, query parameters, or headers. It is used to extract data from the incoming request.\n\nThe `Retrieve` action fetches data from a repository or data source. It is used to get data that is stored in a repository, such as a database or a cache.\n\nIn summary, `Extract` pulls data from the current context, while `Retrieve` fetches data from a repository.",
+  "expected": "`Extract` is OWN-role: it pulls a field out of an in-memory object (`<user: name>`) or a structured input (`<request: body>`). `Retrieve` is REQUEST-role: it fetches a record from an external source — usually a repository, sometimes a service — by id or query.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the absolute value of a number?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use a `when` guard on the sign.\n\n```aro\n(Abs: Example) {\n    Create the <n> with -5.\n    Compute the <abs> from <n>.\n    Compute the <abs> from 0 - <n> when <n> < 0.\n    Return an <OK: status> with <abs>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

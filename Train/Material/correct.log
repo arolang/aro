@@ -1,0 +1,17 @@
+{"prompt": "Write a feature set that logs \"Hello, World!\" to the console.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me an ARO Application-Start that starts an HTTP server.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Translate this JSON config schema into an ARO feature set that loads it.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Find the bug: `(Greet: Example) { Log \"Hi\" to <console>. Return. }`", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Find the bug: `(getUser: Users API) { Extract the <id> from the <pathParameters.id>. Return an <OK: status> with <id>. }`", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Smallest possible ARO application?", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "ARO hello world, please.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Give me the canonical ARO hello world.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Append a Log line to this feature set.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me a feature set that watches a directory and logs every change.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me a feature set that fetches a URL and stores the response in a repository.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me an event handler for a custom `OrderShipped` event.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me a repository observer.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Show me an Application-End handler for graceful shutdown.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Idiomatic ARO for: \"send a notification email after a user signs up\".", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "ARO snippet for a Mustache-style template render.", "judge_reason": "passes structural checks + aro check"}
+{"prompt": "Best practice: how do I test an event handler in isolation?", "judge_reason": "passes structural checks + aro check"}

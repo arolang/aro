@@ -1,0 +1,9 @@
+{
+  "prompt": "How to send a message over a WebSocket?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(BroadcastChat: Example) {\n    Create the <message> with { kind: \"chat\", text: \"hi\" }.\n    Send the <message> to the <websocket: clients>.\n    Return an <OK: status> for the <broadcast>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to write an Application-End handler for graceful shutdown?",
+  "slug": "how_to_write_an_application_end_handler_for_graceful_shutdow",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(Application-End: Success) {\n    Log \"shutting down\" to the <console>.\n    Stop the <http-server> with <application>.\n    Return an <OK: status> for the <shutdown>.\n}\n```",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

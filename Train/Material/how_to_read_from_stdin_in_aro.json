@@ -1,0 +1,9 @@
+{
+  "prompt": "How to read from stdin in ARO?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Pipe source through `aro` and the engine reads it as a program; for runtime stdin, use the stdin system object.\n\n```aro\n(ReadStdin: Example) {\n    Read the <line> from the <stdin>.\n    Log <line> to the <console>.\n    Return an <OK: status> with <line>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

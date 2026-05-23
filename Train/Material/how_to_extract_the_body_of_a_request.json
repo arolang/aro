@@ -1,0 +1,9 @@
+{
+  "prompt": "How to extract the body of a request?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Extract ... from <request: body>`.\n\n```aro\n(createPost: Blog API) {\n    Extract the <post> from the <request: body>.\n    Store the <post> in the <post-repository>.\n    Return a <Created: status> with <post>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

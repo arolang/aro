@@ -1,0 +1,9 @@
+{
+  "prompt": "How to stage files before committing?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Stage ... to the <git>`.\n\n```aro\n(Stage All: Example) {\n    Stage the <files> to the <git> with \".\".\n    Return an <OK: status> with <files>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to handle a GET route?",
+  "slug": "how_to_handle_a_get_route",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Name the feature set after the operationId in `openapi.yaml` and let ARO dispatch the request.\n\n```aro\n(getUser: User API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <user> from the <user-repository> where id = <id>.\n    Return an <OK: status> with <user>.\n}\n```",
+  "elapsed_s": 2.7,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to call a plugin action?",
+  "slug": "how_to_call_a_plugin_action",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Plugin actions are `Handle.Verb` calls.\n\n```aro\n(RenderMarkdown: Example) {\n    Create the <md> with \"# Title\".\n    Markdown.ToHTML the <html> from <md>.\n    Return an <OK: status> with <html>.\n}\n```",
+  "elapsed_s": 4.4,
+  "returncode": 0,
+  "timed_out": false
+}

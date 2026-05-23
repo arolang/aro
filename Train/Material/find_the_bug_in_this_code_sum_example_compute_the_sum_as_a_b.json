@@ -1,0 +1,9 @@
+{
+  "prompt": "Find the bug in this code: `(Sum: Example) { Compute the <sum> as <a> + <b>. Return an <OK: status> with <sum>. }`",
+  "actual": "```aro\n(Sum: Example) {\n    Extract the <a> from the <request: query>.\n    Extract the <b> from the <request: query>.\n    Compute the <sum> as <a> +<b>.\n    Return an<OK: status> with <sum>.\n}\n```",
+  "expected": "`Compute` uses `from`, not `as`. Also `<a>` and `<b>` need to be Created first. Fixed:\n\n```aro\n(Sum: Example) {\n    Create the <a> with 3.\n    Create the <b> with 5.\n    Compute the <sum> from <a> + <b>.\n    Return an <OK: status> with <sum>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

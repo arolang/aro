@@ -1,0 +1,13 @@
+{
+  "prompt": "How to write JSON to a file?",
+  "slug": "how_to_write_json_to_a_file",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(WriteJSON: Example) {\n    Create the <path> with \"data.json\".\n    Create the <data> with { id: 1, name: \"Ada\" }.\n    Write the <data> to the <file: path>.\n    Return an <OK: status> for the <write>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Is there a REPL for ARO?",
+  "actual": "Yes, there is a REPL (Read-Eval-Print Loop) for ARO. The REPL allows you to interactively test and debug ARO code. You can use the REPL to evaluate expressions, test small snippets of code, and debug larger programs.\n\nThe REPL supports the same syntax as the rest of the ARO language, so you can use it to test code snippets that would otherwise be written in a feature set. For example, you can use the REPL to test a simple HTTP API:\n```aro\nReturn the<OK: status> for the <result>.\n```\nThis code returns an HTTP response with a status code of 200. You can use the REPL to test this code and see what happens.\n\nThe REPL also supports debugging. You can use the REPL to step through code, inspect variables, and debug errors. For example, you can use the REPL to step through a feature set and see what happens at each step.\n\nOverall, the REPL is a powerful tool for testing and debugging ARO code. It supports the same syntax as the rest of the language, so you can use it to test code snippets that would otherwise be written in a feature set.",
+  "expected": "Yes — `aro repl` starts an interactive session that compiles and executes one statement at a time, with history.",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "has_canonical_answer": true
+}

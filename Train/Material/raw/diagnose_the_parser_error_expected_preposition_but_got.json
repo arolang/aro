@@ -1,0 +1,13 @@
+{
+  "prompt": "Diagnose the parser error: \"Expected preposition, but got +\".",
+  "slug": "diagnose_the_parser_error_expected_preposition_but_got",
+  "actual": "The error \"Expected preposition, but got +\". indicates that the parser encountered an invalid operator (`+`) where a preposition is expected. In ARO syntax, the `+` operator cannot be used directly in the `Compute` action — only the `from` preposition is valid. For example, `Compute the <total> from <price> *<qty>` is correct, but `Compute the <total> as <price> +<qty>` would trigger this error.\n\nTo fix the error, use `from` instead of `+` in the `Compute` action:\n```aro\nCompute the <total> from <price> *<qty>.\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe error \"Expected preposition, but got +\". indicates that the parser encountered an invalid operator (`+`) where a preposition is expected. In ARO syntax, the `+` operator cannot be used directly in the `Compute` action — only the `from` preposition is valid. For example, `Compute the <total> from <price> *<qty>` is correct, but `Compute the <total> as <price> +<qty>` would trigger this error.\n\nTo fix the error, use `from` instead of `+` in the `Compute` action:\n```aro\nCompute the <total> from <price> *<qty>.\n```",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "expected": "The `+` operator only lives inside `Compute` expressions. The parser hit `+` where it expected one of the action prepositions (from/to/with/for/into/at). Likely your `Compute the <x> from <a> + <b>.` is missing the `from`, or you wrote it as `Compute the <x> + <b>` directly. Use: `Compute the <x> from <a> + <b>.`",
+  "elapsed_s": 4.4,
+  "returncode": 0,
+  "timed_out": false
+}

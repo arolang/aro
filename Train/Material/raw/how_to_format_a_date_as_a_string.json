@@ -1,0 +1,13 @@
+{
+  "prompt": "How to format a date as a string?",
+  "slug": "how_to_format_a_date_as_a_string",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `format` qualifier with a pattern string.\n\n```aro\n(FormatDate: Example) {\n    Create the <today> with the <date: today>.\n    Compute the <formatted: format> from <today> with \"YYYY-MM-DD\".\n    Return an <OK: status> with <formatted>.\n}\n```",
+  "elapsed_s": 3.6,
+  "returncode": 0,
+  "timed_out": false
+}

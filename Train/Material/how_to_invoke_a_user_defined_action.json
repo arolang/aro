@@ -1,0 +1,9 @@
+{
+  "prompt": "How to invoke a user-defined action?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Call it as `Application.<Name>` from any other feature set.\n\n```aro\n(Caller: Example) {\n    Application.DoubleValue the <result> from 21.\n    Extract the <doubled> from the <result: doubled>.\n    Return an <OK: status> with <doubled>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

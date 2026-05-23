@@ -1,0 +1,13 @@
+{
+  "prompt": "Best practice: when should I split a feature set into two?",
+  "slug": "best_practice_when_should_i_split_a_feature_set_into_two",
+  "actual": "Split a feature set into two when the feature set becomes too large or complex, making it hard to understand, maintain, or test. The goal is to keep each feature set focused on a single responsibility or business capability. For example, split a feature set into two if:\n\n1. The feature set contains multiple independent business capabilities that could be handled separately.\n2. The feature set contains multiple independent flows that could be handled separately.\n3. The feature set contains multiple independent events that could be handled separately.\n4. The feature set contains multiple independent HTTP endpoints that could be handled separately.\n5. The feature set contains multiple independent repository observers that could be handled separately.\n\nSplitting a feature set into two makes the code easier to understand, maintain, and test, and makes the application more modular.",
+  "model_raw": "<think>\n\n</think>\n\nSplit a feature set into two when the feature set becomes too large or complex, making it hard to understand, maintain, or test. The goal is to keep each feature set focused on a single responsibility or business capability. For example, split a feature set into two if:\n\n1. The feature set contains multiple independent business capabilities that could be handled separately.\n2. The feature set contains multiple independent flows that could be handled separately.\n3. The feature set contains multiple independent events that could be handled separately.\n4. The feature set contains multiple independent HTTP endpoints that could be handled separately.\n5. The feature set contains multiple independent repository observers that could be handled separately.\n\nSplitting a feature set into two makes the code easier to understand, maintain, and test, and makes the application more modular.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "When two concerns aren't sharing data. Pass control via an event (`Emit`) or a published variable. A 30-line feature set that does \"validate, persist, notify\" usually wants to be `(Save X) → emits XCreated → (Notify) handles XCreated`.",
+  "elapsed_s": 4.9,
+  "returncode": 0,
+  "timed_out": false
+}

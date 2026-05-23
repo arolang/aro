@@ -1,0 +1,9 @@
+{
+  "prompt": "What's wrong with: `Compute the <total> from <price> * <qty>` (missing the trailing period)?",
+  "actual": "The statement `Compute the <total> from <price> *<qty>` is missing the trailing period, which is required for all statements in ARO syntax. The correct statement should be:\n\n```aro\nCompute the <total> from <price> *<qty>.\n```",
+  "expected": "Every ARO statement ends with a period. Add it: `Compute the <total> from <price> * <qty>.`",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "has_canonical_answer": true
+}

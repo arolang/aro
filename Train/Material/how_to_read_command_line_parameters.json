@@ -1,0 +1,9 @@
+{
+  "prompt": "How to read command line parameters?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Parameters` action.\n\n```aro\n(ReadArgs: Example) {\n    Parameters the <args> for the <application>.\n    Return an <OK: status> with <args>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

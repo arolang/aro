@@ -1,0 +1,13 @@
+{
+  "prompt": "Which built-in actions are REQUEST role?",
+  "slug": "which_built_in_actions_are_request_role",
+  "actual": "The built-in actions with the `request` role are used to handle incoming data from HTTP requests, events, or other external sources. They extract values from the incoming payload into variables that can be used in subsequent actions. The built-in actions with the `request` role are:\n\n1. `Extract`\n2. `Read`\n3. `Parse`\n4. `ParseJson`\n5. `ParseXml`\n6. `ParseCsv`\n7. `ParseYaml`\n8. `ParseYaml`\n9. `ParseUrl`\n10. `ParseQuery`\n\nThese actions are used to extract data from the incoming HTTP request body, URL parameters, query strings, headers, or event data.",
+  "model_raw": "<think>\n\n</think>\n\nThe built-in actions with the `request` role are used to handle incoming data from HTTP requests, events, or other external sources. They extract values from the incoming payload into variables that can be used in subsequent actions. The built-in actions with the `request` role are:\n\n1. `Extract`\n2. `Read`\n3. `Parse`\n4. `ParseJson`\n5. `ParseXml`\n6. `ParseCsv`\n7. `ParseYaml`\n8. `ParseYaml`\n9. `ParseUrl`\n10. `ParseQuery`\n\nThese actions are used to extract data from the incoming HTTP request body, URL parameters, query strings, headers, or event data.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "External → Internal: Extract (from structured input), Parse, Retrieve, Fetch, Pull, Clone, Read, Request.",
+  "elapsed_s": 5.4,
+  "returncode": 0,
+  "timed_out": false
+}

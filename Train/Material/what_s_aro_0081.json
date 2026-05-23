@@ -1,0 +1,9 @@
+{
+  "prompt": "What's ARO-0081?",
+  "actual": "ARO-0081 is a proposal in the ARO specification that introduces a new action called `Store`. The `Store` action is used to store data into a repository. The `Store` action is a built-in action that is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository.",
+  "expected": "User-Defined Actions. A feature set whose business activity is `Action` becomes callable application-wide as `Application.<Name>`. The `takes <arg>` slot is sugar for a single positional argument extracted as `input.<arg>`.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

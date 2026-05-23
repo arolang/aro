@@ -1,0 +1,9 @@
+{
+  "prompt": "ARO snippet that uses the date system object.",
+  "actual": "```aro\n(Format Date: FormatDate) {\n    Create the <current-time> from the <date: now>.\n    Format the <current-time> into the <iso8601>.\n    Return the<OK: status> with the <iso8601>.\n}\n```",
+  "expected": "```aro\n(Today: Example) {\n    Create the <today> with the <date: today>.\n    Log <today> to the <console>.\n    Return an <OK: status> with <today>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to push to a remote?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Push: Example) {\n    Push the <result> to the <git>.\n    Return an <OK: status> with <result>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

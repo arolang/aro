@@ -1,0 +1,13 @@
+{
+  "prompt": "Make this feature set publish its result so other feature sets can read it.",
+  "slug": "make_this_feature_set_publish_its_result_so_other_feature_se",
+  "actual": "```aro\n(Read File: Lazy) {\n    Extract the <file-path> from the <request: query>.\n    Return a <file-content> from the <file-path>.\n}\n```",
+  "model_raw": "<think>",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "expected": "Add a `Publish as <alias> <variable>.` at the end. Other feature sets read it as `<alias>` from any scope.",
+  "elapsed_s": 4.9,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Explain the Action Compute.",
+  "actual": "",
+  "expected": "`Compute` is the OWN-role action that derives a new immutable value from existing data. It takes a source and an operation: arithmetic (`+`, `-`, `*`, `/`, `%`), a qualifier (`length`, `uppercase`, `lowercase`, `hash`, `sort`, `reverse`, `union`, `intersect`, `difference`), or string concat (`++`). Result is bound to the angle-bracketed name on the left.",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "has_canonical_answer": true
+}

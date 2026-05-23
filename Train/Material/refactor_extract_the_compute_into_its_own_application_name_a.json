@@ -1,0 +1,9 @@
+{
+  "prompt": "Refactor: extract the Compute into its own Application.<Name> action.",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Return the<OK: status> with <doubled>.\n}\n\n(Compute: DoubleValue) {\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "expected": "Pull the Compute into a `(Doubler: Action takes <number>) { ... }` feature set, then replace the original Compute with `Application.Doubler the <result> from <input>.` plus an Extract for the returned field.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to check if a file exists?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Exists` action.\n\n```aro\n(FileExists: Example) {\n    Create the <path> with \"data.json\".\n    Exists the <present> from the <file: path>.\n    Return an <OK: status> with <present>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

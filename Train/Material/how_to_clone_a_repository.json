@@ -1,0 +1,9 @@
+{
+  "prompt": "How to clone a repository?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Clone: Example) {\n    Clone the <repo> from the <git> with { url: \"https://github.com/arolang/aro.git\", path: \"./clone\" }.\n    Return an <OK: status> with <repo>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

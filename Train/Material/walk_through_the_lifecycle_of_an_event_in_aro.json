@@ -1,0 +1,9 @@
+{
+  "prompt": "Walk through the lifecycle of an event in ARO.",
+  "actual": "The lifecycle of an event in ARO follows these steps:\n\n1. **Emit**: The event is emitted from a feature set using the `Emit` action. For example, `Emit a<UserCreated: event> with <user>` emits a `UserCreated` event with the `user` object.\n\n2. **Receive**: The event is received by another feature set that is listening for events. The event is received using the `Extract` action, such as `Extract the <user> from the <event: user>`.\n\n3. **Process**: The event is processed by the receiving feature set. The processing involves any actions needed to handle the event, such as logging, storing, or sending the event to another service.\n\n4. **Return**: The receiving feature set returns a result using the `Return` action. For example, `Return an<OK: status> for the <notification>` returns a success status.\n\n5. **Acknowledge**: The event is acknowledged by the system. If the event is processed successfully, the system acknowledges the event and removes it from the event queue.\n\n6. **Error Handling**: If an error occurs during processing, the `Throw` action is used to signal the error. The error is handled by the system, and the event may be retried or discarded.\n\nThis lifecycle ensures that events are processed reliably and efficiently in ARO.",
+  "expected": "An event is produced by `Emit a <Name: event> with <payload>`. The runtime's `EventBus` finds every feature set named `(... : Name Handler)` and invokes each with `<event: …>` bound to the payload. Handlers run independently; the emitter doesn't wait. State updates flow back through repositories rather than direct returns.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

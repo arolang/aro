@@ -1,0 +1,13 @@
+{
+  "prompt": "Best practice: naming convention for repository names?",
+  "slug": "best_practice_naming_convention_for_repository_names",
+  "actual": "The repository names should be descriptive and follow a consistent naming convention. For example, you can use the format `repository-name` where `repository-name` is a noun that describes the repository's purpose. For example, `user-repository`, `order-repository`, `product-repository`, etc. This makes it easy to understand what each repository contains and makes it easier to find the right repository when needed.",
+  "model_raw": "<think>\n\n</think>\n\nThe repository names should be descriptive and follow a consistent naming convention. For example, you can use the format `repository-name` where `repository-name` is a noun that describes the repository's purpose. For example, `user-repository`, `order-repository`, `product-repository`, etc. This makes it easy to understand what each repository contains and makes it easier to find the right repository when needed.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Hyphenated lowercase singular-noun + `-repository` (or `-store` for read-only seed data): `user-repository`, `order-repository`, `products.store`. Match the entity name to keep handler events readable (`<event: user>` reads naturally next to `<user-repository>`).",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

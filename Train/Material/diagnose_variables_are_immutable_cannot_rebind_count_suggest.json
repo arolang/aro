@@ -1,0 +1,9 @@
+{
+  "prompt": "Diagnose: \"Variables are immutable — cannot rebind <count>\". Suggest the fix.",
+  "actual": "```aro\n(Add Numbers: Example) {\n    Extract the <a> from the <request: query>.\n    Extract the <b> from the <request: query>.\n    Compute the <result> from <a> +<b>.\n    Return an<OK: status> with <result>.\n}\n```",
+  "expected": "ARO bindings are immutable. You assigned to `<count>` twice. Rename the second binding: `Create the <updated-count> with <count> + 1.`",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "has_canonical_answer": true
+}

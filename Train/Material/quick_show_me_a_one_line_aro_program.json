@@ -1,0 +1,9 @@
+{
+  "prompt": "Quick — show me a one-line ARO program.",
+  "actual": "Return the<OK: status> for the <result>.",
+  "expected": "`echo 'Log \"Hi\" to the <console>.' | aro` — stdin-piped one-liner, no file needed.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

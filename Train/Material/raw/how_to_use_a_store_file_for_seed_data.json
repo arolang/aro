@@ -1,0 +1,13 @@
+{
+  "prompt": "How to use a store file for seed data?",
+  "slug": "how_to_use_a_store_file_for_seed_data",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Drop a `.store` file in the application directory; the runtime auto-loads it as a repository (`products.store` → `<products-repository>`). Read-only unless the file has `chmod o+w`.",
+  "elapsed_s": 4.3,
+  "returncode": 0,
+  "timed_out": false
+}

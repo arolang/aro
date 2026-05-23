@@ -1,0 +1,13 @@
+{
+  "prompt": "How to commit changes via the git system object?",
+  "slug": "how_to_commit_changes_via_the_git_system_object",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use `Commit ... to the <git>`.\n\n```aro\n(Commit Work: Example) {\n    Commit the <result> to the <git> with \"chore: update\".\n    Return an <OK: status> with <result>.\n}\n```",
+  "elapsed_s": 3.6,
+  "returncode": 0,
+  "timed_out": false
+}

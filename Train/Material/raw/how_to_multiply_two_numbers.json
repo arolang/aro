@@ -1,0 +1,13 @@
+{
+  "prompt": "How to multiply two numbers?",
+  "slug": "how_to_multiply_two_numbers",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Compute` action with `*`.\n\n```aro\n(Multiply: Example) {\n    Compute the <product> from <a> * <b>.\n    Return an <OK: status> with <product>.\n}\n```",
+  "elapsed_s": 2.2,
+  "returncode": 0,
+  "timed_out": false
+}

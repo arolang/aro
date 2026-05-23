@@ -1,0 +1,9 @@
+{
+  "prompt": "How to return a Created status?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Confirm: Example) {\n    Return a <Created: status> for the <resource>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

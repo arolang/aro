@@ -1,0 +1,13 @@
+{
+  "prompt": "How to retrieve an item from a repository by id?",
+  "slug": "how_to_retrieve_an_item_from_a_repository_by_id",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(GetItem: Example) {\n    Create the <key> with 1.\n    Retrieve the <item> from the <item-repository> where <id> is <key>.\n    Return an <OK: status> with <item>.\n}\n```",
+  "elapsed_s": 3.0,
+  "returncode": 0,
+  "timed_out": false
+}

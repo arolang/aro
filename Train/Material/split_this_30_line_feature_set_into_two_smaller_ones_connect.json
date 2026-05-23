@@ -1,0 +1,9 @@
+{
+  "prompt": "Split this 30-line feature set into two smaller ones connected by a custom event.",
+  "actual": "",
+  "expected": "Identify the boundary (usually validation→persistence→notification). Emit a custom event at the boundary and create a Handler feature set for the second half. Example:\n\n```aro\n(createOrder: API) {\n    Extract the <order> from the <request: body>.\n    Store the <order> into the <order-repository>.\n    Emit an <OrderCreated: event> with <order>.\n    Return a <Created: status> with <order>.\n}\n\n(Notify: OrderCreated Handler) {\n    Extract the <order> from the <event: order>.\n    Send the <confirmation> to the <order: email>.\n    Return an <OK: status> for the <notification>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to log structured data?",
+  "slug": "how_to_log_structured_data",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Log an object literal; the formatter renders it per the active context.\n\n```aro\n(LogStructured: Example) {\n    Create the <event> with { kind: \"login\", user: \"ada\" }.\n    Log <event> to the <console>.\n    Return an <OK: status> for the <log>.\n}\n```",
+  "elapsed_s": 3.0,
+  "returncode": 0,
+  "timed_out": false
+}

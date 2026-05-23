@@ -1,0 +1,9 @@
+{
+  "prompt": "How to keep an application alive to process events?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Keepalive` action.\n\n```aro\n(Application-Start: Server) {\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

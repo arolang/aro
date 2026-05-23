@@ -1,0 +1,9 @@
+{
+  "prompt": "How to configure a runtime setting?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Configure` action.\n\n```aro\n(SetTimeout: Example) {\n    Configure the <http-client> with { timeout: 30 }.\n    Return an <OK: status> for the <configure>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

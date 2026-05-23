@@ -1,0 +1,9 @@
+{
+  "prompt": "How to retry a failed external call?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Configure` to set retry behaviour, then call as usual.\n\n```aro\n(RetryFetch: Example) {\n    Configure the <http-client> with { retries: 3, backoff: \"exponential\" }.\n    Create the <url> with \"https://example.com\".\n    Request the <response> from the <http-client> at <url>.\n    Return an <OK: status> with <response>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "Generate the feature set names I need from this openapi.yaml.",
+  "slug": "generate_the_feature_set_names_i_need_from_this_openapi_yaml",
+  "actual": "```aro\n(Create Todo: CreateTodo) {\n    Extract the <todo> from the <request: body>.\n    Store the <todo> into the <todo-repository>.\n    Return the<OK: status> with the <todo>.\n}\n\n(List Todos: ListTodos) {\n    Retrieve all <todos> from the <todo-repository>.\n    Return the<OK: status> with the <todos>.\n}\n\n(Complete Todo: CompleteTodo) {\n    Extract the <id> from the <request: pathParameters>.\n    Retrieve the <todo> from the <todo-repository> where id =<id>.\n    Return the<OK: status> with the <todo>.\n}\n\n(Delete Todo: DeleteTodo) {\n    Extract the <id> from the <request: pathParameters>.\n    Delete the <todo> from the <todo-repository> where id =<id>.\n    Return the<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Create Todo: CreateTodo) {\n    Extract the <todo> from the <request: body>.\n    Store the <todo> into the <todo-repository>.\n    Return the<OK: status> with the <todo>.\n}\n\n(List Todos: ListTodos) {\n    Retrieve all <todos> from the <todo-repository>.\n    Return the<OK: status> with the <todos>.\n}\n\n(Complete Todo: CompleteTodo) {\n    Extract the <id> from the <request: pathParameters>.\n    Retrieve the <todo> from the <todo-repository> where id =<id>.\n    Return the<OK: status> with the <todo>.\n}\n\n(Delete Todo: DeleteTodo) {\n    Extract the <id> from the <request: pathParameters>.\n    Delete the <todo> from the <todo-repository> where id =<id>.\n    Return the<OK: status> for the <result>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Same — paste the openapi.yaml. The feature-set name for each route is the `operationId` value verbatim, with the surrounding API name from the spec title.",
+  "elapsed_s": 34.9,
+  "returncode": 0,
+  "timed_out": false
+}

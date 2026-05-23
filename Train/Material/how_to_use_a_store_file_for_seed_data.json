@@ -1,0 +1,9 @@
+{
+  "prompt": "How to use a store file for seed data?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Drop a `.store` file in the application directory; the runtime auto-loads it as a repository (`products.store` → `<products-repository>`). Read-only unless the file has `chmod o+w`.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

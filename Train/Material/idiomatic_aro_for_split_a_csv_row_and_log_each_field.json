@@ -1,0 +1,9 @@
+{
+  "prompt": "Idiomatic ARO for: \"split a CSV row and log each field\".",
+  "actual": "```aro\n(Split CSV Row: SplitRow) {\n    Extract the <row> from the <csv: row>.\n    Split the <row> by the <delimiter>.\n    For each <field> in the <split> {\n        Log the <field>.\n    }\n    Return the<OK: status> for the <split>.\n}\n```",
+  "expected": "```aro\n(LogFields: Example) {\n    Create the <row> with \"alice,30,admin\".\n    Compute the <fields: split> from <row> with \",\".\n    for each <field> in <fields> {\n        Log <field> to the <console>.\n    }\n    Return an <OK: status> for the <log>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

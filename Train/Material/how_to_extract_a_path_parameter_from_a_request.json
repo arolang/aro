@@ -1,0 +1,9 @@
+{
+  "prompt": "How to extract a path parameter from a request?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Extract ... from <pathParameters: name>`.\n\n```aro\n(getOrder: Orders API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where id = <id>.\n    Return an <OK: status> with <order>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

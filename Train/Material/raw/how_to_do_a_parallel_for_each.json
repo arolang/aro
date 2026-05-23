@@ -1,0 +1,13 @@
+{
+  "prompt": "How to do a parallel for-each?",
+  "slug": "how_to_do_a_parallel_for_each",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "`parallel for each <var> in <list> { ... }`.\n\n```aro\n(ParallelForEach: Example) {\n    Create the <items> with [1, 2, 3].\n    parallel for each <i> in <items> {\n        Log <i> to the <console>.\n    }\n    Return an <OK: status> for the <loop>.\n}\n```",
+  "elapsed_s": 4.0,
+  "returncode": 0,
+  "timed_out": false
+}

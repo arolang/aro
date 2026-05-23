@@ -1,0 +1,13 @@
+{
+  "prompt": "Insert a Compute step that doubles a value between Extract and Return.",
+  "slug": "insert_a_compute_step_that_doubles_a_value_between_extract_a",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 *<value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Between `Extract the <n> from ...` and the `Return`, add `Compute the <doubled> from <n> * 2.` and pass `<doubled>` to the Return.",
+  "elapsed_s": 18.1,
+  "returncode": 0,
+  "timed_out": false
+}

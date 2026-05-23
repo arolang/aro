@@ -1,0 +1,9 @@
+{
+  "prompt": "How to divide two numbers?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Compute` action with `/`.\n\n```aro\n(Divide: Example) {\n    Compute the <quotient> from <a> / <b>.\n    Return an <OK: status> with <quotient>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

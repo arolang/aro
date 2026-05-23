@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me an ARO Application-Start that starts an HTTP server.",
+  "slug": "show_me_an_aro_application_start_that_starts_an_http_server",
+  "actual": "```aro\n(Application-Start: HTTP Server) {\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an<OK: status> for the <startup>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Application-Start: HTTP Server) {\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an<OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Application-Start: API) {\n    Log \"starting\" to the <console>.\n    Start the <http-server> with {}.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 5.1,
+  "returncode": 0,
+  "timed_out": false
+}

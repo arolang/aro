@@ -1,0 +1,13 @@
+{
+  "prompt": "Why is `String concatenation: ++` (not `+`)?",
+  "slug": "why_is_string_concatenation_not",
+  "actual": "In ARO, `String concatenation` uses `++` instead of `+` because `+` is reserved for arithmetic addition. This design choice ensures that the syntax remains unambiguous and avoids conflicts with arithmetic operations. For example, `a + b` could mean either string concatenation or arithmetic addition, which could lead to confusion. By using `++`, the language makes it clear that the operation is string concatenation.",
+  "model_raw": "<think>\n\n</think>\n\nIn ARO, `String concatenation` uses `++` instead of `+` because `+` is reserved for arithmetic addition. This design choice ensures that the syntax remains unambiguous and avoids conflicts with arithmetic operations. For example, `a + b` could mean either string concatenation or arithmetic addition, which could lead to confusion. By using `++`, the language makes it clear that the operation is string concatenation.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "`+` is reserved for numeric addition. `++` is the string-concatenation operator, distinct so `\"1\" + \"2\"` doesn't silently produce `\"12\"` when you meant `3`. Use `<left> ++ <right>` for strings.",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

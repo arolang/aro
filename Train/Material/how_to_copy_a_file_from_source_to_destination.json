@@ -1,0 +1,9 @@
+{
+  "prompt": "How to copy a file from source to destination?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(CopyFile: Example) {\n    Create the <src> with \"in.txt\".\n    Create the <dst> with \"out.txt\".\n    Copy the <file: src> to the <destination: dst>.\n    Return an <OK: status> for the <copy>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

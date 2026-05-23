@@ -1,0 +1,13 @@
+{
+  "prompt": "How to handle a POST route?",
+  "slug": "how_to_handle_a_post_route",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Same naming convention as GET — the feature-set name matches the operationId. Use `Extract` to pull the body.\n\n```aro\n(createUser: User API) {\n    Extract the <data> from the <request: body>.\n    Create the <user> with <data>.\n    Emit a <UserCreated: event> with <user>.\n    Return a <Created: status> with <user>.\n}\n```",
+  "elapsed_s": 2.7,
+  "returncode": 0,
+  "timed_out": false
+}

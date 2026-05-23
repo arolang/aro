@@ -1,0 +1,13 @@
+{
+  "prompt": "How to validate input data?",
+  "slug": "how_to_validate_input_data",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use a `when` guard to Throw on bad input.\n\n```aro\n(ValidateInput: Example) {\n    Create the <name> with \"\".\n    Throw a <BadRequest: status> with \"name is required\" when <name> == \"\".\n    Return an <OK: status> with <name>.\n}\n```",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

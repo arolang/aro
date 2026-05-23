@@ -1,0 +1,13 @@
+{
+  "prompt": "Remove the unused Log statement from this feature set.",
+  "slug": "remove_the_unused_log_statement_from_this_feature_set",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Delete the Log line. ARO doesn't require a Log to keep a binding alive — bindings flow through subsequent statements regardless.",
+  "elapsed_s": 19.1,
+  "returncode": 0,
+  "timed_out": false
+}

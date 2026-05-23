@@ -1,0 +1,9 @@
+{
+  "prompt": "ARO snippet that uses a state machine to model an order lifecycle.",
+  "actual": "```aro\n(Order Lifecycle: OrderStateMachine) {\n    Create the <order> with the <status: pending>.\n    When the <order: status> is <pending> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <processing> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <complete> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <cancelled> {\n        Return the<OK: status> for the <order>.\n    }\n    Return the<OK: status> for the <order>.\n}\n```",
+  "expected": "```aro\n(Advance Order: Orders) {\n    Extract the <order> from the <input>.\n    Accept the <transition> for the <order> with \"shipped\".\n    Return an <OK: status> with <order>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the union of two sets?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `union` qualifier with `Compute`.\n\n```aro\n(Combine: Example) {\n    Compute the <combined: union> from the <set-a> and the <set-b>.\n    Return an <OK: status> with <combined>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

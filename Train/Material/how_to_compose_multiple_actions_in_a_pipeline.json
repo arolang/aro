@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compose multiple actions in a pipeline?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "ARO supports an implicit pipeline: chain Compute/Filter/Reduce on a list and the runtime fuses them.\n\n```aro\n(Pipeline: Example) {\n    Create the <numbers> with [1, 2, 3, 4, 5].\n    Compute the <doubled> from <numbers>.\n    Reduce the <total: Integer> from the <doubled> with sum().\n    Return an <OK: status> with <total>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

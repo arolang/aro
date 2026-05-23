@@ -1,0 +1,9 @@
+{
+  "prompt": "Help me with ARO.",
+  "actual": "Hello! I'm here to help with ARO questions, code reviews, debugging, and more. How can I assist you today?",
+  "expected": "Sure — what do you want help with? A feature set, an HTTP route, an event handler, a repository, debugging an error? Paste the prompt or the code and I'll work through it.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

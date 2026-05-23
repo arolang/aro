@@ -1,0 +1,9 @@
+{
+  "prompt": "How to send an HTTP POST request?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Request` with method POST and a body.\n\n```aro\n(PostJSON: Example) {\n    Create the <url> with \"https://example.com/api\".\n    Create the <payload> with { name: \"Ada\" }.\n    Request the <response> from the <http-client> at <url> with <payload>.\n    Return an <OK: status> with <response>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

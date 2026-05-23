@@ -1,0 +1,13 @@
+{
+  "prompt": "How to watch a directory for file changes?",
+  "slug": "how_to_watch_a_directory_for_file_changes",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Start the `<file-monitor>` and add a `File Event Handler` feature set to react.\n\n```aro\n(Application-Start: Watcher) {\n    Start the <file-monitor> with { directory: \".\" }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

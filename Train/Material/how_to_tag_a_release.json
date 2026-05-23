@@ -1,0 +1,9 @@
+{
+  "prompt": "How to tag a release?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Tag: Example) {\n    Tag the <release> for the <git> with \"v1.0.0\".\n    Return an <OK: status> with <release>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

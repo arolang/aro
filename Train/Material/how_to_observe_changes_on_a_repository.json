@@ -1,0 +1,9 @@
+{
+  "prompt": "How to observe changes on a repository?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Name the feature set `(name: <repo> Observer)` and Extract from `<event: …>`.\n\n```aro\n(Audit Items: item-repository Observer) {\n    Extract the <item> from the <event: item>.\n    Log <item> to the <console>.\n    Return an <OK: status> for the <audit>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

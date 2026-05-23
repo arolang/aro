@@ -1,0 +1,13 @@
+{
+  "prompt": "Does ARO support concurrency?",
+  "slug": "does_aro_support_concurrency",
+  "actual": "```aro\n(AsyncHandler: HandleEvent) {\n    Extract the <event> from the <event: event>.\n    async HandleEvent {\n        await HandleEventAsync();\n    }\n    Return an<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nYes, ARO supports concurrency through its event-driven architecture and asynchronous execution model. While ARO itself does not expose concurrency constructs like threads or goroutines directly, it provides a declarative model that makes it easy to write concurrent applications.\n\nFor example, ARO supports event-driven concurrency by allowing you to define event handlers that react to events asynchronously. This makes it easy to build reactive systems that can handle multiple concurrent events.\n\nAdditionally, ARO supports asynchronous execution through its `async` and `await` keywords. This allows you to write asynchronous code that can handle multiple concurrent operations without blocking the execution of other code.\n\nFor example, the following code defines an event handler that asynchronously handles events:\n```aro\n(AsyncEvent Handler: HandleEvent) {\n    async HandleEvent {\n        await HandleEventAsync();\n    }\n}\n```\nThis code defines an event handler that asynchronously handles events. The `await` keyword ensures that the event handler does not block the execution of other code while it handles events.\n\nOverall, ARO provides a powerful model for writing concurrent applications that can handle multiple concurrent events without blocking the execution of other code.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Yes. Actions execute lazily and overlap by default — independent results run in parallel on a dedicated `ActionTaskExecutor`. Effects (Log, Store, Emit, Commit) keep source order. `parallel for each` runs loop iterations concurrently with a configurable cap.",
+  "elapsed_s": 17.6,
+  "returncode": 0,
+  "timed_out": false
+}

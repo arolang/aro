@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me an Application-End handler for graceful shutdown.",
+  "slug": "show_me_an_application_end_handler_for_graceful_shutdown",
+  "actual": "```aro\n(Application-End: GracefulShutdown) {\n    Log \"Application is shutting down gracefully.\" to the <console>.\n    Return an<OK: status> for the <shutdown>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Application-End: GracefulShutdown) {\n    Log \"Application is shutting down gracefully.\" to the <console>.\n    Return an<OK: status> for the <shutdown>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Application-End: Success) {\n    Log \"shutting down\" to the <console>.\n    Stop the <http-server> with <application>.\n    Return an <OK: status> for the <shutdown>.\n}\n```",
+  "elapsed_s": 5.2,
+  "returncode": 0,
+  "timed_out": false
+}

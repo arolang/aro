@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compare two values?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Compare` action.\n\n```aro\n(CompareTwo: Example) {\n    Create the <left> with 10.\n    Create the <right> with 15.\n    Compare the <result> against <left> with <right>.\n    Return an <OK: status> with <result>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the intersection of two sets?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Compute` with the `intersect` qualifier.\n\n```aro\n(Intersect: Example) {\n    Create the <a> with [1, 2, 3].\n    Create the <b> with [2, 3, 4].\n    Compute the <common: intersect> from <a> with <b>.\n    Return an <OK: status> with <common>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

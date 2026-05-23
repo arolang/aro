@@ -1,0 +1,13 @@
+{
+  "prompt": "Are there any deprecated actions I should avoid?",
+  "slug": "are_there_any_deprecated_actions_i_should_avoid",
+  "actual": "No, there are no deprecated actions in ARO. All built-in actions are current and should be used. The `Store` action is a built-in action that is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository.",
+  "model_raw": "<think>\n\n</think>\n\nNo, there are no deprecated actions in ARO. All built-in actions are current and should be used. The `Store` action is a built-in action that is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Avoid the old eager-execution `Force` and the `ARO_LAZY_ACTIONS` flag — both removed in 0.10. `aro lm` is also gone; use `aro ask` instead.",
+  "elapsed_s": 6.4,
+  "returncode": 0,
+  "timed_out": false
+}

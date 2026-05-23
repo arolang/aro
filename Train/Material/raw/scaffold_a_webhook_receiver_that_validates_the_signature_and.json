@@ -1,0 +1,13 @@
+{
+  "prompt": "Scaffold a webhook receiver that validates the signature and stores the event.",
+  "slug": "scaffold_a_webhook_receiver_that_validates_the_signature_and",
+  "actual": "",
+  "model_raw": "<think>",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "```aro\n(receiveWebhook: Webhooks API) {\n    Extract the <signature> from the <request: headers/x-signature>.\n    Extract the <payload> from the <request: body>.\n    Throw a <Unauthorized: status> with \"bad signature\" when <signature> == \"\".\n    Store the <payload> into the <webhook-repository>.\n    Return an <OK: status> for the <reception>.\n}\n```",
+  "elapsed_s": 6.1,
+  "returncode": 0,
+  "timed_out": false
+}

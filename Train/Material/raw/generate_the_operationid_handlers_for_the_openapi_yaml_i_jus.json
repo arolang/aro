@@ -1,0 +1,13 @@
+{
+  "prompt": "Generate the operationId handlers for the openapi.yaml I just gave you.",
+  "slug": "generate_the_operationid_handlers_for_the_openapi_yaml_i_jus",
+  "actual": "",
+  "model_raw": "<think>\n\n</think>",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "I need the openapi.yaml content to generate the handlers. Paste it and I'll write one feature set per `operationId`, named to match.",
+  "elapsed_s": 15.0,
+  "returncode": 0,
+  "timed_out": false
+}

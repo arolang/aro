@@ -1,0 +1,13 @@
+{
+  "prompt": "How to copy a file from source to destination?",
+  "slug": "how_to_copy_a_file_from_source_to_destination",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(CopyFile: Example) {\n    Create the <src> with \"in.txt\".\n    Create the <dst> with \"out.txt\".\n    Copy the <file: src> to the <destination: dst>.\n    Return an <OK: status> for the <copy>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

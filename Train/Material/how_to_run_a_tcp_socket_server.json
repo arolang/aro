@@ -1,0 +1,9 @@
+{
+  "prompt": "How to run a TCP socket server?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Application-Start: Echo Server) {\n    Start the <socket-server> with { port: 9000 }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

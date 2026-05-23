@@ -1,0 +1,13 @@
+{
+  "prompt": "The compiler complains \"is-valid\" is an invalid identifier. What's wrong and how do I fix it?",
+  "slug": "the_compiler_complains_is_valid_is_an_invalid_identifier_wha",
+  "actual": "```aro\n(Validate: Example) {\n    Extract the <is-valid> from the <request: query>.\n    Return an<OK: status> with <is-valid>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe identifier `is-valid` is invalid because ARO identifiers must be in angle brackets (`<identifier>`), not in the format `is-valid`. ARO identifiers are reserved words that represent result names, object names, or qualifiers, and they must be enclosed in angle brackets.\n\nFor example, instead of writing `is-valid`, you should write <is-valid>`.\n\n```aro\n(Validate: Example) {\n    Extract the <is-valid> from the <request: query>.\n    Return an<OK: status> with <is-valid>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "ARO forbids the `is-`, `with-`, and `empty-` prefixes for variable names (they read like adjectives, not nouns, and conflict with `is` in where-clauses). Rename to a noun form: `<validity>`, `<valid-flag>`, or `<validated>`.",
+  "elapsed_s": 15.2,
+  "returncode": 0,
+  "timed_out": false
+}

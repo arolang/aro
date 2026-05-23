@@ -1,0 +1,9 @@
+{
+  "prompt": "How to iterate over a list?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use a `For-each` block.\n\n```aro\n(Process Items: Example) {\n    For-each <item> in the <items> {\n        Log <item> to the <console>.\n    }\n    Return an <OK: status> for the <processing>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

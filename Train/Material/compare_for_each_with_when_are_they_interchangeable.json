@@ -1,0 +1,9 @@
+{
+  "prompt": "Compare `For-each` with `When` — are they interchangeable?",
+  "actual": "No, `For-each` and `When` are not interchangeable in ARO. They serve different purposes and are used in different contexts.\n\n1. **For-each**:\n   - `For-each` is used to iterate over a collection of items. It executes the same set of actions for each item in the collection.\n   - It is used when you want to process each item in a collection individually.\n   - Example: `For each <line> in the <file> { ... }`\n\n2. **When**:\n   - `When` is used to conditionally execute a block of actions based on a condition. It executes the actions only if the condition evaluates to true.\n   - It is used when you want to execute different actions based on different conditions.\n   - Example: `When the <status> is<OK> { ... }`\n\nIn summary, `For-each` is used to iterate over a collection, while `When` is used to conditionally execute actions based on a condition.",
+  "expected": "No. `for each` iterates over a collection; `when` gates a single statement on a condition. You can combine: `for each <x> in <xs> where <x: active> is true { ... }` iterates only matching elements.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

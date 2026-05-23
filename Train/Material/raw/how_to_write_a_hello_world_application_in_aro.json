@@ -1,0 +1,13 @@
+{
+  "prompt": "How to write a hello world application in ARO?",
+  "slug": "how_to_write_a_hello_world_application_in_aro",
+  "actual": "",
+  "model_raw": "<think>\n\n</think>",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "An ARO application needs exactly one `Application-Start` feature set.\n\n```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 3.2,
+  "returncode": 0,
+  "timed_out": false
+}

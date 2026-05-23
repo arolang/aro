@@ -1,0 +1,9 @@
+{
+  "prompt": "Which built-in actions are EXPORT role?",
+  "actual": "The built-in actions with the `export` role are used to send data back to external systems, clients, or services. They format and send responses, events, or data to external endpoints. The built-in actions with the `export` role are:\n\n1. `Return`\n2. `Emit`\n3. `Publish`\n4. `Write`\n5. `WriteFile`\n6. `WriteLog`\n7. `WriteTo`\n8. `WriteJson`\n9. `WriteXml`\n10. `WriteCsv`\n11. `WriteYaml`\n\nThese actions are used to send structured data back to clients, external services, or to write data to files or logs.",
+  "expected": "Internal → External: Publish, Store, Log, Send, Emit, Commit, Push, Tag, Stage, Write.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

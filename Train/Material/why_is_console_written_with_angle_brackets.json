@@ -1,0 +1,9 @@
+{
+  "prompt": "Why is `<console>` written with angle brackets?",
+  "actual": "The angle brackets (`< >`) are used to denote a qualifier in ARO. The qualifier <console>` represents a specific sink where output is directed, such as the console. The angle brackets are part of ARO's syntax to indicate that `console` is a qualifier, not a literal string.",
+  "expected": "`<console>` is a system object — same syntax as every other identifier in ARO. The angle brackets mark it as a referenceable name (vs. a literal). Bare `Console` would be parsed as an identifier expecting a binding, not a system reference. Consistency: every variable and system object uses `<lowercase>` form.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

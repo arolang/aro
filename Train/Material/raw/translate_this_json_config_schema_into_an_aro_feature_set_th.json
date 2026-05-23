@@ -1,0 +1,13 @@
+{
+  "prompt": "Translate this JSON config schema into an ARO feature set that loads it.",
+  "slug": "translate_this_json_config_schema_into_an_aro_feature_set_th",
+  "actual": "The JSON config schema defines a configuration structure with a `title`, `description`, and `version`. The goal is to load this configuration into an ARO feature set. The `Load` action is used to load configuration data from a file or a string.\n\n```aro\n(LoadConfig: Load Config Schema) {\n    Load the <config> from the <file: config.json>.\n    Return an<OK: status> for the <config>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe JSON config schema defines a configuration structure with a `title`, `description`, and `version`. The goal is to load this configuration into an ARO feature set. The `Load` action is used to load configuration data from a file or a string.\n\n```aro\n(LoadConfig: Load Config Schema) {\n    Load the <config> from the <file: config.json>.\n    Return an<OK: status> for the <config>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "Paste the schema. The generic shape is: `Read the <config> from the <file: \"config.json\">.` followed by `Extract` per field per the schema.",
+  "elapsed_s": 6.4,
+  "returncode": 0,
+  "timed_out": false
+}

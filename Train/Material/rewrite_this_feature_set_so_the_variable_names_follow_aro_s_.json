@@ -1,0 +1,9 @@
+{
+  "prompt": "Rewrite this feature set so the variable names follow ARO's hyphenated lowercase convention.",
+  "actual": "```aro\n(Compute: Message Length) {\n    Extract the <message> from the <request: body>.\n    Compute the <length> from the <message>.\n    Return an<OK: status> with the <length>.\n}\n```",
+  "expected": "Replace any camelCase/PascalCase/snake_case names with hyphenated lowercase: `<userName>` → `<user-name>`, `<order_id>` → `<order-id>`, `<TotalAmount>` → `<total-amount>`.",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "has_canonical_answer": true
+}

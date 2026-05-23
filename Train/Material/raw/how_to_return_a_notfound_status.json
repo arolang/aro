@@ -1,0 +1,13 @@
+{
+  "prompt": "How to return a NotFound status?",
+  "slug": "how_to_return_a_notfound_status",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(Missing: Example) {\n    Return a <NotFound: status> for the <lookup>.\n}\n```",
+  "elapsed_s": 2.8,
+  "returncode": 0,
+  "timed_out": false
+}

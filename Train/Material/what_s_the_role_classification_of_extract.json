@@ -1,0 +1,9 @@
+{
+  "prompt": "What's the role classification of `Extract`?",
+  "actual": "The `Extract` action is classified as a `request` role in ARO. It is used to extract values from incoming data sources such as request bodies, query parameters, headers, or event data. The `Extract` action is typically used in the first stage of processing an HTTP request or event, where data is pulled from the incoming payload into variables that can be used in subsequent actions like `Store`, `Compute`, or `Return`.",
+  "expected": "OWN role — Extract works on already-internal data: pulling a field from an object, or extracting from a structured input like `<request: body>` that the runtime already materialised.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

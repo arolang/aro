@@ -1,0 +1,13 @@
+{
+  "prompt": "Idiomatic ARO for: \"deduplicate a list of records by id, keeping the latest\".",
+  "slug": "idiomatic_aro_for_deduplicate_a_list_of_records_by_id_keepin",
+  "actual": "```aro\n(Deduplicate Records: Dedup) {\n    Extract the <records> from the <input>.\n    Sort the <records> by the <id> descending.\n    Deduplicate the <records> by the <id>.\n    Return the<OK: status> with the <records>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Deduplicate Records: Dedup) {\n    Extract the <records> from the <input>.\n    Sort the <records> by <id> descending.\n    Deduplicate the <records> by <id>.\n    Return the<OK: status> with the <records>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Group by id then take the last record of each group.\n\n```aro\n(Dedup: Example) {\n    Create the <records> with [{ id: 1, v: \"old\" }, { id: 1, v: \"new\" }].\n    Group the <by-id> from <records> by id.\n    Return an <OK: status> with <by-id>.\n}\n```",
+  "elapsed_s": 22.2,
+  "returncode": 0,
+  "timed_out": false
+}

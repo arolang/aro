@@ -1,0 +1,9 @@
+{
+  "prompt": "Idiomatic ARO for: \"watch ./inbox for new .csv files and import them\".",
+  "actual": "```aro\n(Watch Inbox: CsvImporter) {\n    Watch the <inbox> for the <csv: file>.\n    For each <file> in the <inbox> {\n        Read the <file> from the <csv: file>.\n        Parse the <file> into the <records>.\n        Store the <records> into the <repository>.\n    }\n    Return an<OK: status> for the <import>.\n}\n```",
+  "expected": "```aro\n(Application-Start: CSV Importer) {\n    Start the <file-monitor> with { directory: \"./inbox\" }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Import CSV: File Event Handler) {\n    Extract the <path> from the <event: path>.\n    Read the <rows> from the <file: path>.\n    for each <row> in <rows> {\n        Store the <row> into the <row-repository>.\n    }\n    Return an <OK: status> for the <import>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

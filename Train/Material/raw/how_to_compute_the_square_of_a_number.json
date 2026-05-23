@@ -1,0 +1,13 @@
+{
+  "prompt": "How to compute the square of a number?",
+  "slug": "how_to_compute_the_square_of_a_number",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Multiply the number by itself.\n\n```aro\n(Square: Example) {\n    Create the <n> with 7.\n    Compute the <squared> from <n> * <n>.\n    Return an <OK: status> with <squared>.\n}\n```",
+  "elapsed_s": 4.5,
+  "returncode": 0,
+  "timed_out": false
+}

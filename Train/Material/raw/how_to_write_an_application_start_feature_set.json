@@ -1,0 +1,13 @@
+{
+  "prompt": "How to write an Application-Start feature set?",
+  "slug": "how_to_write_an_application_start_feature_set",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Exactly one per application. It's the entry point.\n\n```aro\n(Application-Start: My App) {\n    Log \"Starting...\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

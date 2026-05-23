@@ -1,0 +1,13 @@
+{
+  "prompt": "How to publish a variable across feature sets?",
+  "slug": "how_to_publish_a_variable_across_feature_sets",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Publish` action — other feature sets can then read the published variable.\n\n```aro\n(PublishGreeting: Example) {\n    Create the <greeting> with \"Hello\".\n    Publish as <welcome> <greeting>.\n    Return an <OK: status> with <greeting>.\n}\n```",
+  "elapsed_s": 2.6,
+  "returncode": 0,
+  "timed_out": false
+}

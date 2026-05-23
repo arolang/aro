@@ -1,0 +1,13 @@
+{
+  "prompt": "ARO snippet that uses a state machine to model an order lifecycle.",
+  "slug": "aro_snippet_that_uses_a_state_machine_to_model_an_order_life",
+  "actual": "```aro\n(Order Lifecycle: OrderStateMachine) {\n    Create the <order> with the <status: pending>.\n    When the <order: status> is <pending> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <processing> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <complete> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <cancelled> {\n        Return the<OK: status> for the <order>.\n    }\n    Return the<OK: status> for the <order>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Order Lifecycle: OrderStateMachine) {\n    Create the <order> with the <status: pending>.\n    When the <order: status> is <pending> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <processing> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <complete> {\n        Return the<OK: status> for the <order>.\n    }\n    When the <order: status> is <cancelled> {\n        Return the<OK: status> for the <order>.\n    }\n    Return the<OK: status> for the <order>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "```aro\n(Advance Order: Orders) {\n    Extract the <order> from the <input>.\n    Accept the <transition> for the <order> with \"shipped\".\n    Return an <OK: status> with <order>.\n}\n```",
+  "elapsed_s": 30.2,
+  "returncode": 0,
+  "timed_out": false
+}

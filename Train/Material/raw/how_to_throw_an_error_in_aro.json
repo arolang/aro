@@ -1,0 +1,13 @@
+{
+  "prompt": "How to throw an error in ARO?",
+  "slug": "how_to_throw_an_error_in_aro",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Throw` action with a status and message.\n\n```aro\n(Fail: Example) {\n    Throw a <InternalError: status> with \"something broke\".\n}\n```",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

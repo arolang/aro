@@ -1,0 +1,9 @@
+{
+  "prompt": "How to chain transformations on a list?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Multiple Compute/Reduce calls in sequence — the runtime fuses them automatically.\n\n```aro\n(ChainTransforms: Example) {\n    Create the <values> with [10, 20, 30].\n    Compute the <scaled: sort> from <values>.\n    Reduce the <total: Integer> from the <scaled> with sum().\n    Return an <OK: status> with <total>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

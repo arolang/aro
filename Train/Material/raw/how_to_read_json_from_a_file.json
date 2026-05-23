@@ -1,0 +1,13 @@
+{
+  "prompt": "How to read JSON from a file?",
+  "slug": "how_to_read_json_from_a_file",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(ReadJSON: Example) {\n    Create the <path> with \"data.json\".\n    Read the <data> from the <file: path>.\n    Return an <OK: status> with <data>.\n}\n```",
+  "elapsed_s": 2.8,
+  "returncode": 0,
+  "timed_out": false
+}

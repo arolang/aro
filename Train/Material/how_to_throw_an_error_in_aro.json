@@ -1,0 +1,9 @@
+{
+  "prompt": "How to throw an error in ARO?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Throw` action with a status and message.\n\n```aro\n(Fail: Example) {\n    Throw a <InternalError: status> with \"something broke\".\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

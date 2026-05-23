@@ -1,0 +1,9 @@
+{
+  "prompt": "How to read environment variables?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Extract ... from <environment: NAME>`.\n\n```aro\n(ReadEnv: Example) {\n    Extract the <home> from the <environment: HOME>.\n    Return an <OK: status> with <home>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

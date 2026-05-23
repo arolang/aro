@@ -1,0 +1,13 @@
+{
+  "prompt": "How to sum two numbers?",
+  "slug": "how_to_sum_two_numbers",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Compute` action with a `+` expression. Both operands must be `<bracketed>` variables or literals.\n\n```aro\n(Sum Numbers: Example) {\n    Compute the <sum> from <a> + <b>.\n    Return an <OK: status> with <sum>.\n}\n```\n\nNote: `Compute` uses the `from` preposition, and there is no `<request>` because this is a plain action, not an HTTP handler.",
+  "elapsed_s": 2.8,
+  "returncode": 0,
+  "timed_out": false
+}

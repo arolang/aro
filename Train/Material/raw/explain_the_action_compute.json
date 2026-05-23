@@ -1,0 +1,13 @@
+{
+  "prompt": "Explain the Action Compute.",
+  "slug": "explain_the_action_compute",
+  "actual": "",
+  "model_raw": "",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "`Compute` is the OWN-role action that derives a new immutable value from existing data. It takes a source and an operation: arithmetic (`+`, `-`, `*`, `/`, `%`), a qualifier (`length`, `uppercase`, `lowercase`, `hash`, `sort`, `reverse`, `union`, `intersect`, `difference`), or string concat (`++`). Result is bound to the angle-bracketed name on the left.",
+  "elapsed_s": 303.3,
+  "returncode": -1,
+  "timed_out": true
+}

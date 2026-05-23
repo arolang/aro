@@ -1,0 +1,13 @@
+{
+  "prompt": "Best practice: where should I put my openapi.yaml in a multi-file app?",
+  "slug": "best_practice_where_should_i_put_my_openapi_yaml_in_a_multi_",
+  "actual": "The `openapi.yaml` file should be placed in the root directory of your ARO application. This is because the `openapi.yaml` file defines the API contract, and placing it in the root makes it easily accessible to both the application and external clients. The root directory is typically where the main application files are located, making it a logical place for the `openapi.yaml` file.\n\nFor example, if your application has the following structure:\n\n```\nmy-app/\n├── openapi.yaml\n├── main.aro\n├── routes.aro\n└── models.aro\n```\n\nThe `openapi.yaml` file is placed in the root directory (`my-app/`) so that it can be referenced by the application and by external clients.",
+  "model_raw": "<think>\n\n</think>\n\nThe `openapi.yaml` file should be placed in the root directory of your ARO application. This is because the `openapi.yaml` file defines the API contract, and placing it in the root makes it easily accessible to both the application and external clients. The root directory is typically where the main application files are located, making it a logical place for the `openapi.yaml` file.\n\nFor example, if your application has the following structure:\n\n```\nmy-app/\n├── openapi.yaml\n├── main.aro\n├── routes.aro\n└── models.aro\n```\n\nThe `openapi.yaml` file is placed in the root directory (`my-app/`) so that it can be referenced by the application and by external clients.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "In the application root, next to `main.aro`. The runtime looks there first; subdirectories under `sources/` aren't scanned for it.",
+  "elapsed_s": 4.5,
+  "returncode": 0,
+  "timed_out": false
+}

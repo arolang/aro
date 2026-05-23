@@ -1,0 +1,13 @@
+{
+  "prompt": "How to use a plugin qualifier?",
+  "slug": "how_to_use_a_plugin_qualifier",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Plugin qualifiers are namespaced — call as `<value: handle.qualifier>`.\n\n```aro\n(PickRandom: Example) {\n    Create the <items> with [\"a\", \"b\", \"c\"].\n    Compute the <pick: collections.pick-random> from <items>.\n    Return an <OK: status> with <pick>.\n}\n```",
+  "elapsed_s": 4.3,
+  "returncode": 0,
+  "timed_out": false
+}

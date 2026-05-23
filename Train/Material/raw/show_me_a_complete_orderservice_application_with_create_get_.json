@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me a complete OrderService application with create / get / list routes.",
+  "slug": "show_me_a_complete_orderservice_application_with_create_get_",
+  "actual": "```aro\n(OrderService: OrderService) {\n    Extract the <orderId> from the <request: pathParameters>.\n    Return the<OK: status> for the <result>.\n}\n\n(OrderService: CreateOrder) {\n    Extract the <order> from the <request: body>.\n    Store the <order> into the <order-repository>.\n    Return the<OK: status> with the <order>.\n}\n\n(OrderService: GetOrder) {\n    Extract the <orderId> from the <request: pathParameters>.\n    Retrieve the <order> from the <order-repository> where id =<orderId>.\n    Return the<OK: status> with the <order>.\n}\n\n(OrderService: ListOrders) {\n    Retrieve all <orders> from the <order-repository>.\n    Return the<OK: status> with the <orders>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(OrderService: OrderService) {\n    Extract the <orderId> from the <request: pathParameters>.\n    Return the<OK: status> for the <result>.\n}\n\n(OrderService: CreateOrder) {\n    Extract the <order> from the <request: body>.\n    Store the <order> into the <order-repository>.\n    Return the<OK: status> with the <order>.\n}\n\n(OrderService: GetOrder) {\n    Extract the <orderId> from the <request: pathParameters>.\n    Retrieve the <order> from the <order-repository> where id =<orderId>.\n    Return the<OK: status> with the <order>.\n}\n\n(OrderService: ListOrders) {\n    Retrieve all <orders> from the <order-repository>.\n    Return the<OK: status> with the <orders>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "```yaml\n# openapi.yaml\nopenapi: 3.0.3\ninfo: { title: Orders, version: 1.0.0 }\npaths:\n  /orders:\n    get:  { operationId: listOrders }\n    post: { operationId: createOrder }\n  /orders/{id}:\n    get:  { operationId: getOrder }\n```\n```aro\n(Application-Start: Orders) {\n    Start the <http-server> with {}.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(listOrders: Orders) {\n    Retrieve the <orders> from the <order-repository>.\n    Return an <OK: status> with <orders>.\n}\n\n(createOrder: Orders) {\n    Extract the <order> from the <request: body>.\n    Store the <order> into the <order-repository>.\n    Return a <Created: status> with <order>.\n}\n\n(getOrder: Orders) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where <id> is <id>.\n    Return an <OK: status> with <order>.\n}\n```",
+  "elapsed_s": 31.5,
+  "returncode": 0,
+  "timed_out": false
+}

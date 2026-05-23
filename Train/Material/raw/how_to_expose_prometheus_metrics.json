@@ -1,0 +1,13 @@
+{
+  "prompt": "How to expose Prometheus metrics?",
+  "slug": "how_to_expose_prometheus_metrics",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Configure the metrics endpoint and the HTTP server scrapes from `<metrics>` automatically.\n\n```aro\n(Application-Start: Service) {\n    Configure the <metrics> with { path: \"/metrics\" }.\n    Start the <http-server> with {}.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 4.4,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Why does every feature set need a Return or Throw?",
+  "actual": "Every feature set needs a `Return` or `Throw` because it ensures that the application has a defined outcome. The `Return` action specifies the result of the feature set, such as a status code and data, while the `Throw` action signals an error condition. This makes the application predictable and ensures that all execution paths have a clear endpoint.",
+  "expected": "Every feature set produces a status object that the runtime hands back to whatever invoked it (HTTP response, event ack, action result). `Return` produces a success path; `Throw` produces a failure path with a status code. The compiler rejects feature sets that fall off the end — there's no implicit \"nothing\" status, because every caller needs to know what happened.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

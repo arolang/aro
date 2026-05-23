@@ -1,0 +1,13 @@
+{
+  "prompt": "Give me the canonical ARO hello world.",
+  "slug": "give_me_the_canonical_aro_hello_world",
+  "actual": "```aro\n(Return: Hello World) {\n    Return the<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Return: Hello World) {\n    Return the<OK: status> for the <result>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 3.9,
+  "returncode": 0,
+  "timed_out": false
+}

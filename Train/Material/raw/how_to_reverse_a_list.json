@@ -1,0 +1,13 @@
+{
+  "prompt": "How to reverse a list?",
+  "slug": "how_to_reverse_a_list",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `reverse` qualifier on `Compute`.\n\n```aro\n(ReverseList: Example) {\n    Create the <items> with [1, 2, 3].\n    Compute the <reversed: reverse> from <items>.\n    Return an <OK: status> with <reversed>.\n}\n```",
+  "elapsed_s": 2.4,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to checkout a branch?",
+  "slug": "how_to_checkout_a_branch",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(Checkout: Example) {\n    Checkout the <branch> from the <git> with \"feature/x\".\n    Return an <OK: status> with <branch>.\n}\n```",
+  "elapsed_s": 3.8,
+  "returncode": 0,
+  "timed_out": false
+}

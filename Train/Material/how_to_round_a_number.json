@@ -1,0 +1,9 @@
+{
+  "prompt": "How to round a number?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `round` qualifier.\n\n```aro\n(Round: Example) {\n    Create the <x> with 3.7.\n    Compute the <r: round> from <x>.\n    Return an <OK: status> with <r>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

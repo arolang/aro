@@ -1,0 +1,9 @@
+{
+  "prompt": "Quick sanity check: can I have two `Application-Start` feature sets in one app?",
+  "actual": "No, you cannot have two `Application-Start` feature sets in one ARO application. The `Application-Start` feature set is a special feature set that runs once when the application starts. It is used to initialize the application and set up any required services or state. Only one `Application-Start` feature set is allowed per application.",
+  "expected": "No. Exactly one `Application-Start` per application — the compiler errors out on zero or more than one.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

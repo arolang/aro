@@ -1,0 +1,9 @@
+{
+  "prompt": "The model wrote `Compute the <total> for the <items>` and aro check fails. Which preposition is wrong?",
+  "actual": "The error is due to the preposition `for` being used where `from` is expected. In ARO syntax, the `Compute` action uses `from` to indicate the source of the computation, not `for`.\n\n```aro\nCompute the <total> from the <items>.\n```",
+  "expected": "`Compute` takes `from`, not `for`. Fixed: `Compute the <total> from the <items>` — but Compute also needs an operation, so probably you wanted `Reduce` instead: `Reduce the <total: Integer> from the <items> with sum().`",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "has_canonical_answer": true
+}

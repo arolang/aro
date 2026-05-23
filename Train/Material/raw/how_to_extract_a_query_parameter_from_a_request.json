@@ -1,0 +1,13 @@
+{
+  "prompt": "How to extract a query parameter from a request?",
+  "slug": "how_to_extract_a_query_parameter_from_a_request",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use `Extract ... from <queryParameters: name>`.\n\n```aro\n(searchUsers: Users API) {\n    Extract the <q> from the <queryParameters: q>.\n    Retrieve the <users> from the <user-repository>.\n    Return an <OK: status> with <users>.\n}\n```",
+  "elapsed_s": 2.7,
+  "returncode": 0,
+  "timed_out": false
+}

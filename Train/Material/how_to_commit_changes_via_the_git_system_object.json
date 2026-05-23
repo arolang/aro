@@ -1,0 +1,9 @@
+{
+  "prompt": "How to commit changes via the git system object?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Commit ... to the <git>`.\n\n```aro\n(Commit Work: Example) {\n    Commit the <result> to the <git> with \"chore: update\".\n    Return an <OK: status> with <result>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

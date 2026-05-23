@@ -1,0 +1,13 @@
+{
+  "prompt": "Find the bug: `(getUser: Users API) { Extract the <id> from the <pathParameters.id>. Return an <OK: status> with <id>. }`",
+  "slug": "find_the_bug_getuser_users_api_extract_the_id_from_the_pathp",
+  "actual": "The bug is that the `Extract` action uses the angle-bracketed result name <pathParameters.id>` without the required article `the`. In ARO, result names must be prefixed with `the`.\n\n```aro\n(getUser: Users API) {\n    Extract the <id> from the <pathParameters: id>.\n    Return an<OK: status> with <id>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe bug is that the `Extract` action uses the angle-bracketed result name <pathParameters.id>` without the required article `the`. In ARO, result names must be prefixed with `the`.\n\n```aro\n(getUser: Users API) {\n    Extract the <id> from the <pathParameters: id>.\n    Return an<OK: status> with <id>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "Dot notation isn't allowed inside angle brackets. Use the qualifier form: `<pathParameters: id>`. Fixed:\n\n```aro\n(getUser: Users API) {\n    Extract the <id> from the <pathParameters: id>.\n    Return an <OK: status> with <id>.\n}\n```",
+  "elapsed_s": 3.5,
+  "returncode": 0,
+  "timed_out": false
+}

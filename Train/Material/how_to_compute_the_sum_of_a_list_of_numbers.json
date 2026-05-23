@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the sum of a list of numbers?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Reduce` with `sum()`.\n\n```aro\n(SumList: Example) {\n    Create the <numbers> with [1, 2, 3].\n    Reduce the <total: Integer> from the <numbers> with sum().\n    Return an <OK: status> with <total>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

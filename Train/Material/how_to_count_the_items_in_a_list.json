@@ -1,0 +1,9 @@
+{
+  "prompt": "How to count the items in a list?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Reduce` with `count()`.\n\n```aro\n(CountItems: Example) {\n    Create the <items> with [1, 2, 3].\n    Reduce the <n: Integer> from the <items> with count().\n    Return an <OK: status> with <n>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

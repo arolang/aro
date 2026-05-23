@@ -1,0 +1,9 @@
+{
+  "prompt": "How to use git status in ARO?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Retrieve ... from the <git>`.\n\n```aro\n(Show Status: Example) {\n    Retrieve the <status> from the <git>.\n    Return an <OK: status> with <status>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

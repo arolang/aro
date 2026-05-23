@@ -1,0 +1,9 @@
+{
+  "prompt": "Help.",
+  "actual": "Hello! How can I assist you with ARO today?",
+  "expected": "I write and explain ARO code. Try: `aro ask \"write a hello world application\"` or `aro ask \"how do I extract a path parameter\"`. Slash commands: `/help`, `/fix <path>`, `/explain <path>`, `/openapi`.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

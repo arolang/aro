@@ -1,0 +1,13 @@
+{
+  "prompt": "How to read a file in ARO?",
+  "slug": "how_to_read_a_file_in_aro",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Read` action against the `<file-system>` system object.\n\n```aro\n(Read Config: Example) {\n    Read the <content> from the <file-system> at \"config.yaml\".\n    Return an <OK: status> with <content>.\n}\n```",
+  "elapsed_s": 1.9,
+  "returncode": 0,
+  "timed_out": false
+}

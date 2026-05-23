@@ -1,0 +1,13 @@
+{
+  "prompt": "Convert this synchronous file read into the lazy / future-based ARO pattern.",
+  "slug": "convert_this_synchronous_file_read_into_the_lazy_future_base",
+  "actual": "```aro\n(Read File: Lazy) {\n    Extract the <file-path> from the <request: query>.\n    Return a <file-content> from the <file-path>.\n}\n```",
+  "model_raw": "<think>",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "expected": "Lazy is already the default in ARO ≥0.10. Just write the Read normally; the runtime returns a future and forces it only when something reads the value.",
+  "elapsed_s": 4.9,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to return a NotFound status?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(Missing: Example) {\n    Return a <NotFound: status> for the <lookup>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

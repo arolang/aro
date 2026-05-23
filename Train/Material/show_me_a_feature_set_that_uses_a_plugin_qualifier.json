@@ -1,0 +1,9 @@
+{
+  "prompt": "Show me a feature set that uses a plugin qualifier.",
+  "actual": "```aro\n(Use Plugin Qualifier: Example) {\n    Extract the <data> from the <request: body>.\n    Return the<OK: status> for the <result>.\n    Return the<PluginResult: result> with <data>.\n}\n```",
+  "expected": "```aro\n(PickOne: Example) {\n    Create the <items> with [\"a\", \"b\", \"c\"].\n    Compute the <pick: collections.pick-random> from <items>.\n    Return an <OK: status> with <pick>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "has_canonical_answer": true
+}

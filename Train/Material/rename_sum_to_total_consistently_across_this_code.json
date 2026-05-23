@@ -1,0 +1,9 @@
+{
+  "prompt": "Rename `<sum>` to `<total>` consistently across this code.",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <total> as 2 * the <value>.\n    Return the<OK: status> with <total>.\n}\n\n(Compute: DoubleValue) {\n    Compute the <total> as 2 * the <value>.\n    Return the<OK: status> with <total>.\n}\n```",
+  "expected": "Search/replace `<sum>` → `<total>` across the file. ARO's immutability means there are no aliases to worry about — every reference is to the same binding.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

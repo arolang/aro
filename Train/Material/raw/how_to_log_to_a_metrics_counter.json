@@ -1,0 +1,13 @@
+{
+  "prompt": "How to log to a metrics counter?",
+  "slug": "how_to_log_to_a_metrics_counter",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Log` action with a `<metric>` target.\n\n```aro\n(IncCounter: Example) {\n    Log 1 to the <metric: requests-total>.\n    Return an <OK: status> for the <count>.\n}\n```",
+  "elapsed_s": 4.3,
+  "returncode": 0,
+  "timed_out": false
+}

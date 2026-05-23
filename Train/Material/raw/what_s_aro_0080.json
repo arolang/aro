@@ -1,0 +1,13 @@
+{
+  "prompt": "What's ARO-0080?",
+  "slug": "what_s_aro_0080",
+  "actual": "ARO-0080 is a proposal in the ARO specification that introduces a new action called `Store`. The `Store` action is used to store data into a repository. The `Store` action is a built-in action that is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository.",
+  "model_raw": "<think>\n\n</think>\n\nARO-0080 is a proposal in the ARO specification that introduces a new action called `Store`. The `Store` action is used to store data into a repository. The `Store` action is a built-in action that is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository. The `Store` action is used to store data into a repository.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Git Actions. A `<git>` system object backed by libgit2 — `Retrieve` for status/log/branch, `Stage`/`Commit`/`Push`/`Pull`/`Clone`/`Checkout`/`Tag`. Each emits a corresponding event.",
+  "elapsed_s": 6.4,
+  "returncode": 0,
+  "timed_out": false
+}

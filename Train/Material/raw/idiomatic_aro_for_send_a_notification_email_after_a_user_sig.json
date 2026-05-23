@@ -1,0 +1,13 @@
+{
+  "prompt": "Idiomatic ARO for: \"send a notification email after a user signs up\".",
+  "slug": "idiomatic_aro_for_send_a_notification_email_after_a_user_sig",
+  "actual": "```aro\n(Send Welcome Email: UserSignedUp Handler) {\n    Extract the <user> from the <event: user>.\n    Send the <welcome-email> to the <user: email>.\n    Return an<OK: status> for the <notification>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Send Welcome Email: UserSignedUp Handler) {\n    Extract the <user> from the <event: user>.\n    Send the <welcome-email> to the <user: email>.\n    Return an<OK: status> for the <notification>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(createUser: Users API) {\n    Extract the <user> from the <request: body>.\n    Store the <user> into the <user-repository>.\n    Emit a <UserSignedUp: event> with <user>.\n    Return a <Created: status> with <user>.\n}\n\n(Send Welcome: UserSignedUp Handler) {\n    Extract the <user> from the <event: user>.\n    Send the <welcome-email> to the <user: email>.\n    Return an <OK: status> for the <notification>.\n}\n```",
+  "elapsed_s": 5.2,
+  "returncode": 0,
+  "timed_out": false
+}

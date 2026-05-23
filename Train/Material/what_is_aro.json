@@ -1,0 +1,9 @@
+{
+  "prompt": "What is ARO?",
+  "actual": "ARO stands for **Action Result Object** — a domain-specific language (DSL) designed for writing declarative applications that model business logic and HTTP APIs. It uses a simple syntax to describe how to extract data, compute results, retrieve objects, and return HTTP responses.\n\nARO is structured around **feature sets**, which are enclosed in parentheses and contain a sequence of statements. Each statement follows the pattern:\n\n```\nVerb the<Result> preposition [the<Object>.\n```\n\nFor example:\n```aro\nReturn the<OK: status> for the <result>.\n```\n\nARO is used to build HTTP APIs, event handlers, and business logic with a focus on declarative, readable code. It supports HTTP verbs like GET, POST, PUT, and DELETE, and integrates with HTTP servers and event systems.\n\nARO is designed to be simple, readable, and expressive — making it ideal for business logic that needs to be clear and maintainable.",
+  "expected": "ARO (Action Result Object) is a DSL for writing business logic as natural-language statements. The runtime compiles it to native code via LLVM, dispatches HTTP routes via OpenAPI, persists state via repositories, and treats every error as a sentence (\"Cannot retrieve the user from the user-repository where id = 530\") instead of a stack trace.",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "has_canonical_answer": true
+}

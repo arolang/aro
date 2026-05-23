@@ -1,0 +1,13 @@
+{
+  "prompt": "Is ARO compiled or interpreted?",
+  "slug": "is_aro_compiled_or_interpreted",
+  "actual": "ARO is compiled. The compiler translates the declarative syntax into optimized machine code, making it efficient and performant. The compiler uses a compiler toolchain that supports cross-compilation for different platforms.",
+  "model_raw": "<think>\n\n</think>\n\nARO is compiled. The compiler translates the declarative syntax into optimized machine code, making it efficient and performant. The compiler uses a compiler toolchain that supports cross-compilation for different platforms.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Both. `aro run` interprets directly; `aro build` compiles to a native binary via LLVM IR. The runtime libraries (HTTP server, file system, sockets, git via libgit2) are linked in either way.",
+  "elapsed_s": 5.5,
+  "returncode": 0,
+  "timed_out": false
+}

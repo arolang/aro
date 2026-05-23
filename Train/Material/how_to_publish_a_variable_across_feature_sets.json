@@ -1,0 +1,9 @@
+{
+  "prompt": "How to publish a variable across feature sets?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Publish` action — other feature sets can then read the published variable.\n\n```aro\n(PublishGreeting: Example) {\n    Create the <greeting> with \"Hello\".\n    Publish as <welcome> <greeting>.\n    Return an <OK: status> with <greeting>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

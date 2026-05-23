@@ -1,0 +1,13 @@
+{
+  "prompt": "Scaffold a new feature set called `archiveOrder` that emits an OrderArchived event.",
+  "slug": "scaffold_a_new_feature_set_called_archiveorder_that_emits_an",
+  "actual": "",
+  "model_raw": "<think>",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "```aro\n(archiveOrder: Orders API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where <id> is <id>.\n    Emit an <OrderArchived: event> with <order>.\n    Return an <OK: status> with <order>.\n}\n```",
+  "elapsed_s": 9.5,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to delete an item from a repository?",
+  "slug": "how_to_delete_an_item_from_a_repository",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(DeleteItem: Example) {\n    Create the <key> with 1.\n    Delete the <item> from the <item-repository> where <id> is <key>.\n    Return an <OK: status> for the <deletion>.\n}\n```",
+  "elapsed_s": 3.1,
+  "returncode": 0,
+  "timed_out": false
+}

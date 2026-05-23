@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the max of a list of numbers?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Reduce` with `max()`.\n\n```aro\n(MaxList: Example) {\n    Create the <numbers> with [4, 9, 2, 7].\n    Reduce the <m: Integer> from the <numbers> with max().\n    Return an <OK: status> with <m>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

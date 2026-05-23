@@ -1,0 +1,9 @@
+{
+  "prompt": "How to write an Application-Start feature set?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Exactly one per application. It's the entry point.\n\n```aro\n(Application-Start: My App) {\n    Log \"Starting...\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

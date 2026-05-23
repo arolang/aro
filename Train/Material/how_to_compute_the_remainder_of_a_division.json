@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the remainder of a division?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Compute` action with `%`.\n\n```aro\n(Remainder: Example) {\n    Create the <a> with 17.\n    Create the <b> with 5.\n    Compute the <remainder> from <a> % <b>.\n    Return an <OK: status> with <remainder>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

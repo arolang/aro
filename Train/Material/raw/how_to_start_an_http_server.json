@@ -1,0 +1,13 @@
+{
+  "prompt": "How to start an HTTP server?",
+  "slug": "how_to_start_an_http_server",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Define `Application-Start` and use the `Start` action with the `<http-server>` system object. The server reads routes from `openapi.yaml`.\n\n```aro\n(Application-Start: My API) {\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 2.6,
+  "returncode": 0,
+  "timed_out": false
+}

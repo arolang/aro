@@ -1,0 +1,13 @@
+{
+  "prompt": "Explain why this fails aro check: `Return <OK: status>.` (missing article).",
+  "slug": "explain_why_this_fails_aro_check_return_ok_status_missing_ar",
+  "actual": "The statement `Return<OK: status>.` fails `aro check` because the `Return` action uses angle-bracketed result names, which must be prefixed with the article `the`. The `Return` action requires the result to be introduced with `the`.\n\nFor example, `Return the<OK: status>.` is correct.\n\n```aro\nReturn the<OK: status>.\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe statement `Return<OK: status>.` fails `aro check` because the `Return` action uses angle-bracketed result names, which must be prefixed with the article `the`. The `Return` action requires the result to be introduced with `the`.\n\nFor example, `Return the<OK: status>.` is correct.\n\n```aro\nReturn the<OK: status>.\n```",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "expected": "`Return` requires an article (`an`/`a`/`the`) before the result. Fixed: `Return an <OK: status> for the <action>.` Every result and object needs an article in ARO.",
+  "elapsed_s": 4.1,
+  "returncode": 0,
+  "timed_out": false
+}

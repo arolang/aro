@@ -1,0 +1,9 @@
+{
+  "prompt": "Quick sanity check: is `Log <text> to the <console>.` valid ARO?",
+  "actual": "Yes, `Log <text> to the <console>.` is valid ARO syntax. It uses the `Log` action to record the value of the variable <text>` to the console.",
+  "expected": "Yes — that's a complete `Log` statement inside a feature set. Just make sure the surrounding `(Name: Activity) { ... }` wrapper is present and `<text>` is bound somewhere earlier.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

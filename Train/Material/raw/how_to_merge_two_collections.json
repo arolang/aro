@@ -1,0 +1,13 @@
+{
+  "prompt": "How to merge two collections?",
+  "slug": "how_to_merge_two_collections",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Merge` action.\n\n```aro\n(MergeLists: Example) {\n    Create the <left> with [1, 2].\n    Create the <right> with [3, 4].\n    Merge the <combined> from <left> with <right>.\n    Return an <OK: status> with <combined>.\n}\n```",
+  "elapsed_s": 4.1,
+  "returncode": 0,
+  "timed_out": false
+}

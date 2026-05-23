@@ -1,0 +1,9 @@
+{
+  "prompt": "How to read a file in ARO?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Read` action against the `<file-system>` system object.\n\n```aro\n(Read Config: Example) {\n    Read the <content> from the <file-system> at \"config.yaml\".\n    Return an <OK: status> with <content>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

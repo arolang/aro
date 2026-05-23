@@ -1,0 +1,13 @@
+{
+  "prompt": "Help.",
+  "slug": "help",
+  "actual": "Hello! How can I assist you with ARO today?",
+  "model_raw": "<think>\n\n</think>\n\nHello! How can I assist you with ARO today?",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "I write and explain ARO code. Try: `aro ask \"write a hello world application\"` or `aro ask \"how do I extract a path parameter\"`. Slash commands: `/help`, `/fix <path>`, `/explain <path>`, `/openapi`.",
+  "elapsed_s": 3.3,
+  "returncode": 0,
+  "timed_out": false
+}

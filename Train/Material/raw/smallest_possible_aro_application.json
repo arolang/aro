@@ -1,0 +1,13 @@
+{
+  "prompt": "Smallest possible ARO application?",
+  "slug": "smallest_possible_aro_application",
+  "actual": "The smallest possible ARO application is a single feature set that returns an HTTP response with a status code and a result. The code is as follows:\n\n```aro\n(Return: Hello World) {\n    Return the<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe smallest possible ARO application is a single feature set that returns an HTTP response with a status code and a result. The code is as follows:\n\n```aro\n(Return: Hello World) {\n    Return the<OK: status> for the <result>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Application-Start: Tiny) {\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "elapsed_s": 4.3,
+  "returncode": 0,
+  "timed_out": false
+}

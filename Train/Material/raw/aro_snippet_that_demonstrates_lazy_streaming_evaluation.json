@@ -1,0 +1,13 @@
+{
+  "prompt": "ARO snippet that demonstrates lazy / streaming evaluation.",
+  "slug": "aro_snippet_that_demonstrates_lazy_streaming_evaluation",
+  "actual": "```aro\n(Stream Data: StreamExample) {\n    Create the <stream> from the <file: stream>.\n    For each <line> in the <stream> {\n        Extract the <line> from the <stream>.\n        Log the <line>.\n    }\n    Return the<OK: status> for the <stream>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Stream Data: StreamExample) {\n    Create the <stream> from the <file: stream>.\n    For each <line> in the <stream> {\n        Process the <line>.\n        Log the <line>.\n    }\n    Return the<OK: status> for the <stream>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Every action is lazy by default — chained Compute/Reduce fuse automatically.\n\n```aro\n(StreamingPipeline: Example) {\n    Create the <numbers> with [1, 2, 3, 4, 5].\n    Compute the <sorted: sort> from <numbers>.\n    Reduce the <total: Integer> from the <sorted> with sum().\n    Return an <OK: status> with <total>.\n}\n```",
+  "elapsed_s": 25.2,
+  "returncode": 0,
+  "timed_out": false
+}

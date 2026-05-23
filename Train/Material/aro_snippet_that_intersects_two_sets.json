@@ -1,0 +1,9 @@
+{
+  "prompt": "ARO snippet that intersects two sets.",
+  "actual": "```aro\n(Intersect Sets: SetIntersection) {\n    Create the <setA> from the <collectionA>.\n    Create the <setB> from the <collectionB>.\n    Create the <setA-updated> from the <setA>.\n    Intersect the <setA-updated> with the <setB>.\n    Return the<OK: status> with the <intersection>.\n}\n```",
+  "expected": "```aro\n(Intersect: Example) {\n    Create the <a> with [1, 2, 3].\n    Create the <b> with [2, 3, 4].\n    Compute the <common: intersect> from <a> with <b>.\n    Return an <OK: status> with <common>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

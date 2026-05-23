@@ -1,0 +1,13 @@
+{
+  "prompt": "ELI5: what's a feature set?",
+  "slug": "eli5_what_s_a_feature_set",
+  "actual": "A feature set is a collection of related actions that work together to perform a specific task. Think of it like a recipe — each action is an ingredient, and the feature set is the recipe that tells you how to combine them. For example, a feature set might handle a user login by first validating the user's credentials, then creating a session, and finally returning a success message.",
+  "model_raw": "<think>\n\n</think>\n\nA feature set is a collection of related actions that work together to perform a specific task. Think of it like a recipe — each action is an ingredient, and the feature set is the recipe that tells you how to combine them. For example, a feature set might handle a user login by first validating the user's credentials, then creating a session, and finally returning a success message.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "A small, named piece of code. It has a name (`Hello World`), a category (`Application-Start`, `User API`, `OrderCreated Handler`), and a body of action statements. The runtime fires it when the matching event happens (the app starts, an HTTP request arrives, an event is emitted).",
+  "elapsed_s": 5.2,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "How to invoke a user-defined action?",
+  "slug": "how_to_invoke_a_user_defined_action",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Call it as `Application.<Name>` from any other feature set.\n\n```aro\n(Caller: Example) {\n    Application.DoubleValue the <result> from 21.\n    Extract the <doubled> from the <result: doubled>.\n    Return an <OK: status> with <doubled>.\n}\n```",
+  "elapsed_s": 3.3,
+  "returncode": 0,
+  "timed_out": false
+}

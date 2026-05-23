@@ -1,0 +1,13 @@
+{
+  "prompt": "Generate an openapi.yaml for a simple todo list API with create, list, complete, delete.",
+  "slug": "generate_an_openapi_yaml_for_a_simple_todo_list_api_with_cre",
+  "actual": "",
+  "model_raw": "<think>\n\n</think>",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "```yaml\nopenapi: 3.0.3\ninfo: { title: Todo, version: 1.0.0 }\npaths:\n  /todos:\n    get:    { operationId: listTodos }\n    post:   { operationId: createTodo }\n  /todos/{id}:\n    post:   { operationId: completeTodo }\n    delete: { operationId: deleteTodo }\n```",
+  "elapsed_s": 15.0,
+  "returncode": 0,
+  "timed_out": false
+}

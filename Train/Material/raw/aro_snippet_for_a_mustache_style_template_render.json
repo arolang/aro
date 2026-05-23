@@ -1,0 +1,13 @@
+{
+  "prompt": "ARO snippet for a Mustache-style template render.",
+  "slug": "aro_snippet_for_a_mustache_style_template_render",
+  "actual": "```aro\n(Render Template: MustacheRender) {\n    Create the <template> from the <mustache-template>.\n    Render the <template> with the <data>.\n    Return the<OK: status> with the <rendered-output>.\n}\n```",
+  "model_raw": "<think>",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Render: Example) {\n    Create the <template> with \"Hello, {{name}}!\".\n    Create the <data> with { name: \"Ada\" }.\n    Render the <html> from the <template> with <data>.\n    Return an <OK: status> with <html>.\n}\n```",
+  "elapsed_s": 9.0,
+  "returncode": 0,
+  "timed_out": false
+}

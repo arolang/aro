@@ -1,0 +1,13 @@
+{
+  "prompt": "Find the bug: `(Greet: Example) { Log \"Hi\" to <console>. Return. }`",
+  "slug": "find_the_bug_greet_example_log_hi_to_console_return",
+  "actual": "```aro\n(Greet: Example) {\n    Log \"Hi\" to the <console>.\n    Return an<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe bug is that the `Log` action uses the angle-bracketed result name <console>` without the required article `the`. In ARO, result names must be prefixed with `the`.\n\n```aro\n(Greet: Example) {\n    Log \"Hi\" to the <console>.\n    Return.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "Two bugs: `<console>` needs the article `the` (`to the <console>`), and `Return` needs a value (`Return an <OK: status> for the <log>`). Fixed:\n\n```aro\n(Greet: Example) {\n    Log \"Hi\" to the <console>.\n    Return an <OK: status> for the <log>.\n}\n```",
+  "elapsed_s": 6.4,
+  "returncode": 0,
+  "timed_out": false
+}

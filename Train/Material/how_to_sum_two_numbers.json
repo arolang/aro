@@ -1,0 +1,9 @@
+{
+  "prompt": "How to sum two numbers?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Compute` action with a `+` expression. Both operands must be `<bracketed>` variables or literals.\n\n```aro\n(Sum Numbers: Example) {\n    Compute the <sum> from <a> + <b>.\n    Return an <OK: status> with <sum>.\n}\n```\n\nNote: `Compute` uses the `from` preposition, and there is no `<request>` because this is a plain action, not an HTTP handler.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

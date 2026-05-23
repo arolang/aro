@@ -1,0 +1,9 @@
+{
+  "prompt": "How to store an item in a repository?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(SaveItem: Example) {\n    Create the <item> with { id: 1, name: \"Ada\" }.\n    Store the <item> into the <item-repository>.\n    Return an <OK: status> with <item>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

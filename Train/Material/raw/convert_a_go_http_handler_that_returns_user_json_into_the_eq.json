@@ -1,0 +1,13 @@
+{
+  "prompt": "Convert a Go HTTP handler that returns user JSON into the equivalent ARO feature set.",
+  "slug": "convert_a_go_http_handler_that_returns_user_json_into_the_eq",
+  "actual": "```aro\n(Handler: User API) {\n    Extract the <id> from the <request: path>.\n    Retrieve the <user> from the <user-repository> where id =<id>.\n    Return an<OK: status> with the <user>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Handler: User API) {\n    Extract the <id> from the <request: path>.\n    Retrieve the <user> from the <user-repository> where id =<id>.\n    Return an<OK: status> with the <user>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "```aro\n(getUser: Users API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <user> from the <user-repository> where <id> is <id>.\n    Return an <OK: status> with <user>.\n}\n```",
+  "elapsed_s": 23.9,
+  "returncode": 0,
+  "timed_out": false
+}

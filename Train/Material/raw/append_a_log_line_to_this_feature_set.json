@@ -1,0 +1,13 @@
+{
+  "prompt": "Append a Log line to this feature set.",
+  "slug": "append_a_log_line_to_this_feature_set",
+  "actual": "```aro\n(Return: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return the<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Return: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return the<OK: status> for the <result>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "Add `Log <variable> to the <console>.` before the `Return` so the value is visible at runtime without changing the return.",
+  "elapsed_s": 4.1,
+  "returncode": 0,
+  "timed_out": false
+}

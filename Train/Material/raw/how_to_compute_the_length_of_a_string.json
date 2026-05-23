@@ -1,0 +1,13 @@
+{
+  "prompt": "How to compute the length of a string?",
+  "slug": "how_to_compute_the_length_of_a_string",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Compute` action with the `length` qualifier.\n\n```aro\n(Measure: Example) {\n    Compute the <len: length> from the <message>.\n    Return an <OK: status> with <len>.\n}\n```",
+  "elapsed_s": 2.0,
+  "returncode": 0,
+  "timed_out": false
+}

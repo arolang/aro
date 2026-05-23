@@ -1,0 +1,13 @@
+{
+  "prompt": "Quick sanity check: does ARO have `if/else`?",
+  "slug": "quick_sanity_check_does_aro_have_if_else",
+  "actual": "No, ARO does not have `if/else` statements. Instead, ARO uses `When` to conditionally execute actions. For example:\n\n```aro\nWhen the <status> is<OK> {\n    Return the<OK: status> for the <result>.\n} else {\n    Return the <error: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nNo, ARO does not have `if/else` statements. Instead, ARO uses `When` to conditionally execute actions. For example:\n\n```aro\nWhen the <status> is<OK> {\n    Return the<OK: status> for the <result>.\n} else {\n    Return the <error: status> for the <result>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "no_feature_set",
+  "judge_reason": "code block is missing the (Name: Activity) { ... } wrapper",
+  "expected": "Not as a keyword. Use a `when` guard on a single statement (`Log \"x\" to <console> when <cond>.`) or a `match` block for multi-way branching.",
+  "elapsed_s": 5.2,
+  "returncode": 0,
+  "timed_out": false
+}

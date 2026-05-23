@@ -1,0 +1,9 @@
+{
+  "prompt": "Refactor this ARO code to use the qualifier-as-name form: `Compute the length from the message.`",
+  "actual": "The original statement uses the `Compute` action to calculate the length of a message. The qualifier-as-name form uses the qualifier `message` as the name in the feature set. The result is a more readable and idiomatic ARO feature set.\n\n```aro\n(Compute: Message Length) {\n    Extract the <message> from the <request: body>.\n    Compute the <length> from the <message>.\n    Return an<OK: status> with the <length>.\n}\n```",
+  "expected": "`Compute the <len: length> from the <message>.` — the qualifier names the operation, and `<len>` names the result so you can have multiple lengths in the same scope.",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "has_canonical_answer": true
+}

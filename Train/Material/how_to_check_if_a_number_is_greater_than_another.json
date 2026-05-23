@@ -1,0 +1,9 @@
+{
+  "prompt": "How to check if a number is greater than another?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use a `when` guard.\n\n```aro\n(IsGreater: Example) {\n    Create the <a> with 10.\n    Create the <b> with 5.\n    Log \"a is greater\" to the <console> when <a> > <b>.\n    Return an <OK: status> for the <check>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

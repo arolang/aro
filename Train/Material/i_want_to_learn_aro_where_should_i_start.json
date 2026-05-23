@@ -1,0 +1,9 @@
+{
+  "prompt": "I want to learn ARO. Where should I start?",
+  "actual": "```aro\n(Add Numbers: Example) {\n    Extract the <a> from the <request: query>.\n    Extract the <b> from the <request: query>.\n    Compute the <result> from <a> +<b>.\n    Return an<OK: status> with the <result>.\n}\n```",
+  "expected": "Start with `Examples/HelloWorld/main.aro` — it's the smallest valid program. Then `Examples/Calculator` (arithmetic and `Compute`), `Examples/UserService` (full HTTP API with repositories), and `Examples/EventExample` (event-driven flow). The Book chapter is at `Book/TheLanguageGuide/`.",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "has_canonical_answer": true
+}

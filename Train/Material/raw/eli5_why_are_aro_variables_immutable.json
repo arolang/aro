@@ -1,0 +1,13 @@
+{
+  "prompt": "ELI5: why are ARO variables immutable?",
+  "slug": "eli5_why_are_aro_variables_immutable",
+  "actual": "ARO variables are immutable because they are designed to be simple and safe. Once a variable is assigned a value, it cannot be changed. This makes code easier to understand and less error-prone because you don't have to worry about variables changing unexpectedly.",
+  "model_raw": "<think>\n\n</think>\n\nARO variables are immutable because they are designed to be simple and safe. Once a variable is assigned a value, it cannot be changed. This makes code easier to understand and less error-prone because you don't have to worry about variables changing unexpectedly.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Each name binds to one value forever. To change a value you make a new binding with a new name (`<updated-count>`). That way you can never accidentally read the old value somewhere else — and the runtime can safely run independent statements in parallel.",
+  "elapsed_s": 4.9,
+  "returncode": 0,
+  "timed_out": false
+}

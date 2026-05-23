@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the average of a list of numbers?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Reduce` with the `avg()` aggregator.\n\n```aro\n(AverageList: Example) {\n    Create the <numbers> with [10, 20, 30, 40].\n    Reduce the <avg: Float> from the <numbers> with avg().\n    Return an <OK: status> with <avg>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

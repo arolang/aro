@@ -1,0 +1,13 @@
+{
+  "prompt": "Diagnose: \"Variables are immutable — cannot rebind <count>\". Suggest the fix.",
+  "slug": "diagnose_variables_are_immutable_cannot_rebind_count_suggest",
+  "actual": "```aro\n(Add Numbers: Example) {\n    Extract the <a> from the <request: query>.\n    Extract the <b> from the <request: query>.\n    Compute the <result> from <a> +<b>.\n    Return an<OK: status> with <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nThe error \"Variables are immutable — cannot rebind <count>\" indicates that the variable <count>` was declared in a previous statement and cannot be reassigned later. In ARO, variables are immutable — once bound, they cannot be changed.\n\nFor example, this would fail:\n```aro\n(Count: Example) {\n    Extract the <count> from the <request: query>.\n    Compute the <count> as <count> + 1.\n    Return an<OK: status> with <count>.\n}\n```\n\nThe correct approach is to declare a new variable instead of rebinding the same one:\n```aro\n(Count: Example) {\n    Extract the <count> from the <request: query>.\n    Compute the <new-count> as <count> + 1.\n    Return an<OK: status> with <new-count>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "expected": "ARO bindings are immutable. You assigned to `<count>` twice. Rename the second binding: `Create the <updated-count> with <count> + 1.`",
+  "elapsed_s": 9.2,
+  "returncode": 0,
+  "timed_out": false
+}

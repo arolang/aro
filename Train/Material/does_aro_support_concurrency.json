@@ -1,0 +1,9 @@
+{
+  "prompt": "Does ARO support concurrency?",
+  "actual": "```aro\n(AsyncHandler: HandleEvent) {\n    Extract the <event> from the <event: event>.\n    async HandleEvent {\n        await HandleEventAsync();\n    }\n    Return an<OK: status> for the <result>.\n}\n```",
+  "expected": "Yes. Actions execute lazily and overlap by default — independent results run in parallel on a dedicated `ActionTaskExecutor`. Effects (Log, Store, Emit, Commit) keep source order. `parallel for each` runs loop iterations concurrently with a configurable cap.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

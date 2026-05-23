@@ -1,0 +1,13 @@
+{
+  "prompt": "How to tag a release?",
+  "slug": "how_to_tag_a_release",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(Tag: Example) {\n    Tag the <release> for the <git> with \"v1.0.0\".\n    Return an <OK: status> with <release>.\n}\n```",
+  "elapsed_s": 3.8,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Show me how to call a user-defined action from another feature set.",
+  "actual": "```aro\n(Add Numbers: Add) {\n    Extract the <a> from the <request: a>.\n    Extract the <b> from the <request: b>.\n    Compute the <sum> as <a> +<b>.\n    Return the<OK: status> with <sum>.\n}\n\n(CallAction: Example) {\n    Extract the <a> from the <request: a>.\n    Extract the <b> from the <request: b>.\n    Return the<OK: status> for the <result>.\n    Return the<OK: status> with the <sum> from the<Add Numbers: Add>.\n}\n```",
+  "expected": "```aro\n(Doubler: Action takes <number>) {\n    Extract the <n> from the <input: number>.\n    Compute the <doubled> from <n> * 2.\n    Return an <OK: status> with { doubled: <doubled> }.\n}\n\n(Caller: Example) {\n    Application.Doubler the <r> from 21.\n    Extract the <out> from the <r: doubled>.\n    Return an <OK: status> with <out>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

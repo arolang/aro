@@ -1,0 +1,9 @@
+{
+  "prompt": "Generate the operationId handlers for the openapi.yaml I just gave you.",
+  "actual": "",
+  "expected": "I need the openapi.yaml content to generate the handlers. Paste it and I'll write one feature set per `operationId`, named to match.",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "has_canonical_answer": true
+}

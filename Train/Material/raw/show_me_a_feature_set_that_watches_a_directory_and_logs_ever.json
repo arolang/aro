@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me a feature set that watches a directory and logs every change.",
+  "slug": "show_me_a_feature_set_that_watches_a_directory_and_logs_ever",
+  "actual": "```aro\n(Watch Directory: Watcher) {\n    Watch the <directory> for changes.\n    Log \"Directory changed!\" to the <console>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Watch Directory: Watcher) {\n    Watch the <directory> for changes.\n    Log \"Directory changed!\" to the <console>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Application-Start: Watcher) {\n    Start the <file-monitor> with { directory: \".\" }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Log Change: File Event Handler) {\n    Extract the <change> from the <event: change>.\n    Log <change> to the <console>.\n    Return an <OK: status> for the <handling>.\n}\n```",
+  "elapsed_s": 5.0,
+  "returncode": 0,
+  "timed_out": false
+}

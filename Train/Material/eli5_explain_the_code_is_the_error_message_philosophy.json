@@ -1,0 +1,9 @@
+{
+  "prompt": "ELI5: explain the \"code is the error message\" philosophy.",
+  "actual": "The \"code is the error message\" philosophy means that code should be written in a way that makes errors easy to find and understand. Instead of writing code that may fail silently, the code should be written so that errors are clear and immediately visible. For example, instead of writing code that may fail silently, the code should be written so that errors are clear and immediately visible.",
+  "expected": "Write only the happy path. When something goes wrong at runtime, the runtime turns the failing statement into the error message verbatim: \"Cannot retrieve the user from the user-repository where id = 530\". The error reads like the code; no separate exception class to look up.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

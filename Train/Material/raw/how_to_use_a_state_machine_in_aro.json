@@ -1,0 +1,13 @@
+{
+  "prompt": "How to use a state machine in ARO?",
+  "slug": "how_to_use_a_state_machine_in_aro",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use `Accept` to consume a transition; the runtime tracks state per record.\n\n```aro\n(Place Order: Orders) {\n    Extract the <order> from the <input>.\n    Accept the <transition> for the <order> with \"placed\".\n    Return an <OK: status> with <order>.\n}\n```",
+  "elapsed_s": 3.2,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "Tell me everything about ARO.",
+  "slug": "tell_me_everything_about_aro",
+  "actual": "",
+  "model_raw": "",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "ARO is a DSL where every statement is `Verb [the] <result> preposition [the] <object>.`. Programs are directories of `.aro` files plus an optional `openapi.yaml` (for HTTP). `Application-Start` is the entry point. Variables are immutable. Actions are lazy by default; effects keep source order. Errors are the failing statement rendered as a sentence. Compile to native via `aro build`, interpret via `aro run`, test via `aro test`. Extend with Swift/Rust/C/Python plugins.",
+  "elapsed_s": 302.9,
+  "returncode": -1,
+  "timed_out": true
+}

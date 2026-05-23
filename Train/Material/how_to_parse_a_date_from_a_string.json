@@ -1,0 +1,9 @@
+{
+  "prompt": "How to parse a date from a string?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use `Parse` against `<date: ...>`.\n\n```aro\n(ParseDate: Example) {\n    Create the <text> with \"2026-05-23\".\n    Parse the <when> from the <date: text>.\n    Return an <OK: status> with <when>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

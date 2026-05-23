@@ -1,0 +1,9 @@
+{
+  "prompt": "How to handle a custom event?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Name the feature set `(name: <EventName> Handler)`.\n\n```aro\n(Send Email: OrderProcessed Handler) {\n    Extract the <order> from the <event: order>.\n    Send the <confirmation> to the <order: email>.\n    Return an <OK: status> for the <notification>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

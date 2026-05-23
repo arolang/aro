@@ -1,0 +1,9 @@
+{
+  "prompt": "How to stop an HTTP server gracefully?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Put `Stop the <http-server>` in an Application-End handler.\n\n```aro\n(Application-End: Success) {\n    Stop the <http-server> with <application>.\n    Return an <OK: status> for the <shutdown>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

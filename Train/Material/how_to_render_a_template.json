@@ -1,0 +1,9 @@
+{
+  "prompt": "How to render a template?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Render` action against a Mustache-style template string.\n\n```aro\n(RenderGreeting: Example) {\n    Create the <template> with \"Hello, {{name}}!\".\n    Create the <data> with { name: \"Ada\" }.\n    Render the <html> from the <template> with <data>.\n    Return an <OK: status> with <html>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

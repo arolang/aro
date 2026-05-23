@@ -1,0 +1,13 @@
+{
+  "prompt": "How to connect to a TCP socket?",
+  "slug": "how_to_connect_to_a_tcp_socket",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "```aro\n(ConnectSocket: Example) {\n    Create the <addr> with { host: \"127.0.0.1\", port: 9000 }.\n    Connect the <session> to the <socket-client> with <addr>.\n    Return an <OK: status> with <session>.\n}\n```",
+  "elapsed_s": 3.0,
+  "returncode": 0,
+  "timed_out": false
+}

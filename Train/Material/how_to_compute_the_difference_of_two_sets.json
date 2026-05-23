@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute the difference of two sets?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "`Compute` with the `difference` qualifier.\n\n```aro\n(Diff: Example) {\n    Create the <a> with [1, 2, 3].\n    Create the <b> with [2, 4].\n    Compute the <unique: difference> from <a> with <b>.\n    Return an <OK: status> with <unique>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

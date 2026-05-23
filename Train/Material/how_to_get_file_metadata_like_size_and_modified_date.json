@@ -1,0 +1,9 @@
+{
+  "prompt": "How to get file metadata like size and modified date?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Stat` action.\n\n```aro\n(FileStat: Example) {\n    Create the <path> with \"data.json\".\n    Stat the <info> from the <file: path>.\n    Return an <OK: status> with <info>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

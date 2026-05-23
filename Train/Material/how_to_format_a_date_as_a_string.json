@@ -1,0 +1,9 @@
+{
+  "prompt": "How to format a date as a string?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `format` qualifier with a pattern string.\n\n```aro\n(FormatDate: Example) {\n    Create the <today> with the <date: today>.\n    Compute the <formatted: format> from <today> with \"YYYY-MM-DD\".\n    Return an <OK: status> with <formatted>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

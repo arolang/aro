@@ -1,0 +1,9 @@
+{
+  "prompt": "How to filter a list by a condition?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use a `For-each` with a `when` guard, or the `Filter` action if you only need the matching subset.\n\n```aro\n(Filter Adults: Example) {\n    Filter the <adults> from the <people> where age > 17.\n    Return an <OK: status> with <adults>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

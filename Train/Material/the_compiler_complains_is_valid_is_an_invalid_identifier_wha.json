@@ -1,0 +1,9 @@
+{
+  "prompt": "The compiler complains \"is-valid\" is an invalid identifier. What's wrong and how do I fix it?",
+  "actual": "```aro\n(Validate: Example) {\n    Extract the <is-valid> from the <request: query>.\n    Return an<OK: status> with <is-valid>.\n}\n```",
+  "expected": "ARO forbids the `is-`, `with-`, and `empty-` prefixes for variable names (they read like adjectives, not nouns, and conflict with `is` in where-clauses). Rename to a noun form: `<validity>`, `<valid-flag>`, or `<validated>`.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

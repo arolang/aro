@@ -1,0 +1,9 @@
+{
+  "prompt": "Translate this Python snippet to ARO: `total = sum(prices) * 1.19`.",
+  "actual": "```aro\n(Calculate: Tax-Inclusive Total) {\n    Extract the <prices> from the <request: body>.\n    Compute the <sum> with sum of <prices>.\n    Compute the <total> with <sum> * 1.19.\n    Return an<OK: status> with the <total>.\n}\n```",
+  "expected": "```aro\n(WithTax: Example) {\n    Create the <prices> with [19.99, 24.50, 9.95].\n    Reduce the <sub: Float> from the <prices> with sum().\n    Compute the <total> from <sub> * 1.19.\n    Return an <OK: status> with <total>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

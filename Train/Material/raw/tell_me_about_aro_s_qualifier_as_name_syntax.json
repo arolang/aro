@@ -1,0 +1,13 @@
+{
+  "prompt": "Tell me about ARO's qualifier-as-name syntax.",
+  "slug": "tell_me_about_aro_s_qualifier_as_name_syntax",
+  "actual": "ARO's qualifier-as-name syntax allows you to use a qualifier as a name in a feature set. For example, `Extract the <id> from the <request: body>` uses `request` as a qualifier. This syntax helps to make the code more readable by providing context about the source of the value being extracted.",
+  "model_raw": "<think>\n\n</think>\n\nARO's qualifier-as-name syntax allows you to use a qualifier as a name in a feature set. For example, `Extract the <id> from the <request: body>` uses `request` as a qualifier. This syntax helps to make the code more readable by providing context about the source of the value being extracted.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "When you need two results of the same operation, the qualifier names the operation and the variable name is on the left:\n\n```aro\nCompute the <first-len: length> from the <first>.\nCompute the <second-len: length> from the <second>.\n```\n\nThis avoids the ambiguity of `Compute the <length>` (is `length` the operation or the variable?) and lets both results coexist in the same scope.",
+  "elapsed_s": 5.5,
+  "returncode": 0,
+  "timed_out": false
+}

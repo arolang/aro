@@ -1,0 +1,13 @@
+{
+  "prompt": "How to read environment variables?",
+  "slug": "how_to_read_environment_variables",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use `Extract ... from <environment: NAME>`.\n\n```aro\n(ReadEnv: Example) {\n    Extract the <home> from the <environment: HOME>.\n    Return an <OK: status> with <home>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

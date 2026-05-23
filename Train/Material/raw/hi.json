@@ -1,0 +1,13 @@
+{
+  "prompt": "Hi.",
+  "slug": "hi",
+  "actual": "Hello! How can I assist you with ARO today?",
+  "model_raw": "<think>\n\n</think>\n\nHello! How can I assist you with ARO today?",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Hi. I'm an ARO coding assistant. Tell me what you'd like to build — a feature set, an HTTP route, a repository observer — and I'll write it for you.",
+  "elapsed_s": 3.5,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "How to delete a file?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(DeleteFile: Example) {\n    Create the <path> with \"obsolete.txt\".\n    Delete the <file: path> for the <cleanup>.\n    Return an <OK: status> for the <deletion>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

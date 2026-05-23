@@ -1,0 +1,13 @@
+{
+  "prompt": "Summarize the contract-first HTTP model in ARO.",
+  "slug": "summarize_the_contract_first_http_model_in_aro",
+  "actual": "ARO uses a contract-first HTTP model where the API contract is defined first, before any implementation. The contract defines the API endpoints, methods, and expected parameters. The API implementation uses the contract to handle HTTP requests. The contract-first approach ensures that the API is well-defined before implementation, making it easier to implement and test.",
+  "model_raw": "<think>\n\n</think>\n\nARO uses a contract-first HTTP model where the API contract is defined first, before any implementation. The contract defines the API endpoints, methods, and expected parameters. The API implementation uses the contract to handle HTTP requests. The contract-first approach ensures that the API is well-defined before implementation, making it easier to implement and test.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Routes are defined in `openapi.yaml`, not in code. The runtime starts an HTTP server only if `openapi.yaml` exists; for each `operationId` it expects a feature set named `(operationId: API Name) { ... }`. Path/query parameters and request bodies are extracted via `<pathParameters: id>`, `<queryParameters: q>`, `<request: body>`. No openapi.yaml = no server.",
+  "elapsed_s": 5.6,
+  "returncode": 0,
+  "timed_out": false
+}

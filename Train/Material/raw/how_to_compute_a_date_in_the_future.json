@@ -1,0 +1,13 @@
+{
+  "prompt": "How to compute a date in the future?",
+  "slug": "how_to_compute_a_date_in_the_future",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\n</think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Add a duration to a date via `Compute` with `+`.\n\n```aro\n(FutureDate: Example) {\n    Create the <today> with the <date: today>.\n    Compute the <next-week> from <today> + \"7 days\".\n    Return an <OK: status> with <next-week>.\n}\n```",
+  "elapsed_s": 3.5,
+  "returncode": 0,
+  "timed_out": false
+}

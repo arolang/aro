@@ -1,0 +1,13 @@
+{
+  "prompt": "Add error handling (Throw) to this feature set.",
+  "slug": "add_error_handling_throw_to_this_feature_set",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "Add a `Throw a <BadRequest: status> with \"...\" when <field> == \"\".` guard near the top so invalid input rejects before any work runs.",
+  "elapsed_s": 18.6,
+  "returncode": 0,
+  "timed_out": false
+}

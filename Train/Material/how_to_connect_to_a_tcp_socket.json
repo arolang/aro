@@ -1,0 +1,9 @@
+{
+  "prompt": "How to connect to a TCP socket?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "```aro\n(ConnectSocket: Example) {\n    Create the <addr> with { host: \"127.0.0.1\", port: 9000 }.\n    Connect the <session> to the <socket-client> with <addr>.\n    Return an <OK: status> with <session>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

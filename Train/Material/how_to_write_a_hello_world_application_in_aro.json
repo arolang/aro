@@ -1,0 +1,9 @@
+{
+  "prompt": "How to write a hello world application in ARO?",
+  "actual": "",
+  "expected": "An ARO application needs exactly one `Application-Start` feature set.\n\n```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "has_canonical_answer": true
+}

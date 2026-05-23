@@ -1,0 +1,9 @@
+{
+  "prompt": "What does \"Sink syntax\" mean (ARO-0043)?",
+  "actual": "The term \"sink syntax\" refers to a pattern in ARO where data flows into a sink — a sink is a sink because it accepts data but does not emit it further. Sink syntax is a pattern that allows you to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing. Sink syntax is used to sink data into a sink without further processing.",
+  "expected": "Sink syntax (ARO-0043) lets you put an expression in the *result* position instead of a binding name. The expression is evaluated and its value flows on. Useful when you want to compute and immediately consume without naming the intermediate.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

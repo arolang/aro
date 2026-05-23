@@ -1,0 +1,13 @@
+{
+  "prompt": "How to define a user-defined action callable from other feature sets?",
+  "slug": "how_to_define_a_user_defined_action_callable_from_other_feat",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Make the business activity `Action`. Then call as `Application.<Name>`.\n\n```aro\n(DoubleValue: Action takes <number>) {\n    Extract the <n> from the <input: number>.\n    Compute the <doubled> from <n> * 2.\n    Return an <OK: status> with { doubled: <doubled> }.\n}\n```\n\nCall site:\n\n```aro\nApplication.DoubleValue the <res> from <5>.\n```",
+  "elapsed_s": 3.2,
+  "returncode": 0,
+  "timed_out": false
+}

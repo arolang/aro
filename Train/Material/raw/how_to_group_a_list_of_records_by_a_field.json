@@ -1,0 +1,13 @@
+{
+  "prompt": "How to group a list of records by a field?",
+  "slug": "how_to_group_a_list_of_records_by_a_field",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `Group` action.\n\n```aro\n(GroupByCategory: Example) {\n    Create the <items> with [\n        { category: \"a\", value: 1 },\n        { category: \"b\", value: 2 },\n        { category: \"a\", value: 3 }\n    ].\n    Group the <by-category> from <items> by category.\n    Return an <OK: status> with <by-category>.\n}\n```",
+  "elapsed_s": 4.2,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Scaffold a new feature set called `archiveOrder` that emits an OrderArchived event.",
+  "actual": "",
+  "expected": "```aro\n(archiveOrder: Orders API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where <id> is <id>.\n    Emit an <OrderArchived: event> with <order>.\n    Return an <OK: status> with <order>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "has_canonical_answer": true
+}

@@ -1,0 +1,9 @@
+{
+  "prompt": "Scaffold a CSV import job that parses lines and writes records into a repository.",
+  "actual": "```aro\n(Import CSV: ParseAndStore) {\n    Read the <file> from the <csv: file>.\n    For each <line> in the <file> {\n        Parse the <line> into the <record>.\n        Store the <record> into the <repository>.\n    }\n    Return the<OK: status> for the <import>.\n}\n```",
+  "expected": "```aro\n(Import CSV: File Event Handler) {\n    Extract the <path> from the <event: path>.\n    Read the <rows> from the <file: path>.\n    for each <row> in <rows> {\n        Store the <row> into the <row-repository>.\n    }\n    Return an <OK: status> for the <import>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

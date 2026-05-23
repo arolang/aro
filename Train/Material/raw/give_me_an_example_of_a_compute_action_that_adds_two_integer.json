@@ -1,0 +1,13 @@
+{
+  "prompt": "Give me an example of a Compute action that adds two integers.",
+  "slug": "give_me_an_example_of_a_compute_action_that_adds_two_integer",
+  "actual": "```aro\n(Compute: Add Two Integers) {\n    Extract the <a> from the <request: body>.\n    Extract the <b> from the <request: body>.\n    Compute the <sum> with <a> +<b>.\n    Return an<OK: status> with the <sum>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\nCompute adds two integers:\n```aro\n(Compute: Add Two Integers) {\n    Extract the <a> from the <request: body>.\n    Extract the <b> from the <request: body>.\n    Compute the <sum> as a + b.\n    Return an<OK: status> with the <sum>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "hallucinated_request",
+  "judge_reason": "code uses <request: …> / <pathParameters: …> when the prompt never asked about HTTP",
+  "expected": "```aro\n(AddTwo: Example) {\n    Create the <a> with 7.\n    Create the <b> with 5.\n    Compute the <sum> from <a> + <b>.\n    Return an <OK: status> with <sum>.\n}\n```",
+  "elapsed_s": 22.8,
+  "returncode": 0,
+  "timed_out": false
+}

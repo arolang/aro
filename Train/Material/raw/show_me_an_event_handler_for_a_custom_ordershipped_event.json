@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me an event handler for a custom `OrderShipped` event.",
+  "slug": "show_me_an_event_handler_for_a_custom_ordershipped_event",
+  "actual": "```aro\n(OrderShipped Handler: HandleEvent) {\n    Extract the <order> from the <event: order>.\n    Log \"Order shipped!\" to the <console>.\n    Return an<OK: status> for the <result>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(OrderShipped Handler: HandleEvent) {\n    Extract the <order> from the <event: order>.\n    Log \"Order shipped!\" to the <console>.\n    Return an<OK: status> for the <result>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Notify Shipping: OrderShipped Handler) {\n    Extract the <order> from the <event: order>.\n    Log <order> to the <console>.\n    Return an <OK: status> for the <handling>.\n}\n```",
+  "elapsed_s": 5.3,
+  "returncode": 0,
+  "timed_out": false
+}

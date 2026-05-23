@@ -1,0 +1,13 @@
+{
+  "prompt": "Quick — show me a one-line ARO program.",
+  "slug": "quick_show_me_a_one_line_aro_program",
+  "actual": "Return the<OK: status> for the <result>.",
+  "model_raw": "<think>\n\n</think>\n\nReturn the<OK: status> for the <result>.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "`echo 'Log \"Hi\" to the <console>.' | aro` — stdin-piped one-liner, no file needed.",
+  "elapsed_s": 4.1,
+  "returncode": 0,
+  "timed_out": false
+}

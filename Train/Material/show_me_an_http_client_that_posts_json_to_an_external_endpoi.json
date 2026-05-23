@@ -1,0 +1,9 @@
+{
+  "prompt": "Show me an HTTP client that POSTs JSON to an external endpoint.",
+  "actual": "```aro\n(PostToExternal: PostExample) {\n    Extract the <jsonBody> from the <request: body>.\n    Create the <jsonBody-updated> from the <request: body>.\n    Post the <jsonBody-updated> to the <external-url>.\n    Return the<OK: status> for the <result>.\n}\n```",
+  "expected": "```aro\n(PostJSON: Example) {\n    Create the <url> with \"https://example.com/api\".\n    Create the <payload> with { name: \"Ada\" }.\n    Request the <response> from the <http-client> at <url> with <payload>.\n    Return an <OK: status> with <response>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

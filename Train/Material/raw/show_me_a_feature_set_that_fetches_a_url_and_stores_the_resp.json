@@ -1,0 +1,13 @@
+{
+  "prompt": "Show me a feature set that fetches a URL and stores the response in a repository.",
+  "slug": "show_me_a_feature_set_that_fetches_a_url_and_stores_the_resp",
+  "actual": "```aro\n(Fetch URL: FetchExample) {\n    Fetch the <url> to the <response>.\n    Store the <response> into the <url-repository>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Fetch URL: FetchExample) {\n    Fetch the <url> to the <response>.\n    Store the <response> into the <url-repository>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(FetchAndStore: Example) {\n    Create the <url> with \"https://example.com\".\n    Request the <response> from the <http-client> at <url>.\n    Store the <response> into the <response-repository>.\n    Return an <OK: status> with <response>.\n}\n```",
+  "elapsed_s": 4.8,
+  "returncode": 0,
+  "timed_out": false
+}

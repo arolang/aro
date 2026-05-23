@@ -1,0 +1,13 @@
+{
+  "prompt": "ARO snippet that uses parallel for-each with a concurrency limit.",
+  "slug": "aro_snippet_that_uses_parallel_for_each_with_a_concurrency_l",
+  "actual": "```aro\n(Process Items: ParallelExample) {\n    Create the <items> from the <collection>.\n    For each <item> in the <items> {\n        Process the <item>.\n    }\n    Return the<OK: status> for the <process>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Parallel Process: ParallelExample) {\n    Create the <items> from the <collection>.\n    For each <item> in the <items> {\n        Process the <item>.\n    }\n    Return the<OK: status> for the <process>.\n}\n```",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "expected": "```aro\n(ConcurrentProcess: Example) {\n    Create the <items> with [1, 2, 3, 4, 5].\n    parallel for each <item> in <items> with <concurrency: 2> {\n        Log <item> to the <console>.\n    }\n    Return an <OK: status> for the <process>.\n}\n```",
+  "elapsed_s": 24.3,
+  "returncode": 0,
+  "timed_out": false
+}

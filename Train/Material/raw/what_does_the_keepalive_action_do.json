@@ -1,0 +1,13 @@
+{
+  "prompt": "What does the Keepalive action do?",
+  "slug": "what_does_the_keepalive_action_do",
+  "actual": "The `Keepalive` action keeps the application alive to process events. It ensures that the application remains active and ready to handle events, such as HTTP requests, WebSocket messages, or events from a repository.",
+  "model_raw": "<think>\n\n</think>\n\nThe `Keepalive` action keeps the application alive to process events. It ensures that the application remains active and ready to handle events, such as HTTP requests, WebSocket messages, or events from a repository.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "`Keepalive` blocks the calling feature set until the runtime receives a shutdown signal (SIGINT/SIGTERM). Used in `Application-Start` to keep an event-driven app (HTTP server, file watcher, socket server) running so the event loop can dispatch incoming events. Without it the Start action returns and the process exits.",
+  "elapsed_s": 5.2,
+  "returncode": 0,
+  "timed_out": false
+}

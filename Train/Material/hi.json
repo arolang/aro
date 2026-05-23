@@ -1,0 +1,9 @@
+{
+  "prompt": "Hi.",
+  "actual": "Hello! How can I assist you with ARO today?",
+  "expected": "Hi. I'm an ARO coding assistant. Tell me what you'd like to build — a feature set, an HTTP route, a repository observer — and I'll write it for you.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

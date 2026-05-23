@@ -1,0 +1,9 @@
+{
+  "prompt": "List every built-in ARO action verb.",
+  "actual": "The built-in verbs are:\n- Extract\n- Compute\n- Retrieve\n- Store\n- Return\n- Log\n- Emit\n- Send\n- Render\n- Start\n- Stop\n- Keepalive\n- Configure\n- Accept\n- For-each\n- When\n- Read\n- Write\n- Compare\n- Throw",
+  "expected": "Extract, Compute, Parse, Retrieve, Fetch, Pull, Clone, Read, Request, Validate, Compare, Create, Transform, Stage, Checkout, Group, Merge, Filter, Reduce, Render, Sort, Reverse, Return, Throw, Publish, Store, Log, Send, Emit, Commit, Push, Tag, Write, Append, Copy, Move, Delete, Exists, Stat, List, Start, Stop, Keepalive, Configure, Accept, Schedule, Require, Connect.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

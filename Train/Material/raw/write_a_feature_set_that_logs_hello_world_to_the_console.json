@@ -1,0 +1,13 @@
+{
+  "prompt": "Write a feature set that logs \"Hello, World!\" to the console.",
+  "slug": "write_a_feature_set_that_logs_hello_world_to_the_console",
+  "actual": "```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an<OK: status> for the <startup>.\n}\n```",
+  "model_raw": "<think>\n\n</think>\n\n```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an<OK: status> for the <startup>.\n}\n```",
+  "aro_check_passed": true,
+  "judge": "ok",
+  "judge_reason": "passes structural checks + aro check",
+  "expected": "```aro\n(Hello: Example) {\n    Log \"Hello, World!\" to the <console>.\n    Return an <OK: status> for the <log>.\n}\n```",
+  "elapsed_s": 5.0,
+  "returncode": 0,
+  "timed_out": false
+}

@@ -1,0 +1,13 @@
+{
+  "prompt": "Code review: what's wrong stylistically with `(do_stuff: x) { Compute the X from the <a> + the <b>. }`?",
+  "slug": "code_review_what_s_wrong_stylistically_with_do_stuff_x_compu",
+  "actual": "",
+  "model_raw": "",
+  "aro_check_passed": null,
+  "judge": "no_output",
+  "judge_reason": "final answer was empty",
+  "expected": "Three style issues: `do_stuff` should be `Do Stuff` (Title Case for feature-set names), the activity `x` should be a Title-Cased noun phrase, and the result `X` needs angle brackets and hyphenated lowercase. Fixed: `(Do Stuff: Example) { Compute the <x> from <a> + <b>. Return an <OK: status> with <x>. }`",
+  "elapsed_s": 302.7,
+  "returncode": -1,
+  "timed_out": true
+}

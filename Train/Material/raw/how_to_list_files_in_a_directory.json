@@ -1,0 +1,13 @@
+{
+  "prompt": "How to list files in a directory?",
+  "slug": "how_to_list_files_in_a_directory",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Use the `List` action against `<directory: path>`.\n\n```aro\n(ListDir: Example) {\n    Create the <path> with \".\".\n    List the <entries> from the <directory: path>.\n    Return an <OK: status> with <entries>.\n}\n```",
+  "elapsed_s": 2.9,
+  "returncode": 0,
+  "timed_out": false
+}

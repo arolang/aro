@@ -1,0 +1,9 @@
+{
+  "prompt": "Insert a Compute step that doubles a value between Extract and Return.",
+  "actual": "```aro\n(Return: Hello World) {\n    Extract the <value> from the <request: body>.\n    Compute the <doubled> as 2 * the <value>.\n    Return the<OK: status> with <doubled>.\n}\n```",
+  "expected": "Between `Extract the <n> from ...` and the `Return`, add `Compute the <doubled> from <n> * 2.` and pass `<doubled>` to the Return.",
+  "aro_check_passed": false,
+  "judge": "fails_aro_check",
+  "judge_reason": "extracted code does not pass `aro check`",
+  "has_canonical_answer": true
+}

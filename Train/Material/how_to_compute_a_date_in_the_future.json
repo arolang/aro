@@ -1,0 +1,9 @@
+{
+  "prompt": "How to compute a date in the future?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Add a duration to a date via `Compute` with `+`.\n\n```aro\n(FutureDate: Example) {\n    Create the <today> with the <date: today>.\n    Compute the <next-week> from <today> + \"7 days\".\n    Return an <OK: status> with <next-week>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

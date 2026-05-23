@@ -1,0 +1,13 @@
+{
+  "prompt": "How to update an item in a repository?",
+  "slug": "how_to_update_an_item_in_a_repository",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "model_raw": "<think>\n\nThe session is ending. If you need any further assistance, feel free to ask!",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "expected": "Re-store the modified record; Store upserts by id.\n\n```aro\n(UpdateItem: Example) {\n    Create the <item> with { id: 1, name: \"Ada Lovelace\" }.\n    Store the <item> into the <item-repository>.\n    Return an <OK: status> with <item>.\n}\n```",
+  "elapsed_s": 3.0,
+  "returncode": 0,
+  "timed_out": false
+}

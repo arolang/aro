@@ -1,0 +1,9 @@
+{
+  "prompt": "How to write to a file in ARO?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Write` action against the `<file-system>` system object.\n\n```aro\n(Save Report: Example) {\n    Write the <report> to the <file-system> at \"out/report.txt\".\n    Return an <OK: status> for the <write>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

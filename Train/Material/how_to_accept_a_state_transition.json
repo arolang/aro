@@ -1,0 +1,9 @@
+{
+  "prompt": "How to accept a state transition?",
+  "actual": "The session is ending. If you need any further assistance, feel free to ask!",
+  "expected": "Use the `Accept` action against the entity and the target state.\n\n```aro\n(Ship Order: Orders) {\n    Extract the <order> from the <input>.\n    Accept the <transition> for the <order> with \"shipped\".\n    Return an <OK: status> with <order>.\n}\n```",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}

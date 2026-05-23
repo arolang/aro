@@ -1,0 +1,9 @@
+{
+  "prompt": "Best practice: when should I split a feature set into two?",
+  "actual": "Split a feature set into two when the feature set becomes too large or complex, making it hard to understand, maintain, or test. The goal is to keep each feature set focused on a single responsibility or business capability. For example, split a feature set into two if:\n\n1. The feature set contains multiple independent business capabilities that could be handled separately.\n2. The feature set contains multiple independent flows that could be handled separately.\n3. The feature set contains multiple independent events that could be handled separately.\n4. The feature set contains multiple independent HTTP endpoints that could be handled separately.\n5. The feature set contains multiple independent repository observers that could be handled separately.\n\nSplitting a feature set into two makes the code easier to understand, maintain, and test, and makes the application more modular.",
+  "expected": "When two concerns aren't sharing data. Pass control via an event (`Emit`) or a published variable. A 30-line feature set that does \"validate, persist, notify\" usually wants to be `(Save X) → emits XCreated → (Notify) handles XCreated`.",
+  "aro_check_passed": null,
+  "judge": "no_code",
+  "judge_reason": "no ```aro``` block in final output",
+  "has_canonical_answer": true
+}
