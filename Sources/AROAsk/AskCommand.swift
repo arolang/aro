@@ -55,8 +55,11 @@ public struct AskCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Sampling temperature (default 0.2)")
     public var temperature: Double = 0.2
 
-    @Flag(name: [.short, .long], help: "Print backend chatter (model loading, runner stdout/stderr). Sets ARO_ASK_VERBOSE.")
+    @Flag(name: [.short, .long], help: "Print backend chatter (model loading, runner stdout/stderr) and the raw model output including <think> blocks. Sets ARO_ASK_VERBOSE.")
     public var verbose: Bool = false
+
+    @Flag(name: .long, help: "Disable Qwen3 thinking mode for this turn (prepends /no_think). Useful when a simple prompt exhausts the token budget thinking.")
+    public var noThink: Bool = false
 
     public func run() async throws {
         // Backends read ARO_ASK_VERBOSE from the environment to decide
@@ -86,7 +89,8 @@ public struct AskCommand: AsyncParsableCommand {
         try await ensureModel(manager: manager)
         try await session.prepare(modelManager: manager)
         defer { Task { await session.shutdown() } }
-        let answer = try await session.ask(prompt.joined(separator: " "))
+        let promptText = prompt.joined(separator: " ")
+        let answer = try await session.ask(noThink ? "/no_think \(promptText)" : promptText)
         print(answer)
     }
 

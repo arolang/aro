@@ -159,6 +159,16 @@ public actor AskSession {
             )
             let reply = try await backend.chat(request: request)
 
+            // Verbose mode: dump the raw model output (including `<think>`)
+            // to stderr so the user can see what the model was reasoning
+            // about. Useful when the truncation warning fires and you want
+            // to know what was actually going on.
+            if Self.isVerbose, let raw = reply.content, !raw.isEmpty {
+                FileHandle.standardError.write(Data(
+                    "\n=== model raw output ===\n\(raw)\n=== end raw ===\n\n".utf8
+                ))
+            }
+
             // Strip thinking BEFORE persisting — anything saved to .context
             // is replayed verbatim on the next turn, so leaking raw `<think>`
             // (especially an unclosed one from a truncation) poisons future
@@ -169,7 +179,8 @@ public actor AskSession {
             if stripped.truncatedDuringThinking {
                 TerminalUI.printStatus(
                     "model spent its token budget thinking and produced no answer — " +
-                    "try a shorter or more concrete prompt, or break the task into steps"
+                    "try `aro ask --no-think \"<prompt>\"` to skip the reasoning step, " +
+                    "or `aro ask -v` to see what it was thinking about"
                 )
             }
 
@@ -230,6 +241,13 @@ public actor AskSession {
             }
         }
         return ""
+    }
+
+    /// True when `ARO_ASK_VERBOSE` is set (by `-v`/`--verbose` or directly
+    /// in the environment). Gates `=== model raw output ===` dumps so the
+    /// user can see what the model was thinking about.
+    static var isVerbose: Bool {
+        ProcessInfo.processInfo.environment["ARO_ASK_VERBOSE"] != nil
     }
 
     // MARK: - Post-inference self-repair
