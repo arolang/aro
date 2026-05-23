@@ -170,7 +170,14 @@ public actor AskSession {
 
             // If no tool calls, we have a final text reply — validate any ARO code
             guard let toolCalls = reply.toolCalls, !toolCalls.isEmpty else {
-                let finalText = Self.stripThinking(reply.content ?? "")
+                let stripped = stripThinking(reply.content ?? "")
+                if stripped.truncatedDuringThinking {
+                    TerminalUI.printStatus(
+                        "model spent its token budget thinking and produced no answer — " +
+                        "try a shorter or more concrete prompt, or break the task into steps"
+                    )
+                }
+                let finalText = stripped.text
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
                     originalUserRequest: prompt,
@@ -230,21 +237,6 @@ public actor AskSession {
     /// 1.5 in the loop body so a high `config.temperature` baseline doesn't
     /// run away.
     private static let repairTempOffsets: [Double] = [0.0, 0.3, 0.6, 0.9]
-
-    /// Strip `<think>...</think>` blocks from model output. Some packaged
-    /// models follow the thinking-tag protocol but emit empty `<think></think>`
-    /// blocks, which previously leaked through to user output. Idempotent.
-    static func stripThinking(_ text: String) -> String {
-        guard let regex = try? NSRegularExpression(
-            pattern: #"<think>[\s\S]*?</think>"#,
-            options: [.dotMatchesLineSeparators]
-        ) else { return text }
-        let range = NSRange(text.startIndex..., in: text)
-        let stripped = regex.stringByReplacingMatches(
-            in: text, range: range, withTemplate: ""
-        )
-        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 
     /// Extract ```aro code blocks from text.
     private func extractAroBlocks(_ text: String) -> [String] {
@@ -445,7 +437,7 @@ public actor AskSession {
                 stream: false
             )
             let reply = try await backend.chat(request: request)
-            currentText = Self.stripThinking(reply.content ?? currentText)
+            currentText = stripThinking(reply.content ?? currentText).text
 
             let encodedToolCalls = try encodeToolCalls(reply.toolCalls)
             context.messages.append(AskMessage(

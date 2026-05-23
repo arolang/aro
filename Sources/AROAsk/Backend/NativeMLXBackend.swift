@@ -228,13 +228,15 @@ public actor NativeMLXBackend: LMBackend {
             }
         }
         // Strip the Qwen3 thinking block before any further parsing —
-        // tool-call regexes and the user-visible text both want the
-        // post-thinking answer, not the internal reasoning.
-        // Also normalise the missing-space-before-`<` bug the base model
-        // bakes into ARO output (mirrors the training-pipeline fix in
-        // Train/script/config.py::_normalize_aro_whitespace).
+        // tool-call regexes must not match speculative tool calls the
+        // model wrote inside its reasoning. Also normalise the
+        // missing-space-before-`<` bug the base model bakes into ARO
+        // output (mirrors Train/script/config.py::_normalize_aro_whitespace).
+        // `stripThinking` is the module-level shared helper; AskSession
+        // runs it again at the call site, idempotently, so the
+        // truncatedDuringThinking signal still reaches the user.
         let fullText = normalizeAROWhitespace(
-            in: stripThinkingBlock(from: accumulated)
+            in: stripThinking(accumulated).text
         )
 
         // Parse tool calls from the generated text
@@ -275,23 +277,6 @@ public actor NativeMLXBackend: LMBackend {
         )
     }
 
-    /// Remove the Qwen3 `<think>...</think>` reasoning block from the model's
-    /// output. If the closing tag is missing (generation was truncated mid-
-    /// think — shouldn't happen with the bumped token budget, but defend
-    /// anyway), drop everything from `<think>` to end-of-string so the user
-    /// sees an empty response rather than a wall of internal monologue.
-    private func stripThinkingBlock(from text: String) -> String {
-        if let closeRange = text.range(of: "</think>") {
-            var stripped = String(text[closeRange.upperBound...])
-            if stripped.hasPrefix("\n") { stripped.removeFirst() }
-            return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let openRange = text.range(of: "<think>") {
-            return String(text[..<openRange.lowerBound])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return text
-    }
 
     // MARK: - Tool call parsing
 
