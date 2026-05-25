@@ -779,7 +779,10 @@ public final class TemplateExecutor: @unchecked Sendable {
                 } else if let currentDict = current as? [String: any Sendable], let next = currentDict[part] {
                     current = next
                 } else {
-                    throw TemplateError.renderError(path: "", message: "Property '\(part)' not found")
+                    // Missing fields render as empty string so optional-field
+                    // patterns (e.g. an `active` class set on one nav item)
+                    // don't force every other item to set an empty value.
+                    return ""
                 }
             }
 
