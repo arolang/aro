@@ -348,6 +348,30 @@ final class FormatDeserializerTests: XCTestCase {
         XCTAssertEqual(result?["a"] as? String, "it's here")
     }
 
+    // MARK: - YAML fix #4 — stylistic blank line after `key:`
+
+    /// Before this fix, an empty line between `key:` and the first `- `
+    /// of a nested array confused parseYAMLObject — it would step past
+    /// the blank, see a non-dash blank-trimmed string, and fall through
+    /// to parseYAMLObject instead of parseYAMLArray. Result: deeply
+    /// nested `elements:` arrays were silently parsed as empty objects.
+    func testDeserializeYAMLBlankLineAfterKey() {
+        let yaml = """
+        items:
+
+          - tpl: a
+          - tpl: b
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        guard let items = result?["items"] as? [any Sendable] else {
+            XCTFail("Expected items to parse as an array even with a blank line after the key; got \(String(describing: result?["items"]))")
+            return
+        }
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual((items[0] as? [String: any Sendable])?["tpl"] as? String, "a")
+        XCTAssertEqual((items[1] as? [String: any Sendable])?["tpl"] as? String, "b")
+    }
+
     // MARK: - CSV Deserialization Tests
 
     func testDeserializeCSVArray() {
