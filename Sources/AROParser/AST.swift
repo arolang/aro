@@ -425,16 +425,29 @@ public struct ByClause: Sendable, CustomStringConvertible {
     public let flags: String
     /// When true, `pattern` is a literal field name rather than a regex.
     public let isFieldName: Bool
+    /// When set, the executor resolves this variable at runtime and uses
+    /// its string value as the split pattern. Lets data files (yaml/json)
+    /// drive what a Split or Group action keys off — `pattern` is then
+    /// just a fallback / display value.
+    public let variableName: String?
     public let span: SourceSpan
 
-    public init(pattern: String, flags: String, span: SourceSpan, isFieldName: Bool = false) {
+    public init(pattern: String,
+                flags: String,
+                span: SourceSpan,
+                isFieldName: Bool = false,
+                variableName: String? = nil) {
         self.pattern = pattern
         self.flags = flags
         self.isFieldName = isFieldName
+        self.variableName = variableName
         self.span = span
     }
 
     public var description: String {
+        if let v = variableName {
+            return "by <\(v)>"
+        }
         if isFieldName {
             return "by \"\(pattern)\""
         }

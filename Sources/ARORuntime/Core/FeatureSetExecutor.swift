@@ -397,7 +397,15 @@ public final class FeatureSetExecutor: Sendable {
 
         // ARO-0037: Bind by clause if present (for Split and Group actions)
         if let byClause = statement.queryModifiers.byClause {
-            context.bind("_by_pattern_", value: byClause.pattern)
+            // `by <var>` form — resolve the variable now; whatever string
+            // it holds becomes the pattern. Falls back to the literal in
+            // byClause.pattern if the variable is missing or non-string.
+            if let varName = byClause.variableName,
+               let resolved = context.resolveAny(varName) as? String {
+                context.bind("_by_pattern_", value: resolved)
+            } else {
+                context.bind("_by_pattern_", value: byClause.pattern)
+            }
             context.bind("_by_flags_", value: byClause.flags)
             if byClause.isFieldName {
                 context.bind("_by_field_", value: byClause.pattern)
