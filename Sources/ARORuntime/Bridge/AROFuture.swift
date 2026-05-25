@@ -75,7 +75,9 @@ public final class AROFuture: @unchecked Sendable {
     public let sourceLocation: String?
 
     /// Underlying task. Cancelled in deinit when the last consumer goes away.
-    private let task: Task<any Sendable, Error>
+    /// Nil for pre-resolved futures (literals, SynchronousAction fast-path) —
+    /// no Task is spawned for already-known values.
+    private let task: Task<any Sendable, Error>?
 
     /// Result storage with a fan-out wait primitive. Lives in its own object
     /// so the Task body doesn't need to capture self.
@@ -113,11 +115,11 @@ public final class AROFuture: @unchecked Sendable {
         let storage = ResultStorage()
         storage.complete(.success(value))
         self.storage = storage
-        self.task = Task { value }
+        self.task = nil
     }
 
     deinit {
-        task.cancel()
+        task?.cancel()
     }
 
     /// Block the calling thread until the result is available, then return it.
@@ -147,7 +149,10 @@ public final class AROFuture: @unchecked Sendable {
     /// handlers, etc.). Awaits the underlying Task without blocking a pthread.
     /// Use this — not force() — from any `async` context.
     public func value() async throws -> any Sendable {
-        return try await task.value
+        if let task = task {
+            return try await task.value
+        }
+        return try storage.wait()
     }
 
     /// True once the result is memoized; force() will not block.
