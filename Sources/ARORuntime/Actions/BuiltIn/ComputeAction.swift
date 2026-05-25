@@ -197,6 +197,15 @@ public struct ComputeAction: SynchronousAction {
             }
             return try computeUnion(input, with: secondOperand)
 
+        case "markdown":
+            // Built-in markdown → HTML so apps don't need a plugin for
+            // routine CMS-style content. Subset is intentionally small
+            // (ATX headings, paragraphs, fenced code, **bold**, *italic*,
+            // `code`, [text](url)); plug a richer renderer in via a Swift
+            // / Rust plugin if you outgrow it.
+            let md = input as? String ?? String(describing: input)
+            return MinimalMarkdown.toHTML(md)
+
         default:
             return input
         }

@@ -393,15 +393,11 @@ public final class TemplateExecutor: @unchecked Sendable {
             case "lowercase":
                 result = result.lowercased()
 
-            // Markdown -> HTML, intentionally minimal so PageBuilder-style
-            // CMS content can mix prose, headings, inline code, bold/italic
-            // and links straight from a YAML field. Block elements supported:
-            // ATX headings (#..######), paragraphs separated by blank lines,
-            // fenced code blocks (```). Inline: **bold**, *italic*, `code`,
-            // [text](url). Anything we don't recognise is HTML-escaped and
-            // wrapped in <p>.
+            // Markdown -> HTML via the shared MinimalMarkdown helper. The
+            // same subset is also exposed as the `markdown` Compute
+            // qualifier so ARO code outside templates can call it too.
             case "markdown":
-                result = renderMarkdownToHTML(result)
+                result = MinimalMarkdown.toHTML(result)
 
             // Height constraint: pad or clip content to exactly N rows.
             // Counts \n characters; pads with empty lines or clips to target.
@@ -497,107 +493,6 @@ public final class TemplateExecutor: @unchecked Sendable {
             isTTY: false,
             encoding: "UTF-8"
         )
-    }
-
-    // MARK: - Markdown -> HTML (minimal CommonMark subset)
-
-    /// Minimal markdown renderer for the `| markdown` template filter.
-    /// Supported:
-    ///   - blank-line-separated paragraphs (wrapped in <p>)
-    ///   - ATX headings `# … ######`
-    ///   - fenced code blocks ```…```
-    ///   - inline `**bold**`, `*italic*`, `` `code` ``, `[text](url)`
-    /// Everything else is HTML-escaped and rendered as a paragraph.
-    private func renderMarkdownToHTML(_ source: String) -> String {
-        // Split into blocks separated by blank lines, but keep fenced code
-        // blocks intact even when they contain blank lines.
-        var blocks: [String] = []
-        var buf: [String] = []
-        var inFence = false
-        for rawLine in source.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine)
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                buf.append(line)
-                inFence.toggle()
-                continue
-            }
-            if !inFence && line.trimmingCharacters(in: .whitespaces).isEmpty {
-                if !buf.isEmpty { blocks.append(buf.joined(separator: "\n")); buf.removeAll() }
-            } else {
-                buf.append(line)
-            }
-        }
-        if !buf.isEmpty { blocks.append(buf.joined(separator: "\n")) }
-
-        let rendered = blocks.map(renderMarkdownBlock)
-        return rendered.joined(separator: "\n")
-    }
-
-    private func renderMarkdownBlock(_ block: String) -> String {
-        let trimmed = block.trimmingCharacters(in: .whitespaces)
-
-        // Fenced code block
-        if trimmed.hasPrefix("```") {
-            let lines = block.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
-            // Drop the opening and (optional) closing fence
-            var inner = lines
-            if !inner.isEmpty { inner.removeFirst() }
-            if let last = inner.last, last.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                inner.removeLast()
-            }
-            let code = inner.joined(separator: "\n")
-            return "<pre><code>\(htmlEscape(code))</code></pre>"
-        }
-
-        // ATX heading
-        if let match = trimmed.range(of: #"^(#{1,6})\s+(.*)$"#, options: .regularExpression) {
-            let s = String(trimmed[match])
-            // Count leading '#'
-            let level = s.prefix(while: { $0 == "#" }).count
-            let body = s.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
-            return "<h\(level)>\(renderMarkdownInline(body))</h\(level)>"
-        }
-
-        // Default: paragraph. Collapse internal newlines to spaces (CommonMark
-        // soft line breaks).
-        let collapsed = block.replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespaces)
-        return "<p>\(renderMarkdownInline(collapsed))</p>"
-    }
-
-    private func renderMarkdownInline(_ source: String) -> String {
-        var s = htmlEscape(source)
-        // Inline code first so its contents aren't further processed
-        s = regexReplace(s, pattern: "`([^`]+)`", template: "<code>$1</code>")
-        // Links [text](url)
-        s = regexReplace(s, pattern: #"\[([^\]]+)\]\(([^)]+)\)"#, template: "<a href=\"$2\">$1</a>")
-        // Bold **text** (process before italic so ** isn't eaten as two *)
-        s = regexReplace(s, pattern: #"\*\*([^*]+)\*\*"#, template: "<strong>$1</strong>")
-        // Italic *text* and _text_
-        s = regexReplace(s, pattern: #"\*([^*]+)\*"#, template: "<em>$1</em>")
-        s = regexReplace(s, pattern: #"_([^_]+)_"#, template: "<em>$1</em>")
-        return s
-    }
-
-    private func regexReplace(_ s: String, pattern: String, template: String) -> String {
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return s }
-        let range = NSRange(s.startIndex..<s.endIndex, in: s)
-        return re.stringByReplacingMatches(in: s, range: range, withTemplate: template)
-    }
-
-    private func htmlEscape(_ s: String) -> String {
-        var out = ""
-        out.reserveCapacity(s.count)
-        for ch in s {
-            switch ch {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            default: out.append(ch)
-            }
-        }
-        return out
     }
 
     /// Format an ISO date string to a custom format
