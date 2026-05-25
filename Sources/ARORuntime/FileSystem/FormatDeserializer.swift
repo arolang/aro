@@ -242,7 +242,12 @@ public struct FormatDeserializer: Sendable {
                 let prefix = String(repeating: " ", count: continuationIndent)
                 var objectLines = [prefix + itemContent]
 
-                // Collect continuation lines that belong to this object
+                // Collect continuation lines that belong to this object.
+                // A line is part of the same object iff it is strictly more
+                // indented than the dash that opened the item. Lines at the
+                // same indent that start with `- ` are the next array item
+                // and stop the collection; deeper `- ` lines belong to a
+                // nested array under one of the object's keys.
                 var peek = index + 1
                 while peek < lines.count {
                     let pLine = lines[peek]
@@ -253,7 +258,7 @@ public struct FormatDeserializer: Sendable {
                         continue
                     }
                     let pIndent = pLine.prefix(while: { $0 == " " }).count
-                    if pIndent >= continuationIndent && !pTrimmed.hasPrefix("- ") {
+                    if pIndent > dashIndent {
                         objectLines.append(pLine)
                         peek += 1
                     } else {
@@ -315,6 +320,26 @@ public struct FormatDeserializer: Sendable {
             let afterColon = String(trimmedLine[trimmedLine.index(after: colonIndex)...])
                 .trimmingCharacters(in: .whitespaces)
 
+            // Block scalar indicators: `|`, `|-`, `|+`, `>`, `>-`, `>+`
+            // (literal vs folded, with optional chomping). All variants share
+            // the same collection loop — they keep every line whose indent
+            // exceeds the key's own indent.
+            if afterColon == "|" || afterColon == "|-" || afterColon == "|+"
+                || afterColon == ">" || afterColon == ">-" || afterColon == ">+" {
+                let folded = afterColon.hasPrefix(">")
+                let chomp = afterColon.last  // "-" strip, "+" keep, nil clip
+                let (text, endIdx) = parseYAMLBlockScalar(
+                    lines,
+                    startIndex: index + 1,
+                    parentIndent: currentIndent,
+                    folded: folded,
+                    chomp: chomp == "-" ? .strip : (chomp == "+" ? .keep : .clip)
+                )
+                result[key] = text
+                index = endIdx
+                continue
+            }
+
             if afterColon.isEmpty {
                 // Value is on next line(s)
                 index += 1
@@ -338,6 +363,85 @@ public struct FormatDeserializer: Sendable {
         }
 
         return (result, index)
+    }
+
+    private enum YAMLChomp { case strip, clip, keep }
+
+    /// Collect a block scalar body. `parentIndent` is the indent of the key
+    /// line whose value this block is; the block ends as soon as a non-empty
+    /// line is found at parentIndent or less.
+    private static func parseYAMLBlockScalar(
+        _ lines: [String],
+        startIndex: Int,
+        parentIndent: Int,
+        folded: Bool,
+        chomp: YAMLChomp
+    ) -> (value: String, endIndex: Int) {
+        var collected: [String] = []
+        var index = startIndex
+        var blockIndent: Int? = nil
+
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                collected.append("")
+                index += 1
+                continue
+            }
+            let pIndent = line.prefix(while: { $0 == " " }).count
+            if pIndent <= parentIndent { break }
+            if blockIndent == nil { blockIndent = pIndent }
+            let strip = min(blockIndent ?? pIndent, pIndent)
+            collected.append(String(line.dropFirst(strip)))
+            index += 1
+        }
+
+        // Trim trailing empties that were collected past the real end.
+        while index < lines.count {
+            // safety no-op; placeholder
+            break
+        }
+
+        // Drop trailing blank lines that came after the last non-blank.
+        var lastNonBlank = collected.count
+        while lastNonBlank > 0 && collected[lastNonBlank - 1].isEmpty {
+            lastNonBlank -= 1
+        }
+
+        let body: String
+        if folded {
+            // Folded: single newlines become spaces, blank lines stay as newlines.
+            var pieces: [String] = []
+            var current = ""
+            for i in 0..<lastNonBlank {
+                let line = collected[i]
+                if line.isEmpty {
+                    pieces.append(current)
+                    pieces.append("")
+                    current = ""
+                } else if current.isEmpty {
+                    current = line
+                } else {
+                    current += " " + line
+                }
+            }
+            pieces.append(current)
+            body = pieces.joined(separator: "\n")
+        } else {
+            body = collected.prefix(lastNonBlank).joined(separator: "\n")
+        }
+
+        switch chomp {
+        case .strip:
+            return (body, index)
+        case .clip:
+            return (body.isEmpty ? body : body + "\n", index)
+        case .keep:
+            // Re-append every trailing blank we trimmed.
+            let trailing = collected.count - lastNonBlank
+            return (body + String(repeating: "\n", count: trailing + (body.isEmpty ? 0 : 1)), index)
+        }
     }
 
     private static func parseYAMLScalar(_ value: String) -> any Sendable {
@@ -364,13 +468,47 @@ public struct FormatDeserializer: Sendable {
             return doubleValue
         }
 
-        // Quoted string - remove quotes
-        if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"")) ||
-           (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) {
-            return String(trimmed.dropFirst().dropLast())
+        // Double-quoted string: process YAML escape sequences
+        if trimmed.count >= 2 && trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") {
+            let body = String(trimmed.dropFirst().dropLast())
+            return unescapeDoubleQuotedYAML(body)
+        }
+
+        // Single-quoted string: only `''` -> `'` is significant
+        if trimmed.count >= 2 && trimmed.hasPrefix("'") && trimmed.hasSuffix("'") {
+            let body = String(trimmed.dropFirst().dropLast())
+            return body.replacingOccurrences(of: "''", with: "'")
         }
 
         return trimmed
+    }
+
+    private static func unescapeDoubleQuotedYAML(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count)
+        var iter = s.makeIterator()
+        while let ch = iter.next() {
+            if ch != "\\" { out.append(ch); continue }
+            guard let esc = iter.next() else { out.append("\\"); break }
+            switch esc {
+            case "n":  out.append("\n")
+            case "t":  out.append("\t")
+            case "r":  out.append("\r")
+            case "0":  out.append("\u{0}")
+            case "\"": out.append("\"")
+            case "'":  out.append("'")
+            case "\\": out.append("\\")
+            case "/":  out.append("/")
+            case "a":  out.append("\u{07}")
+            case "b":  out.append("\u{08}")
+            case "f":  out.append("\u{0C}")
+            case "v":  out.append("\u{0B}")
+            case "e":  out.append("\u{1B}")
+            case " ":  out.append(" ")
+            default:   out.append("\\"); out.append(esc)
+            }
+        }
+        return out
     }
 
     // MARK: - XML Deserialization

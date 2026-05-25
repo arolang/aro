@@ -241,6 +241,113 @@ final class FormatDeserializerTests: XCTestCase {
         XCTAssertEqual(dict["name"] as? String, "Alice")
     }
 
+    // MARK: - YAML fix #1 — nested arrays-of-objects
+
+    /// Before the fix in commit 523cc254 the inner `sublinks` items were
+    /// flattened up into `items`, producing
+    ///   `items = [{href:x,…}, {href:y,…}, {name:A}, {name:B}]`.
+    /// The continuation collector in parseYAMLArray excluded any line
+    /// starting with `- `, so the nested array items were re-parsed as
+    /// siblings of the outer items. Fixed by switching the continuation
+    /// test to "indent strictly greater than the dash that opened the
+    /// item".
+    func testDeserializeYAMLNestedArraysOfObjects() {
+        let yaml = """
+        items:
+          - name: A
+            sublinks:
+              - href: x
+                label: X
+              - href: y
+                label: Y
+          - name: B
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml)
+        guard let dict = result as? [String: any Sendable],
+              let items = dict["items"] as? [any Sendable] else {
+            XCTFail("Expected a dictionary with an items array; got \(result)")
+            return
+        }
+
+        XCTAssertEqual(items.count, 2, "Expected 2 outer items; nested array must not be flattened")
+
+        guard let a = items[0] as? [String: any Sendable] else {
+            XCTFail("Expected dictionary for items[0]; got \(items[0])")
+            return
+        }
+        XCTAssertEqual(a["name"] as? String, "A")
+        guard let sublinks = a["sublinks"] as? [any Sendable], sublinks.count == 2 else {
+            XCTFail("Expected items[0].sublinks to be a 2-element array; got \(String(describing: a["sublinks"]))")
+            return
+        }
+        XCTAssertEqual((sublinks[0] as? [String: any Sendable])?["href"] as? String, "x")
+        XCTAssertEqual((sublinks[0] as? [String: any Sendable])?["label"] as? String, "X")
+        XCTAssertEqual((sublinks[1] as? [String: any Sendable])?["href"] as? String, "y")
+        XCTAssertEqual((sublinks[1] as? [String: any Sendable])?["label"] as? String, "Y")
+
+        XCTAssertEqual((items[1] as? [String: any Sendable])?["name"] as? String, "B")
+    }
+
+    // MARK: - YAML fix #2 — block scalars
+
+    func testDeserializeYAMLLiteralBlockScalar() {
+        let yaml = """
+        body: |
+          line one
+          line two
+        next: foo
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        // `|` keeps the literal newlines, defaults to "clip" chomping
+        // (one final newline preserved).
+        XCTAssertEqual(result?["body"] as? String, "line one\nline two\n")
+        XCTAssertEqual(result?["next"] as? String, "foo")
+    }
+
+    func testDeserializeYAMLLiteralBlockScalarStripChomping() {
+        let yaml = """
+        body: |-
+          single line
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        // `|-` strips trailing newlines.
+        XCTAssertEqual(result?["body"] as? String, "single line")
+    }
+
+    func testDeserializeYAMLFoldedBlockScalar() {
+        let yaml = """
+        body: >
+          one two
+          three
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        // `>` folds single newlines to spaces, defaults to "clip" chomping.
+        XCTAssertEqual(result?["body"] as? String, "one two three\n")
+    }
+
+    // MARK: - YAML fix #3 — escape sequences in quoted strings
+
+    func testDeserializeYAMLDoubleQuotedEscapes() {
+        let yaml = """
+        a: "line one\\nline two"
+        b: "tab\\there"
+        c: "quote\\"inside"
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        XCTAssertEqual(result?["a"] as? String, "line one\nline two")
+        XCTAssertEqual(result?["b"] as? String, "tab\there")
+        XCTAssertEqual(result?["c"] as? String, "quote\"inside")
+    }
+
+    func testDeserializeYAMLSingleQuotedDoubling() {
+        let yaml = """
+        a: 'it''s here'
+        """
+        let result = FormatDeserializer.deserialize(yaml, format: .yaml) as? [String: any Sendable]
+        // YAML's single-quoted escape: '' -> '
+        XCTAssertEqual(result?["a"] as? String, "it's here")
+    }
+
     // MARK: - CSV Deserialization Tests
 
     func testDeserializeCSVArray() {

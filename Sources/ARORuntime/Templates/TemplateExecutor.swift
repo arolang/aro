@@ -393,6 +393,12 @@ public final class TemplateExecutor: @unchecked Sendable {
             case "lowercase":
                 result = result.lowercased()
 
+            // Markdown -> HTML via the shared MinimalMarkdown helper. The
+            // same subset is also exposed as the `markdown` Compute
+            // qualifier so ARO code outside templates can call it too.
+            case "markdown":
+                result = MinimalMarkdown.toHTML(result)
+
             // Height constraint: pad or clip content to exactly N rows.
             // Counts \n characters; pads with empty lines or clips to target.
             // Spec: "full", "full-N", "full+N", "1/2", "1/3", "2/3", "3/4", N (absolute)
@@ -668,7 +674,10 @@ public final class TemplateExecutor: @unchecked Sendable {
                 } else if let currentDict = current as? [String: any Sendable], let next = currentDict[part] {
                     current = next
                 } else {
-                    throw TemplateError.renderError(path: "", message: "Property '\(part)' not found")
+                    // Missing fields render as empty string so optional-field
+                    // patterns (e.g. an `active` class set on one nav item)
+                    // don't force every other item to set an empty value.
+                    return ""
                 }
             }
 

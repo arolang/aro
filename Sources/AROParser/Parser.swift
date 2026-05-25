@@ -514,8 +514,23 @@ public final class Parser {
             } else if case .stringLiteral(let fieldName) = peek().kind {
                 advance()
                 byClause = ByClause(pattern: fieldName, flags: "", span: byToken.span.merged(with: previous().span), isFieldName: true)
+            } else if case .leftAngle = peek().kind {
+                // `by <var>` — the pattern is whatever string the variable
+                // resolves to at runtime; lets data files drive Split/Group.
+                advance()
+                guard case .identifier(let name) = peek().kind else {
+                    throw ParserError.unexpectedToken(expected: "identifier inside <…> after 'by'", got: peek())
+                }
+                advance()
+                try expect(.rightAngle, message: "Expected '>' after variable name in 'by <…>'")
+                byClause = ByClause(
+                    pattern: "",
+                    flags: "",
+                    span: byToken.span.merged(with: previous().span),
+                    variableName: name
+                )
             } else {
-                throw ParserError.unexpectedToken(expected: "regex literal or string literal after 'by'", got: peek())
+                throw ParserError.unexpectedToken(expected: "regex literal, string literal, or <var> after 'by'", got: peek())
             }
         }
 
