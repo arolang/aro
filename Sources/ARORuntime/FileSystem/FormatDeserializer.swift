@@ -341,8 +341,19 @@ public struct FormatDeserializer: Sendable {
             }
 
             if afterColon.isEmpty {
-                // Value is on next line(s)
+                // Value lives on the next non-blank, non-comment line(s).
+                // Skip blank and comment lines so a stylistic blank line
+                // between `key:` and its block doesn't trick the parser
+                // into seeing an object where the user wrote an array.
                 index += 1
+                while index < lines.count {
+                    let scanTrim = lines[index].trimmingCharacters(in: .whitespaces)
+                    if scanTrim.isEmpty || scanTrim.hasPrefix("#") {
+                        index += 1
+                    } else {
+                        break
+                    }
+                }
                 if index < lines.count {
                     let nextLine = lines[index]
                     let nextIndent = nextLine.prefix(while: { $0 == " " }).count
