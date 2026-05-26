@@ -936,6 +936,53 @@ for verb, label in [
         'logging',
     )
 
+# Match-pattern reinforcement — round-1 booster smoke-test failed on
+# `match X with 200 { ... }` (model invented `match X with N`). Add
+# explicit examples that show the correct `match X { case ... }` form.
+for var, cases in [
+    ('status-code', ['200', '404', '500']),
+    ('priority',    ['"low"', '"medium"', '"high"']),
+    ('role',        ['"admin"', '"editor"', '"viewer"']),
+    ('size',        ['"small"', '"large"']),
+]:
+    case_block = '\n'.join(
+        f'        case {c} {{\n'
+        f'            Log "matched a case" to the <console>.\n'
+        f'        }}'
+        for c in cases
+    )
+    E.add(
+        f'Use a match statement to branch on the {var}. Use `case <value> {{ ... }}` blocks inside the match — do not write `match X with N`.',
+        f'(MatchOn{var.title().replace("-", "")}: Example) {{\n'
+        f'    Create the <{var}> with {cases[0]}.\n'
+        f'    match <{var}> {{\n'
+        f'{case_block}\n'
+        f'        otherwise {{\n'
+        f'            Log "no match" to the <console>.\n'
+        f'        }}\n'
+        f'    }}\n'
+        f'    Return an <OK: status> for the <dispatch>.\n'
+        f'}}',
+        'match_reinforcement',
+    )
+
+E.add('How is the match statement structured in ARO? Show me a correct example.',
+      '(MatchStructure: Example) {\n'
+      '    Create the <code> with 200.\n'
+      '    match <code> {\n'
+      '        case 200 {\n'
+      '            Log "ok" to the <console>.\n'
+      '        }\n'
+      '        case 404 {\n'
+      '            Log "not found" to the <console>.\n'
+      '        }\n'
+      '        otherwise {\n'
+      '            Log "other" to the <console>.\n'
+      '        }\n'
+      '    }\n'
+      '    Return an <OK: status> for the <match>.\n'
+      '}', 'match_reinforcement')
+
 # Match on more flag-style values.
 E.add('Branch on an environment string (dev, staging, prod).',
       '(EnvBranch: Example) {\n'
