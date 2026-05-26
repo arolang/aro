@@ -128,7 +128,10 @@ func toObjectDescriptor(_ ptr: UnsafeRawPointer) -> ObjectDescriptor {
     return ObjectDescriptor(preposition: preposition, base: base, specifiers: specifiers, span: dummySpan)
 }
 
-/// Convert integer to Preposition enum
+/// Convert integer to Preposition enum.
+/// Codes must stay in sync with `LLVMTypeMapper.prepositionValue(_:)`
+/// in AROCompiler so the LLVM-compiled binary and the interpreter
+/// agree on the wire format for preposition tags.
 func intToPreposition(_ value: Int) -> Preposition? {
     switch value {
     case 1: return .from
@@ -139,6 +142,8 @@ func intToPreposition(_ value: Int) -> Preposition? {
     case 6: return .via
     case 7: return .against
     case 8: return .on
+    case 9: return .by
+    case 10: return .at
     default: return nil
     }
 }
