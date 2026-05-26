@@ -570,6 +570,131 @@ public func aro_runtime_register_handler(
     }
 }
 
+/// Register a user-defined `Application.<Name>` action in a compiled binary.
+///
+/// User-defined actions (feature sets whose business activity is `Action`)
+/// are compiled to native code just like every other feature set, but the
+/// runtime's ActionRegistry has no idea they exist — only the LLVM-emitted
+/// `main` knows the name → function mapping. The compiler calls this
+/// function once per user-defined action at startup so a later
+/// `Application.RenderElement the <X> with { … }` can be dispatched
+/// through `aro_action_dynamic` like every other dynamic action.
+///
+/// - Parameters:
+///   - runtimePtr: Runtime handle from aro_runtime_init.
+///   - namePtr: Bare action name (e.g. "RenderElement"). Registered as
+///     verb "Application.<name>".
+///   - bodyFuncPtr: Function pointer to the compiled feature-set body —
+///     `@convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?`,
+///     same signature as event handlers and Application-Start.
+///   - takesFieldPtr: Optional "takes <field>" sugar slot from the action
+///     header. If non-null, callers may use `from <value>` and the runtime
+///     wraps the value as `{ <field>: <value> }` for `<input>`.
+@_cdecl("aro_register_user_action")
+public func aro_register_user_action(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ namePtr: UnsafePointer<CChar>?,
+    _ bodyFuncPtr: UnsafeMutableRawPointer?,
+    _ takesFieldPtr: UnsafePointer<CChar>?
+) {
+    guard let runtimePtr = runtimePtr,
+          let namePtr = namePtr,
+          let bodyFuncPtr = bodyFuncPtr
+    else { return }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
+    let name = String(cString: namePtr)
+    let takesField = takesFieldPtr.map { String(cString: $0) }
+    let bodyAddress = Int(bitPattern: bodyFuncPtr)
+    let verb = "Application.\(name)"
+
+    ActionRegistry.shared.registerDynamic(
+        verb: verb,
+        handler: { result, object, context in
+            // Build the <input> dict the same way UserDefinedActionHost
+            // does in interpreter mode (with-clause, takes-sugar, or a
+            // bare variable that already holds an object).
+            let input = buildCompiledUserActionInput(
+                takesField: takesField,
+                object: object,
+                context: context
+            )
+
+            // Spawn a fresh runtime context for the callee, parented to
+            // the caller so services and globals stay reachable.
+            let childContext = RuntimeContext(
+                featureSetName: name,
+                businessActivity: "Action",
+                parent: context
+            )
+            childContext.bind("input", value: input)
+
+            // Wrap the child context as an AROCContextHandle so the
+            // compiled body can read/write it through the regular C API.
+            let childHandle = AROCContextHandle(runtime: runtimeHandle, existingContext: childContext)
+            let childPtr = Unmanaged.passRetained(childHandle).toOpaque()
+
+            // Re-cast the stored function-pointer address and invoke it.
+            guard let bodyPtrReconstructed = UnsafeMutableRawPointer(bitPattern: bodyAddress) else {
+                Unmanaged<AROCContextHandle>.fromOpaque(childPtr).release()
+                throw ActionError.unknownAction("Application.\(name) — invalid body pointer")
+            }
+            typealias BodyFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+            let body = unsafeBitCast(bodyPtrReconstructed, to: BodyFunc.self)
+            let returned = body(childPtr)
+            if let r = returned { aro_value_free(r) }
+
+            // Read the response the body produced and flatten it into the
+            // dict shape callers see from plugin actions: `status`, optional
+            // `reason`, plus whatever fields `Return … with <data>.` set.
+            let flat = flattenCompiledUserActionResponse(childContext)
+
+            Unmanaged<AROCContextHandle>.fromOpaque(childPtr).release()
+            return flat
+        },
+        pluginName: "_user_defined_actions_"
+    )
+}
+
+/// Build the `<input>` dict for a compiled-binary user-action call.
+/// Mirrors UserDefinedActionHost.buildInput but uses only what's bound
+/// on the caller's context (no analyzer access).
+private func buildCompiledUserActionInput(
+    takesField: String?,
+    object: ObjectDescriptor,
+    context: ExecutionContext
+) -> [String: any Sendable] {
+    func resolveLocal(_ name: String) -> (any Sendable)? {
+        guard let rc = context as? RuntimeContext, rc.existsLocally(name) else { return nil }
+        return rc.resolveAny(name)
+    }
+    if let withDict = resolveLocal("_with_") as? [String: any Sendable] {
+        return withDict
+    }
+    if let takesField = takesField {
+        if let expr = resolveLocal("_expression_") { return [takesField: expr] }
+        if let lit  = resolveLocal("_literal_")    { return [takesField: lit] }
+        if let v    = context.resolveAny(object.base) { return [takesField: v] }
+    }
+    if let resolved = context.resolveAny(object.base) as? [String: any Sendable] {
+        return resolved
+    }
+    return [:]
+}
+
+/// Read the response the compiled feature-set body wrote into its child
+/// context and flatten it into the dict shape callers see from plugin
+/// and interpreter user-actions.
+private func flattenCompiledUserActionResponse(_ context: RuntimeContext) -> [String: any Sendable] {
+    guard let response = context.getResponse() else { return [:] }
+    var dict: [String: any Sendable] = ["status": response.status]
+    if !response.reason.isEmpty { dict["reason"] = response.reason }
+    for (key, anySendable) in response.data {
+        if let value: any Sendable = anySendable.get() { dict[key] = value }
+    }
+    return dict
+}
+
 /// Register a repository observer for compiled binaries with optional when condition
 /// This function subscribes to RepositoryChangedEvent for the specified repository
 /// and calls the observer function when events occur (if when condition passes)
