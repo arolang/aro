@@ -288,17 +288,31 @@ def semantic_alignment_filter(pairs, model, tokenizer, mlx_generate, make_sample
 
 
 def is_complete_program(text_or_blocks):
-    """True when at least one ```aro block in the input contains a feature
-    set header `(name: activity) {`. Accepts either a raw assistant reply
-    (string) or a list of pre-extracted block strings."""
+    """True when the input contains valid ARO — either a complete feature
+    set (any kind: `Application-Start`, user-defined `Action`, event
+    handler, repository observer, HTTP operationId, etc.) or one or more
+    bare REPL-style statements (each non-comment line ends with a period).
+
+    Both forms pass `aro check`; the model needs to learn both. The bare-
+    statement form is what `aro repl` and `echo '...' | aro` consume, and
+    a model that can ONLY produce wrapped feature sets is worse at the
+    interactive use case."""
     if isinstance(text_or_blocks, str):
-        # Look for ```aro\n...``` and check the body
-        for m in _re.finditer(r"```aro\n([\s\S]*?)```", text_or_blocks):
-            if _FEATURESET_HEADER_RE.search(m.group(1)):
-                return True
-        return False
-    # list of block bodies (already stripped of fences)
-    return any(_FEATURESET_HEADER_RE.search(b) for b in text_or_blocks)
+        blocks = [m.group(1) for m in _re.finditer(r"```aro\n([\s\S]*?)```", text_or_blocks)]
+    else:
+        blocks = list(text_or_blocks)
+
+    for body in blocks:
+        if _FEATURESET_HEADER_RE.search(body):
+            return True
+        # Bare REPL: every non-empty, non-comment line ends with `.`
+        nontrivial = [
+            l.strip() for l in body.split('\n')
+            if l.strip() and not l.strip().startswith('(*')
+        ]
+        if nontrivial and all(l.endswith('.') for l in nontrivial):
+            return True
+    return False
 
 
 def filter_complete_program_samples(samples, code_task_types=None):

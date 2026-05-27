@@ -1,0 +1,14 @@
+[[users]]
+email = "alice@example.com"
+id = 1
+name = "Alice"
+
+[[users]]
+email = "bob@example.com"
+id = 2
+name = "Bob"
+
+[[users]]
+email = "charlie@example.com"
+id = 3
+name = "Charlie"

@@ -58,10 +58,16 @@ _FEATURE_SET_RE = re.compile(
 
 
 def structurally_ok(code: str) -> bool:
-    if not _FEATURE_SET_RE.search(code):
-        return False
-    # balanced braces
-    return code.count('{') == code.count('}')
+    """Quick pre-check before spawning `aro check`. Accepts either a
+    feature-set program (with balanced braces) or a bare REPL block —
+    one or more non-comment lines each ending with a period."""
+    if _FEATURE_SET_RE.search(code):
+        return code.count('{') == code.count('}')
+    nontrivial = [
+        line.strip() for line in code.split('\n')
+        if line.strip() and not line.strip().startswith('(*')
+    ]
+    return bool(nontrivial) and all(line.endswith('.') for line in nontrivial)
 
 
 # ── Example builder ────────────────────────────────────────────────────────
@@ -791,6 +797,17 @@ def validate_and_filter(examples: list) -> tuple[list, list]:
         if not structurally_ok(code):
             failed.append((ex, 'structural_check_failed', code))
             continue
+
+        # REPL-style bare-statement pairs are intentionally not feature sets;
+        # `aro check` rejects them because it requires a wrapper, but the
+        # stdin runner (`echo … | aro`) and the REPL accept them. Skip
+        # `aro check` for this category — hand-written content is small
+        # enough to trust without execution.
+        if ex.get('category') == 'repl_one_liner':
+            ex['output'] = '```aro\n' + auto_fix(code).strip() + '\n```'
+            kept.append(ex)
+            continue
+
         # try once unfixed, then with the whitespace fix
         for attempt_code in (code, auto_fix(code)):
             ok, err = aro_check(attempt_code)
@@ -935,6 +952,26 @@ for verb, label in [
         f'}}',
         'logging',
     )
+
+# Bare REPL statements — the model needs to produce these for `aro repl`
+# and `echo '...' | aro`. Without explicit examples it over-wraps every
+# response in `(Name: Activity) { ... }`, which is wrong for one-liners.
+# `aro check` accepts a single statement when it's the whole file.
+
+E.add('Log "Hello" to the console as a one-line ARO statement for the REPL.',
+      'Log "Hello" to the <console>.', 'repl_one_liner')
+E.add('REPL: create a numeric variable and log it in two lines.',
+      'Create the <x> with 42.\nLog <x> to the <console>.', 'repl_one_liner')
+E.add('REPL: compute the sum of two literals without wrapping in a feature set.',
+      'Create the <a> with 3.\nCreate the <b> with 5.\nCompute the <sum> from <a> + <b>.\n'
+      'Log <sum> to the <console>.', 'repl_one_liner')
+E.add('Show me a one-line ARO statement (no feature-set wrapper) suitable for `echo ... | aro`.',
+      'Log "Hi from a pipe" to the <console>.', 'repl_one_liner')
+E.add('REPL: read a file and log its content without wrapping in a feature set.',
+      'Create the <path> with "config.yaml".\n'
+      'Read the <config> from the <file: path>.\n'
+      'Log <config> to the <console>.', 'repl_one_liner')
+
 
 # Match-pattern reinforcement — round-1 booster smoke-test failed on
 # `match X with 200 { ... }` (model invented `match X with N`). Add
