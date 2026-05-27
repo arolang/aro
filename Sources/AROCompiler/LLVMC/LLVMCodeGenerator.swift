@@ -2015,6 +2015,11 @@ public final class LLVMCodeGenerator {
         // Register event handlers
         registerEventHandlers(program: program, runtime: runtime)
 
+        // Register user-defined actions (`Application.<Name>`) so any
+        // subsequent action call dispatched through `aro_action_dynamic`
+        // can find the right compiled body.
+        registerUserDefinedActions(program: program, runtime: runtime)
+
         // Find all Application-Start feature sets
         let appStartFeatureSets = program.featureSets.filter {
             $0.featureSet.name == "Application-Start"
@@ -2103,6 +2108,32 @@ public final class LLVMCodeGenerator {
 
         // Return success
         ctx.module.insertReturn(ctx.i32Type.zero, at: cleanupIP)
+    }
+
+    /// Emit a `aro_register_user_action` call for every feature set
+     /// whose business activity is `Action`. The runtime side adds a
+     /// dynamic handler for verb `Application.<Name>` that wraps the
+     /// compiled body, so a later
+     /// `Application.RenderElement the <X> with { … }` dispatches through
+     /// `aro_action_dynamic` like any other plugin / dynamic action.
+    private func registerUserDefinedActions(program: AnalyzedProgram, runtime: IRValue) {
+        let ip = ctx.insertionPoint
+        for analyzed in program.featureSets where analyzed.featureSet.isUserAction {
+            let funcName = featureSetFunctionName(analyzed.featureSet.name)
+            guard let bodyFunc = ctx.module.function(named: funcName) else { continue }
+            let nameStr = ctx.stringConstant(analyzed.featureSet.name)
+            let takesArg: IRValue
+            if let takes = analyzed.featureSet.userActionTakesField {
+                takesArg = ctx.stringConstant(takes)
+            } else {
+                takesArg = ctx.ptrType.null
+            }
+            _ = ctx.module.insertCall(
+                externals.registerUserAction,
+                on: [runtime, nameStr, bodyFunc, takesArg],
+                at: ip
+            )
+        }
     }
 
     private func registerEventHandlers(program: AnalyzedProgram, runtime: IRValue) {

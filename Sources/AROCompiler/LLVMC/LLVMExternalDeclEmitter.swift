@@ -25,6 +25,7 @@ public final class LLVMExternalDeclEmitter {
     private var _registerRepositoryObserverWithGuard: Function?
     private var _registerStateTransitionHandler: Function?
     private var _registerNotificationHandler: Function?
+    private var _registerUserAction: Function?
     private var _registerFeatureSetMetadata: Function?
     private var _logWarning: Function?
     private var _contextCreate: Function?
@@ -169,6 +170,13 @@ public final class LLVMExternalDeclEmitter {
         // Parameters: runtime, guardKey (e.g. "toState"), guardValue (e.g. "submitted"), handlerFunc
         _registerStateTransitionHandler = ctx.module.declareFunction(
             "aro_runtime_register_state_transition_handler",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr, ptr])
+        )
+
+        // void @aro_register_user_action(ptr, ptr, ptr, ptr)
+        // Parameters: runtime, name (cstr), bodyFunc, takesField (cstr, nullable)
+        _registerUserAction = ctx.module.declareFunction(
+            "aro_register_user_action",
             types.voidFunctionType(parameters: [ptr, ptr, ptr, ptr])
         )
 
@@ -590,6 +598,7 @@ public final class LLVMExternalDeclEmitter {
     public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }
     public var registerStateTransitionHandler: Function { _registerStateTransitionHandler! }
     public var registerNotificationHandler: Function { _registerNotificationHandler! }
+    public var registerUserAction: Function { _registerUserAction! }
     public var registerFeatureSetMetadata: Function { _registerFeatureSetMetadata! }
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }
