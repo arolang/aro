@@ -177,3 +177,4 @@ core
 .context.repairs.jsonl
 .context.index/
 Train/.venv/
+Train/script/output/
