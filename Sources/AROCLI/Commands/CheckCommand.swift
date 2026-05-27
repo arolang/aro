@@ -26,7 +26,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         abstract: "Check ARO source files for errors"
     )
 
-    @Argument(help: "Path to source file or directory")
+    @Argument(help: "Path to source file or directory (or `-` for stdin / inline snippet when --syntax is set)")
     var path: String
 
     @Flag(name: .long, inversion: .prefixedNo, help: "Show warnings")
@@ -35,7 +35,25 @@ struct SourceCheckSubcommand: ParsableCommand {
     @Flag(name: .long, help: "Show verbose diagnostic information")
     var verbose: Bool = false
 
+    @Flag(
+        name: .long,
+        help: """
+            Check a bare ARO snippet (single statement, block of statements,
+            or feature-set body) instead of a full program. The argument may be \
+            a file path, an inline snippet string, or `-` for stdin. Useful for \
+            REPL-style fragments and for training-pipeline validators that \
+            need to gate per-pair output without requiring a feature-set \
+            wrapper around every example.
+            """
+    )
+    var syntax: Bool = false
+
     func run() throws {
+        if syntax {
+            try runSyntaxOnly()
+            return
+        }
+
         let resolvedPath = URL(fileURLWithPath: path)
 
         var isDirectory: ObjCBool = false
@@ -82,6 +100,178 @@ struct SourceCheckSubcommand: ParsableCommand {
         if totalErrors > 0 {
             Foundation.exit(1)
         }
+    }
+
+    /// `--syntax` mode: validate a bare ARO snippet (no feature-set wrapper
+    /// required). The snippet is wrapped in a throw-away feature set so the
+    /// parser path is unchanged; diagnostics that fall inside the wrapper
+    /// are filtered out and locations are shifted back to the user's
+    /// coordinate space.
+    private func runSyntaxOnly() throws {
+        let source: String
+        let label: String
+
+        if path == "-" {
+            label = "<stdin>"
+            let data = FileHandle.standardInput.readDataToEndOfFile()
+            source = String(data: data, encoding: .utf8) ?? ""
+        } else if FileManager.default.fileExists(atPath: path) {
+            label = URL(fileURLWithPath: path).lastPathComponent
+            source = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        } else {
+            // Treat the argument as the inline snippet itself.
+            label = "<snippet>"
+            source = path
+        }
+
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            print("\(label): (empty input)")
+            print()
+            print("❌ no source to check")
+            Foundation.exit(1)
+        }
+
+        // If the snippet is already a full feature set (`(Name: Activity) { … }`),
+        // wrapping it again creates an invalid nested feature-set. Detect and
+        // check directly — same parser, no wrapper needed.
+        let featureSetHeader = #"^\s*\(\s*[\w\- ]+:\s*[\w\- ]+(?:\s+takes\s+<[\w\-]+>)?\s*\)\s*(?:when\s+[^{]+)?\s*\{"#
+        if trimmed.range(of: featureSetHeader, options: .regularExpression) != nil {
+            try checkSnippetUnwrapped(source, label: label)
+            return
+        }
+
+        // Build a wrapper that the parser accepts but won't add semantic
+        // dependencies we'd then have to filter (an inert single-statement
+        // body keeps the symbol table tiny).
+        let header = "(SyntaxOnly_Check: Snippet) {\n"
+        let footer = "\n    Return an <OK: status> for the <_snippet>.\n}\n"
+        let wrapperLineOffset = header.filter { $0 == "\n" }.count
+        let wrapped = header + source + footer
+
+        let compiler = Compiler()
+        let result = compiler.compile(wrapped)
+
+        // Diagnostics on lines <= wrapperLineOffset came from `header`
+        // itself (impossible — header is known-valid — but defensive).
+        // Anything past `wrapperLineOffset + sourceLines` came from the
+        // footer / wrapper Return — skip those too.
+        let sourceLineCount = source.split(separator: "\n", omittingEmptySubsequences: false).count
+        let snippetUpperBound = wrapperLineOffset + sourceLineCount
+
+        // We only care about syntax: filter out "External dependency" and
+        // "defined but not used" warnings, which are semantic-analyser
+        // artefacts of the dummy wrapper, not real issues in the snippet.
+        func isSemanticNoise(_ message: String) -> Bool {
+            return message.hasPrefix("External dependency")
+                || message.contains("is defined but never used")
+                || message.contains("not published by any feature set")
+        }
+
+        var realErrors = 0
+        var realWarnings = 0
+        var printedHeader = false
+
+        func printDiag(_ d: AROParser.Diagnostic, severity: String) {
+            if !printedHeader {
+                print("\(label):")
+                printedHeader = true
+            }
+            let loc = d.location.map { "\($0.line - wrapperLineOffset):\($0.column):" } ?? ""
+            print("  \(loc) \(severity): \(d.message)")
+            for hint in d.hints {
+                print("    hint: \(hint)")
+            }
+        }
+
+        for d in result.diagnostics {
+            // Skip diagnostics that point at the wrapper.
+            if let loc = d.location, loc.line <= wrapperLineOffset || loc.line > snippetUpperBound {
+                continue
+            }
+            if isSemanticNoise(d.message) {
+                continue
+            }
+            switch d.severity {
+            case .error:
+                printDiag(d, severity: "error")
+                realErrors += 1
+            case .warning:
+                if warnings {
+                    printDiag(d, severity: "warning")
+                }
+                realWarnings += 1
+            default:
+                continue
+            }
+        }
+
+        if realErrors > 0 || (warnings && realWarnings > 0) {
+            print("  Found \(realErrors) error(s)\(realWarnings > 0 && warnings ? ", \(realWarnings) warning(s)" : "") in \(label)")
+        }
+
+        print()
+        if realErrors == 0 && realWarnings == 0 {
+            print("✅ No syntax issues in \(label)")
+        } else {
+            if realErrors > 0 {
+                print("❌ \(realErrors) syntax error(s)")
+            }
+            if realWarnings > 0 && warnings {
+                print("⚠️  \(realWarnings) warning(s)")
+            }
+        }
+        if realErrors > 0 {
+            Foundation.exit(1)
+        }
+    }
+
+    /// `--syntax` mode for snippets that already contain a feature-set
+    /// header — no wrapper, just run the parser and report.
+    private func checkSnippetUnwrapped(_ source: String, label: String) throws {
+        let compiler = Compiler()
+        let result = compiler.compile(source)
+
+        func isSemanticNoise(_ message: String) -> Bool {
+            return message.hasPrefix("External dependency")
+                || message.contains("is defined but never used")
+                || message.contains("not published by any feature set")
+        }
+
+        var realErrors = 0
+        var realWarnings = 0
+        var printedHeader = false
+
+        for d in result.diagnostics {
+            if isSemanticNoise(d.message) { continue }
+            switch d.severity {
+            case .error:
+                if !printedHeader { print("\(label):"); printedHeader = true }
+                let loc = d.location.map { "\($0.line):\($0.column):" } ?? ""
+                print("  \(loc) error: \(d.message)")
+                for h in d.hints { print("    hint: \(h)") }
+                realErrors += 1
+            case .warning:
+                realWarnings += 1
+                if warnings {
+                    if !printedHeader { print("\(label):"); printedHeader = true }
+                    let loc = d.location.map { "\($0.line):\($0.column):" } ?? ""
+                    print("  \(loc) warning: \(d.message)")
+                    for h in d.hints { print("    hint: \(h)") }
+                }
+            default:
+                continue
+            }
+        }
+
+        print()
+        if realErrors == 0 && realWarnings == 0 {
+            print("✅ No syntax issues in \(label)")
+        } else {
+            if realErrors > 0 { print("❌ \(realErrors) syntax error(s)") }
+            if realWarnings > 0 && warnings { print("⚠️  \(realWarnings) warning(s)") }
+        }
+        if realErrors > 0 { Foundation.exit(1) }
     }
 
     private func findSourceFiles(in directory: URL) throws -> [URL] {

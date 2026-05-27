@@ -35,7 +35,7 @@ FAIL_LOG = TOOLS_DIR / 'curated_failures.log'
 # ── Validation ─────────────────────────────────────────────────────────────
 
 def aro_check(code: str) -> tuple[bool, str]:
-    """Return (passed, error_message)."""
+    """Return (passed, error_message). Requires a full feature-set program."""
     if not ARO_BIN.exists():
         sys.exit(f'aro binary not found at {ARO_BIN}. Build first: swift build -c release')
     with tempfile.TemporaryDirectory() as tmp:
@@ -43,6 +43,19 @@ def aro_check(code: str) -> tuple[bool, str]:
         r = subprocess.run([str(ARO_BIN), 'check', tmp],
                            capture_output=True, text=True, timeout=10)
         return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
+
+
+def aro_check_syntax(snippet: str) -> tuple[bool, str]:
+    """Validate a bare snippet via `aro check --syntax` (no wrapper required).
+    Returns (passed, error_message). Used for REPL-style training pairs that
+    intentionally aren't wrapped in a feature set."""
+    if not ARO_BIN.exists():
+        sys.exit(f'aro binary not found at {ARO_BIN}. Build first: swift build -c release')
+    r = subprocess.run(
+        [str(ARO_BIN), 'check', '--syntax', '-'],
+        input=snippet, capture_output=True, text=True, timeout=10,
+    )
+    return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
 
 
 # Tiny structural sanity check before we bother spawning aro. Accepts:
@@ -798,14 +811,18 @@ def validate_and_filter(examples: list) -> tuple[list, list]:
             failed.append((ex, 'structural_check_failed', code))
             continue
 
-        # REPL-style bare-statement pairs are intentionally not feature sets;
-        # `aro check` rejects them because it requires a wrapper, but the
-        # stdin runner (`echo … | aro`) and the REPL accept them. Skip
-        # `aro check` for this category — hand-written content is small
-        # enough to trust without execution.
+        # REPL-style bare-statement pairs use `aro check --syntax`, which
+        # validates a snippet without requiring the feature-set wrapper.
+        # Same parser as the regular check; just relaxed entry-point rule.
         if ex.get('category') == 'repl_one_liner':
-            ex['output'] = '```aro\n' + auto_fix(code).strip() + '\n```'
-            kept.append(ex)
+            for attempt_code in (code, auto_fix(code)):
+                ok, err = aro_check_syntax(attempt_code)
+                if ok:
+                    ex['output'] = '```aro\n' + attempt_code.strip() + '\n```'
+                    kept.append(ex)
+                    break
+            else:
+                failed.append((ex, err, code))
             continue
 
         # try once unfixed, then with the whitespace fix
