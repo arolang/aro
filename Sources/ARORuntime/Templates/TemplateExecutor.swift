@@ -867,10 +867,17 @@ public final class TemplateExecutor: @unchecked Sendable {
             )
         }
 
-        throw TemplateError.renderError(
-            path: templatePath,
-            message: "For-each collection '\(config.collection)' is not iterable"
-        )
+        // Missing / empty / non-iterable: render zero iterations. Matches
+        // the analogous "missing dictionary field reads as empty string"
+        // rule — a template that loops over an absent yaml field should
+        // simply emit nothing rather than abort the whole page render.
+        // The empty-string sentinel is what `resolvePropertyPath` returns
+        // for a missing key, so a yaml without `footer_learn:` ends up
+        // here legitimately.
+        if let str = collection as? String, str.isEmpty {
+            return ""
+        }
+        return ""
     }
 
     private func executeForEachOverItems(
