@@ -56,11 +56,53 @@ public struct DataFlowAnalyzer {
             usedVariables.formUnion(flow.inputs)
         }
 
+        // Result names produced by a side-effect verb are intentionally
+        // discardable — Make, Append, Write, Log, Emit, Start, Stop,
+        // Send, Notify, Schedule and user-defined `Application.X` calls
+        // are all "do something" rather than "compute a value". Mark
+        // them used so the unused-var warning doesn't shame intentional
+        // fire-and-forget calls.
+        // Walk the whole statement tree (descending into match cases and
+        // for-each bodies) — the checks below need to see every action,
+        // not just top-level ones.
+        let allAros = collectAROStatements(featureSet.statements)
+
+        var sideEffectResults: Set<String> = []
+        for aro in allAros where isSideEffectVerb(aro.action.verb) {
+            sideEffectResults.insert(aro.result.base)
+        }
+
+        // Variables consumed as the *base* of another statement's result
+        // qualifier (e.g. the `defaults` in `Merge the <opts: defaults>
+        // with <raw>.`) are real uses too — the data-flow visitor only
+        // records the right-hand side as input, so flag the qualifier
+        // bases explicitly here.
+        var qualifierBaseRefs: Set<String> = []
+        for aro in allAros {
+            for specifier in aro.result.specifiers {
+                qualifierBaseRefs.insert(specifier)
+            }
+        }
+
+        // If the feature set renders a template via Transform/Include
+        // (object base == "template"), the template body reads variables
+        // from the calling scope at runtime — static analysis can't see
+        // those reads, so suppress unused warnings for every local in
+        // this feature set.
+        let rendersTemplate = allAros.contains { aro in
+            let verb = aro.action.verb.lowercased()
+            return (verb == "transform" || verb == "include" || verb == "render")
+                && aro.object.noun.base.lowercased() == "template"
+        }
+
         for (name, symbol) in symbolTable.symbols {
             if symbol.visibility == .published { continue }
             if case .alias = symbol.source { continue }
             if symbol.visibility == .external { continue }
             if isSideEffectBinding(name) { continue }
+            if sideEffectResults.contains(name) { continue }
+            if qualifierBaseRefs.contains(name) { continue }
+            if rendersTemplate { continue }
 
             if !usedVariables.contains(name) {
                 diagnostics.warning(
@@ -779,6 +821,10 @@ public struct DataFlowAnalyzer {
             "console", "application", "event", "shutdown",
             "port", "host", "directory", "file", "events", "contract", "template",
             "repository",
+            // Framework-provided runtime objects
+            "parameter",   // CLI arguments via `<parameter: name>` / `<parameter>`
+            "input",       // user-defined action arguments via `<input: name>`
+            "path",        // file qualifier (`<file: path>` resolves a string variable to a fs path)
             "_literal_",
             "_expression_"
         ]
@@ -815,6 +861,46 @@ public struct DataFlowAnalyzer {
             "application"
         ]
         return sideEffectPatterns.contains(name.lowercased())
+    }
+
+    /// Flatten a statement tree (descending into `match` cases and
+    /// `for-each` bodies) into the contained AROStatements. Used so
+    /// side-effect / template-renders / qualifier-base checks see every
+    /// action in the feature set, not just the top-level ones.
+    private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
+        var out: [AROStatement] = []
+        for stmt in statements {
+            if let aro = stmt as? AROStatement {
+                out.append(aro)
+            } else if let m = stmt as? MatchStatement {
+                for c in m.cases {
+                    out.append(contentsOf: collectAROStatements(c.body))
+                }
+                out.append(contentsOf: collectAROStatements(m.otherwise ?? []))
+            } else if let loop = stmt as? ForEachLoop {
+                out.append(contentsOf: collectAROStatements(loop.body))
+            }
+        }
+        return out
+    }
+
+    /// Verbs whose "result" is really just a confirmation handle for a
+    /// side-effecting action — the value rarely needs reading because
+    /// the point of the statement is what it *did*, not what it returns.
+    private func isSideEffectVerb(_ verb: String) -> Bool {
+        let v = verb.lowercased()
+        // Plugin / user-defined action calls (`Application.X`,
+        // `MyPlugin.DoThing`) — these are dispatched by name and almost
+        // always called for their effect.
+        if v.contains(".") { return true }
+        let sideEffectVerbs: Set<String> = [
+            "make", "append", "write", "copy", "move", "delete",
+            "log", "emit", "send", "notify", "publish", "store",
+            "schedule", "start", "stop", "listen", "keepalive",
+            "render", "show", "repaint", "clear",
+            "broadcast", "close", "connect"
+        ]
+        return sideEffectVerbs.contains(v)
     }
 
     private func looksLikeVariable(_ name: String) -> Bool {
