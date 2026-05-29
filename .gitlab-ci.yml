@@ -35,7 +35,7 @@ default:
 # =============================================================================
 test:
   stage: test
-  image: swift:6.2-jammy
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/swift:6.2-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -48,6 +48,7 @@ test:
       prefix: swift-test
     paths:
       - .build/
+      - .swiftpm/
     policy: pull-push
   before_script:
     - apt-get update -qq
@@ -102,7 +103,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: swift:6.2-jammy
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/swift:6.2-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -118,6 +119,7 @@ build:linux:
       prefix: swift-build
     paths:
       - .build/
+      - .swiftpm/
     policy: pull-push
   before_script:
     - apt-get update -qq
@@ -223,7 +225,7 @@ build:linux:
 # =============================================================================
 integration:linux:
   stage: integration
-  image: ubuntu:22.04
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -329,7 +331,7 @@ integration:linux:
 
 integration:repl:
   stage: integration
-  image: ubuntu:22.04
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -368,7 +370,7 @@ integration:repl:
 # =============================================================================
 documentation:
   stage: documentation
-  image: ubuntu:22.04
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -556,12 +558,15 @@ docker:buildsystem:
         TAG="latest"
         DESTINATIONS="--destination=$IMAGE_NAME:$TAG"
       fi
-    # Build and push with Kaniko
+    # Build and push with Kaniko (remote layer cache speeds repeat builds).
     - /kaniko/executor
       --context=docker/buildsystem/
       --dockerfile=docker/buildsystem/Dockerfile
-      --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME} 
+      --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME}
       --build-arg=SKIP_TESTS=true
+      --cache=true
+      --cache-repo=${CI_REGISTRY_IMAGE}/cache
+      --cache-ttl=168h
       $DESTINATIONS
   tags:
     - spencer
@@ -590,10 +595,13 @@ docker:runtime:
         TAG="latest"
         DESTINATIONS="--destination=$IMAGE_NAME:$TAG"
       fi
-    # Build and push with Kaniko
+    # Build and push with Kaniko (remote layer cache speeds repeat builds).
     - /kaniko/executor
       --context=docker/runtime/
       --dockerfile=docker/runtime/Dockerfile
+      --cache=true
+      --cache-repo=${CI_REGISTRY_IMAGE}/cache
+      --cache-ttl=168h
       $DESTINATIONS
   tags:
     - spencer
@@ -603,7 +611,7 @@ docker:runtime:
 # =============================================================================
 post:mastodon:
   stage: mastodon
-  image: node:20-bookworm
+  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/node:20-bookworm
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   before_script:
