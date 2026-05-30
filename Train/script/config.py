@@ -557,6 +557,79 @@ def _normalize_aro_whitespace(text: str) -> str:
     return _MISSING_SPACE_BEFORE_ANGLE_RE.sub(r'\1 <\2', text)
 
 
+# Qwen3's chat template injects an empty `<think>\n\n</think>\n\n` block
+# before every assistant turn when the assistant content does not already
+# contain reasoning. Fine-tuning on text rendered this way teaches the
+# model to emit `<think></think>` + EOS at inference — the round-2
+# empty-content collapse documented in /tmp/aro_ask_eval/REPORT.md.
+# This helper strips that injection from the rendered training text so
+# the model sees assistant turns as pure content.
+_EMPTY_THINK_BLOCK = '<think>\n\n</think>\n\n'
+
+
+def strip_empty_think_blocks(text: str) -> str:
+    """Remove the chat-template's empty <think></think> injections.
+
+    Idempotent. Only removes the exact zero-content block that the
+    Qwen3 chat template inserts before assistant turns; leaves any
+    non-empty <think>...</think> reasoning untouched.
+    """
+    return text.replace(_EMPTY_THINK_BLOCK, '')
+
+
+def render_for_training(tokenizer, messages, add_generation_prompt: bool = False) -> str:
+    """Render chat messages for SFT/DPO without the empty-think injection.
+
+    Use this everywhere training text is built — NB17, NB18, NB21,
+    NB23 — instead of calling tokenizer.apply_chat_template directly.
+    """
+    text = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+    )
+    return strip_empty_think_blocks(text)
+
+
+def patch_qwen3_chat_template(tokenizer):
+    """Modify tokenizer.chat_template so assistant turns without
+    reasoning_content render WITHOUT the `<think>\\n\\n</think>\\n\\n`
+    prefix.
+
+    Stock Qwen3 template emits empty think blocks for every assistant
+    turn regardless of content. Fine-tuning on text rendered this way
+    teaches the model to produce empty think blocks at inference. This
+    surgery keeps the think block only when the message actually has
+    reasoning_content; otherwise the assistant content is emitted bare.
+
+    Idempotent. Safe to call once per tokenizer load in any training
+    notebook (NB17/18/21/23). Inference-side tokenizer loads should
+    skip this and use the stock template.
+
+    Returns the tokenizer for chaining.
+    """
+    tpl = tokenizer.chat_template
+    if tpl is None or '<think>\\n' not in tpl:
+        return tokenizer
+    old = (
+        "{%- if loop.last or (not loop.last and reasoning_content) %}\n"
+        "                {{- '<|im_start|>' + message.role + '\\n<think>\\n' "
+        "+ reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}\n"
+        "            {%- else %}\n"
+        "                {{- '<|im_start|>' + message.role + '\\n' + content }}\n"
+        "            {%- endif %}"
+    )
+    new = (
+        "{%- if reasoning_content %}\n"
+        "                {{- '<|im_start|>' + message.role + '\\n<think>\\n' "
+        "+ reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}\n"
+        "            {%- else %}\n"
+        "                {{- '<|im_start|>' + message.role + '\\n' + content }}\n"
+        "            {%- endif %}"
+    )
+    if old in tpl:
+        tokenizer.chat_template = tpl.replace(old, new)
+    return tokenizer
+
+
 def _normalize_pair(pair: dict) -> dict:
     """Apply `_normalize_aro_whitespace` to every string field in a pair."""
     for key in ('instruction', 'output', 'input', 'prompt', 'response'):
