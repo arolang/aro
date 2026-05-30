@@ -26,6 +26,13 @@ public actor DebugController {
     private var hasFiredEntry = false
     private var recorder: DebugEventLogWriter?
 
+    // Phase 5 — sampling. When >1, the controller only enters the pause
+    // path on every N-th eligible checkpoint. Used for `--attach` style
+    // production debugging where pausing every statement would crater
+    // request throughput.
+    private var sampleStride: Int = 1
+    private var sampleCounter: Int = 0
+
     // MARK: - Init
 
     public init(frontend: any DebugFrontend) {
@@ -36,6 +43,14 @@ public actor DebugController {
     /// after this call gets appended as a JSONL line.
     public func setRecorder(_ recorder: DebugEventLogWriter) {
         self.recorder = recorder
+    }
+
+    /// Phase 5 — sampling stride. `1` (default) pauses on every
+    /// eligible checkpoint; `N > 1` skips N-1 between pauses. Breakpoints
+    /// still match every time — sampling only thins the step-mode pause
+    /// stream so an attached prod session doesn't stall every request.
+    public func setSampleStride(_ stride: Int) {
+        sampleStride = max(1, stride)
     }
 
     // MARK: - Breakpoint management (callable from frontend)
@@ -129,6 +144,12 @@ public actor DebugController {
         } else {
             switch nextMode {
             case .stepOver, .stepIn, .stepOut:
+                // Phase 5 sampling — only the every-Nth checkpoint
+                // actually pauses; the rest skip silently. Breakpoint
+                // matches above are unaffected.
+                sampleCounter += 1
+                if sampleCounter < sampleStride { return }
+                sampleCounter = 0
                 reason = .step
             case .continue:
                 return // no pause

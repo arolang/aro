@@ -52,6 +52,9 @@ struct DebugCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Speak Debug Adapter Protocol over stdio (issue #229 Phase 2)")
     var dap: Bool = false
 
+    @Option(name: .long, help: "Listen on TCP port for a DAP client (issue #229 Phase 5)")
+    var dapPort: Int?
+
     @Option(name: .long, help: "DAP log file path (when --dap is set)")
     var dapLog: String?
 
@@ -60,6 +63,9 @@ struct DebugCommand: AsyncParsableCommand {
 
     @Option(name: .long, help: "Replay a recorded debug session — does not execute the program")
     var replay: String?
+
+    @Option(name: .long, help: "Sample stride — pause every Nth step (issue #229 Phase 5)")
+    var sample: Int = 1
 
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
@@ -128,7 +134,7 @@ struct DebugCommand: AsyncParsableCommand {
         // Build the frontend + controller
         let frontend: any DebugFrontend
         var dapFrontendForLoop: DAPFrontend? = nil
-        if dap {
+        if dap || dapPort != nil {
             let logFH: FileHandle?
             if let dapLog {
                 FileManager.default.createFile(atPath: dapLog, contents: nil)
@@ -136,7 +142,26 @@ struct DebugCommand: AsyncParsableCommand {
             } else {
                 logFH = nil
             }
-            let dapFrontend = DAPFrontend(log: logFH)
+            // Phase 5: TCP socket frontend. Accept blocks; do it before
+            // we start the application so the client controls timing.
+            let input: FileHandle
+            let output: FileHandle
+            if let port = dapPort {
+                FileHandle.standardError.write(Data("aro debug: DAP listening on tcp://127.0.0.1:\(port)\n".utf8))
+                let ep: DAPTCPListener.Endpoint
+                do {
+                    ep = try DAPTCPListener.acceptOne(port: UInt16(port))
+                } catch {
+                    print("Error: failed to accept DAP client on port \(port): \(error)")
+                    throw ExitCode.failure
+                }
+                input = ep.input
+                output = ep.output
+            } else {
+                input = .standardInput
+                output = .standardOutput
+            }
+            let dapFrontend = DAPFrontend(input: input, output: output, log: logFH)
             frontend = dapFrontend
             dapFrontendForLoop = dapFrontend
         } else {
@@ -157,6 +182,12 @@ struct DebugCommand: AsyncParsableCommand {
             } catch {
                 print("warning: failed to open recorder \(record): \(error)")
             }
+        }
+
+        // Phase 5 — sampling stride for production attaches.
+        if sample > 1 {
+            await controller.setSampleStride(sample)
+            if !dap { print("sampling stride: \(sample)") }
         }
 
         // Seed breakpoints from --breakpoint flags
