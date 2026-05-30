@@ -193,6 +193,13 @@ struct DebuggerQuit: Error {}
 final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
     func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
         printPause(pause)
+        let watches = await controller.listWatches()
+        if !watches.isEmpty {
+            for w in watches {
+                let resolved = pause.symbols.first { "<\($0.name)>" == w }?.valuePreview ?? "(unresolved)"
+                print("   watch \(w) = \(resolved)")
+            }
+        }
         while true {
             print("(aro-dbg) ", terminator: "")
             guard let raw = readLine() else {
@@ -216,7 +223,16 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
                 return .stepOut
             case "b", "break":
                 if arg.isEmpty {
-                    print("usage: b <line> | b <Verb>")
+                    print("usage: b <line> | b <Verb> | b <line> if <pred>")
+                } else if let ifRange = arg.range(of: " if ") {
+                    let lhs = String(arg[..<ifRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    let pred = String(arg[ifRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    if let line = Int(lhs) {
+                        await controller.addBreakpoint(.conditionalLocation(file: pause.file, line: line, predicate: pred))
+                        print("conditional breakpoint at \(pause.file.isEmpty ? "*" : pause.file):\(line) if \(pred)")
+                    } else {
+                        print("conditional breakpoints require a line number")
+                    }
                 } else if let line = Int(arg) {
                     await controller.addBreakpoint(.location(file: pause.file, line: line))
                     print("breakpoint set at \(pause.file.isEmpty ? "*" : pause.file):\(line)")
@@ -224,6 +240,28 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
                     await controller.addBreakpoint(.verb(arg))
                     print("breakpoint set on verb \(arg)")
                 }
+            case "be", "breakevent":
+                if arg.isEmpty { print("usage: be <EventName>"); continue }
+                await controller.addBreakpoint(.event(arg))
+                print("breakpoint set on event \(arg)")
+            case "berror":
+                await controller.addBreakpoint(.errorAny)
+                print("breakpoint set on any error")
+            case "w", "watch":
+                if arg.isEmpty {
+                    let list = await controller.listWatches()
+                    if list.isEmpty { print("(no watches)") }
+                    else { for (i, w) in list.enumerated() { print("  \(i): \(w)") } }
+                } else {
+                    await controller.addWatch(arg)
+                    print("watching: \(arg)")
+                }
+            case "dw":
+                guard let n = Int(arg) else { print("usage: dw <n>"); continue }
+                let list = await controller.listWatches()
+                guard n >= 0 && n < list.count else { print("no watch #\(n)"); continue }
+                await controller.removeWatch(list[n])
+                print("deleted watch #\(n)")
             case "bl", "list":
                 let list = await controller.listBreakpoints()
                 if list.isEmpty {
@@ -293,6 +331,8 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
         case .entry: reasonText = "entry"
         case .step: reasonText = "step"
         case .breakpoint(let bp): reasonText = "breakpoint (\(bp.description))"
+        case .event(let n): reasonText = "event \(n)"
+        case .error(let m): reasonText = "error: \(m)"
         }
         let where_ = pause.file.isEmpty ? pause.featureSetName : "\(pause.file):\(pause.line)"
         print("")
@@ -308,8 +348,13 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
           c, continue   resume until next breakpoint or program end
           b <line>      add breakpoint at source line
           b <Verb>      add breakpoint on every statement using that verb
+          b <l> if X    conditional breakpoint at line l (predicate: ==, !=, &&, ||)
+          be <Event>    add breakpoint on every emit of Event
+          berror        add breakpoint on any runtime error
           bl, list      list breakpoints
           d <n>         delete breakpoint #n
+          w <expr>      add watch expression (printed at every pause)
+          dw <n>        delete watch #n
           p, print      show bindings visible at this pause
           bt, where     show current pause location
           h, help       this help text

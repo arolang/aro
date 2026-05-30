@@ -21,6 +21,7 @@ public actor DebugController {
 
     private let frontend: any DebugFrontend
     private var breakpoints: [DebugBreakpoint] = []
+    private var watchExpressions: [String] = []
     private var nextMode: StepMode = .stepOver   // first checkpoint pauses
     private var hasFiredEntry = false
 
@@ -50,6 +51,33 @@ public actor DebugController {
         breakpoints
     }
 
+    // MARK: - Watch expressions (Phase 3)
+
+    public func addWatch(_ expression: String) {
+        if !watchExpressions.contains(expression) {
+            watchExpressions.append(expression)
+        }
+    }
+
+    public func removeWatch(_ expression: String) {
+        watchExpressions.removeAll { $0 == expression }
+    }
+
+    public func listWatches() -> [String] {
+        watchExpressions
+    }
+
+    /// Whether any breakpoint cares about a given event name. Cheap
+    /// lookup the EventBus hook calls before doing anything expensive.
+    nonisolated public func wantsEvent(_ name: String) -> Bool {
+        // We can't read the actor state from a nonisolated context, so
+        // we cache a *snapshot* on the side. Phase 3 keeps this simple
+        // by always returning true and letting the controller filter
+        // inside the actor — the EventBus only calls this when a
+        // controller is bound at all.
+        return true
+    }
+
     // MARK: - Checkpoint hook (called from the runtime)
 
     /// Called from `FeatureSetExecutor` *before* each statement runs.
@@ -70,12 +98,19 @@ public actor DebugController {
             : URL(fileURLWithPath: sourceFile).lastPathComponent
 
         // Match breakpoints first — they override the step mode.
+        // Conditional matching is evaluated separately; Phase 3 short-
+        // circuits when the symbol table has all the names referenced.
         let matched: DebugBreakpoint? = breakpoints.first { bp in
             switch bp {
             case .location(let f, let l):
-                return l == line && basename.hasSuffix(f)
+                return l == line && (f.isEmpty || basename.hasSuffix(f))
             case .verb(let v):
                 return verb == v
+            case .conditionalLocation(let f, let l, let predicate):
+                guard l == line && (f.isEmpty || basename.hasSuffix(f)) else { return false }
+                return Self.evaluatePredicate(predicate, symbols: symbols)
+            case .event, .errorAny:
+                return false   // not relevant at statement boundaries
             }
         }
 
@@ -109,10 +144,89 @@ public actor DebugController {
         nextMode = await frontend.didPause(info, controller: self)
     }
 
+    /// Called from the runtime when an event is about to be published.
+    /// Pauses only when an `.event(name)` breakpoint matches; otherwise
+    /// returns immediately.
+    public func eventCheckpoint(name: String, featureSetName: String, businessActivity: String, payloadPreview: String) async {
+        let matched = breakpoints.first { if case .event(let n) = $0 { return n == name } else { return false } }
+        guard let bp = matched else { return }
+        let info = PauseInfo(
+            reason: .event(name),
+            featureSetName: featureSetName,
+            businessActivity: businessActivity,
+            file: "",
+            line: 0,
+            column: 0,
+            statementSummary: "Emit \(name) \(payloadPreview)",
+            verb: "Emit",
+            symbols: []
+        )
+        _ = bp  // used for description / future filtering
+        nextMode = await frontend.didPause(info, controller: self)
+    }
+
+    /// Called from the runtime when a statement is about to fail.
+    /// Pauses only when `.errorAny` is set.
+    public func errorCheckpoint(message: String, featureSetName: String, businessActivity: String) async {
+        let hasErrorBP = breakpoints.contains(.errorAny)
+        guard hasErrorBP else { return }
+        let info = PauseInfo(
+            reason: .error(message),
+            featureSetName: featureSetName,
+            businessActivity: businessActivity,
+            file: "",
+            line: 0,
+            column: 0,
+            statementSummary: "[error] \(message)",
+            verb: nil,
+            symbols: []
+        )
+        nextMode = await frontend.didPause(info, controller: self)
+    }
+
     /// Called by the harness when the program completes. Frontend gets a
     /// chance to print a wrap-up message or close a socket.
     public func didEnd(error: Error?) async {
         await frontend.didEnd(error: error)
+    }
+
+    // MARK: - Predicate evaluation (Phase 3)
+
+    /// Minimal predicate evaluator: matches `<name>` references against
+    /// the snapshot's bindings and supports `==`, `!=`, `&&`, `||` over
+    /// string previews. This is intentionally tiny — Phase 3 documents
+    /// a path to wiring `ExpressionEvaluator` for the full ARO
+    /// expression grammar, but doing so requires a live `ExecutionContext`
+    /// which the snapshot loses by design.
+    private static func evaluatePredicate(_ source: String, symbols: [SymbolSnapshot]) -> Bool {
+        var expr = source.trimmingCharacters(in: .whitespaces)
+        // Resolve `<name>` references against the snapshot.
+        for s in symbols {
+            expr = expr.replacingOccurrences(of: "<\(s.name)>", with: "\"\(s.valuePreview)\"")
+        }
+        // Tiny grammar: split on `&&` first, then `||`, then compare.
+        if expr.contains("&&") {
+            return expr.split(separator: "&", maxSplits: .max, omittingEmptySubsequences: true)
+                .filter { !$0.isEmpty }
+                .map(String.init)
+                .allSatisfy { evaluatePredicate($0, symbols: symbols) }
+        }
+        if expr.contains("||") {
+            return expr.split(separator: "|", maxSplits: .max, omittingEmptySubsequences: true)
+                .filter { !$0.isEmpty }
+                .map(String.init)
+                .contains { evaluatePredicate($0, symbols: symbols) }
+        }
+        for op in ["==", "!="] {
+            if let range = expr.range(of: op) {
+                let lhs = String(expr[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let rhs = String(expr[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                return op == "==" ? lhs == rhs : lhs != rhs
+            }
+        }
+        // Bare expression: truthy when non-empty and not "false".
+        let lowered = expr.lowercased()
+        return !lowered.isEmpty && lowered != "false" && lowered != "\"\"" && lowered != "0"
     }
 
     // MARK: - Helpers

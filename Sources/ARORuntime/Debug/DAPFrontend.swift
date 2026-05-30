@@ -221,6 +221,8 @@ public actor DAPFrontend: DebugFrontend {
         case .entry: reason = "entry"
         case .step: reason = "step"
         case .breakpoint: reason = "breakpoint"
+        case .event: reason = "event"
+        case .error: reason = "exception"
         }
         try? await writer.event("stopped", body: [
             "reason": reason,

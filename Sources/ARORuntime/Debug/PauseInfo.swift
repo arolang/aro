@@ -16,6 +16,8 @@ public struct PauseInfo: Sendable {
         case step                          // any stepping mode wanted to pause
         case breakpoint(DebugBreakpoint)   // a registered breakpoint matched
         case entry                         // first checkpoint of a feature set
+        case event(String)                 // event-bus emission about to fire
+        case error(String)                 // runtime about to raise
     }
 
     public let reason: Reason
