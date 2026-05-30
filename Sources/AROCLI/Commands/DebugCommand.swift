@@ -49,6 +49,12 @@ struct DebugCommand: AsyncParsableCommand {
     @Option(name: .long, parsing: .upToNextOption, help: "Initial breakpoints (line numbers or verb names)")
     var breakpoint: [String] = []
 
+    @Flag(name: .long, help: "Speak Debug Adapter Protocol over stdio (issue #229 Phase 2)")
+    var dap: Bool = false
+
+    @Option(name: .long, help: "DAP log file path (when --dap is set)")
+    var dapLog: String?
+
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
 
@@ -104,8 +110,27 @@ struct DebugCommand: AsyncParsableCommand {
         }
 
         // Build the frontend + controller
-        let frontend = CLIDebugFrontend()
+        let frontend: any DebugFrontend
+        var dapFrontendForLoop: DAPFrontend? = nil
+        if dap {
+            let logFH: FileHandle?
+            if let dapLog {
+                FileManager.default.createFile(atPath: dapLog, contents: nil)
+                logFH = FileHandle(forWritingAtPath: dapLog)
+            } else {
+                logFH = nil
+            }
+            let dapFrontend = DAPFrontend(log: logFH)
+            frontend = dapFrontend
+            dapFrontendForLoop = dapFrontend
+        } else {
+            frontend = CLIDebugFrontend()
+        }
         let controller = DebugController(frontend: frontend)
+        if let dapFrontend = dapFrontendForLoop {
+            await dapFrontend.attach(controller: controller)
+            Task.detached { await dapFrontend.runMessageLoop() }
+        }
 
         // Seed breakpoints from --breakpoint flags
         for spec in breakpoint {
@@ -132,8 +157,10 @@ struct DebugCommand: AsyncParsableCommand {
         // breakpoints set by file name still show meaningful context.
         let sourceFileHint = appConfig.sourceFiles.first?.path ?? ""
 
-        print("aro debug · \(AROVersion.shortVersion) · \(appConfig.rootPath.lastPathComponent)")
-        print("Use 'h' for help, 'q' to quit, 's' to step.")
+        if !dap {
+            print("aro debug · \(AROVersion.shortVersion) · \(appConfig.rootPath.lastPathComponent)")
+            print("Use 'h' for help, 'q' to quit, 's' to step.")
+        }
 
         do {
             try await Debug.$controller.withValue(controller) {
@@ -142,13 +169,13 @@ struct DebugCommand: AsyncParsableCommand {
                 }
             }
             await controller.didEnd(error: nil)
-            print("\nProgram ended cleanly.")
+            if !dap { print("\nProgram ended cleanly.") }
         } catch is DebuggerQuit {
-            print("\nDebugger quit.")
+            if !dap { print("\nDebugger quit.") }
             throw ExitCode.success
         } catch {
             await controller.didEnd(error: error)
-            print("\nProgram ended with error: \(error)")
+            if !dap { print("\nProgram ended with error: \(error)") }
             throw ExitCode.failure
         }
     }

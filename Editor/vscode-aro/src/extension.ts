@@ -112,7 +112,27 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }),
         vscode.commands.registerCommand('aro.openSettings', openSettings),
-        vscode.commands.registerCommand('aro.configureLspPath', configureLspPath)
+        vscode.commands.registerCommand('aro.configureLspPath', configureLspPath),
+        vscode.commands.registerCommand('aro.debug.start', async () => {
+            const folder = vscode.workspace.workspaceFolders?.[0];
+            if (!folder) {
+                vscode.window.showErrorMessage('Open a workspace folder to debug.');
+                return;
+            }
+            await vscode.debug.startDebugging(folder, {
+                type: 'aro',
+                request: 'launch',
+                name: 'Debug ARO project',
+                program: folder.uri.fsPath,
+                stopOnEntry: true
+            });
+        })
+    );
+
+    // Register the ARO debug adapter (issue #229 Phase 2 — DAP server)
+    context.subscriptions.push(
+        vscode.debug.registerDebugAdapterDescriptorFactory('aro', new AroDebugAdapterDescriptorFactory(() => aroPath)),
+        vscode.debug.registerDebugConfigurationProvider('aro', new AroDebugConfigurationProvider())
     );
 
     // Listen for configuration changes
@@ -177,5 +197,77 @@ async function configureLspPath() {
 export async function deactivate(): Promise<void> {
     if (client) {
         await client.stop();
+    }
+}
+
+// ============================================================
+// Debugger (issue #229 Phase 2)
+// ============================================================
+
+class AroDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+    /**
+     * Fill in missing fields when the user picks the "ARO: Launch" template
+     * or hits F5 in a file with no launch.json.
+     */
+    resolveDebugConfiguration(
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration
+    ): vscode.ProviderResult<vscode.DebugConfiguration> {
+        if (!config.type && !config.request && !config.name) {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && editor.document.languageId === 'aro') {
+                config.type = 'aro';
+                config.request = 'launch';
+                config.name = 'Debug current ARO file';
+                config.program = editor.document.uri.fsPath;
+                config.stopOnEntry = true;
+            }
+        }
+        if (!config.program) {
+            return vscode.window.showErrorMessage(
+                'ARO debugger: specify "program" (a directory or .aro file).'
+            ).then(() => undefined);
+        }
+        if (config.entryPoint == null) config.entryPoint = 'Application-Start';
+        if (config.stopOnEntry == null) config.stopOnEntry = true;
+        return config;
+    }
+}
+
+class AroDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
+    constructor(private readonly aroPath: () => string) {}
+
+    createDebugAdapterDescriptor(
+        session: vscode.DebugSession,
+        _executable: vscode.DebugAdapterExecutable | undefined
+    ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+        const cfg = session.configuration as {
+            program?: string;
+            entryPoint?: string;
+            breakpoint?: string[];
+            aroPath?: string;
+            dapLog?: string;
+        };
+
+        // Per-session override wins over the LSP setting.
+        const aroBin = cfg.aroPath || this.aroPath();
+
+        const args: string[] = ['debug', '--dap'];
+        if (cfg.entryPoint) {
+            args.push('--entry-point', cfg.entryPoint);
+        }
+        if (cfg.dapLog) {
+            args.push('--dap-log', cfg.dapLog);
+        }
+        for (const bp of cfg.breakpoint || []) {
+            args.push('--breakpoint', bp);
+        }
+        if (cfg.program) {
+            args.push(cfg.program);
+        }
+
+        return new vscode.DebugAdapterExecutable(aroBin, args, {
+            env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+        });
     }
 }

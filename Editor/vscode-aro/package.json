@@ -13,7 +13,8 @@
   },
   "categories": [
     "Programming Languages",
-    "Snippets"
+    "Snippets",
+    "Debuggers"
   ],
   "keywords": [
     "aro",
@@ -85,6 +86,82 @@
         "command": "aro.configureLspPath",
         "title": "ARO: Configure Language Server Path",
         "category": "ARO"
+      },
+      {
+        "command": "aro.debug.start",
+        "title": "ARO: Start Debugging",
+        "category": "ARO"
+      }
+    ],
+    "breakpoints": [
+      { "language": "aro" }
+    ],
+    "debuggers": [
+      {
+        "type": "aro",
+        "label": "ARO Debugger",
+        "languages": ["aro"],
+        "program": "aro",
+        "args": ["debug", "--dap"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the ARO application directory or .aro file",
+                "default": "${workspaceFolder}"
+              },
+              "entryPoint": {
+                "type": "string",
+                "description": "Entry-point feature set name",
+                "default": "Application-Start"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause at the first statement",
+                "default": true
+              },
+              "breakpoint": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Initial breakpoints — line numbers or verb names",
+                "default": []
+              },
+              "aroPath": {
+                "type": "string",
+                "description": "Path to the `aro` executable (overrides aro.lsp.path)",
+                "default": "aro"
+              },
+              "dapLog": {
+                "type": "string",
+                "description": "Optional path for the DAP server log file"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "aro",
+            "request": "launch",
+            "name": "Debug current ARO project",
+            "program": "${workspaceFolder}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "ARO: Launch",
+            "description": "Debug an ARO project",
+            "body": {
+              "type": "aro",
+              "request": "launch",
+              "name": "Debug ARO project",
+              "program": "^\"\\${workspaceFolder}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
       }
     ],
     "configurationDefaults": {
@@ -242,7 +319,9 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:aro"
+    "onLanguage:aro",
+    "onDebugResolve:aro",
+    "onDebugDynamicConfigurations:aro"
   ],
   "scripts": {
     "vscode:prepublish": "npm run compile",
