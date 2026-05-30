@@ -51,7 +51,7 @@ public actor DAPFrontend: DebugFrontend {
     public func runMessageLoop() async {
         while !didTerminate {
             do {
-                guard let msg = try await reader.read() else {
+                guard let msg = try reader.read() else {
                     didTerminate = true
                     pendingResume?.resume(returning: .continue)
                     pendingResume = nil
@@ -84,7 +84,7 @@ public actor DAPFrontend: DebugFrontend {
     private func handle(_ msg: DAPMessage) async {
         switch (msg.kind, msg.name) {
         case (.request, "initialize"):
-            try? await writer.reply(to: msg, body: [
+            try? writer.reply(to: msg, body: [
                 "supportsConfigurationDoneRequest": true,
                 "supportsConditionalBreakpoints": false,        // Phase 3
                 "supportsHitConditionalBreakpoints": false,
@@ -96,11 +96,11 @@ public actor DAPFrontend: DebugFrontend {
                     ["filter": "error", "label": "Runtime errors", "default": true]
                 ]
             ])
-            try? await writer.event("initialized")
+            try? writer.event("initialized")
         case (.request, "launch"), (.request, "attach"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
         case (.request, "configurationDone"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             // No need to resume here — execution hasn't paused yet at
             // initial handshake. The first `stopped` is sent on the
             // initial entry checkpoint, after which the client sends
@@ -110,17 +110,17 @@ public actor DAPFrontend: DebugFrontend {
         case (.request, "setFunctionBreakpoints"):
             await handleSetFunctionBreakpoints(msg)
         case (.request, "setExceptionBreakpoints"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
         case (.request, "threads"):
-            try? await writer.reply(to: msg, body: [
+            try? writer.reply(to: msg, body: [
                 "threads": [["id": 1, "name": "aro"]]
             ])
         case (.request, "stackTrace"):
-            try? await writer.reply(to: msg, body: [
+            try? writer.reply(to: msg, body: [
                 "stackFrames": [], "totalFrames": 0
             ])
         case (.request, "scopes"):
-            try? await writer.reply(to: msg, body: [
+            try? writer.reply(to: msg, body: [
                 "scopes": [
                     ["name": "Locals", "variablesReference": 1, "expensive": false]
                 ]
@@ -129,29 +129,29 @@ public actor DAPFrontend: DebugFrontend {
             // The most recent pause's symbols are surfaced as locals.
             // Phase 2 keeps it stateless — the client re-requests on each
             // stopped event.
-            try? await writer.reply(to: msg, body: ["variables": cachedVariables])
+            try? writer.reply(to: msg, body: ["variables": cachedVariables])
         case (.request, "continue"):
-            try? await writer.reply(to: msg, body: ["allThreadsContinued": true])
+            try? writer.reply(to: msg, body: ["allThreadsContinued": true])
             resumeNextStep(with: .continue)
         case (.request, "next"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             resumeNextStep(with: .stepOver)
         case (.request, "stepIn"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             resumeNextStep(with: .stepIn)
         case (.request, "stepOut"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             resumeNextStep(with: .stepOut)
         case (.request, "pause"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             // No-op in Phase 2: pause-on-demand requires a runtime
             // interruption signal. Phase 5 (production attach) adds it.
         case (.request, "disconnect"), (.request, "terminate"):
-            try? await writer.reply(to: msg)
+            try? writer.reply(to: msg)
             didTerminate = true
             resumeNextStep(with: .continue)
         default:
-            try? await writer.reply(to: msg, success: false, message: "unhandled: \(msg.name)")
+            try? writer.reply(to: msg, success: false, message: "unhandled: \(msg.name)")
         }
     }
 
@@ -159,7 +159,7 @@ public actor DAPFrontend: DebugFrontend {
         guard let args = msg.arguments,
               let lines = args["breakpoints"] as? [[String: Any]]
         else {
-            try? await writer.reply(to: msg, body: ["breakpoints": []])
+            try? writer.reply(to: msg, body: ["breakpoints": []])
             return
         }
         let sourceName = (args["source"] as? [String: Any])?["name"] as? String
@@ -176,9 +176,9 @@ public actor DAPFrontend: DebugFrontend {
                 await ctrl.addBreakpoint(.location(file: sourceName ?? "", line: line))
                 verified.append(["verified": true, "line": line])
             }
-            try? await writer.reply(to: msg, body: ["breakpoints": verified])
+            try? writer.reply(to: msg, body: ["breakpoints": verified])
         } else {
-            try? await writer.reply(to: msg, body: ["breakpoints": []])
+            try? writer.reply(to: msg, body: ["breakpoints": []])
         }
     }
 
@@ -187,7 +187,7 @@ public actor DAPFrontend: DebugFrontend {
               let names = args["breakpoints"] as? [[String: Any]],
               let ctrl = controller
         else {
-            try? await writer.reply(to: msg, body: ["breakpoints": []])
+            try? writer.reply(to: msg, body: ["breakpoints": []])
             return
         }
         // Drop existing verb breakpoints and re-add.
@@ -200,7 +200,7 @@ public actor DAPFrontend: DebugFrontend {
             await ctrl.addBreakpoint(.verb(n))
             verified.append(["verified": true])
         }
-        try? await writer.reply(to: msg, body: ["breakpoints": verified])
+        try? writer.reply(to: msg, body: ["breakpoints": verified])
     }
 
     // MARK: - Stop coordination
@@ -224,7 +224,7 @@ public actor DAPFrontend: DebugFrontend {
         case .event: reason = "event"
         case .error: reason = "exception"
         }
-        try? await writer.event("stopped", body: [
+        try? writer.event("stopped", body: [
             "reason": reason,
             "threadId": 1,
             "allThreadsStopped": true,
@@ -234,12 +234,12 @@ public actor DAPFrontend: DebugFrontend {
 
     private func sendTerminated(error: Error?) async {
         if let error {
-            try? await writer.event("output", body: [
+            try? writer.event("output", body: [
                 "category": "stderr",
                 "output": "\(error)\n"
             ])
         }
-        try? await writer.event("terminated")
+        try? writer.event("terminated")
     }
 
     private func awaitNextStep() async -> StepMode {

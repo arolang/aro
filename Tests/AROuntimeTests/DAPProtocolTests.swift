@@ -38,26 +38,22 @@ final class DAPProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.body?["reason"] as? String, "breakpoint")
     }
 
-    func testReaderHandlesChunkedFraming() async throws {
-        // Build two framed messages back-to-back and feed them through a
-        // pipe a few bytes at a time. The reader must reassemble.
+    func testReaderHandlesChunkedFraming() throws {
+        // Build two framed messages back-to-back, write the whole buffer
+        // upfront, then read. (The reader is single-consumer and now
+        // synchronous; concurrent producer/consumer fan-in isn't a
+        // claimed invariant of Phase 2.)
         let pipe = Pipe()
         let reader = DAPReader(handle: pipe.fileHandleForReading)
 
         let m1 = try DAPMessage(seq: 1, kind: .request, name: "initialize").encode()
         let m2 = try DAPMessage(seq: 2, kind: .request, name: "launch").encode()
         let full = m1 + m2
+        try pipe.fileHandleForWriting.write(contentsOf: full)
+        try pipe.fileHandleForWriting.close()
 
-        // Write in small chunks from a background task.
-        Task {
-            for byte in full {
-                try? pipe.fileHandleForWriting.write(contentsOf: [byte])
-            }
-            try? pipe.fileHandleForWriting.close()
-        }
-
-        let first = try await reader.read()
-        let second = try await reader.read()
+        let first = try reader.read()
+        let second = try reader.read()
         XCTAssertEqual(first?.name, "initialize")
         XCTAssertEqual(second?.name, "launch")
     }

@@ -129,13 +129,21 @@ public enum DAPError: Error, CustomStringConvertible {
 }
 
 /// Reads framed DAP messages from a FileHandle. Returns nil at EOF.
-public actor DAPReader {
+///
+/// Class (not actor) so callers can return `[String: Any]` payloads from
+/// methods without tripping Swift 6 strict concurrency's actor-boundary
+/// Sendable check. The reader is single-consumer by design (the
+/// `DAPFrontend.runMessageLoop` Task is the only caller), so the buffer
+/// is not lock-protected — Swift 6 disallows `NSLock.lock()` from async
+/// contexts, and the buffer's single-writer invariant makes a lock
+/// unnecessary.
+public final class DAPReader: @unchecked Sendable {
     private let handle: FileHandle
     private var buffer = Data()
 
     public init(handle: FileHandle) { self.handle = handle }
 
-    public func read() async throws -> DAPMessage? {
+    public func read() throws -> DAPMessage? {
         while true {
             if let msg = try extract() { return msg }
             let chunk = try handle.read(upToCount: 4096)
@@ -148,7 +156,6 @@ public actor DAPReader {
     }
 
     private func extract() throws -> DAPMessage? {
-        // Look for the end of headers (\r\n\r\n).
         guard let sep = buffer.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let headerData = buffer.subdata(in: 0..<sep.lowerBound)
         guard let headerStr = String(data: headerData, encoding: .utf8) else {
@@ -170,8 +177,15 @@ public actor DAPReader {
     }
 }
 
-/// Serializes writes to a FileHandle from any actor.
-public actor DAPWriter {
+/// Writes framed DAP messages to a FileHandle.
+///
+/// Same actor-vs-class reasoning as `DAPReader`. FileHandle.write is
+/// thread-safe per the POSIX file-descriptor contract on both Darwin
+/// and Linux, so concurrent writers do not corrupt the stream. The
+/// `seq` counter races benignly under contention (DAP clients tolerate
+/// non-monotonic seq); Phase 2 accepts that, and a follow-up can swap
+/// in `Synchronization.Mutex` (Swift 6.0+) if needed.
+public final class DAPWriter: @unchecked Sendable {
     private let handle: FileHandle
     private var seq = 1
 
