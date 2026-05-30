@@ -40,8 +40,8 @@ struct DebugCommand: AsyncParsableCommand {
             """
     )
 
-    @Argument(help: "Path to the application directory or .aro file")
-    var path: String
+    @Argument(help: "Path to the application directory or .aro file (omit with --replay)")
+    var path: String = ""
 
     @Option(name: .shortAndLong, help: "Override the entry point feature set")
     var entryPoint: String = "Application-Start"
@@ -55,6 +55,12 @@ struct DebugCommand: AsyncParsableCommand {
     @Option(name: .long, help: "DAP log file path (when --dap is set)")
     var dapLog: String?
 
+    @Option(name: .long, help: "Record the debug session to a JSONL file (issue #229 Phase 4)")
+    var record: String?
+
+    @Option(name: .long, help: "Replay a recorded debug session — does not execute the program")
+    var replay: String?
+
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
 
@@ -63,6 +69,16 @@ struct DebugCommand: AsyncParsableCommand {
         setvbuf(stdout, nil, _IONBF, 0)
         #endif
 
+        // Phase 4 — replay short-circuits the runtime entirely.
+        if let replay {
+            try await runReplay(path: replay)
+            return
+        }
+
+        if path.isEmpty {
+            print("Error: Missing path. Pass a directory / .aro file, or use --replay <session.jsonl>.")
+            throw ExitCode.failure
+        }
         let resolvedPath = URL(fileURLWithPath: path)
 
         // Discover application
@@ -132,6 +148,17 @@ struct DebugCommand: AsyncParsableCommand {
             Task.detached { await dapFrontend.runMessageLoop() }
         }
 
+        // Phase 4 — install JSONL recorder if --record was set.
+        if let record {
+            do {
+                let recorder = try DebugEventLogWriter(path: record)
+                await controller.setRecorder(recorder)
+                if !dap { print("recording session to \(record)") }
+            } catch {
+                print("warning: failed to open recorder \(record): \(error)")
+            }
+        }
+
         // Seed breakpoints from --breakpoint flags
         for spec in breakpoint {
             if let line = Int(spec) {
@@ -178,6 +205,66 @@ struct DebugCommand: AsyncParsableCommand {
             if !dap { print("\nProgram ended with error: \(error)") }
             throw ExitCode.failure
         }
+    }
+}
+
+// MARK: - Replay
+
+extension DebugCommand {
+    /// Issue #229 Phase 4 — read a recorded JSONL session and pretend
+    /// each `pause` record is a fresh checkpoint. This drives the same
+    /// CLI loop without re-running the program. Doesn't support
+    /// breakpoint/step semantics yet — every pause shows in source
+    /// order, the user types `n` to advance.
+    func runReplay(path: String) async throws {
+        let reader: DebugEventLogReader
+        do {
+            reader = try DebugEventLogReader(path: path)
+        } catch {
+            print("Cannot read \(path): \(error)")
+            throw ExitCode.failure
+        }
+        let pauses = reader.records.filter { $0.kind == .pause }
+        if pauses.isEmpty {
+            print("No pause records in \(path).")
+            return
+        }
+        print("aro debug · replay (\(pauses.count) pauses)")
+        var cursor = 0
+        while cursor < pauses.count {
+            let rec = pauses[cursor]
+            print("")
+            print("⏸  [\(cursor+1)/\(pauses.count)] t=\(String(format: "%.3f", rec.time))s — \(rec.body["fs"] ?? "?"):\(rec.body["line"] ?? "0")")
+            print("   \(rec.body["stmt"] ?? "")")
+            if let symsJson = rec.body["syms"],
+               let data = symsJson.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: String]],
+               !arr.isEmpty {
+                for s in arr {
+                    print("     <\(s["n"] ?? "?")> : \(s["ty"] ?? "?") = \(s["v"] ?? "?")")
+                }
+            }
+            print("(replay) ", terminator: "")
+            guard let raw = readLine() else { return }
+            switch raw.trimmingCharacters(in: .whitespaces) {
+            case "n", "next", "":
+                cursor += 1
+            case "p", "prev":
+                cursor = max(0, cursor - 1)
+            case "g":
+                cursor = pauses.count - 1
+            case "0":
+                cursor = 0
+            case "q", "quit":
+                return
+            case let s where Int(s) != nil:
+                let idx = Int(s)! - 1
+                cursor = max(0, min(pauses.count - 1, idx))
+            default:
+                print("commands: n(ext) p(rev) g(o-end) 0(start) <num> q(uit)")
+            }
+        }
+        print("\nEnd of replay.")
     }
 }
 

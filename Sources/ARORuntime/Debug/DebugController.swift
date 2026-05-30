@@ -24,11 +24,18 @@ public actor DebugController {
     private var watchExpressions: [String] = []
     private var nextMode: StepMode = .stepOver   // first checkpoint pauses
     private var hasFiredEntry = false
+    private var recorder: DebugEventLogWriter?
 
     // MARK: - Init
 
     public init(frontend: any DebugFrontend) {
         self.frontend = frontend
+    }
+
+    /// Phase 4 — install a record sink. Every pause + event + error
+    /// after this call gets appended as a JSONL line.
+    public func setRecorder(_ recorder: DebugEventLogWriter) {
+        self.recorder = recorder
     }
 
     // MARK: - Breakpoint management (callable from frontend)
@@ -141,6 +148,7 @@ public actor DebugController {
             symbols: symbols
         )
 
+        await record(pause: info)
         nextMode = await frontend.didPause(info, controller: self)
     }
 
@@ -187,7 +195,35 @@ public actor DebugController {
     /// Called by the harness when the program completes. Frontend gets a
     /// chance to print a wrap-up message or close a socket.
     public func didEnd(error: Error?) async {
+        if let recorder {
+            await recorder.write(.end, body: error.map { ["err": "\($0)"] } ?? [:])
+            await recorder.close()
+        }
         await frontend.didEnd(error: error)
+    }
+
+    // MARK: - Recording
+
+    private func record(pause: PauseInfo) async {
+        guard let recorder else { return }
+        var body: [String: String] = [
+            "reason": String(describing: pause.reason),
+            "fs": pause.featureSetName,
+            "act": pause.businessActivity,
+            "file": pause.file,
+            "line": "\(pause.line)",
+            "col": "\(pause.column)",
+            "stmt": pause.statementSummary
+        ]
+        if let verb = pause.verb { body["verb"] = verb }
+        // Serialize symbol snapshots as a single JSON string so the
+        // JSONL line stays flat (DebugEventRecord values are strings).
+        let symsArr = pause.symbols.map { ["n": $0.name, "ty": $0.typeName, "v": $0.valuePreview] }
+        if let symsData = try? JSONSerialization.data(withJSONObject: symsArr, options: [.sortedKeys]),
+           let symsStr = String(data: symsData, encoding: .utf8) {
+            body["syms"] = symsStr
+        }
+        await recorder.write(.pause, body: body)
     }
 
     // MARK: - Predicate evaluation (Phase 3)
