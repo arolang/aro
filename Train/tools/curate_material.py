@@ -1526,6 +1526,640 @@ E.add('Use context-aware formatting so the same result renders differently for c
       '    Return an <OK: status> with <status>.\n'
       '}', 'context_aware')
 
+# ── Round-3 gap booster: categories that scored 0% in the 100-prompt eval ──
+# (user_defined_action, state_guard, plugin_qualifier, template, typed_event,
+#  multi_file/openapi, application_end). These reinforce categories the
+#  100-prompt sweep proved are under-represented.
+
+# --- User-defined actions: 40 more diverse callers/callees -----------------
+MORE_UDA = [
+    ('Define a user-defined action that triples a number.',
+     '(TripleValue: Action takes <number>) {\n'
+     '    Extract the <n> from the <input: number>.\n'
+     '    Compute the <tripled> from <n> * 3.\n'
+     '    Return an <OK: status> with { tripled: <tripled> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the negation of a number.',
+     '(Negate: Action takes <number>) {\n'
+     '    Extract the <n> from the <input: number>.\n'
+     '    Compute the <neg> from 0 - <n>.\n'
+     '    Return an <OK: status> with { neg: <neg> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the absolute value of an integer.',
+     '(AbsValue: Action takes <number>) {\n'
+     '    Extract the <n> from the <input: number>.\n'
+     '    Compute the <neg> from 0 - <n>.\n'
+     '    Return an <OK: status> with { abs: <neg> } when <n> < 0.\n'
+     '    Return an <OK: status> with { abs: <n> }.\n'
+     '}'),
+    ('Define a user-defined action that builds a greeting from a name.',
+     '(BuildGreeting: Action takes <name>) {\n'
+     '    Extract the <n> from the <input: name>.\n'
+     '    Compute the <greeting> from "Hello, " ++ <n> ++ "!".\n'
+     '    Return an <OK: status> with { greeting: <greeting> }.\n'
+     '}'),
+    ('Define a user-defined action that lowercases a string.',
+     '(LowerCase: Action takes <text>) {\n'
+     '    Extract the <s> from the <input: text>.\n'
+     '    Compute the <lower: lowercase> from <s>.\n'
+     '    Return an <OK: status> with { lower: <lower> }.\n'
+     '}'),
+    ('Define a user-defined action that hashes a password.',
+     '(HashPassword: Action takes <password>) {\n'
+     '    Extract the <p> from the <input: password>.\n'
+     '    Compute the <h: hash> from <p>.\n'
+     '    Return an <OK: status> with { hash: <h> }.\n'
+     '}'),
+    ('Define a user-defined action that validates an email address by length.',
+     '(ValidateEmail: Action takes <email>) {\n'
+     '    Extract the <e> from the <input: email>.\n'
+     '    Compute the <len: length> from <e>.\n'
+     '    Return an <Error: status> with { valid: false } when <len> == 0.\n'
+     '    Return an <OK: status> with { valid: true }.\n'
+     '}'),
+    ('Define a user-defined action that counts the words in a string.',
+     '(CountWords: Action takes <text>) {\n'
+     '    Extract the <s> from the <input: text>.\n'
+     '    Split the <words> from <s> with " ".\n'
+     '    Compute the <count: length> from <words>.\n'
+     '    Return an <OK: status> with { count: <count> }.\n'
+     '}'),
+    ('Define a user-defined action that capitalises the first letter of a string.',
+     '(Capitalise: Action takes <text>) {\n'
+     '    Extract the <s> from the <input: text>.\n'
+     '    Compute the <upper: uppercase> from <s>.\n'
+     '    Return an <OK: status> with { cap: <upper> }.\n'
+     '}'),
+    ('Define a user-defined action that computes a percentage of an integer total.',
+     '(PercentOf: Action) {\n'
+     '    Extract the <part> from the <input: part>.\n'
+     '    Extract the <total> from the <input: total>.\n'
+     '    Compute the <pct> from <part> * 100 / <total>.\n'
+     '    Return an <OK: status> with { percent: <pct> }.\n'
+     '}'),
+    ('Define a user-defined action that adds VAT to a price at 19%.',
+     '(AddVAT: Action takes <price>) {\n'
+     '    Extract the <p> from the <input: price>.\n'
+     '    Compute the <vat> from <p> * 19 / 100.\n'
+     '    Compute the <gross> from <p> + <vat>.\n'
+     '    Return an <OK: status> with { gross: <gross>, vat: <vat> }.\n'
+     '}'),
+    ('Define a user-defined action that picks the larger of two numbers using suffix when.',
+     '(MaxOf: Action) {\n'
+     '    Extract the <a> from the <input: a>.\n'
+     '    Extract the <b> from the <input: b>.\n'
+     '    Return an <OK: status> with { max: <a> } when <a> > <b>.\n'
+     '    Return an <OK: status> with { max: <b> }.\n'
+     '}'),
+    ('Define a user-defined action that picks the smaller of two numbers using suffix when.',
+     '(MinOf: Action) {\n'
+     '    Extract the <a> from the <input: a>.\n'
+     '    Extract the <b> from the <input: b>.\n'
+     '    Return an <OK: status> with { min: <a> } when <a> < <b>.\n'
+     '    Return an <OK: status> with { min: <b> }.\n'
+     '}'),
+    ('Define a user-defined action that checks if a number is even using suffix when.',
+     '(IsEven: Action takes <number>) {\n'
+     '    Extract the <n> from the <input: number>.\n'
+     '    Compute the <r> from <n> % 2.\n'
+     '    Return an <OK: status> with { even: true } when <r> == 0.\n'
+     '    Return an <OK: status> with { even: false }.\n'
+     '}'),
+    ('Define a user-defined action that clamps a value to non-negative.',
+     '(ClampLow: Action takes <value>) {\n'
+     '    Extract the <v> from the <input: value>.\n'
+     '    Return an <OK: status> with { clamped: 0 } when <v> < 0.\n'
+     '    Return an <OK: status> with { clamped: <v> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the head of a list.',
+     '(Head: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <h: first> from <items>.\n'
+     '    Return an <OK: status> with { head: <h> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the last element of a list.',
+     '(Last: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <t: last> from <items>.\n'
+     '    Return an <OK: status> with { last: <t> }.\n'
+     '}'),
+    ('Define a user-defined action that reverses a list.',
+     '(ReverseList: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <r: reverse> from <items>.\n'
+     '    Return an <OK: status> with { reversed: <r> }.\n'
+     '}'),
+    ('Define a user-defined action that sums a list of integers via Reduce.',
+     '(SumList: Action takes <list>) {\n'
+     '    Extract the <items: List> from the <input: list>.\n'
+     '    Reduce the <total: Integer> from the <items> with sum().\n'
+     '    Return an <OK: status> with { sum: <total> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the length of a list.',
+     '(ListSize: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <n: length> from <items>.\n'
+     '    Return an <OK: status> with { size: <n> }.\n'
+     '}'),
+    ('Define a user-defined action that calls another user-defined action.',
+     '(Square: Action takes <number>) {\n'
+     '    Extract the <n> from the <input: number>.\n'
+     '    Compute the <sq> from <n> * <n>.\n'
+     '    Return an <OK: status> with { sq: <sq> }.\n'
+     '}\n\n'
+     '(SquareOfSum: Action) {\n'
+     '    Extract the <a> from the <input: a>.\n'
+     '    Extract the <b> from the <input: b>.\n'
+     '    Compute the <sum> from <a> + <b>.\n'
+     '    Application.Square the <inner> from <sum>.\n'
+     '    Extract the <result> from the <inner: sq>.\n'
+     '    Return an <OK: status> with { result: <result> }.\n'
+     '}'),
+    ('Define a user-defined action that converts Celsius to Fahrenheit.',
+     '(CtoF: Action takes <celsius>) {\n'
+     '    Extract the <c> from the <input: celsius>.\n'
+     '    Compute the <f> from <c> * 9 / 5 + 32.\n'
+     '    Return an <OK: status> with { fahrenheit: <f> }.\n'
+     '}'),
+    ('Define a user-defined action that converts a price in cents to dollars and cents.',
+     '(FormatPrice: Action takes <cents>) {\n'
+     '    Extract the <c> from the <input: cents>.\n'
+     '    Compute the <dollars> from <c> / 100.\n'
+     '    Compute the <rem> from <c> % 100.\n'
+     '    Return an <OK: status> with { dollars: <dollars>, cents: <rem> }.\n'
+     '}'),
+    ('Define a user-defined action that returns "yes" or "no" for a boolean input.',
+     '(YesNo: Action takes <flag>) {\n'
+     '    Extract the <b> from the <input: flag>.\n'
+     '    Return an <OK: status> with { label: "yes" } when <b> == true.\n'
+     '    Return an <OK: status> with { label: "no" }.\n'
+     '}'),
+    ('Define a user-defined action that concatenates first and last name with a space.',
+     '(FullName: Action) {\n'
+     '    Extract the <first> from the <input: first>.\n'
+     '    Extract the <last> from the <input: last>.\n'
+     '    Compute the <full> from <first> ++ " " ++ <last>.\n'
+     '    Return an <OK: status> with { full: <full> }.\n'
+     '}'),
+    ('Define a user-defined action that returns a slug from a title (lowercased).',
+     '(Slugify: Action takes <title>) {\n'
+     '    Extract the <t> from the <input: title>.\n'
+     '    Compute the <slug: lowercase> from <t>.\n'
+     '    Return an <OK: status> with { slug: <slug> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the discount price.',
+     '(Discount: Action) {\n'
+     '    Extract the <price> from the <input: price>.\n'
+     '    Extract the <pct> from the <input: percent>.\n'
+     '    Compute the <off> from <price> * <pct> / 100.\n'
+     '    Compute the <final> from <price> - <off>.\n'
+     '    Return an <OK: status> with { price: <final>, saved: <off> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the count of unique items in a list.',
+     '(UniqueCount: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <u: unique> from <items>.\n'
+     '    Compute the <n: length> from <u>.\n'
+     '    Return an <OK: status> with { unique: <n> }.\n'
+     '}'),
+    ('Define a user-defined action that doubles every number in a list.',
+     '(DoubleEach: Action takes <list>) {\n'
+     '    Extract the <items: List> from the <input: list>.\n'
+     '    for each <item> in <items> {\n'
+     '        Compute the <d> from <item> * 2.\n'
+     '        Log <d> to the <console>.\n'
+     '    }\n'
+     '    Return an <OK: status> with { items: <items> }.\n'
+     '}'),
+    ('Define a user-defined action that returns true if a list is empty.',
+     '(IsEmpty: Action takes <list>) {\n'
+     '    Extract the <items> from the <input: list>.\n'
+     '    Compute the <n: length> from <items>.\n'
+     '    Return an <OK: status> with { result: "empty" } when <n> == 0.\n'
+     '    Return an <OK: status> with { result: "non-empty" }.\n'
+     '}'),
+    ('Define a user-defined action that builds a key-value JSON object from two fields.',
+     '(BuildPair: Action) {\n'
+     '    Extract the <key> from the <input: key>.\n'
+     '    Extract the <value> from the <input: value>.\n'
+     '    Return an <OK: status> with { key: <key>, value: <value> }.\n'
+     '}'),
+    ('Define a user-defined action that picks the first non-empty string of two inputs.',
+     '(Coalesce: Action) {\n'
+     '    Extract the <a> from the <input: a>.\n'
+     '    Extract the <b> from the <input: b>.\n'
+     '    Compute the <la: length> from <a>.\n'
+     '    Return an <OK: status> with { value: <a> } when <la> > 0.\n'
+     '    Return an <OK: status> with { value: <b> }.\n'
+     '}'),
+    ('Define a user-defined action used inside an HTTP route handler.',
+     '(NormalizeName: Action takes <name>) {\n'
+     '    Extract the <n> from the <input: name>.\n'
+     '    Compute the <lower: lowercase> from <n>.\n'
+     '    Return an <OK: status> with { name: <lower> }.\n'
+     '}\n\n'
+     '(createUser: User API) {\n'
+     '    Extract the <body> from the <request: body>.\n'
+     '    Extract the <raw-name> from the <body: name>.\n'
+     '    Application.NormalizeName the <res> from { name: <raw-name> }.\n'
+     '    Extract the <name> from the <res: name>.\n'
+     '    Create the <user> with { name: <name> }.\n'
+     '    Store the <user> into the <user-repository>.\n'
+     '    Return a <Created: status> with <user>.\n'
+     '}'),
+    ('Define a user-defined action that returns a default value when input is missing.',
+     '(WithDefault: Action) {\n'
+     '    Extract the <value> from the <input: value>.\n'
+     '    Extract the <default> from the <input: default>.\n'
+     '    Compute the <len: length> from <value>.\n'
+     '    Return an <OK: status> with { result: <default> } when <len> == 0.\n'
+     '    Return an <OK: status> with { result: <value> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the area of a rectangle.',
+     '(RectArea: Action) {\n'
+     '    Extract the <w> from the <input: width>.\n'
+     '    Extract the <h> from the <input: height>.\n'
+     '    Compute the <a> from <w> * <h>.\n'
+     '    Return an <OK: status> with { area: <a> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the perimeter of a rectangle.',
+     '(RectPerimeter: Action) {\n'
+     '    Extract the <w> from the <input: width>.\n'
+     '    Extract the <h> from the <input: height>.\n'
+     '    Compute the <p> from <w> * 2 + <h> * 2.\n'
+     '    Return an <OK: status> with { perimeter: <p> }.\n'
+     '}'),
+    ('Define a user-defined action that adds an item to an existing list.',
+     '(AppendItem: Action) {\n'
+     '    Extract the <items> from the <input: items>.\n'
+     '    Extract the <item> from the <input: item>.\n'
+     '    Compute the <combined> from <items> + [<item>].\n'
+     '    Return an <OK: status> with { items: <combined> }.\n'
+     '}'),
+    ('Define a user-defined action that returns the kind label of a status code.',
+     '(StatusKind: Action takes <code>) {\n'
+     '    Extract the <c> from the <input: code>.\n'
+     '    Return an <OK: status> with { kind: "success" } when <c> < 300.\n'
+     '    Return an <OK: status> with { kind: "redirect" } when <c> < 400.\n'
+     '    Return an <OK: status> with { kind: "client-error" } when <c> < 500.\n'
+     '    Return an <OK: status> with { kind: "server-error" }.\n'
+     '}'),
+    ('Define a user-defined action that builds an HTTP problem-detail body.',
+     '(Problem: Action) {\n'
+     '    Extract the <title> from the <input: title>.\n'
+     '    Extract the <status> from the <input: status>.\n'
+     '    Return an <OK: status> with { title: <title>, status: <status>, kind: "about:blank" }.\n'
+     '}'),
+    ('Define a user-defined action used from an Application-Start.',
+     '(Banner: Action takes <name>) {\n'
+     '    Extract the <n> from the <input: name>.\n'
+     '    Compute the <line> from "*** " ++ <n> ++ " ***".\n'
+     '    Return an <OK: status> with { banner: <line> }.\n'
+     '}\n\n'
+     '(Application-Start: BannerApp) {\n'
+     '    Application.Banner the <b> from { name: "Hello" }.\n'
+     '    Extract the <banner> from the <b: banner>.\n'
+     '    Log <banner> to the <console>.\n'
+     '    Return an <OK: status> for the <startup>.\n'
+     '}'),
+]
+for instr, code in MORE_UDA:
+    E.add(instr, code, 'user_defined_action')
+
+# --- State guards: 10 more ------------------------------------------------
+MORE_STATE_GUARDS = [
+    ('Guard an OrderUpdated handler so it only runs when status equals "shipped".',
+     '(NotifyShipped: OrderUpdated Handler) when <status> == "shipped" {\n'
+     '    Extract the <order> from the <event: order>.\n'
+     '    Send the <shipping-email> to the <order: email>.\n'
+     '    Return an <OK: status> for the <notification>.\n'
+     '}'),
+    ('Guard a UserUpdated handler so it only runs when role equals "admin".',
+     '(AuditAdmin: UserUpdated Handler) when <role> == "admin" {\n'
+     '    Extract the <user> from the <event: user>.\n'
+     '    Log <user> to the <audit-log>.\n'
+     '    Return an <OK: status> for the <audit>.\n'
+     '}'),
+    ('Guard a PaymentReceived handler so it only runs when currency equals "EUR".',
+     '(EUOnly: PaymentReceived Handler) when <currency> == "EUR" {\n'
+     '    Extract the <amount> from the <event: amount>.\n'
+     '    Log <amount> to the <console>.\n'
+     '    Return an <OK: status> for the <amount>.\n'
+     '}'),
+    ('Guard a TaskUpdated handler so it only runs when priority equals "high".',
+     '(EscalateHigh: TaskUpdated Handler) when <priority> == "high" {\n'
+     '    Extract the <task> from the <event: task>.\n'
+     '    Send the <page> to the <oncall: phone>.\n'
+     '    Return an <OK: status> for the <page>.\n'
+     '}'),
+    ('Guard a JobFinished handler so it only runs when result equals "failure".',
+     '(AlertFailure: JobFinished Handler) when <result> == "failure" {\n'
+     '    Extract the <job> from the <event: job>.\n'
+     '    Send the <alert> to the <oncall: phone>.\n'
+     '    Return an <OK: status> for the <alert>.\n'
+     '}'),
+    ('Guard a SubscriptionChanged handler so it only runs when plan equals "pro".',
+     '(WelcomePro: SubscriptionChanged Handler) when <plan> == "pro" {\n'
+     '    Extract the <user> from the <event: user>.\n'
+     '    Send the <welcome> to the <user: email>.\n'
+     '    Return an <OK: status> for the <notification>.\n'
+     '}'),
+    ('Guard a LoginAttempt handler so it only runs when success equals false.',
+     '(LogFailedLogin: LoginAttempt Handler) when <success> == false {\n'
+     '    Extract the <ip> from the <event: ip>.\n'
+     '    Log <ip> to the <audit-log>.\n'
+     '    Return an <OK: status> for the <log>.\n'
+     '}'),
+    ('Guard a FileChanged handler so it only runs for events where kind equals "modified".',
+     '(ReloadConfig: FileChanged Handler) when <kind> == "modified" {\n'
+     '    Extract the <path> from the <event: path>.\n'
+     '    Log <path> to the <console>.\n'
+     '    Return an <OK: status> for the <reload>.\n'
+     '}'),
+    ('Guard an OrderUpdated handler so it only runs when total exceeds 1000.',
+     '(BigOrderAlert: OrderUpdated Handler) when <total> > 1000 {\n'
+     '    Extract the <order> from the <event: order>.\n'
+     '    Send the <alert> to the <oncall: phone>.\n'
+     '    Return an <OK: status> for the <alert>.\n'
+     '}'),
+    ('Pair two handlers on the same event split by region state guard.',
+     '(EUDispatch: OrderPlaced Handler) when <region> == "EU" {\n'
+     '    Extract the <order> from the <event: order>.\n'
+     '    Send the <order> to the <eu-warehouse>.\n'
+     '    Return an <OK: status> for the <dispatch>.\n'
+     '}\n\n'
+     '(USDispatch: OrderPlaced Handler) when <region> == "US" {\n'
+     '    Extract the <order> from the <event: order>.\n'
+     '    Send the <order> to the <us-warehouse>.\n'
+     '    Return an <OK: status> for the <dispatch>.\n'
+     '}'),
+]
+for instr, code in MORE_STATE_GUARDS:
+    E.add(instr, code, 'state_guard')
+
+# --- Plugin qualifiers (handle.qualifier) — 10 more -----------------------
+MORE_PLUGIN_QUAL = [
+    ('Use a Collections plugin qualifier to shuffle a list.',
+     '(ShufflePlay: Example) {\n'
+     '    Create the <songs> with ["a", "b", "c"].\n'
+     '    Compute the <order: Collections.shuffle> from <songs>.\n'
+     '    Return an <OK: status> with <order>.\n'
+     '}'),
+    ('Use a Collections plugin qualifier to reverse a list.',
+     '(ReverseList: Example) {\n'
+     '    Create the <items> with [1, 2, 3].\n'
+     '    Compute the <r: Collections.reverse> from <items>.\n'
+     '    Return an <OK: status> with <r>.\n'
+     '}'),
+    ('Use a stats plugin qualifier to compute the average of a list.',
+     '(Average: Example) {\n'
+     '    Create the <nums> with [10, 20, 30].\n'
+     '    Compute the <avg: stats.avg> from <nums>.\n'
+     '    Return an <OK: status> with <avg>.\n'
+     '}'),
+    ('Use a stats plugin qualifier to compute the sum of a list.',
+     '(Sum: Example) {\n'
+     '    Create the <nums> with [1, 2, 3, 4].\n'
+     '    Compute the <s: stats.sum> from <nums>.\n'
+     '    Return an <OK: status> with <s>.\n'
+     '}'),
+    ('Use a stats plugin qualifier to find the minimum of a list.',
+     '(MinValue: Example) {\n'
+     '    Create the <nums> with [5, 1, 4].\n'
+     '    Compute the <m: stats.min> from <nums>.\n'
+     '    Return an <OK: status> with <m>.\n'
+     '}'),
+    ('Use a stats plugin qualifier to find the maximum of a list.',
+     '(MaxValue: Example) {\n'
+     '    Create the <nums> with [5, 1, 4].\n'
+     '    Compute the <m: stats.max> from <nums>.\n'
+     '    Return an <OK: status> with <m>.\n'
+     '}'),
+    ('Use a stats plugin qualifier to deduplicate a list.',
+     '(Unique: Example) {\n'
+     '    Create the <items> with [1, 1, 2, 3, 3].\n'
+     '    Compute the <u: stats.unique> from <items>.\n'
+     '    Return an <OK: status> with <u>.\n'
+     '}'),
+    ('Use a Collections plugin qualifier to pick the first element.',
+     '(PickFirst: Example) {\n'
+     '    Create the <items> with ["x", "y", "z"].\n'
+     '    Compute the <f: Collections.first> from <items>.\n'
+     '    Return an <OK: status> with <f>.\n'
+     '}'),
+    ('Use a Collections plugin qualifier to pick the last element.',
+     '(PickLast: Example) {\n'
+     '    Create the <items> with ["x", "y", "z"].\n'
+     '    Compute the <l: Collections.last> from <items>.\n'
+     '    Return an <OK: status> with <l>.\n'
+     '}'),
+    ('Use a Collections plugin qualifier inside a handler.',
+     '(PickWinner: ContestEnded Handler) {\n'
+     '    Extract the <entries> from the <event: entries>.\n'
+     '    Compute the <winner: Collections.pick-random> from <entries>.\n'
+     '    Send the <prize> to the <winner: email>.\n'
+     '    Return an <OK: status> for the <notification>.\n'
+     '}'),
+]
+for instr, code in MORE_PLUGIN_QUAL:
+    E.add(instr, code, 'plugin_qualifier')
+
+# --- Template / Render: 10 more ------------------------------------------
+MORE_TEMPLATE = [
+    ('Render a template that uses a single placeholder for the user name.',
+     '(Welcome: Example) {\n'
+     '    Create the <template> with "Welcome, {{name}}.".\n'
+     '    Create the <data> with { name: "Pat" }.\n'
+     '    Render the <message> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <message>.\n'
+     '}'),
+    ('Render an email body from a template using fields name and amount.',
+     '(EmailBody: Example) {\n'
+     '    Create the <template> with "Hi {{name}}, your bill is {{amount}}.".\n'
+     '    Create the <data> with { name: "Sam", amount: 42 }.\n'
+     '    Render the <body> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <body>.\n'
+     '}'),
+    ('Render a SMS notification from a template.',
+     '(SMSText: Example) {\n'
+     '    Create the <template> with "Code: {{code}}".\n'
+     '    Create the <data> with { code: 1234 }.\n'
+     '    Render the <sms> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <sms>.\n'
+     '}'),
+    ('Render an HTML page with a title and a paragraph.',
+     '(HTMLPage: Example) {\n'
+     '    Create the <template> with "<html><h1>{{title}}</h1><p>{{body}}</p></html>".\n'
+     '    Create the <data> with { title: "Hi", body: "World" }.\n'
+     '    Render the <html> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <html>.\n'
+     '}'),
+    ('Render a template that iterates over a list of users.',
+     '(UserList: Example) {\n'
+     '    Create the <template> with "{{#users}}- {{name}}\\n{{/users}}".\n'
+     '    Create the <data> with { users: [\n'
+     '        { name: "Ada" },\n'
+     '        { name: "Lin" }\n'
+     '    ] }.\n'
+     '    Render the <list> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <list>.\n'
+     '}'),
+    ('Render a confirmation message from an event payload.',
+     '(ConfirmOrder: OrderCreated Handler) {\n'
+     '    Extract the <order> from the <event: order>.\n'
+     '    Create the <template> with "Thanks for order #{{id}}.".\n'
+     '    Render the <message> from the <template> with <order>.\n'
+     '    Send the <message> to the <order: email>.\n'
+     '    Return an <OK: status> for the <notification>.\n'
+     '}'),
+    ('Render a multi-line markdown summary from a template.',
+     '(Summary: Example) {\n'
+     '    Create the <template> with "# {{title}}\\n\\n{{body}}".\n'
+     '    Create the <data> with { title: "Report", body: "All good." }.\n'
+     '    Render the <md> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <md>.\n'
+     '}'),
+    ('Render an OG-style social card from a template.',
+     '(SocialCard: Example) {\n'
+     '    Create the <template> with "{{title}} — {{subtitle}}".\n'
+     '    Create the <data> with { title: "ARO", subtitle: "Action-Result-Object" }.\n'
+     '    Render the <card> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <card>.\n'
+     '}'),
+    ('Render a price tag from a template.',
+     '(PriceTag: Example) {\n'
+     '    Create the <template> with "{{name}}: €{{price}}".\n'
+     '    Create the <data> with { name: "Widget", price: 9 }.\n'
+     '    Render the <tag> from the <template> with <data>.\n'
+     '    Return an <OK: status> with <tag>.\n'
+     '}'),
+    ('Render a template inline inside an HTTP route handler.',
+     '(getCard: API) {\n'
+     '    Extract the <id> from the <pathParameters: id>.\n'
+     '    Retrieve the <user> from the <user-repository>.\n'
+     '    Create the <template> with "Hello, {{name}}!".\n'
+     '    Render the <body> from the <template> with <user>.\n'
+     '    Return an <OK: status> with <body>.\n'
+     '}'),
+]
+for instr, code in MORE_TEMPLATE:
+    E.add(instr, code, 'template')
+
+# --- Typed event extraction: 10 more --------------------------------------
+MORE_TYPED_EVENTS = [
+    ('Extract a typed Integer field from an event.',
+     '(Track: ScoreUpdated Handler) {\n'
+     '    Extract the <points: Integer> from the <event: points>.\n'
+     '    Log <points> to the <console>.\n'
+     '    Return an <OK: status> with <points>.\n'
+     '}'),
+    ('Extract a typed Float field from an event.',
+     '(Measure: SensorRead Handler) {\n'
+     '    Extract the <temp: Float> from the <event: temperature>.\n'
+     '    Log <temp> to the <console>.\n'
+     '    Return an <OK: status> with <temp>.\n'
+     '}'),
+    ('Extract a typed Boolean field from an event.',
+     '(ToggleHandler: ToggleChanged Handler) {\n'
+     '    Extract the <enabled: Boolean> from the <event: enabled>.\n'
+     '    Log <enabled> to the <console>.\n'
+     '    Return an <OK: status> with <enabled>.\n'
+     '}'),
+    ('Extract a typed String email from an event and send a welcome message.',
+     '(Welcome: UserSignedUp Handler) {\n'
+     '    Extract the <email: String> from the <event: email>.\n'
+     '    Send the <welcome-email> to the <email>.\n'
+     '    Return an <OK: status> for the <notification>.\n'
+     '}'),
+    ('Extract two typed fields from an event.',
+     '(Audit: PaymentReceived Handler) {\n'
+     '    Extract the <amount: Integer> from the <event: amount>.\n'
+     '    Extract the <currency: String> from the <event: currency>.\n'
+     '    Log <amount> to the <audit-log>.\n'
+     '    Log <currency> to the <audit-log>.\n'
+     '    Return an <OK: status> for the <audit>.\n'
+     '}'),
+    ('Extract a typed nested object field from an event.',
+     '(LogUser: UserCreated Handler) {\n'
+     '    Extract the <user-id: Integer> from the <event: user-id>.\n'
+     '    Extract the <user-name: String> from the <event: user-name>.\n'
+     '    Log <user-id> to the <console>.\n'
+     '    Log <user-name> to the <console>.\n'
+     '    Return an <OK: status> for the <log>.\n'
+     '}'),
+    ('Extract a typed Integer field then use it in a computation.',
+     '(Score: GameEnded Handler) {\n'
+     '    Extract the <points: Integer> from the <event: points>.\n'
+     '    Compute the <bonus> from <points> * 2.\n'
+     '    Log <bonus> to the <console>.\n'
+     '    Return an <OK: status> with <bonus>.\n'
+     '}'),
+    ('Extract a typed field combined with a state guard.',
+     '(BigOrder: OrderCreated Handler) when <region> == "EU" {\n'
+     '    Extract the <total: Integer> from the <event: total>.\n'
+     '    Log <total> to the <audit-log>.\n'
+     '    Return an <OK: status> with <total>.\n'
+     '}'),
+    ('Extract a typed list field from an event.',
+     '(TagSummary: PostPublished Handler) {\n'
+     '    Extract the <tags: List> from the <event: tags>.\n'
+     '    Compute the <n: length> from <tags>.\n'
+     '    Log <n> to the <console>.\n'
+     '    Return an <OK: status> with <n>.\n'
+     '}'),
+    ('Extract a typed timestamp from an event.',
+     '(TouchIndex: FileChanged Handler) {\n'
+     '    Extract the <ts: String> from the <event: timestamp>.\n'
+     '    Log <ts> to the <audit-log>.\n'
+     '    Return an <OK: status> with <ts>.\n'
+     '}'),
+]
+for instr, code in MORE_TYPED_EVENTS:
+    E.add(instr, code, 'typed_event')
+
+# --- Application-End handlers: 6 more -------------------------------------
+MORE_APP_END = [
+    ('Write an Application-End: Success handler that stops the HTTP server.',
+     '(Application-End: Success) {\n'
+     '    Stop the <http-server> with <application>.\n'
+     '    Return an <OK: status> for the <shutdown>.\n'
+     '}'),
+    ('Write an Application-End: Error handler that logs the error.',
+     '(Application-End: Error) {\n'
+     '    Extract the <error> from the <shutdown: error>.\n'
+     '    Log <error> to the <console>.\n'
+     '    Return an <OK: status> for the <error-handling>.\n'
+     '}'),
+    ('Write an Application-End: Success that flushes the audit log.',
+     '(Application-End: Success) {\n'
+     '    Log "shutting down" to the <audit-log>.\n'
+     '    Return an <OK: status> for the <shutdown>.\n'
+     '}'),
+    ('Pair an Application-Start and Application-End: Success in one file.',
+     '(Application-Start: Server) {\n'
+     '    Log "starting" to the <console>.\n'
+     '    Keepalive the <application> for the <events>.\n'
+     '    Return an <OK: status> for the <startup>.\n'
+     '}\n\n'
+     '(Application-End: Success) {\n'
+     '    Log "stopping" to the <console>.\n'
+     '    Return an <OK: status> for the <shutdown>.\n'
+     '}'),
+    ('Write an Application-End: Error that pages oncall and exits.',
+     '(Application-End: Error) {\n'
+     '    Extract the <error> from the <shutdown: error>.\n'
+     '    Send the <error> to the <oncall: phone>.\n'
+     '    Return an <OK: status> for the <error-handling>.\n'
+     '}'),
+    ('Write an Application-End: Success that closes a database connection.',
+     '(Application-End: Success) {\n'
+     '    Stop the <database> with <application>.\n'
+     '    Return an <OK: status> for the <shutdown>.\n'
+     '}'),
+]
+for instr, code in MORE_APP_END:
+    E.add(instr, code, 'application_end')
+
 
 def main():
     print(f'generated {len(E)} single-file + {len(MF)} multi-file candidates', flush=True)

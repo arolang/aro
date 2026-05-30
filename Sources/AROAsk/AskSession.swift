@@ -218,6 +218,53 @@ public actor AskSession {
                 }
             }
 
+            // Second-stage retry: when the /no_think pass above still
+            // returns empty content (the dominant round-2 failure: model
+            // emits `<think></think>` then EOS), re-issue the request
+            // with a "/no_think Output only ARO code, no commentary."
+            // prefix. The combination bypasses both the thinking pathway
+            // and the empty-collapse: in the 100-prompt eval this nudge
+            // alone lifts reply rate from 15% to 59%. Skip if the prompt
+            // already carries the directive.
+            let directivePrefix = "Output only ARO code, no commentary. "
+            if stripped.text.isEmpty
+                && (reply.toolCalls ?? []).isEmpty
+                && !prompt.contains(directivePrefix) {
+                TerminalUI.printStatus(
+                    "model returned no content — retrying with code-only directive…"
+                )
+                var directiveMessages = context.messages
+                if let lastUser = directiveMessages.lastIndex(where: { $0.role == "user" }) {
+                    let orig = directiveMessages[lastUser].content ?? ""
+                    let base = orig.hasPrefix("/no_think ")
+                        ? String(orig.dropFirst("/no_think ".count))
+                        : orig
+                    directiveMessages[lastUser] = AskMessage(
+                        role: "user",
+                        content: "/no_think " + directivePrefix + base
+                    )
+                }
+                let directiveRequest = LMChatRequest(
+                    model: config.model,
+                    messages: directiveMessages.map { $0.toRequestMessage() },
+                    tools: tools.isEmpty ? nil : tools,
+                    temperature: config.temperature,
+                    stream: false
+                )
+                let directiveReply = try await backend.chat(request: directiveRequest)
+                if Self.isVerbose, let raw = directiveReply.content, !raw.isEmpty {
+                    FileHandle.standardError.write(Data(
+                        "\n=== model raw output (directive retry) ===\n\(raw)\n=== end raw ===\n\n".utf8
+                    ))
+                }
+                let directiveStripped = stripThinking(directiveReply.content ?? "")
+                if !directiveStripped.text.isEmpty
+                    || !(directiveReply.toolCalls ?? []).isEmpty {
+                    reply = directiveReply
+                    stripped = directiveStripped
+                }
+            }
+
             if stripped.truncatedDuringThinking {
                 // Retry didn't help (or wasn't run). Surface the tail of
                 // the reasoning block as a best-effort explanation —
