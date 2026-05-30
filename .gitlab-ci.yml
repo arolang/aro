@@ -29,6 +29,9 @@ workflow:
 # Default settings for all jobs
 default:
   interruptible: true
+  tags:
+    - spencer
+    - adt
 
 # =============================================================================
 # Test Stage - Gate for all builds (main branch only)
@@ -77,8 +80,6 @@ test:
   # Same suite passes locally and on GitHub.
   script:
     - swift test --parallel --num-workers 2 --skip "Socket"
-  tags:
-    - spencer
 
 # Socket / WebSocket / Broadcast tests are NOT run on GitLab.
 #
@@ -217,8 +218,6 @@ build:linux:
     paths:
       - aro-dist/
     expire_in: 30 days
-  tags:
-    - spencer
 
 # =============================================================================
 # Integration Tests Stage
@@ -326,8 +325,6 @@ integration:linux:
       - Examples/**/testrun.*
       - Examples/**/.build/*.ll
     expire_in: 7 days
-  tags:
-    - spencer
 
 integration:repl:
   stage: integration
@@ -362,8 +359,6 @@ integration:repl:
     # Issue #200: stdin-pipe smoke tests
     - chmod +x test_stdin.sh
     - ./test_stdin.sh
-  tags:
-    - spencer
 
 # =============================================================================
 # Documentation Stage
@@ -419,8 +414,6 @@ documentation:
       - Book/AROByHallucination/output/ARO-by-Hallucination.pdf
       - Book/AROByHallucination/output/ARO-by-Hallucination.html
     expire_in: 30 days
-  tags:
-    - spencer
 
 # =============================================================================
 # Release Stage - Create GitLab Release (tags only)
@@ -528,8 +521,6 @@ release:
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROByHallucination/output/ARO-by-Hallucination.pdf?job=release'
           filepath: '/ARO-by-Hallucination.pdf'
           link_type: 'other'
-  tags:
-    - spencer
 
 # =============================================================================
 # Docker Stage - Build and Push Docker Images (using Kaniko + Crane)
@@ -568,8 +559,6 @@ docker:buildsystem:
       --cache-repo=${CI_REGISTRY_IMAGE}/cache
       --cache-ttl=168h
       $DESTINATIONS
-  tags:
-    - spencer
 
 docker:runtime:
   stage: build
@@ -603,8 +592,6 @@ docker:runtime:
       --cache-repo=${CI_REGISTRY_IMAGE}/cache
       --cache-ttl=168h
       $DESTINATIONS
-  tags:
-    - spencer
 
 # =============================================================================
 # Mastodon Stage - Post Daily Cards (scheduled pipelines only)
@@ -625,5 +612,3 @@ post:mastodon:
     - npm install
     - node generate.js
     - node post-to-mastodon.js
-  tags:
-    - spencer
