@@ -61,14 +61,48 @@ jobs:
         id: ver
         env:
           BUMP_KIND: ${{ github.event.inputs.bump || 'patch' }}
+          # Numeric marketplace plugin ID (resolved once via
+          # https://plugins.jetbrains.com/api/searchPlugins?search=com.arolang.aro).
+          # JetBrains' /api/plugins/<id>/updates endpoint only accepts numeric IDs.
+          MARKETPLACE_ID: "30696"
         run: |
           set -euo pipefail
           PLUGIN_XML="Editor/intellij-aro/src/main/resources/META-INF/plugin.xml"
-          # plugin.xml is the source of truth for the user-visible version.
-          CURRENT=$(grep -E '<version>' "$PLUGIN_XML" \
+          GRADLE_KTS="Editor/intellij-aro/build.gradle.kts"
+
+          # 1. plugin.xml version (user-visible source of truth in the repo).
+          XML_VER=$(grep -E '<version>' "$PLUGIN_XML" \
                     | head -n1 \
                     | sed -E 's|.*<version>([^<]+)</version>.*|\1|')
-          echo "Current: $CURRENT"
+          echo "plugin.xml version:  $XML_VER"
+
+          # 2. build.gradle.kts version (what gradle actually packages as).
+          KTS_VER=$(grep -E '^version = ' "$GRADLE_KTS" \
+                    | head -n1 \
+                    | sed -E 's/version = "(.*)"/\1/')
+          echo "build.gradle.kts:    $KTS_VER"
+
+          # 3. Highest semver ever published to the Marketplace. We pull
+          # the last 30 updates (cdate desc) and pick the max by semver —
+          # not by cdate — because a manual rollback (republishing an
+          # older version on top of a newer one) leaves higher versions
+          # alive in the history; without this our bump collides with
+          # those orphan versions forever.
+          MARKET_VER=$(curl -fsS --max-time 10 \
+            "https://plugins.jetbrains.com/api/plugins/${MARKETPLACE_ID}/updates?channel=&size=30" \
+            | jq -r '.[] | .version // empty' \
+            | sort -V \
+            | tail -n1 \
+            || true)
+          MARKET_VER=${MARKET_VER:-0.0.0}
+          echo "marketplace highest: $MARKET_VER"
+
+          # Bump from the max of all three. Catches every drift scenario:
+          # local lag, repo lag, orphan marketplace versions.
+          CURRENT=$(printf '%s\n%s\n%s\n' "$XML_VER" "$KTS_VER" "$MARKET_VER" \
+                    | sort -V | tail -n1)
+          echo "Bumping from:        $CURRENT"
+
           IFS='.' read -r MAJ MIN PAT <<<"$CURRENT"
           case "$BUMP_KIND" in
             major) MAJ=$((MAJ+1)); MIN=0; PAT=0 ;;
@@ -76,7 +110,7 @@ jobs:
             patch|*) PAT=$((PAT+1)) ;;
           esac
           NEW="$MAJ.$MIN.$PAT"
-          echo "Bumped to: $NEW"
+          echo "Bumped to:           $NEW"
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
 
       - name: Generate change notes from git log
