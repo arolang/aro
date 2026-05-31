@@ -149,7 +149,10 @@ public actor DAPFrontend: DebugFrontend {
         case (.request, "disconnect"), (.request, "terminate"):
             try? writer.reply(to: msg)
             didTerminate = true
-            resumeNextStep(with: .continue)
+            // Issue #230 — quit instead of continue so the runtime
+            // unwinds normally (close file handles, flush logs) instead
+            // of running the rest of the program with no client attached.
+            resumeNextStep(with: .quit)
         default:
             try? writer.reply(to: msg, success: false, message: "unhandled: \(msg.name)")
         }

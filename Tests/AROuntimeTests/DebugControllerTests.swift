@@ -208,4 +208,94 @@ final class DebugControllerTests: XCTestCase {
         let observed = await frontend.get()
         XCTAssertTrue(observed.contains("greeting"))
     }
+
+    // MARK: - Issue #230 follow-up coverage
+
+    /// `.quit` from the frontend must surface as a thrown `DebuggerQuit`
+    /// from the next checkpoint — not as `Foundation.exit(0)`.
+    func testQuitThrowsDebuggerQuit() async throws {
+        // Quit on the very first pause (entry).
+        let frontend = ScriptedFrontend(modes: [.quit])
+        let body = """
+        (Application-Start: Probe) {
+            Log "a" to the <console>.
+            Log "b" to the <console>.
+            Return an <OK: status> for the <application>.
+        }
+        """
+        let result = Compiler().compile(body)
+        XCTAssertTrue(result.isSuccess)
+        let app = Application(
+            programs: [result.analyzedProgram],
+            entryPoint: "Application-Start",
+            config: ApplicationConfig(verbose: false, workingDirectory: "."),
+            openAPISpec: nil,
+            recordPath: nil,
+            replayPath: nil,
+            storeFiles: []
+        )
+        let controller = DebugController(frontend: frontend)
+
+        do {
+            try await Debug.$controller.withValue(controller) {
+                _ = try await app.run()
+            }
+            XCTFail("expected DebuggerQuit to throw")
+        } catch is DebuggerQuit {
+            // expected
+        }
+    }
+
+    /// Conditional predicates evaluate against the live ExecutionContext,
+    /// not against the snapshot strings.
+    func testConditionalPredicateAgainstLiveContext() async throws {
+        actor CapturingFrontend: DebugFrontend {
+            private(set) var pauses: [PauseInfo] = []
+            nonisolated func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
+                await record(pause)
+                return .continue
+            }
+            private func record(_ p: PauseInfo) { pauses.append(p) }
+            nonisolated func didEnd(error: Error?) async {}
+            func get() -> [PauseInfo] { pauses }
+        }
+        let frontend = CapturingFrontend()
+        let controller = DebugController(frontend: frontend)
+        // After line 2 binds <count> = 41, the checkpoint on line 3 runs
+        // with <count> already in scope. Predicate is true only when the
+        // live ExecutionContext resolves <count> as an Integer equal to
+        // 41 — the snapshot-string fallback can't satisfy this because
+        // the snapshot stringifies the value without parsing it as Int.
+        await controller.addBreakpoint(.conditionalLocation(file: "", line: 3, predicate: "<count> == 41"))
+
+        let body = """
+        (Application-Start: Probe) {
+            Create the <count: Integer> with 41.
+            Log <count> to the <console>.
+            Return an <OK: status> for the <application>.
+        }
+        """
+        let result = Compiler().compile(body)
+        XCTAssertTrue(result.isSuccess)
+        let app = Application(
+            programs: [result.analyzedProgram],
+            entryPoint: "Application-Start",
+            config: ApplicationConfig(verbose: false, workingDirectory: "."),
+            openAPISpec: nil,
+            recordPath: nil,
+            replayPath: nil,
+            storeFiles: []
+        )
+        try await Debug.$controller.withValue(controller) {
+            try await Debug.$currentSourceFile.withValue("probe.aro") {
+                _ = try await app.run()
+            }
+        }
+        // Predicate is true exactly once — at line 3 after Create binds 41.
+        let allPauses = await frontend.get()
+        let breakpointPauses = allPauses.filter {
+            if case .breakpoint = $0.reason { return true } else { return false }
+        }
+        XCTAssertEqual(breakpointPauses.count, 1, "expected exactly one conditional bp hit on line 3")
+    }
 }
