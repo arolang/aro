@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.arolang.aro</id>
     <name>ARO Language</name>
-    <version>1.4.2</version>
+    <version>1.4.3</version>
     <vendor email="team@arolang.org" url="https://arolang.github.io/aro/">ARO Team</vendor>
 
     <description><![CDATA[
@@ -32,6 +32,10 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>1.4.3</h3>
+        <ul>
+            <li>fix(intellij): override ConfigurationFactory.getOptionsClass()</li>
+        </ul>
         <h3>1.4.2</h3>
         <ul>
             <li>fix(intellij): sync plugin.xml until-build to gradle (252.* → 261.*)</li>
