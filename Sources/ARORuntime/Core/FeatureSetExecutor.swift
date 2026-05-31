@@ -223,6 +223,20 @@ public final class FeatureSetExecutor: Sendable {
         _ statement: Statement,
         context: ExecutionContext
     ) async throws {
+        // Issue #229 Phase 1: statement-boundary debug hook.
+        // Cheap fast-path: TaskLocal pointer load + nil check when no
+        // debugger is attached.
+        if let controller = Debug.controller {
+            let symbols = Self.snapshotSymbols(from: context)
+            await controller.checkpoint(
+                statement: statement,
+                featureSetName: context.featureSetName,
+                businessActivity: context.businessActivity,
+                sourceFile: Debug.currentSourceFile,
+                symbols: symbols
+            )
+        }
+
         if let aroStatement = statement as? AROStatement {
             try await executeAROStatement(aroStatement, context: context)
         } else if let publishStatement = statement as? PublishStatement {
@@ -242,6 +256,35 @@ public final class FeatureSetExecutor: Sendable {
         } else if let pipelineStatement = statement as? PipelineStatement {
             try await executePipelineStatement(pipelineStatement, context: context)
         }
+    }
+
+    /// Build a `SymbolSnapshot` array from the visible bindings on a
+    /// context. Values are previewed with truncation so the TUI / DAP
+    /// frontend can print them safely. Internal underscore-prefixed
+    /// bookkeeping bindings are filtered out — they are noise to a
+    /// debugger user.
+    private static func snapshotSymbols(from context: ExecutionContext) -> [SymbolSnapshot] {
+        var out: [SymbolSnapshot] = []
+        let names = context.variableNames.filter { !$0.hasPrefix("_") }
+        for name in names.sorted() {
+            let typed = context.resolveTyped(name)
+            let typeName = typed.map { "\($0.type)" } ?? "?"
+            let preview: String
+            if let raw = context.resolveAny(name) {
+                preview = Self.previewValue(raw, maxLength: 80)
+            } else {
+                preview = "nil"
+            }
+            out.append(SymbolSnapshot(name: name, typeName: typeName, valuePreview: preview))
+        }
+        return out
+    }
+
+    private static func previewValue(_ value: any Sendable, maxLength: Int) -> String {
+        let s = String(describing: value)
+        if s.count <= maxLength { return s }
+        let idx = s.index(s.startIndex, offsetBy: maxLength)
+        return String(s[..<idx]) + "…"
     }
 
     /// ARO-0067: Execute pipeline statement

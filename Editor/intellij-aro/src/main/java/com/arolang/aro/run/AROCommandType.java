@@ -2,6 +2,7 @@ package com.arolang.aro.run;
 
 public enum AROCommandType {
     RUN("run", "Run"),
+    DEBUG("debug", "Debug (step debugger — Issue #229)"),
     BUILD("build", "Build"),
     CHECK("check", "Check"),
     TEST("test", "Test"),

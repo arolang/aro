@@ -200,11 +200,20 @@ public actor EventBus {
         // cannot exit between publish() returning and publishInternal running.
         pendingFireAndForgetPublishes.increment()
         Task {
+            // Issue #229 Phase 3 — event breakpoint hook. Fast-path when
+            // no debugger is attached: nil check + return.
+            if let controller = Debug.controller {
+                let typeName = type(of: event).eventType
+                let preview = "(\(typeName))"
+                await controller.eventCheckpoint(
+                    name: typeName,
+                    featureSetName: "",
+                    businessActivity: "",
+                    payloadPreview: preview
+                )
+            }
             await self.publishInternal(event)
             let drained = self.pendingFireAndForgetPublishes.decrement()
-            // If our decrement drained the pending counter, the actor may
-            // already think it's idle and have parked flush continuations.
-            // Re-check inside the actor and resume them if appropriate.
             if drained {
                 await self.checkFlushReadiness()
             }

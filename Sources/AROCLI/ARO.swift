@@ -112,6 +112,7 @@ struct ARO: AsyncParsableCommand {
     private static var subcommandsList: [any ParsableCommand.Type] {
         var commands: [any ParsableCommand.Type] = [
             RunCommand.self,
+            DebugCommand.self,
             BuildCommand.self,
             CompileCommand.self,
             CheckCommand.self,

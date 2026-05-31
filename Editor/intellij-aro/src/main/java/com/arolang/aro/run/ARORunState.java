@@ -23,14 +23,37 @@ public class ARORunState extends CommandLineState {
     @Override
     protected @NotNull ProcessHandler startProcess() throws ExecutionException {
         String aroPath = AROPathResolver.resolve();
-        String command = configuration.getCommandType().getCommand();
+        AROCommandType type = configuration.getCommandType();
+        String command = type.getCommand();
         String directory = configuration.getApplicationDirectory();
 
         GeneralCommandLine commandLine = new GeneralCommandLine()
             .withExePath(aroPath)
-            .withParameters(command, directory)
             .withWorkDirectory(directory)
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE);
+
+        if (type == AROCommandType.DEBUG) {
+            // Issue #229 Phase 2 — `aro debug` exposes both a console TUI
+            // and a DAP server. The IntelliJ run-config UI exposes the
+            // DAP toggle via ARORunConfigurationOptions.dapMode.
+            commandLine.addParameter(command);
+            if (configuration.getOptions().getDapMode()) {
+                commandLine.addParameter("--dap");
+            }
+            String bps = configuration.getOptions().getInitialBreakpoints();
+            if (bps != null && !bps.isEmpty()) {
+                commandLine.addParameter("--breakpoint");
+                for (String part : bps.split(",")) {
+                    String trimmed = part.trim();
+                    if (!trimmed.isEmpty()) {
+                        commandLine.addParameter(trimmed);
+                    }
+                }
+            }
+            commandLine.addParameter(directory);
+        } else {
+            commandLine.addParameters(command, directory);
+        }
 
         OSProcessHandler handler = ProcessHandlerFactory.getInstance()
             .createColoredProcessHandler(commandLine);

@@ -1,9 +1,11 @@
 # =============================================================================
 # ARO IntelliJ Plugin - Build & Publish
 # =============================================================================
-# Manually triggered workflow to build the IntelliJ plugin, upload the
-# distribution ZIP as a downloadable artifact, and optionally publish
-# to the JetBrains Marketplace.
+# Triggered automatically on push to main when the plugin source changes:
+# bumps the patch version in build.gradle.kts and plugin.xml, prepends a
+# change-notes section from recent commits, builds, signs (if secrets are
+# present), and publishes to the JetBrains Marketplace. A workflow_dispatch
+# entry point keeps the manual flow working too.
 #
 # Required secrets for publishing:
 #   JETBRAINS_CERTIFICATE_CHAIN   - Plugin signing certificate chain
@@ -15,29 +17,131 @@
 name: IntelliJ Plugin
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'Editor/intellij-aro/**'
+      - '!Editor/intellij-aro/README.md'
+      - '.github/workflows/intellij-plugin.yml'
   workflow_dispatch:
     inputs:
       publish:
         description: 'Publish to JetBrains Marketplace'
         required: false
         type: boolean
-        default: false
+        default: true
+      bump:
+        description: 'Version bump kind'
+        required: false
+        type: choice
+        default: 'patch'
+        options: [patch, minor, major]
 
 permissions:
-  contents: read
+  contents: write   # to push the bump commit + tag
 
 jobs:
-  # ===========================================================================
-  # Build the IntelliJ plugin
-  # ===========================================================================
-  build:
-    name: Build Plugin
+  build-and-publish:
+    name: Build & publish
     runs-on: ubuntu-latest
+    # Guard against the workflow re-triggering on its own bump commit.
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      # -------------------------------------------------------------------
+      # Version bump
+      # -------------------------------------------------------------------
+      - name: Compute bumped version
+        id: ver
+        env:
+          BUMP_KIND: ${{ github.event.inputs.bump || 'patch' }}
+        run: |
+          set -euo pipefail
+          PLUGIN_XML="Editor/intellij-aro/src/main/resources/META-INF/plugin.xml"
+          # plugin.xml is the source of truth for the user-visible version.
+          CURRENT=$(grep -E '<version>' "$PLUGIN_XML" \
+                    | head -n1 \
+                    | sed -E 's|.*<version>([^<]+)</version>.*|\1|')
+          echo "Current: $CURRENT"
+          IFS='.' read -r MAJ MIN PAT <<<"$CURRENT"
+          case "$BUMP_KIND" in
+            major) MAJ=$((MAJ+1)); MIN=0; PAT=0 ;;
+            minor) MIN=$((MIN+1)); PAT=0 ;;
+            patch|*) PAT=$((PAT+1)) ;;
+          esac
+          NEW="$MAJ.$MIN.$PAT"
+          echo "Bumped to: $NEW"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Generate change notes from git log
+        id: notes
+        env:
+          NEW: ${{ steps.ver.outputs.new }}
+        run: |
+          set -euo pipefail
+          LAST_TAG=$(git tag --list 'intellij-v*' --sort=-v:refname | head -n1 || true)
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+            echo "Diffing against $LAST_TAG"
+          else
+            RANGE="HEAD~30..HEAD"
+            echo "No intellij-v* tag yet; using last 30 commits"
+          fi
+          # Restrict to plugin-source-touching commits.
+          NOTES=$(git log --pretty='format:            <li>%s</li>' "$RANGE" -- Editor/intellij-aro || true)
+          if [ -z "$NOTES" ]; then
+            NOTES='            <li>Plugin source updated.</li>'
+          fi
+          {
+            echo 'notes<<NOTES_END'
+            echo "$NOTES"
+            echo 'NOTES_END'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Patch build.gradle.kts, plugin.xml
+        env:
+          NEW: ${{ steps.ver.outputs.new }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s/^version = \".*\"/version = \"$NEW\"/" \
+              Editor/intellij-aro/build.gradle.kts
+          sed -i -E "s|<version>[^<]+</version>|<version>$NEW</version>|" \
+              Editor/intellij-aro/src/main/resources/META-INF/plugin.xml
+
+          # Prepend a new <h3> section inside the <change-notes><![CDATA[ block.
+          # NOTE: every line of the python heredoc starts at the same YAML
+          # indent as the surrounding shell so YAML's block-scalar parsing
+          # strips a consistent prefix. Lines outdented from that prefix
+          # would terminate the YAML block, so build any nested HTML by
+          # string-concatenation rather than a multi-line f-string.
+          cat > /tmp/aro_patch_notes.py <<'PYEOF'
+          import os, re
+          path = "Editor/intellij-aro/src/main/resources/META-INF/plugin.xml"
+          new = os.environ["NEW"]
+          notes = os.environ["NOTES"]
+          block = "\n        <h3>" + new + "</h3>\n        <ul>\n" + notes + "\n        </ul>"
+          with open(path) as f:
+              x = f.read()
+          x = re.sub(r'(<change-notes><!\[CDATA\[)', r'\1' + block, x, count=1)
+          with open(path, "w") as f:
+              f.write(x)
+          PYEOF
+          python3 /tmp/aro_patch_notes.py
+
+          echo "---- patched ----"
+          grep -E '^version =' Editor/intellij-aro/build.gradle.kts
+          grep -m1 '<version>' Editor/intellij-aro/src/main/resources/META-INF/plugin.xml
+
+      # -------------------------------------------------------------------
+      # Build
+      # -------------------------------------------------------------------
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -56,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report
+          name: test-report-${{ steps.ver.outputs.new }}
           path: Editor/intellij-aro/build/reports/tests/test/
           retention-days: 30
 
@@ -67,33 +171,19 @@ jobs:
       - name: Upload plugin ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: aro-intellij-plugin
+          name: aro-intellij-plugin-${{ steps.ver.outputs.new }}
           path: Editor/intellij-aro/build/distributions/*.zip
           retention-days: 90
 
-  # ===========================================================================
-  # Publish to JetBrains Marketplace (only when requested)
-  # ===========================================================================
-  publish:
-    name: Publish Plugin
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: ${{ inputs.publish }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
+      # -------------------------------------------------------------------
+      # Publish
+      # -------------------------------------------------------------------
       - name: Sign and publish plugin
+        # Auto-publish on push to main (when sources changed). On manual
+        # dispatch, respect the input flag.
+        if: |
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
         working-directory: Editor/intellij-aro
         env:
           CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
@@ -101,8 +191,35 @@ jobs:
           PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
           PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
         run: |
-          if [ -n "$CERTIFICATE_CHAIN" ] && [ -n "$PRIVATE_KEY" ]; then
+          set -euo pipefail
+          if [ -z "${PUBLISH_TOKEN:-}" ]; then
+            echo "JETBRAINS_PUBLISH_TOKEN is not set — skipping publish step."
+            exit 0
+          fi
+          if [ -n "${CERTIFICATE_CHAIN:-}" ] && [ -n "${PRIVATE_KEY:-}" ]; then
             ./gradlew signPlugin publishPlugin
           else
             ./gradlew publishPlugin
           fi
+
+      # -------------------------------------------------------------------
+      # Commit the bump + tag, so the next push picks up the new baseline.
+      # `[skip ci]` in the message keeps the workflow from re-triggering.
+      # -------------------------------------------------------------------
+      - name: Commit version bump and tag
+        if: github.event_name == 'push'
+        env:
+          NEW: ${{ steps.ver.outputs.new }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Editor/intellij-aro/build.gradle.kts \
+                  Editor/intellij-aro/src/main/resources/META-INF/plugin.xml
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(intellij): release $NEW [skip ci]"
+          git tag "intellij-v$NEW"
+          git push origin HEAD --tags
