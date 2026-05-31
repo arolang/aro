@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.arolang"
-version = "0.4.2"
+version = "1.4.2"
 
 repositories {
     mavenCentral()
