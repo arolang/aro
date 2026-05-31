@@ -4,6 +4,7 @@ import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.ConfigurationType;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.icons.AllIcons;
+import com.intellij.openapi.components.BaseState;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -58,6 +59,23 @@ public class ARORunConfigurationType implements ConfigurationType {
         @Override
         public @NotNull RunConfiguration createTemplateConfiguration(@NotNull Project project) {
             return new ARORunConfiguration(project, this, "ARO Application");
+        }
+
+        /**
+         * Tell IntelliJ which options class to instantiate when it creates
+         * a template configuration. Without this override, the platform falls
+         * back to the base {@code RunConfigurationOptions} and the cast in
+         * {@code ARORunConfiguration.getOptions()} throws ClassCastException
+         * — observed against 2024.3 with the new-UI run toolbar (issue #229
+         * Phase 2 fallout). The cast worked previously because
+         * {@code RunConfigurationBase.setAllowRunningInParallel} didn't call
+         * {@code getOptions()} until the user opened the Edit-Configurations
+         * dialog, which is when the platform happens to instantiate the right
+         * subclass anyway. Newer toolbars touch the options eagerly.
+         */
+        @Override
+        public @NotNull Class<? extends BaseState> getOptionsClass() {
+            return ARORunConfigurationOptions.class;
         }
     }
 }
