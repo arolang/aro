@@ -521,6 +521,14 @@ public actor AskSession {
         var currentText = text
         for attempt in 1...totalAttempts {
             let aroCode = extractAroBlocks(currentText).joined(separator: "\n\n")
+            // Empty code can vacuously "pass" aro check — guard against
+            // claiming success when the model produced nothing.
+            guard !aroCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                TerminalUI.printStatus(
+                    "repair loop saw no ARO code to validate — returning prior text"
+                )
+                break
+            }
             let (ok, error) = runAroCheck(aroCode)
 
             if ok {
@@ -588,7 +596,18 @@ public actor AskSession {
                 stream: false
             )
             let reply = try await backend.chat(request: request)
-            currentText = stripThinking(reply.content ?? currentText).text
+            let repairStripped = stripThinking(reply.content ?? "").text
+            // Never overwrite currentText with empty content — if the
+            // repair model goes into think-stall (`<think></think>` and
+            // EOS), we still want to surface the prior best attempt
+            // instead of returning an empty string to the user.
+            if !repairStripped.isEmpty {
+                currentText = repairStripped
+            } else {
+                TerminalUI.printStatus(
+                    "repair attempt \(attempt) produced empty content — keeping prior text"
+                )
+            }
 
             let encodedToolCalls = try encodeToolCalls(reply.toolCalls)
             context.messages.append(AskMessage(
