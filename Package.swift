@@ -278,6 +278,7 @@ let package = Package(
                     .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
                     .product(name: "DefaultBackend", package: "swift-cross-ui"),
                     .product(name: "Logging", package: "swift-log"),
+                    .product(name: "Yams", package: "Yams"),
                 ],
                 path: "Sources/SOLARO"
             ),

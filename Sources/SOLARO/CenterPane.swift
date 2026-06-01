@@ -3,19 +3,24 @@
 // SOLARO — center pane: text editor / canvas / split / map
 // ============================================================
 //
-// Phase 1 only renders the Text mode; Canvas / Split / Map land
-// in Phase 2 (canvas) and Phase 2+ (Map view from note 8519).
+// Phase 1: Text. Phase 2: Canvas, Split. Phase 3: Map (note 8519).
 
 import Foundation
 import SwiftCrossUI
+import AROParser
 
 struct CenterPane: View {
     let file: SourceFileState?
     let paneMode: PaneMode
+    /// Phase 3 — every parsed program in the project, used to
+    /// build the Project Map.
+    let projectPrograms: [AROParser.Program]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let file {
+            if paneMode == .map {
+                projectMapView()
+            } else if let file {
                 Text("\(file.url.lastPathComponent) · \(paneMode.label)")
                     .foregroundColor(.gray)
                     .font(.system(.subheadline))
@@ -27,13 +32,21 @@ struct CenterPane: View {
                 case .split:
                     splitView(for: file)
                 case .map:
-                    mapPlaceholder
+                    // Handled above — split out to avoid the
+                    // missing-file case below.
+                    EmptyView()
                 }
             } else {
                 Text("No file open.").foregroundColor(.gray)
             }
         }
         .padding(8)
+    }
+
+    @ViewBuilder
+    private func projectMapView() -> some View {
+        let map = ProjectMap.build(from: projectPrograms)
+        ProjectMapView(map: map, onSelect: { _ in /* selection in Phase 3 follow-up */ })
     }
 
     @ViewBuilder
@@ -68,12 +81,6 @@ struct CenterPane: View {
             CanvasView(graph: graph(for: file))
             textView(for: file)
         }
-    }
-
-    @ViewBuilder
-    private var mapPlaceholder: some View {
-        Text("Project Map mode (note 8519) lands in Phase 3.")
-            .foregroundColor(.gray)
     }
 
     /// Build + position the canvas graph for the file's first

@@ -22,6 +22,7 @@
 import Foundation
 import SwiftCrossUI
 import AROVersion
+import AROParser
 
 struct WorkspaceView: View {
     let project: Project
@@ -31,6 +32,9 @@ struct WorkspaceView: View {
     @State var currentFile: SourceFileState?
     @State var paneMode: PaneMode = .text
     @State var loadError: String?
+    /// Phase 3 — every project file's parsed Program. Used by the
+    /// Project Map (`.map` pane mode).
+    @State var projectPrograms: [AROParser.Program] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,7 +60,8 @@ struct WorkspaceView: View {
                 )
                 CenterPane(
                     file: currentFile,
-                    paneMode: paneMode
+                    paneMode: paneMode,
+                    projectPrograms: projectPrograms
                 )
                 InspectorPane(
                     file: currentFile,
@@ -103,6 +108,13 @@ struct WorkspaceView: View {
         do {
             let loaded = try ProjectModel.load(project)
             self.model = loaded
+            // Phase 3 — parse every file so the Project Map has
+            // the full picture. Cheap enough for typical project
+            // sizes; future work should cache per-file mtime.
+            self.projectPrograms = loaded.sourceFiles.compactMap { url in
+                let state = SourceFileState(url: url)
+                return state.program
+            }
             if let first = loaded.sourceFiles.first {
                 openFile(first)
             }
