@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# =============================================================================
+# build-solaro-app-local.sh — assemble a local SOLARO.app for dev use.
+# =============================================================================
+# CI uses its own packaging step (see .github/workflows/build.yml). This
+# script is for local development: build the SOLARO executable + launcher,
+# wrap the binary in a minimal .app bundle, and stage it under .build/ so
+# the `solaro` launcher can find it via SOLARO_APP=.
+#
+# Usage:
+#   ./tools/build-solaro-app-local.sh [release|debug]
+#
+# Outputs:
+#   .build/SOLARO.app/...
+#   .build/<config>/solaro       (the launcher CLI)
+# =============================================================================
+
+set -euo pipefail
+
+CONFIG="${1:-release}"
+case "$CONFIG" in
+    release) ;;
+    debug) ;;
+    *) echo "Usage: $0 [release|debug]" >&2; exit 1 ;;
+esac
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+echo "[solaro-app] swift build -c $CONFIG --product SOLARO"
+swift build -c "$CONFIG" --product SOLARO
+
+echo "[solaro-app] swift build -c $CONFIG --product solaro"
+swift build -c "$CONFIG" --product solaro
+
+APP_DIR=".build/SOLARO.app"
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+cp ".build/$CONFIG/SOLARO" "$APP_DIR/Contents/MacOS/SOLARO"
+cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
+
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+cat > "$APP_DIR/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleExecutable</key><string>SOLARO</string>
+  <key>CFBundleIdentifier</key><string>com.arolang.SOLARO</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>SOLARO</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+PLIST
+
+echo ""
+echo "[solaro-app] Built: $(pwd)/$APP_DIR"
+echo "[solaro-app] Launcher: $(pwd)/.build/$CONFIG/solaro"
+echo ""
+echo "Try it:"
+echo "  export SOLARO_APP=\"$(pwd)/$APP_DIR\""
+echo "  ./.build/$CONFIG/solaro ./Examples/HelloWorld"

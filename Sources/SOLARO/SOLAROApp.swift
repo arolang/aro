@@ -29,13 +29,38 @@ struct SOLAROApp: App {
 
     /// Phase 0 ships only the welcome screen — single Open / Create
     /// panel per ADR-008. Project model + canvas land in Phase 1+.
-    @State var workspace: WorkspaceState = .welcome
+    ///
+    /// If the app was launched with a directory path as the first
+    /// CLI argument (typically via the `solaro` launcher CLI doing
+    /// `open -a SOLARO.app /path/to/project`), start directly in
+    /// the open state rather than at the welcome screen.
+    @State var workspace: WorkspaceState = SOLAROApp.initialWorkspace()
 
     var body: some Scene {
         WindowGroup("SOLARO") {
             ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
         }
         .defaultSize(width: 1400, height: 900)
+    }
+
+    /// Inspect `CommandLine.arguments` for a project path. Accepts
+    /// the project as the first positional argument; ignores flag-
+    /// style args (anything starting with `-`). Returns `.welcome`
+    /// when no usable path is given or when the path isn't a
+    /// directory.
+    static func initialWorkspace() -> WorkspaceState {
+        // argv[0] is the executable path; skip it.
+        let candidates = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
+        guard let path = candidates.first else { return .welcome }
+
+        let resolved = path == "." ? FileManager.default.currentDirectoryPath : path
+        let url = URL(fileURLWithPath: resolved)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+              isDir.boolValue else {
+            return .welcome
+        }
+        return .open(Project(rootPath: url))
     }
 }
 
