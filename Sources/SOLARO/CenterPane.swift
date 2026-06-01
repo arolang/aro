@@ -23,9 +23,9 @@ struct CenterPane: View {
                 case .text:
                     textView(for: file)
                 case .canvas:
-                    canvasPlaceholder
+                    canvasView(for: file)
                 case .split:
-                    splitPlaceholder
+                    splitView(for: file)
                 case .map:
                     mapPlaceholder
                 }
@@ -58,20 +58,36 @@ struct CenterPane: View {
     }
 
     @ViewBuilder
-    private var canvasPlaceholder: some View {
-        Text("Canvas mode lands in Phase 2 (#228).")
-            .foregroundColor(.gray)
+    private func canvasView(for file: SourceFileState) -> some View {
+        CanvasView(graph: graph(for: file))
     }
 
     @ViewBuilder
-    private var splitPlaceholder: some View {
-        Text("Split mode shows Canvas + Text together — Phase 2.")
-            .foregroundColor(.gray)
+    private func splitView(for file: SourceFileState) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            CanvasView(graph: graph(for: file))
+            textView(for: file)
+        }
     }
 
     @ViewBuilder
     private var mapPlaceholder: some View {
         Text("Project Map mode (note 8519) lands in Phase 3.")
             .foregroundColor(.gray)
+    }
+
+    /// Build + position the canvas graph for the file's first
+    /// feature set. Phase 2 scope: one feature set at a time
+    /// (the inspector handles multi-feature-set navigation).
+    private func graph(for file: SourceFileState) -> CanvasGraph {
+        guard
+            let program = file.program,
+            let firstFS = program.featureSets.first
+        else {
+            return CanvasGraph(nodes: [], edges: [])
+        }
+        let built = CanvasGraph.build(featureSet: firstFS, fileKey: file.url.path)
+        let withSaved = built.withPositions(from: file.layout)
+        return ForceDirectedLayout.place(withSaved)
     }
 }
