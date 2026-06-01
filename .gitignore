@@ -178,3 +178,4 @@ core
 .context.index/
 Train/.venv/
 Train/script/output/
+*.aro.layout.json

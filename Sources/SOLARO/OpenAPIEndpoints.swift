@@ -1,15 +1,14 @@
 // ============================================================
-// OpenAPIPalette.swift
-// SOLARO — OpenAPI endpoint palette (Phase 3)
+// OpenAPIEndpoints.swift
+// SOLARO — OpenAPI endpoint discovery (pure logic, no UI)
 // ============================================================
 //
-// Reads the project's `openapi.yaml` and surfaces each endpoint
-// as a draggable chip (wireframe note 8467 figure 10). Phase 3
-// ships the data-driven list; drag-to-canvas comes when the
-// canvas gains drop targets (Phase 2 follow-up #232).
+// Reads a project's `openapi.yaml` and surfaces each endpoint as
+// a value type for downstream views. The palette UI (Phase 11)
+// renders these as draggable chips per wireframe note 8467 figure 10.
 
 import Foundation
-import SwiftCrossUI
+import AROParser
 import Yams
 
 /// One HTTP endpoint discovered in `openapi.yaml`.
@@ -26,12 +25,12 @@ struct OpenAPIEndpoint: Identifiable, Equatable {
 enum OpenAPIPalette {
 
     /// Discover endpoints in a project's `openapi.yaml`. Returns
-    /// an empty list when the file is missing — the UI handles
-    /// that case honestly.
+    /// an empty list when the file is missing — UIs handle that
+    /// case honestly.
     ///
     /// Used-feature-set marking is determined by checking each
-    /// `operationId` against the list of feature-set names in the
-    /// program(s).
+    /// `operationId` against the list of feature-set names in
+    /// the program(s).
     static func endpoints(in projectModel: ProjectModel, programs: [Program]) -> [OpenAPIEndpoint] {
         guard let spec = projectModel.openAPISpec else { return [] }
         guard
@@ -68,50 +67,5 @@ enum OpenAPIPalette {
             }
         }
         return out.sorted { $0.id < $1.id }
-    }
-}
-
-import AROParser
-
-struct OpenAPIPaletteView: View {
-    let endpoints: [OpenAPIEndpoint]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("OpenAPI palette").font(.system(.headline))
-            if endpoints.isEmpty {
-                Text("No openapi.yaml in this project — drop one at the project root to populate this palette.")
-                    .foregroundColor(.gray)
-            } else {
-                Text("\(endpoints.count) endpoint(s)").foregroundColor(.gray)
-                ForEach(endpoints, id: \.id) { ep in
-                    HStack {
-                        Text(ep.method)
-                            .foregroundColor(methodColor(ep.method))
-                        Text(ep.path)
-                        Spacer()
-                        if let opId = ep.operationId {
-                            Text(opId).foregroundColor(.gray)
-                        }
-                        if ep.used {
-                            Text("⇆ used").foregroundColor(.gray)
-                        } else {
-                            Text("+ stub").foregroundColor(.gray)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(8)
-    }
-
-    private func methodColor(_ method: String) -> Color {
-        switch method {
-        case "GET":    return .blue
-        case "POST":   return .green
-        case "PUT", "PATCH":   return .yellow
-        case "DELETE": return .red
-        default:       return .gray
-        }
     }
 }
