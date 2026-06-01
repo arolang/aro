@@ -23,6 +23,18 @@ public enum StepMode: Sendable, Equatable {
     case stepOut
     /// Resume execution until the next breakpoint or program end.
     case `continue`
+    /// User wants to terminate the program. The next `checkpoint` call
+    /// throws `DebuggerQuit` so the executor unwinds normally — close
+    /// file handles, flush logs, drain HTTP — instead of `Foundation.exit(0)`
+    /// from inside the frontend.
+    case quit
+}
+
+/// Thrown from `DebugController.checkpoint` when the frontend returns
+/// `.quit`. Caught at the program entry point (e.g. `aro debug`) and
+/// exits zero.
+public struct DebuggerQuit: Error {
+    public init() {}
 }
 
 /// Frontend interface. The runtime calls `didPause` from within a

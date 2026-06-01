@@ -202,6 +202,20 @@ public actor EventBus {
         Task {
             // Issue #229 Phase 3 — event breakpoint hook. Fast-path when
             // no debugger is attached: nil check + return.
+            //
+            // **Ordering caveat (#230 follow-up):** the checkpoint runs in a
+            // detached Task alongside `publishInternal`. The runtime
+            // *intends* to pause "before handlers fire," and on a pure
+            // statement-bound debugger that's effectively what users see,
+            // because Swift's actor scheduler typically runs the checkpoint
+            // first. But it is **not strictly guaranteed** — subscribers may
+            // begin executing concurrently with a slow pause. If you need
+            // strict happens-before semantics for an event breakpoint,
+            // prefer a verb breakpoint on `Emit` at the call site (which
+            // pauses on the statement boundary, before any subscriber
+            // Task is even scheduled). The strict-gating path is tracked
+            // in #230 as a follow-up; it requires reshaping `publish` to
+            // await synchronously, which most callers don't want.
             if let controller = Debug.controller {
                 let typeName = type(of: event).eventType
                 let preview = "(\(typeName))"

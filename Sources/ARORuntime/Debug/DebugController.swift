@@ -112,28 +112,47 @@ public actor DebugController {
         featureSetName: String,
         businessActivity: String,
         sourceFile: String,
-        symbols: [SymbolSnapshot]
-    ) async {
+        symbols: [SymbolSnapshot],
+        context: ExecutionContext? = nil
+    ) async throws {
+        // If a previous pause asked to quit, throw on the next statement
+        // boundary so the executor unwinds cleanly. (eventCheckpoint /
+        // errorCheckpoint set this state from non-throwing contexts.)
+        if nextMode == .quit {
+            throw DebuggerQuit()
+        }
+
         let (line, column, summary, verb) = describe(statement)
         let basename = sourceFile.isEmpty
             ? ""
             : URL(fileURLWithPath: sourceFile).lastPathComponent
 
         // Match breakpoints first — they override the step mode.
-        // Conditional matching is evaluated separately; Phase 3 short-
-        // circuits when the symbol table has all the names referenced.
-        let matched: DebugBreakpoint? = breakpoints.first { bp in
+        // Conditional predicates evaluate against the live context when
+        // one is available (preferred) and fall back to the snapshot-
+        // string evaluator when it isn't.
+        var matched: DebugBreakpoint? = nil
+        for bp in breakpoints {
             switch bp {
             case .location(let f, let l):
-                return l == line && (f.isEmpty || basename.hasSuffix(f))
+                if l == line && (f.isEmpty || basename.hasSuffix(f)) {
+                    matched = bp
+                }
             case .verb(let v):
-                return verb == v
+                if verb == v { matched = bp }
             case .conditionalLocation(let f, let l, let predicate):
-                guard l == line && (f.isEmpty || basename.hasSuffix(f)) else { return false }
-                return Self.evaluatePredicate(predicate, symbols: symbols)
+                guard l == line && (f.isEmpty || basename.hasSuffix(f)) else { continue }
+                let result: Bool
+                if let ctx = context {
+                    result = await PredicateEvaluator.evaluate(predicate, context: ctx)
+                } else {
+                    result = Self.evaluatePredicateFromSnapshot(predicate, symbols: symbols)
+                }
+                if result { matched = bp }
             case .event, .errorAny:
-                return false   // not relevant at statement boundaries
+                continue   // not relevant at statement boundaries
             }
+            if matched != nil { break }
         }
 
         let reason: PauseInfo.Reason
@@ -153,6 +172,8 @@ public actor DebugController {
                 reason = .step
             case .continue:
                 return // no pause
+            case .quit:
+                throw DebuggerQuit()
             }
         }
         hasFiredEntry = true
@@ -171,6 +192,9 @@ public actor DebugController {
 
         await record(pause: info)
         nextMode = await frontend.didPause(info, controller: self)
+        if nextMode == .quit {
+            throw DebuggerQuit()
+        }
     }
 
     /// Called from the runtime when an event is about to be published.
@@ -249,13 +273,15 @@ public actor DebugController {
 
     // MARK: - Predicate evaluation (Phase 3)
 
-    /// Minimal predicate evaluator: matches `<name>` references against
-    /// the snapshot's bindings and supports `==`, `!=`, `&&`, `||` over
-    /// string previews. This is intentionally tiny — Phase 3 documents
-    /// a path to wiring `ExpressionEvaluator` for the full ARO
-    /// expression grammar, but doing so requires a live `ExecutionContext`
-    /// which the snapshot loses by design.
-    private static func evaluatePredicate(_ source: String, symbols: [SymbolSnapshot]) -> Bool {
+    /// Fallback predicate evaluator used only when `checkpoint` is called
+    /// without a live `ExecutionContext` — matches `<name>` against
+    /// snapshot previews and supports `==` / `!=` / `&&` / `||`. The
+    /// primary path is `PredicateEvaluator.evaluate`, which uses the
+    /// real `AROParser` + `ExpressionEvaluator` against a live context
+    /// (#230). Keeping this fallback around preserves bug-compatibility
+    /// with the original #229 Phase 3 behavior for any harness that
+    /// hasn't been updated to thread an `ExecutionContext` through.
+    private static func evaluatePredicateFromSnapshot(_ source: String, symbols: [SymbolSnapshot]) -> Bool {
         var expr = source.trimmingCharacters(in: .whitespaces)
         // Resolve `<name>` references against the snapshot.
         for s in symbols {
@@ -266,13 +292,13 @@ public actor DebugController {
             return expr.split(separator: "&", maxSplits: .max, omittingEmptySubsequences: true)
                 .filter { !$0.isEmpty }
                 .map(String.init)
-                .allSatisfy { evaluatePredicate($0, symbols: symbols) }
+                .allSatisfy { evaluatePredicateFromSnapshot($0, symbols: symbols) }
         }
         if expr.contains("||") {
             return expr.split(separator: "|", maxSplits: .max, omittingEmptySubsequences: true)
                 .filter { !$0.isEmpty }
                 .map(String.init)
-                .contains { evaluatePredicate($0, symbols: symbols) }
+                .contains { evaluatePredicateFromSnapshot($0, symbols: symbols) }
         }
         for op in ["==", "!="] {
             if let range = expr.range(of: op) {

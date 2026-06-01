@@ -22,6 +22,11 @@ struct DebugCommand: AsyncParsableCommand {
             Pauses execution at every ARO statement and accepts a small set of
             REPL commands over stdin. Issue #229 Phase 1.
 
+            Note: this driver runs the program through the ARO interpreter
+            (the same path as `aro run`). Compiled binaries produced by
+            `aro build` do not yet emit DWARF debug info — that's tracked
+            separately as issue #231. To debug, run from source.
+
             Commands at a pause prompt:
               s, step            — advance one statement
               n, next            — advance one statement (alias for step)
@@ -301,9 +306,9 @@ extension DebugCommand {
 
 // MARK: - CLI Frontend
 
-/// Signal thrown by the debugger when the user types `quit`. Caught by
-/// the top-level handler to exit cleanly.
-struct DebuggerQuit: Error {}
+// `DebuggerQuit` is defined in ARORuntime (see Debug/DebugFrontend.swift)
+// — the controller throws it from `checkpoint` when the frontend returns
+// `.quit`. We catch it at the top of `run()` and exit zero.
 
 /// Reads stdin line-by-line at each pause and drives the controller.
 /// Holds no mutable state across pauses — every command is interpreted
@@ -417,20 +422,13 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
                 printHelp()
             case "q", "quit":
                 print("quit.")
-                // Throw a typed error from a Task so it propagates up
-                // through the application.run() call.
-                return .continue  // never reached; we'll throw below via DebuggerQuit
+                // Issue #230 — return `.quit` so DebugController.checkpoint
+                // throws DebuggerQuit, the executor unwinds normally, and
+                // the run() catch handler prints the wrap-up. No more
+                // Foundation.exit(0).
+                return .quit
             default:
                 print("unknown command: \(cmd) (use 'h' for help)")
-            }
-
-            if cmd == "q" || cmd == "quit" {
-                // Returning a step mode is required by the protocol but we want
-                // to terminate execution. Use a non-local throw approach: set a
-                // controller flag would be nicer, but the cleanest minimum is to
-                // simulate an exit by exiting the process. Phase 2 will replace
-                // this with a proper teardown signal through the controller.
-                Foundation.exit(0)
             }
         }
     }
@@ -468,6 +466,9 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
           b <Verb>      add breakpoint on every statement using that verb
           b <l> if X    conditional breakpoint at line l (predicate: ==, !=, &&, ||)
           be <Event>    add breakpoint on every emit of Event
+                        (note: pause is best-effort vs. handler fan-out;
+                         for strict pre-handler stop, use a verb bp on
+                         Emit at the source statement)
           berror        add breakpoint on any runtime error
           bl, list      list breakpoints
           d <n>         delete breakpoint #n

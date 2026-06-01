@@ -228,12 +228,13 @@ public final class FeatureSetExecutor: Sendable {
         // debugger is attached.
         if let controller = Debug.controller {
             let symbols = Self.snapshotSymbols(from: context)
-            await controller.checkpoint(
+            try await controller.checkpoint(
                 statement: statement,
                 featureSetName: context.featureSetName,
                 businessActivity: context.businessActivity,
                 sourceFile: Debug.currentSourceFile,
-                symbols: symbols
+                symbols: symbols,
+                context: context
             )
         }
 
