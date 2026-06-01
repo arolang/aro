@@ -89,6 +89,7 @@ askMLXTargetDependencies = [
 import Foundation
 let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/opt/homebrew/opt/llvm@20"
 let llvmLibPath = "\(llvmPath)/lib"
+let llvmIncludePath = "\(llvmPath)/include"
 let llvmLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
@@ -97,14 +98,26 @@ let llvmLinkerSettings: [LinkerSetting] = [
 import Foundation
 let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/usr/lib/llvm-20"
 let llvmLibPath = "\(llvmPath)/lib"
+let llvmIncludePath = "\(llvmPath)/include"
 let llvmLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
 ]
 #else
 // Windows and other platforms: LLVM not available
+let llvmPath = ""
+let llvmLibPath = ""
+let llvmIncludePath = ""
 let llvmLinkerSettings: [LinkerSetting] = []
 #endif
+
+// Issue #231 — C bridge target exposing llvm-c/DebugInfo.h to Swift so
+// AROCompiler can emit DWARF metadata. Swifty-LLVM's bundled `llvmc`
+// module only covers Core.h.
+let arocDebugInfoCSettings: [CSetting] = [
+    .headerSearchPath("include"),
+    .unsafeFlags(["-I\(llvmIncludePath)"], .when(platforms: [.macOS, .linux])),
+]
 
 let package = Package(
     name: "AROParser",
@@ -181,11 +194,20 @@ let package = Package(
                 ] + runtimePlatformDependencies,
                 path: "Sources/ARORuntime"
             ),
+            // Issue #231 — C bridge target exposing llvm-c/DebugInfo.h
+            // to Swift for DWARF source-mapping emission.
+            .target(
+                name: "AROCDebugInfo",
+                path: "Sources/AROCDebugInfo",
+                publicHeadersPath: "include",
+                cSettings: arocDebugInfoCSettings
+            ),
             // Native compiler (LLVM IR generation)
             .target(
                 name: "AROCompiler",
                 dependencies: [
                     "AROParser",
+                    "AROCDebugInfo",
                     .product(name: "Logging", package: "swift-log"),
                 ] + compilerLLVMDependency,
                 path: "Sources/AROCompiler",

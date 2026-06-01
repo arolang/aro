@@ -1,0 +1,4 @@
+module AROCDebugInfo {
+    umbrella header "AROCDebugInfo.h"
+    export *
+}
