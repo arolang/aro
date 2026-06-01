@@ -14,15 +14,19 @@ struct WelcomeView: View {
     let onOpen: (Project) -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SolaroSpace.xl) {
             Text("SOLARO")
-                .font(.system(size: 48, weight: .light, design: .default))
+                .font(SolaroFont.wordmark)
+                .foregroundStyle(SolaroColor.textPrimary)
+                .tracking(8)
             Text("canvas-first IDE for ARO  ·  runtime \(runtimeVersion)")
-                .foregroundStyle(.secondary)
+                .font(SolaroFont.body)
+                .foregroundStyle(SolaroColor.textSecondary)
             Text("welcome screen — Phase 3")
-                .foregroundStyle(.tertiary)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.95))
+        .solaroBackdrop()
     }
 }

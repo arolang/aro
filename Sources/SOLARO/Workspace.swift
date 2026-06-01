@@ -13,18 +13,20 @@ struct WorkspaceView: View {
     let onClose: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SolaroSpace.xl) {
             Text(project.displayName)
                 .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(SolaroColor.textPrimary)
             Text(project.rootPath.path)
-                .foregroundStyle(.secondary)
-                .font(.system(.body, design: .monospaced))
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.textSecondary)
             Text("workspace shell — Phase 4")
-                .foregroundStyle(.tertiary)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
             Button("Close project", action: onClose)
                 .keyboardShortcut("w", modifiers: [.command, .shift])
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.95))
+        .solaroBackdrop()
     }
 }
