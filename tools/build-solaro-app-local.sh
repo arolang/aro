@@ -27,8 +27,8 @@ esac
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "[solaro-app] swift build -c $CONFIG --product SOLARO"
-swift build -c "$CONFIG" --product SOLARO
+echo "[solaro-app] swift build -c $CONFIG --product SolaroApp"
+swift build -c "$CONFIG" --product SolaroApp
 
 echo "[solaro-app] swift build -c $CONFIG --product solaro"
 swift build -c "$CONFIG" --product solaro
@@ -36,7 +36,11 @@ swift build -c "$CONFIG" --product solaro
 APP_DIR=".build/SOLARO.app"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-cp ".build/$CONFIG/SOLARO" "$APP_DIR/Contents/MacOS/SOLARO"
+# Copy the SolaroApp binary into the .app under its user-facing
+# name (SOLARO). The product is named SolaroApp internally only
+# to dodge SwiftPM's case-insensitive-fs collision with the
+# launcher product `solaro`.
+cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/SOLARO"
 cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")

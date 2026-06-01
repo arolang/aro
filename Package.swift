@@ -152,8 +152,15 @@ let package = Package(
         // Issue #228 — SOLARO desktop app (separate product, not an `aro`
         // subcommand per ADR-001). Native SwiftCrossUI app on macOS /
         // Linux / Windows; embeds AROParser + ARORuntime in-process.
+        //
+        // Product name is `SolaroApp` (camelCase) and not `SOLARO` to
+        // avoid colliding with the launcher's `solaro` product on
+        // case-insensitive filesystems (macOS default). The binary is
+        // renamed back to `SOLARO` when packaged into the .app bundle
+        // for user-facing presentation — see tools/build-solaro-app-local.sh
+        // and the CI .app bundling steps.
         .executable(
-            name: "SOLARO",
+            name: "SolaroApp",
             targets: ["SOLARO"]
         ),
         // Tiny launcher CLI alongside the .app (ADR-008 follow-up): lets

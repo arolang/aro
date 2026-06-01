@@ -252,7 +252,7 @@ build:solaro:linux:
   script:
     # Build SOLARO + launcher CLI. Both are part of the SOLARO product
     # family per ADR-001 (sibling to aro, not subcommands).
-    - swift build -c release --product SOLARO
+    - swift build -c release --product SolaroApp
     - swift build -c release --product solaro
 
     # Smoke-test the launcher (won't open a window — it errors out
@@ -264,7 +264,7 @@ build:solaro:linux:
     # Phase 4 (#228 ADR-012) once `appimagetool` + bundled GTK 4
     # runtime is wired into CI.
     - mkdir -p solaro-dist
-    - cp .build/release/SOLARO solaro-dist/SOLARO
+    - cp .build/release/SolaroApp solaro-dist/SOLARO
     - cp .build/release/solaro solaro-dist/solaro
     - cp Sources/SOLARO/LICENSE-NOTICE.md solaro-dist/LICENSE-NOTICE.md
     - tar -czvf solaro-linux-amd64.tar.gz -C solaro-dist .
