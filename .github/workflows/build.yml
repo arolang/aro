@@ -751,6 +751,12 @@ jobs:
           chmod +x Tests/IntegrationTestsRunner/run-tests.pl
           perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j 4
 
+      - name: Verify DWARF debug info (#231)
+        run: |
+          export ARO="$ARO_BIN"
+          chmod +x Tests/IntegrationTestsRunner/test-dwarf-debug-info.sh
+          ./Tests/IntegrationTestsRunner/test-dwarf-debug-info.sh
+
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4

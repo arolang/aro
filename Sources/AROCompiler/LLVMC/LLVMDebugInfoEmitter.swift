@@ -47,6 +47,11 @@ final class LLVMDebugInfoEmitter {
     /// allocations.
     private var fileCache: [String: LLVMMetadataRef] = [:]
 
+    /// The `DISubprogram` from the most recent `beginFunction` call.
+    /// Used as the scope when constructing per-statement `DILocation`s.
+    /// Nil before any function has been opened or after `endFunction`.
+    private var currentScope: LLVMMetadataRef?
+
     /// Creates an emitter and seeds the module-level DI metadata:
     /// CompileUnit, primary File, BasicType for the implicit return.
     ///
@@ -178,7 +183,58 @@ final class LLVMDebugInfoEmitter {
 
         if let sp {
             LLVMSetSubprogram(valueRef, sp)
+            currentScope = sp
         }
+    }
+
+    /// Closes out the current function's debug-info scope. Subsequent
+    /// `setLocation` calls have no effect until `beginFunction` runs
+    /// again. Optional — `beginFunction` overwrites `currentScope`
+    /// either way.
+    func endFunction() {
+        currentScope = nil
+    }
+
+    /// Issue #231 phase 2 — set the IR builder's current debug location
+    /// before emitting instructions for a statement. lldb maps the
+    /// emitted instructions back to `(file, line, column)` via this
+    /// metadata, which is what makes
+    /// `breakpoint set --file foo.aro --line N` actually resolve.
+    ///
+    /// Implementation note: Swifty-LLVM keeps the underlying
+    /// `LLVMBuilderRef` private inside `InsertionPoint`'s wrapped
+    /// `ManagedPointer`. There is no public Swift accessor — exposing
+    /// one needs an upstream change. Until that lands we reach the
+    /// builder by mirroring the struct's storage layout and reading
+    /// the class instance directly. The layout is documented in
+    /// `Swifty-LLVM/Sources/SwiftyLLVM/InsertionPoint.swift` and
+    /// `Utils/ManagedPointer.swift`; the offset is asserted at runtime
+    /// via a small sanity check (see `extractBuilderRef`). If
+    /// Swifty-LLVM reorders these fields the assertion fires and we
+    /// fall back to emitting no per-line location for that statement
+    /// — silent degradation rather than crash.
+    func setLocation(at insertionPoint: SwiftyLLVM.InsertionPoint, line: Int, column: Int) {
+        guard let scope = currentScope else { return }
+        guard let builderRef = Self.extractBuilderRef(insertionPoint) else { return }
+
+        let loc = LLVMDIBuilderCreateDebugLocation(
+            context,
+            UInt32(max(line, 1)),
+            UInt32(max(column, 0)),
+            scope,
+            /* InlinedAt */ nil
+        )
+        if let loc {
+            LLVMSetCurrentDebugLocation2(builderRef, loc)
+        }
+    }
+
+    /// Clears the IR builder's debug location. Call before emitting
+    /// alloca's or prologue instructions that shouldn't be attributed
+    /// to a specific source line — keeps lldb's line tables clean.
+    func clearLocation(at insertionPoint: SwiftyLLVM.InsertionPoint) {
+        guard let builderRef = Self.extractBuilderRef(insertionPoint) else { return }
+        LLVMSetCurrentDebugLocation2(builderRef, nil)
     }
 
     /// Finalizes all pending DI metadata and disposes the builder. Must
@@ -204,6 +260,47 @@ final class LLVMDebugInfoEmitter {
         }
         fileCache[filename] = made
         return made
+    }
+
+    /// Reach the underlying `LLVMBuilderRef` from a Swifty-LLVM
+    /// `InsertionPoint`. Returns `nil` if the layout we expect doesn't
+    /// match — that protects against silent corruption if Swifty-LLVM
+    /// changes its struct shape upstream.
+    ///
+    /// The expected layout (verified against `Sources/SwiftyLLVM/InsertionPoint.swift`
+    /// at the version this code was written for):
+    ///
+    /// ```
+    /// public struct InsertionPoint {
+    ///     private let wrapped: ManagedPointer<LLVMBuilderRef>
+    /// }
+    /// final class ManagedPointer<T> {
+    ///     let llvm: T          // ← what we want
+    ///     private let dispose: @Sendable (T) -> Void
+    /// }
+    /// ```
+    ///
+    /// We mirror `InsertionPoint` as a single-field struct holding the
+    /// class reference, then read offset 16 from the class instance
+    /// (the Swift class-instance header occupies the first 16 bytes
+    /// on 64-bit Darwin/Linux; the first stored property follows).
+    fileprivate static func extractBuilderRef(_ ip: SwiftyLLVM.InsertionPoint) -> LLVMBuilderRef? {
+        // Mirror struct must match SwiftyLLVM.InsertionPoint's storage
+        // exactly — single pointer-sized field.
+        struct InsertionPointShim: @unchecked Sendable {
+            let wrapped: AnyObject
+        }
+        guard MemoryLayout<SwiftyLLVM.InsertionPoint>.size == MemoryLayout<InsertionPointShim>.size else {
+            return nil
+        }
+        let shim = unsafeBitCast(ip, to: InsertionPointShim.self)
+        let classPtr = Unmanaged.passUnretained(shim.wrapped).toOpaque()
+        // First stored property of a Swift class on 64-bit lives at
+        // offset 16 (8 bytes isa + 8 bytes refcount).
+        let storedOffset = 16
+        let rawPtr = classPtr.advanced(by: storedOffset)
+        let builderRef = rawPtr.load(as: LLVMBuilderRef?.self)
+        return builderRef
     }
 
     private func addModuleFlag(name: String, value: UInt32) {

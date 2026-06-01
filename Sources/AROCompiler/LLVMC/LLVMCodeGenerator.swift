@@ -310,8 +310,21 @@ public final class LLVMCodeGenerator {
         // Generate statements
         for (index, statement) in fs.statements.enumerated() {
             ctx.currentSourceSpan = statement.span
+            // Issue #231 phase 2 — push the source line onto the IR
+            // builder so every instruction emitted for this statement
+            // carries a `!dbg` reference back to the .aro line. lldb
+            // uses this metadata for `breakpoint set --file --line`
+            // resolution in compiled binaries.
+            debugInfo?.setLocation(
+                at: ctx.insertionPoint,
+                line: statement.span.start.line,
+                column: statement.span.start.column
+            )
             generateStatement(statement, index: index, errorBlock: errorExitBlock)
         }
+        // Clear before the epilogue so return/cleanup instructions
+        // don't claim a line that doesn't exist in source.
+        debugInfo?.clearLocation(at: ctx.insertionPoint)
 
         // Branch to normal return
         ctx.module.insertBr(to: normalReturnBlock, at: ctx.insertionPoint)
