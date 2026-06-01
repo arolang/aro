@@ -37,8 +37,23 @@ struct SOLAROApp: App {
             ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
                 .frame(minWidth: 1200, minHeight: 800)
                 .preferredColorScheme(.dark)
+                .onOpenURL(perform: openURL)
         }
         .defaultSize(width: 1400, height: 900)
+    }
+
+    /// macOS Launch Services delivers `open -a SOLARO.app <path>`
+    /// invocations as an open-URL event rather than as argv — so the
+    /// launcher CLI's project path lands here, not in
+    /// `initialWorkspace()`. Falls through silently for non-directory
+    /// URLs so a stray Finder drop doesn't crash the workspace.
+    private func openURL(_ url: URL) {
+        var isDir: ObjCBool = false
+        guard
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+            isDir.boolValue
+        else { return }
+        workspace = .open(Project(rootPath: url))
     }
 
     /// Inspect `CommandLine.arguments` for a project path. Accepts

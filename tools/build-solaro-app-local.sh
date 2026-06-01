@@ -59,6 +59,22 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- Tell Launch Services SOLARO opens folders (ARO projects)
+       so \`open -a SOLARO.app /some/dir\` routes the directory
+       through onOpenURL instead of being ignored. -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>ARO project folder</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.folder</string>
+        <string>public.directory</string>
+      </array>
+    </dict>
+  </array>
 </dict></plist>
 PLIST
 

@@ -68,11 +68,13 @@ struct LayoutSidecar: Codable, Equatable {
 
 /// The four center-pane projections. Mirrors the wireframe set
 /// (notes 8467 and 8519 on issue #228).
-enum PaneMode: String, Codable, CaseIterable, Equatable {
+enum PaneMode: String, Codable, CaseIterable, Equatable, Identifiable {
     case canvas
     case text
     case split
     case map
+
+    var id: String { rawValue }
 
     var label: String {
         switch self {
@@ -80,6 +82,17 @@ enum PaneMode: String, Codable, CaseIterable, Equatable {
         case .text:   return "Text"
         case .split:  return "Split"
         case .map:    return "Map"
+        }
+    }
+
+    /// SF Symbol used in the workspace toolbar's segmented pane-mode
+    /// picker. Picked to read as: graph, text, split, network.
+    var symbol: String {
+        switch self {
+        case .canvas: return "circle.hexagongrid"
+        case .text:   return "text.alignleft"
+        case .split:  return "rectangle.split.2x1"
+        case .map:    return "point.3.connected.trianglepath.dotted"
         }
     }
 }
