@@ -1277,6 +1277,19 @@ jobs:
           path: Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
           retention-days: 30
 
+      - name: Build Debugging Guide PDF
+        run: |
+          cd Book/TheDebuggingGuide
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload Debugging Guide PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-debugging-guide
+          path: Book/TheDebuggingGuide/output/ARO-Debugging-Guide.pdf
+          retention-days: 30
+
   # ===========================================================================
   # Create Release (only on tags)
   # ===========================================================================
@@ -1336,6 +1349,7 @@ jobs:
             artifacts/aro-macos-arm64.tar.gz \
             artifacts/aro-windows-amd64.zip \
             artifacts/aro-language-guide/ARO-Language-Guide.pdf \
+            artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf \
             artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf \
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf \
             artifacts/aro-by-example/ARO-By-Example.pdf \
@@ -1376,6 +1390,7 @@ jobs:
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
+            artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf
             artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
             artifacts/aro-by-example/ARO-By-Example.pdf
@@ -1393,6 +1408,7 @@ jobs:
             | Document | Download |
             |----------|----------|
             | ARO Language Guide | [ARO-Language-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Language-Guide.pdf) |
+            | ARO Debugging Guide | [ARO-Debugging-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Debugging-Guide.pdf) |
             | ARO Plugin Guide | [ARO-Plugin-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Plugin-Guide.pdf) |
             | ARO Construction Studies | [ARO-Construction-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Construction-Studies.pdf) |
             | ARO By Example | [ARO-By-Example.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-By-Example.pdf) |

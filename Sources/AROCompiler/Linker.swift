@@ -46,6 +46,25 @@ public final class LLVMEmitter {
         args.append(outputPath)
         args.append(irPath)
         try runProcess(args)
+        #elseif os(macOS)
+        // Issue #231 — on macOS use `clang -c -g` so the resulting `.o`
+        // is recognized by `ld` as a debug-info-bearing input. `llc`
+        // emits valid DWARF segments but doesn't add the Apple-specific
+        // stab structure ld needs to record OSO entries; without OSO,
+        // `dsymutil` cannot extract our IR-level DI into a `.dSYM` and
+        // lldb sees only addresses in backtraces. clang on the IR
+        // produces an `.o` ld treats correctly.
+        let clangPath = "/usr/bin/clang"
+        var args = [clangPath]
+        args.append("-c")
+        args.append("-g")
+        args.append(optimize.rawValue)
+        args.append("-o")
+        args.append(outputPath)
+        args.append("-x")
+        args.append("ir")
+        args.append(irPath)
+        try runProcess(args)
         #else
         let llcPath = try findLLC()
 
@@ -62,9 +81,7 @@ public final class LLVMEmitter {
         // On Linux, generate position-independent code for PIE executables
         // Modern Linux distributions require PIE by default; without this flag,
         // x86_64 gets R_X86_64_32 relocations that are incompatible with PIE
-        #if os(Linux)
         args.append("-relocation-model=pic")
-        #endif
 
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
@@ -400,6 +417,15 @@ public final class CCompiler {
         #if os(Linux)
         FileHandle.standardError.write(Data("[LINKER] 3. Adding output path...\n".utf8))
         #endif
+
+        // Issue #231 — `-g` on the link line tells clang's driver that
+        // input .o files carry DWARF, which makes ld record OSO stab
+        // entries pointing at each .o so `dsymutil` can later build
+        // a .dSYM bundle. Without this the DWARF emitted by `llc` for
+        // our IR is invisible to lldb in the final binary.
+        if outputType == .executable {
+            args.append("-g")
+        }
 
         // Output
         args.append("-o")

@@ -71,6 +71,10 @@ public final class LLVMCodeGenerator {
     private var ctx: LLVMCodeGenContext!
     private var types: LLVMTypeMapper!
     private var externals: LLVMExternalDeclEmitter!
+    /// Issue #231 — DWARF emitter. Populated only when the host LLVM
+    /// install accepts the DI setup; nil means "emit IR without
+    /// debug info" (compatible with what AROCompiler shipped before).
+    private var debugInfo: LLVMDebugInfoEmitter?
 
     // MARK: - State
 
@@ -102,12 +106,26 @@ public final class LLVMCodeGenerator {
         embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil,
         staticPlugins: [StaticPluginIRInfo]? = nil,
         pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
-        pythonBundle: PythonBundleIRInfo? = nil
+        pythonBundle: PythonBundleIRInfo? = nil,
+        sourceFilename: String? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
         types = LLVMTypeMapper(context: ctx)
         externals = LLVMExternalDeclEmitter(context: ctx, types: types)
+
+        // Issue #231 — DWARF emitter. Function-level debug info: each
+        // feature set gets a DISubprogram. lldb backtraces report
+        // `.aro` filenames + lines instead of raw addresses. Optional
+        // by virtue of failable init — if LLVM rejects the metadata
+        // setup we fall back to a no-DI emit rather than failing the
+        // whole compile.
+        let primaryFilename = sourceFilename ?? "aro_program.aro"
+        debugInfo = LLVMDebugInfoEmitter(
+            swiftyModule: ctx.module,
+            primaryFilename: primaryFilename,
+            producerVersion: "ARO compiler"
+        )
 
         // Set up module target
         setupModuleTarget()
@@ -140,6 +158,12 @@ public final class LLVMCodeGenerator {
                 message: "Code generation failed with \(ctx.errors.count) error(s):\n\(messages)"
             )
         }
+
+        // Issue #231 — flush pending DI metadata before module
+        // verification reads it. Must run exactly once; subsequent
+        // passes through `generate()` create a fresh emitter above.
+        debugInfo?.finalize()
+        debugInfo = nil
 
         // Verify module
         try verifyModule()
@@ -221,6 +245,22 @@ public final class LLVMCodeGenerator {
         let funcType = types.featureSetFunctionType
         let function = ctx.module.declareFunction(funcName, funcType)
         ctx.currentFunction = function
+
+        // Issue #231 — attach a DISubprogram so lldb can map this
+        // function back to its `.aro` source location. Filename is
+        // synthesized from the business activity until source-file
+        // tracking lands on AnalyzedFeatureSet.
+        if let debugInfo {
+            let sourceFile = "\(fs.businessActivity.isEmpty ? fs.name : fs.businessActivity).aro"
+            let line = fs.span.start.line
+            debugInfo.beginFunction(
+                function: function,
+                name: fs.name,
+                linkageName: funcName,
+                file: sourceFile,
+                line: line
+            )
+        }
 
         // Create entry block
         let entryBlock = ctx.module.appendBlock(named: "entry", to: function)
