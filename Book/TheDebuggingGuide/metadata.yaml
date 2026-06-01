@@ -1,0 +1,26 @@
+---
+title: "ARO Debugging Guide"
+subtitle: "Step, Inspect, Replay"
+author: "ARO Project"
+date: "June 2026"
+version: "1.0.0"
+lang: en
+documentclass: book
+classoption:
+  - oneside
+  - 11pt
+geometry:
+  - margin=1in
+  - paperwidth=7in
+  - paperheight=10in
+monofont: "TeX Gyre Cursor"
+mainfont: "TeX Gyre Pagella"
+linestretch: 1.15
+toc: true
+toc-depth: 2
+numbersections: false
+colorlinks: true
+linkcolor: NavyBlue
+urlcolor: NavyBlue
+include-in-header: header.tex
+---

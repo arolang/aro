@@ -11,6 +11,7 @@
   <a href="https://arolang.github.io/aro/">Website</a> ·
   <a href="https://github.com/arolang/aro/wiki">Documentation</a> ·
   <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Language-Guide.pdf">Language Guide (PDF)</a> ·
+  <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Debugging-Guide.pdf">Debugging Guide (PDF)</a> ·
   <a href="https://github.com/arolang/aro/discussions">Discussions</a> ·
   <a href="https://social.uitsmijter.io/@aro">Mastodon</a>
 </p>
@@ -243,6 +244,8 @@ The complete language guide is available as a PDF in the [Releases](https://gith
 - Custom actions and plugins
 - Native compilation
 - Patterns and practices
+
+The **[ARO Debugging Guide](https://github.com/arolang/aro/releases/latest/download/ARO-Debugging-Guide.pdf)** is a separate, chapter-by-chapter walkthrough of `aro debug` — installation, the statement-boundary model, the five breakpoint flavors, watches, DAP integration with VS Code / IntelliJ / Neovim, recording and replay, and production attach. Source lives under [`Book/TheDebuggingGuide/`](./Book/TheDebuggingGuide).
 
 For a detailed look at the implementation, see [OVERVIEW.md](./OVERVIEW.md).
 
