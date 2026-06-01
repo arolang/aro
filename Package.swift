@@ -148,7 +148,20 @@ let package = Package(
         .executable(
             name: "aro",
             targets: ["AROCLI"]
-        )
+        ),
+        // Issue #228 — SOLARO desktop app (separate product, not an `aro`
+        // subcommand per ADR-001). Native SwiftCrossUI app on macOS /
+        // Linux / Windows; embeds AROParser + ARORuntime in-process.
+        .executable(
+            name: "SOLARO",
+            targets: ["SOLARO"]
+        ),
+        // Tiny launcher CLI alongside the .app (ADR-008 follow-up): lets
+        // terminal users run `solaro <path>` to open SOLARO with a project.
+        .executable(
+            name: "solaro",
+            targets: ["SOLAROLauncher"]
+        ),
     ],
     dependencies: platformDependencies + lspDependencies + mlxDependencies + [
         // Swift Argument Parser for CLI
@@ -161,6 +174,10 @@ let package = Package(
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
         // Swift Log for structured logging
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        // SwiftCrossUI for SOLARO (#228 ADR-001). Pinned to the
+        // version this codebase was developed against; bump deliberately
+        // when picking up new SwiftCrossUI releases.
+        .package(url: "https://github.com/moreSwift/swift-cross-ui.git", exact: "0.6.0"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
@@ -247,6 +264,38 @@ let package = Package(
                 ] + cliLspDependency + askDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings
+            ),
+            // Issue #228 SOLARO Phase 0 — desktop app target.
+            // Sibling product to the `aro` CLI (ADR-001). Embeds the
+            // parser + runtime in-process (ADR-002) and pins the
+            // runtime version per release (ADR-003).
+            .executableTarget(
+                name: "SOLARO",
+                dependencies: [
+                    "AROVersion",
+                    "AROParser",
+                    "ARORuntime",
+                    .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
+                    .product(name: "DefaultBackend", package: "swift-cross-ui"),
+                    .product(name: "Logging", package: "swift-log"),
+                ],
+                path: "Sources/SOLARO"
+            ),
+            // Tiny launcher CLI bundled alongside the .app — lets
+            // terminal users `cd project && solaro .` without making
+            // SOLARO an `aro` subcommand. ~20 LOC total.
+            .executableTarget(
+                name: "SOLAROLauncher",
+                dependencies: [
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                ],
+                path: "Sources/SOLAROLauncher"
+            ),
+            // SOLARO unit tests (non-UI logic only).
+            .testTarget(
+                name: "SOLAROTests",
+                dependencies: ["SOLARO"],
+                path: "Tests/SOLAROTests"
             ),
             // Parser tests
             .testTarget(
