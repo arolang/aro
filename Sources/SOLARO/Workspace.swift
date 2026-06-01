@@ -247,66 +247,7 @@ struct WorkspaceView: View {
     }
 }
 
-// MARK: - Sidebar placeholder (Phase 5 fills it in)
-
-private struct SidebarPaneView: View {
-    @Bindable var controller: WorkspaceController
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            tabStrip
-            Divider().background(SolaroColor.divider)
-            ScrollView {
-                VStack(alignment: .leading, spacing: SolaroSpace.xs) {
-                    Text("Sidebar pane · Phase 5")
-                        .font(SolaroFont.caption)
-                        .foregroundStyle(SolaroColor.textTertiary)
-                        .padding(.horizontal, SolaroSpace.m)
-                        .padding(.top, SolaroSpace.m)
-                }
-            }
-            Spacer()
-        }
-        .background(SolaroColor.surface)
-    }
-
-    private var tabStrip: some View {
-        HStack(spacing: 0) {
-            ForEach(SidebarTab.allCases) { tab in
-                Button {
-                    controller.sidebarTab = tab
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: tab.symbol)
-                            .font(.system(size: 12, weight: .medium))
-                        Text(tab.label)
-                            .font(SolaroFont.caption)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 40)
-                    .foregroundStyle(
-                        controller.sidebarTab == tab
-                            ? SolaroColor.textPrimary
-                            : SolaroColor.textTertiary
-                    )
-                    .background(
-                        VStack {
-                            Spacer()
-                            Rectangle()
-                                .fill(
-                                    controller.sidebarTab == tab
-                                        ? SolaroColor.accent
-                                        : Color.clear
-                                )
-                                .frame(height: 2)
-                        }
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .background(SolaroColor.surface)
-    }
-}
+// Real SidebarPaneView lives in Sidebar.swift (Phase 5).
 
 // MARK: - Center placeholder (Phases 7–8 fill it in)
 
