@@ -1026,31 +1026,37 @@ struct WorkspaceView: View {
         }
     }
 
+    @AppStorage(SolaroPrefs.editorFolded.rawValue)
+    private var editorFolded: Bool = false
+    @AppStorage(SolaroPrefs.editorMinimap.rawValue)
+    private var editorMinimap: Bool = false
+
     private var foldToggle: some View {
         Button {
-            let key = SolaroPrefs.editorFolded.rawValue
-            let current = UserDefaults.standard.bool(forKey: key)
-            UserDefaults.standard.set(!current, forKey: key)
-            // Bump a controller flag so SwiftUI re-renders CenterPane —
-            // @AppStorage in CenterPane would do this for free, but
-            // the toggle lives here, so nudge the workspace.
-            controller.paneMode = controller.paneMode
+            editorFolded.toggle()
         } label: {
-            Label("Fold bodies", systemImage: "chevron.right.square")
+            Label(
+                editorFolded ? "Expand bodies" : "Fold bodies",
+                systemImage: editorFolded
+                    ? "chevron.down.square.fill"
+                    : "chevron.right.square"
+            )
         }
         .help("Show feature-set bodies as `{ … N statements }` (read-only)")
     }
 
     private var minimapToggle: some View {
         Button {
-            let key = SolaroPrefs.editorMinimap.rawValue
-            let current = UserDefaults.standard.bool(forKey: key)
-            UserDefaults.standard.set(!current, forKey: key)
-            controller.paneMode = controller.paneMode
+            editorMinimap.toggle()
         } label: {
-            Label("Minimap", systemImage: "rectangle.portrait.righthalf.inset.filled")
+            Label(
+                editorMinimap ? "Hide minimap" : "Show minimap",
+                systemImage: editorMinimap
+                    ? "rectangle.portrait.righthalf.inset.filled.arrow.right"
+                    : "rectangle.portrait.righthalf.inset.filled"
+            )
         }
-        .help("Show the minimap overview on the right edge of the editor")
+        .help("Toggle the minimap overview on the right edge of the editor")
     }
 
     private var inspectorToggle: some View {

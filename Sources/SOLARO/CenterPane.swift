@@ -51,13 +51,18 @@ struct CenterPaneView: View {
         }
     }
 
+    @AppStorage(SolaroPrefs.editorFolded.rawValue)
+    private var folded: Bool = false
+    @AppStorage(SolaroPrefs.editorMinimap.rawValue)
+    private var minimap: Bool = false
+
     /// Composite view: optional folded-source pane, the main
-    /// editor, and the minimap column on the right. Controlled
-    /// by two @AppStorage toggles surfaced in the editor header.
+    /// editor, and the minimap column on the right. The two flags
+    /// come from @AppStorage so the toolbar toggles cause an
+    /// immediate re-render — reading UserDefaults directly in the
+    /// view body wouldn't pick up changes.
     @ViewBuilder
     private func editorWithGutters(for url: URL) -> some View {
-        let folded = UserDefaults.standard.bool(forKey: SolaroPrefs.editorFolded.rawValue)
-        let minimap = UserDefaults.standard.bool(forKey: SolaroPrefs.editorMinimap.rawValue)
         let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         HStack(spacing: 0) {
             if folded, let program = controller.programs[url] {
@@ -65,7 +70,7 @@ struct CenterPaneView: View {
                     source: text,
                     program: program,
                     onJumpToLine: { line in
-                        UserDefaults.standard.set(false, forKey: SolaroPrefs.editorFolded.rawValue)
+                        folded = false
                         controller.currentLine = line
                     }
                 )
