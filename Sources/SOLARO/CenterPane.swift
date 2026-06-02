@@ -109,7 +109,9 @@ struct CenterPaneView: View {
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),
-                    onSave: { saveAndReparse(text: $0, url: url) }
+                    onSave: { saveAndReparse(text: $0, url: url) },
+                    requestGhost: ghostRequest(for: url),
+                    acceptGhost: ghostAccept(for: url)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -254,6 +256,54 @@ struct CenterPaneView: View {
         // requiring a restart.
         controller.lsp.didChange(url: url, text: formatted)
         reparse(url: url)
+    }
+
+    // MARK: - Ghost text (#272)
+
+    /// Build the ghost-fetch closure bound to a specific file URL.
+    /// Calls `aro lsp`'s textDocument/completion and returns the
+    /// first item's insertText (or nil) on the main actor.
+    private func ghostRequest(for url: URL)
+        -> ((Int, Int, @escaping (String?) -> Void) -> Void)
+    {
+        { [controller = controller] line0, char0, completion in
+            controller.lsp.completion(
+                url: url, line0: line0, character0: char0, limit: 1
+            ) { items in
+                completion(items.first?.insertText)
+            }
+        }
+    }
+
+    /// Build the ghost-accept closure bound to a specific file URL.
+    /// Splices the accepted text at the current caret position and
+    /// writes the buffer back through the save-and-reparse path so
+    /// the canvas + LSP both see the change.
+    private func ghostAccept(for url: URL) -> ((String) -> Void) {
+        { [controller = controller] text in
+            guard
+                let lineNumber = controller.currentLine,
+                let source = try? String(contentsOf: url, encoding: .utf8)
+            else { return }
+            let ns = source as NSString
+            // Recompute the line offsets so we don't rely on a stale
+            // currentColumn that might point past the current line.
+            var lineStarts: [Int] = [0]
+            for i in 0..<ns.length where ns.character(at: i) == 0x0A {
+                lineStarts.append(i + 1)
+            }
+            guard lineNumber - 1 < lineStarts.count else { return }
+            let lineStart = lineStarts[lineNumber - 1]
+            let column = controller.currentColumn ?? 0
+            let insertOffset = min(lineStart + column, ns.length)
+            let updated = ns.replacingCharacters(
+                in: NSRange(location: insertOffset, length: 0),
+                with: text
+            )
+            try? updated.write(to: url, atomically: true, encoding: .utf8)
+            controller.lsp.didChange(url: url, text: updated)
+            controller.openFile(url)
+        }
     }
 
     private func reparse(url: URL) {
@@ -573,7 +623,9 @@ struct CenterPaneView: View {
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),
-                    onSave: { saveAndReparse(text: $0, url: url) }
+                    onSave: { saveAndReparse(text: $0, url: url) },
+                    requestGhost: ghostRequest(for: url),
+                    acceptGhost: ghostAccept(for: url)
                 )
                 .frame(minWidth: 240)
             }

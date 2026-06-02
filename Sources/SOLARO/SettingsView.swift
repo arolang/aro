@@ -20,6 +20,8 @@ struct SettingsView: View {
     private var inspectorVisible: Bool = true
     @AppStorage(SolaroPrefs.formatOnSave.rawValue)
     private var formatOnSave: Bool = false
+    @AppStorage(SolaroPrefs.editorGhostText.rawValue)
+    private var editorGhostText: Bool = false
     @AppStorage(SolaroPrefs.aroOverride.rawValue)
     private var aroOverride: String = ""
     @AppStorage(SolaroPrefs.askEndpoint.rawValue)
@@ -92,6 +94,8 @@ struct SettingsView: View {
                 Toggle("Inspector visible by default", isOn: $inspectorVisible)
                 Toggle("Format on save — strip trailing whitespace + tidy final newline",
                        isOn: $formatOnSave)
+                Toggle("Inline suggestions — show LSP completions as you type (⇥ to accept)",
+                       isOn: $editorGhostText)
             } header: {
                 Text("Defaults")
             }
@@ -183,4 +187,5 @@ enum SolaroPrefs: String {
     case editorFolded     = "solaro.editor.folded"
     case editorMinimap    = "solaro.editor.minimap"
     case diffStyle        = "solaro.diff.style"
+    case editorGhostText  = "solaro.editor.ghostText"
 }

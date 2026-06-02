@@ -49,6 +49,32 @@ final class AROHoverTextView: STTextView {
     }()
     private var hoverHost: NSHostingController<HoverValuePopover>?
     private var lastHoverIdentifier: String?
+
+    // -------------------------------------------------------------
+    // Ghost-text suggestion plumbing (#272).
+    // -------------------------------------------------------------
+    /// Async LSP-completion fetcher set by the SwiftUI wrapper.
+    /// Given a 0-based line/column at the caret, calls back with
+    /// the suggestion text or nil if none / disabled.
+    var requestGhost: ((Int, Int, @escaping (String?) -> Void) -> Void)?
+    /// Inserts the accepted suggestion at the caret. Owns the
+    /// reparse + binding update.
+    var acceptGhost: ((String) -> Void)?
+    /// Toggled by the SwiftUI wrapper from `@AppStorage`.
+    var ghostTextEnabled: Bool = false
+
+    private lazy var ghostPopover: NSPopover = {
+        let p = NSPopover()
+        // applicationDefined keeps the popover open while the user
+        // keeps typing; we close it explicitly on Esc / accept /
+        // any incompatible event.
+        p.behavior = .applicationDefined
+        p.animates = false
+        return p
+    }()
+    private var ghostHost: NSHostingController<GhostTextPopover>?
+    private var currentGhostText: String?
+    private var ghostDebounce: DispatchWorkItem?
     /// Global mouse-moved monitor. Tracking areas on STTextView
     /// don't always deliver mouseMoved because the text view's own
     /// content view sits on top and consumes the event. The local
@@ -210,6 +236,96 @@ final class AROHoverTextView: STTextView {
         }
     }
 
+    // MARK: - Ghost text (#272)
+
+    /// Re-arm the debounce. Called from the coordinator's
+    /// textViewDidChangeText so each keystroke pushes the trigger
+    /// further out — only an actual typing pause fires LSP.
+    func scheduleGhost() {
+        hideGhost()
+        ghostDebounce?.cancel()
+        guard ghostTextEnabled, requestGhost != nil else { return }
+        let work = DispatchWorkItem { [weak self] in self?.fetchGhost() }
+        ghostDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    private func fetchGhost() {
+        let location = textSelection.location
+        let raw = (text ?? "") as NSString
+        guard location <= raw.length else { return }
+        var line = 0
+        var lastNL = -1
+        for i in 0..<location {
+            if raw.character(at: i) == 0x0A {
+                line += 1
+                lastNL = i
+            }
+        }
+        let column = location - lastNL - 1
+        requestGhost?(line, column) { [weak self] suggestion in
+            DispatchQueue.main.async {
+                guard let self,
+                      let text = suggestion?
+                          .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty
+                else { return }
+                self.showGhost(text)
+            }
+        }
+    }
+
+    private func showGhost(_ text: String) {
+        currentGhostText = text
+        let view = GhostTextPopover(text: text)
+        if let host = ghostHost {
+            host.rootView = view
+        } else {
+            let host = NSHostingController(rootView: view)
+            host.sizingOptions = [.intrinsicContentSize]
+            ghostHost = host
+            ghostPopover.contentViewController = host
+        }
+        // Anchor at the current caret rect. Falls back to the
+        // bounds origin if the layout manager can't resolve it.
+        let location = textSelection.location
+        let nsRange = NSRange(location: location, length: 0)
+        let rect = self.firstRect(forCharacterRange: nsRange,
+                                  actualRange: nil)
+        let local = self.convert(rect, from: nil)
+        let anchor = local.isEmpty
+            ? CGRect(x: 1, y: 1, width: 1, height: 1)
+            : local
+        if !ghostPopover.isShown {
+            ghostPopover.show(relativeTo: anchor,
+                              of: self, preferredEdge: .maxY)
+        }
+    }
+
+    private func hideGhost() {
+        currentGhostText = nil
+        if ghostPopover.isShown {
+            ghostPopover.performClose(nil)
+        }
+    }
+
+    /// Intercept Tab / Esc when a ghost suggestion is visible.
+    /// Anything else falls through so editing still works.
+    override func keyDown(with event: NSEvent) {
+        if let ghost = currentGhostText {
+            if event.keyCode == 48 {            // Tab
+                acceptGhost?(ghost)
+                hideGhost()
+                return
+            }
+            if event.keyCode == 53 {            // Esc
+                hideGhost()
+                return
+            }
+        }
+        super.keyDown(with: event)
+    }
+
     /// Find the `<…>` identifier (if any) at `point`. Treats angle
     /// brackets and a colon as terminators so `<name: type>` yields
     /// just `name`.
@@ -321,6 +437,33 @@ struct HoverValuePopover: View {
     }
 }
 
+/// LSP-driven suggestion shown after a typing pause (#272).
+/// Sits in an NSPopover anchored just under the caret rect.
+struct GhostTextPopover: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.xs) {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SolaroColor.accent)
+                Text("Suggestion · ⇥ to accept · ⎋ to dismiss")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            Text(text)
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.textPrimary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.s)
+        .frame(maxWidth: 420, alignment: .leading)
+    }
+}
+
 struct AROCodeEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var currentLine: Int?
@@ -344,8 +487,18 @@ struct AROCodeEditor: NSViewRepresentable {
     /// otherwise stain quotes + numbers with verb tints).
     var language: Language = .aro
     let onSave: (String) -> Void
+    /// Fetch an inline ghost suggestion at (0-based line, 0-based col).
+    /// Called by AROHoverTextView after a debounced typing pause.
+    /// nil = no suggestion / feature disabled.
+    var requestGhost: ((Int, Int, @escaping (String?) -> Void) -> Void)? = nil
+    /// Insert the accepted suggestion at the current caret. Owns the
+    /// reparse / binding update.
+    var acceptGhost: ((String) -> Void)? = nil
 
     enum Language { case aro, yaml, plain }
+
+    @AppStorage(SolaroPrefs.editorGhostText.rawValue)
+    private var ghostTextEnabled: Bool = false
 
     func makeNSView(context: Context) -> NSScrollView {
         // Build our hover-capable subclass by hand instead of using
@@ -367,6 +520,10 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.onGutterClick = { [weak coordinator = context.coordinator] line in
             coordinator?.parent.toggleBreakpoint(line, in: textView)
         }
+        // #272: ghost text plumbing.
+        textView.ghostTextEnabled = ghostTextEnabled
+        textView.requestGhost = requestGhost
+        textView.acceptGhost = acceptGhost
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
         textView.text = text
@@ -392,6 +549,14 @@ struct AROCodeEditor: NSViewRepresentable {
         // hover-on-source returned no popover even when the
         // canvas tooltip was rendering the same data.
         context.coordinator.parent = self
+
+        // #272: keep ghost-text flags in sync when the user
+        // toggles the Settings preference at runtime.
+        if let hover = textView as? AROHoverTextView {
+            hover.ghostTextEnabled = ghostTextEnabled
+            hover.requestGhost = requestGhost
+            hover.acceptGhost = acceptGhost
+        }
 
         // Push text back into the view only when the external
         // binding diverged — avoids fighting the user's edits.
@@ -629,6 +794,12 @@ struct AROCodeEditor: NSViewRepresentable {
                     let newText = textView.text ?? ""
                     self.parent.text = newText
                     self.parent.applyHighlight(textView)
+                    // #272: any text change dismisses the live ghost
+                    // and re-arms the debounce; the next pause fires
+                    // a fresh LSP completion.
+                    if let hover = textView as? AROHoverTextView {
+                        hover.scheduleGhost()
+                    }
                 }
             }
         }
