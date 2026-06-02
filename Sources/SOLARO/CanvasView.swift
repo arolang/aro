@@ -19,6 +19,13 @@
 import SwiftUI
 import AROParser
 
+/// Right-click context-menu choices on a canvas node card.
+enum CanvasNodeContextAction {
+    case revealInEditor
+    case duplicate
+    case delete
+}
+
 struct CanvasView: View {
     let graph: CanvasGraph
     /// Persist a single node's position to the file's layout
@@ -44,6 +51,8 @@ struct CanvasView: View {
     /// macros don't let us shadow, so the actual storage lives on
     /// the canvas struct (this field) and we just pass it down.
     let onActionDrop: ((String, CGPoint) -> Void)?
+    /// Right-click context-menu actions on a node card.
+    let onNodeContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -87,6 +96,7 @@ struct CanvasView: View {
                         pausedLine: pausedLine,
                         pauseSymbols: pauseSymbols,
                         breakpointLines: breakpointLines,
+                        onContextAction: onNodeContextAction,
                         onDrag: { id, newPos in
                             liveNodes[id] = newPos
                         },
@@ -542,6 +552,8 @@ struct NodesLayer: View {
     /// Lines that carry a breakpoint — each matching node renders
     /// the red gutter dot in its corner.
     let breakpointLines: Set<Int>
+    /// Right-click context menu on each node card.
+    let onContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
     let onSelect: (Int) -> Void
@@ -579,6 +591,27 @@ struct NodesLayer: View {
                           y: p.y + nodeHeight / 2)
                 .onTapGesture { onSelect(node.lineHint) }
                 .gesture(dragGesture(id: node.id, livePosition: p))
+                .contextMenu {
+                    if let onContextAction {
+                        Button {
+                            onContextAction(.revealInEditor, node)
+                        } label: {
+                            Label("Reveal in editor", systemImage: "text.cursor")
+                        }
+                        Button {
+                            onContextAction(.duplicate, node)
+                        } label: {
+                            Label("Duplicate statement",
+                                  systemImage: "plus.square.on.square")
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            onContextAction(.delete, node)
+                        } label: {
+                            Label("Delete statement", systemImage: "trash")
+                        }
+                    }
+                }
             }
         }
     }

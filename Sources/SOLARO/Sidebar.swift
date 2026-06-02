@@ -99,7 +99,8 @@ struct SidebarPaneView: View {
                 } else {
                     FileTreeList(
                         nodes: nodes,
-                        selection: selectionBinding
+                        selection: selectionBinding,
+                        gitStatus: controller.gitMonitor.status
                     )
                 }
             } else {
@@ -254,11 +255,12 @@ struct SidebarPaneView: View {
 private struct FileTreeList: View {
     let nodes: [FileTreeNode]
     @Binding var selection: URL?
+    let gitStatus: GitStatus
 
     var body: some View {
         List(selection: selectionBinding) {
             OutlineGroup(nodes, id: \.id, children: \.outlineChildren) { node in
-                FileRow(node: node)
+                FileRow(node: node, gitStatus: gitStatus.files[node.url.path])
                     .tag(node.id)
                     .listRowBackground(Color.clear)
             }
@@ -281,6 +283,7 @@ private struct FileTreeList: View {
 
 private struct FileRow: View {
     let node: FileTreeNode
+    let gitStatus: GitStatus.FileStatus?
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -294,8 +297,50 @@ private struct FileRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
+            if let gitStatus {
+                Text(gitTag(gitStatus))
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(gitColor(gitStatus))
+                    .help(gitTitle(gitStatus))
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private func gitTag(_ status: GitStatus.FileStatus) -> String {
+        switch status {
+        case .modified:   return "M"
+        case .added:      return "A"
+        case .deleted:    return "D"
+        case .renamed:    return "R"
+        case .untracked:  return "U"
+        case .ignored:    return ""
+        case .conflicted: return "‼"
+        }
+    }
+
+    private func gitColor(_ status: GitStatus.FileStatus) -> Color {
+        switch status {
+        case .modified:   return SolaroColor.stateWarn
+        case .added:      return SolaroColor.stateOK
+        case .deleted:    return SolaroColor.stateError
+        case .renamed:    return SolaroColor.accent
+        case .untracked:  return SolaroColor.stateOK
+        case .ignored:    return SolaroColor.textTertiary
+        case .conflicted: return SolaroColor.stateError
+        }
+    }
+
+    private func gitTitle(_ status: GitStatus.FileStatus) -> String {
+        switch status {
+        case .modified:   return "Modified"
+        case .added:      return "Added"
+        case .deleted:    return "Deleted"
+        case .renamed:    return "Renamed"
+        case .untracked:  return "Untracked"
+        case .ignored:    return "Ignored"
+        case .conflicted: return "Conflicted — resolve before committing"
+        }
     }
 
     private var icon: String {

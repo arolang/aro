@@ -144,6 +144,10 @@ struct CenterPaneView: View {
         } catch {
             controller.parseErrors[url] = "\(error)"
         }
+        // Git status may have changed when the file's bytes changed
+        // — refresh the cached status so the sidebar + branch chip
+        // catch the update.
+        controller.gitMonitor.refresh(for: controller.project)
     }
 
     // MARK: - Canvas
@@ -165,6 +169,9 @@ struct CenterPaneView: View {
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
+                },
+                onNodeContextAction: { action, node in
+                    handleNodeContextAction(action, node: node)
                 }
             )
         }
@@ -307,6 +314,85 @@ struct CenterPaneView: View {
         return "    "
     }
 
+    /// Right-click context-menu dispatcher on a canvas node card.
+    /// Reveal jumps the caret to the statement's line; duplicate
+    /// copies the underlying source text just below the statement;
+    /// delete excises the statement's source range and reparses.
+    private func handleNodeContextAction(
+        _ action: CanvasNodeContextAction,
+        node: CanvasNode
+    ) {
+        switch action {
+        case .revealInEditor:
+            controller.currentLine = node.lineHint
+            controller.setPaneMode(.text)
+        case .duplicate:
+            mutateStatement(node: node, mode: .duplicate)
+        case .delete:
+            mutateStatement(node: node, mode: .delete)
+        }
+    }
+
+    private enum StatementMutation { case duplicate, delete }
+
+    /// Splice a statement out of the source file (delete) or
+    /// re-emit it just below (duplicate) by finding the line
+    /// covering `node.lineHint` and operating on the matching
+    /// AST statement's source span.
+    private func mutateStatement(node: CanvasNode, mode: StatementMutation) {
+        guard
+            let url = controller.currentFile,
+            let program = controller.programs[url],
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+
+        // Find the statement whose start.line == node.lineHint.
+        var hit: (start: Int, end: Int)? = nil
+        for fs in program.featureSets {
+            for statement in fs.statements {
+                if statement.span.start.line == node.lineHint {
+                    hit = (statement.span.start.offset,
+                           statement.span.end.offset)
+                    break
+                }
+            }
+            if hit != nil { break }
+        }
+        guard let (startOff, endOff) = hit else { return }
+        let nsText = text as NSString
+        guard startOff >= 0, endOff <= nsText.length, endOff > startOff
+        else { return }
+
+        // Walk back to the start of the line so we delete the
+        // indentation too, and forward to (and including) the
+        // trailing newline so the gap closes cleanly.
+        var lineStart = startOff
+        while lineStart > 0, nsText.character(at: lineStart - 1) != 0x0A {
+            lineStart -= 1
+        }
+        var lineEnd = endOff
+        while lineEnd < nsText.length, nsText.character(at: lineEnd) != 0x0A {
+            lineEnd += 1
+        }
+        if lineEnd < nsText.length { lineEnd += 1 }  // consume newline
+
+        let removalRange = NSRange(location: lineStart, length: lineEnd - lineStart)
+        let statementText = nsText.substring(with: removalRange)
+
+        var updated: String
+        switch mode {
+        case .delete:
+            updated = nsText.replacingCharacters(in: removalRange, with: "")
+        case .duplicate:
+            updated = nsText.replacingCharacters(
+                in: NSRange(location: lineEnd, length: 0),
+                with: statementText
+            )
+        }
+        try? updated.write(to: url, atomically: true, encoding: .utf8)
+        reparse(url: url)
+    }
+
     /// Drag-end callback: persist this node's new `(x, y)` to the
     /// per-file `.aro.layout.json` sidecar so it survives a reload.
     private func persistNodePosition(_ id: CanvasNode.ID, to point: CGPoint) {
@@ -332,9 +418,13 @@ struct CenterPaneView: View {
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
+                },
+                onNodeContextAction: { action, node in
+                    handleNodeContextAction(action, node: node)
                 }
             )
             .frame(minWidth: 240)
+            // (CanvasView is closed for the split mode call site)
             if let url = controller.currentFile {
                 AROCodeEditor(
                     text: editableBinding(for: url),

@@ -24,6 +24,11 @@ struct StatusBarView: View {
             Divider().frame(height: 14).background(SolaroColor.divider)
             parseStateSegment
 
+            if controller.gitMonitor.isAvailable {
+                Divider().frame(height: 14).background(SolaroColor.divider)
+                gitChip
+            }
+
             Spacer(minLength: 0)
 
             paletteButton
@@ -73,6 +78,47 @@ struct StatusBarView: View {
                     .foregroundStyle(SolaroColor.textTertiary)
             }
         }
+    }
+
+    private var gitChip: some View {
+        let s = controller.gitMonitor.status
+        return HStack(spacing: SolaroSpace.xs) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 10))
+                .foregroundStyle(SolaroColor.textSecondary)
+            Text(s.branch.isEmpty ? "(detached)" : s.branch)
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textSecondary)
+            if s.ahead > 0 {
+                Label("\(s.ahead)", systemImage: "arrow.up")
+                    .labelStyle(.titleAndIcon)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.stateOK)
+            }
+            if s.behind > 0 {
+                Label("\(s.behind)", systemImage: "arrow.down")
+                    .labelStyle(.titleAndIcon)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.stateWarn)
+            }
+            if !s.files.isEmpty {
+                Text("·  \(s.files.count) changed")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+        }
+        .help(gitTooltip)
+    }
+
+    private var gitTooltip: String {
+        let s = controller.gitMonitor.status
+        var lines = ["branch: \(s.branch)"]
+        if !s.upstream.isEmpty { lines.append("upstream: \(s.upstream)") }
+        lines.append("ahead \(s.ahead) · behind \(s.behind)")
+        if !s.files.isEmpty {
+            lines.append("\(s.files.count) changed files")
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Shared 6pt SF Symbol state pip — keeps every dot in the

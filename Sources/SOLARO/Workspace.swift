@@ -104,6 +104,11 @@ final class WorkspaceController {
     /// and reused by the right-rail Actions tab.
     let actionsRegistry = ActionsRegistry()
 
+    /// Git status of the project root. Populated on project load
+    /// + after every file save. Feeds the sidebar file-tree
+    /// indicators and the status bar's branch chip.
+    let gitMonitor = GitStatusMonitor()
+
     init(project: Project) {
         self.project = project
     }
@@ -133,6 +138,9 @@ final class WorkspaceController {
             // Same for the actions registry — runs `aro actions`
             // off the main actor and feeds the right-rail tab.
             actionsRegistry.reload(for: project)
+            // Git status — populates file-tree decorations + branch
+            // chip. Refreshed on file save and via the command palette.
+            gitMonitor.refresh(for: project)
             for url in loaded.sourceFiles {
                 if let text = try? String(contentsOf: url, encoding: .utf8) {
                     lsp.didOpen(url: url, text: text)
