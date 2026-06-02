@@ -622,6 +622,7 @@ struct WorkspaceView: View {
             searchField
             playButton
             debugButton
+            testButton
             statusPip
             inspectorToggle
             closeProjectButton
@@ -704,6 +705,18 @@ struct WorkspaceView: View {
     private var isRunning: Bool {
         if case .running = consoleProcess.state { return true }
         return false
+    }
+
+    private var testButton: some View {
+        Button {
+            showConsole = true
+            consoleProcess.startTests(project: project)
+        } label: {
+            Label("Test", systemImage: "checkmark.diamond")
+        }
+        .disabled(isRunning)
+        .help("Run `aro test` and stream output to the console (⌃⌘U)")
+        .keyboardShortcut("u", modifiers: [.control, .command])
     }
 
     private var statusPip: some View {

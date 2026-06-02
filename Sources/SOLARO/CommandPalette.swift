@@ -51,6 +51,15 @@ enum CommandPaletteBuilder {
             }
         ))
         items.append(.init(
+            id: "test",
+            title: "Run tests",
+            subtitle: "aro test \(project.displayName)",
+            category: "Run",
+            trailing: "⌃⌘U",
+            symbol: "checkmark.diamond",
+            action: { consoleProcess.startTests(project: project) }
+        ))
+        items.append(.init(
             id: "stop",
             title: "Stop running process",
             subtitle: nil,

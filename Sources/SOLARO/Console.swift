@@ -71,6 +71,7 @@ final class ConsoleProcess {
     enum Mode {
         case run
         case debug
+        case test(filter: String?)
     }
 
     /// Convenience for the Play button — always plain `aro run`,
@@ -83,6 +84,14 @@ final class ConsoleProcess {
     /// breakpoints the workspace has accumulated.
     func startDebug(project: Project, breakpointsByFile: [URL: Set<Int>]) {
         start(project: project, mode: .debug, breakpointsByFile: breakpointsByFile)
+    }
+
+    /// Convenience for the Tests command — runs `aro test` with an
+    /// optional --filter pattern. Output streams into the same
+    /// console panel as run/debug.
+    func startTests(project: Project, filter: String? = nil) {
+        start(project: project, mode: .test(filter: filter),
+              breakpointsByFile: [:])
     }
 
     /// Lower-level entry that both convenience helpers funnel through.
@@ -99,14 +108,16 @@ final class ConsoleProcess {
         didAutoContinueFirstPause = false
 
         let lines = breakpointsByFile.values.flatMap { $0 }.sorted()
-        let useDebugger = mode == .debug
+        let useDebugger: Bool
+        if case .debug = mode { useDebugger = true } else { useDebugger = false }
 
         let aro = Self.resolveAroBinary(near: project)
         appendInfo("[aro] \(aro)")
 
         // Build the subcommand portion of the argv.
         var subArgs: [String]
-        if useDebugger {
+        switch mode {
+        case .debug:
             subArgs = ["debug", project.rootPath.path,
                        "--record", recordPath(for: project)]
             for line in lines {
@@ -114,9 +125,17 @@ final class ConsoleProcess {
                 subArgs.append(String(line))
             }
             appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
-        } else {
+        case .run:
             subArgs = ["run", project.rootPath.path]
             appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
+        case .test(let filter):
+            subArgs = ["test", project.rootPath.path]
+            if let filter, !filter.isEmpty {
+                subArgs.append(contentsOf: ["--filter", filter])
+                appendInfo("$ aro test \(project.rootPath.lastPathComponent) --filter \(filter)")
+            } else {
+                appendInfo("$ aro test \(project.rootPath.lastPathComponent)")
+            }
         }
 
         let task = Process()
