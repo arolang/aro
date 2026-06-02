@@ -510,9 +510,10 @@ struct ConsolePanelView: View {
     }
 
     private var statePip: some View {
-        Circle()
-            .fill(pipColor)
+        Image(systemName: "circle.fill")
+            .resizable()
             .frame(width: 8, height: 8)
+            .foregroundStyle(pipColor)
     }
 
     private var pipColor: Color {

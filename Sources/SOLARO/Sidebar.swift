@@ -263,9 +263,10 @@ private struct FeatureRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: SolaroSpace.s) {
-                Circle()
-                    .fill(activityTint)
+                Image(systemName: "circle.fill")
+                    .resizable()
                     .frame(width: 6, height: 6)
+                    .foregroundStyle(activityTint)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(fs.name)
                         .font(SolaroFont.body)

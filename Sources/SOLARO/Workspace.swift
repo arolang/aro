@@ -397,9 +397,10 @@ struct WorkspaceView: View {
     }
 
     private var statusPip: some View {
-        Circle()
-            .fill(statusPipColor)
+        Image(systemName: "circle.fill")
+            .resizable()
             .frame(width: 10, height: 10)
+            .foregroundStyle(statusPipColor)
             .help(statusPipHelp)
     }
 

@@ -447,9 +447,10 @@ private struct StatementRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if let aro = statement as? AROStatement {
-                Circle()
-                    .fill(SolaroColor.roleColor(forVerb: aro.action.verb))
+                Image(systemName: "circle.fill")
+                    .resizable()
                     .frame(width: 4, height: 4)
+                    .foregroundStyle(SolaroColor.roleColor(forVerb: aro.action.verb))
                 Text(aro.action.verb)
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.roleColor(forVerb: aro.action.verb))
@@ -460,9 +461,10 @@ private struct StatementRow: View {
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textTertiary)
             } else if let pub = statement as? PublishStatement {
-                Circle()
-                    .fill(SolaroColor.roleExport)
+                Image(systemName: "circle.fill")
+                    .resizable()
                     .frame(width: 4, height: 4)
+                    .foregroundStyle(SolaroColor.roleExport)
                 Text("Publish")
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.roleExport)

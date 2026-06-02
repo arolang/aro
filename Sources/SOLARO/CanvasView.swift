@@ -532,13 +532,13 @@ private struct CanvasNodeCard: View {
         )
         .overlay(alignment: .topLeading) {
             if hasBreakpoint {
-                Circle()
-                    .fill(SolaroColor.stateError)
-                    .frame(width: 8, height: 8)
-                    .overlay(
-                        Circle().stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
-                    .offset(x: -4, y: -4)
+                Image(systemName: "circle.fill")
+                    .resizable()
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(SolaroColor.stateError)
+                    .frame(width: 10, height: 10)
+                    .offset(x: -5, y: -5)
+                    .accessibilityLabel("breakpoint")
             }
         }
         .onHover { isHovering in

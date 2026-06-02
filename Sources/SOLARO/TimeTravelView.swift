@@ -265,7 +265,10 @@ private struct TimelineRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(kindColor).frame(width: 6, height: 6)
+            Image(systemName: "circle.fill")
+                .resizable()
+                .frame(width: 6, height: 6)
+                .foregroundStyle(kindColor)
             VStack(alignment: .leading, spacing: 1) {
                 Text(record.featureSet ?? record.kind.rawValue)
                     .font(SolaroFont.body)

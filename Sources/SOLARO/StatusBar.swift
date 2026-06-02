@@ -57,22 +57,31 @@ struct StatusBarView: View {
     private var parseStateSegment: some View {
         HStack(spacing: SolaroSpace.xs) {
             if controller.currentParseError != nil {
-                Circle().fill(SolaroColor.stateError).frame(width: 6, height: 6)
+                statePip(color: SolaroColor.stateError)
                 Text("parse error")
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.stateError)
             } else if let program = controller.currentProgram {
-                Circle().fill(SolaroColor.stateOK).frame(width: 6, height: 6)
+                statePip(color: SolaroColor.stateOK)
                 Text("\(program.featureSets.count) feature set\(program.featureSets.count == 1 ? "" : "s")")
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textSecondary)
             } else {
-                Circle().fill(SolaroColor.textTertiary).frame(width: 6, height: 6)
+                statePip(color: SolaroColor.textTertiary)
                 Text("no file")
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textTertiary)
             }
         }
+    }
+
+    /// Shared 6pt SF Symbol state pip — keeps every dot in the
+    /// app consistent and avoids hand-rolled Circle shapes.
+    private func statePip(color: Color) -> some View {
+        Image(systemName: "circle.fill")
+            .resizable()
+            .frame(width: 6, height: 6)
+            .foregroundStyle(color)
     }
 
     private var paletteButton: some View {

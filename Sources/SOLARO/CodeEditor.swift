@@ -271,9 +271,9 @@ struct HoverValuePopover: View {
 }
 
 /// Red-dot marker drawn in the gutter for each line that has a
-/// breakpoint. Sized to fit the gutter's marker container; SOLARO
-/// doesn't customize STGutterView's geometry, so we lean on the
-/// default frame.
+/// breakpoint. The dot is the `circle.fill` SF Symbol palette-
+/// tinted to the SOLARO error red — no custom NSBezierPath
+/// drawing so the icon style matches everything else in the app.
 final class BreakpointMarkerView: NSView {
     override init(frame frameRect: NSRect = .zero) {
         super.init(frame: frameRect)
@@ -290,17 +290,16 @@ final class BreakpointMarkerView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let inset = min(bounds.width, bounds.height) * 0.18
-        let circle = bounds.insetBy(dx: inset, dy: inset)
-        // SolaroColor.stateError tone — translates to AppKit via
-        // the macOS 14+ SwiftUI bridge.
-        NSColor(SolaroColor.stateError).setFill()
-        NSBezierPath(ovalIn: circle).fill()
-        // Subtle inner highlight so the dot reads as a 3-D bead at
-        // the canvas dark backdrop.
-        let highlight = circle.insetBy(dx: circle.width * 0.3,
-                                       dy: circle.height * 0.3)
-        NSColor.white.withAlphaComponent(0.4).setFill()
-        NSBezierPath(ovalIn: highlight).fill()
+        let drawRect = bounds.insetBy(dx: inset, dy: inset)
+        let config = NSImage.SymbolConfiguration(
+            pointSize: drawRect.width,
+            weight: .bold
+        ).applying(.init(paletteColors: [NSColor(SolaroColor.stateError)]))
+        guard let symbol = NSImage(
+            systemSymbolName: "circle.fill",
+            accessibilityDescription: "breakpoint"
+        )?.withSymbolConfiguration(config) else { return }
+        symbol.draw(in: drawRect)
     }
 }
 
