@@ -162,6 +162,10 @@ struct WorkspaceView: View {
 
     @State private var showOpenAPIPalette = false
     @State private var showTimeTravel = false
+    /// Console process driving Play. Open whenever it's running OR
+    /// the user has explicitly opened it.
+    @State private var consoleProcess = ConsoleProcess()
+    @State private var showConsole = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -175,12 +179,20 @@ struct WorkspaceView: View {
                             .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
                     }
             }
+            if showConsole {
+                ConsolePanelView(process: consoleProcess) {
+                    showConsole = false
+                }
+                .frame(height: 220)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             StatusBarView(
                 controller: controller,
                 onShowOpenAPIPalette: { showOpenAPIPalette = true },
                 onShowTimeTravel: { showTimeTravel = true }
             )
         }
+        .animation(.easeInOut(duration: 0.25), value: showConsole)
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)
         .toolbar { toolbarContent }
@@ -297,18 +309,45 @@ struct WorkspaceView: View {
 
     private var runButton: some View {
         Button {
-            // Phase 11+: trigger an `aro run` of the current project.
+            showConsole = true
+            consoleProcess.start(project: project)
         } label: {
-            Label("Run", systemImage: "play.fill")
+            Label("Run", systemImage: isRunning ? "play.fill" : "play")
         }
-        .help("Run this project (Phase 11)")
+        .disabled(isRunning)
+        .help("Run `aro run` and stream its output to the console")
+    }
+
+    private var isRunning: Bool {
+        if case .running = consoleProcess.state { return true }
+        return false
     }
 
     private var statusPip: some View {
         Circle()
-            .fill(SolaroColor.stateOK)
+            .fill(statusPipColor)
             .frame(width: 10, height: 10)
-            .help("Project parses successfully")
+            .help(statusPipHelp)
+    }
+
+    private var statusPipColor: Color {
+        switch consoleProcess.state {
+        case .idle:    return SolaroColor.stateOK
+        case .running: return SolaroColor.accent
+        case .exited(let code): return code == 0 ? SolaroColor.stateOK
+                                                 : SolaroColor.stateError
+        case .failed:  return SolaroColor.stateError
+        }
+    }
+
+    private var statusPipHelp: String {
+        switch consoleProcess.state {
+        case .idle:    return "Idle — click Run to execute"
+        case .running: return "Running…"
+        case .exited(let code): return code == 0 ? "Last run succeeded"
+                                                 : "Last run exited \(code)"
+        case .failed(let msg): return "Failed: \(msg)"
+        }
     }
 
     private var inspectorToggle: some View {
