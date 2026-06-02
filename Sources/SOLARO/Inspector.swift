@@ -33,6 +33,7 @@ struct InspectorPaneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SolaroSpace.m) {
                 fileHeader
+                openAPIEditorSection
                 variablesSection
                 lspDiagnosticsSection
                 featureSetSection
@@ -140,6 +141,51 @@ struct InspectorPaneView: View {
                     .foregroundStyle(SolaroColor.textSecondary)
             }
         }
+    }
+
+    @ViewBuilder
+    private var openAPIEditorSection: some View {
+        if let document = controller.openAPIDocument,
+           let nodeID = controller.openAPISelectedNodeID
+        {
+            VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                HStack {
+                    Text("OPENAPI · \(nodeKindLabel(nodeID))")
+                        .font(SolaroFont.sectionTitle)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .tracking(2)
+                    Spacer()
+                    if document.isDirty {
+                        Text("modified")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.stateWarn)
+                    }
+                    Button {
+                        document.save()
+                    } label: {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(!document.isDirty)
+                }
+                OpenAPINodeForm(
+                    nodeID: nodeID,
+                    document: document
+                )
+                if let error = document.lastError {
+                    Text(error)
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.stateError)
+                }
+            }
+            .padding(.top, SolaroSpace.s)
+        }
+    }
+
+    /// Pretty label for the section header ("route" / "schema").
+    private func nodeKindLabel(_ nodeID: String) -> String {
+        if nodeID.hasPrefix("route:") { return "ROUTE" }
+        if nodeID.hasPrefix("inline:") { return "INLINE OBJECT" }
+        return "SCHEMA"
     }
 
     @ViewBuilder
@@ -264,6 +310,372 @@ struct InspectorPaneView: View {
             .solaroCard()
         }
         .padding(.top, SolaroSpace.s)
+    }
+}
+
+// MARK: - OpenAPI editor form
+
+/// Renders an editable form for the currently-selected OpenAPI
+/// node. Today it edits the most common route fields (summary +
+/// operationId); deeper editing (parameters, responses, schema
+/// properties) lands in subsequent commits.
+private struct OpenAPINodeForm: View {
+    let nodeID: String
+    @Bindable var document: OpenAPIDocument
+
+    var body: some View {
+        if let parsed = ParsedRouteID(from: nodeID) {
+            routeForm(method: parsed.method, path: parsed.path)
+        } else if nodeID.hasPrefix("schema:") {
+            schemaForm(name: String(nodeID.dropFirst("schema:".count)))
+        } else if nodeID.hasPrefix("inline:") {
+            inlineNotice
+        }
+    }
+
+    // MARK: Route form
+
+    @ViewBuilder
+    private func routeForm(method: String, path: String) -> some View {
+        let operation = document.operation(path: path, method: method) ?? [:]
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            FormRow(label: "Method") {
+                Text(method)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.accent)
+            }
+            FormRow(label: "Path") {
+                Text(path)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .textSelection(.enabled)
+            }
+            FormRow(label: "operationId") {
+                TextField("opId", text: textBinding(
+                    initial: operation["operationId"] as? String ?? "",
+                    apply: { newValue in
+                        document.mutateRoute(path: path, method: method) { op in
+                            if newValue.isEmpty {
+                                op.removeValue(forKey: "operationId")
+                            } else {
+                                op["operationId"] = newValue
+                            }
+                        }
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+            FormRow(label: "summary") {
+                TextField("summary", text: textBinding(
+                    initial: operation["summary"] as? String ?? "",
+                    apply: { newValue in
+                        document.mutateRoute(path: path, method: method) { op in
+                            if newValue.isEmpty {
+                                op.removeValue(forKey: "summary")
+                            } else {
+                                op["summary"] = newValue
+                            }
+                        }
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+            FormRow(label: "description") {
+                TextField("description", text: textBinding(
+                    initial: operation["description"] as? String ?? "",
+                    apply: { newValue in
+                        document.mutateRoute(path: path, method: method) { op in
+                            if newValue.isEmpty {
+                                op.removeValue(forKey: "description")
+                            } else {
+                                op["description"] = newValue
+                            }
+                        }
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+            tagEditor(operation: operation, path: path, method: method)
+            responseHints(operation: operation)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func tagEditor(operation: [String: Any], path: String, method: String) -> some View {
+        let tags = (operation["tags"] as? [Any])?.compactMap { $0 as? String } ?? []
+        FormRow(label: "tags") {
+            TextField(
+                "comma-separated",
+                text: textBinding(
+                    initial: tags.joined(separator: ", "),
+                    apply: { newValue in
+                        let parsed = newValue
+                            .split(separator: ",")
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty }
+                        document.mutateRoute(path: path, method: method) { op in
+                            if parsed.isEmpty {
+                                op.removeValue(forKey: "tags")
+                            } else {
+                                op["tags"] = parsed
+                            }
+                        }
+                    }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    @ViewBuilder
+    private func responseHints(operation: [String: Any]) -> some View {
+        if let responses = operation["responses"] as? [String: Any], !responses.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Responses")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                ForEach(responses.keys.sorted(), id: \.self) { status in
+                    HStack(spacing: 4) {
+                        Text(status)
+                            .font(SolaroFont.mono)
+                            .foregroundStyle(statusColor(status))
+                        if let body = responses[status] as? [String: Any],
+                           let desc = body["description"] as? String, !desc.isEmpty {
+                            Text(desc)
+                                .font(SolaroFont.caption)
+                                .foregroundStyle(SolaroColor.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .padding(.top, SolaroSpace.xs)
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        let n = Int(status) ?? 0
+        switch n / 100 {
+        case 2: return SolaroColor.stateOK
+        case 3: return SolaroColor.accent
+        case 4: return SolaroColor.stateWarn
+        case 5: return SolaroColor.stateError
+        default: return SolaroColor.textSecondary
+        }
+    }
+
+    // MARK: Schema form
+
+    @ViewBuilder
+    private func schemaForm(name: String) -> some View {
+        let schema = document.schema(name: name) ?? [:]
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            FormRow(label: "Name") {
+                Text(name)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+            }
+            FormRow(label: "description") {
+                TextField("description", text: textBinding(
+                    initial: schema["description"] as? String ?? "",
+                    apply: { newValue in
+                        document.mutateSchema(name: name) { s in
+                            if newValue.isEmpty {
+                                s.removeValue(forKey: "description")
+                            } else {
+                                s["description"] = newValue
+                            }
+                        }
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+            propertiesEditor(schema: schema, name: name)
+        }
+    }
+
+    @ViewBuilder
+    private func propertiesEditor(schema: [String: Any], name: String) -> some View {
+        let props = (schema["properties"] as? [String: Any]) ?? [:]
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Properties")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Spacer()
+                Button {
+                    var updated = props
+                    var counter = updated.count + 1
+                    var key = "newField"
+                    while updated[key] != nil {
+                        counter += 1
+                        key = "newField\(counter)"
+                    }
+                    updated[key] = ["type": "string"]
+                    document.mutateSchema(name: name) { s in
+                        s["properties"] = updated
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+            }
+            ForEach(props.keys.sorted(), id: \.self) { key in
+                if let p = props[key] as? [String: Any] {
+                    SchemaPropertyRow(
+                        propertyName: key,
+                        property: p,
+                        onRename: { newName in
+                            renameProperty(in: name, from: key, to: newName)
+                        },
+                        onChangeType: { newType in
+                            updatePropertyType(in: name, key: key, type: newType)
+                        },
+                        onRemove: {
+                            removeProperty(in: name, key: key)
+                        }
+                    )
+                }
+            }
+        }
+        .padding(.top, SolaroSpace.xs)
+    }
+
+    private func renameProperty(in schemaName: String, from: String, to: String) {
+        guard from != to, !to.isEmpty else { return }
+        document.mutateSchema(name: schemaName) { schema in
+            var props = (schema["properties"] as? [String: Any]) ?? [:]
+            if let v = props.removeValue(forKey: from) {
+                props[to] = v
+                schema["properties"] = props
+            }
+        }
+    }
+
+    private func updatePropertyType(in schemaName: String, key: String, type: String) {
+        document.mutateSchema(name: schemaName) { schema in
+            var props = (schema["properties"] as? [String: Any]) ?? [:]
+            var p = (props[key] as? [String: Any]) ?? [:]
+            p["type"] = type
+            // Drop $ref since type and $ref are mutually exclusive.
+            p.removeValue(forKey: "$ref")
+            props[key] = p
+            schema["properties"] = props
+        }
+    }
+
+    private func removeProperty(in schemaName: String, key: String) {
+        document.mutateSchema(name: schemaName) { schema in
+            var props = (schema["properties"] as? [String: Any]) ?? [:]
+            props.removeValue(forKey: key)
+            schema["properties"] = props
+        }
+    }
+
+    private var inlineNotice: some View {
+        Text("Inline component — edit via its parent route or schema.")
+            .font(SolaroFont.caption)
+            .foregroundStyle(SolaroColor.textTertiary)
+    }
+
+    // MARK: - Helpers
+
+    /// Hand-rolled two-way binding wrapping a closure that mutates
+    /// the document. We can't use `@Binding` directly because the
+    /// underlying storage is `[String: Any]`.
+    private func textBinding(
+        initial: String,
+        apply: @escaping (String) -> Void
+    ) -> Binding<String> {
+        Binding(
+            get: { initial },
+            set: { apply($0) }
+        )
+    }
+}
+
+private struct ParsedRouteID {
+    let method: String
+    let path: String
+    init?(from id: String) {
+        // "route:GET /users"
+        guard id.hasPrefix("route:") else { return nil }
+        let payload = id.dropFirst("route:".count)
+        let split = payload.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard split.count == 2 else { return nil }
+        self.method = String(split[0])
+        self.path = String(split[1])
+    }
+}
+
+private struct FormRow<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+                .frame(width: 90, alignment: .trailing)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct SchemaPropertyRow: View {
+    let propertyName: String
+    let property: [String: Any]
+    let onRename: (String) -> Void
+    let onChangeType: (String) -> Void
+    let onRemove: () -> Void
+
+    @State private var draftName: String = ""
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField("name", text: Binding(
+                get: { draftName.isEmpty ? propertyName : draftName },
+                set: { draftName = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                onRename(draftName)
+                draftName = ""
+            }
+            Text(":")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            if let refStr = property["$ref"] as? String {
+                Text(refStr.split(separator: "/").last.map(String.init) ?? "$ref")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.accent)
+            } else {
+                Picker("", selection: Binding(
+                    get: { property["type"] as? String ?? "string" },
+                    set: { onChangeType($0) }
+                )) {
+                    Text("string").tag("string")
+                    Text("integer").tag("integer")
+                    Text("number").tag("number")
+                    Text("boolean").tag("boolean")
+                    Text("array").tag("array")
+                    Text("object").tag("object")
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 100)
+            }
+            Spacer(minLength: 0)
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle")
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            .buttonStyle(.borderless)
+        }
     }
 }
 

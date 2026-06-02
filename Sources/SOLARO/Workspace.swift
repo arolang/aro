@@ -70,6 +70,11 @@ final class WorkspaceController {
     /// form that lets them edit route / schema fields directly.
     var openAPISelectedNodeID: String?
 
+    /// Mutable OpenAPI document loaded when the current file is
+    /// openapi.yaml — the inspector form mutates it, the Save
+    /// button writes it back to disk.
+    var openAPIDocument: OpenAPIDocument?
+
     /// Parsed programs keyed by source-file URL. Built once on load;
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the
@@ -145,6 +150,15 @@ final class WorkspaceController {
         currentFile = url
         let sidecar = LayoutSidecar.load(for: url)
         paneMode = sidecar.paneMode
+        // Refresh the OpenAPI document buffer when switching files.
+        if url.lastPathComponent.lowercased() == "openapi.yaml"
+            || url.lastPathComponent.lowercased() == "openapi.yml"
+        {
+            openAPIDocument = OpenAPIDocument.load(from: url)
+        } else {
+            openAPIDocument = nil
+            openAPISelectedNodeID = nil
+        }
     }
 
     func setPaneMode(_ mode: PaneMode) {
