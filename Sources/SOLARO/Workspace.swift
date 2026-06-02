@@ -251,6 +251,25 @@ struct HiddenShortcutButton: View {
     }
 }
 
+enum BottomTab: String, CaseIterable, Identifiable {
+    case console
+    case terminal
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .console:  return "Console"
+        case .terminal: return "Terminal"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .console:  return "rectangle.fill.on.rectangle.fill"
+        case .terminal: return "terminal.fill"
+        }
+    }
+}
+
 enum RightPaneMode: String, CaseIterable, Identifiable {
     case inspector
     case actions
@@ -316,6 +335,7 @@ struct WorkspaceView: View {
     /// the user has explicitly opened it.
     @State private var consoleProcess = ConsoleProcess()
     @State private var showConsole = false
+    @State private var bottomTab: BottomTab = .console
     /// Palette sheets: command (⌘⇧P), quick open (⌘P),
     /// find-in-project (⌘⇧F).
     @State private var showCommandPalette = false
@@ -354,11 +374,9 @@ struct WorkspaceView: View {
                 }
             }
             if showConsole {
-                ConsolePanelView(process: consoleProcess) {
-                    showConsole = false
-                }
-                .frame(height: 220)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                bottomPanel
+                    .frame(height: 260)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             StatusBarView(
                 controller: controller,
@@ -501,6 +519,10 @@ struct WorkspaceView: View {
             HiddenShortcutButton(key: "o", modifiers: [.command, .shift]) {
                 showSymbolPalette = true
             }
+            HiddenShortcutButton(key: "`", modifiers: [.control]) {
+                bottomTab = .terminal
+                showConsole = true
+            }
         }
         .onAppear { controller.load() }
         .alert(
@@ -550,6 +572,64 @@ struct WorkspaceView: View {
             return String(filePath.dropFirst(rootPath.count + 1))
         }
         return url.lastPathComponent
+    }
+
+    /// Bottom panel hosting Console + Terminal as switchable tabs.
+    @ViewBuilder
+    private var bottomPanel: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(BottomTab.allCases) { tab in
+                    Button {
+                        bottomTab = tab
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: tab.symbol)
+                                .font(.system(size: 10))
+                            Text(tab.label)
+                                .font(SolaroFont.caption)
+                        }
+                        .padding(.horizontal, SolaroSpace.s)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(bottomTab == tab
+                                         ? SolaroColor.textPrimary
+                                         : SolaroColor.textTertiary)
+                        .background(
+                            VStack {
+                                Spacer()
+                                Rectangle()
+                                    .fill(bottomTab == tab
+                                          ? SolaroColor.accent
+                                          : Color.clear)
+                                    .frame(height: 2)
+                            }
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Button {
+                    showConsole = false
+                } label: {
+                    Label("Hide", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, SolaroSpace.s)
+            }
+            .padding(.leading, SolaroSpace.s)
+            .background(SolaroColor.surface)
+            Divider().background(SolaroColor.divider)
+            switch bottomTab {
+            case .console:
+                ConsolePanelView(process: consoleProcess) {
+                    showConsole = false
+                }
+            case .terminal:
+                TerminalView(workingDirectory: project.rootPath)
+                    .background(SolaroColor.backdrop)
+            }
+        }
     }
 
     /// Right pane content. The header strip lets the user flip

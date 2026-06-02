@@ -99,6 +99,8 @@ solaroTargets = [
             // gives us a gutter, proper attributed-text editing, and
             // a plugin surface for syntax highlighting + breakpoints.
             .product(name: "STTextView", package: "STTextView"),
+            // SwiftTerm — ANSI terminal emulator for the bottom panel.
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
         ],
         path: "Sources/SOLARO"
     ),
@@ -214,6 +216,9 @@ let package = Package(
         // STTextView — TextKit 2 editor used by SOLARO's center pane.
         // Pinned to the minor while the API is still settling.
         .package(url: "https://github.com/krzyzanowskim/STTextView.git", from: "2.3.0"),
+        // SwiftTerm — real ANSI terminal emulator for the bottom
+        // panel's Terminal tab (#244).
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
