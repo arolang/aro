@@ -138,7 +138,10 @@ final class AICoPilotProcess {
                 return
             }
             guard let text = String(data: data, encoding: .utf8) else { return }
-            onChunk(text)
+            // `aro ask` emits cursor-hide / erase-line / SGR
+            // escape sequences for its TTY UI. Strip them so the
+            // panel doesn't display gibberish like "[0[?25[K".
+            onChunk(ConsoleProcess.stripANSI(text))
         }
     }
 
@@ -202,11 +205,6 @@ struct AICoPilotPanel: View {
                 process.reset()
             } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
-            }
-            Button {
-                onClose()
-            } label: {
-                Label("Hide", systemImage: "xmark")
             }
         }
         .padding(.horizontal, SolaroSpace.m)
