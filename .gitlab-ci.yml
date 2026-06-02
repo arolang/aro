@@ -219,62 +219,9 @@ build:linux:
       - aro-dist/
     expire_in: 30 days
 
-# =============================================================================
-# SOLARO Build (issue #228 Phase 0)
-# =============================================================================
-build:solaro:linux:
-  stage: build
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/swift:6.2-jammy
-  rules:
-    - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
-    - if: $CI_COMMIT_BRANCH =~ /^features?\/solaro/
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  needs:
-    - job: test
-      optional: true
-  cache:
-    key:
-      files:
-        - Package.resolved
-      prefix: swift-build-solaro
-    paths:
-      - .build/
-      - .swiftpm/
-    policy: pull-push
-  before_script:
-    - apt-get update -qq
-    # GTK 4 + libadwaita: SwiftCrossUI's DefaultBackend on Linux uses
-    # GTK 4. Building requires the dev packages; running needs the
-    # runtime libs (shipped in the user's distro normally).
-    - apt-get install -y -qq git wget gnupg pkg-config build-essential libgtk-4-dev libadwaita-1-dev
-  script:
-    # Build SOLARO + launcher CLI. Both are part of the SOLARO product
-    # family per ADR-001 (sibling to aro, not subcommands).
-    - swift build -c release --product SolaroApp
-    - swift build -c release --product solaro
-
-    # Smoke-test the launcher (won't open a window — it errors out
-    # cleanly when no AppImage is installed).
-    - .build/release/solaro --version
-    - .build/release/solaro --help
-
-    # Package: a portable tarball for now. AppImage polish lands in
-    # Phase 4 (#228 ADR-012) once `appimagetool` + bundled GTK 4
-    # runtime is wired into CI.
-    - mkdir -p solaro-dist
-    - cp .build/release/SolaroApp solaro-dist/SOLARO
-    - cp .build/release/solaro solaro-dist/solaro
-    - cp Sources/SOLARO/LICENSE-NOTICE.md solaro-dist/LICENSE-NOTICE.md
-    - tar -czvf solaro-linux-amd64.tar.gz -C solaro-dist .
-    - ls -lh solaro-linux-amd64.tar.gz
-  artifacts:
-    name: solaro-linux-amd64
-    paths:
-      - solaro-linux-amd64.tar.gz
-      - solaro-dist/
-    expire_in: 30 days
+# SOLARO Linux job was removed (ADR-001 follow-up 2026-06): SOLARO is
+# now a native SwiftUI/AppKit macOS app — see .github/workflows/build.yml
+# for the macOS pipeline.
 
 # =============================================================================
 # Integration Tests Stage

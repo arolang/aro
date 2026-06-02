@@ -471,77 +471,10 @@ jobs:
           path: aro-dist/
           retention-days: 30
 
-  # ===========================================================================
-  # SOLARO — Linux build (issue #228 Phase 0)
-  # ===========================================================================
-  # Sibling product to the `aro` CLI per ADR-001. Builds the SwiftCrossUI
-  # app + the tiny launcher CLI; uploads the artifacts; on tag, the
-  # release job below attaches them to the GitHub Release.
-  solaro-linux:
-    needs: test
-    name: SOLARO · Linux
-    runs-on: ubuntu-latest
-    container:
-      image: swift:6.2-jammy
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Install GTK 4 + build deps
-        run: |
-          apt-get update -qq
-          apt-get install -y -qq \
-            build-essential pkg-config wget gnupg \
-            libgtk-4-dev libadwaita-1-dev libgit2-dev
-
-      - name: Cache Swift packages
-        uses: actions/cache@v5
-        with:
-          path: .build
-          key: linux-solaro-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
-
-      - name: Generate version file
-        run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          cat > Sources/AROVersion/Version.swift << EOF
-          import Foundation
-          public enum AROVersion {
-              public static let version: String = "$VERSION"
-              public static let commit: String = "$COMMIT"
-              public static let buildDate: String = "$BUILD_DATE"
-              public static let isRelease: Bool = { !version.contains("-dirty") && !version.hasPrefix("dev") }()
-              public static var fullVersion: String { "\(version) (\(commit)) built on \(buildDate)" }
-              public static var shortVersion: String { version }
-          }
-          EOF
-
-      - name: Build SOLARO + launcher
-        run: |
-          swift build -c release --product SolaroApp
-          swift build -c release --product solaro
-          .build/release/solaro --version
-          .build/release/solaro --help
-
-      - name: Package
-        run: |
-          mkdir -p solaro-dist
-          cp .build/release/SolaroApp solaro-dist/SOLARO
-          cp .build/release/solaro solaro-dist/solaro
-          cp Sources/SOLARO/LICENSE-NOTICE.md solaro-dist/LICENSE-NOTICE.md
-          tar -czvf solaro-linux-amd64.tar.gz -C solaro-dist .
-          ls -lh solaro-linux-amd64.tar.gz
-
-      - name: Upload SOLARO Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: solaro-linux-amd64
-          path: solaro-linux-amd64.tar.gz
-          retention-days: 30
+  # SOLARO Linux build was dropped (ADR-001 follow-up 2026-06): the
+  # SwiftCrossUI cross-platform approach couldn't render the wireframes,
+  # and SOLARO is now a native SwiftUI / AppKit app shipped on macOS only.
+  # Linux + Windows may return later; the design stays portable in spirit.
 
   # ===========================================================================
   # SOLARO — macOS build + signing (#228 Phase 0 + ADR-012)
@@ -1525,7 +1458,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation, solaro-linux, solaro-macos]
+    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation, solaro-macos]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
@@ -1578,7 +1511,6 @@ jobs:
             artifacts/aro-linux-amd64.tar.gz \
             artifacts/aro-macos-arm64.tar.gz \
             artifacts/aro-windows-amd64.zip \
-            artifacts/solaro-linux-amd64/solaro-linux-amd64.tar.gz \
             artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg \
             artifacts/aro-language-guide/ARO-Language-Guide.pdf \
             artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf \
@@ -1602,9 +1534,6 @@ jobs:
           if [ -f "artifacts/aro-windows-amd64.zip" ]; then
             DOWNLOADS="${DOWNLOADS}| Windows | x86_64 | [aro-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-windows-amd64.zip) |\n"
           fi
-          if [ -f "artifacts/solaro-linux-amd64/solaro-linux-amd64.tar.gz" ]; then
-            DOWNLOADS="${DOWNLOADS}| SOLARO desktop · Linux | x86_64 | [solaro-linux-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/solaro-linux-amd64.tar.gz) |\n"
-          fi
           if [ -f "artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg" ]; then
             DOWNLOADS="${DOWNLOADS}| SOLARO desktop · macOS | Apple Silicon | [solaro-macos-arm64.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/solaro-macos-arm64.dmg) |\n"
           fi
@@ -1627,7 +1556,6 @@ jobs:
             artifacts/aro-linux-amd64.tar.gz
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
-            artifacts/solaro-linux-amd64/solaro-linux-amd64.tar.gz
             artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
             artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf
