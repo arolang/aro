@@ -271,9 +271,10 @@ struct HoverValuePopover: View {
 }
 
 /// Red-dot marker drawn in the gutter for each line that has a
-/// breakpoint. The dot is the `circle.fill` SF Symbol palette-
-/// tinted to the SOLARO error red — no custom NSBezierPath
-/// drawing so the icon style matches everything else in the app.
+/// breakpoint. Renders a perfectly round `circle.fill` SF Symbol
+/// in a square rect centred vertically and pinned to the right
+/// edge of the marker container — that lands the dot directly
+/// beside the line number rather than floating in empty space.
 final class BreakpointMarkerView: NSView {
     override init(frame frameRect: NSRect = .zero) {
         super.init(frame: frameRect)
@@ -289,10 +290,24 @@ final class BreakpointMarkerView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let inset = min(bounds.width, bounds.height) * 0.18
-        let drawRect = bounds.insetBy(dx: inset, dy: inset)
+
+        // Square draw rect ensures the SF Symbol renders as a true
+        // circle (not an oval stretched into a tall marker slot).
+        // Sized to ~70% of the smaller dimension so it doesn't crowd
+        // the gutter separator.
+        let diameter = max(min(bounds.width, bounds.height) * 0.7, 8)
+        // Pin to the right edge of the marker container with a 2pt
+        // breathing-room gap — visually that puts the dot directly
+        // adjacent to the line number text drawn just left of here.
+        let rightInset: CGFloat = 2
+        let drawRect = NSRect(
+            x: bounds.maxX - diameter - rightInset,
+            y: bounds.midY - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
         let config = NSImage.SymbolConfiguration(
-            pointSize: drawRect.width,
+            pointSize: diameter,
             weight: .bold
         ).applying(.init(paletteColors: [NSColor(SolaroColor.stateError)]))
         guard let symbol = NSImage(
