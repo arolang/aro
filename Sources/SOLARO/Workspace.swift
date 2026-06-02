@@ -43,6 +43,10 @@ final class WorkspaceController {
 
     var model: ProjectModel?
     var currentFile: URL?
+    /// Files currently open in the center-pane tab bar. The active
+    /// tab is `currentFile`; if a tab is closed and was the active
+    /// one, the workspace falls back to the previous tab.
+    var openTabs: [URL] = []
     var paneMode: PaneMode = .canvas
     var sidebarTab: SidebarTab = .files
     var inspectorShown: Bool = true
@@ -160,6 +164,9 @@ final class WorkspaceController {
 
     func openFile(_ url: URL) {
         currentFile = url
+        if !openTabs.contains(url) {
+            openTabs.append(url)
+        }
         let sidecar = LayoutSidecar.load(for: url)
         paneMode = sidecar.paneMode
         // Refresh the OpenAPI document buffer when switching files;
@@ -174,6 +181,33 @@ final class WorkspaceController {
             openAPIDocument = nil
             openAPISelectedNodeID = nil
         }
+    }
+
+    /// Close one of the open tabs. When closing the active tab the
+    /// workspace falls back to the tab that was open just before
+    /// it, or the previous neighbour if there is no history.
+    func closeTab(_ url: URL) {
+        guard let idx = openTabs.firstIndex(of: url) else { return }
+        openTabs.remove(at: idx)
+        if currentFile == url {
+            if openTabs.isEmpty {
+                currentFile = nil
+                openAPIDocument?.tearDownWatcher()
+                openAPIDocument = nil
+                openAPISelectedNodeID = nil
+            } else {
+                let next = openTabs[max(idx - 1, 0)]
+                openFile(next)
+            }
+        }
+    }
+
+    /// Cycle to the previous / next tab in the open-tab list.
+    func cycleTab(by delta: Int) {
+        guard !openTabs.isEmpty, let current = currentFile,
+              let idx = openTabs.firstIndex(of: current) else { return }
+        let nextIdx = (idx + delta + openTabs.count) % openTabs.count
+        openFile(openTabs[nextIdx])
     }
 
     func setPaneMode(_ mode: PaneMode) {
@@ -293,11 +327,17 @@ struct WorkspaceView: View {
                 SidebarPaneView(controller: controller)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
             } detail: {
-                CenterPaneView(controller: controller)
-                    .inspector(isPresented: $controller.inspectorShown) {
-                        rightPane
-                            .inspectorColumnWidth(min: 320, ideal: 360, max: 480)
+                VStack(spacing: 0) {
+                    if !controller.openTabs.isEmpty {
+                        FileTabBar(controller: controller)
+                        Divider().background(SolaroColor.divider)
                     }
+                    CenterPaneView(controller: controller)
+                }
+                .inspector(isPresented: $controller.inspectorShown) {
+                    rightPane
+                        .inspectorColumnWidth(min: 320, ideal: 360, max: 480)
+                }
             }
             if showConsole {
                 ConsolePanelView(process: consoleProcess) {
@@ -403,6 +443,17 @@ struct WorkspaceView: View {
             }
             HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
                 showFindInProject = true
+            }
+            HiddenShortcutButton(key: "w", modifiers: [.command]) {
+                if let url = controller.currentFile {
+                    controller.closeTab(url)
+                }
+            }
+            HiddenShortcutButton(key: "]", modifiers: [.command, .shift]) {
+                controller.cycleTab(by: 1)
+            }
+            HiddenShortcutButton(key: "[", modifiers: [.command, .shift]) {
+                controller.cycleTab(by: -1)
             }
         }
         .onAppear { controller.load() }
