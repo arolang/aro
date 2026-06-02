@@ -17,6 +17,13 @@ import Yams
 struct SidebarPaneView: View {
     @Bindable var controller: WorkspaceController
 
+    @State private var showAddPlugin = false
+    @State private var addPluginProcess = AddPluginProcess()
+    /// Bump this to force the Plugins tab to re-scan after an
+    /// install. `PluginScanner.scan` reads from disk on every
+    /// view eval so changing the integer is enough.
+    @State private var pluginsRefreshToken: Int = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             tabStrip
@@ -28,6 +35,20 @@ struct SidebarPaneView: View {
             }
         }
         .background(SolaroColor.surface)
+        .sheet(isPresented: $showAddPlugin) {
+            if let project = controller.model?.root {
+                AddPluginSheet(
+                    project: project,
+                    process: addPluginProcess,
+                    onCancel: { showAddPlugin = false },
+                    onSuccess: {
+                        pluginsRefreshToken += 1
+                        showAddPlugin = false
+                        addPluginProcess.reset()
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Tab strip
@@ -140,7 +161,27 @@ struct SidebarPaneView: View {
     // MARK: - Plugins tab
 
     private var pluginsPane: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: SolaroSpace.xs) {
+                Text("Installed")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Spacer()
+                Button {
+                    showAddPlugin = true
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .disabled(controller.model == nil)
+                .help("Install a plugin from a Git repository (`aro add`)")
+            }
+            .padding(.horizontal, SolaroSpace.m)
+            .padding(.top, SolaroSpace.s)
+            .padding(.bottom, 2)
+
+            let _ = pluginsRefreshToken
             let plugins = controller.model.map(PluginScanner.scan) ?? []
             if !plugins.isEmpty {
                 ScrollView {
@@ -153,7 +194,7 @@ struct SidebarPaneView: View {
                     .padding(.horizontal, SolaroSpace.m)
                 }
             } else {
-                emptyMessage("No Plugins/ directory in this project.")
+                emptyMessage("No plugins installed.\nClick + above to add one from a Git URL.")
             }
         }
     }
