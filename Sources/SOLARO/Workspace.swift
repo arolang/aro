@@ -96,6 +96,10 @@ final class WorkspaceController {
     /// per-line problems alongside the local Lexer parse status.
     let lsp = AROLSPClient()
 
+    /// Cached `aro actions` listing. Populated on project load
+    /// and reused by the right-rail Actions tab.
+    let actionsRegistry = ActionsRegistry()
+
     init(project: Project) {
         self.project = project
     }
@@ -122,6 +126,9 @@ final class WorkspaceController {
             // Kick the LSP off in parallel — the handshake takes a
             // couple hundred ms but doesn't block project load.
             lsp.start()
+            // Same for the actions registry — runs `aro actions`
+            // off the main actor and feeds the right-rail tab.
+            actionsRegistry.reload(for: project)
             for url in loaded.sourceFiles {
                 if let text = try? String(contentsOf: url, encoding: .utf8) {
                     lsp.didOpen(url: url, text: text)
@@ -180,6 +187,7 @@ final class WorkspaceController {
 
 enum RightPaneMode: String, CaseIterable, Identifiable {
     case inspector
+    case actions
     case coPilot
 
     var id: String { rawValue }
@@ -187,6 +195,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .inspector: return "Inspector"
+        case .actions:   return "Actions"
         case .coPilot:   return "Ask"
         }
     }
@@ -194,6 +203,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .inspector: return "sidebar.right"
+        case .actions:   return "puzzlepiece.fill"
         case .coPilot:   return "sparkles"
         }
     }
@@ -366,6 +376,8 @@ struct WorkspaceView: View {
             switch controller.rightPaneMode {
             case .inspector:
                 InspectorPaneView(controller: controller)
+            case .actions:
+                ActionsListView(registry: controller.actionsRegistry)
             case .coPilot:
                 AICoPilotPanel(
                     project: project,
