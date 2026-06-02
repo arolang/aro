@@ -154,21 +154,50 @@ struct WorkspaceView: View {
         _controller = State(initialValue: WorkspaceController(project: project))
     }
 
+    @State private var showOpenAPIPalette = false
+    @State private var showTimeTravel = false
+
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
-            SidebarPaneView(controller: controller)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
-        } detail: {
-            CenterPaneView(controller: controller)
-                .inspector(isPresented: $controller.inspectorShown) {
-                    InspectorPaneView(controller: controller)
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
-                }
+        VStack(spacing: 0) {
+            NavigationSplitView(columnVisibility: .constant(.all)) {
+                SidebarPaneView(controller: controller)
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+            } detail: {
+                CenterPaneView(controller: controller)
+                    .inspector(isPresented: $controller.inspectorShown) {
+                        InspectorPaneView(controller: controller)
+                            .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+                    }
+            }
+            StatusBarView(
+                controller: controller,
+                onShowOpenAPIPalette: { showOpenAPIPalette = true },
+                onShowTimeTravel: { showTimeTravel = true }
+            )
         }
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)
         .toolbar { toolbarContent }
         .background(SolaroColor.backdrop)
+        .sheet(isPresented: $showOpenAPIPalette) {
+            OpenAPIPaletteView(
+                endpoints: openAPIEndpoints,
+                onClose: { showOpenAPIPalette = false },
+                onSelect: { endpoint in
+                    if let op = endpoint.operationId,
+                       let url = sourceURL(forFeatureSet: op) {
+                        controller.openFile(url)
+                        controller.setPaneMode(.text)
+                    }
+                    showOpenAPIPalette = false
+                }
+            )
+        }
+        .sheet(isPresented: $showTimeTravel) {
+            TimeTravelView(project: project) {
+                showTimeTravel = false
+            }
+        }
         .onAppear { controller.load() }
         .alert(
             "Failed to load",
@@ -183,6 +212,28 @@ struct WorkspaceView: View {
                 Text(controller.loadError ?? "")
             }
         )
+    }
+
+    /// All endpoints discovered in the project's `openapi.yaml`,
+    /// each marked used or not based on whether a matching
+    /// operationId-named feature set exists.
+    private var openAPIEndpoints: [OpenAPIEndpoint] {
+        guard let model = controller.model else { return [] }
+        return OpenAPIPalette.endpoints(in: model, programs: controller.allPrograms)
+    }
+
+    /// Find the URL of the source file declaring a feature set with
+    /// the given name. Used by the OpenAPI palette to jump to the
+    /// matching handler.
+    private func sourceURL(forFeatureSet name: String) -> URL? {
+        guard let model = controller.model else { return nil }
+        for url in model.sourceFiles {
+            if let program = controller.programs[url],
+               program.featureSets.contains(where: { $0.name == name }) {
+                return url
+            }
+        }
+        return nil
     }
 
     private var currentFileLabel: String {
