@@ -279,6 +279,7 @@ struct WorkspaceView: View {
     @State private var showCommandPalette = false
     @State private var showQuickOpen = false
     @State private var showFindInProject = false
+    @State private var findInProjectModel = FindInProjectModel()
     /// Co-pilot (`aro ask`) process.
     @State private var aiCoPilot = AICoPilotProcess()
     /// NavigationSplitView's column visibility — bound (not constant)
@@ -374,6 +375,19 @@ struct WorkspaceView: View {
                     onOpen: { url in controller.openFile(url) }
                 ),
                 onClose: { showQuickOpen = false }
+            )
+        }
+        .sheet(isPresented: $showFindInProject) {
+            FindInProjectSheet(
+                model: findInProjectModel,
+                project: project,
+                projectModel: controller.model,
+                onClose: { showFindInProject = false },
+                onJump: { url, line in
+                    controller.openFile(url)
+                    controller.currentLine = line
+                    showFindInProject = false
+                }
             )
         }
         .background {
