@@ -36,6 +36,7 @@ import AROParser
 /// Kept as an `@Observable` class (not a struct) so toolbar and
 /// pane updates share one source of truth without prop-drilling
 /// callbacks through every layer.
+@MainActor
 @Observable
 final class WorkspaceController {
     let project: Project
@@ -65,6 +66,11 @@ final class WorkspaceController {
     /// diagnostics card.
     var parseErrors: [URL: String] = [:]
 
+    /// LSP client driving `aro lsp` for richer diagnostics. The
+    /// inspector reads `lsp.diagnostics[currentFile]` to render
+    /// per-line problems alongside the local Lexer parse status.
+    let lsp = AROLSPClient()
+
     init(project: Project) {
         self.project = project
     }
@@ -88,6 +94,14 @@ final class WorkspaceController {
                 openFile(first)
             }
             RecentProjects.remember(project)
+            // Kick the LSP off in parallel — the handshake takes a
+            // couple hundred ms but doesn't block project load.
+            lsp.start()
+            for url in loaded.sourceFiles {
+                if let text = try? String(contentsOf: url, encoding: .utf8) {
+                    lsp.didOpen(url: url, text: text)
+                }
+            }
         } catch {
             loadError = "Failed to load project: \(error.localizedDescription)"
         }

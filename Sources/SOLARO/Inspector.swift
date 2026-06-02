@@ -33,6 +33,7 @@ struct InspectorPaneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SolaroSpace.m) {
                 fileHeader
+                lspDiagnosticsSection
                 featureSetSection
                 deployRail
                 Spacer(minLength: SolaroSpace.l)
@@ -59,6 +60,7 @@ struct InspectorPaneView: View {
                         .font(SolaroFont.bodyBold)
                         .foregroundStyle(SolaroColor.textPrimary)
                     parseStatus
+                    lspStatus
                 }
                 .padding(SolaroSpace.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -102,6 +104,64 @@ struct InspectorPaneView: View {
     }
 
     // MARK: - Feature sets
+
+    @ViewBuilder
+    private var lspStatus: some View {
+        let entries = lspDiagnosticsForCurrentFile
+        if !controller.lsp.isReady {
+            HStack(spacing: SolaroSpace.xs) {
+                ProgressView().controlSize(.mini)
+                Text("LSP starting…")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+        } else if !entries.isEmpty {
+            let errs = entries.filter { $0.severity == .error }.count
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: errs > 0
+                      ? "exclamationmark.octagon.fill"
+                      : "exclamationmark.triangle.fill")
+                    .foregroundStyle(errs > 0
+                                     ? SolaroColor.stateError
+                                     : SolaroColor.stateWarn)
+                Text("LSP · \(entries.count) diagnostic\(entries.count == 1 ? "" : "s")")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(errs > 0
+                                     ? SolaroColor.stateError
+                                     : SolaroColor.stateWarn)
+            }
+        } else {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(SolaroColor.stateOK)
+                Text("LSP · clean")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var lspDiagnosticsSection: some View {
+        let entries = lspDiagnosticsForCurrentFile
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                Text("LSP DIAGNOSTICS")
+                    .font(SolaroFont.sectionTitle)
+                    .foregroundStyle(SolaroColor.textSecondary)
+                    .tracking(2)
+                ForEach(entries) { d in
+                    LSPDiagnosticRow(diagnostic: d)
+                }
+            }
+            .padding(.top, SolaroSpace.s)
+        }
+    }
+
+    private var lspDiagnosticsForCurrentFile: [AROLSPClient.Diagnostic] {
+        guard let url = controller.currentFile else { return [] }
+        return controller.lsp.diagnostics[url] ?? []
+    }
 
     @ViewBuilder
     private var featureSetSection: some View {
@@ -148,6 +208,57 @@ struct InspectorPaneView: View {
             .solaroCard()
         }
         .padding(.top, SolaroSpace.s)
+    }
+}
+
+// MARK: - LSP diagnostic row
+
+private struct LSPDiagnosticRow: View {
+    let diagnostic: AROLSPClient.Diagnostic
+
+    var body: some View {
+        HStack(alignment: .top, spacing: SolaroSpace.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(color)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("line \(diagnostic.line):\(diagnostic.character)")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Text(diagnostic.message)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(SolaroSpace.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.s))
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.s)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    private var icon: String {
+        switch diagnostic.severity {
+        case .error:   return "xmark.octagon.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .info:    return "info.circle.fill"
+        case .hint:    return "lightbulb.fill"
+        }
+    }
+
+    private var color: Color {
+        switch diagnostic.severity {
+        case .error:   return SolaroColor.stateError
+        case .warning: return SolaroColor.stateWarn
+        case .info:    return SolaroColor.accent
+        case .hint:    return SolaroColor.textSecondary
+        }
     }
 }
 
