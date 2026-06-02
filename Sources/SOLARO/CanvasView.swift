@@ -24,6 +24,7 @@ enum CanvasNodeContextAction {
     case revealInEditor
     case duplicate
     case delete
+    case extractAsAction
 }
 
 struct CanvasView: View {
@@ -603,6 +604,12 @@ struct NodesLayer: View {
                         } label: {
                             Label("Duplicate statement",
                                   systemImage: "plus.square.on.square")
+                        }
+                        Button {
+                            onContextAction(.extractAsAction, node)
+                        } label: {
+                            Label("Extract as Action…",
+                                  systemImage: "function")
                         }
                         Divider()
                         Button(role: .destructive) {

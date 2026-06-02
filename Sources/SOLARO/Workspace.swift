@@ -74,6 +74,19 @@ final class WorkspaceController {
     /// form that lets them edit route / schema fields directly.
     var openAPISelectedNodeID: String?
 
+    /// Drives the Extract-as-Action sheet. The sheet's binding
+    /// pulls from this state; setting it from a context-menu
+    /// click pops the sheet open.
+    var extractActionState = ExtractActionState()
+    var showExtractActionSheet: Bool = false
+
+    func requestExtractAction(node: CanvasNode) {
+        extractActionState.node = node
+        extractActionState.sourceURL = currentFile
+        extractActionState.name = ""
+        showExtractActionSheet = true
+    }
+
     /// Which view the right rail shows — the classic inspector
     /// (file metadata, AST, debugger variables, OpenAPI form, …)
     /// or the AI co-pilot.
@@ -412,6 +425,21 @@ struct WorkspaceView: View {
         .onChange(of: consoleProcess.pauseSymbols) { _, newValue in
             controller.pauseSymbols = newValue
         }
+        // After a recorded run finishes, slurp the last-seen value
+        // for every binding from .solaro/events.jsonl and merge it
+        // into pauseSymbols. The canvas's existing hover popover
+        // surfaces them as "live wire values" with no extra plumbing.
+        .onChange(of: consoleProcess.state) { _, newState in
+            if case .exited = newState {
+                let live = LiveValueIndex.load(for: project)
+                guard !live.isEmpty else { return }
+                var merged = controller.pauseSymbols
+                for (name, value) in live where merged[name] == nil {
+                    merged[name] = value
+                }
+                controller.pauseSymbols = merged
+            }
+        }
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)
         .toolbar { toolbarContent }
@@ -471,6 +499,16 @@ struct WorkspaceView: View {
                 model: commitModel,
                 monitor: controller.gitMonitor,
                 onClose: { showCommitOverlay = false }
+            )
+        }
+        .sheet(isPresented: $controller.showExtractActionSheet) {
+            ExtractActionSheet(
+                state: controller.extractActionState,
+                onCancel: { controller.showExtractActionSheet = false },
+                onConfirm: { node, url, name in
+                    applyExtractAction(node: node, url: url, name: name)
+                    controller.showExtractActionSheet = false
+                }
             )
         }
         .sheet(isPresented: $showFindInProject) {
@@ -570,6 +608,20 @@ struct WorkspaceView: View {
     private var openAPIEndpoints: [OpenAPIEndpoint] {
         guard let model = controller.model else { return [] }
         return OpenAPIPalette.endpoints(in: model, programs: controller.allPrograms)
+    }
+
+    /// Apply the Extract-as-Action refactor: rewrite the call site
+    /// to `Application.<Name>` and append a new `(<Name>: Action)`
+    /// feature set at the end of the file. The file is then re-
+    /// parsed so the canvas + breadcrumbs catch up.
+    private func applyExtractAction(node: CanvasNode, url: URL, name: String) {
+        guard let source = try? String(contentsOf: url, encoding: .utf8) else { return }
+        guard let result = ExtractActionRefactor.apply(
+            source: source, node: node, actionName: name
+        ) else { return }
+        try? result.newSource.write(to: url, atomically: true, encoding: .utf8)
+        controller.openFile(url)  // reparses + refreshes graph
+        controller.currentLine = result.newCallSiteLine
     }
 
     /// Pop the commit overlay open. Reset the model's transient
@@ -741,6 +793,8 @@ struct WorkspaceView: View {
             debugButton
             testButton
             statusPip
+            foldToggle
+            minimapToggle
             inspectorToggle
             closeProjectButton
         }
@@ -862,6 +916,33 @@ struct WorkspaceView: View {
                                                  : "Last run exited \(code)"
         case .failed(let msg): return "Failed: \(msg)"
         }
+    }
+
+    private var foldToggle: some View {
+        Button {
+            let key = SolaroPrefs.editorFolded.rawValue
+            let current = UserDefaults.standard.bool(forKey: key)
+            UserDefaults.standard.set(!current, forKey: key)
+            // Bump a controller flag so SwiftUI re-renders CenterPane —
+            // @AppStorage in CenterPane would do this for free, but
+            // the toggle lives here, so nudge the workspace.
+            controller.paneMode = controller.paneMode
+        } label: {
+            Label("Fold bodies", systemImage: "chevron.right.square")
+        }
+        .help("Show feature-set bodies as `{ … N statements }` (read-only)")
+    }
+
+    private var minimapToggle: some View {
+        Button {
+            let key = SolaroPrefs.editorMinimap.rawValue
+            let current = UserDefaults.standard.bool(forKey: key)
+            UserDefaults.standard.set(!current, forKey: key)
+            controller.paneMode = controller.paneMode
+        } label: {
+            Label("Minimap", systemImage: "rectangle.portrait.righthalf.inset.filled")
+        }
+        .help("Show the minimap overview on the right edge of the editor")
     }
 
     private var inspectorToggle: some View {

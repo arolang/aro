@@ -180,4 +180,6 @@ enum SolaroPrefs: String {
     case aroOverride      = "solaro.aroOverride"
     case askEndpoint      = "solaro.askEndpoint"
     case theme            = "solaro.theme"
+    case editorFolded     = "solaro.editor.folded"
+    case editorMinimap    = "solaro.editor.minimap"
 }

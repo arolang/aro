@@ -42,17 +42,62 @@ struct CenterPaneView: View {
     @ViewBuilder
     private var textMode: some View {
         if let url = controller.currentFile {
-            AROCodeEditor(
-                text: editableBinding(for: url),
-                currentLine: currentLineBinding,
-                breakpoints: breakpointsBinding,
-                pausedLine: controller.pausedLine,
-                pauseSymbols: controller.pauseSymbols,
-                language: editorLanguage(for: url),
-                onSave: { saveAndReparse(text: $0, url: url) }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if isDiffFile(url) {
+                DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                editorWithGutters(for: url)
+            }
         }
+    }
+
+    /// Composite view: optional folded-source pane, the main
+    /// editor, and the minimap column on the right. Controlled
+    /// by two @AppStorage toggles surfaced in the editor header.
+    @ViewBuilder
+    private func editorWithGutters(for url: URL) -> some View {
+        let folded = UserDefaults.standard.bool(forKey: SolaroPrefs.editorFolded.rawValue)
+        let minimap = UserDefaults.standard.bool(forKey: SolaroPrefs.editorMinimap.rawValue)
+        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        HStack(spacing: 0) {
+            if folded, let program = controller.programs[url] {
+                FoldedSourceView(
+                    source: text,
+                    program: program,
+                    onJumpToLine: { line in
+                        UserDefaults.standard.set(false, forKey: SolaroPrefs.editorFolded.rawValue)
+                        controller.currentLine = line
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                AROCodeEditor(
+                    text: editableBinding(for: url),
+                    currentLine: currentLineBinding,
+                    breakpoints: breakpointsBinding,
+                    pausedLine: controller.pausedLine,
+                    pauseSymbols: controller.pauseSymbols,
+                    language: editorLanguage(for: url),
+                    onSave: { saveAndReparse(text: $0, url: url) }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if minimap && !folded {
+                MinimapView(
+                    text: text,
+                    currentLine: controller.currentLine,
+                    onJumpToLine: { line in controller.currentLine = line }
+                )
+            }
+        }
+    }
+
+    /// Diff / patch files render through DiffRendererView instead
+    /// of the regular code editor — they're read-only and benefit
+    /// from a structured viewer that tints adds / removes.
+    private func isDiffFile(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return name.hasSuffix(".diff") || name.hasSuffix(".patch")
     }
 
     /// Binding mediating the editor cursor's line ↔ canvas node
@@ -387,6 +432,8 @@ struct CenterPaneView: View {
             mutateStatement(node: node, mode: .duplicate)
         case .delete:
             mutateStatement(node: node, mode: .delete)
+        case .extractAsAction:
+            controller.requestExtractAction(node: node)
         }
     }
 
