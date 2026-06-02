@@ -39,6 +39,8 @@ struct CenterPaneView: View {
 
     // MARK: - Text
 
+    @State private var showConflictResolver: Bool = false
+
     @ViewBuilder
     private var textMode: some View {
         if let url = controller.currentFile {
@@ -46,9 +48,32 @@ struct CenterPaneView: View {
                 DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                editorWithGutters(for: url)
+                VStack(spacing: 0) {
+                    let conflicts = currentFileConflicts(url)
+                    if !conflicts.isEmpty {
+                        MergeConflictBanner(count: conflicts.count) {
+                            showConflictResolver = true
+                        }
+                    }
+                    editorWithGutters(for: url)
+                }
+                .sheet(isPresented: $showConflictResolver) {
+                    MergeConflictResolverSheet(
+                        fileURL: url,
+                        onComplete: { showConflictResolver = false }
+                    )
+                }
             }
         }
+    }
+
+    /// Cheap scan of the current file's text for git conflict
+    /// markers — called from the view body, so it's bounded by
+    /// SwiftUI's render frequency and we read straight from disk
+    /// once per render (small cost, no caching needed for the MVP).
+    private func currentFileConflicts(_ url: URL) -> [MergeConflict] {
+        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        return MergeConflictScanner.scan(text)
     }
 
     @AppStorage(SolaroPrefs.editorFolded.rawValue)

@@ -41,6 +41,11 @@ struct SOLAROApp: App {
         .defaultSize(width: 1400, height: 900)
         .commands {
             CommandGroup(after: .help) {
+                Button("Language Guide…") {
+                    LanguageGuideWindow.show()
+                }
+                .keyboardShortcut("?", modifiers: [.command])
+                Divider()
                 Button("Report a Bug…") {
                     CrashReporter.openReportBugPage()
                 }

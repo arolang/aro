@@ -141,6 +141,11 @@ final class WorkspaceController {
     /// aro ask") can fire prompts directly.
     let aiCoPilot = AICoPilotProcess()
 
+    /// Test runner state (#271) — shared across the workspace so
+    /// the bottom-panel Tests tab and the Run-tests palette
+    /// command see the same in-flight run.
+    let tests = TestRunModel()
+
     /// Right-pane visibility flag for the Ask panel — the canvas
     /// context menu nudges this on when it dispatches an Explain
     /// request so the user sees the streaming response.
@@ -313,18 +318,21 @@ struct HiddenShortcutButton: View {
 enum BottomTab: String, CaseIterable, Identifiable {
     case console
     case terminal
+    case tests
 
     var id: String { rawValue }
     var label: String {
         switch self {
         case .console:  return "Console"
         case .terminal: return "Terminal"
+        case .tests:    return "Tests"
         }
     }
     var symbol: String {
         switch self {
         case .console:  return "rectangle.fill.on.rectangle.fill"
         case .terminal: return "terminal.fill"
+        case .tests:    return "checkmark.diamond"
         }
     }
 }
@@ -1042,6 +1050,8 @@ struct WorkspaceView: View {
             case .terminal:
                 TerminalView(workingDirectory: project.rootPath)
                     .background(SolaroColor.backdrop)
+            case .tests:
+                TestsPanel(project: project, model: controller.tests)
             }
         }
     }
