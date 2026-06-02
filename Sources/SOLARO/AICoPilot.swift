@@ -234,6 +234,9 @@ struct AICoPilotPanel: View {
             Text("No model is auto-downloaded. Per ADR-006 SOLARO won't reach out without your say-so. Configure one of the above, then continue.")
                 .font(SolaroFont.caption)
                 .foregroundStyle(SolaroColor.textSecondary)
+            Text("If you hit \"Failed to load the default metallib\", build the MLX Metal shaders once with `tools/build-metallib.sh debug` (or `release`) from the SOLARO source tree.")
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
             HStack {
                 Spacer()
                 Button("Got it") {

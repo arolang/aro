@@ -33,6 +33,15 @@ swift build -c "$CONFIG" --product SolaroApp
 echo "[solaro-app] swift build -c $CONFIG --product solaro"
 swift build -c "$CONFIG" --product solaro
 
+# `aro ask`'s native MLX backend looks for `mlx.metallib` alongside the
+# binary. SwiftPM doesn't compile .metal sources, so we shell out to the
+# dedicated build script — first run only compiles, subsequent calls
+# are no-ops because the metallib is cached.
+if [ -d ".build/checkouts/mlx-swift" ]; then
+    echo "[solaro-app] tools/build-metallib.sh $CONFIG"
+    ./tools/build-metallib.sh "$CONFIG" 2>&1 | sed 's/^/[metallib] /'
+fi
+
 APP_DIR=".build/SOLARO.app"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
