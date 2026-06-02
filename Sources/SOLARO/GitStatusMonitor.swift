@@ -31,22 +31,56 @@ struct GitStatus: Equatable {
     var hasUpstream: Bool { !upstream.isEmpty }
 }
 
+struct GitBranch: Equatable, Identifiable, Hashable {
+    let name: String
+    let isCurrent: Bool
+    var id: String { name }
+}
+
 @MainActor
 @Observable
 final class GitStatusMonitor {
     private(set) var status: GitStatus = .init()
     private(set) var isAvailable: Bool = false
     private(set) var lastError: String?
+    /// Local branches as of the last refresh, with `isCurrent`
+    /// flagging which one HEAD points at.
+    private(set) var branches: [GitBranch] = []
 
     func refresh(for project: Project) {
         Task.detached(priority: .utility) {
             let result = await Self.run(project: project)
+            let branches = await Self.runBranches(project: project)
             await MainActor.run {
                 self.isAvailable = result.available
                 self.status = result.status
                 self.lastError = result.error
+                self.branches = branches
             }
         }
+    }
+
+    /// Run `git checkout <branch>` and refresh on success. Returns
+    /// the trimmed stderr on failure so callers can show it.
+    func checkout(branch: String, in project: Project) async -> String? {
+        let err = await Self.runCheckout(branch: branch, project: project)
+        if err == nil { refresh(for: project) }
+        return err
+    }
+
+    /// Combined unstaged + staged diff against HEAD, capped at a
+    /// large-but-bounded size so prompts to `aro ask` stay reasonable.
+    /// Returns "" if there's nothing to diff or git fails.
+    func diffAgainstHEAD(in project: Project) async -> String {
+        await Self.runDiff(project: project)
+    }
+
+    /// Stage everything and commit with the given message. Trims
+    /// the result; throws via the returned error string on failure.
+    func commit(message: String, in project: Project) async -> String? {
+        let err = await Self.runCommit(message: message, project: project)
+        if err == nil { refresh(for: project) }
+        return err
     }
 
     private struct Result {
@@ -142,6 +176,97 @@ final class GitStatusMonitor {
                 .trimmingCharacters(in: .whitespaces)
         } else {
             s.branch = rest.trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    // MARK: - Branch / diff / commit
+
+    nonisolated private static func runBranches(project: Project) async -> [GitBranch] {
+        let result = runGit(
+            args: ["branch", "--list", "--no-color"],
+            project: project
+        )
+        guard result.exitCode == 0 else { return [] }
+        var branches: [GitBranch] = []
+        for raw in result.stdout.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            guard line.count > 2 else { continue }
+            let marker = line.first
+            let name = String(line.dropFirst(2))
+                .trimmingCharacters(in: .whitespaces)
+            // Skip detached-HEAD lines like "* (HEAD detached at …)".
+            if name.hasPrefix("(") && name.hasSuffix(")") { continue }
+            guard !name.isEmpty else { continue }
+            branches.append(GitBranch(name: name, isCurrent: marker == "*"))
+        }
+        return branches
+    }
+
+    nonisolated private static func runCheckout(branch: String, project: Project) async -> String? {
+        let result = runGit(args: ["checkout", branch], project: project)
+        if result.exitCode == 0 { return nil }
+        let err = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        return err.isEmpty ? "git checkout failed (exit \(result.exitCode))" : err
+    }
+
+    nonisolated private static func runDiff(project: Project) async -> String {
+        // Untracked files don't show up in `git diff HEAD` — we
+        // include their full text via `git diff --no-index` for any
+        // file the porcelain marked `??`. For tracked changes a
+        // single `git diff HEAD` covers staged + unstaged combined.
+        let tracked = runGit(args: ["diff", "HEAD", "--no-color"], project: project)
+        return tracked.stdout
+    }
+
+    nonisolated private static func runCommit(message: String, project: Project) async -> String? {
+        let add = runGit(args: ["add", "-A"], project: project)
+        if add.exitCode != 0 {
+            let err = add.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return err.isEmpty ? "git add failed (exit \(add.exitCode))" : err
+        }
+        let commit = runGit(args: ["commit", "-m", message], project: project)
+        if commit.exitCode == 0 { return nil }
+        let err = (commit.stderr + commit.stdout)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return err.isEmpty ? "git commit failed (exit \(commit.exitCode))" : err
+    }
+
+    private struct GitRun {
+        let exitCode: Int32
+        let stdout: String
+        let stderr: String
+    }
+
+    /// Synchronous git invocation used by the off-main helpers
+    /// above. Returns captured stdout/stderr and the exit code.
+    nonisolated private static func runGit(args: [String], project: Project) -> GitRun {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["git"] + args
+        task.currentDirectoryURL = project.rootPath
+        let out = Pipe()
+        let err = Pipe()
+        task.standardOutput = out
+        task.standardError = err
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let outText = String(
+                data: out.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+            let errText = String(
+                data: err.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+            return GitRun(
+                exitCode: task.terminationStatus,
+                stdout: outText,
+                stderr: errText
+            )
+        } catch {
+            return GitRun(exitCode: -1, stdout: "",
+                          stderr: error.localizedDescription)
         }
     }
 

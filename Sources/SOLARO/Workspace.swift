@@ -353,6 +353,8 @@ struct WorkspaceView: View {
     /// find-in-project (⌘⇧F).
     @State private var showCommandPalette = false
     @State private var showQuickOpen = false
+    @State private var showCommitOverlay = false
+    @State private var commitModel = GitCommitModel()
     @State private var showFindInProject = false
     @State private var findInProjectModel = FindInProjectModel()
     @State private var showSymbolPalette = false
@@ -394,7 +396,8 @@ struct WorkspaceView: View {
             StatusBarView(
                 controller: controller,
                 onShowOpenAPIPalette: { showOpenAPIPalette = true },
-                onShowTimeTravel: { showTimeTravel = true }
+                onShowTimeTravel: { showTimeTravel = true },
+                onShowCommitOverlay: { openCommitOverlay() }
             )
         }
         .animation(.easeInOut(duration: 0.25), value: showConsole)
@@ -460,6 +463,14 @@ struct WorkspaceView: View {
                     onOpen: { url in controller.openFile(url) }
                 ),
                 onClose: { showQuickOpen = false }
+            )
+        }
+        .sheet(isPresented: $showCommitOverlay) {
+            GitCommitSheet(
+                project: project,
+                model: commitModel,
+                monitor: controller.gitMonitor,
+                onClose: { showCommitOverlay = false }
             )
         }
         .sheet(isPresented: $showFindInProject) {
@@ -559,6 +570,19 @@ struct WorkspaceView: View {
     private var openAPIEndpoints: [OpenAPIEndpoint] {
         guard let model = controller.model else { return [] }
         return OpenAPIPalette.endpoints(in: model, programs: controller.allPrograms)
+    }
+
+    /// Pop the commit overlay open. Reset the model's transient
+    /// state (last error, last message) so each invocation starts
+    /// fresh — the AI suggestion task itself runs from inside the
+    /// sheet's `.task` modifier.
+    private func openCommitOverlay() {
+        commitModel.commitError = nil
+        commitModel.message = ""
+        commitModel.suggestion = ""
+        commitModel.suggestionFailed = false
+        commitModel.suggestionError = nil
+        showCommitOverlay = true
     }
 
     /// Find the URL of the source file declaring a feature set with

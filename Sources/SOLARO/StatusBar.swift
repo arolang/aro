@@ -17,6 +17,11 @@ struct StatusBarView: View {
 
     let onShowOpenAPIPalette: () -> Void
     let onShowTimeTravel: () -> Void
+    let onShowCommitOverlay: () -> Void
+
+    @State private var showBranchPicker: Bool = false
+    @State private var branchSwitchError: String?
+    @State private var branchSwitching: String?
 
     var body: some View {
         HStack(spacing: SolaroSpace.m) {
@@ -83,12 +88,25 @@ struct StatusBarView: View {
     private var gitChip: some View {
         let s = controller.gitMonitor.status
         return HStack(spacing: SolaroSpace.xs) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 10))
-                .foregroundStyle(SolaroColor.textSecondary)
-            Text(s.branch.isEmpty ? "(detached)" : s.branch)
-                .font(SolaroFont.monoCaption)
-                .foregroundStyle(SolaroColor.textSecondary)
+            // Branch button — clicking opens a popover with every
+            // local branch; clicking a name runs `git checkout`.
+            Button {
+                showBranchPicker.toggle()
+            } label: {
+                HStack(spacing: SolaroSpace.xs) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 10))
+                        .foregroundStyle(SolaroColor.textSecondary)
+                    Text(s.branch.isEmpty ? "(detached)" : s.branch)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Switch branch — \(gitTooltip)")
+            .popover(isPresented: $showBranchPicker, arrowEdge: .top) {
+                branchPicker
+            }
             if s.ahead > 0 {
                 Label("\(s.ahead)", systemImage: "arrow.up")
                     .labelStyle(.titleAndIcon)
@@ -102,12 +120,118 @@ struct StatusBarView: View {
                     .foregroundStyle(SolaroColor.stateWarn)
             }
             if !s.files.isEmpty {
-                Text("·  \(s.files.count) changed")
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.textTertiary)
+                // Changed-files chip — clicking opens the commit
+                // overlay. We piggyback on the workspace's sheet
+                // state so the sheet renders at the workspace level.
+                Button {
+                    onShowCommitOverlay()
+                } label: {
+                    Text("·  \(s.files.count) changed")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.accent)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .help("Open commit overlay (⌘⇧K)")
             }
         }
-        .help(gitTooltip)
+    }
+
+    private var branchPicker: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Image(systemName: "arrow.triangle.branch")
+                Text("Switch branch")
+                    .font(SolaroFont.sectionTitle)
+                    .tracking(2)
+                    .foregroundStyle(SolaroColor.textSecondary)
+                Spacer()
+            }
+            .padding(SolaroSpace.s)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if controller.gitMonitor.branches.isEmpty {
+                        Text("(no local branches)")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textTertiary)
+                            .padding(SolaroSpace.s)
+                    } else {
+                        ForEach(controller.gitMonitor.branches) { branch in
+                            branchRow(branch)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 280)
+            if let err = branchSwitchError {
+                Divider()
+                HStack(alignment: .top, spacing: SolaroSpace.xs) {
+                    Image(systemName: "exclamationmark.octagon.fill")
+                        .foregroundStyle(SolaroColor.stateError)
+                    Text(err)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.stateError)
+                        .textSelection(.enabled)
+                }
+                .padding(SolaroSpace.s)
+            }
+        }
+        .frame(width: 280)
+        .background(SolaroColor.surface)
+    }
+
+    @ViewBuilder
+    private func branchRow(_ branch: GitBranch) -> some View {
+        Button {
+            switchToBranch(branch)
+        } label: {
+            HStack {
+                if branch.isCurrent {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(SolaroColor.stateOK)
+                        .frame(width: 14)
+                } else if branchSwitching == branch.name {
+                    ProgressView().controlSize(.mini).frame(width: 14)
+                } else {
+                    Color.clear.frame(width: 14)
+                }
+                Text(branch.name)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(branch.isCurrent
+                                     ? SolaroColor.textPrimary
+                                     : SolaroColor.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, SolaroSpace.s)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(branch.isCurrent || branchSwitching != nil)
+        .background(
+            branch.isCurrent
+                ? SolaroColor.accent.opacity(0.08)
+                : Color.clear
+        )
+    }
+
+    private func switchToBranch(_ branch: GitBranch) {
+        guard !branch.isCurrent,
+              let project = controller.model?.root
+        else { return }
+        branchSwitching = branch.name
+        branchSwitchError = nil
+        Task {
+            let err = await controller.gitMonitor.checkout(
+                branch: branch.name, in: project
+            )
+            branchSwitching = nil
+            if let err {
+                branchSwitchError = err
+            } else {
+                showBranchPicker = false
+            }
+        }
     }
 
     private var gitTooltip: String {
