@@ -207,6 +207,13 @@ struct WorkspaceView: View {
             )
         }
         .animation(.easeInOut(duration: 0.25), value: showConsole)
+        .onChange(of: consoleProcess.pausedLine) { _, newLine in
+            // Debugger paused — jump the caret + canvas to the line
+            // it stopped at.
+            if let newLine, controller.currentLine != newLine {
+                controller.currentLine = newLine
+            }
+        }
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)
         .toolbar { toolbarContent }
@@ -324,12 +331,41 @@ struct WorkspaceView: View {
     private var runButton: some View {
         Button {
             showConsole = true
-            consoleProcess.start(project: project)
+            consoleProcess.start(
+                project: project,
+                breakpointsByFile: collectBreakpoints()
+            )
         } label: {
-            Label("Run", systemImage: isRunning ? "play.fill" : "play")
+            Label(runButtonLabel,
+                  systemImage: isRunning ? "play.fill" : "play")
         }
         .disabled(isRunning)
-        .help("Run `aro run` and stream its output to the console")
+        .help(runButtonHelp)
+    }
+
+    /// Scan every project source file's sidecar for breakpoints
+    /// and collect them by file. Empty result → ConsoleProcess
+    /// falls back to plain `aro run`.
+    private func collectBreakpoints() -> [URL: Set<Int>] {
+        guard let model = controller.model else { return [:] }
+        var out: [URL: Set<Int>] = [:]
+        for url in model.sourceFiles {
+            let sidecar = LayoutSidecar.load(for: url)
+            if !sidecar.breakpoints.isEmpty {
+                out[url] = sidecar.breakpoints
+            }
+        }
+        return out
+    }
+
+    private var runButtonLabel: String {
+        collectBreakpoints().isEmpty ? "Run" : "Debug"
+    }
+
+    private var runButtonHelp: String {
+        collectBreakpoints().isEmpty
+            ? "Run `aro run` and stream its output to the console"
+            : "Run `aro debug` with the current breakpoints"
     }
 
     private var isRunning: Bool {

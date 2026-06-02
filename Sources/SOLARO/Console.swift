@@ -28,10 +28,19 @@ final class ConsoleProcess {
     /// Append-only log of captured stdout+stderr lines.
     var log: [LogEntry] = []
     var state: State = .idle
+    /// 1-indexed line of the most recent `⏸  paused (…) at file:LINE`
+    /// notice from the debugger. SwiftUI binds to this so the editor
+    /// caret can jump to the pause point automatically.
+    var pausedLine: Int?
 
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
+    private var stdinPipe: Pipe?
+    /// True while we're running an `aro debug` session — the
+    /// console exposes a stdin input field so the user can type
+    /// debugger commands (continue, step, etc).
+    private(set) var acceptsStdin: Bool = false
 
     struct LogEntry: Identifiable, Equatable {
         let id = UUID()
@@ -42,26 +51,46 @@ final class ConsoleProcess {
         enum Kind { case stdout, stderr, info, error }
     }
 
-    /// Spawn `aro run <project>`. No-op when a process is already
-    /// running; call `stop()` first if you want to restart.
-    func start(project: Project) {
+    /// Spawn `aro run <project>` (or `aro debug …` when breakpoints
+    /// are set). No-op when a process is already running.
+    func start(project: Project, breakpointsByFile: [URL: Set<Int>] = [:]) {
         if case .running = state { return }
         log.removeAll()
-        appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
+
+        // Aggregate every file's breakpoints into a single `--breakpoint`
+        // list. The debugger accepts line numbers as "filename:line"
+        // pairs as well as bare integers; we pass the bare form when
+        // there's only one file to keep the command terse.
+        let lines = breakpointsByFile.values.flatMap { $0 }.sorted()
+        let useDebugger = !lines.isEmpty
 
         let task = Process()
-        // `/usr/bin/env` resolves `aro` against $PATH so the install
-        // location doesn't have to be hard-coded.
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["aro", "run", project.rootPath.path]
+        if useDebugger {
+            var args: [String] = ["aro", "debug", project.rootPath.path,
+                                  "--record", recordPath(for: project)]
+            for line in lines {
+                args.append("--breakpoint")
+                args.append(String(line))
+            }
+            task.arguments = args
+            appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
+        } else {
+            task.arguments = ["aro", "run", project.rootPath.path]
+            appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
+        }
         task.currentDirectoryURL = project.rootPath
 
         let stdout = Pipe()
         let stderr = Pipe()
+        let stdin = Pipe()
         task.standardOutput = stdout
         task.standardError = stderr
+        task.standardInput = stdin
         stdoutPipe = stdout
         stderrPipe = stderr
+        stdinPipe = stdin
+        acceptsStdin = useDebugger
 
         // Stream stdout / stderr line-by-line into the log.
         readPipe(stdout) { [weak self] line in
@@ -99,6 +128,21 @@ final class ConsoleProcess {
         // The terminationHandler will flip state to .exited.
     }
 
+    /// Write a line of input to the running process's stdin. Used
+    /// for debugger commands (continue, step, b 12, etc).
+    func sendInput(_ line: String) {
+        guard let stdinPipe else { return }
+        appendInfo("> \(line)")
+        let bytes = (line + "\n").data(using: .utf8) ?? Data()
+        stdinPipe.fileHandleForWriting.write(bytes)
+    }
+
+    /// Where `--record` writes its JSONL stream for time-travel
+    /// playback in the Time-Travel view.
+    private func recordPath(for project: Project) -> String {
+        project.rootPath.appendingPathComponent(".solaro/events.jsonl").path
+    }
+
     /// Drain the read-side of a pipe in the background, splitting
     /// on newlines and posting each line back via `onLine`. ANSI
     /// codes get stripped before the line lands in the UI.
@@ -122,6 +166,27 @@ final class ConsoleProcess {
 
     private func appendLine(_ line: String, kind: LogEntry.Kind) {
         log.append(LogEntry(kind: kind, text: line, timestamp: Date()))
+        detectPause(in: line)
+    }
+
+    /// Scan a freshly-logged line for the debugger's pause notice
+    /// and bump `pausedLine` so the workspace can jump the caret.
+    private func detectPause(in line: String) {
+        guard line.contains("⏸") else { return }
+        // The TUI prints "⏸  paused (reason) at file.aro:N — FeatureSet".
+        // We pull the number right after the last `:` in the
+        // `at <where>` segment.
+        guard
+            let atRange = line.range(of: " at "),
+            let dashRange = line.range(of: " — ", range: atRange.upperBound..<line.endIndex)
+        else { return }
+        let whereSegment = line[atRange.upperBound..<dashRange.lowerBound]
+        guard
+            let colon = whereSegment.lastIndex(of: ":"),
+            let n = Int(whereSegment[whereSegment.index(after: colon)...]
+                .trimmingCharacters(in: .whitespaces))
+        else { return }
+        pausedLine = n
     }
 
     private func appendInfo(_ line: String) {
@@ -159,14 +224,41 @@ struct ConsolePanelView: View {
     @Bindable var process: ConsoleProcess
     let onClose: () -> Void
 
+    @State private var stdinInput: String = ""
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().background(SolaroColor.divider)
             logView
+            if process.acceptsStdin {
+                Divider().background(SolaroColor.divider)
+                stdinField
+            }
         }
         .frame(maxWidth: .infinity)
         .background(SolaroColor.surface)
+    }
+
+    private var stdinField: some View {
+        HStack(spacing: SolaroSpace.s) {
+            Text("(debug)")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.accent)
+            TextField("type a debugger command — c, s, n, b 12, q",
+                      text: $stdinInput)
+                .textFieldStyle(.plain)
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.textPrimary)
+                .onSubmit {
+                    guard !stdinInput.isEmpty else { return }
+                    process.sendInput(stdinInput)
+                    stdinInput = ""
+                }
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.xs)
+        .background(SolaroColor.backdrop)
     }
 
     private var header: some View {
