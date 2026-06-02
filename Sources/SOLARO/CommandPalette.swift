@@ -23,7 +23,8 @@ enum CommandPaletteBuilder {
         onOpenOpenAPIPalette: @escaping () -> Void,
         onOpenTimeTravel: @escaping () -> Void,
         onOpenAddPlugin: @escaping () -> Void,
-        onGoToDefinition: @escaping () -> Void
+        onGoToDefinition: @escaping () -> Void,
+        onHoverAtCaret: @escaping () -> Void
     ) -> [PaletteItem] {
         var items: [PaletteItem] = []
 
@@ -161,6 +162,15 @@ enum CommandPaletteBuilder {
             trailing: "⌃⌘D",
             symbol: "arrow.right.to.line",
             action: { onGoToDefinition() }
+        ))
+        items.append(.init(
+            id: "hover-at-caret",
+            title: "Hover at Caret",
+            subtitle: "Ask `aro lsp` for info about the symbol under the caret",
+            category: "File",
+            trailing: "⌃⌘H",
+            symbol: "questionmark.bubble",
+            action: { onHoverAtCaret() }
         ))
         items.append(.init(
             id: "reveal",

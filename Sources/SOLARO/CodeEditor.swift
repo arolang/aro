@@ -324,6 +324,11 @@ struct HoverValuePopover: View {
 struct AROCodeEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var currentLine: Int?
+    /// 0-indexed caret column (UTF-16 offset from the start of the
+    /// current line). LSP wants character offsets, not display
+    /// columns, so we keep this in sync with the text view's
+    /// selection. nil when there's no caret yet.
+    @Binding var currentColumn: Int?
     /// Breakpoint source lines (1-indexed). Toggled by clicking the
     /// gutter; persisted to the file's LayoutSidecar by the parent.
     @Binding var breakpoints: Set<Int>
@@ -445,16 +450,27 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Compute the 1-indexed line number of the caret. Returns nil
     /// when the text view has no content yet.
     fileprivate func lineForCurrentSelection(in textView: STTextView) -> Int? {
+        positionForCurrentSelection(in: textView)?.line
+    }
+
+    /// 1-based line + 0-based column for the caret. The column is
+    /// the UTF-16 offset from the start of the line — matches what
+    /// LSP wants for positions.
+    fileprivate func positionForCurrentSelection(in textView: STTextView) -> (line: Int, column: Int)? {
         let nsText = (textView.text ?? "") as NSString
         guard nsText.length > 0 else { return nil }
         let location = textView.textSelection.location
         let clamped = min(location, nsText.length)
-        // Count newlines from the document start up to the caret.
         var line = 1
+        var lastNewline = -1
         for i in 0..<clamped {
-            if nsText.character(at: i) == 0x0A { line += 1 }
+            if nsText.character(at: i) == 0x0A {
+                line += 1
+                lastNewline = i
+            }
         }
-        return line
+        let column = clamped - lastNewline - 1
+        return (line, max(0, column))
     }
 
     /// Move the caret to the start of `line` (1-indexed), scrolling
@@ -622,9 +638,12 @@ struct AROCodeEditor: NSViewRepresentable {
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, let textView else { return }
-                    let line = self.parent.lineForCurrentSelection(in: textView)
-                    if line != self.parent.currentLine {
-                        self.parent.currentLine = line
+                    let position = self.parent.positionForCurrentSelection(in: textView)
+                    if position?.line != self.parent.currentLine {
+                        self.parent.currentLine = position?.line
+                    }
+                    if position?.column != self.parent.currentColumn {
+                        self.parent.currentColumn = position?.column
                     }
                 }
             }

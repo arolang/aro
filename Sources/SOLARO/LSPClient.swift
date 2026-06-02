@@ -187,6 +187,61 @@ final class AROLSPClient {
         ])
     }
 
+    /// Send `textDocument/hover` and call back with the textual
+    /// content the server returned (Markdown or plain). Returns nil
+    /// when the server has nothing to say at the position.
+    func hover(
+        url: URL,
+        line0: Int,
+        character0: Int,
+        completion: @escaping (String?) -> Void
+    ) {
+        guard isReady else { completion(nil); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            completion(Self.parseHover(raw))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "textDocument/hover",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "position": ["line": line0, "character": character0],
+            ],
+        ])
+    }
+
+    private static func parseHover(_ raw: Any?) -> String? {
+        guard let dict = raw as? [String: Any] else { return nil }
+        // LSP hover.contents can be:
+        //   - MarkupContent: { kind, value }
+        //   - MarkedString: a string or { language, value }
+        //   - An array of MarkedString
+        if let markup = dict["contents"] as? [String: Any],
+           let value = markup["value"] as? String,
+           !value.isEmpty
+        {
+            return value
+        }
+        if let string = dict["contents"] as? String, !string.isEmpty {
+            return string
+        }
+        if let arr = dict["contents"] as? [Any] {
+            let strings: [String] = arr.compactMap { entry in
+                if let s = entry as? String { return s }
+                if let m = entry as? [String: Any], let v = m["value"] as? String {
+                    return v
+                }
+                return nil
+            }
+            let joined = strings.joined(separator: "\n\n")
+            return joined.isEmpty ? nil : joined
+        }
+        return nil
+    }
+
     private static func parseDefinition(_ raw: Any?) -> DefinitionLocation? {
         let dict: [String: Any]?
         if let arr = raw as? [[String: Any]] {

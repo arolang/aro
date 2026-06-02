@@ -74,6 +74,11 @@ final class WorkspaceController {
     /// form that lets them edit route / schema fields directly.
     var openAPISelectedNodeID: String?
 
+    /// 0-indexed caret column tracked by the code editor. Surfaced
+    /// so LSP-backed features (go-to-definition, hover) can ship
+    /// the actual user position instead of a heuristic guess.
+    var currentColumn: Int?
+
     /// Drives the Extract-as-Action sheet. The sheet's binding
     /// pulls from this state; setting it from a context-menu
     /// click pops the sheet open.
@@ -368,6 +373,8 @@ struct WorkspaceView: View {
     @State private var showQuickOpen = false
     @State private var showCommitOverlay = false
     @State private var commitModel = GitCommitModel()
+    @State private var showHoverSheet = false
+    @State private var hoverState = HoverSheetState()
     @State private var showFindInProject = false
     @State private var findInProjectModel = FindInProjectModel()
     @State private var showSymbolPalette = false
@@ -478,7 +485,8 @@ struct WorkspaceView: View {
                     onOpenOpenAPIPalette: { showOpenAPIPalette = true },
                     onOpenTimeTravel: { showTimeTravel = true },
                     onOpenAddPlugin: { controller.sidebarTab = .plugins },
-                    onGoToDefinition: { goToDefinition() }
+                    onGoToDefinition: { goToDefinition() },
+                    onHoverAtCaret: { hoverAtCaret() }
                 ),
                 onClose: { showCommandPalette = false }
             )
@@ -501,6 +509,9 @@ struct WorkspaceView: View {
                 monitor: controller.gitMonitor,
                 onClose: { showCommitOverlay = false }
             )
+        }
+        .sheet(isPresented: $showHoverSheet) {
+            HoverSheet(state: hoverState, onClose: { showHoverSheet = false })
         }
         .sheet(isPresented: $controller.showExtractActionSheet) {
             ExtractActionSheet(
@@ -590,6 +601,9 @@ struct WorkspaceView: View {
             HiddenShortcutButton(key: "d", modifiers: [.control, .command]) {
                 goToDefinition()
             }
+            HiddenShortcutButton(key: "h", modifiers: [.control, .command]) {
+                hoverAtCaret()
+            }
         }
         .onAppear { controller.load() }
         .alert(
@@ -616,11 +630,10 @@ struct WorkspaceView: View {
     }
 
     /// Send `textDocument/definition` for the symbol at the current
-    /// caret line. We don't track the caret's character offset, so
-    /// we send the column of the first identifier-ish glyph (`<`,
-    /// or the first non-whitespace character if there's no `<`) —
-    /// good enough to land on the symbol the user is most likely
-    /// looking at on that line.
+    /// caret. We use the editor-reported column if we have one;
+    /// otherwise we fall back to the first `<` on the line (which
+    /// is where ARO identifier references start) or the first
+    /// non-whitespace character.
     private func goToDefinition() {
         guard
             let url = controller.currentFile,
@@ -630,16 +643,7 @@ struct WorkspaceView: View {
         let lines = text.components(separatedBy: "\n")
         guard lineNumber - 1 < lines.count else { return }
         let line = lines[lineNumber - 1]
-        let column: Int = {
-            if let bracket = line.firstIndex(of: "<") {
-                return line.distance(from: line.startIndex,
-                                     to: line.index(after: bracket))
-            }
-            if let nonSpace = line.firstIndex(where: { !$0.isWhitespace }) {
-                return line.distance(from: line.startIndex, to: nonSpace)
-            }
-            return 0
-        }()
+        let column = resolvedColumn(for: line)
         controller.lsp.definition(
             url: url,
             line0: lineNumber - 1,
@@ -649,6 +653,69 @@ struct WorkspaceView: View {
             controller.openFile(location.url)
             controller.currentLine = location.line
         }
+    }
+
+    /// Pop the Hover sheet for the current caret position. Same
+    /// column heuristic as goToDefinition: use the editor-reported
+    /// column when we have one, otherwise the first `<` or first
+    /// non-whitespace character on the line.
+    private func hoverAtCaret() {
+        guard
+            let url = controller.currentFile,
+            let lineNumber = controller.currentLine,
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        let lines = text.components(separatedBy: "\n")
+        guard lineNumber - 1 < lines.count else { return }
+        let line = lines[lineNumber - 1]
+        let column = resolvedColumn(for: line)
+        hoverState.content = ""
+        hoverState.hasResult = false
+        hoverState.isLoading = true
+        hoverState.symbol = identifierAround(line: line, column: column)
+        showHoverSheet = true
+        controller.lsp.hover(
+            url: url,
+            line0: lineNumber - 1,
+            character0: column
+        ) { content in
+            hoverState.isLoading = false
+            hoverState.hasResult = true
+            hoverState.content = content ?? ""
+        }
+    }
+
+    /// Best-effort: pluck the identifier surrounding the column for
+    /// the sheet's title bar. Doesn't influence the actual LSP
+    /// request — that uses the column directly.
+    private func identifierAround(line: String, column: Int) -> String? {
+        guard column >= 0, column <= line.count else { return nil }
+        let chars = Array(line)
+        let i = min(column, chars.count - 1)
+        let isIdent: (Character) -> Bool = { c in
+            c.isLetter || c.isNumber || c == "-" || c == "_"
+        }
+        guard i >= 0, i < chars.count, isIdent(chars[i]) else { return nil }
+        var start = i
+        while start > 0, isIdent(chars[start - 1]) { start -= 1 }
+        var end = i
+        while end < chars.count - 1, isIdent(chars[end + 1]) { end += 1 }
+        return String(chars[start...end])
+    }
+
+    private func resolvedColumn(for line: String) -> Int {
+        if let tracked = controller.currentColumn,
+           tracked >= 0,
+           tracked <= line.count
+        { return tracked }
+        if let bracket = line.firstIndex(of: "<") {
+            return line.distance(from: line.startIndex,
+                                 to: line.index(after: bracket))
+        }
+        if let nonSpace = line.firstIndex(where: { !$0.isWhitespace }) {
+            return line.distance(from: line.startIndex, to: nonSpace)
+        }
+        return 0
     }
 
     /// Apply the Extract-as-Action refactor: rewrite the call site

@@ -74,6 +74,7 @@ struct CenterPaneView: View {
                 AROCodeEditor(
                     text: editableBinding(for: url),
                     currentLine: currentLineBinding,
+                    currentColumn: currentColumnBinding,
                     breakpoints: breakpointsBinding,
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
@@ -110,6 +111,17 @@ struct CenterPaneView: View {
             set: { newValue in
                 if controller.currentLine != newValue {
                     controller.currentLine = newValue
+                }
+            }
+        )
+    }
+
+    private var currentColumnBinding: Binding<Int?> {
+        Binding(
+            get: { controller.currentColumn },
+            set: { newValue in
+                if controller.currentColumn != newValue {
+                    controller.currentColumn = newValue
                 }
             }
         )
@@ -523,6 +535,7 @@ struct CenterPaneView: View {
                 AROCodeEditor(
                     text: editableBinding(for: url),
                     currentLine: currentLineBinding,
+                    currentColumn: currentColumnBinding,
                     breakpoints: breakpointsBinding,
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
