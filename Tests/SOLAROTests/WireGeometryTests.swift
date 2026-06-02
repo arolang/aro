@@ -1,6 +1,6 @@
 // ============================================================
 // WireGeometryTests.swift
-// SOLARO — Phase 9: Bézier wire geometry regression coverage
+// SOLARO — Bézier wire geometry regression (Swift Testing)
 // ============================================================
 //
 // The visual look of the canvas depends on:
@@ -12,15 +12,14 @@
 // CanvasView don't accidentally drop the curve into a straight
 // line.
 
-import XCTest
+import Testing
+import Foundation
 @testable import SOLARO
 
 /// Mirror of the math inside CanvasView's WiresLayer so we can
 /// regression-test the curve geometry without invoking SwiftUI.
 private struct WireGeometry {
-    static func controlPoints(
-        start: CGPoint, end: CGPoint
-    ) -> (CGPoint, CGPoint) {
+    static func controlPoints(start: CGPoint, end: CGPoint) -> (CGPoint, CGPoint) {
         let dx = abs(end.x - start.x)
         let curveOffset = max(dx * 0.5, 36)
         let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
@@ -29,30 +28,29 @@ private struct WireGeometry {
     }
 }
 
-final class WireGeometryTests: XCTestCase {
+@Suite("Bézier wire geometry")
+struct WireGeometryTests {
 
-    func testControlPointsScaleWithDistance() {
+    @Test func controlPointsScaleWithDistance() {
         let (c1, c2) = WireGeometry.controlPoints(
             start: CGPoint(x: 0, y: 0),
             end:   CGPoint(x: 400, y: 100)
         )
         // 50% of dx = 200; c1.x = 0 + 200; c2.x = 400 - 200.
-        XCTAssertEqual(c1.x, 200, accuracy: 0.001)
-        XCTAssertEqual(c2.x, 200, accuracy: 0.001)
+        #expect(abs(c1.x - 200) < 0.001)
+        #expect(abs(c2.x - 200) < 0.001)
         // y coordinates stick to the endpoints so the curve flows
         // horizontally before bending.
-        XCTAssertEqual(c1.y, 0)
-        XCTAssertEqual(c2.y, 100)
+        #expect(c1.y == 0)
+        #expect(c2.y == 100)
     }
 
-    func testControlPointsRespectMinimumOffset() {
-        // Short wire — would collapse to a straight line without the
-        // minimum.
+    @Test func controlPointsRespectMinimumOffset() {
         let (c1, c2) = WireGeometry.controlPoints(
             start: CGPoint(x: 0, y: 0),
             end:   CGPoint(x: 20, y: 60)
         )
-        XCTAssertEqual(c1.x, 36, accuracy: 0.001)
-        XCTAssertEqual(c2.x, 20 - 36, accuracy: 0.001)
+        #expect(abs(c1.x - 36) < 0.001)
+        #expect(abs(c2.x - (20 - 36)) < 0.001)
     }
 }

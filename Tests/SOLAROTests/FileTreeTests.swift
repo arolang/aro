@@ -1,45 +1,46 @@
 // ============================================================
 // FileTreeTests.swift
-// SOLARO — Phase 5: sidebar tree-building regression coverage
+// SOLARO — sidebar tree-building regression (Swift Testing)
 // ============================================================
 
-import XCTest
+import Testing
+import Foundation
 @testable import SOLARO
 
-final class FileTreeTests: XCTestCase {
+@Suite("FileTreeBuilder")
+struct FileTreeBuilderTests {
 
     // MARK: - Helpers
 
-    private func makeProject(at: URL, layout: [String]) throws -> ProjectModel {
+    private func makeProject(at root: URL, layout: [String]) throws -> ProjectModel {
         let fm = FileManager.default
-        try fm.createDirectory(at: at, withIntermediateDirectories: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
         for rel in layout {
-            let url = at.appendingPathComponent(rel)
+            let url = root.appendingPathComponent(rel)
             try fm.createDirectory(at: url.deletingLastPathComponent(),
                                    withIntermediateDirectories: true)
             try Data().write(to: url)
         }
-        return try ProjectModel.load(Project(rootPath: at))
+        return try ProjectModel.load(Project(rootPath: root))
     }
 
     private func tmp() -> URL {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+        URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("solaro-filetree-\(UUID().uuidString)")
-        return dir
     }
 
     // MARK: - Cases
 
-    func testFlatProjectProducesLeafNodes() throws {
+    @Test func flatProjectProducesLeafNodes() throws {
         let project = try makeProject(at: tmp(), layout: ["main.aro"])
         let nodes = FileTreeBuilder.build(model: project)
-        XCTAssertEqual(nodes.count, 1)
-        XCTAssertEqual(nodes[0].name, "main.aro")
-        XCTAssertEqual(nodes[0].kind, .aroSource)
-        XCTAssertNil(nodes[0].outlineChildren)
+        #expect(nodes.count == 1)
+        #expect(nodes[0].name == "main.aro")
+        #expect(nodes[0].kind == .aroSource)
+        #expect(nodes[0].outlineChildren == nil)
     }
 
-    func testNestedSourcesProduceDisclosureGroup() throws {
+    @Test func nestedSourcesProduceDisclosureGroup() throws {
         let project = try makeProject(at: tmp(), layout: [
             "main.aro",
             "sources/users/users.aro",
@@ -47,25 +48,22 @@ final class FileTreeTests: XCTestCase {
         ])
         let nodes = FileTreeBuilder.build(model: project)
 
-        // Directories first, files after — so `sources/` is at index 0.
-        XCTAssertEqual(nodes.first?.name, "sources")
-        XCTAssertEqual(nodes.first?.kind, .directory)
+        #expect(nodes.first?.name == "sources")
+        #expect(nodes.first?.kind == .directory)
 
-        // Each subdirectory itself contains one file leaf.
-        let sources = nodes.first!
+        let sources = try #require(nodes.first)
         let subNames = Set(sources.children.map(\.name))
-        XCTAssertEqual(subNames, Set(["users", "orders"]))
+        #expect(subNames == Set(["users", "orders"]))
         for child in sources.children {
-            XCTAssertEqual(child.kind, .directory)
-            XCTAssertEqual(child.children.count, 1)
-            XCTAssertEqual(child.children.first?.kind, .aroSource)
+            #expect(child.kind == .directory)
+            #expect(child.children.count == 1)
+            #expect(child.children.first?.kind == .aroSource)
         }
 
-        // The root file `main.aro` is the last entry — files after dirs.
-        XCTAssertEqual(nodes.last?.name, "main.aro")
+        #expect(nodes.last?.name == "main.aro")
     }
 
-    func testOpenAPISpecBubblesToTopOfFileGroup() throws {
+    @Test func openAPISpecBubblesToTopOfFileGroup() throws {
         let root = tmp()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent("main.aro"))
@@ -73,13 +71,11 @@ final class FileTreeTests: XCTestCase {
         let project = try ProjectModel.load(Project(rootPath: root))
 
         let nodes = FileTreeBuilder.build(model: project)
-        // `openapi.yaml` precedes `main.aro` even though alphabetic
-        // order would have put `main.aro` first.
-        XCTAssertEqual(nodes.first?.name, "openapi.yaml")
-        XCTAssertEqual(nodes.first?.kind, .openapi)
+        #expect(nodes.first?.name == "openapi.yaml")
+        #expect(nodes.first?.kind == .openapi)
     }
 
-    func testStoreFilesAreIncluded() throws {
+    @Test func storeFilesAreIncluded() throws {
         let root = tmp()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent("main.aro"))
@@ -87,18 +83,18 @@ final class FileTreeTests: XCTestCase {
         let project = try ProjectModel.load(Project(rootPath: root))
 
         let nodes = FileTreeBuilder.build(model: project)
-        XCTAssertEqual(nodes.count, 2)
-        XCTAssertTrue(nodes.contains { $0.kind == .storeFile && $0.name == "products.store" })
-        XCTAssertTrue(nodes.contains { $0.kind == .aroSource && $0.name == "main.aro" })
+        #expect(nodes.count == 2)
+        #expect(nodes.contains { $0.kind == .storeFile && $0.name == "products.store" })
+        #expect(nodes.contains { $0.kind == .aroSource && $0.name == "main.aro" })
     }
 
-    func testDirectoriesAreSortedBeforeFiles() throws {
+    @Test func directoriesSortBeforeFiles() throws {
         let project = try makeProject(at: tmp(), layout: [
-            "z-main.aro",            // file
-            "a-sources/users.aro",   // dir
+            "z-main.aro",
+            "a-sources/users.aro",
         ])
         let nodes = FileTreeBuilder.build(model: project)
-        XCTAssertEqual(nodes.first?.kind, .directory)
-        XCTAssertEqual(nodes.last?.kind, .aroSource)
+        #expect(nodes.first?.kind == .directory)
+        #expect(nodes.last?.kind == .aroSource)
     }
 }

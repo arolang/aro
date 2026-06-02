@@ -1,66 +1,64 @@
 // ============================================================
 // ThemeTests.swift
-// SOLARO — Phase 2: design-token regression tests
+// SOLARO — design-token regression coverage (Swift Testing)
 // ============================================================
 
-import XCTest
-@testable import SOLARO
+import Testing
 import SwiftUI
+@testable import SOLARO
 
-final class ThemeTests: XCTestCase {
+@Suite("Role colors")
+struct RoleColorTests {
 
-    // MARK: - Role colors
+    @Test func mapsKnownVerbsToCorrectRoleFamily() {
+        // REQUEST
+        #expect(SolaroColor.roleColor(forVerb: "Extract")  == SolaroColor.roleRequest)
+        #expect(SolaroColor.roleColor(forVerb: "retrieve") == SolaroColor.roleRequest)
+        #expect(SolaroColor.roleColor(forVerb: "PULL")     == SolaroColor.roleRequest)
 
-    func testRoleColorMapsKnownVerbsToCorrectFamily() {
-        // REQUEST family
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Extract"),  SolaroColor.roleRequest)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "retrieve"), SolaroColor.roleRequest)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "PULL"),     SolaroColor.roleRequest)
+        // OWN
+        #expect(SolaroColor.roleColor(forVerb: "Compute")  == SolaroColor.roleOwn)
+        #expect(SolaroColor.roleColor(forVerb: "Validate") == SolaroColor.roleOwn)
+        #expect(SolaroColor.roleColor(forVerb: "Create")   == SolaroColor.roleOwn)
 
-        // OWN family
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Compute"),   SolaroColor.roleOwn)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Validate"),  SolaroColor.roleOwn)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Create"),    SolaroColor.roleOwn)
+        // RESPONSE
+        #expect(SolaroColor.roleColor(forVerb: "Return")   == SolaroColor.roleResponse)
+        #expect(SolaroColor.roleColor(forVerb: "Throw")    == SolaroColor.roleResponse)
 
-        // RESPONSE family
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Return"),    SolaroColor.roleResponse)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Throw"),     SolaroColor.roleResponse)
-
-        // EXPORT family
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Emit"),      SolaroColor.roleExport)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "publish"),   SolaroColor.roleExport)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Commit"),    SolaroColor.roleExport)
+        // EXPORT
+        #expect(SolaroColor.roleColor(forVerb: "Emit")     == SolaroColor.roleExport)
+        #expect(SolaroColor.roleColor(forVerb: "publish")  == SolaroColor.roleExport)
+        #expect(SolaroColor.roleColor(forVerb: "Commit")   == SolaroColor.roleExport)
     }
 
-    func testRoleColorFallsBackToSecondaryForUnknownVerb() {
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: "Bogus"),     SolaroColor.textSecondary)
-        XCTAssertEqual(SolaroColor.roleColor(forVerb: ""),          SolaroColor.textSecondary)
+    @Test func unknownVerbsFallBackToSecondaryText() {
+        #expect(SolaroColor.roleColor(forVerb: "Bogus") == SolaroColor.textSecondary)
+        #expect(SolaroColor.roleColor(forVerb: "")      == SolaroColor.textSecondary)
+    }
+}
+
+@Suite("Wire colors")
+struct WireColorTests {
+
+    @Test func mapsKnownPrepositionsToDistinctColors() {
+        #expect(SolaroColor.wireColor(forPreposition: "from")
+                != SolaroColor.wireColor(forPreposition: "with"))
+        #expect(SolaroColor.wireColor(forPreposition: "with")
+                != SolaroColor.wireColor(forPreposition: "into"))
+        #expect(SolaroColor.wireColor(forPreposition: "into")
+                != SolaroColor.wireColor(forPreposition: "against"))
     }
 
-    // MARK: - Wire colors
-
-    func testWireColorMapsKnownPrepositions() {
-        // Distinct colors for from / with / into / against — they
-        // need to be visually distinguishable in the canvas.
-        XCTAssertNotEqual(SolaroColor.wireColor(forPreposition: "from"),
-                          SolaroColor.wireColor(forPreposition: "with"))
-        XCTAssertNotEqual(SolaroColor.wireColor(forPreposition: "with"),
-                          SolaroColor.wireColor(forPreposition: "into"))
-        XCTAssertNotEqual(SolaroColor.wireColor(forPreposition: "into"),
-                          SolaroColor.wireColor(forPreposition: "against"))
-    }
-
-    func testWireColorFallsBackForNilOrUnknown() {
-        // Nil and unknown collapse to the same "neutral" wire color.
+    @Test func nilAndUnknownShareTheNeutralFallback() {
         let nilColor = SolaroColor.wireColor(forPreposition: nil)
         let unkColor = SolaroColor.wireColor(forPreposition: "bogus-preposition")
-        XCTAssertEqual(nilColor, unkColor)
+        #expect(nilColor == unkColor)
     }
 
-    func testWireColorIsCaseInsensitive() {
-        XCTAssertEqual(SolaroColor.wireColor(forPreposition: "FROM"),
-                       SolaroColor.wireColor(forPreposition: "from"))
-        XCTAssertEqual(SolaroColor.wireColor(forPreposition: "With"),
-                       SolaroColor.wireColor(forPreposition: "with"))
+    @Test func caseInsensitive() {
+        #expect(SolaroColor.wireColor(forPreposition: "FROM")
+                == SolaroColor.wireColor(forPreposition: "from"))
+        #expect(SolaroColor.wireColor(forPreposition: "With")
+                == SolaroColor.wireColor(forPreposition: "with"))
     }
 }

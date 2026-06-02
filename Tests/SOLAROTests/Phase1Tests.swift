@@ -1,16 +1,32 @@
 // ============================================================
 // Phase1Tests.swift
-// SOLARO — Phase 1 unit tests (project loading, layout sidecar)
+// SOLARO — project loading + layout sidecar (Swift Testing)
 // ============================================================
 
-import XCTest
+import Testing
+import Foundation
 @testable import SOLARO
 
-final class Phase1Tests: XCTestCase {
+// Shared helper — re-used by Phase 1 / Phase 3 / FileTreeTests.
+func makeProjectTree(files: [String: String]) throws -> URL {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("solaro-test-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    for (relPath, body) in files {
+        let url = root.appendingPathComponent(relPath)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try body.write(to: url, atomically: true, encoding: .utf8)
+    }
+    return root
+}
 
-    // MARK: - ProjectModel.load
+@Suite("ProjectModel.load")
+struct ProjectModelLoadTests {
 
-    func testProjectLoadDiscoversAroFiles() throws {
+    @Test func discoversAroFiles() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: Probe) { Log \"hi\" to the <console>. }",
             "users.aro": "(createUser: User API) { Return an <OK: status> for the <result>. }",
@@ -19,31 +35,29 @@ final class Phase1Tests: XCTestCase {
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let project = Project(rootPath: tmp)
-        let model = try ProjectModel.load(project)
+        let model = try ProjectModel.load(Project(rootPath: tmp))
 
-        XCTAssertEqual(model.sourceFiles.count, 3)
-        XCTAssertTrue(model.sourceFiles.contains { $0.lastPathComponent == "main.aro" })
-        XCTAssertTrue(model.sourceFiles.contains { $0.lastPathComponent == "users.aro" })
-        XCTAssertTrue(model.sourceFiles.contains { $0.lastPathComponent == "orders.aro" })
-        XCTAssertNil(model.openAPISpec)
-        XCTAssertTrue(model.storeFiles.isEmpty)
+        #expect(model.sourceFiles.count == 3)
+        #expect(model.sourceFiles.contains { $0.lastPathComponent == "main.aro" })
+        #expect(model.sourceFiles.contains { $0.lastPathComponent == "users.aro" })
+        #expect(model.sourceFiles.contains { $0.lastPathComponent == "orders.aro" })
+        #expect(model.openAPISpec == nil)
+        #expect(model.storeFiles.isEmpty)
     }
 
-    func testProjectLoadReadsOpenAPISpec() throws {
+    @Test func readsOpenAPISpec() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: x) { Return an <OK: status> for the <r>. }",
             "openapi.yaml": "openapi: 3.0.3\ninfo: { title: t, version: '1' }",
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let project = Project(rootPath: tmp)
-        let model = try ProjectModel.load(project)
-        XCTAssertNotNil(model.openAPISpec)
-        XCTAssertEqual(model.openAPISpec?.lastPathComponent, "openapi.yaml")
+        let model = try ProjectModel.load(Project(rootPath: tmp))
+        #expect(model.openAPISpec != nil)
+        #expect(model.openAPISpec?.lastPathComponent == "openapi.yaml")
     }
 
-    func testProjectLoadFindsStoreFiles() throws {
+    @Test func findsStoreFiles() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: x) { Return an <OK: status> for the <r>. }",
             "products.store": "- name: A",
@@ -51,32 +65,31 @@ final class Phase1Tests: XCTestCase {
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let project = Project(rootPath: tmp)
-        let model = try ProjectModel.load(project)
-        XCTAssertEqual(model.storeFiles.count, 2)
+        let model = try ProjectModel.load(Project(rootPath: tmp))
+        #expect(model.storeFiles.count == 2)
     }
 
-    func testProjectLoadEmptyProjectIsOK() throws {
+    @Test func emptyProjectIsOK() throws {
         let tmp = try makeProjectTree(files: [:])
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let project = Project(rootPath: tmp)
-        let model = try ProjectModel.load(project)
-        XCTAssertTrue(model.sourceFiles.isEmpty)
-        XCTAssertNil(model.openAPISpec)
+        let model = try ProjectModel.load(Project(rootPath: tmp))
+        #expect(model.sourceFiles.isEmpty)
+        #expect(model.openAPISpec == nil)
     }
+}
 
-    // MARK: - LayoutSidecar
+@Suite("LayoutSidecar")
+struct LayoutSidecarTests {
 
-    func testLayoutSidecarDefaultPaneMode() {
+    @Test func defaultPaneModeIsText() {
         // Phase 7: default flipped from .canvas to .text so new
-        // files open in the always-implemented text editor until
-        // Canvas / Map ship in Phases 8/10.
+        // files open in the always-implemented text editor.
         let sidecar = LayoutSidecar()
-        XCTAssertEqual(sidecar.paneMode, .text)
+        #expect(sidecar.paneMode == .text)
     }
 
-    func testLayoutSidecarRoundTripsThroughDisk() throws {
+    @Test func roundTripsThroughDisk() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: x) { Return an <OK: status> for the <r>. }",
         ])
@@ -89,26 +102,28 @@ final class Phase1Tests: XCTestCase {
         try sidecar.save(for: source)
 
         let reloaded = LayoutSidecar.load(for: source)
-        XCTAssertEqual(reloaded.paneMode, .split)
-        XCTAssertEqual(reloaded.view.zoom, 1.5)
+        #expect(reloaded.paneMode == .split)
+        #expect(reloaded.view.zoom == 1.5)
     }
 
-    func testLayoutSidecarLoadMissingIsDefault() {
+    @Test func loadingMissingFileReturnsDefault() {
         let url = URL(fileURLWithPath: "/tmp/never-exists-\(UUID().uuidString).aro")
         let sidecar = LayoutSidecar.load(for: url)
-        XCTAssertEqual(sidecar.paneMode, .text)
+        #expect(sidecar.paneMode == .text)
     }
 
-    func testLayoutSidecarFilenameConvention() {
+    @Test func filenameConventionIsDoubleExtension() {
         let source = URL(fileURLWithPath: "/tmp/MyApp/users.aro")
         let sidecar = LayoutSidecar.sidecarURL(for: source)
-        XCTAssertEqual(sidecar.lastPathComponent, "users.aro.layout.json")
-        XCTAssertEqual(sidecar.deletingLastPathComponent().path, "/tmp/MyApp")
+        #expect(sidecar.lastPathComponent == "users.aro.layout.json")
+        #expect(sidecar.deletingLastPathComponent().path == "/tmp/MyApp")
     }
+}
 
-    // MARK: - SourceFileState
+@Suite("SourceFileState")
+struct SourceFileStateTests {
 
-    func testSourceFileStateParsesValidProgram() throws {
+    @Test func parsesValidProgram() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": """
             (Application-Start: Entry Point) {
@@ -119,40 +134,22 @@ final class Phase1Tests: XCTestCase {
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
         let state = SourceFileState(url: tmp.appendingPathComponent("main.aro"))
-        XCTAssertNotNil(state.program)
-        XCTAssertEqual(state.program?.featureSets.first?.name, "Application-Start")
-        XCTAssertEqual(state.program?.featureSets.first?.businessActivity, "Entry Point")
-        XCTAssertTrue(state.diagnostics.isEmpty)
+        #expect(state.program != nil)
+        #expect(state.program?.featureSets.first?.name == "Application-Start")
+        #expect(state.program?.featureSets.first?.businessActivity == "Entry Point")
+        #expect(state.diagnostics.isEmpty)
     }
 
-    func testSourceFileStateReparsesAfterEdit() throws {
+    @Test func reparsesAfterEdit() throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: x) { Return an <OK: status> for the <r>. }",
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
         let state = SourceFileState(url: tmp.appendingPathComponent("main.aro"))
-        XCTAssertNotNil(state.program)
+        #expect(state.program != nil)
 
         state.text = "this is not valid aro syntax;;;"
         state.reparse()
-        // Either program is nil OR diagnostics are present.
-        XCTAssertTrue(state.program == nil || !state.diagnostics.isEmpty)
-    }
-
-    // MARK: - Helpers
-
-    private func makeProjectTree(files: [String: String]) throws -> URL {
-        let root = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("solaro-test-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        for (relPath, body) in files {
-            let url = root.appendingPathComponent(relPath)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try body.write(to: url, atomically: true, encoding: .utf8)
-        }
-        return root
+        #expect(state.program == nil || !state.diagnostics.isEmpty)
     }
 }

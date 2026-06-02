@@ -1,12 +1,14 @@
 // ============================================================
 // StackLayoutTests.swift
-// SOLARO — default column-stack placement coverage
+// SOLARO — column-stack placement (Swift Testing)
 // ============================================================
 
-import XCTest
+import Testing
+import Foundation
 @testable import SOLARO
 
-final class StackLayoutTests: XCTestCase {
+@Suite("StackLayout")
+struct StackLayoutTests {
 
     private func makeNode(_ id: String, verb: String = "Log",
                           x: Double = 0, y: Double = 0) -> CanvasNode {
@@ -18,21 +20,20 @@ final class StackLayoutTests: XCTestCase {
         )
     }
 
-    func testNodesStackTopToBottomInSourceOrder() {
+    @Test func nodesStackTopToBottomInSourceOrder() {
         let nodes = [makeNode("a"), makeNode("b"), makeNode("c")]
         let graph = CanvasGraph(nodes: nodes, edges: [])
         let placed = StackLayout.place(graph)
 
-        XCTAssertEqual(placed.nodes[0].y, 40)
-        XCTAssertEqual(placed.nodes[1].y, 40 + 78)
-        XCTAssertEqual(placed.nodes[2].y, 40 + 156)
+        #expect(placed.nodes[0].y == 40)
+        #expect(placed.nodes[1].y == 40 + 78)
+        #expect(placed.nodes[2].y == 40 + 156)
         // All in column 0 → same x.
         let xs = placed.nodes.map(\.x)
-        XCTAssertEqual(Set(xs).count, 1)
+        #expect(Set(xs).count == 1)
     }
 
-    func testIncomingFromNonImmediatePredecessorOpensNewColumn() {
-        // a → b → c, plus d which reads from a (not b).
+    @Test func incomingFromNonImmediatePredecessorOpensNewColumn() {
         let nodes = [makeNode("a"), makeNode("b"), makeNode("c"), makeNode("d")]
         let edges = [
             CanvasEdge(id: "a-b", fromNodeID: "a", toNodeID: "b", preposition: "with"),
@@ -42,18 +43,18 @@ final class StackLayoutTests: XCTestCase {
         let placed = StackLayout.place(CanvasGraph(nodes: nodes, edges: edges))
         let xd = placed.nodes.first { $0.id == "d" }!.x
         let xa = placed.nodes.first { $0.id == "a" }!.x
-        XCTAssertGreaterThan(xd, xa, "d should branch into a new column")
+        #expect(xd > xa)
     }
 
-    func testSavedPositionsArePreserved() {
+    @Test func savedPositionsArePreserved() {
         let nodes = [
             makeNode("a", x: 0, y: 0),
-            makeNode("b", x: 555, y: 222),   // user-dragged
+            makeNode("b", x: 555, y: 222),    // user-dragged
             makeNode("c", x: 0, y: 0),
         ]
         let placed = StackLayout.place(CanvasGraph(nodes: nodes, edges: []))
         let b = placed.nodes.first { $0.id == "b" }!
-        XCTAssertEqual(b.x, 555)
-        XCTAssertEqual(b.y, 222)
+        #expect(b.x == 555)
+        #expect(b.y == 222)
     }
 }
