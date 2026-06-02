@@ -48,10 +48,16 @@ final class WorkspaceController {
     var searchText: String = ""
     var loadError: String?
 
-    /// Parsed programs across the project. Built once on load; will
-    /// re-parse on Save in Phase 7. Used by the Map view + the
-    /// OpenAPI palette.
-    var programs: [Program] = []
+    /// Parsed programs keyed by source-file URL. Built once on load;
+    /// re-parsing on edit lands in Phase 7. Used by the Sidebar
+    /// Features tab, the Inspector AST tree, the Canvas, and the
+    /// Map view.
+    var programs: [URL: Program] = [:]
+
+    /// Parse-failure messages keyed by source-file URL. Empty when
+    /// every file parsed cleanly. Surfaced by the Inspector's
+    /// diagnostics card.
+    var parseErrors: [URL: String] = [:]
 
     init(project: Project) {
         self.project = project
@@ -61,11 +67,16 @@ final class WorkspaceController {
         do {
             let loaded = try ProjectModel.load(project)
             self.model = loaded
-            self.programs = loaded.sourceFiles.compactMap { url -> Program? in
+            for url in loaded.sourceFiles {
                 guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-                    return nil
+                    parseErrors[url] = "Could not read file."
+                    continue
                 }
-                return try? Parser.parse(text)
+                do {
+                    programs[url] = try Parser.parse(text)
+                } catch {
+                    parseErrors[url] = "\(error)"
+                }
             }
             if let first = loaded.sourceFiles.first {
                 openFile(first)
@@ -74,6 +85,25 @@ final class WorkspaceController {
         } catch {
             loadError = "Failed to load project: \(error.localizedDescription)"
         }
+    }
+
+    /// Parsed program for the file currently shown in the center
+    /// pane, if any.
+    var currentProgram: Program? {
+        guard let url = currentFile else { return nil }
+        return programs[url]
+    }
+
+    /// Parse error string for the current file, if parsing failed.
+    var currentParseError: String? {
+        guard let url = currentFile else { return nil }
+        return parseErrors[url]
+    }
+
+    /// Convenience for cross-file views (Map, OpenAPI palette).
+    var allPrograms: [Program] {
+        guard let model else { return [] }
+        return model.sourceFiles.compactMap { programs[$0] }
     }
 
     func openFile(_ url: URL) {
@@ -273,28 +303,4 @@ private struct CenterPaneView: View {
     }
 }
 
-// MARK: - Inspector placeholder (Phase 6 fills it in)
-
-private struct InspectorPaneView: View {
-    @Bindable var controller: WorkspaceController
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SolaroSpace.s) {
-            Text("INSPECTOR")
-                .font(SolaroFont.sectionTitle)
-                .foregroundStyle(SolaroColor.textSecondary)
-                .tracking(2)
-                .padding(.top, SolaroSpace.m)
-                .padding(.horizontal, SolaroSpace.m)
-
-            Text("Inspector pane · Phase 6")
-                .font(SolaroFont.caption)
-                .foregroundStyle(SolaroColor.textTertiary)
-                .padding(.horizontal, SolaroSpace.m)
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(SolaroColor.surface)
-    }
-}
+// Real InspectorPaneView lives in Inspector.swift (Phase 6).

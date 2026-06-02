@@ -102,9 +102,10 @@ struct SidebarPaneView: View {
             if let model = controller.model, !controller.programs.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: SolaroSpace.m) {
-                        ForEach(Array(zip(model.sourceFiles, controller.programs)),
-                                id: \.0) { url, program in
-                            featureGroup(url: url, program: program, model: model)
+                        ForEach(model.sourceFiles, id: \.self) { url in
+                            if let program = controller.programs[url] {
+                                featureGroup(url: url, program: program, model: model)
+                            }
                         }
                     }
                     .padding(.vertical, SolaroSpace.s)
