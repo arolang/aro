@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  SOLARO logo — glowing sphere with one tilted cyan ribbon
+  and one orange streak over the top.
+  ===========================================================
+  Pass 4 — comparing carefully to the source:
+    * The orange element isn't a ring, it's a single partial
+      arc that sweeps over the top of the planet and tapers
+      off at both ends.
+    * The cyan IS a ring, tilted -22°, with proper ribbon
+      depth (vertical user-space gradient + thin shine on
+      the lit top edge).
+    * The sphere has three stacked passes: base radial,
+      terminator shadow (lower-right), specular highlight
+      (upper-left).
+    * Both ribbons taper out at their ends via gradient alpha
+      stops, so they don't stop flat.
+    * Subtle radial vignette darkens the corners, ground
+      shadow under the planet for depth.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1024 1024" width="1024" height="1024">
+
+  <defs>
+    <!-- ============================================================
+         Sphere shading — three stacked gradients
+         ============================================================ -->
+    <radialGradient id="sphereBase" cx="35%" cy="30%" r="68%">
+      <stop offset="0%"   stop-color="#FFE9A8"/>
+      <stop offset="32%"  stop-color="#FFC04A"/>
+      <stop offset="72%"  stop-color="#D86A0A"/>
+      <stop offset="100%" stop-color="#5F2400"/>
+    </radialGradient>
+
+    <radialGradient id="sphereTerminator" cx="82%" cy="82%" r="78%">
+      <stop offset="0%"   stop-color="#2A0E00" stop-opacity="0.40"/>
+      <stop offset="60%"  stop-color="#2A0E00" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="sphereSpecular" cx="28%" cy="22%" r="30%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.80"/>
+      <stop offset="45%"  stop-color="#FFF4B5" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#FFF4B5" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- ============================================================
+         Background ambience
+         ============================================================ -->
+    <radialGradient id="halo" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"   stop-color="#FFB23C" stop-opacity="0.55"/>
+      <stop offset="60%"  stop-color="#FF7A18" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FF7A18" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="40%"  stop-color="#0B1828" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#03070F" stop-opacity="0.7"/>
+    </radialGradient>
+
+    <radialGradient id="groundShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#000000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- ============================================================
+         Cyan ribbon — vertical user-space gradient for the body
+         (light at the top, dark at the bottom) gives the ring a
+         lit-from-above ribbon look. Stops also fade to transparent
+         at the colour-extremes so the ends taper off rather than
+         end with a hard cap.
+         ============================================================ -->
+    <linearGradient id="cyanBody"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0" y1="380" x2="0" y2="605">
+      <stop offset="0%"   stop-color="#DDF1FF"/>
+      <stop offset="20%"  stop-color="#5BCBFF"/>
+      <stop offset="50%"  stop-color="#1F88F4"/>
+      <stop offset="85%"  stop-color="#173A9E"/>
+      <stop offset="100%" stop-color="#0E1F66"/>
+    </linearGradient>
+
+    <linearGradient id="cyanFade"
+                    gradientUnits="userSpaceOnUse"
+                    x1="160" y1="0" x2="864" y2="0">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="14%"  stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="86%"  stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="cyanShine"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0" y1="400" x2="0" y2="560">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- ============================================================
+         Orange streak — vertical gradient too, fades at ends.
+         ============================================================ -->
+    <linearGradient id="orangeBody"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0" y1="320" x2="0" y2="520">
+      <stop offset="0%"   stop-color="#FFF5D2"/>
+      <stop offset="25%"  stop-color="#FFD06C"/>
+      <stop offset="55%"  stop-color="#FFA12A"/>
+      <stop offset="85%"  stop-color="#C45B0B"/>
+      <stop offset="100%" stop-color="#6F2900"/>
+    </linearGradient>
+
+    <linearGradient id="orangeFade"
+                    gradientUnits="userSpaceOnUse"
+                    x1="280" y1="0" x2="760" y2="0">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="14%"  stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="86%"  stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Use the fade gradient as a mask so the gradient-stroked
+         path tapers to invisible at both ends. -->
+    <mask id="cyanMask" maskUnits="userSpaceOnUse"
+          x="0" y="0" width="1024" height="1024">
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#cyanFade)"/>
+    </mask>
+
+    <mask id="orangeMask" maskUnits="userSpaceOnUse"
+          x="0" y="0" width="1024" height="1024">
+      <rect x="0" y="0" width="1024" height="1024" fill="url(#orangeFade)"/>
+    </mask>
+
+    <!-- ============================================================
+         Wordmark fade
+         ============================================================ -->
+    <linearGradient id="wordmark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#D2EEFF"/>
+      <stop offset="100%" stop-color="#1F66E0"/>
+    </linearGradient>
+
+    <!-- ============================================================
+         Filters
+         ============================================================ -->
+    <filter id="softBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="36"/>
+    </filter>
+    <filter id="mildBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="ribbonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+  </defs>
+
+  <!-- ============================================================
+       1. Backdrop + vignette
+       ============================================================ -->
+  <rect width="1024" height="1024" fill="#0B1828"/>
+  <rect width="1024" height="1024" fill="url(#vignette)"/>
+
+  <!-- 2. Halo behind the planet -->
+  <circle cx="512" cy="480" r="260"
+          fill="url(#halo)" filter="url(#softBlur)"/>
+
+  <!-- 2b. Outermost wide cyan halo ring — faint, large, gives the
+        composition an orbital "atmosphere" of motion. -->
+  <g mask="url(#cyanMask)" opacity="0.45">
+    <g transform="translate(512 480) rotate(-28)">
+      <ellipse cx="0" cy="0" rx="395" ry="118"
+               fill="none" stroke="url(#cyanBody)"
+               stroke-width="6" filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- 2c. Wispy orange streak way above the main ring system —
+        an extra motion-line for richness. -->
+  <g mask="url(#orangeMask)" opacity="0.55">
+    <g transform="translate(512 480) rotate(8)">
+      <path d="M -300 -180 Q 0 -260 300 -180"
+            fill="none" stroke="url(#orangeBody)"
+            stroke-width="5" stroke-linecap="butt"
+            filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- 3a. Cyan ring — BACK half -->
+  <g mask="url(#cyanMask)">
+    <g transform="translate(512 480) rotate(-22)">
+      <path d="M -340 0 A 340 92 0 0 0 340 0"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="36" stroke-linecap="butt"
+            opacity="0.78"/>
+    </g>
+  </g>
+
+  <!-- 3a-bis. Inner secondary cyan ring at a slightly different
+        tilt — adds depth and breaks the single-orbit feel. -->
+  <g mask="url(#cyanMask)" opacity="0.6">
+    <g transform="translate(512 480) rotate(-15)">
+      <path d="M -270 0 A 270 60 0 0 0 270 0"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="14" stroke-linecap="butt"/>
+    </g>
+  </g>
+
+  <!-- 3b. Orange ring — BACK half (opposite tilt, +18°). -->
+  <g mask="url(#orangeMask)">
+    <g transform="translate(512 480) rotate(18)">
+      <path d="M -260 0 A 260 70 0 0 1 260 0"
+            fill="none" stroke="url(#orangeBody)"
+            stroke-width="26" stroke-linecap="butt"
+            opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- 3c. Wide back motion-blur swoosh in cyan — a chunky arc
+        well above the main ring, behind the sphere, that the
+        planet partially eclipses. -->
+  <g mask="url(#cyanMask)" opacity="0.32">
+    <g transform="translate(512 480) rotate(-35)">
+      <path d="M -370 0 A 370 110 0 0 0 370 0"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="18" stroke-linecap="butt"
+            filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- ============================================================
+       4. The planet — base + terminator shadow + specular highlight
+       ============================================================ -->
+  <!-- Ground shadow on the dark background underneath the planet -->
+  <ellipse cx="512" cy="650" rx="180" ry="22"
+           fill="url(#groundShadow)" filter="url(#mildBlur)"/>
+
+  <circle cx="512" cy="480" r="155" fill="url(#sphereBase)"/>
+  <circle cx="512" cy="480" r="155" fill="url(#sphereTerminator)"/>
+  <circle cx="512" cy="480" r="155" fill="url(#sphereSpecular)"/>
+
+  <!-- 5. Cyan ring — FRONT half (over the sphere). -->
+  <g mask="url(#cyanMask)">
+    <g transform="translate(512 480) rotate(-22)">
+      <path d="M -340 0 A 340 92 0 0 1 340 0"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="52" stroke-linecap="butt"
+            filter="url(#ribbonGlow)"/>
+      <path d="M -312 0 A 312 76 0 0 1 312 0"
+            fill="none" stroke="url(#cyanShine)"
+            stroke-width="6" stroke-linecap="butt"/>
+    </g>
+  </g>
+
+  <!-- 6. Orange ring — FRONT half (over the top of the planet). -->
+  <g mask="url(#orangeMask)">
+    <g transform="translate(512 480) rotate(18)">
+      <path d="M -260 0 A 260 70 0 0 0 260 0"
+            fill="none" stroke="url(#orangeBody)"
+            stroke-width="44" stroke-linecap="butt"
+            filter="url(#ribbonGlow)"/>
+      <path d="M -234 0 A 234 56 0 0 0 234 0"
+            fill="none" stroke="#FFF5CC"
+            stroke-width="6" stroke-linecap="butt"
+            opacity="0.95"/>
+    </g>
+  </g>
+
+  <!-- 6b. Secondary thin orange streak parallel to the main one,
+        slightly higher arc — racing-stripe parallel. -->
+  <g mask="url(#orangeMask)" opacity="0.7">
+    <g transform="translate(512 480) rotate(18)">
+      <path d="M -210 -30 A 220 52 0 0 0 210 -30"
+            fill="none" stroke="url(#orangeBody)"
+            stroke-width="9" stroke-linecap="butt"
+            filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- 6c. Cyan tail-flick on the upper-right — the ribbon
+        appears to lift off and trail away, classic motion-line.
+        Drawn last so it sits over everything. -->
+  <g opacity="0.85">
+    <g transform="translate(512 480) rotate(-22)">
+      <path d="M 320 -22 Q 380 -90 380 -180"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="14" stroke-linecap="round"
+            filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- 6d. Cyan tail-flick on the lower-left, mirror of 6c. -->
+  <g opacity="0.55">
+    <g transform="translate(512 480) rotate(-22)">
+      <path d="M -320 22 Q -380 90 -380 175"
+            fill="none" stroke="url(#cyanBody)"
+            stroke-width="10" stroke-linecap="round"
+            filter="url(#ribbonGlow)"/>
+    </g>
+  </g>
+
+  <!-- 6e. Bright pin-prick highlight where the rings cross the
+        planet's lit edge — sells the "light hitting the ribbon"
+        moment. -->
+  <circle cx="430" cy="402" r="6" fill="#FFFFFF" opacity="0.85"
+          filter="url(#ribbonGlow)"/>
+  <circle cx="620" cy="555" r="5" fill="#E6F6FF" opacity="0.7"
+          filter="url(#ribbonGlow)"/>
+
+  <!-- ============================================================
+       7. Wordmark — light weight, wide tracking, blue gradient
+       ============================================================ -->
+  <text x="512" y="860" text-anchor="middle"
+        font-family="'Helvetica Neue', 'Avenir Next', 'Arial', sans-serif"
+        font-weight="200" font-size="144"
+        letter-spacing="18"
+        fill="url(#wordmark)">SOLARO</text>
+</svg>

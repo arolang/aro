@@ -375,6 +375,13 @@ struct WorkspaceView: View {
     @State private var commitModel = GitCommitModel()
     @State private var showHoverSheet = false
     @State private var hoverState = HoverSheetState()
+    @State private var showCompletionSheet = false
+    @State private var completionState = CompletionSheetState()
+    @State private var showRenameSheet = false
+    @State private var renameNewName: String = ""
+    @State private var renameError: String? = nil
+    @State private var showBlameSheet = false
+    @State private var blameContent: String = ""
     @State private var showFindInProject = false
     @State private var findInProjectModel = FindInProjectModel()
     @State private var showSymbolPalette = false
@@ -513,6 +520,27 @@ struct WorkspaceView: View {
         .sheet(isPresented: $showHoverSheet) {
             HoverSheet(state: hoverState, onClose: { showHoverSheet = false })
         }
+        .sheet(isPresented: $showCompletionSheet) {
+            CompletionSheet(
+                state: completionState,
+                onPick: { item in acceptCompletion(item) },
+                onClose: { showCompletionSheet = false }
+            )
+        }
+        .sheet(isPresented: $showRenameSheet) {
+            RenameSheet(
+                newName: $renameNewName,
+                error: $renameError,
+                onCancel: { showRenameSheet = false },
+                onConfirm: { applyRename() }
+            )
+        }
+        .sheet(isPresented: $showBlameSheet) {
+            BlameSheet(
+                content: blameContent,
+                onClose: { showBlameSheet = false }
+            )
+        }
         .sheet(isPresented: $controller.showExtractActionSheet) {
             ExtractActionSheet(
                 state: controller.extractActionState,
@@ -603,6 +631,22 @@ struct WorkspaceView: View {
             }
             HiddenShortcutButton(key: "h", modifiers: [.control, .command]) {
                 hoverAtCaret()
+            }
+            // ⌃Space — LSP autocompletion (#254)
+            HiddenShortcutButton(key: " ", modifiers: [.control]) {
+                triggerCompletion()
+            }
+            // ⌃⌘R — rename refactor (#256)
+            HiddenShortcutButton(key: "r", modifiers: [.control, .command]) {
+                beginRename()
+            }
+            // ⇧⌥F — format document (#257)
+            HiddenShortcutButton(key: "f", modifiers: [.option, .shift]) {
+                formatDocument()
+            }
+            // ⌃⌘B — git blame for current file (#260)
+            HiddenShortcutButton(key: "b", modifiers: [.control, .command]) {
+                showBlame()
             }
         }
         .onAppear { controller.load() }
@@ -701,6 +745,140 @@ struct WorkspaceView: View {
         var end = i
         while end < chars.count - 1, isIdent(chars[end + 1]) { end += 1 }
         return String(chars[start...end])
+    }
+
+    // MARK: - LSP autocompletion (#254)
+
+    private func triggerCompletion() {
+        guard
+            let url = controller.currentFile,
+            let lineNumber = controller.currentLine,
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        let lines = text.components(separatedBy: "\n")
+        guard lineNumber - 1 < lines.count else { return }
+        let column = resolvedColumn(for: lines[lineNumber - 1])
+
+        completionState.items = []
+        completionState.isLoading = true
+        completionState.hasResult = false
+        completionState.selection = nil
+        showCompletionSheet = true
+
+        controller.lsp.completion(
+            url: url, line0: lineNumber - 1, character0: column
+        ) { items in
+            completionState.items = items
+            completionState.isLoading = false
+            completionState.hasResult = true
+            completionState.selection = items.first?.id
+        }
+    }
+
+    private func acceptCompletion(_ item: AROLSPClient.CompletionItem) {
+        showCompletionSheet = false
+        guard
+            let url = controller.currentFile,
+            let lineNumber = controller.currentLine,
+            var text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        // Insert the chosen text at the current caret position.
+        // Simplification: insert at the end of the current line
+        // followed by a space if no caret column tracked.
+        let lines = text.components(separatedBy: "\n")
+        guard lineNumber - 1 < lines.count else { return }
+        let column = resolvedColumn(for: lines[lineNumber - 1])
+        var lineStarts: [Int] = [0]
+        let ns = text as NSString
+        for i in 0..<ns.length {
+            if ns.character(at: i) == 0x0A { lineStarts.append(i + 1) }
+        }
+        let insertOffset = lineStarts[lineNumber - 1] + column
+        guard insertOffset <= ns.length else { return }
+        text = ns.replacingCharacters(
+            in: NSRange(location: insertOffset, length: 0),
+            with: item.insertText
+        )
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+        controller.lsp.didChange(url: url, text: text)
+        controller.openFile(url)
+    }
+
+    // MARK: - LSP rename (#256)
+
+    private func beginRename() {
+        renameNewName = ""
+        renameError = nil
+        showRenameSheet = true
+    }
+
+    private func applyRename() {
+        guard
+            let url = controller.currentFile,
+            let lineNumber = controller.currentLine,
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        let lines = text.components(separatedBy: "\n")
+        guard lineNumber - 1 < lines.count else { return }
+        let column = resolvedColumn(for: lines[lineNumber - 1])
+        let newName = renameNewName.trimmingCharacters(in: .whitespaces)
+        guard !newName.isEmpty else {
+            renameError = "Enter a new name."
+            return
+        }
+        controller.lsp.rename(
+            url: url, line0: lineNumber - 1, character0: column,
+            newName: newName
+        ) { edits, error in
+            if let edits {
+                _ = LSPEditApplier.apply(edits: edits, through: controller)
+                showRenameSheet = false
+            } else {
+                renameError = error ?? "Rename failed."
+            }
+        }
+    }
+
+    // MARK: - LSP formatting (#257)
+
+    private func formatDocument() {
+        guard let url = controller.currentFile else { return }
+        controller.lsp.format(url: url) { edits in
+            guard !edits.isEmpty else { return }
+            _ = LSPEditApplier.apply(edits: edits, through: controller)
+        }
+    }
+
+    // MARK: - Git blame (#260)
+
+    private func showBlame() {
+        guard let url = controller.currentFile else { return }
+        let projectURL = project.rootPath
+        blameContent = "Loading…"
+        showBlameSheet = true
+        Task.detached(priority: .utility) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = ["git", "blame", "--date=short", url.path]
+            task.currentDirectoryURL = projectURL
+            let out = Pipe(), err = Pipe()
+            task.standardOutput = out
+            task.standardError = err
+            do {
+                try task.run()
+                task.waitUntilExit()
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                let text = String(data: data, encoding: .utf8) ?? ""
+                let result = task.terminationStatus == 0
+                    ? text
+                    : "git blame failed (exit \(task.terminationStatus))"
+                await MainActor.run { blameContent = result }
+            } catch {
+                await MainActor.run {
+                    blameContent = "Could not run git blame: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     private func resolvedColumn(for line: String) -> Int {

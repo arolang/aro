@@ -66,6 +66,30 @@ final class AROLSPClient {
         let character: Int     // 0-based — the editor doesn't track columns yet
     }
 
+    /// One row in a completion response. Mirrors the subset of
+    /// `CompletionItem` we actually display: label, detail line,
+    /// the text that gets inserted, and a kind for the icon. We
+    /// strip the long-form Markdown documentation from the wire
+    /// payload since the popup only shows one line.
+    struct CompletionItem: Equatable, Identifiable {
+        let id = UUID()
+        let label: String
+        let detail: String?
+        let insertText: String
+        let kind: Kind
+
+        /// Mirrors LSP's CompletionItemKind enum (subset SOLARO uses).
+        enum Kind: Int {
+            case text = 1, method = 2, function = 3, constructor = 4,
+                 field = 5, variable = 6, classKind = 7, interfaceKind = 8,
+                 module = 9, property = 10, unit = 11, value = 12,
+                 enumKind = 13, keyword = 14, snippet = 15, color = 16,
+                 file = 17, reference = 18, folder = 19, enumMember = 20,
+                 constant = 21, structKind = 22, event = 23, operatorKind = 24,
+                 typeParameter = 25
+        }
+    }
+
     func start() {
         guard process == nil else { return }
         let task = Process()
@@ -242,6 +266,166 @@ final class AROLSPClient {
         return nil
     }
 
+    /// Send `textDocument/completion` and call back with a parsed
+    /// list of `CompletionItem`s. Returns the up to `limit` first
+    /// items the server offered, in the server's order (LSP
+    /// servers typically pre-sort by sortText).
+    func completion(
+        url: URL,
+        line0: Int,
+        character0: Int,
+        limit: Int = 50,
+        completion: @escaping ([CompletionItem]) -> Void
+    ) {
+        guard isReady else { completion([]); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            completion(Self.parseCompletions(raw, limit: limit))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "textDocument/completion",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "position": ["line": line0, "character": character0],
+            ],
+        ])
+    }
+
+    /// LSP can return either `CompletionItem[]` or a `CompletionList`
+    /// wrapping `items: [...]`. Accept both.
+    /// One edit returned by rename / formatting requests.
+    struct TextEdit: Equatable {
+        let url: URL
+        /// LSP uses 0-based positions. Stored as-is so we can apply
+        /// in reverse without bookkeeping.
+        let startLine: Int
+        let startChar: Int
+        let endLine: Int
+        let endChar: Int
+        let newText: String
+    }
+
+    /// Send `textDocument/rename`. Callback delivers either the
+    /// edits or a human-readable failure reason — not via
+    /// `Result<_, Error>` because we never throw an actual Error
+    /// here, just surface the server's complaint as text.
+    func rename(
+        url: URL, line0: Int, character0: Int, newName: String,
+        completion: @escaping (_ edits: [TextEdit]?, _ error: String?) -> Void
+    ) {
+        guard isReady else { completion(nil, "LSP not ready"); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            let parsed = Self.parseWorkspaceEdit(raw)
+            completion(parsed.edits, parsed.error)
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0", "id": id,
+            "method": "textDocument/rename",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "position": ["line": line0, "character": character0],
+                "newName": newName,
+            ],
+        ])
+    }
+
+    /// Send `textDocument/formatting`.
+    func format(
+        url: URL,
+        tabSize: Int = 4,
+        completion: @escaping ([TextEdit]) -> Void
+    ) {
+        guard isReady else { completion([]); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            guard let arr = raw as? [[String: Any]] else { completion([]); return }
+            completion(Self.parseEdits(arr, url: url))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0", "id": id,
+            "method": "textDocument/formatting",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "options": [
+                    "tabSize": tabSize,
+                    "insertSpaces": true,
+                ],
+            ],
+        ])
+    }
+
+    private static func parseWorkspaceEdit(_ raw: Any?) -> (edits: [TextEdit]?, error: String?) {
+        guard let dict = raw as? [String: Any] else {
+            return (nil, "LSP returned no edits")
+        }
+        var edits: [TextEdit] = []
+        if let changes = dict["changes"] as? [String: [[String: Any]]] {
+            for (uriStr, items) in changes {
+                guard let url = URL(string: uriStr) else { continue }
+                edits.append(contentsOf: parseEdits(items, url: url))
+            }
+        }
+        if let docChanges = dict["documentChanges"] as? [[String: Any]] {
+            for doc in docChanges {
+                guard
+                    let textDoc = doc["textDocument"] as? [String: Any],
+                    let uriStr = textDoc["uri"] as? String,
+                    let url = URL(string: uriStr),
+                    let items = doc["edits"] as? [[String: Any]]
+                else { continue }
+                edits.append(contentsOf: parseEdits(items, url: url))
+            }
+        }
+        return edits.isEmpty
+            ? (nil, "LSP returned no edits")
+            : (edits, nil)
+    }
+
+    private static func parseEdits(_ raw: [[String: Any]], url: URL) -> [TextEdit] {
+        raw.compactMap { item -> TextEdit? in
+            guard
+                let range = item["range"] as? [String: Any],
+                let start = range["start"] as? [String: Any],
+                let end = range["end"] as? [String: Any],
+                let sl = start["line"] as? Int,
+                let sc = start["character"] as? Int,
+                let el = end["line"] as? Int,
+                let ec = end["character"] as? Int,
+                let newText = item["newText"] as? String
+            else { return nil }
+            return TextEdit(url: url, startLine: sl, startChar: sc,
+                            endLine: el, endChar: ec, newText: newText)
+        }
+    }
+
+    private static func parseCompletions(_ raw: Any?, limit: Int) -> [CompletionItem] {
+        let items: [[String: Any]]
+        if let list = raw as? [String: Any],
+           let arr = list["items"] as? [[String: Any]]
+        {
+            items = arr
+        } else if let arr = raw as? [[String: Any]] {
+            items = arr
+        } else {
+            return []
+        }
+        return items.prefix(limit).compactMap { dict in
+            guard let label = dict["label"] as? String else { return nil }
+            let detail = dict["detail"] as? String
+            let insertText = dict["insertText"] as? String ?? label
+            let rawKind = (dict["kind"] as? Int) ?? 1
+            let kind = CompletionItem.Kind(rawValue: rawKind) ?? .text
+            return CompletionItem(label: label, detail: detail,
+                                  insertText: insertText, kind: kind)
+        }
+    }
+
     private static func parseDefinition(_ raw: Any?) -> DefinitionLocation? {
         let dict: [String: Any]?
         if let arr = raw as? [[String: Any]] {
@@ -276,6 +460,15 @@ final class AROLSPClient {
                     "publishDiagnostics": [
                         "relatedInformation": true,
                     ],
+                    "completion": [
+                        "completionItem": [
+                            "snippetSupport": false,
+                        ],
+                    ],
+                    "rename": [
+                        "prepareSupport": true,
+                    ],
+                    "formatting": [:],
                 ],
             ],
         ]
