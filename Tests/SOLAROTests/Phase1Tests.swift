@@ -69,8 +69,11 @@ final class Phase1Tests: XCTestCase {
     // MARK: - LayoutSidecar
 
     func testLayoutSidecarDefaultPaneMode() {
+        // Phase 7: default flipped from .canvas to .text so new
+        // files open in the always-implemented text editor until
+        // Canvas / Map ship in Phases 8/10.
         let sidecar = LayoutSidecar()
-        XCTAssertEqual(sidecar.paneMode, .canvas)
+        XCTAssertEqual(sidecar.paneMode, .text)
     }
 
     func testLayoutSidecarRoundTripsThroughDisk() throws {
@@ -93,7 +96,7 @@ final class Phase1Tests: XCTestCase {
     func testLayoutSidecarLoadMissingIsDefault() {
         let url = URL(fileURLWithPath: "/tmp/never-exists-\(UUID().uuidString).aro")
         let sidecar = LayoutSidecar.load(for: url)
-        XCTAssertEqual(sidecar.paneMode, .canvas)
+        XCTAssertEqual(sidecar.paneMode, .text)
     }
 
     func testLayoutSidecarFilenameConvention() {

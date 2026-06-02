@@ -15,8 +15,12 @@ import Foundation
 /// bytes per file. Phase 1 only persists `paneMode`; canvas node
 /// positions land in Phase 2 (`nodes`).
 struct LayoutSidecar: Codable, Equatable {
-    /// Last-used pane mode for this file. Default per ADR-005.
-    var paneMode: PaneMode = .canvas
+    /// Last-used pane mode for this file. Default `.text` so new
+    /// files open in the editor (the only universally-implemented
+    /// pane mode through Phase 7). Phases 8/10 enable Canvas / Split
+    /// / Map; users opt in by switching modes — the choice persists
+    /// here for next time.
+    var paneMode: PaneMode = .text
 
     /// Reserved for Phase 2 — node positions by AST id.
     var nodes: [String: NodePosition] = [:]

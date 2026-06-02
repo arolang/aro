@@ -279,28 +279,6 @@ struct WorkspaceView: View {
 
 // Real SidebarPaneView lives in Sidebar.swift (Phase 5).
 
-// MARK: - Center placeholder (Phases 7–8 fill it in)
-
-private struct CenterPaneView: View {
-    @Bindable var controller: WorkspaceController
-
-    var body: some View {
-        VStack(spacing: SolaroSpace.l) {
-            Spacer()
-            Image(systemName: controller.paneMode.symbol)
-                .font(.system(size: 64, weight: .ultraLight))
-                .foregroundStyle(SolaroColor.textTertiary)
-            Text(controller.paneMode.label)
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(SolaroColor.textSecondary)
-            Text("Center pane · Phases 7–8")
-                .font(SolaroFont.caption)
-                .foregroundStyle(SolaroColor.textTertiary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SolaroColor.backdrop)
-    }
-}
+// Real CenterPaneView lives in CenterPane.swift (Phase 7 onwards).
 
 // Real InspectorPaneView lives in Inspector.swift (Phase 6).
