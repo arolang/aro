@@ -187,7 +187,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .inspector: return "Inspector"
-        case .coPilot:   return "Co-pilot"
+        case .coPilot:   return "Ask"
         }
     }
 

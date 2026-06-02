@@ -278,7 +278,7 @@ struct AICoPilotPanel: View {
     private var promptField: some View {
         HStack(spacing: SolaroSpace.s) {
             TextField(
-                "Ask the co-pilot…",
+                "Ask…",
                 text: $promptDraft,
                 axis: .vertical
             )
