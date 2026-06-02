@@ -179,3 +179,5 @@ core
 Train/.venv/
 Train/script/output/
 *.aro.layout.json
+*.yaml.layout.json
+.solaro/
