@@ -64,20 +64,32 @@ final class ConsoleProcess {
         let lines = breakpointsByFile.values.flatMap { $0 }.sorted()
         let useDebugger = !lines.isEmpty
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        let aro = Self.resolveAroBinary(near: project)
+        appendInfo("[aro] \(aro)")
+
+        // Build the subcommand portion of the argv.
+        var subArgs: [String]
         if useDebugger {
-            var args: [String] = ["aro", "debug", project.rootPath.path,
-                                  "--record", recordPath(for: project)]
+            subArgs = ["debug", project.rootPath.path,
+                       "--record", recordPath(for: project)]
             for line in lines {
-                args.append("--breakpoint")
-                args.append(String(line))
+                subArgs.append("--breakpoint")
+                subArgs.append(String(line))
             }
-            task.arguments = args
             appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
         } else {
-            task.arguments = ["aro", "run", project.rootPath.path]
+            subArgs = ["run", project.rootPath.path]
             appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
+        }
+
+        let task = Process()
+        if aro == "/usr/bin/env" {
+            // Fallback path — let env resolve `aro` from $PATH.
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = ["aro"] + subArgs
+        } else {
+            task.executableURL = URL(fileURLWithPath: aro)
+            task.arguments = subArgs
         }
         task.currentDirectoryURL = project.rootPath
 
@@ -141,6 +153,54 @@ final class ConsoleProcess {
     /// playback in the Time-Travel view.
     private func recordPath(for project: Project) -> String {
         project.rootPath.appendingPathComponent(".solaro/events.jsonl").path
+    }
+
+    /// Pick an `aro` binary in priority order:
+    ///   1. `$SOLARO_ARO` environment override
+    ///   2. The SOLARO source-tree's local debug build, walking up
+    ///      from the open project's parent until a Package.swift +
+    ///      .build/debug/aro pair is found (common during SOLARO
+    ///      development — Homebrew's `aro` may lag behind main).
+    ///   3. Same dance with .build/release/aro.
+    ///   4. `/usr/local/bin/aro`
+    ///   5. `/opt/homebrew/bin/aro`
+    ///   6. Bare `aro` resolved by /usr/bin/env (the legacy path).
+    nonisolated static func resolveAroBinary(near project: Project) -> String {
+        let fm = FileManager.default
+        if let envPath = ProcessInfo.processInfo.environment["SOLARO_ARO"],
+           !envPath.isEmpty, fm.isExecutableFile(atPath: envPath) {
+            return envPath
+        }
+
+        // Walk up from the project root looking for an ARO source
+        // checkout. We accept anywhere up to filesystem root.
+        var dir = project.rootPath.deletingLastPathComponent()
+        let configs = ["release", "debug"]
+        for _ in 0..<8 {  // hard cap so we never recurse forever
+            for cfg in configs {
+                let candidate = dir.appendingPathComponent(".build/\(cfg)/aro").path
+                if fm.isExecutableFile(atPath: candidate) {
+                    return candidate
+                }
+            }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { break }
+            dir = parent
+        }
+
+        // Common install locations as fallbacks.
+        let fallbacks = [
+            "/usr/local/bin/aro",
+            "/opt/homebrew/bin/aro",
+        ]
+        for path in fallbacks where fm.isExecutableFile(atPath: path) {
+            return path
+        }
+
+        // Last resort — let env walk PATH at exec time. The console
+        // will surface the failure when an older `aro` doesn't
+        // recognise the requested subcommand.
+        return "/usr/bin/env"
     }
 
     /// Drain the read-side of a pipe in the background, splitting
