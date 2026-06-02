@@ -24,11 +24,19 @@ import AROParser
 /// clipping and the system delay.
 final class AROHoverTextView: STTextView {
     /// Resolver callback set by the SwiftUI wrapper: takes an
-    /// identifier name (e.g. "greeting") and returns the tooltip
-    /// text (e.g. "greeting: String = \"Hello, World!\"") when the
-    /// debugger has captured a value for it, else nil.
-    var resolveSymbol: ((String) -> String?)?
+    /// identifier name (e.g. "greeting") and returns the captured
+    /// symbol value when the debugger has one for it, else nil.
+    var resolveSymbol: ((String) -> ConsoleProcess.SymbolValue?)?
+
     private var trackingAreaCache: NSTrackingArea?
+    private lazy var hoverPopover: NSPopover = {
+        let p = NSPopover()
+        p.behavior = .transient
+        p.animates = false
+        return p
+    }()
+    private var hoverHost: NSHostingController<HoverValuePopover>?
+    private var lastHoverIdentifier: String?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -37,7 +45,8 @@ final class AROHoverTextView: STTextView {
         }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect],
+            options: [.activeInKeyWindow, .mouseMoved,
+                      .mouseEnteredAndExited, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -45,14 +54,54 @@ final class AROHoverTextView: STTextView {
         trackingAreaCache = area
     }
 
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hideHoverPopover()
+    }
+
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
         guard let identifier = identifierUnderPoint(point) else {
-            toolTip = nil
+            hideHoverPopover()
             return
         }
-        toolTip = resolveSymbol?(identifier)
+        if identifier == lastHoverIdentifier, hoverPopover.isShown {
+            return
+        }
+        guard let symbol = resolveSymbol?(identifier) else {
+            hideHoverPopover()
+            return
+        }
+        lastHoverIdentifier = identifier
+        showHoverPopover(for: symbol, near: point)
+    }
+
+    /// Mount the SwiftUI popover anchored just under the cursor's
+    /// caret rect. NSPopover handles the arrow + edge clipping.
+    private func showHoverPopover(for symbol: ConsoleProcess.SymbolValue,
+                                  near point: CGPoint) {
+        let view = HoverValuePopover(symbol: symbol)
+        if let host = hoverHost {
+            host.rootView = view
+        } else {
+            let host = NSHostingController(rootView: view)
+            host.sizingOptions = [.intrinsicContentSize]
+            hoverHost = host
+            hoverPopover.contentViewController = host
+        }
+        // Anchor on a 1pt rect at the cursor; popover positions itself.
+        let anchor = NSRect(x: point.x, y: point.y, width: 1, height: 1)
+        if !hoverPopover.isShown {
+            hoverPopover.show(relativeTo: anchor, of: self, preferredEdge: .maxY)
+        }
+    }
+
+    private func hideHoverPopover() {
+        lastHoverIdentifier = nil
+        if hoverPopover.isShown {
+            hoverPopover.performClose(nil)
+        }
     }
 
     /// Find the `<…>` identifier (if any) at `point`. Treats angle
@@ -125,6 +174,47 @@ final class AROHoverTextView: STTextView {
     }
 }
 
+/// SwiftUI content of the hover-value popover. Styled to match the
+/// inspector's Variables-row pattern: name in accent, type secondary,
+/// value primary mono, with a small "captured at pause" caption.
+struct HoverValuePopover: View {
+    let symbol: ConsoleProcess.SymbolValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: "pause.circle.fill")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                    .font(.system(size: 11))
+                Text(symbol.name)
+                    .font(SolaroFont.bodyBold)
+                    .foregroundStyle(SolaroColor.accent)
+                Text(":")
+                    .font(SolaroFont.bodyBold)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Text(symbol.typeName)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textSecondary)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text("= ")
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Text(symbol.value)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .textSelection(.enabled)
+            }
+            Text("captured at the current pause")
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.s)
+        .frame(maxWidth: 380, alignment: .leading)
+    }
+}
+
 /// Red-dot marker drawn in the gutter for each line that has a
 /// breakpoint. Sized to fit the gutter's marker container; SOLARO
 /// doesn't customize STGutterView's geometry, so we lean on the
@@ -189,7 +279,7 @@ struct AROCodeEditor: NSViewRepresentable {
         configureTextView(textView)
         textView.textDelegate = context.coordinator
         textView.resolveSymbol = { [weak coordinator = context.coordinator] name in
-            coordinator?.parent.tooltip(forIdentifier: name)
+            coordinator?.parent.symbolValue(forIdentifier: name)
         }
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
@@ -294,14 +384,14 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Paint a warm tint across the paused line's character range
     /// so the user sees exactly where execution stopped. No-op
     /// when `pausedLine` is nil.
-    /// Format the tooltip line shown when the user hovers over
-    /// `<identifier>`. Returns nil when the debugger hasn't
-    /// captured a value for it at the current pause — that's
-    /// the "show only when there's actually a value" the user
-    /// asked for.
-    fileprivate func tooltip(forIdentifier name: String) -> String? {
-        guard let symbol = pauseSymbols[name] else { return nil }
-        return "\(symbol.name): \(symbol.typeName) = \(symbol.value)"
+    /// Return the live debugger value for `name` so the editor's
+    /// hover popover can render it. nil → no value captured yet,
+    /// so the popover stays hidden (the "show only when there's
+    /// actually a value" rule).
+    fileprivate func symbolValue(
+        forIdentifier name: String
+    ) -> ConsoleProcess.SymbolValue? {
+        pauseSymbols[name]
     }
 
     fileprivate func paintPausedLine(on textView: STTextView) {
