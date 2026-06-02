@@ -35,6 +35,7 @@ struct InspectorPaneView: View {
                 fileHeader
                 openAPIEditorSection
                 variablesSection
+                WatchesSection(controller: controller, store: controller.watches)
                 lspDiagnosticsSection
                 featureSetSection
                 deployRail
@@ -324,21 +325,68 @@ struct InspectorPaneView: View {
 
     @ViewBuilder
     private var lspDiagnosticsSection: some View {
-        let entries = lspDiagnosticsForCurrentFile
+        let entries = projectDiagnostics
         if !entries.isEmpty {
             VStack(alignment: .leading, spacing: SolaroSpace.s) {
-                Text("LSP DIAGNOSTICS")
-                    .font(SolaroFont.sectionTitle)
-                    .foregroundStyle(SolaroColor.textSecondary)
-                    .tracking(2)
-                ForEach(entries) { d in
-                    LSPDiagnosticRow(diagnostic: d)
+                HStack {
+                    Text("PROBLEMS")
+                        .font(SolaroFont.sectionTitle)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .tracking(2)
+                    Text("\(entries.count)")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                }
+                ForEach(entries) { entry in
+                    Button {
+                        controller.openFile(entry.url)
+                        controller.currentLine = entry.diagnostic.line
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(relativePath(for: entry.url))
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textTertiary)
+                            LSPDiagnosticRow(diagnostic: entry.diagnostic)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.top, SolaroSpace.s)
         }
     }
 
+    /// Project-wide diagnostics flattened with their owning URL so
+    /// the inspector can render a single "Problems" list.
+    private var projectDiagnostics: [DiagnosticEntry] {
+        var out: [DiagnosticEntry] = []
+        for (url, diags) in controller.lsp.diagnostics {
+            for d in diags { out.append(.init(url: url, diagnostic: d)) }
+        }
+        return out.sorted { lhs, rhs in
+            if lhs.url.path != rhs.url.path { return lhs.url.path < rhs.url.path }
+            return lhs.diagnostic.line < rhs.diagnostic.line
+        }
+    }
+
+    private struct DiagnosticEntry: Identifiable {
+        let url: URL
+        let diagnostic: AROLSPClient.Diagnostic
+        var id: String { "\(url.path):\(diagnostic.id)" }
+    }
+
+    private func relativePath(for url: URL) -> String {
+        guard let model = controller.model else { return url.lastPathComponent }
+        let root = model.root.rootPath.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        if path.hasPrefix(root + "/") {
+            return String(path.dropFirst(root.count + 1))
+        }
+        return url.lastPathComponent
+    }
+
+    /// Diagnostics for the currently-edited file — used by the
+    /// lspStatus chip in the feature-set section.
     private var lspDiagnosticsForCurrentFile: [AROLSPClient.Diagnostic] {
         guard let url = controller.currentFile else { return [] }
         return controller.lsp.diagnostics[url] ?? []

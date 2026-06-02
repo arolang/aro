@@ -234,6 +234,23 @@ struct SidebarPaneView: View {
                     VStack(alignment: .leading, spacing: SolaroSpace.s) {
                         ForEach(plugins) { plugin in
                             PluginRow(plugin: plugin)
+                                .contextMenu {
+                                    if let dir = pluginPath(for: plugin) {
+                                        Button("Reveal plugin.yaml") {
+                                            let yaml = dir.appendingPathComponent("plugin.yaml")
+                                            NSWorkspace.shared.activateFileViewerSelecting([yaml])
+                                        }
+                                        Button("Reveal in Finder") {
+                                            NSWorkspace.shared.activateFileViewerSelecting([dir])
+                                        }
+                                        Divider()
+                                        Button(role: .destructive) {
+                                            uninstall(plugin, at: dir)
+                                        } label: {
+                                            Label("Uninstall…", systemImage: "trash")
+                                        }
+                                    }
+                                }
                         }
                     }
                     .padding(.vertical, SolaroSpace.s)
@@ -243,6 +260,27 @@ struct SidebarPaneView: View {
                 emptyMessage("No plugins installed.\nClick + above to add one from a Git URL.")
             }
         }
+    }
+
+    /// Resolve the on-disk directory for a plugin entry.
+    private func pluginPath(for plugin: SidebarPluginInfo) -> URL? {
+        guard let model = controller.model else { return nil }
+        return model.root.rootPath
+            .appendingPathComponent("Plugins")
+            .appendingPathComponent(plugin.name)
+    }
+
+    /// Confirm-then-remove a plugin directory.
+    private func uninstall(_ plugin: SidebarPluginInfo, at dir: URL) {
+        let alert = NSAlert()
+        alert.messageText = "Uninstall \(plugin.name)?"
+        alert.informativeText = "Removes Plugins/\(plugin.name) from disk. This cannot be undone."
+        alert.addButton(withTitle: "Uninstall")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        try? FileManager.default.removeItem(at: dir)
+        pluginsRefreshToken += 1
     }
 
     // MARK: - Helpers

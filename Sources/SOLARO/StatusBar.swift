@@ -22,6 +22,9 @@ struct StatusBarView: View {
     @State private var showBranchPicker: Bool = false
     @State private var branchSwitchError: String?
     @State private var branchSwitching: String?
+    @State private var creatingBranch: Bool = false
+    @State private var newBranchName: String = ""
+    @State private var gitCommandRunning: Bool = false
 
     var body: some View {
         HStack(spacing: SolaroSpace.m) {
@@ -108,16 +111,28 @@ struct StatusBarView: View {
                 branchPicker
             }
             if s.ahead > 0 {
-                Label("\(s.ahead)", systemImage: "arrow.up")
-                    .labelStyle(.titleAndIcon)
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.stateOK)
+                Button {
+                    runGitCommand(["push"])
+                } label: {
+                    Label("\(s.ahead)", systemImage: "arrow.up")
+                        .labelStyle(.titleAndIcon)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.stateOK)
+                }
+                .buttonStyle(.plain)
+                .help("git push — send \(s.ahead) commit\(s.ahead == 1 ? "" : "s") to origin")
             }
             if s.behind > 0 {
-                Label("\(s.behind)", systemImage: "arrow.down")
-                    .labelStyle(.titleAndIcon)
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.stateWarn)
+                Button {
+                    runGitCommand(["pull"])
+                } label: {
+                    Label("\(s.behind)", systemImage: "arrow.down")
+                        .labelStyle(.titleAndIcon)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.stateWarn)
+                }
+                .buttonStyle(.plain)
+                .help("git pull — fetch \(s.behind) commit\(s.behind == 1 ? "" : "s") from origin")
             }
             if !s.files.isEmpty {
                 // Separator dot — kept *outside* the button so the
@@ -167,6 +182,8 @@ struct StatusBarView: View {
                 }
             }
             .frame(maxHeight: 280)
+            Divider()
+            createBranchRow
             if let err = branchSwitchError {
                 Divider()
                 HStack(alignment: .top, spacing: SolaroSpace.xs) {
@@ -216,6 +233,108 @@ struct StatusBarView: View {
                 ? SolaroColor.accent.opacity(0.08)
                 : Color.clear
         )
+    }
+
+    @ViewBuilder
+    private var createBranchRow: some View {
+        if creatingBranch {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "plus.circle")
+                    .foregroundStyle(SolaroColor.accent)
+                TextField("new-branch", text: $newBranchName)
+                    .textFieldStyle(.plain)
+                    .font(SolaroFont.monoCaption)
+                    .onSubmit { confirmCreateBranch() }
+                Button("Create") { confirmCreateBranch() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(newBranchName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
+                    creatingBranch = false
+                    newBranchName = ""
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(SolaroSpace.s)
+        } else {
+            Button {
+                creatingBranch = true
+                branchSwitchError = nil
+            } label: {
+                HStack(spacing: SolaroSpace.xs) {
+                    Image(systemName: "plus")
+                        .foregroundStyle(SolaroColor.accent)
+                    Text("Create branch…")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                    Spacer()
+                }
+                .padding(SolaroSpace.s)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func confirmCreateBranch() {
+        guard let project = controller.model?.root else { return }
+        let name = newBranchName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        gitCommandRunning = true
+        Task.detached(priority: .utility) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = ["git", "checkout", "-b", name]
+            task.currentDirectoryURL = project.rootPath
+            let errPipe = Pipe()
+            task.standardError = errPipe
+            var errText: String? = nil
+            do {
+                try task.run()
+                task.waitUntilExit()
+                if task.terminationStatus != 0 {
+                    let raw = String(
+                        data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                        encoding: .utf8
+                    ) ?? ""
+                    errText = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if errText?.isEmpty == true {
+                        errText = "git checkout -b failed (exit \(task.terminationStatus))"
+                    }
+                }
+            } catch {
+                errText = error.localizedDescription
+            }
+            let outErr = errText
+            await MainActor.run {
+                gitCommandRunning = false
+                if let outErr {
+                    branchSwitchError = outErr
+                } else {
+                    creatingBranch = false
+                    newBranchName = ""
+                    controller.gitMonitor.refresh(for: project)
+                }
+            }
+        }
+    }
+
+    private func runGitCommand(_ args: [String]) {
+        guard let project = controller.model?.root, !gitCommandRunning else { return }
+        gitCommandRunning = true
+        Task.detached(priority: .utility) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = ["git"] + args
+            task.currentDirectoryURL = project.rootPath
+            try? task.run()
+            task.waitUntilExit()
+            await MainActor.run {
+                gitCommandRunning = false
+                controller.gitMonitor.refresh(for: project)
+            }
+        }
     }
 
     private func switchToBranch(_ branch: GitBranch) {

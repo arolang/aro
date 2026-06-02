@@ -132,6 +132,34 @@ final class WorkspaceController {
     /// indicators and the status bar's branch chip.
     let gitMonitor = GitStatusMonitor()
 
+    /// Debugger watch expressions (#258). Persists across launches
+    /// via UserDefaults.
+    let watches = WatchesStore()
+
+    /// AI co-pilot subprocess. Moved here from the view's @State so
+    /// non-view callers (e.g. canvas right-click "Explain with
+    /// aro ask") can fire prompts directly.
+    let aiCoPilot = AICoPilotProcess()
+
+    /// Right-pane visibility flag for the Ask panel — the canvas
+    /// context menu nudges this on when it dispatches an Explain
+    /// request so the user sees the streaming response.
+    var askPanelRequested: Bool = false
+
+    /// Build a Conventional "Explain this" prompt from a canvas
+    /// statement and ship it to `aro ask` (#273). The Ask panel
+    /// flips into view via askPanelRequested so the user sees the
+    /// streaming reply.
+    func askToExplain(node: CanvasNode, in project: Project) {
+        let prompt = """
+        Explain in 2-4 plain-English sentences what this ARO statement does, focusing on its effect on the surrounding feature set:
+
+        \(node.summary)
+        """
+        aiCoPilot.send(prompt: prompt, in: project)
+        askPanelRequested = true
+    }
+
     init(project: Project) {
         self.project = project
     }
@@ -387,7 +415,9 @@ struct WorkspaceView: View {
     @State private var showSymbolPalette = false
     @State private var referencesSymbol: String? = nil
     /// Co-pilot (`aro ask`) process.
-    @State private var aiCoPilot = AICoPilotProcess()
+    // aiCoPilot moved onto WorkspaceController (#273) so canvas
+    // context menus can dispatch prompts directly. Access as
+    // `controller.aiCoPilot` everywhere.
     /// NavigationSplitView's column visibility — bound (not constant)
     /// so the sidebar toggle in the title bar actually hides + shows
     /// the left rail.
@@ -438,6 +468,15 @@ struct WorkspaceView: View {
         }
         .onChange(of: consoleProcess.pauseSymbols) { _, newValue in
             controller.pauseSymbols = newValue
+        }
+        // When the canvas dispatches an Explain request, flip the
+        // right pane to the Ask panel so the streaming response is
+        // visible immediately (#273).
+        .onChange(of: controller.askPanelRequested) { _, requested in
+            guard requested else { return }
+            controller.rightPaneMode = .coPilot
+            controller.inspectorShown = true
+            controller.askPanelRequested = false
         }
         // After a recorded run finishes, slurp the last-seen value
         // for every binding from .solaro/events.jsonl and merge it
@@ -1023,7 +1062,7 @@ struct WorkspaceView: View {
             case .coPilot:
                 AICoPilotPanel(
                     project: project,
-                    process: aiCoPilot,
+                    process: controller.aiCoPilot,
                     onClose: { controller.rightPaneMode = .inspector }
                 )
             }

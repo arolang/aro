@@ -25,6 +25,7 @@ enum CanvasNodeContextAction {
     case duplicate
     case delete
     case extractAsAction
+    case explainWithAsk
 }
 
 struct CanvasView: View {
@@ -610,6 +611,12 @@ struct NodesLayer: View {
                         } label: {
                             Label("Extract as Action…",
                                   systemImage: "function")
+                        }
+                        Button {
+                            onContextAction(.explainWithAsk, node)
+                        } label: {
+                            Label("Explain with aro ask…",
+                                  systemImage: "sparkles")
                         }
                         Divider()
                         Button(role: .destructive) {

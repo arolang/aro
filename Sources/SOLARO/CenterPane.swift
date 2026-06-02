@@ -455,6 +455,9 @@ struct CenterPaneView: View {
             mutateStatement(node: node, mode: .delete)
         case .extractAsAction:
             controller.requestExtractAction(node: node)
+        case .explainWithAsk:
+            guard let project = controller.model?.root else { return }
+            controller.askToExplain(node: node, in: project)
         }
     }
 
