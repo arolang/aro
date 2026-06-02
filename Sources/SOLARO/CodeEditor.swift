@@ -28,7 +28,19 @@ final class AROHoverTextView: STTextView {
     /// symbol value when the debugger has one for it, else nil.
     var resolveSymbol: ((String) -> ConsoleProcess.SymbolValue?)?
 
+    /// Callback invoked when the user clicks the gutter on a given
+    /// 1-indexed source line. The SwiftUI wrapper toggles the line
+    /// in the breakpoints binding.
+    var onGutterClick: ((Int) -> Void)?
+
     private var trackingAreaCache: NSTrackingArea?
+    /// Click monitor that fires for every left-mouse-down anywhere
+    /// in the app. We use it because STGutterView has its own
+    /// mouseDown handler that consumes clicks landing on existing
+    /// markers — without the monitor those clicks never reach a
+    /// vanilla NSClickGestureRecognizer, so "click an existing
+    /// breakpoint to remove it" never fires.
+    private var clickMonitor: Any?
     private lazy var hoverPopover: NSPopover = {
         let p = NSPopover()
         p.behavior = .transient
@@ -59,6 +71,10 @@ final class AROHoverTextView: STTextView {
             NSEvent.removeMonitor(mouseMonitor)
             self.mouseMonitor = nil
         }
+        if let clickMonitor {
+            NSEvent.removeMonitor(clickMonitor)
+            self.clickMonitor = nil
+        }
         super.removeFromSuperview()
     }
 
@@ -68,6 +84,41 @@ final class AROHoverTextView: STTextView {
             self?.handleMouseMoved(event)
             return event
         }
+        if clickMonitor == nil {
+            clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+                self?.handleLeftMouseDown(event)
+                return event
+            }
+        }
+    }
+
+    /// Forward gutter clicks to the SwiftUI layer so breakpoints can
+    /// toggle. Adds new breakpoints when clicking empty gutter
+    /// rows; removes existing ones when clicking the red dot.
+    private func handleLeftMouseDown(_ event: NSEvent) {
+        guard
+            let window, event.window == window,
+            let gutter = gutterView
+        else { return }
+        let pointInGutter = gutter.convert(event.locationInWindow, from: nil)
+        guard gutter.bounds.contains(pointInGutter) else { return }
+
+        // Find the source line under the click. The gutter shares
+        // its vertical metrics with the text view, so we can use
+        // the textLayoutManager to map y → fragment → line.
+        let pointInTextView = gutter.convert(pointInGutter, to: self)
+        let probe = CGPoint(x: 4, y: pointInTextView.y)
+        guard let fragment = textLayoutManager.textLayoutFragment(for: probe)
+        else { return }
+        let elementStart = fragment.textElement?.elementRange?.location
+            ?? fragment.rangeInElement.location
+        let docStart = textContentManager.documentRange.location
+        guard let prefixRange = NSTextRange(location: docStart, end: elementStart)
+        else { return }
+        let prefix = textContentManager
+            .attributedString(in: prefixRange)?.string ?? ""
+        let line = prefix.filter { $0.isNewline }.count + 1
+        onGutterClick?(line)
     }
 
     /// Cursor moved somewhere in this process. Filter by whether
@@ -296,12 +347,12 @@ final class BreakpointMarkerView: NSView {
         // Sized to ~70% of the smaller dimension so it doesn't crowd
         // the gutter separator.
         let diameter = max(min(bounds.width, bounds.height) * 0.7, 8)
-        // Pin to the right edge of the marker container with a 2pt
-        // breathing-room gap — visually that puts the dot directly
-        // adjacent to the line number text drawn just left of here.
-        let rightInset: CGFloat = 2
+        // Pin to the LEFT edge of the marker container so the dot
+        // sits beside the line number (Xcode / VSCode convention)
+        // rather than crowding the text margin on the right.
+        let leftInset: CGFloat = 2
         let drawRect = NSRect(
-            x: bounds.maxX - diameter - rightInset,
+            x: leftInset,
             y: bounds.midY - diameter / 2,
             width: diameter,
             height: diameter
@@ -350,6 +401,9 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.resolveSymbol = { [weak coordinator = context.coordinator] name in
             coordinator?.parent.symbolValue(forIdentifier: name)
         }
+        textView.onGutterClick = { [weak coordinator = context.coordinator] line in
+            coordinator?.parent.toggleBreakpoint(line, in: textView)
+        }
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
         textView.text = text
@@ -357,8 +411,9 @@ struct AROCodeEditor: NSViewRepresentable {
         // Stash a weak reference for updateNSView to find the
         // text view inside the scroll view on subsequent passes.
         context.coordinator.textView = textView
-        // Attach the gutter click handler + render initial markers.
-        installBreakpointGesture(on: textView, coordinator: context.coordinator)
+        // Render initial markers — gutter clicks route through the
+        // AROHoverTextView's global click monitor (set above via
+        // `onGutterClick`).
         renderBreakpoints(on: textView)
         return scroll
     }
@@ -501,21 +556,20 @@ struct AROCodeEditor: NSViewRepresentable {
 
     // MARK: - Breakpoint gutter
 
-    /// Attach a single-click recognizer to the existing gutter view.
-    /// STGutterView's own marker drag-drop UX stays intact — clicks
-    /// fall through to the recognizer's action first.
-    fileprivate func installBreakpointGesture(
-        on textView: STTextView,
-        coordinator: Coordinator
-    ) {
-        guard let gutter = textView.gutterView else { return }
-        let click = NSClickGestureRecognizer(
-            target: coordinator,
-            action: #selector(Coordinator.gutterClicked(_:))
-        )
-        click.numberOfClicksRequired = 1
-        click.buttonMask = 0x1
-        gutter.addGestureRecognizer(click)
+    /// Toggle the breakpoint on `line`: add when missing, remove
+    /// when already set. Called from AROHoverTextView's click
+    /// monitor so clicks on existing markers go through (a plain
+    /// NSClickGestureRecognizer was being swallowed by STGutterView's
+    /// own marker mouseDown handling).
+    fileprivate func toggleBreakpoint(_ line: Int, in textView: STTextView) {
+        var updated = breakpoints
+        if updated.contains(line) {
+            updated.remove(line)
+        } else {
+            updated.insert(line)
+        }
+        breakpoints = updated
+        renderBreakpoints(on: textView)
     }
 
     /// Replace the gutter's marker set with one STGutterMarker per
@@ -586,43 +640,10 @@ struct AROCodeEditor: NSViewRepresentable {
             self.parent = parent
         }
 
-        // Click on the gutter → toggle a breakpoint at the line
-        // under the click.
-        @objc func gutterClicked(_ recognizer: NSClickGestureRecognizer) {
-            guard
-                let textView,
-                let gutter = recognizer.view
-            else { return }
-            let pointInGutter = recognizer.location(in: gutter)
-            // Convert to text view coordinates. Map the click's Y
-            // into the text content area at a small x offset so
-            // the layout manager can find a fragment.
-            let pointInTextView = gutter.convert(pointInGutter, to: textView)
-            let probe = CGPoint(x: 4, y: pointInTextView.y)
-            guard let fragment = textView.textLayoutManager
-                .textLayoutFragment(for: probe)
-            else { return }
-            let elementStart = fragment.textElement?.elementRange?.location
-                ?? fragment.rangeInElement.location
-            // Count newlines from doc-start to the fragment start.
-            let docStart = textView.textContentManager.documentRange.location
-            guard
-                let prefixRange = NSTextRange(location: docStart, end: elementStart)
-            else { return }
-            let prefix = textView.textContentManager
-                .attributedString(in: prefixRange)?.string ?? ""
-            let line = prefix.filter { $0.isNewline }.count + 1
-
-            var updated = parent.breakpoints
-            if updated.contains(line) {
-                updated.remove(line)
-            } else {
-                updated.insert(line)
-            }
-            parent.breakpoints = updated
-            parent.renderBreakpoints(on: textView)
-            lastRenderedBreakpoints = updated
-        }
+        // Gutter clicks are now handled by AROHoverTextView's
+        // global mouseDown monitor — see `onGutterClick` plumbing
+        // in makeNSView. We keep the Coordinator's role limited
+        // to text + selection tracking.
 
         nonisolated func textViewDidChangeText(_ notification: Notification) {
             let textView = notification.object as? STTextView
