@@ -127,16 +127,16 @@ struct CenterPaneView: View {
     private var canvasGraph: CanvasGraph {
         guard
             let url = controller.currentFile,
-            let program = controller.programs[url],
-            let firstFS = program.featureSets.first
+            let program = controller.programs[url]
         else {
             return CanvasGraph(nodes: [], edges: [])
         }
         let sidecar = LayoutSidecar.load(for: url)
-        let built = CanvasGraph.build(featureSet: firstFS, fileKey: url.path)
+        // Build one graph spanning every feature set in the file —
+        // statements are tagged with their parent feature-set name
+        // so the canvas can group them in colored containers.
+        let built = CanvasGraph.build(program: program, fileKey: url.path)
             .withPositions(from: sidecar)
-        // Stack layout is the deterministic default; nodes with
-        // saved positions in the sidecar keep them.
         return StackLayout.place(built)
     }
 

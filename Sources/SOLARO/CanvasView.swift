@@ -60,6 +60,13 @@ struct CanvasView: View {
                 dotGrid(in: geo.size)
 
                 ZStack(alignment: .topLeading) {
+                    FeatureSetContainersLayer(
+                        graph: graph,
+                        positions: nodePositions,
+                        nodeWidth: nodeWidth, nodeHeight: nodeHeight
+                    )
+                    .frame(width: contentSize.width, height: contentSize.height,
+                           alignment: .topLeading)
                     WiresLayer(
                         graph: graph,
                         positions: nodePositions,
@@ -286,6 +293,122 @@ struct CanvasView: View {
                 .compactMap { $0.preposition?.lowercased() }
         )
         return canonical.filter(present.contains)
+    }
+}
+
+// MARK: - Feature-set containers
+
+/// Draws one colored rounded rectangle per feature set in the
+/// graph, with the feature-set name labelled at the top. Sits
+/// behind wires + nodes so the boxes read as background regions
+/// rather than overlays.
+private struct FeatureSetContainersLayer: View {
+    let graph: CanvasGraph
+    let positions: [CanvasNode.ID: CGPoint]
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(groupedFeatureSets(), id: \.name) { group in
+                FeatureSetContainer(
+                    name: group.name,
+                    tint: color(for: group.name),
+                    rect: group.rect
+                )
+                .position(x: group.rect.midX, y: group.rect.midY)
+                .frame(width: group.rect.width, height: group.rect.height)
+            }
+        }
+    }
+
+    private struct FSGroup {
+        let name: String
+        let rect: CGRect
+    }
+
+    private func groupedFeatureSets() -> [FSGroup] {
+        // Compute bounding rects per feature set in source order.
+        var order: [String] = []
+        var bounds: [String: CGRect] = [:]
+        for node in graph.nodes {
+            let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
+            let nodeRect = CGRect(x: p.x, y: p.y,
+                                  width: nodeWidth, height: nodeHeight)
+            if let existing = bounds[node.featureSetName] {
+                bounds[node.featureSetName] = existing.union(nodeRect)
+            } else {
+                bounds[node.featureSetName] = nodeRect
+                order.append(node.featureSetName)
+            }
+        }
+        let inset: CGFloat = 14
+        let headerExtra: CGFloat = 28
+        return order.map { name in
+            let core = bounds[name] ?? .zero
+            let r = CGRect(
+                x: core.minX - inset,
+                y: core.minY - inset - headerExtra,
+                width: core.width + inset * 2,
+                height: core.height + inset * 2 + headerExtra
+            )
+            return FSGroup(name: name, rect: r)
+        }
+    }
+
+    /// Stable color per feature-set name. Cycles through a small
+    /// palette of role tints so each feature set reads as a distinct
+    /// region.
+    private func color(for name: String) -> Color {
+        let palette: [Color] = [
+            SolaroColor.roleRequest,
+            SolaroColor.roleOwn,
+            SolaroColor.roleExport,
+            SolaroColor.roleResponse,
+            SolaroColor.accent,
+            SolaroColor.stateWarn,
+        ]
+        var hash = 5381
+        for byte in name.utf8 {
+            hash = ((hash << 5) &+ hash) &+ Int(byte)
+        }
+        return palette[abs(hash) % palette.count]
+    }
+}
+
+private struct FeatureSetContainer: View {
+    let name: String
+    let tint: Color
+    let rect: CGRect
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(tint)
+                Text(name)
+                    .font(SolaroFont.sectionTitle)
+                    .foregroundStyle(tint)
+                    .tracking(2)
+                Spacer()
+            }
+            .padding(.horizontal, SolaroSpace.s)
+            .padding(.top, SolaroSpace.xs)
+            .padding(.bottom, 2)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: SolaroRadius.l, style: .continuous)
+                .fill(tint.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.l, style: .continuous)
+                .stroke(tint.opacity(0.45),
+                        style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+        )
     }
 }
 

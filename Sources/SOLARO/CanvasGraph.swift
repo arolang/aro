@@ -33,13 +33,19 @@ struct CanvasNode: Identifiable, Equatable {
     /// filtered out.
     let referencedIdentifiers: [String]
     let lineHint: Int           // for tooltips
+    /// Which feature set this statement belongs to. Drives the
+    /// colored-container grouping in the multi-feature-set canvas.
+    let featureSetName: String
 
     var x: Double
     var y: Double
 
     /// Build a node from an AST statement. `fileKey` distinguishes
     /// statements with the same offset in different files.
-    static func make(from statement: AROStatement, fileKey: String, x: Double = 0, y: Double = 0) -> CanvasNode {
+    static func make(from statement: AROStatement,
+                     fileKey: String,
+                     featureSetName: String,
+                     x: Double = 0, y: Double = 0) -> CanvasNode {
         let refs = collectReferenced(statement)
         return CanvasNode(
             id: "\(fileKey):\(statement.span.start.offset)",
@@ -50,6 +56,7 @@ struct CanvasNode: Identifiable, Equatable {
             objectName: statement.object.noun.base,
             referencedIdentifiers: refs,
             lineHint: statement.span.start.line,
+            featureSetName: featureSetName,
             x: x,
             y: y
         )
@@ -122,15 +129,33 @@ struct CanvasGraph: Equatable {
     var nodes: [CanvasNode]
     var edges: [CanvasEdge]
 
-    /// Build a graph from a `FeatureSet`. `fileKey` should be a
-    /// stable string per `.aro` source — typically the file path.
+    /// Build a graph spanning every feature set in `program`. Each
+    /// statement is tagged with its parent feature-set name so the
+    /// canvas can group / color them. Data-flow edges are still
+    /// derived per feature set (no cross-feature-set edges — those
+    /// belong to the Project Map view).
+    static func build(program: Program, fileKey: String) -> CanvasGraph {
+        var allNodes: [CanvasNode] = []
+        var allEdges: [CanvasEdge] = []
+        for fs in program.featureSets {
+            let sub = build(featureSet: fs, fileKey: fileKey)
+            allNodes.append(contentsOf: sub.nodes)
+            allEdges.append(contentsOf: sub.edges)
+        }
+        return CanvasGraph(nodes: allNodes, edges: allEdges)
+    }
+
+    /// Build a graph from a single `FeatureSet`. `fileKey` should be
+    /// a stable string per `.aro` source — typically the file path.
     static func build(featureSet: FeatureSet, fileKey: String) -> CanvasGraph {
         var nodes: [CanvasNode] = []
         var edges: [CanvasEdge] = []
 
         for statement in featureSet.statements {
             guard let aro = statement as? AROStatement else { continue }
-            nodes.append(.make(from: aro, fileKey: fileKey))
+            nodes.append(.make(from: aro,
+                               fileKey: fileKey,
+                               featureSetName: featureSet.name))
         }
 
         // Build edges by `<result>` → referenced-identifier match.

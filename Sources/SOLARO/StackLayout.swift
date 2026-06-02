@@ -25,48 +25,74 @@ enum StackLayout {
 
     /// Apply the column-stack default to `graph`. Saved positions
     /// (non-zero in the input) are preserved.
+    ///
+    /// When the graph contains multiple feature sets, each gets its
+    /// own pair of horizontal columns (with `featureSetGap` between
+    /// neighbouring feature sets) so the canvas can render colored
+    /// containing boxes around each group.
     static func place(
         _ graph: CanvasGraph,
         rowPitch: Double = 78,
         columnPitch: Double = 320,
+        featureSetGap: Double = 80,
         leftPadding: Double = 40,
-        topPadding: Double = 40
+        topPadding: Double = 56     // extra room for the FS header
     ) -> CanvasGraph {
         var nodes = graph.nodes
         guard !nodes.isEmpty else { return graph }
 
-        // Build a quick lookup so we can branch when consecutive
-        // statements have multiple incoming edges.
         let edgesByTo: [String: [CanvasEdge]] = Dictionary(
             grouping: graph.edges,
             by: { $0.toNodeID }
         )
 
-        var nextRow = 0
-        var column = 0
+        // Walk in source order. Track:
+        //   * which feature set we're currently laying out,
+        //   * the X origin of that feature set's first column,
+        //   * the local row + column inside the feature set.
+        var currentFS: String? = nil
+        var fsBaseX: Double = leftPadding
+        var localColumn = 0
+        var localRow = 0
+        var lastNodeWasUserPositioned = false
 
         for i in nodes.indices {
+            if currentFS != nodes[i].featureSetName {
+                // New feature set — flush to the right of the
+                // previous one. The previous feature set's footprint
+                // is bounded by whatever node X+columnPitch reached.
+                if currentFS != nil {
+                    fsBaseX += Double(localColumn + 1) * columnPitch + featureSetGap
+                }
+                currentFS = nodes[i].featureSetName
+                localColumn = 0
+                localRow = 0
+                lastNodeWasUserPositioned = false
+            }
+
             // Preserve user-saved positions.
             if nodes[i].x != 0 || nodes[i].y != 0 {
+                lastNodeWasUserPositioned = true
                 continue
             }
 
-            // Branch right when this node has incoming edges from
-            // outside the immediately preceding row — visually flags
-            // a fork in the flow.
-            if i > 0 {
+            // Branch right inside the feature set when a node has
+            // incoming edges from outside the immediately preceding
+            // row.
+            if localRow > 0, !lastNodeWasUserPositioned {
                 let incoming = edgesByTo[nodes[i].id] ?? []
                 let previousID = nodes[i - 1].id
                 let comesOnlyFromPrev = incoming.allSatisfy { $0.fromNodeID == previousID }
                 if !incoming.isEmpty, !comesOnlyFromPrev {
-                    column += 1
-                    nextRow = 0
+                    localColumn += 1
+                    localRow = 0
                 }
             }
+            lastNodeWasUserPositioned = false
 
-            nodes[i].x = leftPadding + Double(column) * columnPitch
-            nodes[i].y = topPadding + Double(nextRow) * rowPitch
-            nextRow += 1
+            nodes[i].x = fsBaseX + Double(localColumn) * columnPitch
+            nodes[i].y = topPadding + Double(localRow) * rowPitch
+            localRow += 1
         }
 
         return CanvasGraph(nodes: nodes, edges: graph.edges)
