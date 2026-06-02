@@ -69,8 +69,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <!-- Tell Launch Services SOLARO opens folders (ARO projects)
-       so \`open -a SOLARO.app /some/dir\` routes the directory
-       through onOpenURL instead of being ignored. -->
+       and individual .aro source files (#277). Double-click in
+       Finder routes through RootView.onOpenURL. -->
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>
@@ -82,6 +82,42 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
         <string>public.folder</string>
         <string>public.directory</string>
       </array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>ARO source file</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.arolang.aro-source</string>
+      </array>
+    </dict>
+  </array>
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>com.arolang.aro-source</string>
+      <key>UTTypeDescription</key><string>ARO source file</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.source-code</string>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array><string>aro</string></array>
+        <key>public.mime-type</key>
+        <array><string>text/x-aro</string></array>
+      </dict>
+    </dict>
+  </array>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>SOLARO deep link</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>solaro</string></array>
     </dict>
   </array>
 </dict></plist>

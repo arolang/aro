@@ -82,18 +82,37 @@ struct RootView: View {
     }
 
     /// macOS Launch Services delivers `open -a SOLARO.app <path>`
-    /// invocations as an open-URL event rather than as argv — so
-    /// the launcher CLI's project path lands here, not in
-    /// `initialWorkspace()`. Falls through silently for non-
-    /// directory URLs so a stray Finder drop doesn't crash the
-    /// workspace.
+    /// invocations as an open-URL event rather than as argv. Two
+    /// shapes land here now (#277):
+    ///   * a directory URL — open it as the project root
+    ///   * an .aro file URL — open the *containing* directory and
+    ///     focus the file in the editor
+    ///   * a solaro://… deep link — for future use, ignored for now
     private func openURL(_ url: URL) {
+        // Deep links (solaro://foo) — keep a stub so they don't
+        // crash. Real handlers can grow here later.
+        if url.scheme == "solaro" { return }
+
         var isDir: ObjCBool = false
-        guard
-            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-            isDir.boolValue
-        else { return }
-        workspace = .open(Project(rootPath: url))
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
+            return
+        }
+        if isDir.boolValue {
+            workspace = .open(Project(rootPath: url))
+            return
+        }
+        // File URL — open its enclosing directory as the project
+        // and queue a deep link so the workspace can focus the
+        // file once the project loads.
+        let parent = url.deletingLastPathComponent()
+        let project = Project(rootPath: parent)
+        workspace = .open(project)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            NotificationCenter.default.post(
+                name: .solaroFocusFile, object: nil,
+                userInfo: ["url": url]
+            )
+        }
     }
 
     /// Pull a project path out of CommandLine.arguments for the
@@ -126,6 +145,12 @@ struct RootView: View {
     /// parallel during onAppear, but in practice it's only racing with
     /// itself on app launch.
     private static var argvConsumed = false
+}
+
+/// Notification name used to ask a workspace to focus a file
+/// after the project has finished loading (#277).
+extension Notification.Name {
+    static let solaroFocusFile = Notification.Name("solaroFocusFile")
 }
 
 /// Top-level routing between the welcome screen (no project open)

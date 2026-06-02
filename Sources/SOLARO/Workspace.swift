@@ -697,6 +697,16 @@ struct WorkspaceView: View {
             }
         }
         .onAppear { controller.load() }
+        .onReceive(NotificationCenter.default
+                    .publisher(for: .solaroFocusFile)) { note in
+            // A double-click on an .aro in Finder routes through
+            // RootView.onOpenURL and arrives here after the
+            // project has loaded — focus the file in this window.
+            if let url = note.userInfo?["url"] as? URL,
+               url.path.hasPrefix(project.rootPath.path) {
+                controller.openFile(url)
+            }
+        }
         .alert(
             "Failed to load",
             isPresented: Binding(

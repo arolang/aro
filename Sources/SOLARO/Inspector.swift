@@ -528,6 +528,7 @@ private struct OpenAPINodeForm: View {
             responseHints(operation: operation)
             OpenAPITryItOutView(
                 model: controller.tryItOutModel,
+                project: controller.model?.root,
                 method: method,
                 path: path,
                 parameters: (operation["parameters"] as? [[String: Any]]) ?? []
