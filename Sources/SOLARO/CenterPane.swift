@@ -99,6 +99,37 @@ struct CenterPaneView: View {
         )
     }
 
+    /// Lightweight whitespace cleanup applied on save when the
+    /// "Format on save" preference is enabled. Strips trailing
+    /// whitespace from every line and ensures exactly one trailing
+    /// newline. Full AST round-trip pretty-printing is a follow-up.
+    private func formatIfEnabled(_ text: String, for url: URL) -> String {
+        let enabled = UserDefaults.standard.bool(forKey: SolaroPrefs.formatOnSave.rawValue)
+        guard enabled else { return text }
+        let suffix = url.lastPathComponent.lowercased()
+        if !(suffix.hasSuffix(".aro")
+             || suffix.hasSuffix(".yaml")
+             || suffix.hasSuffix(".yml")
+             || suffix.hasSuffix(".store"))
+        {
+            return text
+        }
+        let trimmedLines = text
+            .components(separatedBy: "\n")
+            .map { line -> String in
+                if let lastNonSpace = line.lastIndex(where: { !$0.isWhitespace || $0 == "\t" })
+                    .map({ line.index(after: $0) }) ?? (line.isEmpty ? nil : line.startIndex)
+                {
+                    return String(line[..<lastNonSpace])
+                }
+                return ""
+            }
+        var joined = trimmedLines.joined(separator: "\n")
+        while joined.hasSuffix("\n\n") { joined.removeLast() }
+        if !joined.hasSuffix("\n") { joined += "\n" }
+        return joined
+    }
+
     private func editableBinding(for url: URL) -> Binding<String> {
         // OpenAPI files: route text through the @Observable
         // OpenAPIDocument so the canvas (which mutates document.root
@@ -121,14 +152,16 @@ struct CenterPaneView: View {
         return Binding(
             get: { (try? String(contentsOf: url, encoding: .utf8)) ?? "" },
             set: { newValue in
-                try? newValue.write(to: url, atomically: true, encoding: .utf8)
+                let formatted = formatIfEnabled(newValue, for: url)
+                try? formatted.write(to: url, atomically: true, encoding: .utf8)
                 reparse(url: url)
             }
         )
     }
 
     private func saveAndReparse(text: String, url: URL) {
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        let formatted = formatIfEnabled(text, for: url)
+        try? formatted.write(to: url, atomically: true, encoding: .utf8)
         reparse(url: url)
     }
 

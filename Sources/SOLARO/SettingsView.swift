@@ -71,7 +71,8 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Inspector visible by default", isOn: $inspectorVisible)
-                Toggle("Format on save (no-op until #252)", isOn: $formatOnSave)
+                Toggle("Format on save — strip trailing whitespace + tidy final newline",
+                       isOn: $formatOnSave)
             } header: {
                 Text("Defaults")
             }
