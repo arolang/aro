@@ -18,6 +18,7 @@ struct SidebarPaneView: View {
     @Bindable var controller: WorkspaceController
 
     @State private var showAddPlugin = false
+    @State private var showMarketplace = false
     @State private var addPluginProcess = AddPluginProcess()
     /// Bump this to force the Plugins tab to re-scan after an
     /// install. `PluginScanner.scan` reads from disk on every
@@ -47,6 +48,15 @@ struct SidebarPaneView: View {
                         showAddPlugin = false
                         addPluginProcess.reset()
                     }
+                )
+            }
+        }
+        .sheet(isPresented: $showMarketplace) {
+            if let project = controller.model?.root {
+                PluginMarketplaceSheet(
+                    project: project,
+                    onClose: { showMarketplace = false },
+                    onInstalled: { pluginsRefreshToken += 1 }
                 )
             }
         }
@@ -194,6 +204,15 @@ struct SidebarPaneView: View {
                     .font(SolaroFont.caption)
                     .foregroundStyle(SolaroColor.textTertiary)
                 Spacer()
+                Button {
+                    showMarketplace = true
+                } label: {
+                    Label("Browse", systemImage: "shippingbox")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .disabled(controller.model == nil)
+                .help("Browse the plugin marketplace")
                 Button {
                     showAddPlugin = true
                 } label: {
