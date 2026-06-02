@@ -474,6 +474,7 @@ private struct OpenAPINodeForm: View {
                 .textFieldStyle(.roundedBorder)
             }
             tagEditor(operation: operation, path: path, method: method)
+            parameterEditor(operation: operation, path: path, method: method)
             responseHints(operation: operation)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -504,6 +505,63 @@ private struct OpenAPINodeForm: View {
             )
             .textFieldStyle(.roundedBorder)
         }
+    }
+
+    @ViewBuilder
+    private func parameterEditor(
+        operation: [String: Any], path: String, method: String
+    ) -> some View {
+        let params = (operation["parameters"] as? [[String: Any]]) ?? []
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Parameters")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Spacer()
+                Button {
+                    document.mutateRoute(path: path, method: method) { op in
+                        var current = (op["parameters"] as? [[String: Any]]) ?? []
+                        current.append([
+                            "name": "newParam",
+                            "in": "query",
+                            "required": false,
+                            "schema": ["type": "string"] as [String: Any],
+                        ])
+                        op["parameters"] = current
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+            }
+            ForEach(Array(params.enumerated()), id: \.offset) { idx, param in
+                RouteParameterRow(
+                    parameter: param,
+                    onChange: { mutate in
+                        document.mutateRoute(path: path, method: method) { op in
+                            var current = (op["parameters"] as? [[String: Any]]) ?? []
+                            guard idx < current.count else { return }
+                            mutate(&current[idx])
+                            op["parameters"] = current
+                        }
+                    },
+                    onRemove: {
+                        document.mutateRoute(path: path, method: method) { op in
+                            var current = (op["parameters"] as? [[String: Any]]) ?? []
+                            guard idx < current.count else { return }
+                            current.remove(at: idx)
+                            if current.isEmpty {
+                                op.removeValue(forKey: "parameters")
+                            } else {
+                                op["parameters"] = current
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        .padding(.top, SolaroSpace.xs)
     }
 
     @ViewBuilder
@@ -702,6 +760,75 @@ private struct FormRow<Content: View>: View {
                 .frame(width: 90, alignment: .trailing)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// One parameter row in the route form. Edits route through
+/// to OpenAPIDocument.mutateRoute via the `onChange` closure.
+private struct RouteParameterRow: View {
+    let parameter: [String: Any]
+    let onChange: ((inout [String: Any]) -> Void) -> Void
+    let onRemove: () -> Void
+
+    @State private var nameDraft: String = ""
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField("name", text: Binding(
+                get: { nameDraft.isEmpty ? (parameter["name"] as? String ?? "") : nameDraft },
+                set: { nameDraft = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                let value = nameDraft
+                onChange { p in p["name"] = value }
+                nameDraft = ""
+            }
+            Picker("", selection: Binding(
+                get: { parameter["in"] as? String ?? "query" },
+                set: { newIn in onChange { p in p["in"] = newIn } }
+            )) {
+                Text("query").tag("query")
+                Text("path").tag("path")
+                Text("header").tag("header")
+                Text("cookie").tag("cookie")
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 90)
+            Picker("", selection: Binding(
+                get: {
+                    ((parameter["schema"] as? [String: Any])?["type"] as? String) ?? "string"
+                },
+                set: { newType in
+                    onChange { p in
+                        var schema = (p["schema"] as? [String: Any]) ?? [:]
+                        schema["type"] = newType
+                        p["schema"] = schema
+                    }
+                }
+            )) {
+                Text("string").tag("string")
+                Text("integer").tag("integer")
+                Text("number").tag("number")
+                Text("boolean").tag("boolean")
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 90)
+            Toggle("", isOn: Binding(
+                get: { (parameter["required"] as? Bool) ?? false },
+                set: { req in onChange { p in p["required"] = req } }
+            ))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .help("Required parameter")
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle")
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            .buttonStyle(.borderless)
         }
     }
 }

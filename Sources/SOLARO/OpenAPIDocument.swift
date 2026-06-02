@@ -30,9 +30,64 @@ final class OpenAPIDocument {
     /// Last error from a save attempt, surfaced in the inspector.
     private(set) var lastError: String?
 
+    /// File-system source that fires whenever the YAML file on
+    /// disk is rewritten — e.g. an external editor saved over it.
+    private var watcher: DispatchSourceFileSystemObject?
+    private var watcherFD: Int32 = -1
+
     init(root: [String: Any], url: URL) {
         self.root = root
         self.url = url
+        installFileWatcher()
+    }
+
+    /// Tear the file watcher down. Called explicitly because the
+    /// MainActor-isolated stored properties aren't reachable from
+    /// a nonisolated deinit.
+    func tearDownWatcher() {
+        watcher?.cancel()
+        if watcherFD >= 0 {
+            Darwin.close(watcherFD)
+            watcherFD = -1
+        }
+        watcher = nil
+    }
+
+    /// Watch the file for external writes; when something else
+    /// touches it (vim, Xcode, git checkout, …) reload the
+    /// document — but only if the user has no unsaved changes,
+    /// since otherwise we'd silently nuke their work.
+    private func installFileWatcher() {
+        let fd = Darwin.open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        watcherFD = fd
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .delete, .rename],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.reloadFromDiskIfClean()
+            }
+        }
+        source.setCancelHandler { [weak self] in
+            if let fd = self?.watcherFD, fd >= 0 {
+                Darwin.close(fd)
+                self?.watcherFD = -1
+            }
+        }
+        source.resume()
+        watcher = source
+    }
+
+    private func reloadFromDiskIfClean() {
+        guard !isDirty else { return }
+        guard
+            let text = try? String(contentsOf: url, encoding: .utf8),
+            let parsed = try? Yams.load(yaml: text) as? [String: Any]
+        else { return }
+        root = parsed
     }
 
     /// Mark the document as having unsaved changes. Called when

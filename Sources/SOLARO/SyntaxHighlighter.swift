@@ -132,3 +132,52 @@ enum AROSyntaxHighlighter {
 
 // NSColor.init(_: Color) is a macOS 14+ SwiftUI bridge — no
 // explicit shim needed here.
+
+/// Lightweight regex-based YAML highlighter for the OpenAPI editor.
+/// We only need enough colour to make the YAML readable — keys,
+/// strings, numbers, booleans, comments. Anchor tags and complex
+/// flow constructs aren't covered.
+enum YAMLSyntaxHighlighter {
+    static func apply(to attributed: NSMutableAttributedString, source: String) {
+        let baseColor = NSColor(SolaroColor.textPrimary)
+        let full = NSRange(location: 0, length: attributed.length)
+        attributed.removeAttribute(.foregroundColor, range: full)
+        attributed.addAttribute(.foregroundColor, value: baseColor, range: full)
+
+        paint(pattern: "(^|\\n)\\s*#[^\\n]*",
+              in: attributed, source: source,
+              color: NSColor(SolaroColor.textTertiary))
+        paint(pattern: "^\\s*[A-Za-z0-9_\\-]+(?=\\s*:)",
+              in: attributed, source: source,
+              color: NSColor(SolaroColor.accent),
+              options: [.anchorsMatchLines])
+        paint(pattern: "\"[^\"\\n]*\"",
+              in: attributed, source: source,
+              color: NSColor(Color(red: 0.48, green: 0.83, blue: 0.45)))
+        paint(pattern: "'[^'\\n]*'",
+              in: attributed, source: source,
+              color: NSColor(Color(red: 0.48, green: 0.83, blue: 0.45)))
+        paint(pattern: "\\b\\d+(\\.\\d+)?\\b",
+              in: attributed, source: source,
+              color: NSColor(Color(red: 0.96, green: 0.78, blue: 0.32)))
+        paint(pattern: "\\b(true|false|null|~)\\b",
+              in: attributed, source: source,
+              color: NSColor(Color(red: 0.73, green: 0.47, blue: 0.95)))
+    }
+
+    private static func paint(
+        pattern: String,
+        in attributed: NSMutableAttributedString,
+        source: String,
+        color: NSColor,
+        options: NSRegularExpression.Options = []
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+            return
+        }
+        let full = NSRange(location: 0, length: (source as NSString).length)
+        for match in regex.matches(in: source, range: full) {
+            attributed.addAttribute(.foregroundColor, value: color, range: match.range)
+        }
+    }
+}

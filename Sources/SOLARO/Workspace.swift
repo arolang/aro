@@ -150,7 +150,10 @@ final class WorkspaceController {
         currentFile = url
         let sidecar = LayoutSidecar.load(for: url)
         paneMode = sidecar.paneMode
-        // Refresh the OpenAPI document buffer when switching files.
+        // Refresh the OpenAPI document buffer when switching files;
+        // tear down the previous file watcher first so we don't
+        // leak an O_EVTONLY descriptor per file open.
+        openAPIDocument?.tearDownWatcher()
         if url.lastPathComponent.lowercased() == "openapi.yaml"
             || url.lastPathComponent.lowercased() == "openapi.yml"
         {

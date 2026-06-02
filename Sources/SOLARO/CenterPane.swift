@@ -48,6 +48,7 @@ struct CenterPaneView: View {
                 breakpoints: breakpointsBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
+                language: editorLanguage(for: url),
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -67,6 +68,17 @@ struct CenterPaneView: View {
                 }
             }
         )
+    }
+
+    /// Pick the syntax highlighter mode for the editor based on
+    /// the file extension. ARO sources get the Lexer-driven
+    /// coloring; openapi.yaml gets the lightweight YAML pass;
+    /// everything else stays uncoloured.
+    private func editorLanguage(for url: URL) -> AROCodeEditor.Language {
+        let name = url.lastPathComponent.lowercased()
+        if name.hasSuffix(".aro") { return .aro }
+        if name.hasSuffix(".yaml") || name.hasSuffix(".yml") { return .yaml }
+        return .plain
     }
 
     /// Binding to the current file's breakpoints (1-indexed lines).

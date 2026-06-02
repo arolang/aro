@@ -334,7 +334,13 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Live debugger symbols keyed by identifier name. The editor
     /// uses this to resolve hover tooltips over `<name>` references.
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
+    /// What syntax to highlight. ARO files get the Lexer-driven
+    /// coloring; YAML/plain files skip ARO tokens (the Lexer would
+    /// otherwise stain quotes + numbers with verb tints).
+    var language: Language = .aro
     let onSave: (String) -> Void
+
+    enum Language { case aro, yaml, plain }
 
     func makeNSView(context: Context) -> NSScrollView {
         // Build our hover-capable subclass by hand instead of using
@@ -545,9 +551,6 @@ struct AROCodeEditor: NSViewRepresentable {
         let nsString = source as NSString
         let fullRange = NSRange(location: 0, length: nsString.length)
 
-        // Reset to the base foreground / font, then overlay token
-        // colors. The whole pass is wrapped in a single edit cycle
-        // by STTextView under the hood via setAttributes.
         textView.setAttributes(
             [
                 .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
@@ -556,10 +559,15 @@ struct AROCodeEditor: NSViewRepresentable {
             range: fullRange
         )
 
-        // Reuse the existing Lexer-driven highlighter by funnelling
-        // its output into STTextView's addAttributes(_:range:).
         let mutable = NSMutableAttributedString(string: source)
-        AROSyntaxHighlighter.apply(to: mutable, source: source)
+        switch language {
+        case .aro:
+            AROSyntaxHighlighter.apply(to: mutable, source: source)
+        case .yaml:
+            YAMLSyntaxHighlighter.apply(to: mutable, source: source)
+        case .plain:
+            break
+        }
         mutable.enumerateAttribute(
             .foregroundColor, in: fullRange, options: []
         ) { value, range, _ in
