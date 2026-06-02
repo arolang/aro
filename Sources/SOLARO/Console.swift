@@ -227,6 +227,13 @@ final class ConsoleProcess {
     ///   6. Bare `aro` resolved by /usr/bin/env (the legacy path).
     nonisolated static func resolveAroBinary(near project: Project) -> String {
         let fm = FileManager.default
+        // Settings override (UserDefaults) takes precedence over
+        // the SOLARO_ARO env var so the user can change it without
+        // relaunching with a different environment.
+        let defaultsPath = UserDefaults.standard.string(forKey: SolaroPrefs.aroOverride.rawValue) ?? ""
+        if !defaultsPath.isEmpty, fm.isExecutableFile(atPath: defaultsPath) {
+            return defaultsPath
+        }
         if let envPath = ProcessInfo.processInfo.environment["SOLARO_ARO"],
            !envPath.isEmpty, fm.isExecutableFile(atPath: envPath) {
             return envPath

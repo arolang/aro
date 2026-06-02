@@ -418,9 +418,13 @@ struct AROCodeEditor: NSViewRepresentable {
     // MARK: - Setup
 
     private func configureTextView(_ textView: AROHoverTextView) {
-        let mono = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let fontSize = UserDefaults.standard.double(forKey: SolaroPrefs.editorFontSize.rawValue)
+        let resolvedFontSize: CGFloat = fontSize > 0 ? fontSize : 13
+        let lineHeight = UserDefaults.standard.double(forKey: SolaroPrefs.editorLineHeight.rawValue)
+        let resolvedLineHeight: CGFloat = lineHeight > 0 ? lineHeight : 1.25
+        let mono = NSFont.monospacedSystemFont(ofSize: resolvedFontSize, weight: .regular)
         let paragraph = NSParagraphStyle.default.mutableCopy() as! NSMutableParagraphStyle
-        paragraph.lineHeightMultiple = 1.25
+        paragraph.lineHeightMultiple = resolvedLineHeight
         textView.defaultParagraphStyle = paragraph
         textView.font = mono
         textView.textColor = NSColor(SolaroColor.textPrimary)

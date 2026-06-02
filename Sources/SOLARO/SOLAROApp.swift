@@ -41,6 +41,9 @@ struct SOLAROApp: App {
     }
 
     var body: some Scene {
+        Settings {
+            SettingsView()
+        }
         WindowGroup("SOLARO") {
             ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
                 .frame(minWidth: 1200, minHeight: 800)
