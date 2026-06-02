@@ -95,6 +95,10 @@ solaroTargets = [
             "ARORuntime",
             .product(name: "Logging", package: "swift-log"),
             .product(name: "Yams", package: "Yams"),
+            // STTextView (TextKit 2 editor) for the code-editing pane —
+            // gives us a gutter, proper attributed-text editing, and
+            // a plugin surface for syntax highlighting + breakpoints.
+            .product(name: "STTextView", package: "STTextView"),
         ],
         path: "Sources/SOLARO"
     ),
@@ -207,6 +211,9 @@ let package = Package(
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
         // Swift Log for structured logging
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        // STTextView — TextKit 2 editor used by SOLARO's center pane.
+        // Pinned to the minor while the API is still settling.
+        .package(url: "https://github.com/krzyzanowskim/STTextView.git", from: "2.3.0"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
