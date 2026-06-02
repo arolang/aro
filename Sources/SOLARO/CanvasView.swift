@@ -103,10 +103,40 @@ struct CanvasView: View {
             }
             .onAppear(perform: seedPositionsIfNeeded)
             .onChange(of: graph.nodes.map(\.id)) { _, _ in
-                // Seed any new nodes (e.g. after an edit + reparse)
-                // without clobbering nodes the user already dragged.
                 seedPositionsIfNeeded()
             }
+            .onChange(of: currentLine) { _, newLine in
+                guard let newLine else { return }
+                centerOnNode(forLine: newLine, in: geo.size)
+            }
+        }
+    }
+
+    /// Ease-in-out the canvas's pan offset so the node matching
+    /// `line` lands at the viewport center. Called whenever
+    /// `currentLine` changes — both editor-driven (cursor moved
+    /// in source) and canvas-driven (node tap) flows trigger this,
+    /// but the latter usually only nudges by a small amount.
+    private func centerOnNode(forLine line: Int, in viewportSize: CGSize) {
+        guard let target = graph.nodes.first(where: { $0.lineHint == line }) else {
+            return
+        }
+        let pos = liveNodes[target.id] ?? CGPoint(x: target.x, y: target.y)
+        let nodeCenter = CGPoint(
+            x: pos.x + nodeWidth / 2,
+            y: pos.y + nodeHeight / 2
+        )
+        // Modifier order in body: scaleEffect (inner) → offset
+        // (outer). Visual position of a point P inside content:
+        //     screen = P * zoom + pan
+        // Solve for pan that places the node center at the viewport
+        // center.
+        let newPan = CGSize(
+            width: viewportSize.width / 2 - nodeCenter.x * zoom,
+            height: viewportSize.height / 2 - nodeCenter.y * zoom
+        )
+        withAnimation(.easeInOut(duration: 0.35)) {
+            pan = newPan
         }
     }
 
