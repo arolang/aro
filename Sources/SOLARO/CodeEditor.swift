@@ -321,54 +321,6 @@ struct HoverValuePopover: View {
     }
 }
 
-/// Red-dot marker drawn in the gutter for each line that has a
-/// breakpoint. Renders a perfectly round `circle.fill` SF Symbol
-/// in a square rect centred vertically and pinned to the right
-/// edge of the marker container — that lands the dot directly
-/// beside the line number rather than floating in empty space.
-final class BreakpointMarkerView: NSView {
-    override init(frame frameRect: NSRect = .zero) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("BreakpointMarkerView does not support NSCoder")
-    }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        // Square draw rect ensures the SF Symbol renders as a true
-        // circle (not an oval stretched into a tall marker slot).
-        // Sized to ~70% of the smaller dimension so it doesn't crowd
-        // the gutter separator.
-        let diameter = max(min(bounds.width, bounds.height) * 0.7, 8)
-        // Pin to the LEFT edge of the marker container so the dot
-        // sits beside the line number (Xcode / VSCode convention)
-        // rather than crowding the text margin on the right.
-        let leftInset: CGFloat = 2
-        let drawRect = NSRect(
-            x: leftInset,
-            y: bounds.midY - diameter / 2,
-            width: diameter,
-            height: diameter
-        )
-        let config = NSImage.SymbolConfiguration(
-            pointSize: diameter,
-            weight: .bold
-        ).applying(.init(paletteColors: [NSColor(SolaroColor.stateError)]))
-        guard let symbol = NSImage(
-            systemSymbolName: "circle.fill",
-            accessibilityDescription: "breakpoint"
-        )?.withSymbolConfiguration(config) else { return }
-        symbol.draw(in: drawRect)
-    }
-}
-
 struct AROCodeEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var currentLine: Int?
@@ -573,22 +525,18 @@ struct AROCodeEditor: NSViewRepresentable {
     }
 
     /// Replace the gutter's marker set with one STGutterMarker per
-    /// breakpoint line. The custom view is a small filled circle
-    /// in the SOLARO error red.
+    /// breakpoint line. Uses STGutterMarker's default view — the
+    /// wide blue pentagonal indicator that matches the gutter's
+    /// own selected-line highlight, so breakpoints and selection
+    /// share one visual vocabulary.
     fileprivate func renderBreakpoints(on textView: STTextView) {
         guard let gutter = textView.gutterView else { return }
-        // Clear all current breakpoint markers — we own them.
         let lines = Set((1...max(breakpoints.max() ?? 0, 1)).map { $0 })
         for line in lines {
             gutter.removeMarker(lineNumber: line)
         }
-        // Re-add the current set.
         for line in breakpoints {
-            let marker = STGutterMarker(
-                lineNumber: line,
-                view: BreakpointMarkerView(frame: .zero)
-            )
-            gutter.addMarker(marker)
+            gutter.addMarker(STGutterMarker(lineNumber: line))
         }
     }
 
