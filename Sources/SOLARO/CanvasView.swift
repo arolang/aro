@@ -477,6 +477,7 @@ private struct CanvasNodeCard: View {
     let symbols: [ConsoleProcess.SymbolValue]
 
     @State private var hovering = false
+    @State private var showPopover = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -540,7 +541,19 @@ private struct CanvasNodeCard: View {
                     .offset(x: -4, y: -4)
             }
         }
-        .onHover { hovering = $0 }
+        .onHover { isHovering in
+            hovering = isHovering
+            // Only show the styled popover when there's actually
+            // something interesting to display — i.e. live debugger
+            // values captured for symbols this statement touches.
+            showPopover = isHovering && !symbols.isEmpty
+        }
+        .popover(isPresented: $showPopover, arrowEdge: .top) {
+            CanvasNodeHoverPopover(node: node, symbols: symbols)
+        }
+        // Keep the system tooltip as a fallback for nodes that
+        // have no captured symbols — at least the line + summary
+        // are still readable.
         .help(tooltipText)
     }
 
@@ -578,6 +591,67 @@ private struct CanvasNodeCard: View {
             return String(withoutDot.dropFirst(prefix.count))
         }
         return withoutDot
+    }
+}
+
+/// Styled balloon popover for canvas nodes — mirrors the editor's
+/// HoverValuePopover but renders the full list of symbols the
+/// statement is touching, with the statement source as the header.
+private struct CanvasNodeHoverPopover: View {
+    let node: CanvasNode
+    let symbols: [ConsoleProcess.SymbolValue]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: "pause.circle.fill")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                    .font(.system(size: 11))
+                Text("Line \(node.lineHint)")
+                    .font(SolaroFont.sectionTitle)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                    .tracking(2)
+                Spacer()
+            }
+            Text(node.summary)
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.textPrimary)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+            Divider().background(SolaroColor.divider)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(symbols, id: \.name) { s in
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(s.name)
+                            .font(SolaroFont.mono)
+                            .foregroundStyle(SolaroColor.accent)
+                        Text(":")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textTertiary)
+                        Text(s.typeName)
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textSecondary)
+                        Text("=")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textTertiary)
+                        Text(s.value)
+                            .font(SolaroFont.mono)
+                            .foregroundStyle(SolaroColor.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            Text("captured at the current pause")
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.s)
+        .frame(minWidth: 260, maxWidth: 420, alignment: .leading)
     }
 }
 
