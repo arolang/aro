@@ -39,16 +39,19 @@ struct CanvasView: View {
 
     var body: some View {
         GeometryReader { geo in
+            let contentSize = contentBounds()
             ZStack {
                 SolaroColor.backdrop
                 dotGrid(in: geo.size)
 
-                ZStack {
+                ZStack(alignment: .topLeading) {
                     WiresLayer(
                         graph: graph,
                         positions: nodePositions,
                         nodeWidth: nodeWidth, nodeHeight: nodeHeight
                     )
+                    .frame(width: contentSize.width, height: contentSize.height,
+                           alignment: .topLeading)
                     NodesLayer(
                         graph: graph,
                         positions: nodePositions,
@@ -61,11 +64,16 @@ struct CanvasView: View {
                             persistPosition(id, finalPos)
                         }
                     )
+                    .frame(width: contentSize.width, height: contentSize.height,
+                           alignment: .topLeading)
                 }
+                .frame(width: contentSize.width, height: contentSize.height,
+                       alignment: .topLeading)
                 .offset(x: pan.width + dragOffset.width,
                         y: pan.height + dragOffset.height)
                 .scaleEffect(zoom * magnify, anchor: .topLeading)
                 .animation(.easeOut(duration: 0.15), value: zoom)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .contentShape(Rectangle())
             .gesture(panGesture)
@@ -105,6 +113,20 @@ struct CanvasView: View {
             }
         }
         return out
+    }
+
+    /// Bounding box (in canvas coordinates) of all currently-placed
+    /// nodes, with generous padding so the wires/nodes container has
+    /// a consistent frame for both layers and pan reaches everything.
+    private func contentBounds() -> CGSize {
+        var maxX: CGFloat = 800
+        var maxY: CGFloat = 600
+        for node in graph.nodes {
+            let p = liveNodes[node.id] ?? CGPoint(x: node.x, y: node.y)
+            maxX = max(maxX, p.x + nodeWidth)
+            maxY = max(maxY, p.y + nodeHeight)
+        }
+        return CGSize(width: maxX + 200, height: maxY + 200)
     }
 
     private func seedPositionsIfNeeded() {
@@ -268,16 +290,25 @@ struct NodesLayer: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
+            // Invisible spacer so the ZStack reports a non-zero size
+            // even when all real children are placed via .position
+            // (which doesn't contribute to layout).
+            Color.clear
             ForEach(graph.nodes) { node in
                 let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
                 CanvasNodeCard(
                     node: node,
                     width: nodeWidth, height: nodeHeight
                 )
-                .offset(x: p.x, y: p.y)
-                .gesture(
-                    dragGesture(forNodeAt: p, id: node.id)
-                )
+                // `.position` is absolute placement that puts the
+                // view's center at the given point in the parent's
+                // coordinate space — unlike `.offset`, it counts as
+                // layout. The +width/2, +height/2 converts from the
+                // (top-left) node origin we store on disk to the
+                // (center) point .position expects.
+                .position(x: p.x + nodeWidth / 2,
+                          y: p.y + nodeHeight / 2)
+                .gesture(dragGesture(forNodeAt: p, id: node.id))
             }
         }
     }
