@@ -112,7 +112,27 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private var mapMode: some View {
-        emptyPane("Map mode lands in Phase 10.")
+        let map = ProjectMap.build(from: controller.allPrograms)
+        ProjectMapView(map: map) { node in
+            // Phase 10: locate which source file declares this
+            // feature set and switch to it. The text editor's
+            // scroll-to-feature-set position lands as a follow-up.
+            if let url = sourceURL(for: node.featureSetName) {
+                controller.openFile(url)
+                controller.setPaneMode(.text)
+            }
+        }
+    }
+
+    private func sourceURL(for featureSetName: String) -> URL? {
+        guard let model = controller.model else { return nil }
+        for url in model.sourceFiles {
+            if let program = controller.programs[url],
+               program.featureSets.contains(where: { $0.name == featureSetName }) {
+                return url
+            }
+        }
+        return nil
     }
 
     // MARK: - Helpers
