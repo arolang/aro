@@ -144,33 +144,53 @@ struct InspectorPaneView: View {
 
     @ViewBuilder
     private var variablesSection: some View {
-        let symbols = sortedPauseSymbols
-        if !symbols.isEmpty {
+        // Render the section whenever the debugger is paused, even
+        // when the symbol bag happens to be empty — empties used
+        // to make the whole section vanish, leaving the user
+        // wondering where it went.
+        if controller.pausedLine != nil {
             VStack(alignment: .leading, spacing: SolaroSpace.s) {
                 HStack {
-                    Text("VARIABLES")
+                    Image(systemName: "pause.circle.fill")
+                        .foregroundStyle(SolaroColor.stateWarn)
+                    Text("DEBUGGER · VARIABLES")
                         .font(SolaroFont.sectionTitle)
                         .foregroundStyle(SolaroColor.textSecondary)
                         .tracking(2)
                     Spacer()
                     if let line = controller.pausedLine {
-                        Text("at line \(line)")
+                        Text("line \(line)")
                             .font(SolaroFont.monoCaption)
                             .foregroundStyle(SolaroColor.stateWarn)
                     }
                 }
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(symbols, id: \.name) { sym in
-                        VariableRow(symbol: sym)
-                    }
-                }
-                .padding(.vertical, SolaroSpace.xs)
-                .padding(.horizontal, SolaroSpace.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .solaroCard()
+                variableList
             }
             .padding(.top, SolaroSpace.s)
         }
+    }
+
+    @ViewBuilder
+    private var variableList: some View {
+        let symbols = sortedPauseSymbols
+        VStack(alignment: .leading, spacing: 1) {
+            if symbols.isEmpty {
+                Text("No variables captured at this pause.")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Text("Step / continue to a statement that binds one.")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            } else {
+                ForEach(symbols, id: \.name) { sym in
+                    VariableRow(symbol: sym)
+                }
+            }
+        }
+        .padding(.vertical, SolaroSpace.xs)
+        .padding(.horizontal, SolaroSpace.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .solaroCard()
     }
 
     private var sortedPauseSymbols: [ConsoleProcess.SymbolValue] {

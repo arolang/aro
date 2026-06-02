@@ -186,9 +186,17 @@ final class ConsoleProcess {
     func quit()              { sendInput("q") }
 
     /// Where `--record` writes its JSONL stream for time-travel
-    /// playback in the Time-Travel view.
+    /// playback in the Time-Travel view. Creates the parent
+    /// `.solaro/` directory on demand — `DebugEventLogWriter` fails
+    /// silently if the directory is missing, which manifested as
+    /// "no variables in the inspector during debug".
     private func recordPath(for project: Project) -> String {
-        project.rootPath.appendingPathComponent(".solaro/events.jsonl").path
+        let url = project.rootPath.appendingPathComponent(".solaro/events.jsonl")
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true
+        )
+        return url.path
     }
 
     /// Pick an `aro` binary in priority order:
