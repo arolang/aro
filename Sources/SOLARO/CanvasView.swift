@@ -224,7 +224,11 @@ struct CanvasView: View {
     private var legendPrepositions: [String] {
         let canonical = ["from", "to", "with", "into", "against",
                          "for", "at", "by", "via", "on"]
-        let present = Set(graph.edges.compactMap { $0.preposition?.lowercased() })
+        let present = Set(
+            graph.edges
+                .filter { $0.kind == .dataFlow }
+                .compactMap { $0.preposition?.lowercased() }
+        )
         return canonical.filter(present.contains)
     }
 }
@@ -239,42 +243,71 @@ struct WiresLayer: View {
 
     var body: some View {
         Canvas { ctx, _ in
-            for edge in graph.edges {
-                guard
-                    let from = positions[edge.fromNodeID],
-                    let to = positions[edge.toNodeID]
-                else { continue }
-
-                let start = CGPoint(
-                    x: from.x + nodeWidth,
-                    y: from.y + nodeHeight / 2
-                )
-                let end = CGPoint(
-                    x: to.x,
-                    y: to.y + nodeHeight / 2
-                )
-
-                let dx = abs(end.x - start.x)
-                let curveOffset = max(dx * 0.5, 36)
-                let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
-                let c2 = CGPoint(x: end.x - curveOffset, y: end.y)
-
-                var path = Path()
-                path.move(to: start)
-                path.addCurve(to: end, control1: c1, control2: c2)
-
-                let color = SolaroColor.wireColor(forPreposition: edge.preposition)
-                ctx.stroke(path,
-                           with: .color(color.opacity(0.20)),
-                           style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                ctx.stroke(path,
-                           with: .color(color.opacity(0.92)),
-                           style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-                let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
-                                     width: 6, height: 6)
-                ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
+            // Draw sequence (program-flow) edges first so the
+            // data-flow Béziers sit on top of them.
+            for edge in graph.edges where edge.kind == .sequence {
+                drawSequence(edge, ctx: ctx)
+            }
+            for edge in graph.edges where edge.kind == .dataFlow {
+                drawDataFlow(edge, ctx: ctx)
             }
         }
+    }
+
+    private func drawSequence(_ edge: CanvasEdge,
+                              ctx: GraphicsContext) {
+        guard
+            let from = positions[edge.fromNodeID],
+            let to = positions[edge.toNodeID]
+        else { return }
+        // Bottom-center of source → top-center of receiver. The
+        // user sees execution flowing top-down through the stack
+        // layout.
+        let start = CGPoint(x: from.x + nodeWidth / 2,
+                            y: from.y + nodeHeight)
+        let end   = CGPoint(x: to.x + nodeWidth / 2,
+                            y: to.y)
+        let dy = abs(end.y - start.y)
+        let curve = max(dy * 0.4, 18)
+        let c1 = CGPoint(x: start.x, y: start.y + curve)
+        let c2 = CGPoint(x: end.x,   y: end.y - curve)
+        var path = Path()
+        path.move(to: start)
+        path.addCurve(to: end, control1: c1, control2: c2)
+        ctx.stroke(
+            path,
+            with: .color(SolaroColor.textTertiary.opacity(0.55)),
+            style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [2, 4])
+        )
+    }
+
+    private func drawDataFlow(_ edge: CanvasEdge,
+                              ctx: GraphicsContext) {
+        guard
+            let from = positions[edge.fromNodeID],
+            let to = positions[edge.toNodeID]
+        else { return }
+        let start = CGPoint(x: from.x + nodeWidth,
+                            y: from.y + nodeHeight / 2)
+        let end = CGPoint(x: to.x,
+                          y: to.y + nodeHeight / 2)
+        let dx = abs(end.x - start.x)
+        let curveOffset = max(dx * 0.5, 36)
+        let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
+        let c2 = CGPoint(x: end.x - curveOffset, y: end.y)
+        var path = Path()
+        path.move(to: start)
+        path.addCurve(to: end, control1: c1, control2: c2)
+        let color = SolaroColor.wireColor(forPreposition: edge.preposition)
+        ctx.stroke(path,
+                   with: .color(color.opacity(0.20)),
+                   style: StrokeStyle(lineWidth: 5, lineCap: .round))
+        ctx.stroke(path,
+                   with: .color(color.opacity(0.92)),
+                   style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+        let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
+                             width: 6, height: 6)
+        ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
     }
 }
 

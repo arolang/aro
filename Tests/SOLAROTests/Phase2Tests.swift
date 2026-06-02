@@ -38,20 +38,22 @@ final class Phase2Tests: XCTestCase {
         let fs = try XCTUnwrap(program.featureSets.first)
         let graph = CanvasGraph.build(featureSet: fs, fileKey: "test.aro")
 
-        // Dump for debug if the assertion fails — surfaces the
-        // actual `(resultName, objectName)` pairs the matcher saw.
         let summary = graph.nodes.map { n in
             "\(n.verb)(result=\(n.resultName ?? "nil"), object=\(n.objectName ?? "nil"))"
         }.joined(separator: " | ")
-        XCTAssertEqual(graph.edges.count, 1, "Create.<user> → Emit (object=user); got nodes: \(summary)")
-        if graph.edges.count == 1 {
-            XCTAssertEqual(graph.edges.first?.fromNodeID, graph.nodes[0].id)
-            XCTAssertEqual(graph.edges.first?.toNodeID, graph.nodes[1].id)
-            XCTAssertEqual(graph.edges.first?.preposition, "with")
+        let dataEdges = graph.edges.filter { $0.kind == .dataFlow }
+        XCTAssertEqual(dataEdges.count, 1, "Create.<user> → Emit (object=user); got nodes: \(summary)")
+        if let edge = dataEdges.first {
+            XCTAssertEqual(edge.fromNodeID, graph.nodes[0].id)
+            XCTAssertEqual(edge.toNodeID, graph.nodes[1].id)
+            XCTAssertEqual(edge.preposition, "with")
         }
+        // Data-flow edge already connects the pair → no redundant
+        // sequence edge gets added.
+        XCTAssertTrue(graph.edges.allSatisfy { $0.kind == .dataFlow })
     }
 
-    func testCanvasGraphNoEdgesWhenIdentifiersDontMatch() throws {
+    func testCanvasGraphNoDataEdgesWhenIdentifiersDontMatch() throws {
         let program = try parse("""
         (Application-Start: Probe) {
             Create the <alpha> with "x".
@@ -61,7 +63,34 @@ final class Phase2Tests: XCTestCase {
         let fs = try XCTUnwrap(program.featureSets.first)
         let graph = CanvasGraph.build(featureSet: fs, fileKey: "test.aro")
         XCTAssertEqual(graph.nodes.count, 2)
-        XCTAssertTrue(graph.edges.isEmpty)
+        // No identifier overlap → no data-flow edges. But adjacent
+        // statements get a sequence (gray-dotted) edge so the
+        // program flow is visible.
+        XCTAssertTrue(graph.edges.allSatisfy { $0.kind == .sequence })
+        XCTAssertEqual(graph.edges.count, 1)
+        XCTAssertEqual(graph.edges.first?.fromNodeID, graph.nodes[0].id)
+        XCTAssertEqual(graph.edges.first?.toNodeID, graph.nodes[1].id)
+    }
+
+    func testCanvasGraphSequenceEdgesSpanAdjacentStatements() throws {
+        // Three statements that share no identifiers — there should
+        // be exactly two sequence edges (a→b, b→c) and no data edges.
+        let program = try parse("""
+        (Application-Start: Probe) {
+            Log "first" to the <console>.
+            Log "second" to the <console>.
+            Log "third" to the <console>.
+        }
+        """)
+        let fs = try XCTUnwrap(program.featureSets.first)
+        let graph = CanvasGraph.build(featureSet: fs, fileKey: "test.aro")
+        let seq = graph.edges.filter { $0.kind == .sequence }
+        XCTAssertEqual(graph.edges.count, 2)
+        XCTAssertEqual(seq.count, 2)
+        XCTAssertEqual(seq[0].fromNodeID, graph.nodes[0].id)
+        XCTAssertEqual(seq[0].toNodeID,   graph.nodes[1].id)
+        XCTAssertEqual(seq[1].fromNodeID, graph.nodes[1].id)
+        XCTAssertEqual(seq[1].toNodeID,   graph.nodes[2].id)
     }
 
     // MARK: - Layout sidecar round-trip with positions

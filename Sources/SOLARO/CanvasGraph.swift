@@ -83,17 +83,37 @@ struct CanvasNode: Identifiable, Equatable {
     }
 }
 
-/// Directed edge between two nodes. Phase 2 captures the simplest
-/// connectivity: when statement A's `<result>` matches statement B's
-/// `<object>`, A → B.
+/// Directed edge between two nodes. Either:
+/// - `.dataFlow`: A's `<result>` is consumed by B (the colored wire
+///   in the canvas, drawn along the receiver's preposition).
+/// - `.sequence`: B is the next statement after A in source order
+///   and they're not already connected by data flow — a thin gray
+///   dotted line that makes the normal program flow visible.
 struct CanvasEdge: Identifiable, Equatable {
     let id: String
     let fromNodeID: String
     let toNodeID: String
-    /// Preposition flavor of the receiving pin (for color in Phase 2
-    /// follow-up wire rendering): "from", "to", "with", "into",
-    /// "against", "for".
+    /// Preposition flavor of the receiving pin (for color on data-
+    /// flow wires): "from", "to", "with", "into", "against", "for".
+    /// Always nil for `.sequence` edges.
     let preposition: String?
+    /// What this edge represents — used by the renderer to pick
+    /// stroke style + color.
+    let kind: Kind
+
+    enum Kind: Equatable, Hashable {
+        case dataFlow
+        case sequence
+    }
+
+    init(id: String, fromNodeID: String, toNodeID: String,
+         preposition: String?, kind: Kind = .dataFlow) {
+        self.id = id
+        self.fromNodeID = fromNodeID
+        self.toNodeID = toNodeID
+        self.preposition = preposition
+        self.kind = kind
+    }
 }
 
 /// Wraps a feature set's statements into a node + edge list ready
@@ -132,11 +152,35 @@ struct CanvasGraph: Equatable {
                             id: "\(nodes[i].id)→\(rhs.id)→\(refName)",
                             fromNodeID: nodes[i].id,
                             toNodeID: rhs.id,
-                            preposition: rhs.objectPreposition
+                            preposition: rhs.objectPreposition,
+                            kind: .dataFlow
                         ))
                         break
                     }
                 }
+            }
+        }
+
+        // Sequence edges: for every adjacent pair of statements in
+        // source order, draw a gray dotted line so the normal
+        // execution flow reads visually — e.g. two adjacent `Log`
+        // statements that share no data still flow first→second.
+        // Suppressed when a data-flow edge already connects them so
+        // the canvas doesn't double-wire the same pair.
+        for i in 0..<max(nodes.count - 1, 0) {
+            let a = nodes[i]
+            let b = nodes[i + 1]
+            let alreadyConnected = edges.contains { e in
+                e.fromNodeID == a.id && e.toNodeID == b.id
+            }
+            if !alreadyConnected {
+                edges.append(CanvasEdge(
+                    id: "\(a.id)→\(b.id)→seq",
+                    fromNodeID: a.id,
+                    toNodeID: b.id,
+                    preposition: nil,
+                    kind: .sequence
+                ))
             }
         }
         return CanvasGraph(nodes: nodes, edges: edges)
