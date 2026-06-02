@@ -219,6 +219,12 @@ final class WorkspaceController {
     }
 }
 
+/// Adapter so a `String?` can drive a `sheet(item:)` modifier.
+struct SymbolNameWrapper: Identifiable {
+    let name: String
+    var id: String { name }
+}
+
 /// Renders a 1×1 transparent button with a keyboard shortcut so
 /// the parent view can wire a global accelerator without exposing
 /// any visible chrome.
@@ -316,6 +322,8 @@ struct WorkspaceView: View {
     @State private var showQuickOpen = false
     @State private var showFindInProject = false
     @State private var findInProjectModel = FindInProjectModel()
+    @State private var showSymbolPalette = false
+    @State private var referencesSymbol: String? = nil
     /// Co-pilot (`aro ask`) process.
     @State private var aiCoPilot = AICoPilotProcess()
     /// NavigationSplitView's column visibility — bound (not constant)
@@ -436,6 +444,35 @@ struct WorkspaceView: View {
                 }
             )
         }
+        .sheet(isPresented: $showSymbolPalette) {
+            PaletteView(
+                title: "SYMBOLS",
+                placeholder: "Jump to identifier…",
+                items: SymbolPaletteBuilder.items(
+                    controller: controller,
+                    onJump: { url, line in
+                        controller.openFile(url)
+                        controller.currentLine = line
+                    }
+                ),
+                onClose: { showSymbolPalette = false }
+            )
+        }
+        .sheet(item: Binding(
+            get: { referencesSymbol.map { SymbolNameWrapper(name: $0) } },
+            set: { referencesSymbol = $0?.name }
+        )) { wrapper in
+            FindReferencesSheet(
+                controller: controller,
+                symbolName: wrapper.name,
+                onClose: { referencesSymbol = nil },
+                onJump: { url, line in
+                    controller.openFile(url)
+                    controller.currentLine = line
+                    referencesSymbol = nil
+                }
+            )
+        }
         .background {
             // Hidden buttons hold the three palette shortcuts. SwiftUI
             // keyboard shortcuts only fire from views in the hierarchy,
@@ -460,6 +497,9 @@ struct WorkspaceView: View {
             }
             HiddenShortcutButton(key: "[", modifiers: [.command, .shift]) {
                 controller.cycleTab(by: -1)
+            }
+            HiddenShortcutButton(key: "o", modifiers: [.command, .shift]) {
+                showSymbolPalette = true
             }
         }
         .onAppear { controller.load() }
