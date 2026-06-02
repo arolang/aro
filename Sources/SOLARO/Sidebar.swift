@@ -31,6 +31,7 @@ struct SidebarPaneView: View {
             switch controller.sidebarTab {
             case .files:    filesPane
             case .features: featuresPane
+            case .outline:  outlinePane
             case .plugins:  pluginsPane
             }
         }
@@ -154,6 +155,31 @@ struct SidebarPaneView: View {
                 FeatureRow(fs: fs) {
                     controller.openFile(url)
                 }
+            }
+        }
+    }
+
+    // MARK: - Outline tab
+
+    private var outlinePane: some View {
+        Group {
+            if let url = controller.currentFile,
+               let program = controller.programs[url] {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                        ForEach(program.featureSets, id: \.name) { fs in
+                            OutlineFeatureSet(
+                                fs: fs,
+                                onJump: { line in
+                                    controller.currentLine = line
+                                }
+                            )
+                        }
+                    }
+                    .padding(.vertical, SolaroSpace.s)
+                }
+            } else {
+                emptyMessage("Open a file to see its outline.")
             }
         }
     }
@@ -348,6 +374,91 @@ private struct FeatureRow: View {
         }
         if activity.contains("action") { return SolaroColor.roleOwn }
         return SolaroColor.textSecondary
+    }
+}
+
+// MARK: - Outline rows
+
+private struct OutlineFeatureSet: View {
+    let fs: FeatureSet
+    let onJump: (Int) -> Void
+    @State private var expanded: Bool = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9))
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .frame(width: 12)
+                    Text(fs.name)
+                        .font(SolaroFont.body)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(fs.businessActivity)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, SolaroSpace.m)
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                ForEach(Array(fs.statements.enumerated()), id: \.offset) { _, stmt in
+                    OutlineStatement(statement: stmt, onJump: onJump)
+                }
+            }
+        }
+    }
+}
+
+private struct OutlineStatement: View {
+    let statement: any Statement
+    let onJump: (Int) -> Void
+
+    var body: some View {
+        Button {
+            onJump(statement.span.start.line)
+        } label: {
+            HStack(spacing: 4) {
+                if let aro = statement as? AROStatement {
+                    Image(systemName: "circle.fill")
+                        .resizable()
+                        .frame(width: 4, height: 4)
+                        .foregroundStyle(SolaroColor.roleColor(forVerb: aro.action.verb))
+                    Text(aro.action.verb)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.roleColor(forVerb: aro.action.verb))
+                    Text("<\(aro.result.base)>")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .lineLimit(1)
+                } else if let pub = statement as? PublishStatement {
+                    Image(systemName: "circle.fill")
+                        .resizable()
+                        .frame(width: 4, height: 4)
+                        .foregroundStyle(SolaroColor.roleExport)
+                    Text("Publish")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.roleExport)
+                    Text(pub.internalVariable)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                }
+                Spacer()
+                Text(":\(statement.span.start.line)")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            .padding(.leading, SolaroSpace.l + 8)
+            .padding(.trailing, SolaroSpace.m)
+            .padding(.vertical, 1)
+        }
+        .buttonStyle(.plain)
     }
 }
 

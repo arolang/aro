@@ -270,12 +270,13 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
 }
 
 enum SidebarTab: String, CaseIterable, Identifiable {
-    case files, features, plugins
+    case files, features, outline, plugins
     var id: String { rawValue }
     var label: String {
         switch self {
         case .files: return "Files"
         case .features: return "Features"
+        case .outline: return "Outline"
         case .plugins: return "Plugins"
         }
     }
@@ -283,6 +284,7 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .files: return "doc.text"
         case .features: return "square.grid.2x2"
+        case .outline: return "list.bullet.indent"
         case .plugins: return "puzzlepiece.extension"
         }
     }
@@ -330,6 +332,10 @@ struct WorkspaceView: View {
                 VStack(spacing: 0) {
                     if !controller.openTabs.isEmpty {
                         FileTabBar(controller: controller)
+                        Divider().background(SolaroColor.divider)
+                    }
+                    if controller.currentFile != nil {
+                        BreadcrumbView(controller: controller)
                         Divider().background(SolaroColor.divider)
                     }
                     CenterPaneView(controller: controller)
