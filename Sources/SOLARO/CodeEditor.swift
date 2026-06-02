@@ -18,9 +18,46 @@ import AppKit
 import STTextView
 import AROParser
 
+/// Red-dot marker drawn in the gutter for each line that has a
+/// breakpoint. Sized to fit the gutter's marker container; SOLARO
+/// doesn't customize STGutterView's geometry, so we lean on the
+/// default frame.
+final class BreakpointMarkerView: NSView {
+    override init(frame frameRect: NSRect = .zero) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("BreakpointMarkerView does not support NSCoder")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let inset = min(bounds.width, bounds.height) * 0.18
+        let circle = bounds.insetBy(dx: inset, dy: inset)
+        // SolaroColor.stateError tone — translates to AppKit via
+        // the macOS 14+ SwiftUI bridge.
+        NSColor(SolaroColor.stateError).setFill()
+        NSBezierPath(ovalIn: circle).fill()
+        // Subtle inner highlight so the dot reads as a 3-D bead at
+        // the canvas dark backdrop.
+        let highlight = circle.insetBy(dx: circle.width * 0.3,
+                                       dy: circle.height * 0.3)
+        NSColor.white.withAlphaComponent(0.4).setFill()
+        NSBezierPath(ovalIn: highlight).fill()
+    }
+}
+
 struct AROCodeEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var currentLine: Int?
+    /// Breakpoint source lines (1-indexed). Toggled by clicking the
+    /// gutter; persisted to the file's LayoutSidecar by the parent.
+    @Binding var breakpoints: Set<Int>
     let onSave: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -38,6 +75,9 @@ struct AROCodeEditor: NSViewRepresentable {
         // Stash a weak reference for updateNSView to find the
         // text view inside the scroll view on subsequent passes.
         context.coordinator.textView = textView
+        // Attach the gutter click handler + render initial markers.
+        installBreakpointGesture(on: textView, coordinator: context.coordinator)
+        renderBreakpoints(on: textView)
         return scroll
     }
 
@@ -49,12 +89,15 @@ struct AROCodeEditor: NSViewRepresentable {
             textView.text = text
             applyHighlight(textView)
         }
-        // Move the caret when an external source (canvas tap) set
-        // currentLine to something different than where the cursor
-        // already is.
         if let target = currentLine,
            target != lineForCurrentSelection(in: textView) {
             moveCaret(to: target, in: textView)
+        }
+        // Re-render breakpoint markers whenever the binding changes
+        // (e.g. file switch loaded a new sidecar).
+        if context.coordinator.lastRenderedBreakpoints != breakpoints {
+            renderBreakpoints(on: textView)
+            context.coordinator.lastRenderedBreakpoints = breakpoints
         }
     }
 
@@ -120,6 +163,45 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.scrollRangeToVisible(target)
     }
 
+    // MARK: - Breakpoint gutter
+
+    /// Attach a single-click recognizer to the existing gutter view.
+    /// STGutterView's own marker drag-drop UX stays intact — clicks
+    /// fall through to the recognizer's action first.
+    fileprivate func installBreakpointGesture(
+        on textView: STTextView,
+        coordinator: Coordinator
+    ) {
+        guard let gutter = textView.gutterView else { return }
+        let click = NSClickGestureRecognizer(
+            target: coordinator,
+            action: #selector(Coordinator.gutterClicked(_:))
+        )
+        click.numberOfClicksRequired = 1
+        click.buttonMask = 0x1
+        gutter.addGestureRecognizer(click)
+    }
+
+    /// Replace the gutter's marker set with one STGutterMarker per
+    /// breakpoint line. The custom view is a small filled circle
+    /// in the SOLARO error red.
+    fileprivate func renderBreakpoints(on textView: STTextView) {
+        guard let gutter = textView.gutterView else { return }
+        // Clear all current breakpoint markers — we own them.
+        let lines = Set((1...max(breakpoints.max() ?? 0, 1)).map { $0 })
+        for line in lines {
+            gutter.removeMarker(lineNumber: line)
+        }
+        // Re-add the current set.
+        for line in breakpoints {
+            let marker = STGutterMarker(
+                lineNumber: line,
+                view: BreakpointMarkerView(frame: .zero)
+            )
+            gutter.addMarker(marker)
+        }
+    }
+
     fileprivate func applyHighlight(_ textView: STTextView) {
         let source = textView.text ?? ""
         let nsString = source as NSString
@@ -155,9 +237,52 @@ struct AROCodeEditor: NSViewRepresentable {
     final class Coordinator: NSObject, STTextViewDelegate {
         var parent: AROCodeEditor
         weak var textView: STTextView?
+        /// Tracks the most recently rendered breakpoint set so
+        /// updateNSView can detect external changes (file switch,
+        /// sidecar reload) without re-rendering on every body
+        /// re-evaluation.
+        var lastRenderedBreakpoints: Set<Int> = []
 
         init(parent: AROCodeEditor) {
             self.parent = parent
+        }
+
+        // Click on the gutter → toggle a breakpoint at the line
+        // under the click.
+        @objc func gutterClicked(_ recognizer: NSClickGestureRecognizer) {
+            guard
+                let textView,
+                let gutter = recognizer.view
+            else { return }
+            let pointInGutter = recognizer.location(in: gutter)
+            // Convert to text view coordinates. Map the click's Y
+            // into the text content area at a small x offset so
+            // the layout manager can find a fragment.
+            let pointInTextView = gutter.convert(pointInGutter, to: textView)
+            let probe = CGPoint(x: 4, y: pointInTextView.y)
+            guard let fragment = textView.textLayoutManager
+                .textLayoutFragment(for: probe)
+            else { return }
+            let elementStart = fragment.textElement?.elementRange?.location
+                ?? fragment.rangeInElement.location
+            // Count newlines from doc-start to the fragment start.
+            let docStart = textView.textContentManager.documentRange.location
+            guard
+                let prefixRange = NSTextRange(location: docStart, end: elementStart)
+            else { return }
+            let prefix = textView.textContentManager
+                .attributedString(in: prefixRange)?.string ?? ""
+            let line = prefix.filter { $0.isNewline }.count + 1
+
+            var updated = parent.breakpoints
+            if updated.contains(line) {
+                updated.remove(line)
+            } else {
+                updated.insert(line)
+            }
+            parent.breakpoints = updated
+            parent.renderBreakpoints(on: textView)
+            lastRenderedBreakpoints = updated
         }
 
         nonisolated func textViewDidChangeText(_ notification: Notification) {

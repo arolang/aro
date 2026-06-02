@@ -39,6 +39,7 @@ struct CenterPaneView: View {
             AROCodeEditor(
                 text: editableBinding(for: url),
                 currentLine: currentLineBinding,
+                breakpoints: breakpointsBinding,
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -56,6 +57,24 @@ struct CenterPaneView: View {
                 if controller.currentLine != newValue {
                     controller.currentLine = newValue
                 }
+            }
+        )
+    }
+
+    /// Binding to the current file's breakpoints (1-indexed lines).
+    /// Reads from the per-file LayoutSidecar; mutations write back
+    /// to disk so the set survives a relaunch.
+    private var breakpointsBinding: Binding<Set<Int>> {
+        Binding(
+            get: {
+                guard let url = controller.currentFile else { return [] }
+                return LayoutSidecar.load(for: url).breakpoints
+            },
+            set: { newValue in
+                guard let url = controller.currentFile else { return }
+                var sidecar = LayoutSidecar.load(for: url)
+                sidecar.breakpoints = newValue
+                try? sidecar.save(for: url)
             }
         )
     }
@@ -142,6 +161,7 @@ struct CenterPaneView: View {
                 AROCodeEditor(
                     text: editableBinding(for: url),
                     currentLine: currentLineBinding,
+                    breakpoints: breakpointsBinding,
                     onSave: { saveAndReparse(text: $0, url: url) }
                 )
                 .frame(minWidth: 240)
