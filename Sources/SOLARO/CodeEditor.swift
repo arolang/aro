@@ -351,6 +351,16 @@ struct AROCodeEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? STTextView else { return }
+        // Refresh the Coordinator's snapshot of `self`. SwiftUI
+        // re-creates AROCodeEditor on every body re-eval, but the
+        // Coordinator's stored `parent` is captured once at
+        // makeCoordinator(). Without this line, the resolveSymbol
+        // closure sees the empty pauseSymbols dictionary captured
+        // when the editor first mounted — which is exactly why
+        // hover-on-source returned no popover even when the
+        // canvas tooltip was rendering the same data.
+        context.coordinator.parent = self
+
         // Push text back into the view only when the external
         // binding diverged — avoids fighting the user's edits.
         if textView.text != text {
