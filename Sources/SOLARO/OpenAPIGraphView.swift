@@ -23,10 +23,17 @@ import AppKit
 
 struct OpenAPIGraphView: View {
     let yaml: String
+    /// Lint warnings the workspace already computed; nodes that
+    /// match any warning ID render a small badge.
+    let warnings: [OpenAPILintWarning]
     /// Callback invoked when the user selects a node. The
     /// workspace's inspector uses this to render an editable
     /// form for the selected route or schema.
     let onSelect: (OpenAPINode?) -> Void
+
+    private var warningsByNode: [String: [OpenAPILintWarning]] {
+        Dictionary(grouping: warnings, by: { $0.nodeID })
+    }
 
     @State private var selectedID: String?
     @State private var pan: CGSize = .zero
@@ -53,6 +60,7 @@ struct OpenAPIGraphView: View {
                     OpenAPINodesLayer(
                         graph: graph,
                         selectedID: selectedID,
+                        warningsByNode: warningsByNode,
                         onTap: { node in
                             selectedID = node.id
                             onSelect(node)
@@ -373,6 +381,7 @@ private struct OpenAPIWiresLayer: View {
 private struct OpenAPINodesLayer: View {
     let graph: OpenAPIGraph
     let selectedID: String?
+    let warningsByNode: [String: [OpenAPILintWarning]]
     let onTap: (OpenAPINode) -> Void
 
     var body: some View {
@@ -380,10 +389,47 @@ private struct OpenAPINodesLayer: View {
             Color.clear
             ForEach(graph.nodes) { node in
                 nodeView(for: node)
+                    .overlay(alignment: .topTrailing) {
+                        warningBadge(for: node)
+                    }
                     .position(x: CGFloat(node.x) + nodeWidth(for: node) / 2,
                               y: CGFloat(node.y) + nodeHeight(for: node) / 2)
                     .onTapGesture { onTap(node) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func warningBadge(for node: OpenAPINode) -> some View {
+        let entries = warningsByNode[node.id] ?? []
+        if !entries.isEmpty {
+            let hasError = entries.contains { $0.severity == .error }
+            HStack(spacing: 2) {
+                Image(systemName: hasError
+                      ? "exclamationmark.octagon.fill"
+                      : "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(hasError
+                                     ? SolaroColor.stateError
+                                     : SolaroColor.stateWarn)
+                Text("\(entries.count)")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(hasError
+                                     ? SolaroColor.stateError
+                                     : SolaroColor.stateWarn)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(SolaroColor.surface)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(
+                    hasError ? SolaroColor.stateError : SolaroColor.stateWarn,
+                    lineWidth: 1
+                )
+            )
+            .offset(x: 4, y: -4)
+            .help(entries.map(\.message).joined(separator: "\n"))
         }
     }
 

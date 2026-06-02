@@ -171,6 +171,7 @@ struct InspectorPaneView: View {
                     nodeID: nodeID,
                     document: document
                 )
+                openAPILintList(for: nodeID, document: document)
                 if let error = document.lastError {
                     Text(error)
                         .font(SolaroFont.caption)
@@ -186,6 +187,53 @@ struct InspectorPaneView: View {
         if nodeID.hasPrefix("route:") { return "ROUTE" }
         if nodeID.hasPrefix("inline:") { return "INLINE OBJECT" }
         return "SCHEMA"
+    }
+
+    /// Lint the document and return warnings attached to `nodeID`.
+    /// Returns an empty array when the workspace isn't on an
+    /// OpenAPI file or the file can't be read.
+    private func lintWarnings(
+        for nodeID: String,
+        document: OpenAPIDocument
+    ) -> [OpenAPILintWarning] {
+        guard
+            let url = controller.currentFile,
+            let yaml = try? String(contentsOf: url, encoding: .utf8)
+        else { return [] }
+        let graph = OpenAPIGraphBuilder.build(yaml: yaml)
+        return OpenAPILinter.lint(graph: graph, document: document)
+            .filter { $0.nodeID == nodeID }
+    }
+
+    @ViewBuilder
+    private func openAPILintList(
+        for nodeID: String,
+        document: OpenAPIDocument
+    ) -> some View {
+        let warnings = lintWarnings(for: nodeID, document: document)
+        if !warnings.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Lint")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                ForEach(warnings) { warning in
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: warning.severity == .error
+                              ? "exclamationmark.octagon.fill"
+                              : "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(warning.severity == .error
+                                             ? SolaroColor.stateError
+                                             : SolaroColor.stateWarn)
+                        Text(warning.message)
+                            .font(SolaroFont.caption)
+                            .foregroundStyle(SolaroColor.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.top, SolaroSpace.xs)
+        }
     }
 
     @ViewBuilder

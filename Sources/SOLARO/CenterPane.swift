@@ -134,19 +134,13 @@ struct CenterPaneView: View {
     @ViewBuilder
     private func openAPICanvas(for url: URL) -> some View {
         let yaml = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        OpenAPIGraphView(yaml: yaml) { node in
-            // Selection drives the inspector's editable form
-            // (forthcoming follow-up); for now we mirror the
-            // selected route's operationId line into the editor
-            // caret so users get a familiar focus signal.
-            if let node, case .route(_, _, _, let opId) = node.kind {
-                controller.openAPISelectedNodeID = node.id
-                if let _ = opId {
-                    // No-op for now; future hook into editor caret.
-                }
-            } else {
-                controller.openAPISelectedNodeID = node?.id
-            }
+        let graph = OpenAPIGraphBuilder.build(yaml: yaml)
+        let warnings: [OpenAPILintWarning] = {
+            guard let document = controller.openAPIDocument else { return [] }
+            return OpenAPILinter.lint(graph: graph, document: document)
+        }()
+        OpenAPIGraphView(yaml: yaml, warnings: warnings) { node in
+            controller.openAPISelectedNodeID = node?.id
         }
     }
 
