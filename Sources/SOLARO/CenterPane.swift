@@ -72,16 +72,42 @@ struct CenterPaneView: View {
         }
     }
 
-    // MARK: - Canvas / Split / Map (Phases 8 and 10)
+    // MARK: - Canvas
 
     @ViewBuilder
     private var canvasMode: some View {
-        emptyPane("Canvas mode lands in Phase 8.")
+        CanvasView(graph: canvasGraph)
     }
+
+    private var canvasGraph: CanvasGraph {
+        guard
+            let url = controller.currentFile,
+            let program = controller.programs[url],
+            let firstFS = program.featureSets.first
+        else {
+            return CanvasGraph(nodes: [], edges: [])
+        }
+        let sidecar = LayoutSidecar.load(for: url)
+        let built = CanvasGraph.build(featureSet: firstFS, fileKey: url.path)
+            .withPositions(from: sidecar)
+        return ForceDirectedLayout.place(built)
+    }
+
+    // MARK: - Split / Map (Phase 10)
 
     @ViewBuilder
     private var splitMode: some View {
-        emptyPane("Split mode lands in Phase 10.")
+        HSplitView {
+            CanvasView(graph: canvasGraph)
+                .frame(minWidth: 240)
+            if let url = controller.currentFile {
+                AROCodeEditor(
+                    text: editableBinding(for: url),
+                    onSave: { saveAndReparse(text: $0, url: url) }
+                )
+                .frame(minWidth: 240)
+            }
+        }
     }
 
     @ViewBuilder
