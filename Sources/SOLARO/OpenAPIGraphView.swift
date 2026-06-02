@@ -35,6 +35,9 @@ struct OpenAPIGraphView: View {
     /// re-renders (yaml is re-read on the next render).
     let onAddRoute: (() -> Void)?
     let onAddSchema: (() -> Void)?
+    /// Invoked on double-click of a node — the workspace uses
+    /// this to jump the YAML editor to the route/schema definition.
+    let onJumpToCode: ((OpenAPINode) -> Void)?
 
     private var warningsByNode: [String: [OpenAPILintWarning]] {
         Dictionary(grouping: warnings, by: { $0.nodeID })
@@ -69,6 +72,9 @@ struct OpenAPIGraphView: View {
                         onTap: { node in
                             selectedID = node.id
                             onSelect(node)
+                        },
+                        onDoubleTap: { node in
+                            onJumpToCode?(node)
                         }
                     )
                 }
@@ -413,6 +419,7 @@ private struct OpenAPINodesLayer: View {
     let selectedID: String?
     let warningsByNode: [String: [OpenAPILintWarning]]
     let onTap: (OpenAPINode) -> Void
+    let onDoubleTap: (OpenAPINode) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -424,6 +431,10 @@ private struct OpenAPINodesLayer: View {
                     }
                     .position(x: CGFloat(node.x) + nodeWidth(for: node) / 2,
                               y: CGFloat(node.y) + nodeHeight(for: node) / 2)
+                    // Double-tap first: SwiftUI prefers higher-count
+                    // gestures when both are attached, so single-tap
+                    // selection still fires when the user clicks once.
+                    .onTapGesture(count: 2) { onDoubleTap(node) }
                     .onTapGesture { onTap(node) }
             }
         }

@@ -187,10 +187,7 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private var canvasMode: some View {
-        if let url = controller.currentFile,
-           url.lastPathComponent.lowercased() == "openapi.yaml"
-            || url.lastPathComponent.lowercased() == "openapi.yml"
-        {
+        if let url = controller.currentFile, isOpenAPIFile(url) {
             openAPICanvas(for: url)
         } else {
             CanvasView(
@@ -242,8 +239,35 @@ struct CenterPaneView: View {
                     let name = d.addSchema()
                     controller.openAPISelectedNodeID = "schema:\(name)"
                 }
+            },
+            onJumpToCode: { node in
+                jumpToYAMLDefinition(of: node, in: url, yaml: yaml)
             }
         )
+    }
+
+    /// Double-clicking an OpenAPI node should drop the editor's
+    /// caret on the route's `<method>:` line (or the schema's
+    /// declaration line). We do a forgiving textual scan rather
+    /// than tracking source positions through Yams round-trip,
+    /// which is plenty for the casual editor jump.
+    private func jumpToYAMLDefinition(
+        of node: OpenAPINode,
+        in url: URL,
+        yaml: String
+    ) {
+        guard let line = OpenAPISourceMap.line(for: node.id, in: yaml) else {
+            return
+        }
+        // Make sure we're actually editing the YAML, then drop the
+        // caret on the target line. paneMode stays as the user set
+        // it — split mode shows graph + code side-by-side already;
+        // canvas-only mode flips to text so the user actually sees
+        // the jump land somewhere.
+        if controller.paneMode == .canvas {
+            controller.paneMode = .text
+        }
+        controller.currentLine = line
     }
 
     private var canvasGraph: CanvasGraph {
@@ -442,6 +466,33 @@ struct CenterPaneView: View {
     @ViewBuilder
     private var splitMode: some View {
         HSplitView {
+            splitLeftPane
+                .frame(minWidth: 240)
+            if let url = controller.currentFile {
+                AROCodeEditor(
+                    text: editableBinding(for: url),
+                    currentLine: currentLineBinding,
+                    breakpoints: breakpointsBinding,
+                    pausedLine: controller.pausedLine,
+                    pauseSymbols: controller.pauseSymbols,
+                    language: editorLanguage(for: url),
+                    onSave: { saveAndReparse(text: $0, url: url) }
+                )
+                .frame(minWidth: 240)
+            }
+        }
+    }
+
+    /// Picks the canvas-side view for split mode based on the
+    /// current file: OpenAPI graph for openapi.yaml, ARO action
+    /// graph otherwise. Previously this hardcoded `CanvasView`,
+    /// which left the OpenAPI graph reachable only in canvas-only
+    /// mode and broke split editing on openapi.yaml.
+    @ViewBuilder
+    private var splitLeftPane: some View {
+        if let url = controller.currentFile, isOpenAPIFile(url) {
+            openAPICanvas(for: url)
+        } else {
             CanvasView(
                 graph: canvasGraph,
                 persistPosition: persistNodePosition(_:to:),
@@ -456,20 +507,12 @@ struct CenterPaneView: View {
                     handleNodeContextAction(action, node: node)
                 }
             )
-            .frame(minWidth: 240)
-            // (CanvasView is closed for the split mode call site)
-            if let url = controller.currentFile {
-                AROCodeEditor(
-                    text: editableBinding(for: url),
-                    currentLine: currentLineBinding,
-                    breakpoints: breakpointsBinding,
-                    pausedLine: controller.pausedLine,
-                    pauseSymbols: controller.pauseSymbols,
-                    onSave: { saveAndReparse(text: $0, url: url) }
-                )
-                .frame(minWidth: 240)
-            }
         }
+    }
+
+    private func isOpenAPIFile(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return name == "openapi.yaml" || name == "openapi.yml"
     }
 
     @ViewBuilder
