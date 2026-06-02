@@ -33,6 +33,21 @@ final class ConsoleProcess {
     /// caret can jump to the pause point automatically.
     var pausedLine: Int?
 
+    /// `true` between a `⏸  paused` notice and the next command
+    /// the user sends. Drives the debug-button bar's enablement.
+    var isPaused: Bool = false
+
+    /// Symbols visible at the most recent pause. Cleared on
+    /// continue/step/next/finish. Used by the canvas + editor for
+    /// hover tooltips that show live variable values.
+    var pauseSymbols: [String: SymbolValue] = [:]
+
+    struct SymbolValue: Equatable, Hashable {
+        let name: String
+        let typeName: String
+        let value: String
+    }
+
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
@@ -56,6 +71,10 @@ final class ConsoleProcess {
     func start(project: Project, breakpointsByFile: [URL: Set<Int>] = [:]) {
         if case .running = state { return }
         log.removeAll()
+        pausedLine = nil
+        isPaused = false
+        pauseSymbols.removeAll(keepingCapacity: true)
+        lastProject = project
 
         // Aggregate every file's breakpoints into a single `--breakpoint`
         // list. The debugger accepts line numbers as "filename:line"
@@ -147,7 +166,22 @@ final class ConsoleProcess {
         appendInfo("> \(line)")
         let bytes = (line + "\n").data(using: .utf8) ?? Data()
         stdinPipe.fileHandleForWriting.write(bytes)
+        isPaused = false
+        pauseSymbols.removeAll(keepingCapacity: true)
     }
+
+    // MARK: - Step commands
+
+    /// Continue execution until the next breakpoint / program end.
+    func continueExecution() { sendInput("c") }
+    /// Advance into the next statement (follows emits/calls).
+    func stepInto()          { sendInput("s") }
+    /// Advance over the next statement.
+    func stepOver()          { sendInput("n") }
+    /// Run until the current feature set returns.
+    func finishFrame()       { sendInput("f") }
+    /// Quit the debugger session.
+    func quit()              { sendInput("q") }
 
     /// Where `--record` writes its JSONL stream for time-travel
     /// playback in the Time-Travel view.
@@ -229,13 +263,11 @@ final class ConsoleProcess {
         detectPause(in: line)
     }
 
-    /// Scan a freshly-logged line for the debugger's pause notice
-    /// and bump `pausedLine` so the workspace can jump the caret.
+    /// Scan a freshly-logged line for the debugger's pause notice.
+    /// Updates pausedLine, flips isPaused, and refreshes the live
+    /// symbol table from the JSONL record.
     private func detectPause(in line: String) {
         guard line.contains("⏸") else { return }
-        // The TUI prints "⏸  paused (reason) at file.aro:N — FeatureSet".
-        // We pull the number right after the last `:` in the
-        // `at <where>` segment.
         guard
             let atRange = line.range(of: " at "),
             let dashRange = line.range(of: " — ", range: atRange.upperBound..<line.endIndex)
@@ -247,7 +279,34 @@ final class ConsoleProcess {
                 .trimmingCharacters(in: .whitespaces))
         else { return }
         pausedLine = n
+        isPaused = true
+        refreshSymbolsFromRecord()
     }
+
+    /// Read the JSONL record file and capture the last pause event's
+    /// symbol bag into `pauseSymbols` keyed by name. The record path
+    /// is the same one we pass to `aro debug --record`.
+    private func refreshSymbolsFromRecord() {
+        guard let project = lastProject else { return }
+        let url = URL(fileURLWithPath: recordPath(for: project))
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return
+        }
+        let records = TimeTravelReader.parse(text)
+        guard let lastPause = records.last(where: { $0.kind == .pause })
+        else { return }
+        var bag: [String: SymbolValue] = [:]
+        for s in lastPause.symbols {
+            bag[s.name] = SymbolValue(
+                name: s.name, typeName: s.typeName, value: s.value
+            )
+        }
+        pauseSymbols = bag
+    }
+
+    /// Project the most recent `start()` call ran against — used
+    /// by `refreshSymbolsFromRecord()` to locate the JSONL file.
+    private var lastProject: Project?
 
     private func appendInfo(_ line: String) {
         log.append(LogEntry(kind: .info, text: line, timestamp: Date()))
@@ -289,6 +348,10 @@ struct ConsolePanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if process.acceptsStdin {
+                Divider().background(SolaroColor.divider)
+                debugBar
+            }
             Divider().background(SolaroColor.divider)
             logView
             if process.acceptsStdin {
@@ -298,6 +361,46 @@ struct ConsolePanelView: View {
         }
         .frame(maxWidth: .infinity)
         .background(SolaroColor.surface)
+    }
+
+    /// Debugger button row — visible only while `aro debug` is the
+    /// active subcommand. Each button maps to one of the TUI's
+    /// single-letter commands. Disabled until the process actually
+    /// pauses, so accidental clicks don't pile up commands on stdin.
+    private var debugBar: some View {
+        HStack(spacing: SolaroSpace.s) {
+            DebugCmdButton(label: "Continue", symbol: "play.fill",
+                           enabled: process.isPaused) {
+                process.continueExecution()
+            }
+            DebugCmdButton(label: "Step", symbol: "arrow.turn.down.right",
+                           enabled: process.isPaused) {
+                process.stepInto()
+            }
+            DebugCmdButton(label: "Next", symbol: "arrow.right.to.line",
+                           enabled: process.isPaused) {
+                process.stepOver()
+            }
+            DebugCmdButton(label: "Finish", symbol: "arrow.uturn.up",
+                           enabled: process.isPaused) {
+                process.finishFrame()
+            }
+            Spacer()
+            Text(process.isPaused
+                 ? "paused at line \(process.pausedLine.map(String.init) ?? "?")"
+                 : "running…")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(process.isPaused
+                                 ? SolaroColor.stateWarn
+                                 : SolaroColor.textTertiary)
+            DebugCmdButton(label: "Quit", symbol: "xmark.octagon",
+                           enabled: true) {
+                process.quit()
+            }
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.xs)
+        .background(SolaroColor.surfaceRaised)
     }
 
     private var stdinField: some View {
@@ -411,6 +514,24 @@ struct ConsolePanelView: View {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
             }
+        }
+    }
+
+    /// Tiny labelled icon button for the debug bar.
+    private struct DebugCmdButton: View {
+        let label: String
+        let symbol: String
+        let enabled: Bool
+        let action: () -> Void
+
+        var body: some View {
+            Button(action: action) {
+                HStack(spacing: 4) {
+                    Image(systemName: symbol)
+                    Text(label).font(SolaroFont.caption)
+                }
+            }
+            .disabled(!enabled)
         }
     }
 

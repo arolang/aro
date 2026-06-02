@@ -40,6 +40,7 @@ struct CenterPaneView: View {
                 text: editableBinding(for: url),
                 currentLine: currentLineBinding,
                 breakpoints: breakpointsBinding,
+                pausedLine: controller.pausedLine,
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -115,7 +116,9 @@ struct CenterPaneView: View {
         CanvasView(
             graph: canvasGraph,
             persistPosition: persistNodePosition(_:to:),
-            currentLine: currentLineBinding
+            currentLine: currentLineBinding,
+            pausedLine: controller.pausedLine,
+            pauseSymbols: controller.pauseSymbols
         )
     }
 
@@ -154,7 +157,9 @@ struct CenterPaneView: View {
             CanvasView(
                 graph: canvasGraph,
                 persistPosition: persistNodePosition(_:to:),
-                currentLine: currentLineBinding
+                currentLine: currentLineBinding,
+                pausedLine: controller.pausedLine,
+                pauseSymbols: controller.pauseSymbols
             )
             .frame(minWidth: 240)
             if let url = controller.currentFile {
@@ -162,6 +167,7 @@ struct CenterPaneView: View {
                     text: editableBinding(for: url),
                     currentLine: currentLineBinding,
                     breakpoints: breakpointsBinding,
+                    pausedLine: controller.pausedLine,
                     onSave: { saveAndReparse(text: $0, url: url) }
                 )
                 .frame(minWidth: 240)

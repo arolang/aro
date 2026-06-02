@@ -58,6 +58,10 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Breakpoint source lines (1-indexed). Toggled by clicking the
     /// gutter; persisted to the file's LayoutSidecar by the parent.
     @Binding var breakpoints: Set<Int>
+    /// 1-indexed source line where the debugger is currently paused.
+    /// When non-nil, that line gets a tinted background so the
+    /// caller sees "execution is stopped here".
+    let pausedLine: Int?
     let onSave: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -93,11 +97,16 @@ struct AROCodeEditor: NSViewRepresentable {
            target != lineForCurrentSelection(in: textView) {
             moveCaret(to: target, in: textView)
         }
-        // Re-render breakpoint markers whenever the binding changes
-        // (e.g. file switch loaded a new sidecar).
+        // Re-render breakpoint markers whenever the binding changes.
         if context.coordinator.lastRenderedBreakpoints != breakpoints {
             renderBreakpoints(on: textView)
             context.coordinator.lastRenderedBreakpoints = breakpoints
+        }
+        // Re-apply the paused-line tint whenever it changes.
+        if context.coordinator.lastPausedLine != pausedLine {
+            applyHighlight(textView)
+            paintPausedLine(on: textView)
+            context.coordinator.lastPausedLine = pausedLine
         }
     }
 
@@ -161,6 +170,35 @@ struct AROCodeEditor: NSViewRepresentable {
         let target = NSRange(location: offset, length: 0)
         textView.textSelection = target
         textView.scrollRangeToVisible(target)
+    }
+
+    /// Paint a warm tint across the paused line's character range
+    /// so the user sees exactly where execution stopped. No-op
+    /// when `pausedLine` is nil.
+    fileprivate func paintPausedLine(on textView: STTextView) {
+        guard let line = pausedLine, line >= 1 else { return }
+        let nsText = (textView.text ?? "") as NSString
+        var start = 0
+        var current = 1
+        let length = nsText.length
+        while current < line, start < length {
+            if nsText.character(at: start) == 0x0A { current += 1 }
+            start += 1
+        }
+        guard current == line else { return }
+        var end = start
+        while end < length, nsText.character(at: end) != 0x0A {
+            end += 1
+        }
+        let range = NSRange(location: start, length: end - start)
+        guard range.length > 0 else { return }
+        textView.addAttributes([
+            .backgroundColor: NSColor(SolaroColor.stateWarn).withAlphaComponent(0.18),
+        ], range: range)
+        // Pull the paused line into the visible area too — the
+        // caret-jump already does this, but a pause from inside
+        // the debugger may fire before the caret moves.
+        textView.scrollRangeToVisible(range)
     }
 
     // MARK: - Breakpoint gutter
@@ -242,6 +280,9 @@ struct AROCodeEditor: NSViewRepresentable {
         /// sidecar reload) without re-rendering on every body
         /// re-evaluation.
         var lastRenderedBreakpoints: Set<Int> = []
+        /// Tracks the most recently painted paused line so updateNSView
+        /// only re-applies the tint when it actually changes.
+        var lastPausedLine: Int?
 
         init(parent: AROCodeEditor) {
             self.parent = parent

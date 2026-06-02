@@ -55,6 +55,16 @@ final class WorkspaceController {
     /// on this from either side is the single source of truth.
     var currentLine: Int?
 
+    /// 1-indexed source line where the debugger is currently
+    /// paused. Independent from `currentLine` (which follows the
+    /// user's caret); both views can paint them differently.
+    var pausedLine: Int?
+
+    /// Live symbol bag captured at the most recent pause. Keyed by
+    /// identifier name; populated from the `aro debug --record`
+    /// JSONL stream. Used for hover-over-variable tooltips.
+    var pauseSymbols: [String: ConsoleProcess.SymbolValue] = [:]
+
     /// Parsed programs keyed by source-file URL. Built once on load;
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the
@@ -208,11 +218,15 @@ struct WorkspaceView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showConsole)
         .onChange(of: consoleProcess.pausedLine) { _, newLine in
-            // Debugger paused — jump the caret + canvas to the line
-            // it stopped at.
+            // Debugger paused — jump the caret + canvas + paint
+            // the pause line.
+            controller.pausedLine = newLine
             if let newLine, controller.currentLine != newLine {
                 controller.currentLine = newLine
             }
+        }
+        .onChange(of: consoleProcess.pauseSymbols) { _, newValue in
+            controller.pauseSymbols = newValue
         }
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)

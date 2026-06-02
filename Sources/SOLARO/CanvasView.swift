@@ -28,6 +28,13 @@ struct CanvasView: View {
     /// matching-line node gets an accent border; tapping a node
     /// pushes its line back into this binding.
     @Binding var currentLine: Int?
+    /// 1-indexed line where the debugger is currently paused. The
+    /// node whose `lineHint` matches gets a warm-tinted "paused"
+    /// outline distinct from the cursor-selection accent.
+    let pausedLine: Int?
+    /// Live symbol bag for hover tooltips on nodes that reference
+    /// one of these identifiers.
+    let pauseSymbols: [String: ConsoleProcess.SymbolValue]
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -61,6 +68,8 @@ struct CanvasView: View {
                         positions: nodePositions,
                         nodeWidth: nodeWidth, nodeHeight: nodeHeight,
                         selectedLine: currentLine,
+                        pausedLine: pausedLine,
+                        pauseSymbols: pauseSymbols,
                         onDrag: { id, newPos in
                             liveNodes[id] = newPos
                         },
@@ -363,6 +372,11 @@ struct NodesLayer: View {
     /// Currently-highlighted source line (from the editor caret).
     /// The node with `lineHint == selectedLine` gets an accent border.
     let selectedLine: Int?
+    /// Debugger-paused line — the matching node gets a warm
+    /// "paused here" outline.
+    let pausedLine: Int?
+    /// Live symbols for hover tooltips.
+    let pauseSymbols: [String: ConsoleProcess.SymbolValue]
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
     let onSelect: (Int) -> Void
@@ -385,7 +399,9 @@ struct NodesLayer: View {
                 CanvasNodeCard(
                     node: node,
                     width: nodeWidth, height: nodeHeight,
-                    isSelected: selectedLine == node.lineHint
+                    isSelected: selectedLine == node.lineHint,
+                    isPaused: pausedLine == node.lineHint,
+                    symbols: relevantSymbols(for: node)
                 )
                 // `.position` is absolute placement that puts the
                 // view's center at the given point in the parent's
@@ -399,6 +415,19 @@ struct NodesLayer: View {
                 .gesture(dragGesture(id: node.id, livePosition: p))
             }
         }
+    }
+
+    /// Filter the global symbol bag down to identifiers this node
+    /// produces or reads. Drives the per-node hover tooltip.
+    private func relevantSymbols(for node: CanvasNode)
+        -> [ConsoleProcess.SymbolValue]
+    {
+        var names: Set<String> = Set(node.referencedIdentifiers)
+        if let r = node.resultName, !r.hasPrefix("_") {
+            names.insert(r)
+        }
+        return names.compactMap { pauseSymbols[$0] }
+            .sorted { $0.name < $1.name }
     }
 
     private func dragGesture(id: CanvasNode.ID,
@@ -434,6 +463,8 @@ private struct CanvasNodeCard: View {
     let width: CGFloat
     let height: CGFloat
     let isSelected: Bool
+    let isPaused: Bool
+    let symbols: [ConsoleProcess.SymbolValue]
 
     @State private var hovering = false
 
@@ -476,18 +507,39 @@ private struct CanvasNodeCard: View {
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
+                .stroke(borderColor, lineWidth: isPaused || isSelected ? 2 : 1)
         )
-        .shadow(color: Color.black.opacity(
-                    isSelected ? 0.45 : (hovering ? 0.35 : 0.12)
-                ),
-                radius: isSelected ? 10 : (hovering ? 8 : 3),
-                x: 0, y: isSelected ? 5 : (hovering ? 4 : 2))
+        .shadow(
+            color: Color.black.opacity(
+                isPaused ? 0.55 :
+                isSelected ? 0.45 :
+                (hovering ? 0.35 : 0.12)
+            ),
+            radius: isPaused ? 12 : (isSelected ? 10 : (hovering ? 8 : 3)),
+            x: 0,
+            y: isPaused ? 6 : (isSelected ? 5 : (hovering ? 4 : 2))
+        )
         .onHover { hovering = $0 }
-        .help("Line \(node.lineHint): \(node.summary)")
+        .help(tooltipText)
+    }
+
+    /// Multi-line tooltip combining the statement's source location,
+    /// raw text, and any live symbol values the debugger has
+    /// captured for identifiers this statement reads or produces.
+    private var tooltipText: String {
+        var lines = ["Line \(node.lineHint): \(node.summary)"]
+        if !symbols.isEmpty {
+            lines.append("")
+            lines.append("Current values:")
+            for s in symbols {
+                lines.append("  \(s.name): \(s.typeName) = \(s.value)")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     private var borderColor: Color {
+        if isPaused   { return SolaroColor.stateWarn }
         if isSelected { return SolaroColor.accent }
         if hovering   { return SolaroColor.accent.opacity(0.6) }
         return SolaroColor.divider
