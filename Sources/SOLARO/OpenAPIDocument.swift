@@ -35,6 +35,14 @@ final class OpenAPIDocument {
         self.url = url
     }
 
+    /// Mark the document as having unsaved changes. Called when
+    /// the YAML editor parses a text edit back into `root` — the
+    /// inspector's Save button + the modified-badge respond to
+    /// this flag.
+    func markDirty() {
+        isDirty = true
+    }
+
     static func load(from url: URL) -> OpenAPIDocument? {
         guard
             let text = try? String(contentsOf: url, encoding: .utf8),

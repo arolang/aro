@@ -16,7 +16,12 @@ struct CenterPaneView: View {
     @Bindable var controller: WorkspaceController
 
     var body: some View {
-        Group {
+        // Touch the OpenAPI document's root so SwiftUI subscribes
+        // to its @Observable mutations — this is what makes
+        // canvas-driven edits (add route / add schema / etc.) flow
+        // through to the text editor view without a manual refresh.
+        _ = controller.openAPIDocument?.root.count
+        return Group {
             if controller.currentFile == nil, controller.paneMode != .map {
                 emptyPane("Select a file from the sidebar.")
             } else {
@@ -83,7 +88,25 @@ struct CenterPaneView: View {
     }
 
     private func editableBinding(for url: URL) -> Binding<String> {
-        Binding(
+        // OpenAPI files: route text through the @Observable
+        // OpenAPIDocument so the canvas (which mutates document.root
+        // directly when the user adds a route etc.) and the text
+        // editor stay in lock-step both directions. The Inspector's
+        // Save button is still what persists to disk.
+        if let document = controller.openAPIDocument, document.url == url {
+            return Binding(
+                get: {
+                    (try? Yams.dump(object: document.root, sortKeys: false)) ?? ""
+                },
+                set: { newValue in
+                    if let parsed = try? Yams.load(yaml: newValue) as? [String: Any] {
+                        document.root = parsed
+                        document.markDirty()
+                    }
+                }
+            )
+        }
+        return Binding(
             get: { (try? String(contentsOf: url, encoding: .utf8)) ?? "" },
             set: { newValue in
                 try? newValue.write(to: url, atomically: true, encoding: .utf8)
