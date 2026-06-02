@@ -32,6 +32,14 @@ struct SOLAROApp: App {
     /// the open workspace; otherwise show the welcome screen.
     @State private var workspace: WorkspaceState = SOLAROApp.initialWorkspace()
 
+    init() {
+        // Per ADR-007 / ADR-010: install a local crash logger so
+        // we can write a report to disk on fatal signals. No
+        // automatic upload — the user opens an issue manually
+        // via Help → Report a Bug…
+        CrashReporter.install()
+    }
+
     var body: some Scene {
         WindowGroup("SOLARO") {
             ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
@@ -40,6 +48,17 @@ struct SOLAROApp: App {
                 .onOpenURL(perform: openURL)
         }
         .defaultSize(width: 1400, height: 900)
+        .commands {
+            CommandGroup(after: .help) {
+                Button("Report a Bug…") {
+                    CrashReporter.openReportBugPage()
+                }
+                .keyboardShortcut("?", modifiers: [.command, .shift])
+                Button("Reveal crash logs in Finder") {
+                    NSWorkspace.shared.open(CrashReporter.crashesDirectory)
+                }
+            }
+        }
     }
 
     /// macOS Launch Services delivers `open -a SOLARO.app <path>`
