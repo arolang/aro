@@ -549,10 +549,8 @@ private struct OpenAPINodeForm: View {
     private func schemaForm(name: String) -> some View {
         let schema = document.schema(name: name) ?? [:]
         VStack(alignment: .leading, spacing: SolaroSpace.s) {
-            FormRow(label: "Name") {
-                Text(name)
-                    .font(SolaroFont.mono)
-                    .foregroundStyle(SolaroColor.textPrimary)
+            SchemaNameField(currentName: name) { newName in
+                document.renameSchema(from: name, to: newName)
             }
             FormRow(label: "description") {
                 TextField("description", text: textBinding(
@@ -576,7 +574,9 @@ private struct OpenAPINodeForm: View {
     @ViewBuilder
     private func propertiesEditor(schema: [String: Any], name: String) -> some View {
         let props = (schema["properties"] as? [String: Any]) ?? [:]
-        VStack(alignment: .leading, spacing: 2) {
+        let required = Set((schema["required"] as? [Any])?
+            .compactMap { $0 as? String } ?? [])
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Properties")
                     .font(SolaroFont.caption)
@@ -605,11 +605,25 @@ private struct OpenAPINodeForm: View {
                     SchemaPropertyRow(
                         propertyName: key,
                         property: p,
+                        isRequired: required.contains(key),
+                        availableSchemas: document.schemaNames,
                         onRename: { newName in
                             renameProperty(in: name, from: key, to: newName)
                         },
-                        onChangeType: { newType in
-                            updatePropertyType(in: name, key: key, type: newType)
+                        onChangeType: { choice in
+                            document.setPropertyType(in: name,
+                                                     propertyName: key,
+                                                     kind: choice)
+                        },
+                        onToggleRequired: { req in
+                            document.setPropertyRequired(in: name,
+                                                         propertyName: key,
+                                                         required: req)
+                        },
+                        onChangeDescription: { newDesc in
+                            document.setPropertyDescription(in: name,
+                                                            propertyName: key,
+                                                            description: newDesc)
                         },
                         onRemove: {
                             removeProperty(in: name, key: key)
@@ -629,18 +643,6 @@ private struct OpenAPINodeForm: View {
                 props[to] = v
                 schema["properties"] = props
             }
-        }
-    }
-
-    private func updatePropertyType(in schemaName: String, key: String, type: String) {
-        document.mutateSchema(name: schemaName) { schema in
-            var props = (schema["properties"] as? [String: Any]) ?? [:]
-            var p = (props[key] as? [String: Any]) ?? [:]
-            p["type"] = type
-            // Drop $ref since type and $ref are mutually exclusive.
-            p.removeValue(forKey: "$ref")
-            props[key] = p
-            schema["properties"] = props
         }
     }
 
@@ -704,56 +706,181 @@ private struct FormRow<Content: View>: View {
     }
 }
 
+/// Editable form for the schema's name itself. Renaming
+/// propagates through every `$ref` in the document via
+/// OpenAPIDocument.renameSchema.
+private struct SchemaNameField: View {
+    let currentName: String
+    let onCommit: (String) -> Void
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        FormRow(label: "Name") {
+            TextField("schema name", text: Binding(
+                get: { draft.isEmpty ? currentName : draft },
+                set: { draft = $0 }
+            ))
+            .focused($focused)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                onCommit(draft)
+                draft = ""
+                focused = false
+            }
+            .onChange(of: focused) { _, isFocused in
+                // Commit on focus-out too, so a click outside the
+                // field doesn't silently drop the rename.
+                if !isFocused, !draft.isEmpty, draft != currentName {
+                    onCommit(draft)
+                    draft = ""
+                }
+            }
+        }
+    }
+}
+
 private struct SchemaPropertyRow: View {
     let propertyName: String
     let property: [String: Any]
+    let isRequired: Bool
+    let availableSchemas: [String]
     let onRename: (String) -> Void
-    let onChangeType: (String) -> Void
+    let onChangeType: (OpenAPIDocument.PropertyTypeChoice) -> Void
+    let onToggleRequired: (Bool) -> Void
+    let onChangeDescription: (String) -> Void
     let onRemove: () -> Void
 
     @State private var draftName: String = ""
+    @State private var descriptionDraft: String = ""
+    @State private var expanded: Bool = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            TextField("name", text: Binding(
-                get: { draftName.isEmpty ? propertyName : draftName },
-                set: { draftName = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .onSubmit {
-                onRename(draftName)
-                draftName = ""
-            }
-            Text(":")
-                .font(SolaroFont.monoCaption)
-                .foregroundStyle(SolaroColor.textTertiary)
-            if let refStr = property["$ref"] as? String {
-                Text(refStr.split(separator: "/").last.map(String.init) ?? "$ref")
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.accent)
-            } else {
-                Picker("", selection: Binding(
-                    get: { property["type"] as? String ?? "string" },
-                    set: { onChangeType($0) }
-                )) {
-                    Text("string").tag("string")
-                    Text("integer").tag("integer")
-                    Text("number").tag("number")
-                    Text("boolean").tag("boolean")
-                    Text("array").tag("array")
-                    Text("object").tag("object")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                TextField("name", text: Binding(
+                    get: { draftName.isEmpty ? propertyName : draftName },
+                    set: { draftName = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    onRename(draftName)
+                    draftName = ""
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 100)
-            }
-            Spacer(minLength: 0)
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle")
+                Text(":")
+                    .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textTertiary)
+                typePicker
+                Toggle("", isOn: Binding(
+                    get: { isRequired },
+                    set: { onToggleRequired($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .help("Required field")
+                Button {
+                    expanded.toggle()
+                } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundStyle(SolaroColor.textTertiary)
+                }
+                .buttonStyle(.borderless)
+                Button(action: onRemove) {
+                    Image(systemName: "minus.circle")
+                        .foregroundStyle(SolaroColor.textTertiary)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
+            if expanded {
+                TextField(
+                    "description",
+                    text: Binding(
+                        get: {
+                            descriptionDraft.isEmpty
+                                ? (property["description"] as? String ?? "")
+                                : descriptionDraft
+                        },
+                        set: { descriptionDraft = $0 }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    onChangeDescription(descriptionDraft)
+                    descriptionDraft = ""
+                }
+            }
         }
+    }
+
+    /// Picker exposing every primitive type plus every existing
+    /// component schema (set as `$ref`) and array-of-each.
+    private var typePicker: some View {
+        Picker("", selection: Binding(
+            get: { currentChoice },
+            set: { onChangeType($0) }
+        )) {
+            Section("Primitive") {
+                Text("string").tag(OpenAPIDocument.PropertyTypeChoice.primitive("string"))
+                Text("integer").tag(OpenAPIDocument.PropertyTypeChoice.primitive("integer"))
+                Text("number").tag(OpenAPIDocument.PropertyTypeChoice.primitive("number"))
+                Text("boolean").tag(OpenAPIDocument.PropertyTypeChoice.primitive("boolean"))
+                Text("object").tag(OpenAPIDocument.PropertyTypeChoice.primitive("object"))
+            }
+            if !availableSchemas.isEmpty {
+                Section("Schema") {
+                    ForEach(availableSchemas, id: \.self) { s in
+                        Text(s)
+                            .tag(OpenAPIDocument.PropertyTypeChoice.schemaRef(s))
+                    }
+                }
+                Section("Array of") {
+                    Text("[string]")
+                        .tag(OpenAPIDocument.PropertyTypeChoice.array(.primitive("string")))
+                    Text("[integer]")
+                        .tag(OpenAPIDocument.PropertyTypeChoice.array(.primitive("integer")))
+                    ForEach(availableSchemas, id: \.self) { s in
+                        Text("[\(s)]")
+                            .tag(OpenAPIDocument.PropertyTypeChoice.array(.schemaRef(s)))
+                    }
+                }
+            } else {
+                Section("Array of") {
+                    Text("[string]")
+                        .tag(OpenAPIDocument.PropertyTypeChoice.array(.primitive("string")))
+                    Text("[integer]")
+                        .tag(OpenAPIDocument.PropertyTypeChoice.array(.primitive("integer")))
+                }
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 160)
+    }
+
+    /// Map the underlying YAML dict to the choice enum the picker
+    /// binds against, so the current value pre-selects correctly.
+    private var currentChoice: OpenAPIDocument.PropertyTypeChoice {
+        if let refStr = property["$ref"] as? String {
+            let prefix = "#/components/schemas/"
+            if refStr.hasPrefix(prefix) {
+                return .schemaRef(String(refStr.dropFirst(prefix.count)))
+            }
+        }
+        if let typeStr = property["type"] as? String, typeStr == "array",
+           let items = property["items"] as? [String: Any]
+        {
+            if let refStr = items["$ref"] as? String {
+                let prefix = "#/components/schemas/"
+                if refStr.hasPrefix(prefix) {
+                    return .array(.schemaRef(String(refStr.dropFirst(prefix.count))))
+                }
+            }
+            if let innerType = items["type"] as? String {
+                return .array(.primitive(innerType))
+            }
+        }
+        return .primitive(property["type"] as? String ?? "string")
     }
 }
 

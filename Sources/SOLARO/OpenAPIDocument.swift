@@ -191,6 +191,145 @@ final class OpenAPIDocument {
         root["components"] = components
         isDirty = true
     }
+
+    /// Rename a component schema. Updates every `$ref` pointing
+    /// at the old name so the graph stays consistent. No-op when
+    /// the target name already exists or the names are identical.
+    @discardableResult
+    func renameSchema(from oldName: String, to newName: String) -> Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != oldName else { return false }
+        var components = root["components"] as? [String: Any] ?? [:]
+        var schemas = components["schemas"] as? [String: Any] ?? [:]
+        guard let value = schemas[oldName], schemas[trimmed] == nil else {
+            return false
+        }
+        schemas.removeValue(forKey: oldName)
+        schemas[trimmed] = value
+        components["schemas"] = schemas
+        root["components"] = components
+        rewriteRefs(from: "#/components/schemas/\(oldName)",
+                    to: "#/components/schemas/\(trimmed)")
+        isDirty = true
+        return true
+    }
+
+    /// Walk the entire root tree replacing any `$ref` string equal
+    /// to `from` with `to`. Used to keep cross-references valid
+    /// when a schema is renamed.
+    private func rewriteRefs(from: String, to: String) {
+        root = (Self.rewriteRefs(in: root, from: from, to: to) as? [String: Any]) ?? root
+    }
+
+    private static func rewriteRefs(in value: Any, from: String, to: String) -> Any {
+        if let dict = value as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (k, v) in dict {
+                if k == "$ref", let s = v as? String, s == from {
+                    out[k] = to
+                } else {
+                    out[k] = rewriteRefs(in: v, from: from, to: to)
+                }
+            }
+            return out
+        }
+        if let arr = value as? [Any] {
+            return arr.map { rewriteRefs(in: $0, from: from, to: to) }
+        }
+        return value
+    }
+
+    /// Toggle membership in the schema's `required` array.
+    func setPropertyRequired(in schemaName: String, propertyName: String, required: Bool) {
+        mutateSchema(name: schemaName) { schema in
+            var arr = (schema["required"] as? [Any])?.compactMap { $0 as? String } ?? []
+            if required {
+                if !arr.contains(propertyName) { arr.append(propertyName) }
+            } else {
+                arr.removeAll { $0 == propertyName }
+            }
+            if arr.isEmpty {
+                schema.removeValue(forKey: "required")
+            } else {
+                schema["required"] = arr
+            }
+        }
+    }
+
+    /// Set the property's type — accepts primitives or a schema
+    /// name (which becomes a `$ref` to the component). Mutually
+    /// exclusive with each other: a $ref drops the `type` key,
+    /// a primitive drops `$ref`.
+    func setPropertyType(
+        in schemaName: String,
+        propertyName: String,
+        kind: PropertyTypeChoice
+    ) {
+        mutateSchema(name: schemaName) { schema in
+            var props = (schema["properties"] as? [String: Any]) ?? [:]
+            var p = (props[propertyName] as? [String: Any]) ?? [:]
+            // Wipe both first, then set whichever the user picked.
+            p.removeValue(forKey: "type")
+            p.removeValue(forKey: "$ref")
+            p.removeValue(forKey: "items")
+            switch kind {
+            case .primitive(let name):
+                p["type"] = name
+            case .array(let inner):
+                p["type"] = "array"
+                switch inner {
+                case .primitive(let n):
+                    p["items"] = ["type": n] as [String: Any]
+                case .schemaRef(let s):
+                    p["items"] = ["$ref": "#/components/schemas/\(s)"] as [String: Any]
+                }
+            case .schemaRef(let target):
+                p["$ref"] = "#/components/schemas/\(target)"
+            }
+            props[propertyName] = p
+            schema["properties"] = props
+        }
+    }
+
+    enum PropertyTypeChoice: Equatable, Hashable {
+        case primitive(String)            // "string", "integer", etc
+        case schemaRef(String)            // schema name → $ref
+        case array(InnerType)             // array of …
+
+        enum InnerType: Equatable, Hashable {
+            case primitive(String)
+            case schemaRef(String)
+        }
+    }
+
+    /// Set the property's description ("" clears it).
+    func setPropertyDescription(
+        in schemaName: String,
+        propertyName: String,
+        description: String
+    ) {
+        mutateSchema(name: schemaName) { schema in
+            var props = (schema["properties"] as? [String: Any]) ?? [:]
+            var p = (props[propertyName] as? [String: Any]) ?? [:]
+            if description.isEmpty {
+                p.removeValue(forKey: "description")
+            } else {
+                p["description"] = description
+            }
+            props[propertyName] = p
+            schema["properties"] = props
+        }
+    }
+
+    /// Every component schema name — used by the inspector's
+    /// type picker to offer "→ existing schema" choices.
+    var schemaNames: [String] {
+        guard
+            let components = root["components"] as? [String: Any],
+            let schemas = components["schemas"] as? [String: Any]
+        else { return [] }
+        return schemas.keys.sorted()
+    }
 }
 
 // MARK: - Lint warnings
