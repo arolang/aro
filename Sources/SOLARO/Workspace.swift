@@ -70,6 +70,11 @@ final class WorkspaceController {
     /// form that lets them edit route / schema fields directly.
     var openAPISelectedNodeID: String?
 
+    /// Which view the right rail shows — the classic inspector
+    /// (file metadata, AST, debugger variables, OpenAPI form, …)
+    /// or the AI co-pilot.
+    var rightPaneMode: RightPaneMode = .inspector
+
     /// Mutable OpenAPI document loaded when the current file is
     /// openapi.yaml — the inspector form mutates it, the Save
     /// button writes it back to disk.
@@ -173,6 +178,27 @@ final class WorkspaceController {
     }
 }
 
+enum RightPaneMode: String, CaseIterable, Identifiable {
+    case inspector
+    case coPilot
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .inspector: return "Inspector"
+        case .coPilot:   return "Co-pilot"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .inspector: return "sidebar.right"
+        case .coPilot:   return "sparkles"
+        }
+    }
+}
+
 enum SidebarTab: String, CaseIterable, Identifiable {
     case files, features, plugins
     var id: String { rawValue }
@@ -212,20 +238,23 @@ struct WorkspaceView: View {
     /// the user has explicitly opened it.
     @State private var consoleProcess = ConsoleProcess()
     @State private var showConsole = false
-    /// Co-pilot (`aro ask`) process + panel visibility.
+    /// Co-pilot (`aro ask`) process.
     @State private var aiCoPilot = AICoPilotProcess()
-    @State private var showCoPilot = false
+    /// NavigationSplitView's column visibility — bound (not constant)
+    /// so the sidebar toggle in the title bar actually hides + shows
+    /// the left rail.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigationSplitView(columnVisibility: .constant(.all)) {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
                 SidebarPaneView(controller: controller)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
             } detail: {
                 CenterPaneView(controller: controller)
                     .inspector(isPresented: $controller.inspectorShown) {
-                        InspectorPaneView(controller: controller)
-                            .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+                        rightPane
+                            .inspectorColumnWidth(min: 320, ideal: 360, max: 480)
                     }
             }
             if showConsole {
@@ -275,14 +304,6 @@ struct WorkspaceView: View {
             TimeTravelView(project: project) {
                 showTimeTravel = false
             }
-        }
-        .sheet(isPresented: $showCoPilot) {
-            AICoPilotPanel(
-                project: project,
-                process: aiCoPilot,
-                onClose: { showCoPilot = false }
-            )
-            .frame(width: 520, height: 620)
         }
         .onAppear { controller.load() }
         .alert(
@@ -334,6 +355,63 @@ struct WorkspaceView: View {
         return url.lastPathComponent
     }
 
+    /// Right pane content. The header strip lets the user flip
+    /// between the classic Inspector and the AI co-pilot in place,
+    /// instead of opening the co-pilot in a sheet.
+    @ViewBuilder
+    private var rightPane: some View {
+        VStack(spacing: 0) {
+            rightPaneTabStrip
+            Divider().background(SolaroColor.divider)
+            switch controller.rightPaneMode {
+            case .inspector:
+                InspectorPaneView(controller: controller)
+            case .coPilot:
+                AICoPilotPanel(
+                    project: project,
+                    process: aiCoPilot,
+                    onClose: { controller.rightPaneMode = .inspector }
+                )
+            }
+        }
+    }
+
+    private var rightPaneTabStrip: some View {
+        HStack(spacing: 0) {
+            ForEach(RightPaneMode.allCases) { mode in
+                rightPaneTab(mode)
+            }
+        }
+        .background(SolaroColor.surface)
+    }
+
+    private func rightPaneTab(_ mode: RightPaneMode) -> some View {
+        let active = controller.rightPaneMode == mode
+        return Button {
+            controller.rightPaneMode = mode
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: mode.symbol)
+                    .font(.system(size: 12, weight: .medium))
+                Text(mode.label)
+                    .font(SolaroFont.caption)
+            }
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .foregroundStyle(active
+                             ? SolaroColor.textPrimary
+                             : SolaroColor.textTertiary)
+            .background(
+                VStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(active ? SolaroColor.accent : Color.clear)
+                        .frame(height: 2)
+                }
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
@@ -345,7 +423,6 @@ struct WorkspaceView: View {
             searchField
             playButton
             debugButton
-            coPilotButton
             statusPip
             inspectorToggle
             closeProjectButton
@@ -428,16 +505,6 @@ struct WorkspaceView: View {
     private var isRunning: Bool {
         if case .running = consoleProcess.state { return true }
         return false
-    }
-
-    private var coPilotButton: some View {
-        Button {
-            showCoPilot = true
-        } label: {
-            Label("Co-pilot", systemImage: "sparkles")
-        }
-        .help("Open the AI co-pilot powered by `aro ask`")
-        .keyboardShortcut("a", modifiers: [.command, .control])
     }
 
     private var statusPip: some View {
