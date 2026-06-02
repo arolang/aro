@@ -41,6 +41,7 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 breakpoints: breakpointsBinding,
                 pausedLine: controller.pausedLine,
+                pauseSymbols: controller.pauseSymbols,
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -168,6 +169,7 @@ struct CenterPaneView: View {
                     currentLine: currentLineBinding,
                     breakpoints: breakpointsBinding,
                     pausedLine: controller.pausedLine,
+                    pauseSymbols: controller.pauseSymbols,
                     onSave: { saveAndReparse(text: $0, url: url) }
                 )
                 .frame(minWidth: 240)

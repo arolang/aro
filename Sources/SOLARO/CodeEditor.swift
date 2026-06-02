@@ -18,6 +18,113 @@ import AppKit
 import STTextView
 import AROParser
 
+/// STTextView subclass that resolves identifier hovers into native
+/// AppKit tooltips. We use the AppKit `toolTip` mechanism rather
+/// than a SwiftUI popover so the tooltip respects window-edge
+/// clipping and the system delay.
+final class AROHoverTextView: STTextView {
+    /// Resolver callback set by the SwiftUI wrapper: takes an
+    /// identifier name (e.g. "greeting") and returns the tooltip
+    /// text (e.g. "greeting: String = \"Hello, World!\"") when the
+    /// debugger has captured a value for it, else nil.
+    var resolveSymbol: ((String) -> String?)?
+    private var trackingAreaCache: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaCache {
+            removeTrackingArea(trackingAreaCache)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaCache = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        guard let identifier = identifierUnderPoint(point) else {
+            toolTip = nil
+            return
+        }
+        toolTip = resolveSymbol?(identifier)
+    }
+
+    /// Find the `<…>` identifier (if any) at `point`. Treats angle
+    /// brackets and a colon as terminators so `<name: type>` yields
+    /// just `name`.
+    private func identifierUnderPoint(_ point: CGPoint) -> String? {
+        let source = text ?? ""
+        let nsSource = source as NSString
+        guard nsSource.length > 0 else { return nil }
+
+        // Map point → line (1-indexed) via layout fragment, then
+        // column via character-width approximation. Works cleanly
+        // for the monospaced ARO source.
+        guard let fragment = textLayoutManager.textLayoutFragment(for: point) else {
+            return nil
+        }
+        let elementStart = fragment.textElement?.elementRange?.location
+            ?? fragment.rangeInElement.location
+        let docStart = textContentManager.documentRange.location
+        guard
+            let prefixRange = NSTextRange(location: docStart, end: elementStart)
+        else { return nil }
+        let prefixText = textContentManager
+            .attributedString(in: prefixRange)?.string ?? ""
+        // Offset of the line's first character in the source.
+        let lineStart = (prefixText as NSString).length
+
+        // Approximate column via mean glyph width — monospaced font,
+        // so this is exact for ASCII.
+        let glyphWidth = ("M" as NSString)
+            .size(withAttributes: [.font: font]).width
+        let safeWidth = max(glyphWidth, 1)
+        let lineInset = textContainer.lineFragmentPadding
+        let column = max(0, Int((point.x - lineInset) / safeWidth))
+        let charIndex = min(lineStart + column, nsSource.length - 1)
+        return Self.angleBracketIdentifier(at: charIndex, in: nsSource)
+    }
+
+    /// Walk backwards from `index` to the nearest `<` and forwards
+    /// to the nearest `>` / `:` / whitespace, returning the
+    /// identifier name in between. Returns nil if `index` is not
+    /// inside an angle-bracket pair on the same line.
+    static func angleBracketIdentifier(at index: Int, in nsSource: NSString) -> String? {
+        guard index >= 0, index < nsSource.length else { return nil }
+        // Find the opening '<'.
+        var start = index
+        while start > 0 {
+            let c = nsSource.character(at: start - 1)
+            if c == 0x3C /* '<' */ { break }
+            if c == 0x3E /* '>' */ { return nil }
+            if c == 0x0A /* '\n' */ { return nil }
+            start -= 1
+        }
+        guard start > 0, nsSource.character(at: start - 1) == 0x3C else {
+            return nil
+        }
+        // Find the terminator forward.
+        var end = index
+        while end < nsSource.length {
+            let c = nsSource.character(at: end)
+            if c == 0x3E /* '>' */ || c == 0x3A /* ':' */ || c == 0x0A {
+                break
+            }
+            end += 1
+        }
+        guard end > start else { return nil }
+        let raw = nsSource.substring(with: NSRange(location: start, length: end - start))
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// Red-dot marker drawn in the gutter for each line that has a
 /// breakpoint. Sized to fit the gutter's marker container; SOLARO
 /// doesn't customize STGutterView's geometry, so we lean on the
@@ -62,16 +169,28 @@ struct AROCodeEditor: NSViewRepresentable {
     /// When non-nil, that line gets a tinted background so the
     /// caller sees "execution is stopped here".
     let pausedLine: Int?
+    /// Live debugger symbols keyed by identifier name. The editor
+    /// uses this to resolve hover tooltips over `<name>` references.
+    let pauseSymbols: [String: ConsoleProcess.SymbolValue]
     let onSave: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = STTextView.scrollableTextView()
-        guard let textView = scroll.documentView as? STTextView else {
-            return scroll
-        }
+        // Build our hover-capable subclass by hand instead of using
+        // `STTextView.scrollableTextView()`, which would instantiate
+        // the base STTextView class and not pick up the override.
+        let textView = AROHoverTextView()
+        let scroll = NSScrollView()
+        scroll.documentView = textView
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = true
 
         configureTextView(textView)
         textView.textDelegate = context.coordinator
+        textView.resolveSymbol = { [weak coordinator = context.coordinator] name in
+            coordinator?.parent.tooltip(forIdentifier: name)
+        }
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
         textView.text = text
@@ -116,7 +235,7 @@ struct AROCodeEditor: NSViewRepresentable {
 
     // MARK: - Setup
 
-    private func configureTextView(_ textView: STTextView) {
+    private func configureTextView(_ textView: AROHoverTextView) {
         let mono = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let paragraph = NSParagraphStyle.default.mutableCopy() as! NSMutableParagraphStyle
         paragraph.lineHeightMultiple = 1.25
@@ -175,6 +294,16 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Paint a warm tint across the paused line's character range
     /// so the user sees exactly where execution stopped. No-op
     /// when `pausedLine` is nil.
+    /// Format the tooltip line shown when the user hovers over
+    /// `<identifier>`. Returns nil when the debugger hasn't
+    /// captured a value for it at the current pause — that's
+    /// the "show only when there's actually a value" the user
+    /// asked for.
+    fileprivate func tooltip(forIdentifier name: String) -> String? {
+        guard let symbol = pauseSymbols[name] else { return nil }
+        return "\(symbol.name): \(symbol.typeName) = \(symbol.value)"
+    }
+
     fileprivate func paintPausedLine(on textView: STTextView) {
         guard let line = pausedLine, line >= 1 else { return }
         let nsText = (textView.text ?? "") as NSString
