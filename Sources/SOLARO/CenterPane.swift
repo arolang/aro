@@ -162,7 +162,10 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
-                breakpointLines: breakpointsBinding.wrappedValue
+                breakpointLines: breakpointsBinding.wrappedValue,
+                onActionDrop: { template, point in
+                    insertDroppedAction(template: template, at: point)
+                }
             )
         }
     }
@@ -219,6 +222,91 @@ struct CenterPaneView: View {
         return StackLayout.place(built)
     }
 
+    /// Insert a dropped Actions-tab template into the source file.
+    /// Pick the feature set whose laid-out bounding box contains
+    /// the drop point (or the first feature set if the drop is
+    /// outside every box) and splice the template in just before
+    /// the feature set's closing `}`.
+    private func insertDroppedAction(template: String, at point: CGPoint) {
+        guard
+            let url = controller.currentFile,
+            let program = controller.programs[url]
+        else { return }
+        let graph = canvasGraph
+        let target = featureSetAtPoint(point, in: graph)
+            ?? program.featureSets.first?.name
+        guard
+            let name = target,
+            let fs = program.featureSets.first(where: { $0.name == name }),
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+
+        let nsText = text as NSString
+        let endOffset = fs.span.end.offset
+        // The feature set's span.end points at the byte *after*
+        // the closing `}`. Walk back to the `}` itself so we
+        // insert above it, not after.
+        var insertAt = min(endOffset, nsText.length)
+        while insertAt > 0, nsText.character(at: insertAt - 1) != 0x7D /* } */ {
+            insertAt -= 1
+        }
+        if insertAt > 0 { insertAt -= 1 }  // sit just before the `}`
+
+        let indent = inferIndent(in: nsText, around: insertAt)
+        var snippet = indent + template
+        if !snippet.hasSuffix("\n") { snippet += "\n" }
+
+        let updated = nsText.replacingCharacters(
+            in: NSRange(location: insertAt, length: 0),
+            with: snippet
+        )
+        try? updated.write(to: url, atomically: true, encoding: .utf8)
+        reparse(url: url)
+    }
+
+    /// Find the feature set whose laid-out node bounding box
+    /// contains `point` in canvas coordinates. Returns nil when
+    /// the drop is on empty space.
+    private func featureSetAtPoint(_ point: CGPoint, in graph: CanvasGraph) -> String? {
+        let nodeW: CGFloat = 240
+        let nodeH: CGFloat = 64
+        var bounds: [String: CGRect] = [:]
+        for node in graph.nodes {
+            let rect = CGRect(x: node.x, y: node.y, width: nodeW, height: nodeH)
+            let inset = rect.insetBy(dx: -16, dy: -32)  // include FS container chrome
+            if let existing = bounds[node.featureSetName] {
+                bounds[node.featureSetName] = existing.union(inset)
+            } else {
+                bounds[node.featureSetName] = inset
+            }
+        }
+        return bounds.first(where: { $0.value.contains(point) })?.key
+    }
+
+    /// Sniff a reasonable indentation string by walking back to
+    /// the previous newline and copying any leading whitespace.
+    /// Fallback: four spaces.
+    private func inferIndent(in text: NSString, around offset: Int) -> String {
+        var i = offset - 1
+        while i >= 0, text.character(at: i) != 0x0A /* \n */ {
+            i -= 1
+        }
+        var start = i + 1
+        var end = start
+        while end < text.length {
+            let c = text.character(at: end)
+            if c == 0x20 /* space */ || c == 0x09 /* tab */ {
+                end += 1
+            } else {
+                break
+            }
+        }
+        if end > start {
+            return text.substring(with: NSRange(location: start, length: end - start))
+        }
+        return "    "
+    }
+
     /// Drag-end callback: persist this node's new `(x, y)` to the
     /// per-file `.aro.layout.json` sidecar so it survives a reload.
     private func persistNodePosition(_ id: CanvasNode.ID, to point: CGPoint) {
@@ -241,7 +329,10 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
-                breakpointLines: breakpointsBinding.wrappedValue
+                breakpointLines: breakpointsBinding.wrappedValue,
+                onActionDrop: { template, point in
+                    insertDroppedAction(template: template, at: point)
+                }
             )
             .frame(minWidth: 240)
             if let url = controller.currentFile {

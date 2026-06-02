@@ -39,6 +39,11 @@ struct CanvasView: View {
     /// lines render a red dot in the top-left corner so the
     /// canvas mirrors the editor gutter.
     let breakpointLines: Set<Int>
+    /// Forwarded to the inner drop handler — see the parameter
+    /// docs on the duplicate property below for context. SwiftUI
+    /// macros don't let us shadow, so the actual storage lives on
+    /// the canvas struct (this field) and we just pass it down.
+    let onActionDrop: ((String, CGPoint) -> Void)?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -102,6 +107,14 @@ struct CanvasView: View {
                 }
                 .frame(width: contentSize.width, height: contentSize.height,
                        alignment: .topLeading)
+                .onDrop(of: [.plainText], isTargeted: nil) { providers, location in
+                    guard let onActionDrop else { return false }
+                    return handleActionDrop(
+                        providers: providers,
+                        location: location,
+                        deliver: onActionDrop
+                    )
+                }
                 .offset(x: pan.width + dragOffset.width,
                         y: pan.height + dragOffset.height)
                 .scaleEffect(zoom * magnify, anchor: .topLeading)
@@ -138,6 +151,27 @@ struct CanvasView: View {
     /// `currentLine` changes — both editor-driven (cursor moved
     /// in source) and canvas-driven (node tap) flows trigger this,
     /// but the latter usually only nudges by a small amount.
+    /// Read the dropped action template (NSString payload from
+    /// ActionsListView's .onDrag) and forward it + the drop point
+    /// to the dispatcher closure. The dispatcher mutates the
+    /// source file textually — see CenterPane for the insertion
+    /// logic.
+    private func handleActionDrop(
+        providers: [NSItemProvider],
+        location: CGPoint,
+        deliver: @MainActor @escaping (String, CGPoint) -> Void
+    ) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadObject(ofClass: NSString.self) { obj, _ in
+            guard let nsstr = obj as? NSString else { return }
+            let payload = nsstr as String
+            Task { @MainActor in
+                deliver(payload, location)
+            }
+        }
+        return true
+    }
+
     private func centerOnNode(forLine line: Int, in viewportSize: CGSize) {
         guard let target = graph.nodes.first(where: { $0.lineHint == line }) else {
             return
