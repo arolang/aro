@@ -1,31 +1,40 @@
 // ============================================================
 // CanvasView.swift
-// SOLARO — Canvas action-graph rendering (Phase 8)
+// SOLARO — Canvas action-graph rendering (Phases 8 / 9 + drag fix)
 // ============================================================
 //
 // Wireframe target: note 8467 figure 1 (canvas center pane).
 //
-// Phase 8 ships:
+// The canvas:
 //   * Dot-grid backdrop on the workspace dark surface.
-//   * Pan (drag) and zoom (magnify gesture / scroll-wheel).
+//   * Pan (drag empty area) and zoom (magnify gesture / HUD).
 //   * Rounded action cards per statement with a left role-color
-//     stripe, verb label, and `<result>` + preposition + `<object>`
-//     pin text.
-//   * Straight wires between connected statements colored by the
-//     receiving statement's preposition. Phase 9 swaps these for
-//     cubic Béziers.
+//     stripe, verb + role-tinted label, and the AROStatement's
+//     full description on a second line.
+//   * Cubic Bézier wires colored by the receiver's preposition,
+//     with a soft glow underlay and a small dot at the receiver.
+//   * Drag-to-move nodes; positions persist to the .aro.layout.json
+//     sidecar through the supplied `persistPosition` callback.
 
 import SwiftUI
 import AROParser
 
 struct CanvasView: View {
     let graph: CanvasGraph
+    /// Persist a single node's position to the file's layout
+    /// sidecar. Called on drag-end.
+    let persistPosition: (CanvasNode.ID, CGPoint) -> Void
+
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
     @GestureState private var dragOffset: CGSize = .zero
     @GestureState private var magnify: Double = 1.0
 
-    private let nodeWidth: CGFloat = 220
+    /// Live per-node position overlay. Initialised from the graph's
+    /// laid-out positions on first appearance; mutated by drags.
+    @State private var liveNodes: [CanvasNode.ID: CGPoint] = [:]
+
+    private let nodeWidth: CGFloat = 240
     private let nodeHeight: CGFloat = 64
 
     var body: some View {
@@ -35,11 +44,23 @@ struct CanvasView: View {
                 dotGrid(in: geo.size)
 
                 ZStack {
-                    // Wires first so nodes sit on top.
-                    WiresLayer(graph: graph,
-                               nodeWidth: nodeWidth, nodeHeight: nodeHeight)
-                    NodesLayer(graph: graph,
-                               nodeWidth: nodeWidth, nodeHeight: nodeHeight)
+                    WiresLayer(
+                        graph: graph,
+                        positions: nodePositions,
+                        nodeWidth: nodeWidth, nodeHeight: nodeHeight
+                    )
+                    NodesLayer(
+                        graph: graph,
+                        positions: nodePositions,
+                        nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                        onDrag: { id, newPos in
+                            liveNodes[id] = newPos
+                        },
+                        onDragEnd: { id, finalPos in
+                            liveNodes[id] = finalPos
+                            persistPosition(id, finalPos)
+                        }
+                    )
                 }
                 .offset(x: pan.width + dragOffset.width,
                         y: pan.height + dragOffset.height)
@@ -47,53 +68,75 @@ struct CanvasView: View {
                 .animation(.easeOut(duration: 0.15), value: zoom)
             }
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture()
-                    .updating($dragOffset) { value, state, _ in
-                        state = value.translation
-                    }
-                    .onEnded { value in
-                        pan.width += value.translation.width
-                        pan.height += value.translation.height
-                    }
-            )
-            .gesture(
-                MagnificationGesture()
-                    .updating($magnify) { value, state, _ in
-                        state = value
-                    }
-                    .onEnded { value in
-                        zoom = max(0.3, min(3.0, zoom * value))
-                    }
-            )
+            .gesture(panGesture)
+            .gesture(magnifyGesture)
             .overlay(alignment: .bottomTrailing) {
-                zoomControls
-                    .padding(SolaroSpace.m)
+                zoomControls.padding(SolaroSpace.m)
             }
             .overlay(alignment: .topTrailing) {
                 if graph.nodes.isEmpty {
-                    EmptyCanvasNotice()
-                        .padding(SolaroSpace.l)
-                } else if showLegend {
+                    EmptyCanvasNotice().padding(SolaroSpace.l)
+                } else if !legendPrepositions.isEmpty {
                     WireLegend(prepositions: legendPrepositions)
                         .padding(SolaroSpace.l)
                 }
             }
+            .onAppear(perform: seedPositionsIfNeeded)
+            .onChange(of: graph.nodes.map(\.id)) { _, _ in
+                // Seed any new nodes (e.g. after an edit + reparse)
+                // without clobbering nodes the user already dragged.
+                seedPositionsIfNeeded()
+            }
         }
     }
 
-    /// Show the legend only when there's at least one wire to label.
-    private var showLegend: Bool {
-        !legendPrepositions.isEmpty
+    // MARK: - Position bookkeeping
+
+    /// Effective position per node — drag overrides the laid-out
+    /// position from the graph (which itself came from the sidecar
+    /// or the default stack layout).
+    private var nodePositions: [CanvasNode.ID: CGPoint] {
+        var out: [CanvasNode.ID: CGPoint] = [:]
+        for node in graph.nodes {
+            if let live = liveNodes[node.id] {
+                out[node.id] = live
+            } else {
+                out[node.id] = CGPoint(x: node.x, y: node.y)
+            }
+        }
+        return out
     }
 
-    /// Unique prepositions present on the current graph's edges,
-    /// sorted by the wireframe order (from, to, with, into, against,
-    /// then any remaining). Drives the small legend overlay.
-    private var legendPrepositions: [String] {
-        let canonical = ["from", "to", "with", "into", "against", "for", "at", "by", "via", "on"]
-        let present = Set(graph.edges.compactMap { $0.preposition?.lowercased() })
-        return canonical.filter(present.contains)
+    private func seedPositionsIfNeeded() {
+        // Only seed nodes we don't already track. Lets the layout
+        // sidecar / default stack drive the first frame while
+        // preserving any drags the user already made this session.
+        for node in graph.nodes where liveNodes[node.id] == nil {
+            liveNodes[node.id] = CGPoint(x: node.x, y: node.y)
+        }
+    }
+
+    // MARK: - Gestures
+
+    private var panGesture: some Gesture {
+        DragGesture()
+            .updating($dragOffset) { value, state, _ in
+                state = value.translation
+            }
+            .onEnded { value in
+                pan.width += value.translation.width
+                pan.height += value.translation.height
+            }
+    }
+
+    private var magnifyGesture: some Gesture {
+        MagnificationGesture()
+            .updating($magnify) { value, state, _ in
+                state = value
+            }
+            .onEnded { value in
+                zoom = max(0.3, min(3.0, zoom * value))
+            }
     }
 
     // MARK: - Backdrop dot grid
@@ -153,38 +196,42 @@ struct CanvasView: View {
                 .stroke(SolaroColor.divider, lineWidth: 1)
         )
     }
+
+    // MARK: - Legend
+
+    private var legendPrepositions: [String] {
+        let canonical = ["from", "to", "with", "into", "against",
+                         "for", "at", "by", "via", "on"]
+        let present = Set(graph.edges.compactMap { $0.preposition?.lowercased() })
+        return canonical.filter(present.contains)
+    }
 }
 
-// MARK: - Wires layer (Phase 9 — cubic Bézier per edge, colored by preposition)
+// MARK: - Wires layer
 
 struct WiresLayer: View {
     let graph: CanvasGraph
+    let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
 
     var body: some View {
         Canvas { ctx, _ in
-            let nodesByID = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
             for edge in graph.edges {
                 guard
-                    let from = nodesByID[edge.fromNodeID],
-                    let to = nodesByID[edge.toNodeID]
+                    let from = positions[edge.fromNodeID],
+                    let to = positions[edge.toNodeID]
                 else { continue }
 
                 let start = CGPoint(
-                    x: from.x + Double(nodeWidth),
-                    y: from.y + Double(nodeHeight) / 2
+                    x: from.x + nodeWidth,
+                    y: from.y + nodeHeight / 2
                 )
                 let end = CGPoint(
                     x: to.x,
-                    y: to.y + Double(nodeHeight) / 2
+                    y: to.y + nodeHeight / 2
                 )
 
-                // Control points sit halfway along the horizontal
-                // distance, producing the gentle S-curve from the
-                // wireframe (note 8467 figure 5). Minimum offset
-                // keeps short wires from collapsing to a straight
-                // line.
                 let dx = abs(end.x - start.x)
                 let curveOffset = max(dx * 0.5, 36)
                 let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
@@ -195,41 +242,59 @@ struct WiresLayer: View {
                 path.addCurve(to: end, control1: c1, control2: c2)
 
                 let color = SolaroColor.wireColor(forPreposition: edge.preposition)
-                // Soft glow under the main stroke so the wire reads
-                // against the dot grid even at low brightness.
                 ctx.stroke(path,
                            with: .color(color.opacity(0.20)),
                            style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 ctx.stroke(path,
                            with: .color(color.opacity(0.92)),
                            style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-
-                // Small filled dot at the receiver end, same color
-                // — visual cue for which pin terminates the wire.
-                let dotRect = CGRect(x: end.x - 3, y: end.y - 3, width: 6, height: 6)
+                let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
+                                     width: 6, height: 6)
                 ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
             }
         }
     }
 }
 
-// MARK: - Nodes layer
+// MARK: - Nodes layer (drag-aware)
 
 struct NodesLayer: View {
     let graph: CanvasGraph
+    let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    let onDrag: (CanvasNode.ID, CGPoint) -> Void
+    let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             ForEach(graph.nodes) { node in
+                let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
                 CanvasNodeCard(
                     node: node,
                     width: nodeWidth, height: nodeHeight
                 )
-                .offset(x: node.x, y: node.y)
+                .offset(x: p.x, y: p.y)
+                .gesture(
+                    dragGesture(forNodeAt: p, id: node.id)
+                )
             }
         }
+    }
+
+    private func dragGesture(forNodeAt origin: CGPoint,
+                             id: CanvasNode.ID) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                onDrag(id,
+                       CGPoint(x: origin.x + value.translation.width,
+                               y: origin.y + value.translation.height))
+            }
+            .onEnded { value in
+                onDragEnd(id,
+                          CGPoint(x: origin.x + value.translation.width,
+                                  y: origin.y + value.translation.height))
+            }
     }
 }
 
@@ -237,6 +302,8 @@ private struct CanvasNodeCard: View {
     let node: CanvasNode
     let width: CGFloat
     let height: CGFloat
+
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -248,21 +315,22 @@ private struct CanvasNodeCard: View {
                     Text(node.verb)
                         .font(SolaroFont.bodyBold)
                         .foregroundStyle(SolaroColor.roleColor(forVerb: node.verb))
-                    if let r = node.resultName {
+                    if let r = node.resultName, !r.hasPrefix("_") {
                         Text("<\(r)>")
                             .font(SolaroFont.mono)
                             .foregroundStyle(SolaroColor.textPrimary)
                     }
                     Spacer(minLength: 0)
-                }
-                if let prep = node.objectPreposition,
-                   let obj = node.objectName,
-                   obj.first != "_" {
-                    Text("\(prep) <\(obj)>")
+                    Text(":\(node.lineHint)")
                         .font(SolaroFont.monoCaption)
-                        .foregroundStyle(SolaroColor.wireColor(forPreposition: prep))
-                        .lineLimit(1)
+                        .foregroundStyle(SolaroColor.textTertiary)
                 }
+                Text(summaryDisplay)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, SolaroSpace.s)
             .padding(.vertical, SolaroSpace.xs)
@@ -272,15 +340,30 @@ private struct CanvasNodeCard: View {
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(SolaroColor.divider, lineWidth: 1)
+                .stroke(hovering ? SolaroColor.accent.opacity(0.6) : SolaroColor.divider,
+                        lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(hovering ? 0.35 : 0.12),
+                radius: hovering ? 8 : 3, x: 0, y: hovering ? 4 : 2)
+        .onHover { hovering = $0 }
         .help("Line \(node.lineHint): \(node.summary)")
+    }
+
+    /// Human-readable line shown under the verb. Falls back to the
+    /// statement's raw description, but trims the verb prefix +
+    /// terminal period so the card doesn't visually echo itself.
+    private var summaryDisplay: String {
+        let raw = node.summary
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutDot = trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+        let prefix = node.verb + " "
+        if withoutDot.hasPrefix(prefix) {
+            return String(withoutDot.dropFirst(prefix.count))
+        }
+        return withoutDot
     }
 }
 
-/// Tiny legend in the canvas's top-right corner showing the wire-
-/// color mapping for whichever prepositions are present in the
-/// current feature set. Hidden when no wires exist.
 private struct WireLegend: View {
     let prepositions: [String]
 

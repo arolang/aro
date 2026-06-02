@@ -40,6 +40,7 @@ struct CenterPaneView: View {
                 text: editableBinding(for: url),
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -76,7 +77,10 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private var canvasMode: some View {
-        CanvasView(graph: canvasGraph)
+        CanvasView(
+            graph: canvasGraph,
+            persistPosition: persistNodePosition(_:to:)
+        )
     }
 
     private var canvasGraph: CanvasGraph {
@@ -90,16 +94,32 @@ struct CenterPaneView: View {
         let sidecar = LayoutSidecar.load(for: url)
         let built = CanvasGraph.build(featureSet: firstFS, fileKey: url.path)
             .withPositions(from: sidecar)
-        return ForceDirectedLayout.place(built)
+        // Stack layout is the deterministic default; nodes with
+        // saved positions in the sidecar keep them.
+        return StackLayout.place(built)
     }
 
-    // MARK: - Split / Map (Phase 10)
+    /// Drag-end callback: persist this node's new `(x, y)` to the
+    /// per-file `.aro.layout.json` sidecar so it survives a reload.
+    private func persistNodePosition(_ id: CanvasNode.ID, to point: CGPoint) {
+        guard let url = controller.currentFile else { return }
+        var sidecar = LayoutSidecar.load(for: url)
+        sidecar.nodes[id] = LayoutSidecar.NodePosition(
+            x: Double(point.x), y: Double(point.y)
+        )
+        try? sidecar.save(for: url)
+    }
+
+    // MARK: - Split
 
     @ViewBuilder
     private var splitMode: some View {
         HSplitView {
-            CanvasView(graph: canvasGraph)
-                .frame(minWidth: 240)
+            CanvasView(
+                graph: canvasGraph,
+                persistPosition: persistNodePosition(_:to:)
+            )
+            .frame(minWidth: 240)
             if let url = controller.currentFile {
                 AROCodeEditor(
                     text: editableBinding(for: url),

@@ -79,6 +79,24 @@ struct AROCodeEditor: NSViewRepresentable {
 
         textView.textContainerInset = NSSize(width: 0, height: 8)
         textView.textContainer?.lineFragmentPadding = 8
+
+        // Without this NSTextView's textContainer keeps the default
+        // (10, 10000) size that `scrollableTextView()` ships with,
+        // which means the layout manager produces zero glyph rects
+        // once the SwiftUI parent gives it a real frame — the editor
+        // appears blank. Tell the container to follow the textView's
+        // width and grow vertically to fit the content.
+        let infinity = CGFloat.greatestFiniteMagnitude
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: infinity, height: infinity)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        if let container = textView.textContainer {
+            container.containerSize = NSSize(width: infinity, height: infinity)
+            container.widthTracksTextView = true
+            container.heightTracksTextView = false
+        }
     }
 
     private func addLineNumberRuler(to scroll: NSScrollView, textView: NSTextView) {
