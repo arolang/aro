@@ -22,7 +22,8 @@ enum CommandPaletteBuilder {
         onOpenFindReplace: @escaping () -> Void,
         onOpenOpenAPIPalette: @escaping () -> Void,
         onOpenTimeTravel: @escaping () -> Void,
-        onOpenAddPlugin: @escaping () -> Void
+        onOpenAddPlugin: @escaping () -> Void,
+        onGoToDefinition: @escaping () -> Void
     ) -> [PaletteItem] {
         var items: [PaletteItem] = []
 
@@ -151,6 +152,15 @@ enum CommandPaletteBuilder {
             trailing: "⇧⌘F",
             symbol: "text.magnifyingglass",
             action: { onOpenFindReplace() }
+        ))
+        items.append(.init(
+            id: "go-to-definition",
+            title: "Go to Definition",
+            subtitle: "Jump to where the symbol on this line is declared",
+            category: "File",
+            trailing: "⌃⌘D",
+            symbol: "arrow.right.to.line",
+            action: { onGoToDefinition() }
         ))
         items.append(.init(
             id: "reveal",

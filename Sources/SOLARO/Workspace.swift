@@ -477,7 +477,8 @@ struct WorkspaceView: View {
                     onOpenFindReplace: { showFindInProject = true },
                     onOpenOpenAPIPalette: { showOpenAPIPalette = true },
                     onOpenTimeTravel: { showTimeTravel = true },
-                    onOpenAddPlugin: { controller.sidebarTab = .plugins }
+                    onOpenAddPlugin: { controller.sidebarTab = .plugins },
+                    onGoToDefinition: { goToDefinition() }
                 ),
                 onClose: { showCommandPalette = false }
             )
@@ -585,6 +586,10 @@ struct WorkspaceView: View {
                 bottomTab = .terminal
                 showConsole = true
             }
+            // Go to Definition — ⌃⌘D mirrors Xcode and most LSP UIs.
+            HiddenShortcutButton(key: "d", modifiers: [.control, .command]) {
+                goToDefinition()
+            }
         }
         .onAppear { controller.load() }
         .alert(
@@ -608,6 +613,42 @@ struct WorkspaceView: View {
     private var openAPIEndpoints: [OpenAPIEndpoint] {
         guard let model = controller.model else { return [] }
         return OpenAPIPalette.endpoints(in: model, programs: controller.allPrograms)
+    }
+
+    /// Send `textDocument/definition` for the symbol at the current
+    /// caret line. We don't track the caret's character offset, so
+    /// we send the column of the first identifier-ish glyph (`<`,
+    /// or the first non-whitespace character if there's no `<`) —
+    /// good enough to land on the symbol the user is most likely
+    /// looking at on that line.
+    private func goToDefinition() {
+        guard
+            let url = controller.currentFile,
+            let lineNumber = controller.currentLine,
+            let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        let lines = text.components(separatedBy: "\n")
+        guard lineNumber - 1 < lines.count else { return }
+        let line = lines[lineNumber - 1]
+        let column: Int = {
+            if let bracket = line.firstIndex(of: "<") {
+                return line.distance(from: line.startIndex,
+                                     to: line.index(after: bracket))
+            }
+            if let nonSpace = line.firstIndex(where: { !$0.isWhitespace }) {
+                return line.distance(from: line.startIndex, to: nonSpace)
+            }
+            return 0
+        }()
+        controller.lsp.definition(
+            url: url,
+            line0: lineNumber - 1,
+            character0: column
+        ) { location in
+            guard let location else { return }
+            controller.openFile(location.url)
+            controller.currentLine = location.line
+        }
     }
 
     /// Apply the Extract-as-Action refactor: rewrite the call site

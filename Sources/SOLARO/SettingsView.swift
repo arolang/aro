@@ -182,4 +182,5 @@ enum SolaroPrefs: String {
     case theme            = "solaro.theme"
     case editorFolded     = "solaro.editor.folded"
     case editorMinimap    = "solaro.editor.minimap"
+    case diffStyle        = "solaro.diff.style"
 }

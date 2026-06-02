@@ -207,6 +207,10 @@ struct CenterPaneView: View {
     private func saveAndReparse(text: String, url: URL) {
         let formatted = formatIfEnabled(text, for: url)
         try? formatted.write(to: url, atomically: true, encoding: .utf8)
+        // Keep the LSP server's view of the document in sync so
+        // diagnostics + go-to-definition pick up edits without
+        // requiring a restart.
+        controller.lsp.didChange(url: url, text: formatted)
         reparse(url: url)
     }
 

@@ -74,9 +74,50 @@ enum DiffParser {
 struct DiffRendererView: View {
     let source: String
 
+    @AppStorage(SolaroPrefs.diffStyle.rawValue)
+    private var styleRaw: String = DiffStyle.unified.rawValue
+
+    private var style: DiffStyle {
+        DiffStyle(rawValue: styleRaw) ?? .unified
+    }
+
     private var lines: [DiffLine] { DiffParser.parse(source) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider().background(SolaroColor.divider)
+            switch style {
+            case .unified:     unifiedBody
+            case .sideBySide:  sideBySideBody
+            }
+        }
+        .background(SolaroColor.backdrop)
+    }
+
+    private var header: some View {
+        HStack(spacing: SolaroSpace.s) {
+            Picker("", selection: $styleRaw) {
+                Text("Unified").tag(DiffStyle.unified.rawValue)
+                Text("Side-by-side").tag(DiffStyle.sideBySide.rawValue)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+            .labelsHidden()
+            Spacer()
+            let stats = DiffStats.compute(lines: lines)
+            Text("+\(stats.added)")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.stateOK)
+            Text("−\(stats.removed)")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.stateError)
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, SolaroSpace.s)
+    }
+
+    private var unifiedBody: some View {
         ScrollView([.horizontal, .vertical]) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
@@ -85,7 +126,69 @@ struct DiffRendererView: View {
             }
             .padding(.vertical, SolaroSpace.s)
         }
-        .background(SolaroColor.backdrop)
+    }
+
+    private var sideBySideBody: some View {
+        let pairs = DiffPairer.pair(lines)
+        return ScrollView([.horizontal, .vertical]) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                    sideBySideRow(pair)
+                }
+            }
+            .padding(.vertical, SolaroSpace.s)
+        }
+    }
+
+    /// One row of the side-by-side view. Hunk + file-header rows
+    /// span the full width; line pairs split 50/50 with an empty
+    /// half for adds / removes that don't pair with anything.
+    @ViewBuilder
+    private func sideBySideRow(_ pair: DiffPair) -> some View {
+        if pair.isFullWidth {
+            row(pair.left ?? pair.right!)
+        } else {
+            HStack(spacing: 0) {
+                halfRow(pair.left,  side: .left)
+                Rectangle()
+                    .fill(SolaroColor.divider)
+                    .frame(width: 1)
+                halfRow(pair.right, side: .right)
+            }
+        }
+    }
+
+    private enum Side { case left, right }
+
+    private func halfRow(_ line: DiffLine?, side: Side) -> some View {
+        let kind: DiffLineKind = line?.kind ?? .blank
+        let body: String = {
+            guard let line else { return "" }
+            return line.body.isEmpty ? " " : line.body
+        }()
+        return HStack(alignment: .top, spacing: 0) {
+            Text(prefix(forSide: side, kind: kind))
+                .font(SolaroFont.mono)
+                .foregroundStyle(prefixColor(for: kind))
+                .frame(width: 22, alignment: .center)
+            Text(body)
+                .font(SolaroFont.mono)
+                .foregroundStyle(bodyColor(for: kind))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, SolaroSpace.s)
+        .background(background(for: kind))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func prefix(forSide side: Side, kind: DiffLineKind) -> String {
+        switch (side, kind) {
+        case (.left, .removed): return "−"
+        case (.right, .added):  return "+"
+        case (_, .context):     return " "
+        default:                return " "
+        }
     }
 
     private func row(_ line: DiffLine) -> some View {
@@ -142,5 +245,81 @@ struct DiffRendererView: View {
         case .noNewline:  return SolaroColor.textTertiary
         default:          return SolaroColor.textPrimary
         }
+    }
+}
+
+// MARK: - Side-by-side pairing
+
+enum DiffStyle: String { case unified, sideBySide }
+
+/// One row of the side-by-side view. Either both halves point at
+/// the same `DiffLine` (full-width — used for hunk + file-header
+/// rows) or each side holds an independent line / nil.
+struct DiffPair {
+    let left: DiffLine?
+    let right: DiffLine?
+    let isFullWidth: Bool
+}
+
+/// Walks a unified diff and groups consecutive `-` / `+` runs into
+/// left / right pairs. Context lines mirror on both sides; hunk
+/// markers and file headers stay full-width.
+enum DiffPairer {
+    static func pair(_ lines: [DiffLine]) -> [DiffPair] {
+        var pairs: [DiffPair] = []
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            switch line.kind {
+            case .hunk, .fileHeader, .noNewline:
+                pairs.append(DiffPair(left: line, right: line, isFullWidth: true))
+                i += 1
+            case .context, .blank:
+                pairs.append(DiffPair(left: line, right: line, isFullWidth: false))
+                i += 1
+            case .removed:
+                var removed: [DiffLine] = []
+                var added: [DiffLine] = []
+                while i < lines.count, lines[i].kind == .removed {
+                    removed.append(lines[i])
+                    i += 1
+                }
+                while i < lines.count, lines[i].kind == .added {
+                    added.append(lines[i])
+                    i += 1
+                }
+                let count = max(removed.count, added.count)
+                for k in 0..<count {
+                    pairs.append(DiffPair(
+                        left:  k < removed.count ? removed[k] : nil,
+                        right: k < added.count   ? added[k]   : nil,
+                        isFullWidth: false
+                    ))
+                }
+            case .added:
+                pairs.append(DiffPair(left: nil, right: line, isFullWidth: false))
+                i += 1
+            }
+        }
+        return pairs
+    }
+}
+
+/// Quick counter for the header chip — number of `+` and `-`
+/// lines in the whole diff, excluding file headers.
+struct DiffStats {
+    let added: Int
+    let removed: Int
+
+    static func compute(lines: [DiffLine]) -> DiffStats {
+        var a = 0, r = 0
+        for line in lines {
+            switch line.kind {
+            case .added:   a += 1
+            case .removed: r += 1
+            default: break
+            }
+        }
+        return DiffStats(added: a, removed: r)
     }
 }

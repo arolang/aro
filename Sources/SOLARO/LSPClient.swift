@@ -52,6 +52,19 @@ final class AROLSPClient {
     private var partialBuffer = Data()
     private var nextID: Int = 1
     private var documentVersions: [URL: Int] = [:]
+    /// In-flight requests keyed by JSON-RPC id. Used for round-trip
+    /// calls like `textDocument/definition` where we need to hand
+    /// the result back to a SwiftUI caller.
+    private var pendingResults: [Int: (Any?) -> Void] = [:]
+
+    /// A location returned by `textDocument/definition`, expressed
+    /// in SOLARO's 1-based line convention so callers can hand it
+    /// straight to `controller.currentLine` and `openFile`.
+    struct DefinitionLocation: Equatable {
+        let url: URL
+        let line: Int          // 1-based
+        let character: Int     // 0-based — the editor doesn't track columns yet
+    }
 
     func start() {
         guard process == nil else { return }
@@ -146,6 +159,55 @@ final class AROLSPClient {
         ])
     }
 
+    /// Send `textDocument/definition` and call `completion` with
+    /// the first matching location, or nil if the server returned
+    /// nothing / errored / isn't ready yet. LSP positions are
+    /// 0-based; the caller passes 0-based values so it can hand us
+    /// whatever STTextView reported.
+    func definition(
+        url: URL,
+        line0: Int,
+        character0: Int,
+        completion: @escaping (DefinitionLocation?) -> Void
+    ) {
+        guard isReady else { completion(nil); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            completion(Self.parseDefinition(raw))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "textDocument/definition",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "position": ["line": line0, "character": character0],
+            ],
+        ])
+    }
+
+    private static func parseDefinition(_ raw: Any?) -> DefinitionLocation? {
+        let dict: [String: Any]?
+        if let arr = raw as? [[String: Any]] {
+            dict = arr.first
+        } else if let single = raw as? [String: Any] {
+            dict = single
+        } else {
+            dict = nil
+        }
+        guard
+            let dict,
+            let uri = dict["uri"] as? String,
+            let target = URL(string: uri),
+            let range = dict["range"] as? [String: Any],
+            let start = range["start"] as? [String: Any],
+            let l = start["line"] as? Int,
+            let c = start["character"] as? Int
+        else { return nil }
+        return DefinitionLocation(url: target, line: l + 1, character: c)
+    }
+
     // MARK: - JSON-RPC plumbing
 
     private func sendInitialize() {
@@ -231,10 +293,17 @@ final class AROLSPClient {
         else { return }
         if let method = obj["method"] as? String {
             handleServerMessage(method: method, params: obj["params"])
-        } else if obj["result"] != nil, let id = obj["id"] as? Int, id == 1 {
-            // The initialize response — finish handshake.
-            isReady = true
-            sendNotification(method: "initialized", params: [:])
+        } else if let id = obj["id"] as? Int {
+            // Response to one of our requests. Handshake responses
+            // (id == 1) get matched here too — finish the handshake
+            // and forward any registered completion handler.
+            if id == 1 && !isReady {
+                isReady = true
+                sendNotification(method: "initialized", params: [:])
+            }
+            if let cb = pendingResults.removeValue(forKey: id) {
+                cb(obj["result"])
+            }
         }
     }
 
