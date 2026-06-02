@@ -114,14 +114,40 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private var canvasMode: some View {
-        CanvasView(
-            graph: canvasGraph,
-            persistPosition: persistNodePosition(_:to:),
-            currentLine: currentLineBinding,
-            pausedLine: controller.pausedLine,
-            pauseSymbols: controller.pauseSymbols,
-            breakpointLines: breakpointsBinding.wrappedValue
-        )
+        if let url = controller.currentFile,
+           url.lastPathComponent.lowercased() == "openapi.yaml"
+            || url.lastPathComponent.lowercased() == "openapi.yml"
+        {
+            openAPICanvas(for: url)
+        } else {
+            CanvasView(
+                graph: canvasGraph,
+                persistPosition: persistNodePosition(_:to:),
+                currentLine: currentLineBinding,
+                pausedLine: controller.pausedLine,
+                pauseSymbols: controller.pauseSymbols,
+                breakpointLines: breakpointsBinding.wrappedValue
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func openAPICanvas(for url: URL) -> some View {
+        let yaml = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        OpenAPIGraphView(yaml: yaml) { node in
+            // Selection drives the inspector's editable form
+            // (forthcoming follow-up); for now we mirror the
+            // selected route's operationId line into the editor
+            // caret so users get a familiar focus signal.
+            if let node, case .route(_, _, _, let opId) = node.kind {
+                controller.openAPISelectedNodeID = node.id
+                if let _ = opId {
+                    // No-op for now; future hook into editor caret.
+                }
+            } else {
+                controller.openAPISelectedNodeID = node?.id
+            }
+        }
     }
 
     private var canvasGraph: CanvasGraph {

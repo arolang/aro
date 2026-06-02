@@ -65,6 +65,11 @@ final class WorkspaceController {
     /// JSONL stream. Used for hover-over-variable tooltips.
     var pauseSymbols: [String: ConsoleProcess.SymbolValue] = [:]
 
+    /// Currently-selected node in the graphical OpenAPI editor (if
+    /// the user is on an openapi.yaml file). Drives the inspector
+    /// form that lets them edit route / schema fields directly.
+    var openAPISelectedNodeID: String?
+
     /// Parsed programs keyed by source-file URL. Built once on load;
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the
