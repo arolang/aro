@@ -288,6 +288,13 @@ struct NodesLayer: View {
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
 
+    /// Position of each node at the moment its drag began. Captured
+    /// once on the first `onChanged` event, cleared on `onEnded`.
+    /// Without this, every drag event adds the cumulative translation
+    /// to the *just-updated* live position, so the node sprints away
+    /// at 2× mouse speed (the user-reported regression).
+    @State private var dragOrigins: [CanvasNode.ID: CGPoint] = [:]
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             // Invisible spacer so the ZStack reports a non-zero size
@@ -308,23 +315,35 @@ struct NodesLayer: View {
                 // (center) point .position expects.
                 .position(x: p.x + nodeWidth / 2,
                           y: p.y + nodeHeight / 2)
-                .gesture(dragGesture(forNodeAt: p, id: node.id))
+                .gesture(dragGesture(id: node.id, livePosition: p))
             }
         }
     }
 
-    private func dragGesture(forNodeAt origin: CGPoint,
-                             id: CanvasNode.ID) -> some Gesture {
+    private func dragGesture(id: CanvasNode.ID,
+                             livePosition: CGPoint) -> some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
+                // Capture the origin once at the start of the drag —
+                // not on every onChanged. Subsequent events use the
+                // captured value so `translation` (which is cumulative
+                // from the gesture start) lands at the correct spot.
+                if dragOrigins[id] == nil {
+                    dragOrigins[id] = livePosition
+                }
+                let origin = dragOrigins[id] ?? livePosition
                 onDrag(id,
                        CGPoint(x: origin.x + value.translation.width,
                                y: origin.y + value.translation.height))
             }
             .onEnded { value in
-                onDragEnd(id,
-                          CGPoint(x: origin.x + value.translation.width,
-                                  y: origin.y + value.translation.height))
+                let origin = dragOrigins[id] ?? livePosition
+                let final = CGPoint(
+                    x: origin.x + value.translation.width,
+                    y: origin.y + value.translation.height
+                )
+                onDragEnd(id, final)
+                dragOrigins.removeValue(forKey: id)
             }
     }
 }
