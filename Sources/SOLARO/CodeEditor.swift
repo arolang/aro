@@ -37,6 +37,55 @@ final class AROHoverTextView: STTextView {
     }()
     private var hoverHost: NSHostingController<HoverValuePopover>?
     private var lastHoverIdentifier: String?
+    /// Global mouse-moved monitor. Tracking areas on STTextView
+    /// don't always deliver mouseMoved because the text view's own
+    /// content view sits on top and consumes the event. The local
+    /// monitor sees the event before it gets dispatched, so we can
+    /// react regardless of the responder chain.
+    private var mouseMonitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Belt: ask the window to deliver mouseMoved.
+        window?.acceptsMouseMovedEvents = true
+        // Suspenders: install a local monitor so we hear about
+        // moves regardless of subview hit-testing.
+        installMouseMonitorIfNeeded()
+    }
+
+    @MainActor
+    override func removeFromSuperview() {
+        if let mouseMonitor {
+            NSEvent.removeMonitor(mouseMonitor)
+            self.mouseMonitor = nil
+        }
+        super.removeFromSuperview()
+    }
+
+    private func installMouseMonitorIfNeeded() {
+        if mouseMonitor != nil { return }
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+            self?.handleMouseMoved(event)
+            return event
+        }
+    }
+
+    /// Cursor moved somewhere in this process. Filter by whether
+    /// the cursor is currently inside our text view, then resolve
+    /// the identifier under it.
+    private func handleMouseMoved(_ event: NSEvent) {
+        guard let window, event.window == window else {
+            hideHoverPopover()
+            return
+        }
+        let windowPoint = event.locationInWindow
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            hideHoverPopover()
+            return
+        }
+        resolveHover(at: localPoint)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -45,7 +94,7 @@ final class AROHoverTextView: STTextView {
         }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.activeInKeyWindow, .mouseMoved,
+            options: [.activeAlways, .mouseMoved,
                       .mouseEnteredAndExited, .inVisibleRect],
             owner: self,
             userInfo: nil
@@ -62,6 +111,12 @@ final class AROHoverTextView: STTextView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
+        resolveHover(at: point)
+    }
+
+    /// Shared hover-resolution path used by both the tracking-area
+    /// `mouseMoved` and the global event-monitor fallback.
+    private func resolveHover(at point: CGPoint) {
         guard let identifier = identifierUnderPoint(point) else {
             hideHoverPopover()
             return
