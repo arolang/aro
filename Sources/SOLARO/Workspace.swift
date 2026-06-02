@@ -84,6 +84,11 @@ final class WorkspaceController {
     /// button writes it back to disk.
     var openAPIDocument: OpenAPIDocument?
 
+    /// State for the OpenAPI Try-It-Out section in the inspector
+    /// (#249). One model per workspace, reused across selected
+    /// routes so the base URL + headers carry over between requests.
+    let tryItOutModel = TryItOutModel()
+
     /// Parsed programs keyed by source-file URL. Built once on load;
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the

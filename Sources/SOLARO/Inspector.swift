@@ -174,7 +174,8 @@ struct InspectorPaneView: View {
                 }
                 OpenAPINodeForm(
                     nodeID: nodeID,
-                    document: document
+                    document: document,
+                    controller: controller
                 )
                 openAPILintList(for: nodeID, document: document)
                 if let error = document.lastError {
@@ -400,6 +401,7 @@ struct InspectorPaneView: View {
 private struct OpenAPINodeForm: View {
     let nodeID: String
     @Bindable var document: OpenAPIDocument
+    @Bindable var controller: WorkspaceController
 
     var body: some View {
         if let parsed = ParsedRouteID(from: nodeID) {
@@ -476,6 +478,12 @@ private struct OpenAPINodeForm: View {
             tagEditor(operation: operation, path: path, method: method)
             parameterEditor(operation: operation, path: path, method: method)
             responseHints(operation: operation)
+            OpenAPITryItOutView(
+                model: controller.tryItOutModel,
+                method: method,
+                path: path,
+                parameters: (operation["parameters"] as? [[String: Any]]) ?? []
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
