@@ -310,7 +310,8 @@ struct WorkspaceView: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             searchField
-            runButton
+            playButton
+            debugButton
             statusPip
             inspectorToggle
             closeProjectButton
@@ -342,24 +343,34 @@ struct WorkspaceView: View {
             .frame(width: 220)
     }
 
-    private var runButton: some View {
+    private var playButton: some View {
         Button {
             showConsole = true
-            consoleProcess.start(
+            consoleProcess.startRun(project: project)
+        } label: {
+            Label("Run", systemImage: "play.fill")
+        }
+        .disabled(isRunning)
+        .help("Run `aro run` and stream its output to the console")
+    }
+
+    private var debugButton: some View {
+        Button {
+            showConsole = true
+            consoleProcess.startDebug(
                 project: project,
                 breakpointsByFile: collectBreakpoints()
             )
         } label: {
-            Label(runButtonLabel,
-                  systemImage: isRunning ? "play.fill" : "play")
+            Label("Debug", systemImage: "ant.fill")
         }
         .disabled(isRunning)
-        .help(runButtonHelp)
+        .help(debugButtonHelp)
     }
 
     /// Scan every project source file's sidecar for breakpoints
-    /// and collect them by file. Empty result → ConsoleProcess
-    /// falls back to plain `aro run`.
+    /// and collect them by file. Empty result → `aro debug` will
+    /// pause on every statement (its default behavior).
     private func collectBreakpoints() -> [URL: Set<Int>] {
         guard let model = controller.model else { return [:] }
         var out: [URL: Set<Int>] = [:]
@@ -372,14 +383,12 @@ struct WorkspaceView: View {
         return out
     }
 
-    private var runButtonLabel: String {
-        collectBreakpoints().isEmpty ? "Run" : "Debug"
-    }
-
-    private var runButtonHelp: String {
-        collectBreakpoints().isEmpty
-            ? "Run `aro run` and stream its output to the console"
-            : "Run `aro debug` with the current breakpoints"
+    private var debugButtonHelp: String {
+        let total = collectBreakpoints().values.reduce(0) { $0 + $1.count }
+        if total == 0 {
+            return "Run `aro debug` — pauses on every statement (no breakpoints set)"
+        }
+        return "Run `aro debug` and pause at \(total) breakpoint\(total == 1 ? "" : "s")"
     }
 
     private var isRunning: Bool {

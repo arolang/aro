@@ -68,7 +68,27 @@ final class ConsoleProcess {
 
     /// Spawn `aro run <project>` (or `aro debug …` when breakpoints
     /// are set). No-op when a process is already running.
-    func start(project: Project, breakpointsByFile: [URL: Set<Int>] = [:]) {
+    enum Mode {
+        case run
+        case debug
+    }
+
+    /// Convenience for the Play button — always plain `aro run`,
+    /// no breakpoints, no record file.
+    func startRun(project: Project) {
+        start(project: project, mode: .run, breakpointsByFile: [:])
+    }
+
+    /// Convenience for the Debug button — `aro debug` with whatever
+    /// breakpoints the workspace has accumulated.
+    func startDebug(project: Project, breakpointsByFile: [URL: Set<Int>]) {
+        start(project: project, mode: .debug, breakpointsByFile: breakpointsByFile)
+    }
+
+    /// Lower-level entry that both convenience helpers funnel through.
+    func start(project: Project,
+               mode: Mode,
+               breakpointsByFile: [URL: Set<Int>] = [:]) {
         if case .running = state { return }
         log.removeAll()
         pausedLine = nil
@@ -78,12 +98,8 @@ final class ConsoleProcess {
         breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
         didAutoContinueFirstPause = false
 
-        // Aggregate every file's breakpoints into a single `--breakpoint`
-        // list. The debugger accepts line numbers as "filename:line"
-        // pairs as well as bare integers; we pass the bare form when
-        // there's only one file to keep the command terse.
         let lines = breakpointsByFile.values.flatMap { $0 }.sorted()
-        let useDebugger = !lines.isEmpty
+        let useDebugger = mode == .debug
 
         let aro = Self.resolveAroBinary(near: project)
         appendInfo("[aro] \(aro)")
