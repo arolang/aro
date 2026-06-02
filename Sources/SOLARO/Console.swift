@@ -75,6 +75,8 @@ final class ConsoleProcess {
         isPaused = false
         pauseSymbols.removeAll(keepingCapacity: true)
         lastProject = project
+        breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
+        didAutoContinueFirstPause = false
 
         // Aggregate every file's breakpoints into a single `--breakpoint`
         // list. The debugger accepts line numbers as "filename:line"
@@ -281,6 +283,21 @@ final class ConsoleProcess {
         pausedLine = n
         isPaused = true
         refreshSymbolsFromRecord()
+
+        // First pause coming back from the debugger is at the
+        // program's first statement (the step-debugger pauses on
+        // every step by default). If the user actually set
+        // breakpoints, auto-continue so execution runs to the
+        // first breakpoint — they didn't ask to stop at line 1.
+        // We only do this once per session; subsequent pauses are
+        // user-initiated.
+        if !didAutoContinueFirstPause,
+           !breakpointLines.isEmpty,
+           !breakpointLines.contains(n)
+        {
+            didAutoContinueFirstPause = true
+            sendInput("c")
+        }
     }
 
     /// Read the JSONL record file and capture the last pause event's
@@ -307,6 +324,15 @@ final class ConsoleProcess {
     /// Project the most recent `start()` call ran against — used
     /// by `refreshSymbolsFromRecord()` to locate the JSONL file.
     private var lastProject: Project?
+
+    /// All breakpoint line numbers (across every file) the current
+    /// debug session was started with. Used to decide whether the
+    /// debugger's first pause is actually at a user-requested
+    /// breakpoint or just at the program's entry — in the latter
+    /// case we auto-continue so the run feels like a "real"
+    /// breakpoint debugger.
+    private var breakpointLines: Set<Int> = []
+    private var didAutoContinueFirstPause = false
 
     private func appendInfo(_ line: String) {
         log.append(LogEntry(kind: .info, text: line, timestamp: Date()))
