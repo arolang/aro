@@ -20,6 +20,7 @@ import AROParser
 
 struct AROCodeEditor: NSViewRepresentable {
     @Binding var text: String
+    @Binding var currentLine: Int?
     let onSave: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -42,11 +43,18 @@ struct AROCodeEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? STTextView else { return }
-        // Only push text back into the view when the external
+        // Push text back into the view only when the external
         // binding diverged — avoids fighting the user's edits.
         if textView.text != text {
             textView.text = text
             applyHighlight(textView)
+        }
+        // Move the caret when an external source (canvas tap) set
+        // currentLine to something different than where the cursor
+        // already is.
+        if let target = currentLine,
+           target != lineForCurrentSelection(in: textView) {
+            moveCaret(to: target, in: textView)
         }
     }
 
@@ -75,6 +83,41 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.gutterView?.areMarkersEnabled = true
         textView.isHorizontallyResizable = false        // soft-wrap
         textView.isIncrementalSearchingEnabled = true
+    }
+
+    /// Compute the 1-indexed line number of the caret. Returns nil
+    /// when the text view has no content yet.
+    fileprivate func lineForCurrentSelection(in textView: STTextView) -> Int? {
+        let nsText = (textView.text ?? "") as NSString
+        guard nsText.length > 0 else { return nil }
+        let location = textView.textSelection.location
+        let clamped = min(location, nsText.length)
+        // Count newlines from the document start up to the caret.
+        var line = 1
+        for i in 0..<clamped {
+            if nsText.character(at: i) == 0x0A { line += 1 }
+        }
+        return line
+    }
+
+    /// Move the caret to the start of `line` (1-indexed), scrolling
+    /// it into view. No-op if the line is out of range.
+    fileprivate func moveCaret(to line: Int, in textView: STTextView) {
+        guard line >= 1 else { return }
+        let nsText = (textView.text ?? "") as NSString
+        guard nsText.length > 0 else { return }
+
+        var offset = 0
+        var current = 1
+        let length = nsText.length
+        while current < line, offset < length {
+            if nsText.character(at: offset) == 0x0A { current += 1 }
+            offset += 1
+        }
+        guard current == line else { return }
+        let target = NSRange(location: offset, length: 0)
+        textView.textSelection = target
+        textView.scrollRangeToVisible(target)
     }
 
     fileprivate func applyHighlight(_ textView: STTextView) {
@@ -118,10 +161,6 @@ struct AROCodeEditor: NSViewRepresentable {
         }
 
         nonisolated func textViewDidChangeText(_ notification: Notification) {
-            // The delegate callback fires on the main thread already
-            // (AppKit guarantee); extract the text on this thread,
-            // then bounce the Sendable text+view back into the main
-            // actor for the SwiftUI binding + re-highlight.
             let textView = notification.object as? STTextView
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
@@ -129,6 +168,19 @@ struct AROCodeEditor: NSViewRepresentable {
                     let newText = textView.text ?? ""
                     self.parent.text = newText
                     self.parent.applyHighlight(textView)
+                }
+            }
+        }
+
+        nonisolated func textViewDidChangeSelection(_ notification: Notification) {
+            let textView = notification.object as? STTextView
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let textView else { return }
+                    let line = self.parent.lineForCurrentSelection(in: textView)
+                    if line != self.parent.currentLine {
+                        self.parent.currentLine = line
+                    }
                 }
             }
         }

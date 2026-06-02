@@ -48,6 +48,12 @@ final class WorkspaceController {
     var searchText: String = ""
     var loadError: String?
 
+    /// 1-indexed source line under the editor caret, used to drive
+    /// the bidirectional selection-sync between the editor and the
+    /// canvas (the matching node card gets an accent border). Setter
+    /// on this from either side is the single source of truth.
+    var currentLine: Int?
+
     /// Parsed programs keyed by source-file URL. Built once on load;
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the

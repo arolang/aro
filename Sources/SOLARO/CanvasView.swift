@@ -24,6 +24,10 @@ struct CanvasView: View {
     /// Persist a single node's position to the file's layout
     /// sidecar. Called on drag-end.
     let persistPosition: (CanvasNode.ID, CGPoint) -> Void
+    /// Two-way binding to the controller's `currentLine`. The
+    /// matching-line node gets an accent border; tapping a node
+    /// pushes its line back into this binding.
+    @Binding var currentLine: Int?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -56,12 +60,20 @@ struct CanvasView: View {
                         graph: graph,
                         positions: nodePositions,
                         nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                        selectedLine: currentLine,
                         onDrag: { id, newPos in
                             liveNodes[id] = newPos
                         },
                         onDragEnd: { id, finalPos in
                             liveNodes[id] = finalPos
                             persistPosition(id, finalPos)
+                        },
+                        onSelect: { lineHint in
+                            // Push the node's source line back so
+                            // the editor moves its caret to match.
+                            if currentLine != lineHint {
+                                currentLine = lineHint
+                            }
                         }
                     )
                     .frame(width: contentSize.width, height: contentSize.height,
@@ -318,8 +330,12 @@ struct NodesLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    /// Currently-highlighted source line (from the editor caret).
+    /// The node with `lineHint == selectedLine` gets an accent border.
+    let selectedLine: Int?
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
+    let onSelect: (Int) -> Void
 
     /// Position of each node at the moment its drag began. Captured
     /// once on the first `onChanged` event, cleared on `onEnded`.
@@ -338,7 +354,8 @@ struct NodesLayer: View {
                 let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
                 CanvasNodeCard(
                     node: node,
-                    width: nodeWidth, height: nodeHeight
+                    width: nodeWidth, height: nodeHeight,
+                    isSelected: selectedLine == node.lineHint
                 )
                 // `.position` is absolute placement that puts the
                 // view's center at the given point in the parent's
@@ -348,6 +365,7 @@ struct NodesLayer: View {
                 // (center) point .position expects.
                 .position(x: p.x + nodeWidth / 2,
                           y: p.y + nodeHeight / 2)
+                .onTapGesture { onSelect(node.lineHint) }
                 .gesture(dragGesture(id: node.id, livePosition: p))
             }
         }
@@ -385,6 +403,7 @@ private struct CanvasNodeCard: View {
     let node: CanvasNode
     let width: CGFloat
     let height: CGFloat
+    let isSelected: Bool
 
     @State private var hovering = false
 
@@ -419,17 +438,29 @@ private struct CanvasNodeCard: View {
             .padding(.vertical, SolaroSpace.xs)
         }
         .frame(width: width, height: height, alignment: .topLeading)
-        .background(SolaroColor.surfaceRaised)
+        .background(
+            isSelected
+                ? SolaroColor.surfaceRaised.opacity(1.0)
+                : SolaroColor.surfaceRaised
+        )
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(hovering ? SolaroColor.accent.opacity(0.6) : SolaroColor.divider,
-                        lineWidth: 1)
+                .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
         )
-        .shadow(color: Color.black.opacity(hovering ? 0.35 : 0.12),
-                radius: hovering ? 8 : 3, x: 0, y: hovering ? 4 : 2)
+        .shadow(color: Color.black.opacity(
+                    isSelected ? 0.45 : (hovering ? 0.35 : 0.12)
+                ),
+                radius: isSelected ? 10 : (hovering ? 8 : 3),
+                x: 0, y: isSelected ? 5 : (hovering ? 4 : 2))
         .onHover { hovering = $0 }
         .help("Line \(node.lineHint): \(node.summary)")
+    }
+
+    private var borderColor: Color {
+        if isSelected { return SolaroColor.accent }
+        if hovering   { return SolaroColor.accent.opacity(0.6) }
+        return SolaroColor.divider
     }
 
     /// Human-readable line shown under the verb. Falls back to the

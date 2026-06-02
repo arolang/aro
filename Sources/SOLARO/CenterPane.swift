@@ -38,10 +38,26 @@ struct CenterPaneView: View {
         if let url = controller.currentFile {
             AROCodeEditor(
                 text: editableBinding(for: url),
+                currentLine: currentLineBinding,
                 onSave: { saveAndReparse(text: $0, url: url) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Binding mediating the editor cursor's line ↔ canvas node
+    /// highlight. Both views read + write to the same controller
+    /// property, which avoids feedback loops as long as we only
+    /// emit when the value actually changes.
+    private var currentLineBinding: Binding<Int?> {
+        Binding(
+            get: { controller.currentLine },
+            set: { newValue in
+                if controller.currentLine != newValue {
+                    controller.currentLine = newValue
+                }
+            }
+        )
     }
 
     private func editableBinding(for url: URL) -> Binding<String> {
@@ -79,7 +95,8 @@ struct CenterPaneView: View {
     private var canvasMode: some View {
         CanvasView(
             graph: canvasGraph,
-            persistPosition: persistNodePosition(_:to:)
+            persistPosition: persistNodePosition(_:to:),
+            currentLine: currentLineBinding
         )
     }
 
@@ -117,12 +134,14 @@ struct CenterPaneView: View {
         HSplitView {
             CanvasView(
                 graph: canvasGraph,
-                persistPosition: persistNodePosition(_:to:)
+                persistPosition: persistNodePosition(_:to:),
+                currentLine: currentLineBinding
             )
             .frame(minWidth: 240)
             if let url = controller.currentFile {
                 AROCodeEditor(
                     text: editableBinding(for: url),
+                    currentLine: currentLineBinding,
                     onSave: { saveAndReparse(text: $0, url: url) }
                 )
                 .frame(minWidth: 240)

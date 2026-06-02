@@ -28,6 +28,11 @@ struct LayoutSidecar: Codable, Equatable {
     /// Reserved for Phase 2 — canvas zoom + scroll offset.
     var view: ViewState = .init()
 
+    /// Phase 15: 1-indexed source lines where the editor's gutter
+    /// shows a breakpoint marker. Persisted next to the file so a
+    /// debugging session resumes with the same breakpoints set.
+    var breakpoints: Set<Int> = []
+
     struct NodePosition: Codable, Equatable {
         var x: Double
         var y: Double
