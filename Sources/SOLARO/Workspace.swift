@@ -209,6 +209,9 @@ struct WorkspaceView: View {
     /// the user has explicitly opened it.
     @State private var consoleProcess = ConsoleProcess()
     @State private var showConsole = false
+    /// Co-pilot (`aro ask`) process + panel visibility.
+    @State private var aiCoPilot = AICoPilotProcess()
+    @State private var showCoPilot = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -269,6 +272,14 @@ struct WorkspaceView: View {
             TimeTravelView(project: project) {
                 showTimeTravel = false
             }
+        }
+        .sheet(isPresented: $showCoPilot) {
+            AICoPilotPanel(
+                project: project,
+                process: aiCoPilot,
+                onClose: { showCoPilot = false }
+            )
+            .frame(width: 520, height: 620)
         }
         .onAppear { controller.load() }
         .alert(
@@ -331,6 +342,7 @@ struct WorkspaceView: View {
             searchField
             playButton
             debugButton
+            coPilotButton
             statusPip
             inspectorToggle
             closeProjectButton
@@ -413,6 +425,16 @@ struct WorkspaceView: View {
     private var isRunning: Bool {
         if case .running = consoleProcess.state { return true }
         return false
+    }
+
+    private var coPilotButton: some View {
+        Button {
+            showCoPilot = true
+        } label: {
+            Label("Co-pilot", systemImage: "sparkles")
+        }
+        .help("Open the AI co-pilot powered by `aro ask`")
+        .keyboardShortcut("a", modifiers: [.command, .control])
     }
 
     private var statusPip: some View {
