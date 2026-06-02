@@ -185,6 +185,32 @@ final class WorkspaceController {
     }
 }
 
+/// Renders a 1×1 transparent button with a keyboard shortcut so
+/// the parent view can wire a global accelerator without exposing
+/// any visible chrome.
+struct HiddenShortcutButton: View {
+    let key: KeyEquivalent
+    let modifiers: EventModifiers
+    let action: () -> Void
+
+    init(key: Character, modifiers: EventModifiers,
+         action: @escaping () -> Void) {
+        self.key = KeyEquivalent(key)
+        self.modifiers = modifiers
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            EmptyView()
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+        .keyboardShortcut(key, modifiers: modifiers)
+    }
+}
+
 enum RightPaneMode: String, CaseIterable, Identifiable {
     case inspector
     case actions
@@ -248,6 +274,11 @@ struct WorkspaceView: View {
     /// the user has explicitly opened it.
     @State private var consoleProcess = ConsoleProcess()
     @State private var showConsole = false
+    /// Palette sheets: command (⌘⇧P), quick open (⌘P),
+    /// find-in-project (⌘⇧F).
+    @State private var showCommandPalette = false
+    @State private var showQuickOpen = false
+    @State private var showFindInProject = false
     /// Co-pilot (`aro ask`) process.
     @State private var aiCoPilot = AICoPilotProcess()
     /// NavigationSplitView's column visibility — bound (not constant)
@@ -313,6 +344,51 @@ struct WorkspaceView: View {
         .sheet(isPresented: $showTimeTravel) {
             TimeTravelView(project: project) {
                 showTimeTravel = false
+            }
+        }
+        .sheet(isPresented: $showCommandPalette) {
+            PaletteView(
+                title: "COMMANDS",
+                placeholder: "Type a command…",
+                items: CommandPaletteBuilder.items(
+                    controller: controller,
+                    project: project,
+                    consoleProcess: consoleProcess,
+                    onSwitchPaneMode: { controller.setPaneMode($0); showConsole = false },
+                    onCloseProject: { onClose() },
+                    onOpenQuickOpen: { showQuickOpen = true },
+                    onOpenFindReplace: { showFindInProject = true },
+                    onOpenOpenAPIPalette: { showOpenAPIPalette = true },
+                    onOpenTimeTravel: { showTimeTravel = true },
+                    onOpenAddPlugin: { controller.sidebarTab = .plugins }
+                ),
+                onClose: { showCommandPalette = false }
+            )
+        }
+        .sheet(isPresented: $showQuickOpen) {
+            PaletteView(
+                title: "QUICK OPEN",
+                placeholder: "Type a filename…",
+                items: QuickOpenBuilder.items(
+                    controller: controller,
+                    onOpen: { url in controller.openFile(url) }
+                ),
+                onClose: { showQuickOpen = false }
+            )
+        }
+        .background {
+            // Hidden buttons hold the three palette shortcuts. SwiftUI
+            // keyboard shortcuts only fire from views in the hierarchy,
+            // and we want them active regardless of focus — invisible
+            // buttons accomplish that without leaking visual clutter.
+            HiddenShortcutButton(key: "p", modifiers: [.command, .shift]) {
+                showCommandPalette = true
+            }
+            HiddenShortcutButton(key: "p", modifiers: [.command]) {
+                showQuickOpen = true
+            }
+            HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
+                showFindInProject = true
             }
         }
         .onAppear { controller.load() }
