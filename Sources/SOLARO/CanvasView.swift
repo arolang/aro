@@ -74,9 +74,26 @@ struct CanvasView: View {
                 if graph.nodes.isEmpty {
                     EmptyCanvasNotice()
                         .padding(SolaroSpace.l)
+                } else if showLegend {
+                    WireLegend(prepositions: legendPrepositions)
+                        .padding(SolaroSpace.l)
                 }
             }
         }
+    }
+
+    /// Show the legend only when there's at least one wire to label.
+    private var showLegend: Bool {
+        !legendPrepositions.isEmpty
+    }
+
+    /// Unique prepositions present on the current graph's edges,
+    /// sorted by the wireframe order (from, to, with, into, against,
+    /// then any remaining). Drives the small legend overlay.
+    private var legendPrepositions: [String] {
+        let canonical = ["from", "to", "with", "into", "against", "for", "at", "by", "via", "on"]
+        let present = Set(graph.edges.compactMap { $0.preposition?.lowercased() })
+        return canonical.filter(present.contains)
     }
 
     // MARK: - Backdrop dot grid
@@ -138,7 +155,7 @@ struct CanvasView: View {
     }
 }
 
-// MARK: - Wires layer (Phase 8 — straight lines; Phase 9 swaps to Béziers)
+// MARK: - Wires layer (Phase 9 — cubic Bézier per edge, colored by preposition)
 
 struct WiresLayer: View {
     let graph: CanvasGraph
@@ -153,21 +170,44 @@ struct WiresLayer: View {
                     let from = nodesByID[edge.fromNodeID],
                     let to = nodesByID[edge.toNodeID]
                 else { continue }
-                let startPoint = CGPoint(
-                    x: from.x + Double(nodeWidth),       // right edge of source
+
+                let start = CGPoint(
+                    x: from.x + Double(nodeWidth),
                     y: from.y + Double(nodeHeight) / 2
                 )
-                let endPoint = CGPoint(
-                    x: to.x,                              // left edge of receiver
+                let end = CGPoint(
+                    x: to.x,
                     y: to.y + Double(nodeHeight) / 2
                 )
+
+                // Control points sit halfway along the horizontal
+                // distance, producing the gentle S-curve from the
+                // wireframe (note 8467 figure 5). Minimum offset
+                // keeps short wires from collapsing to a straight
+                // line.
+                let dx = abs(end.x - start.x)
+                let curveOffset = max(dx * 0.5, 36)
+                let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
+                let c2 = CGPoint(x: end.x - curveOffset, y: end.y)
+
                 var path = Path()
-                path.move(to: startPoint)
-                path.addLine(to: endPoint)
+                path.move(to: start)
+                path.addCurve(to: end, control1: c1, control2: c2)
+
                 let color = SolaroColor.wireColor(forPreposition: edge.preposition)
+                // Soft glow under the main stroke so the wire reads
+                // against the dot grid even at low brightness.
                 ctx.stroke(path,
-                           with: .color(color.opacity(0.85)),
-                           style: StrokeStyle(lineWidth: 1.5))
+                           with: .color(color.opacity(0.20)),
+                           style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                ctx.stroke(path,
+                           with: .color(color.opacity(0.92)),
+                           style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+
+                // Small filled dot at the receiver end, same color
+                // — visual cue for which pin terminates the wire.
+                let dotRect = CGRect(x: end.x - 3, y: end.y - 3, width: 6, height: 6)
+                ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
             }
         }
     }
@@ -235,6 +275,39 @@ private struct CanvasNodeCard: View {
                 .stroke(SolaroColor.divider, lineWidth: 1)
         )
         .help("Line \(node.lineHint): \(node.summary)")
+    }
+}
+
+/// Tiny legend in the canvas's top-right corner showing the wire-
+/// color mapping for whichever prepositions are present in the
+/// current feature set. Hidden when no wires exist.
+private struct WireLegend: View {
+    let prepositions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("CONNECTIONS")
+                .font(SolaroFont.sectionTitle)
+                .foregroundStyle(SolaroColor.textTertiary)
+                .tracking(2)
+            ForEach(prepositions, id: \.self) { p in
+                HStack(spacing: 6) {
+                    Rectangle()
+                        .fill(SolaroColor.wireColor(forPreposition: p))
+                        .frame(width: 18, height: 2)
+                    Text(p)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                }
+            }
+        }
+        .padding(SolaroSpace.s)
+        .background(SolaroColor.surfaceRaised.opacity(0.92))
+        .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m)
+                .stroke(SolaroColor.divider, lineWidth: 1)
+        )
     }
 }
 
