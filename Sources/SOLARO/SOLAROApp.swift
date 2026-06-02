@@ -37,7 +37,6 @@ struct SOLAROApp: App {
         WindowGroup("SOLARO") {
             RootView(runtimeVersion: runtimeVersion)
                 .frame(minWidth: 1200, minHeight: 800)
-                .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
@@ -61,10 +60,20 @@ struct SOLAROApp: App {
 struct RootView: View {
     let runtimeVersion: String
     @State private var workspace: WorkspaceState = RootView.initialWorkspace()
+    @AppStorage(SolaroPrefs.theme.rawValue)
+    private var themeRaw: String = SolaroTheme.dark.rawValue
 
     var body: some View {
+        let theme = SolaroTheme(rawValue: themeRaw) ?? .dark
         ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
             .onOpenURL(perform: openURL)
+            .preferredColorScheme(theme.colorScheme)
+            .onAppear { SolaroTheme.apply(theme) }
+            .onChange(of: themeRaw) { _, new in
+                if let resolved = SolaroTheme(rawValue: new) {
+                    SolaroTheme.apply(resolved)
+                }
+            }
     }
 
     /// macOS Launch Services delivers `open -a SOLARO.app <path>`

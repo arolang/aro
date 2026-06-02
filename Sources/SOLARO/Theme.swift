@@ -8,11 +8,15 @@
 // note 8467: deep-dark backdrop, glass surfaces, role-tinted node
 // stripes, preposition-colored wires.
 //
-// All colors are tuned for the dark appearance. The window forces
-// `.preferredColorScheme(.dark)` in SOLAROApp; light-mode support
-// is a deliberate non-goal for now (developer tool, dark by default).
+// Colors are dynamic: each backing NSColor returns a light or
+// dark value based on the current `NSAppearance`. The user picks
+// the theme (system / light / dark) in Settings, which writes
+// the chosen NSAppearance to NSApp.appearance; the dynamic
+// colors below pick up the swap automatically the next time
+// SwiftUI evaluates a view body.
 
 import SwiftUI
+import AppKit
 
 // MARK: - Palette
 
@@ -22,29 +26,63 @@ enum SolaroColor {
 
     /// Deepest layer behind everything. Slight blue tilt so the
     /// canvas doesn't feel like a flat blackboard.
-    static let backdrop      = Color(red: 0.062, green: 0.075, blue: 0.094)
+    static let backdrop = dynamic(
+        light: NSColor(srgbRed: 0.961, green: 0.965, blue: 0.973, alpha: 1),
+        dark:  NSColor(srgbRed: 0.062, green: 0.075, blue: 0.094, alpha: 1)
+    )
 
     /// Sidebars, inspector panels, status bar. One shade lighter
     /// than `backdrop` so the layout reads.
-    static let surface       = Color(red: 0.097, green: 0.115, blue: 0.142)
+    static let surface = dynamic(
+        light: NSColor(srgbRed: 1.000, green: 1.000, blue: 1.000, alpha: 1),
+        dark:  NSColor(srgbRed: 0.097, green: 0.115, blue: 0.142, alpha: 1)
+    )
 
     /// Cards / nodes / popovers sitting on top of surfaces.
-    static let surfaceRaised = Color(red: 0.137, green: 0.157, blue: 0.187)
+    static let surfaceRaised = dynamic(
+        light: NSColor(srgbRed: 0.945, green: 0.949, blue: 0.957, alpha: 1),
+        dark:  NSColor(srgbRed: 0.137, green: 0.157, blue: 0.187, alpha: 1)
+    )
 
     /// Hairline dividers between zones.
-    static let divider       = Color.white.opacity(0.06)
+    static let divider = dynamic(
+        light: NSColor.black.withAlphaComponent(0.10),
+        dark:  NSColor.white.withAlphaComponent(0.06)
+    )
 
     /// Selected-row tint for sidebar lists.
-    static let selection     = Color(red: 0.30, green: 0.42, blue: 0.78).opacity(0.35)
+    static let selection = dynamic(
+        light: NSColor(srgbRed: 0.30, green: 0.42, blue: 0.78, alpha: 0.20),
+        dark:  NSColor(srgbRed: 0.30, green: 0.42, blue: 0.78, alpha: 0.35)
+    )
 
     // --- Foreground ---
 
     /// Primary body text.
-    static let textPrimary   = Color.white.opacity(0.92)
+    static let textPrimary = dynamic(
+        light: NSColor.black.withAlphaComponent(0.92),
+        dark:  NSColor.white.withAlphaComponent(0.92)
+    )
     /// Secondary labels (path metadata, hints).
-    static let textSecondary = Color.white.opacity(0.55)
+    static let textSecondary = dynamic(
+        light: NSColor.black.withAlphaComponent(0.62),
+        dark:  NSColor.white.withAlphaComponent(0.55)
+    )
     /// Tertiary labels (empty-state hints, footnotes).
-    static let textTertiary  = Color.white.opacity(0.35)
+    static let textTertiary = dynamic(
+        light: NSColor.black.withAlphaComponent(0.42),
+        dark:  NSColor.white.withAlphaComponent(0.35)
+    )
+
+    /// Helper: build a SwiftUI Color from a name-less dynamic NSColor.
+    /// `appearance.bestMatch` returns nil for unknown appearances
+    /// (HighContrast, etc.); fall back to the light variant.
+    private static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+            let match = appearance.bestMatch(from: [.aqua, .darkAqua])
+            return match == .darkAqua ? dark : light
+        }))
+    }
 
     // --- Brand / accent ---
 
@@ -98,7 +136,10 @@ enum SolaroColor {
     /// legend documented in the wireframe.
     /// Neutral wire color used when a preposition is missing or
     /// unknown. Centralised so callers / tests share one value.
-    static let wireNeutral = Color.white.opacity(0.35)
+    static let wireNeutral = dynamic(
+        light: NSColor.black.withAlphaComponent(0.30),
+        dark:  NSColor.white.withAlphaComponent(0.35)
+    )
 
     static func wireColor(forPreposition preposition: String?) -> Color {
         guard let preposition else { return wireNeutral }
@@ -197,5 +238,54 @@ struct SolaroCard: ViewModifier {
 extension View {
     func solaroCard(radius: CGFloat = SolaroRadius.m) -> some View {
         modifier(SolaroCard(radius: radius))
+    }
+}
+
+// MARK: - Theme
+
+/// User-selectable appearance — written by the Settings panel,
+/// read by RootView when applying NSApp.appearance. Stored as a
+/// raw string via @AppStorage so it survives across launches.
+enum SolaroTheme: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "Match system"
+        case .light:  return "Light"
+        case .dark:   return "Dark"
+        }
+    }
+
+    /// Returns the NSAppearance to install on NSApp.appearance.
+    /// `nil` means "let the system decide" — that's what `.system`
+    /// maps to.
+    var appearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light:  return NSAppearance(named: .aqua)
+        case .dark:   return NSAppearance(named: .darkAqua)
+        }
+    }
+
+    /// Returns the equivalent SwiftUI `ColorScheme?` so the root
+    /// view can pin its color scheme too — keeps SwiftUI-side
+    /// tinting (e.g. accent buttons) in sync with the NSAppearance.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
+
+    /// Apply the theme to the running NSApplication. Safe to call
+    /// from any actor — bounces to the main actor internally.
+    @MainActor static func apply(_ theme: SolaroTheme) {
+        NSApp?.appearance = theme.appearance
     }
 }

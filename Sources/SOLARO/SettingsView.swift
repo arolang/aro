@@ -24,6 +24,8 @@ struct SettingsView: View {
     private var aroOverride: String = ""
     @AppStorage(SolaroPrefs.askEndpoint.rawValue)
     private var askEndpoint: String = ""
+    @AppStorage(SolaroPrefs.theme.rawValue)
+    private var theme: String = SolaroTheme.dark.rawValue
 
     var body: some View {
         TabView {
@@ -40,6 +42,23 @@ struct SettingsView: View {
 
     private var editorTab: some View {
         Form {
+            Section {
+                Picker("Theme", selection: $theme) {
+                    ForEach(SolaroTheme.allCases) { t in
+                        Text(t.label).tag(t.rawValue)
+                    }
+                }
+                .onChange(of: theme) { _, new in
+                    if let resolved = SolaroTheme(rawValue: new) {
+                        SolaroTheme.apply(resolved)
+                    }
+                }
+                Text("Switches the entire app between light and dark — windows, sidebars, syntax colours.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Appearance")
+            }
             Section {
                 HStack {
                     Text("Font size")
@@ -160,4 +179,5 @@ enum SolaroPrefs: String {
     case formatOnSave     = "solaro.formatOnSave"
     case aroOverride      = "solaro.aroOverride"
     case askEndpoint      = "solaro.askEndpoint"
+    case theme            = "solaro.theme"
 }
