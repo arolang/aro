@@ -120,19 +120,22 @@ struct StatusBarView: View {
                     .foregroundStyle(SolaroColor.stateWarn)
             }
             if !s.files.isEmpty {
-                // Changed-files chip — clicking opens the commit
-                // overlay. We piggyback on the workspace's sheet
-                // state so the sheet renders at the workspace level.
+                // Separator dot — kept *outside* the button so the
+                // hover underline only ranges across "N changed",
+                // not the leading "·  ".
+                Text("·")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
                 Button {
                     onShowCommitOverlay()
                 } label: {
-                    Text("·  \(s.files.count) changed")
+                    Text("\(s.files.count) changed")
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.accent)
                         .underline()
                 }
                 .buttonStyle(.plain)
-                .help("Open commit overlay (⌘⇧K)")
+                .help("Open commit overlay")
             }
         }
     }
