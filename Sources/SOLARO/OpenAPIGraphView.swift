@@ -30,6 +30,11 @@ struct OpenAPIGraphView: View {
     /// workspace's inspector uses this to render an editable
     /// form for the selected route or schema.
     let onSelect: (OpenAPINode?) -> Void
+    /// Callback invoked when the user clicks "Add Route" /
+    /// "Add Schema". The workspace mutates the document and
+    /// re-renders (yaml is re-read on the next render).
+    let onAddRoute: (() -> Void)?
+    let onAddSchema: (() -> Void)?
 
     private var warningsByNode: [String: [OpenAPILintWarning]] {
         Dictionary(grouping: warnings, by: { $0.nodeID })
@@ -79,7 +84,11 @@ struct OpenAPIGraphView: View {
             .gesture(panGesture)
             .gesture(magnifyGesture)
             .overlay(alignment: .topLeading) {
-                titleBar(graph: graph).padding(SolaroSpace.l)
+                VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                    titleBar(graph: graph)
+                    addToolbar
+                }
+                .padding(SolaroSpace.l)
             }
             .overlay(alignment: .topTrailing) {
                 if !graph.refs.isEmpty {
@@ -225,6 +234,27 @@ struct OpenAPIGraphView: View {
         parts.append("\(schemas) schema\(schemas == 1 ? "" : "s")")
         if inlines > 0 { parts.append("\(inlines) inline") }
         return parts.joined(separator: "  ·  ")
+    }
+
+    @ViewBuilder
+    private var addToolbar: some View {
+        HStack(spacing: SolaroSpace.s) {
+            if let onAddRoute {
+                Button {
+                    onAddRoute()
+                } label: {
+                    Label("Add route", systemImage: "plus.rectangle.on.rectangle")
+                }
+            }
+            if let onAddSchema {
+                Button {
+                    onAddSchema()
+                } label: {
+                    Label("Add schema", systemImage: "plus.square.on.square")
+                }
+            }
+        }
+        .buttonStyle(.bordered)
     }
 
     private var legend: some View {

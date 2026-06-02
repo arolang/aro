@@ -112,6 +112,85 @@ final class OpenAPIDocument {
         else { return nil }
         return schemas[name] as? [String: Any]
     }
+
+    // MARK: - Add / remove
+
+    /// Insert a new route under `paths`. Picks a non-colliding path
+    /// like `/newRoute`, `/newRoute2`, …; returns the chosen path
+    /// + method so the caller can select the new node.
+    @discardableResult
+    func addRoute() -> (path: String, method: String) {
+        var paths = root["paths"] as? [String: Any] ?? [:]
+        var pathName = "/newRoute"
+        var counter = 2
+        while paths[pathName] != nil {
+            pathName = "/newRoute\(counter)"
+            counter += 1
+        }
+        paths[pathName] = [
+            "get": [
+                "operationId": "todoRename",
+                "summary": "Describe what this route does",
+                "responses": [
+                    "200": [
+                        "description": "ok",
+                    ],
+                ],
+            ],
+        ] as [String: Any]
+        root["paths"] = paths
+        isDirty = true
+        return (pathName, "GET")
+    }
+
+    /// Insert a new component schema. Returns the chosen name so
+    /// the caller can select it.
+    @discardableResult
+    func addSchema() -> String {
+        var components = root["components"] as? [String: Any] ?? [:]
+        var schemas = components["schemas"] as? [String: Any] ?? [:]
+        var name = "NewType"
+        var counter = 2
+        while schemas[name] != nil {
+            name = "NewType\(counter)"
+            counter += 1
+        }
+        schemas[name] = [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string"],
+            ],
+        ] as [String: Any]
+        components["schemas"] = schemas
+        root["components"] = components
+        isDirty = true
+        return name
+    }
+
+    /// Remove a route (`paths.<path>.<method>`) and, if that was
+    /// the only verb on that path, the path entry itself.
+    func removeRoute(path: String, method: String) {
+        var paths = root["paths"] as? [String: Any] ?? [:]
+        var pathObj = paths[path] as? [String: Any] ?? [:]
+        if pathObj.removeValue(forKey: method.lowercased()) == nil { return }
+        if pathObj.isEmpty {
+            paths.removeValue(forKey: path)
+        } else {
+            paths[path] = pathObj
+        }
+        root["paths"] = paths
+        isDirty = true
+    }
+
+    /// Remove a component schema.
+    func removeSchema(name: String) {
+        var components = root["components"] as? [String: Any] ?? [:]
+        var schemas = components["schemas"] as? [String: Any] ?? [:]
+        if schemas.removeValue(forKey: name) == nil { return }
+        components["schemas"] = schemas
+        root["components"] = components
+        isDirty = true
+    }
 }
 
 // MARK: - Lint warnings

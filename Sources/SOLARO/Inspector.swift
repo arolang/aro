@@ -160,6 +160,11 @@ struct InspectorPaneView: View {
                             .font(SolaroFont.monoCaption)
                             .foregroundStyle(SolaroColor.stateWarn)
                     }
+                    Button(role: .destructive) {
+                        deleteSelectedNode(nodeID, in: document)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                     Button {
                         document.save()
                     } label: {
@@ -187,6 +192,31 @@ struct InspectorPaneView: View {
         if nodeID.hasPrefix("route:") { return "ROUTE" }
         if nodeID.hasPrefix("inline:") { return "INLINE OBJECT" }
         return "SCHEMA"
+    }
+
+    /// Remove the selected node from the document; clear the
+    /// selection so the form goes away.
+    private func deleteSelectedNode(_ nodeID: String, in document: OpenAPIDocument) {
+        if let parsed = parseRouteIDForInspector(nodeID) {
+            document.removeRoute(path: parsed.path, method: parsed.method)
+        } else if nodeID.hasPrefix("schema:") {
+            let name = String(nodeID.dropFirst("schema:".count))
+            document.removeSchema(name: name)
+        }
+        controller.openAPISelectedNodeID = nil
+    }
+
+    private struct ParsedRouteIDForInspector {
+        let method: String
+        let path: String
+    }
+
+    private func parseRouteIDForInspector(_ id: String) -> ParsedRouteIDForInspector? {
+        guard id.hasPrefix("route:") else { return nil }
+        let payload = id.dropFirst("route:".count)
+        let split = payload.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard split.count == 2 else { return nil }
+        return .init(method: String(split[0]), path: String(split[1]))
     }
 
     /// Lint the document and return warnings attached to `nodeID`.

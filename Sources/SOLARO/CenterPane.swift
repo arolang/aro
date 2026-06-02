@@ -10,6 +10,7 @@
 
 import SwiftUI
 import AROParser
+import Yams
 
 struct CenterPaneView: View {
     @Bindable var controller: WorkspaceController
@@ -133,15 +134,38 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private func openAPICanvas(for url: URL) -> some View {
-        let yaml = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let document = controller.openAPIDocument
+        // Snapshot the dictionary so changes in `document.root`
+        // (Yams.dump's input) bypass the disk → SwiftUI re-render
+        // is driven by the @Observable's didSet.
+        let yaml = document.flatMap { d in
+            try? Yams.dump(object: d.root, sortKeys: false)
+        } ?? (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         let graph = OpenAPIGraphBuilder.build(yaml: yaml)
         let warnings: [OpenAPILintWarning] = {
-            guard let document = controller.openAPIDocument else { return [] }
+            guard let document else { return [] }
             return OpenAPILinter.lint(graph: graph, document: document)
         }()
-        OpenAPIGraphView(yaml: yaml, warnings: warnings) { node in
-            controller.openAPISelectedNodeID = node?.id
-        }
+        OpenAPIGraphView(
+            yaml: yaml,
+            warnings: warnings,
+            onSelect: { node in
+                controller.openAPISelectedNodeID = node?.id
+            },
+            onAddRoute: document.map { d in
+                {
+                    let added = d.addRoute()
+                    controller.openAPISelectedNodeID =
+                        "route:\(added.method) \(added.path)"
+                }
+            },
+            onAddSchema: document.map { d in
+                {
+                    let name = d.addSchema()
+                    controller.openAPISelectedNodeID = "schema:\(name)"
+                }
+            }
+        )
     }
 
     private var canvasGraph: CanvasGraph {
