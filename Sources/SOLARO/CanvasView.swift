@@ -35,6 +35,10 @@ struct CanvasView: View {
     /// Live symbol bag for hover tooltips on nodes that reference
     /// one of these identifiers.
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
+    /// 1-indexed lines that carry a breakpoint. Nodes on those
+    /// lines render a red dot in the top-left corner so the
+    /// canvas mirrors the editor gutter.
+    let breakpointLines: Set<Int>
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -70,6 +74,7 @@ struct CanvasView: View {
                         selectedLine: currentLine,
                         pausedLine: pausedLine,
                         pauseSymbols: pauseSymbols,
+                        breakpointLines: breakpointLines,
                         onDrag: { id, newPos in
                             liveNodes[id] = newPos
                         },
@@ -377,6 +382,9 @@ struct NodesLayer: View {
     let pausedLine: Int?
     /// Live symbols for hover tooltips.
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
+    /// Lines that carry a breakpoint — each matching node renders
+    /// the red gutter dot in its corner.
+    let breakpointLines: Set<Int>
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
     let onSelect: (Int) -> Void
@@ -401,6 +409,7 @@ struct NodesLayer: View {
                     width: nodeWidth, height: nodeHeight,
                     isSelected: selectedLine == node.lineHint,
                     isPaused: pausedLine == node.lineHint,
+                    hasBreakpoint: breakpointLines.contains(node.lineHint),
                     symbols: relevantSymbols(for: node)
                 )
                 // `.position` is absolute placement that puts the
@@ -464,6 +473,7 @@ private struct CanvasNodeCard: View {
     let height: CGFloat
     let isSelected: Bool
     let isPaused: Bool
+    let hasBreakpoint: Bool
     let symbols: [ConsoleProcess.SymbolValue]
 
     @State private var hovering = false
@@ -519,6 +529,17 @@ private struct CanvasNodeCard: View {
             x: 0,
             y: isPaused ? 6 : (isSelected ? 5 : (hovering ? 4 : 2))
         )
+        .overlay(alignment: .topLeading) {
+            if hasBreakpoint {
+                Circle()
+                    .fill(SolaroColor.stateError)
+                    .frame(width: 8, height: 8)
+                    .overlay(
+                        Circle().stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
+                    .offset(x: -4, y: -4)
+            }
+        }
         .onHover { hovering = $0 }
         .help(tooltipText)
     }

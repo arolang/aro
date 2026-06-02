@@ -33,6 +33,7 @@ struct InspectorPaneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SolaroSpace.m) {
                 fileHeader
+                variablesSection
                 lspDiagnosticsSection
                 featureSetSection
                 deployRail
@@ -142,6 +143,41 @@ struct InspectorPaneView: View {
     }
 
     @ViewBuilder
+    private var variablesSection: some View {
+        let symbols = sortedPauseSymbols
+        if !symbols.isEmpty {
+            VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                HStack {
+                    Text("VARIABLES")
+                        .font(SolaroFont.sectionTitle)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .tracking(2)
+                    Spacer()
+                    if let line = controller.pausedLine {
+                        Text("at line \(line)")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.stateWarn)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(symbols, id: \.name) { sym in
+                        VariableRow(symbol: sym)
+                    }
+                }
+                .padding(.vertical, SolaroSpace.xs)
+                .padding(.horizontal, SolaroSpace.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .solaroCard()
+            }
+            .padding(.top, SolaroSpace.s)
+        }
+    }
+
+    private var sortedPauseSymbols: [ConsoleProcess.SymbolValue] {
+        controller.pauseSymbols.values.sorted { $0.name < $1.name }
+    }
+
+    @ViewBuilder
     private var lspDiagnosticsSection: some View {
         let entries = lspDiagnosticsForCurrentFile
         if !entries.isEmpty {
@@ -208,6 +244,37 @@ struct InspectorPaneView: View {
             .solaroCard()
         }
         .padding(.top, SolaroSpace.s)
+    }
+}
+
+// MARK: - Variable row
+
+private struct VariableRow: View {
+    let symbol: ConsoleProcess.SymbolValue
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(symbol.name)
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.accent)
+            Text(":")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            Text(symbol.typeName)
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textSecondary)
+            Text("=")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            Text(symbol.value)
+                .font(SolaroFont.mono)
+                .foregroundStyle(SolaroColor.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 1)
     }
 }
 

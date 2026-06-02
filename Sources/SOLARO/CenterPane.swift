@@ -119,7 +119,8 @@ struct CenterPaneView: View {
             persistPosition: persistNodePosition(_:to:),
             currentLine: currentLineBinding,
             pausedLine: controller.pausedLine,
-            pauseSymbols: controller.pauseSymbols
+            pauseSymbols: controller.pauseSymbols,
+            breakpointLines: breakpointsBinding.wrappedValue
         )
     }
 
@@ -160,7 +161,8 @@ struct CenterPaneView: View {
                 persistPosition: persistNodePosition(_:to:),
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
-                pauseSymbols: controller.pauseSymbols
+                pauseSymbols: controller.pauseSymbols,
+                breakpointLines: breakpointsBinding.wrappedValue
             )
             .frame(minWidth: 240)
             if let url = controller.currentFile {
