@@ -22,7 +22,6 @@
 (* Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop) *)
 (Application-End: Success) {
     Log "User Service shutting down..." to the <console>.
-	Lo
 
     (* Gracefully stop accepting new requests *)
     Stop the <http-server> with <application>.

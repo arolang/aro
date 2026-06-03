@@ -8,15 +8,13 @@
     Compute the <file-path> from "./data/users/" ++ <name> ++ ".json".
     Write the <user> to the <file: file-path>.
     Log "New user file created" to the <console>.
-	Log 
-    Return an <OAccept>K: status> for the <file-write>.
+    Return an <OK: status> for the <file-write>.
 }
 
 (* Handler 2: Log when a user is updated via API *)
 (Log User Update: UserUpdated Handler) {
     Extract the <user> from the <event: existing-user>.
     Log "User was updated" to the <console>.
-
     Return an <OK: status> for the <audit>.
 }
 
