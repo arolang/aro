@@ -97,9 +97,14 @@ fi
 if [[ -z "$DWARF_INSPECT" ]]; then
     echo "[dwarf-test] WARN: no dwarfdump / llvm-dwarfdump / objdump available — skipping .o inspection"
 else
-    if ! $DWARF_INSPECT 2>/dev/null | grep -q "DW_TAG_subprogram"; then
+    # See check 7 for why we capture to a temp file: `objdump | grep -q`
+    # races on SIGPIPE under `set -o pipefail`.
+    OBJ_DUMP="$(mktemp)"
+    trap 'rm -f "$OBJ_DUMP"' EXIT
+    $DWARF_INSPECT > "$OBJ_DUMP" 2>/dev/null || true
+    if ! grep -q "DW_TAG_subprogram" "$OBJ_DUMP"; then
         echo "FAIL: object file missing DW_TAG_subprogram" >&2
-        $DWARF_INSPECT 2>&1 | head -20
+        head -20 "$OBJ_DUMP" >&2
         exit 1
     fi
     echo "[dwarf-test] Object file has DW_TAG_subprogram ✓"
@@ -113,10 +118,14 @@ elif command -v llvm-dwarfdump >/dev/null 2>&1; then
     LINE_INSPECT="llvm-dwarfdump --debug-line $OBJ"
 fi
 if [[ -n "$LINE_INSPECT" ]]; then
-    if ! $LINE_INSPECT 2>/dev/null | grep -qE "is_stmt"; then
+    LINE_DUMP="$(mktemp)"
+    $LINE_INSPECT > "$LINE_DUMP" 2>/dev/null || true
+    if ! grep -qE "is_stmt" "$LINE_DUMP"; then
         echo "FAIL: object file missing line-table is_stmt entries" >&2
+        rm -f "$LINE_DUMP"
         exit 1
     fi
+    rm -f "$LINE_DUMP"
     echo "[dwarf-test] Object file has DWARF line table ✓"
 fi
 
@@ -130,6 +139,14 @@ fi
 # This is the meaningful check on Linux: did the .o's DWARF actually
 # survive linking. If yes, the compiler pipeline is correct and downstream
 # debugger behavior is a tool-config concern, not a code regression.
+#
+# Capture inspector output to a temp file BEFORE grepping. `objdump
+# --dwarf=info` on a real binary produces megabytes of output and
+# emits many "Unrecognized form" warnings for DWARF 5 forms; if we
+# pipe it to `grep -q`, grep exits on first match, objdump dies with
+# SIGPIPE (exit 141), and `set -o pipefail` propagates that as the
+# script's exit status (CI run 26886357057 hit exactly this). The
+# temp-file approach has no pipeline so SIGPIPE can't fire.
 case "$(uname -s)" in
     Linux)
         DWARF_BIN_INSPECT=""
@@ -141,9 +158,12 @@ case "$(uname -s)" in
             DWARF_BIN_INSPECT="objdump --dwarf=info $BIN"
         fi
         if [[ -n "$DWARF_BIN_INSPECT" ]]; then
-            if ! $DWARF_BIN_INSPECT 2>/dev/null | grep -q "DW_TAG_subprogram"; then
+            DWARF_DUMP="$(mktemp)"
+            trap 'rm -f "$DWARF_DUMP"' EXIT
+            $DWARF_BIN_INSPECT > "$DWARF_DUMP" 2>/dev/null || true
+            if ! grep -q "DW_TAG_subprogram" "$DWARF_DUMP"; then
                 echo "FAIL: linked binary missing DW_TAG_subprogram — linker stripped DWARF" >&2
-                $DWARF_BIN_INSPECT 2>&1 | head -20 >&2
+                head -20 "$DWARF_DUMP" >&2
                 exit 1
             fi
             echo "[dwarf-test] Linked binary has DW_TAG_subprogram ✓"
