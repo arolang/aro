@@ -138,7 +138,14 @@ public final class MetricsSocketServer: @unchecked Sendable {
         // bind — otherwise `bind()` would fail with EADDRINUSE.
         unlink(path)
 
+        // On Linux glibc, SOCK_STREAM is `__socket_type` (an enum) and
+        // SHUT_RDWR is `Int`; on Darwin both are `Int32`. Use platform
+        // shims so the same source compiles on both.
+        #if canImport(Glibc)
+        let fd = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
+        #else
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #endif
         guard fd >= 0 else {
             FileHandle.standardError.write(Data(
                 "[aro-metrics] socket() failed: \(String(cString: strerror(errno)))\n".utf8
@@ -232,7 +239,11 @@ public final class MetricsSocketServer: @unchecked Sendable {
         if fd >= 0 {
             // shutdown() unblocks any pending accept() in the
             // dedicated thread, then close() releases the FD.
+            #if canImport(Glibc)
+            shutdown(fd, Int32(SHUT_RDWR))
+            #else
             shutdown(fd, SHUT_RDWR)
+            #endif
             close(fd)
         }
         for client in clients {
