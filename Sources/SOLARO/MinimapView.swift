@@ -28,19 +28,23 @@ struct MinimapView: View {
             let lines = text.components(separatedBy: "\n")
             let totalCount = max(1, lines.count)
             let perLine = geo.size.height / CGFloat(totalCount)
-            ZStack(alignment: .topLeading) {
-                Canvas { ctx, size in
-                    drawLines(lines: lines,
-                              perLine: perLine,
-                              size: size,
-                              context: ctx)
-                    drawViewport(currentLine: currentLine,
-                                 totalCount: totalCount,
-                                 perLine: perLine,
-                                 size: size,
-                                 context: ctx)
-                }
+            // Canvas has no intrinsic size, so without an explicit
+            // `.frame(maxWidth:.infinity, maxHeight:.infinity)` it
+            // collapses to 0×0 inside the GeometryReader and the
+            // minimap appears blank. Filling the proxy size makes
+            // the bars render.
+            Canvas { ctx, size in
+                drawLines(lines: lines,
+                          perLine: perLine,
+                          size: size,
+                          context: ctx)
+                drawViewport(currentLine: currentLine,
+                             totalCount: totalCount,
+                             perLine: perLine,
+                             size: size,
+                             context: ctx)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)

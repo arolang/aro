@@ -53,28 +53,42 @@ final class AROHoverTextView: STTextView {
     // -------------------------------------------------------------
     // Ghost-text suggestion plumbing (#272).
     // -------------------------------------------------------------
-    /// Async LSP-completion fetcher set by the SwiftUI wrapper.
-    /// Given a 0-based line/column at the caret, calls back with
-    /// the suggestion text or nil if none / disabled.
-    var requestGhost: ((Int, Int, @escaping (String?) -> Void) -> Void)?
+    /// Async LSP-completion fetcher. Now returns the full list of
+    /// items instead of just the first — the popover shows them as
+    /// a navigable dropdown.
+    var requestGhost: ((Int, Int, @escaping ([AROLSPClient.CompletionItem]) -> Void) -> Void)?
+    /// Optional AI fallback fired after the popover has been open
+    /// for ~1s. Returns one short prediction string or nil. Wired
+    /// to `AICompletionFallback.predictNext` by CenterPane.
+    var requestAI: ((Int, Int, @escaping (String?) -> Void) -> Void)?
     /// Inserts the accepted suggestion at the caret. Owns the
-    /// reparse + binding update.
+    /// reparse + caret-after-insertion handling.
     var acceptGhost: ((String) -> Void)?
     /// Toggled by the SwiftUI wrapper from `@AppStorage`.
     var ghostTextEnabled: Bool = false
 
     private lazy var ghostPopover: NSPopover = {
         let p = NSPopover()
-        // applicationDefined keeps the popover open while the user
-        // keeps typing; we close it explicitly on Esc / accept /
-        // any incompatible event.
+        // `.applicationDefined`: we own the lifecycle. `.transient`
+        // dismisses on any parent interaction, which means the
+        // moment the user starts typing the popover closes.
         p.behavior = .applicationDefined
         p.animates = false
         return p
     }()
     private var ghostHost: NSHostingController<GhostTextPopover>?
-    private var currentGhostText: String?
+    /// Shared state between AROHoverTextView and the SwiftUI
+    /// popover view — populated when LSP returns, mutated on
+    /// keyboard navigation, drained by `hideGhost()`.
+    let ghostState = GhostState()
     private var ghostDebounce: DispatchWorkItem?
+    private var ghostAITimer: DispatchWorkItem?
+    /// Set the moment the user picks a suggestion (keyboard or
+    /// mouse). The next `scheduleGhost()` clears the flag and
+    /// returns early so the popover doesn't snap back open before
+    /// the user has typed a fresh character — they explicitly
+    /// asked to wait for new input after accepting.
+    private var suppressNextSchedule: Bool = false
     /// Global mouse-moved monitor. Tracking areas on STTextView
     /// don't always deliver mouseMoved because the text view's own
     /// content view sits on top and consumes the event. The local
@@ -240,44 +254,127 @@ final class AROHoverTextView: STTextView {
 
     /// Re-arm the debounce. Called from the coordinator's
     /// textViewDidChangeText so each keystroke pushes the trigger
-    /// further out — only an actual typing pause fires LSP.
+    /// further out — only an actual typing pause fires LSP. The
+    /// pause duration is user-configurable via Settings →
+    /// "Suggestion delay" (default 0.75s, clamped 0.2–3.0s).
     func scheduleGhost() {
         hideGhost()
         ghostDebounce?.cancel()
+        if suppressNextSchedule {
+            suppressNextSchedule = false
+            return
+        }
         guard ghostTextEnabled, requestGhost != nil else { return }
+        let raw = UserDefaults.standard.double(
+            forKey: SolaroPrefs.editorGhostDelay.rawValue
+        )
+        let delay = max(0.2, min(raw > 0 ? raw : 0.75, 3.0))
         let work = DispatchWorkItem { [weak self] in self?.fetchGhost() }
         ghostDebounce = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func fetchGhost() {
-        let location = textSelection.location
-        let raw = (text ?? "") as NSString
-        guard location <= raw.length else { return }
-        var line = 0
-        var lastNL = -1
-        for i in 0..<location {
-            if raw.character(at: i) == 0x0A {
-                line += 1
-                lastNL = i
-            }
-        }
-        let column = location - lastNL - 1
-        requestGhost?(line, column) { [weak self] suggestion in
+        guard let (line, column) = caretLineColumn() else { return }
+        // Don't open the popover on an empty line, on a line that's
+        // pure whitespace, or before the user has typed anything
+        // meaningful on the line — those positions never produce
+        // sensible suggestions and just flash the popover open and
+        // closed as the user begins typing.
+        guard shouldOfferGhost(line: line, column: column) else { return }
+        let typedPrefix = currentLineWordPrefix(line: line, column: column)
+        requestGhost?(line, column) { [weak self] items in
             DispatchQueue.main.async {
-                guard let self,
-                      let text = suggestion?
-                          .trimmingCharacters(in: .whitespacesAndNewlines),
-                      !text.isEmpty
-                else { return }
-                self.showGhost(text)
+                guard let self, !items.isEmpty else { return }
+                self.showGhost(items, typedPrefix: typedPrefix)
             }
         }
     }
 
-    private func showGhost(_ text: String) {
-        currentGhostText = text
-        let view = GhostTextPopover(text: text)
+    /// True when the cursor sits somewhere that warrants a
+    /// suggestion popover: not on an empty line, not at column 0,
+    /// and not in leading whitespace. The user explicitly asked to
+    /// never see the popover at the start of a line so they can
+    /// indent freely without flicker.
+    private func shouldOfferGhost(line: Int, column: Int) -> Bool {
+        guard column > 0 else { return false }
+        let raw = self.text ?? ""
+        let lines = raw.components(separatedBy: "\n")
+        guard line < lines.count else { return false }
+        let lineText = lines[line]
+        let trimmed = lineText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        // Cursor still inside the indent block? Bail — the user
+        // hasn't started a real token yet.
+        let prefix = String(lineText.prefix(min(column, lineText.count)))
+        if prefix.trimmingCharacters(in: .whitespaces).isEmpty {
+            return false
+        }
+        return true
+    }
+
+    /// The partial word the user has typed up to the caret on the
+    /// current line — used to filter the LSP's response on the
+    /// client side so the popover narrows as the user types.
+    /// We walk back from the caret over identifier-ish characters
+    /// (letters / digits / `-` / `_`) until we hit whitespace or a
+    /// delimiter.
+    private func currentLineWordPrefix(line: Int, column: Int) -> String {
+        let raw = self.text ?? ""
+        let lines = raw.components(separatedBy: "\n")
+        guard line < lines.count else { return "" }
+        let lineText = lines[line]
+        let safeColumn = min(max(0, column), lineText.count)
+        let upToCursor = String(lineText.prefix(safeColumn))
+        // Walk back over identifier chars.
+        var word: [Character] = []
+        for ch in upToCursor.reversed() {
+            if ch.isLetter || ch.isNumber || ch == "-" || ch == "_" {
+                word.append(ch)
+            } else {
+                break
+            }
+        }
+        return String(word.reversed())
+    }
+
+    /// (0-based line, 0-based column) of the caret in the current
+    /// text buffer, or nil if we can't resolve it.
+    private func caretLineColumn() -> (Int, Int)? {
+        let location = textSelection.location
+        let raw = (text ?? "") as NSString
+        guard location <= raw.length else { return nil }
+        var line = 0
+        var lastNL = -1
+        for i in 0..<location where raw.character(at: i) == 0x0A {
+            line += 1
+            lastNL = i
+        }
+        let column = location - lastNL - 1
+        return (line, column)
+    }
+
+    private func showGhost(
+        _ items: [AROLSPClient.CompletionItem],
+        typedPrefix: String = ""
+    ) {
+        ghostState.reset()
+        ghostState.items = items
+        ghostState.typedPrefix = typedPrefix
+        ghostState.selectedIndex = 0
+        let view = GhostTextPopover(
+            state: ghostState,
+            onAccept: { [weak self] item in
+                self?.acceptGhost?(item.insertText)
+                self?.suppressNextSchedule = true
+                self?.hideGhost()
+            },
+            onAcceptAI: { [weak self] suggestion in
+                self?.acceptGhost?(suggestion)
+                self?.suppressNextSchedule = true
+                self?.hideGhost()
+            }
+        )
         if let host = ghostHost {
             host.rootView = view
         } else {
@@ -286,44 +383,174 @@ final class AROHoverTextView: STTextView {
             ghostHost = host
             ghostPopover.contentViewController = host
         }
-        // Anchor at the current caret rect. Falls back to the
-        // bounds origin if the layout manager can't resolve it.
-        let location = textSelection.location
-        let nsRange = NSRange(location: location, length: 0)
-        let rect = self.firstRect(forCharacterRange: nsRange,
-                                  actualRange: nil)
-        let local = self.convert(rect, from: nil)
-        let anchor = local.isEmpty
-            ? CGRect(x: 1, y: 1, width: 1, height: 1)
-            : local
+        let anchor = ghostAnchorRect()
         if !ghostPopover.isShown {
             ghostPopover.show(relativeTo: anchor,
                               of: self, preferredEdge: .maxY)
         }
+        scheduleGhostAI()
+    }
+
+    /// Arm a 1s timer that fires the AI fallback when the popover
+    /// has been open uninterrupted. Cancelled by `hideGhost()` and
+    /// rescheduled by `showGhost(_:)` so re-renders within the
+    /// window don't double-trigger.
+    private func scheduleGhostAI() {
+        ghostAITimer?.cancel()
+        let aiOn = UserDefaults.standard.bool(
+            forKey: SolaroPrefs.editorAIFallback.rawValue
+        )
+        guard aiOn, requestAI != nil else { return }
+        let work = DispatchWorkItem { [weak self] in self?.fireGhostAI() }
+        ghostAITimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
+    }
+
+    private func fireGhostAI() {
+        guard !ghostState.items.isEmpty else { return }
+        guard let (line, column) = caretLineColumn() else { return }
+        ghostState.aiLoading = true
+        requestAI?(line, column) { [weak self] suggestion in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Only land the answer if the popover is still open.
+                guard !self.ghostState.items.isEmpty else { return }
+                self.ghostState.aiLoading = false
+                self.ghostState.aiSuggestion = suggestion?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+    }
+
+    /// Resolve the rect we anchor the ghost popover to, in self's
+    /// bounds coordinate space.
+    ///
+    /// STTextView is a TextKit-2 reimplementation and the inherited
+    /// NSTextInputClient `firstRect(forCharacterRange:actualRange:)`
+    /// returns `CGRect.zero` on it — so we compute the caret
+    /// position ourselves using the document text + the monospaced
+    /// font's metrics. Since the editor is configured with a
+    /// monospaced font, a column×char-width computation is exact.
+    private func ghostAnchorRect() -> CGRect {
+        let nsText = (self.text ?? "") as NSString
+        let location = textSelection.location
+        guard nsText.length > 0 else { return fallbackAnchor() }
+        let clamped = min(location, nsText.length)
+
+        // Walk newlines up to the caret to derive line + column.
+        var line = 0
+        var lineStart = 0
+        for i in 0..<clamped {
+            if nsText.character(at: i) == 0x0A {
+                line += 1
+                lineStart = i + 1
+            }
+        }
+        let column = clamped - lineStart
+
+        // Font metrics. We configured a monospaced font, so the
+        // "M" advance is the canonical character width.
+        let font = self.font
+            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let charWidth = ("M" as NSString)
+            .size(withAttributes: [.font: font]).width
+        let baseLineHeight = NSLayoutManager().defaultLineHeight(for: font)
+        let lineHeightMultiple = UserDefaults.standard
+            .double(forKey: SolaroPrefs.editorLineHeight.rawValue)
+        let resolvedMultiple = lineHeightMultiple > 0 ? lineHeightMultiple : 1.25
+        let lineHeight = baseLineHeight * CGFloat(resolvedMultiple)
+
+        // STTextView positions text after the gutter and a small
+        // top inset. The exact insets aren't publicly surfaced on
+        // the base class, so we use 4pt — matches STTextView's
+        // built-in default and gets the popover within a couple
+        // of pixels of the actual caret in practice.
+        let gutterWidth = gutterView?.frame.width ?? 0
+        let topInset: CGFloat = 4
+        let leftInset: CGFloat = 4
+
+        let x = gutterWidth + leftInset
+            + (CGFloat(column) * charWidth)
+        let y = topInset + (CGFloat(line) * lineHeight)
+
+        // Anchor a thin rect matching the current line so the
+        // popover hangs immediately below it.
+        return CGRect(x: x, y: y, width: 1, height: lineHeight)
+    }
+
+    /// Fallback used only when the text storage is empty — anchor
+    /// at the top-left of the visible area so the popover at least
+    /// renders somewhere reasonable.
+    private func fallbackAnchor() -> CGRect {
+        let visible = self.visibleRect.isEmpty ? self.bounds : self.visibleRect
+        return CGRect(x: visible.minX + 8,
+                      y: visible.minY + 8,
+                      width: 1, height: 16)
     }
 
     private func hideGhost() {
-        currentGhostText = nil
+        ghostState.reset()
+        ghostAITimer?.cancel()
         if ghostPopover.isShown {
             ghostPopover.performClose(nil)
         }
     }
 
-    /// Intercept Tab / Esc when a ghost suggestion is visible.
-    /// Anything else falls through so editing still works.
+    /// Intercept Tab / Esc / arrow keys when the ghost popover is
+    /// open. Before the user presses Tab the popover is informational
+    /// — keystrokes pass through to the editor and trigger a fresh
+    /// LSP fetch. Once they press Tab the popover takes over and
+    /// Up/Down/Enter navigate + accept; any other key dismisses and
+    /// falls through to normal editing.
     override func keyDown(with event: NSEvent) {
-        if let ghost = currentGhostText {
-            if event.keyCode == 48 {            // Tab
-                acceptGhost?(ghost)
-                hideGhost()
-                return
-            }
-            if event.keyCode == 53 {            // Esc
-                hideGhost()
-                return
-            }
+        guard !ghostState.items.isEmpty else {
+            super.keyDown(with: event)
+            return
         }
-        super.keyDown(with: event)
+        switch (event.keyCode, ghostState.inNavMode) {
+        case (48, false):           // Tab → enter navigation
+            ghostState.inNavMode = true
+            return
+        case (53, _):               // Esc → dismiss
+            hideGhost()
+            return
+        case (125, true):           // Down arrow
+            let visible = ghostState.visibleItems
+            if ghostState.selectedIndex == GhostState.aiRowIndex {
+                ghostState.selectedIndex = 0
+            } else if ghostState.selectedIndex < visible.count - 1 {
+                ghostState.selectedIndex += 1
+            }
+            return
+        case (126, true):           // Up arrow
+            if ghostState.selectedIndex > 0 {
+                ghostState.selectedIndex -= 1
+            } else if ghostState.selectedIndex == 0, ghostState.canSelectAI {
+                ghostState.selectedIndex = GhostState.aiRowIndex
+            }
+            return
+        case (36, true), (76, true): // Return / numpad Enter → accept
+            let idx = ghostState.selectedIndex
+            let visible = ghostState.visibleItems
+            if idx == GhostState.aiRowIndex,
+               let suggestion = ghostState.aiSuggestion,
+               !suggestion.isEmpty
+            {
+                acceptGhost?(suggestion)
+            } else if idx >= 0, idx < visible.count {
+                acceptGhost?(visible[idx].insertText)
+            }
+            suppressNextSchedule = true
+            hideGhost()
+            return
+        default:
+            // Any other key: if we were in nav mode the user is
+            // bailing out — dismiss and let the keystroke through.
+            if ghostState.inNavMode {
+                hideGhost()
+            }
+            super.keyDown(with: event)
+        }
     }
 
     /// Find the `<…>` identifier (if any) at `point`. Treats angle
@@ -437,30 +664,237 @@ struct HoverValuePopover: View {
     }
 }
 
-/// LSP-driven suggestion shown after a typing pause (#272).
-/// Sits in an NSPopover anchored just under the caret rect.
-struct GhostTextPopover: View {
+/// Multi-line read-only label backed by NSTextField so the text
+/// is reliably mouse-selectable inside NSPopover contexts where
+/// SwiftUI's `.textSelection(.enabled)` doesn't activate.
+struct SelectableMonoText: NSViewRepresentable {
     let text: String
 
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.isSelectable = true
+        field.isEditable = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.allowsEditingTextAttributes = false
+        field.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        field.textColor = NSColor(SolaroColor.textPrimary)
+        field.lineBreakMode = .byWordWrapping
+        field.maximumNumberOfLines = 0
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+    }
+}
+
+/// LSP-driven dropdown shown after a typing pause (#272).
+/// Sits in an NSPopover anchored under the caret rect. Lists the
+/// completion items returned by the LSP, with arrow-key navigation
+/// once the user presses Tab. An optional AI section appears at
+/// the top once the popover has been open ~1s and the
+/// `solaro.editor.aiFallback` setting is on.
+struct GhostTextPopover: View {
+    @Bindable var state: GhostState
+    let onAccept: (AROLSPClient.CompletionItem) -> Void
+    let onAcceptAI: (String) -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: SolaroSpace.xs) {
+        VStack(spacing: 0) {
+            if state.aiLoading || state.aiSuggestion != nil {
+                aiSection
+                Divider().background(SolaroColor.divider)
+            }
+            itemsList
+            Divider().background(SolaroColor.divider)
+            footer
+        }
+        // Fixed width so the SwiftUI host reports a non-zero
+        // intrinsicContentSize — macOS 26's layout pass asserts on
+        // 0×N popovers.
+        .frame(width: 380, height: 280)
+        .background(SolaroColor.surface)
+    }
+
+    // MARK: - AI section
+
+    private var aiSection: some View {
+        let selected = state.selectedIndex == GhostState.aiRowIndex
+        let usable: String? = {
+            guard let s = state.aiSuggestion, !s.isEmpty else { return nil }
+            return s
+        }()
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: SolaroSpace.xs) {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 11))
+                Image(systemName: "sparkles")
                     .foregroundStyle(SolaroColor.accent)
-                Text("Suggestion · ⇥ to accept · ⎋ to dismiss")
-                    .font(SolaroFont.caption)
+                    .font(.system(size: 11))
+                if state.aiLoading {
+                    ProgressView().controlSize(.mini)
+                    Text("aro ask is thinking…")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                } else {
+                    Text("aro ask  ·  ⏎ accept")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                }
+                Spacer(minLength: 0)
+                if let suggestion = usable {
+                    Button {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(suggestion, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 11))
+                            .foregroundStyle(SolaroColor.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy the AI suggestion")
+                }
+            }
+            if let suggestion = usable {
+                SelectableMonoText(text: suggestion)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if state.aiSuggestion != nil, !state.aiLoading {
+                Text("(aro ask returned nothing)")
+                    .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textTertiary)
             }
-            Text(text)
-                .font(SolaroFont.mono)
-                .foregroundStyle(SolaroColor.textPrimary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, SolaroSpace.m)
-        .padding(.vertical, SolaroSpace.s)
-        .frame(maxWidth: 420, alignment: .leading)
+        .padding(.horizontal, SolaroSpace.s)
+        .padding(.vertical, SolaroSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Highlight when the user has navigated to the AI row.
+        // Clicking anywhere on the section accepts it, mirroring
+        // the LSP-row click-to-accept behaviour.
+        .background(selected ? SolaroColor.selection : SolaroColor.backdrop)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if let suggestion = usable {
+                onAcceptAI(suggestion)
+            }
+        }
+    }
+
+    // MARK: - Items list
+
+    private var itemsList: some View {
+        let visible = state.visibleItems
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if visible.isEmpty {
+                        Text(state.typedPrefix.isEmpty
+                             ? "(no suggestions)"
+                             : "(nothing matches \"\(state.typedPrefix)\")")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textTertiary)
+                            .padding(SolaroSpace.s)
+                    } else {
+                        ForEach(Array(visible.enumerated()), id: \.offset) { idx, item in
+                            row(idx: idx, item: item)
+                                .id(idx)
+                        }
+                    }
+                }
+            }
+            .onChange(of: state.selectedIndex) { _, new in
+                guard new >= 0 else { return }
+                withAnimation(.easeOut(duration: 0.08)) {
+                    proxy.scrollTo(new, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func row(idx: Int, item: AROLSPClient.CompletionItem) -> some View {
+        let selected = idx == state.selectedIndex
+        return Button {
+            onAccept(item)
+        } label: {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: kindIcon(item.kind))
+                    .foregroundStyle(kindColor(item.kind))
+                    .font(.system(size: 11))
+                    .frame(width: 14)
+                Text(item.label)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .lineLimit(1)
+                if let detail = item.detail, !detail.isEmpty {
+                    Text(detail)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, SolaroSpace.s)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? SolaroColor.selection : Color.clear)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        let visible = state.visibleItems
+        let filtered = !state.typedPrefix.isEmpty
+            && visible.count != state.items.count
+        return HStack(spacing: SolaroSpace.xs) {
+            Image(systemName: "wand.and.stars")
+                .foregroundStyle(SolaroColor.accent)
+                .font(.system(size: 10))
+            Text(state.inNavMode
+                 ? "↑↓ navigate · ⏎ accept · ⎋ dismiss"
+                 : "⇥ to enter · keep typing to refine · ⎋ to dismiss")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            Spacer()
+            Text(filtered
+                 ? "\(visible.count)/\(state.items.count)"
+                 : "\(state.items.count)")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+        }
+        .padding(.horizontal, SolaroSpace.s)
+        .padding(.vertical, 4)
+        .background(SolaroColor.backdrop)
+    }
+
+    // MARK: - Styling
+
+    private func kindIcon(_ kind: AROLSPClient.CompletionItem.Kind) -> String {
+        switch kind {
+        case .keyword:       return "key.fill"
+        case .variable:      return "diamond.fill"
+        case .function, .method: return "function"
+        case .property, .field: return "circle.grid.cross.fill"
+        case .snippet:       return "scissors"
+        case .module:        return "shippingbox"
+        case .constant, .value: return "number"
+        default:             return "circle.fill"
+        }
+    }
+
+    private func kindColor(_ kind: AROLSPClient.CompletionItem.Kind) -> Color {
+        switch kind {
+        case .keyword:       return SolaroColor.accent
+        case .variable:      return SolaroColor.roleOwn
+        case .function, .method: return SolaroColor.roleRequest
+        case .property, .field: return SolaroColor.roleResponse
+        case .snippet:       return SolaroColor.stateWarn
+        default:             return SolaroColor.textSecondary
+        }
     }
 }
 
@@ -487,13 +921,26 @@ struct AROCodeEditor: NSViewRepresentable {
     /// otherwise stain quotes + numbers with verb tints).
     var language: Language = .aro
     let onSave: (String) -> Void
-    /// Fetch an inline ghost suggestion at (0-based line, 0-based col).
-    /// Called by AROHoverTextView after a debounced typing pause.
-    /// nil = no suggestion / feature disabled.
-    var requestGhost: ((Int, Int, @escaping (String?) -> Void) -> Void)? = nil
+    /// Fetch LSP completions at (0-based line, 0-based col). Called
+    /// by AROHoverTextView after a debounced typing pause. The
+    /// callback gets the full item list; the popover renders all of
+    /// them.
+    var requestGhost: ((Int, Int, @escaping ([AROLSPClient.CompletionItem]) -> Void) -> Void)? = nil
+    /// Fetch an AI-predicted next snippet at the caret. Fired by
+    /// the popover ~1s after it opens, when the AI-fallback setting
+    /// is on. The result lands at the top of the popover above a
+    /// divider.
+    var requestAI: ((Int, Int, @escaping (String?) -> Void) -> Void)? = nil
     /// Insert the accepted suggestion at the current caret. Owns the
-    /// reparse / binding update.
+    /// reparse + cursor positioning (places the caret after the
+    /// inserted text).
     var acceptGhost: ((String) -> Void)? = nil
+    /// Generation counter bumped by callers that want the editor to
+    /// reposition the caret to `(currentLine, currentColumn)` even
+    /// when the line hasn't changed. Used by the ghost popover's
+    /// accept path so the caret lands one past the inserted word
+    /// instead of column 0.
+    var caretMoveTick: Int = 0
 
     enum Language { case aro, yaml, plain }
 
@@ -523,6 +970,7 @@ struct AROCodeEditor: NSViewRepresentable {
         // #272: ghost text plumbing.
         textView.ghostTextEnabled = ghostTextEnabled
         textView.requestGhost = requestGhost
+        textView.requestAI = requestAI
         textView.acceptGhost = acceptGhost
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
@@ -555,18 +1003,61 @@ struct AROCodeEditor: NSViewRepresentable {
         if let hover = textView as? AROHoverTextView {
             hover.ghostTextEnabled = ghostTextEnabled
             hover.requestGhost = requestGhost
+            hover.requestAI = requestAI
             hover.acceptGhost = acceptGhost
         }
 
         // Push text back into the view only when the external
         // binding diverged — avoids fighting the user's edits.
-        if textView.text != text {
+        // The `lastUserText` check is what keeps STTextView's
+        // text setter (which resets the caret to 0) from firing
+        // on every keystroke now that updateNSView is woken up
+        // by the currentColumn binding too.
+        if textView.text != text,
+           text != context.coordinator.lastUserText {
             textView.text = text
             applyHighlight(textView)
         }
         if let target = currentLine,
-           target != lineForCurrentSelection(in: textView) {
+           target != lineForCurrentSelection(in: textView),
+           target != context.coordinator.lastUserLine {
             moveCaret(to: target, in: textView)
+        }
+        // Explicit caret-move request (ghost-accept etc.): when the
+        // tick changes, jump to (currentLine, currentColumn) verbatim
+        // — even on the same line. This is the only path that honors
+        // currentColumn; the line-only check above stays put when
+        // the line already matches.
+        if context.coordinator.lastCaretMoveTick != caretMoveTick {
+            context.coordinator.lastCaretMoveTick = caretMoveTick
+            let line = currentLine
+            let col = currentColumn
+            if let line {
+                moveCaret(to: line, column: col ?? 0, in: textView)
+                // Defer a second move past the run loop — STTextView's
+                // text setter restores the previous insertion point
+                // location as a side effect, and that restore can run
+                // after our move if the text sync hasn't fully drained
+                // yet. The async pass guarantees we get the final
+                // word on the caret position.
+                DispatchQueue.main.async { [weak textView] in
+                    guard let textView else { return }
+                    let nsText = (textView.text ?? "") as NSString
+                    var off = 0
+                    var current = 1
+                    while current < line, off < nsText.length {
+                        if nsText.character(at: off) == 0x0A { current += 1 }
+                        off += 1
+                    }
+                    guard current == line else { return }
+                    let target = NSRange(
+                        location: min(off + (col ?? 0), nsText.length),
+                        length: 0
+                    )
+                    textView.textSelection = target
+                    textView.scrollRangeToVisible(target)
+                }
+            }
         }
         // Re-render breakpoint markers whenever the binding changes.
         if context.coordinator.lastRenderedBreakpoints != breakpoints {
@@ -638,9 +1129,10 @@ struct AROCodeEditor: NSViewRepresentable {
         return (line, max(0, column))
     }
 
-    /// Move the caret to the start of `line` (1-indexed), scrolling
-    /// it into view. No-op if the line is out of range.
-    fileprivate func moveCaret(to line: Int, in textView: STTextView) {
+    /// Move the caret to `line` (1-indexed) at `column` (0-indexed
+    /// UTF-16 offset from the start of the line), scrolling it into
+    /// view. No-op if the line is out of range.
+    fileprivate func moveCaret(to line: Int, column: Int = 0, in textView: STTextView) {
         guard line >= 1 else { return }
         let nsText = (textView.text ?? "") as NSString
         guard nsText.length > 0 else { return }
@@ -653,7 +1145,10 @@ struct AROCodeEditor: NSViewRepresentable {
             offset += 1
         }
         guard current == line else { return }
-        let target = NSRange(location: offset, length: 0)
+        let target = NSRange(
+            location: min(offset + max(0, column), length),
+            length: 0
+        )
         textView.textSelection = target
         textView.scrollRangeToVisible(target)
     }
@@ -776,6 +1271,22 @@ struct AROCodeEditor: NSViewRepresentable {
         /// Tracks the most recently painted paused line so updateNSView
         /// only re-applies the tint when it actually changes.
         var lastPausedLine: Int?
+        /// Snapshot of the text we most recently received from the
+        /// user's typing. updateNSView uses this to distinguish a
+        /// re-render triggered by user input (skip text sync — the
+        /// textView already has the right value) from a re-render
+        /// triggered by an external change (do sync — e.g. another
+        /// view modified the buffer, or the file reloaded).
+        var lastUserText: String?
+        /// Same idea for the caret line — tracks what we last
+        /// wrote back from the textView's selection, so we don't
+        /// jump the caret back to col 0 on every keystroke.
+        var lastUserLine: Int?
+        /// Last seen value of `AROCodeEditor.caretMoveTick`. When the
+        /// parent bumps the tick, updateNSView notices the change and
+        /// performs an explicit (line, column) caret move — used by
+        /// the ghost-popover accept path.
+        var lastCaretMoveTick: Int = 0
 
         init(parent: AROCodeEditor) {
             self.parent = parent
@@ -792,6 +1303,7 @@ struct AROCodeEditor: NSViewRepresentable {
                 MainActor.assumeIsolated {
                     guard let self, let textView else { return }
                     let newText = textView.text ?? ""
+                    self.lastUserText = newText
                     self.parent.text = newText
                     self.parent.applyHighlight(textView)
                     // #272: any text change dismisses the live ghost
@@ -810,6 +1322,7 @@ struct AROCodeEditor: NSViewRepresentable {
                 MainActor.assumeIsolated {
                     guard let self, let textView else { return }
                     let position = self.parent.positionForCurrentSelection(in: textView)
+                    self.lastUserLine = position?.line
                     if position?.line != self.parent.currentLine {
                         self.parent.currentLine = position?.line
                     }

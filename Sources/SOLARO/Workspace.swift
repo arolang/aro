@@ -79,6 +79,19 @@ final class WorkspaceController {
     /// the actual user position instead of a heuristic guess.
     var currentColumn: Int?
 
+    /// Bumped by callers that want the editor to forcibly reposition
+    /// the caret to `(currentLine, currentColumn)` — used after the
+    /// ghost popover splices a suggestion so the caret lands at the
+    /// end of the inserted word + space instead of column 0 of the
+    /// line (which is what the line-only moveCaret would do).
+    var caretMoveTick: Int = 0
+
+    func requestCaretMove(line: Int, column: Int) {
+        currentLine = line
+        currentColumn = column
+        caretMoveTick &+= 1
+    }
+
     /// Drives the Extract-as-Action sheet. The sheet's binding
     /// pulls from this state; setting it from a context-menu
     /// click pops the sheet open.
@@ -190,7 +203,7 @@ final class WorkspaceController {
             RecentProjects.remember(project)
             // Kick the LSP off in parallel — the handshake takes a
             // couple hundred ms but doesn't block project load.
-            lsp.start()
+            lsp.start(project: project)
             // Same for the actions registry — runs `aro actions`
             // off the main actor and feeds the right-rail tab.
             actionsRegistry.reload(for: project)
@@ -340,6 +353,7 @@ enum BottomTab: String, CaseIterable, Identifiable {
 enum RightPaneMode: String, CaseIterable, Identifiable {
     case inspector
     case actions
+    case metrics
     case coPilot
 
     var id: String { rawValue }
@@ -348,6 +362,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
         switch self {
         case .inspector: return "Inspector"
         case .actions:   return "Actions"
+        case .metrics:   return "Metrics"
         case .coPilot:   return "Ask"
         }
     }
@@ -356,6 +371,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
         switch self {
         case .inspector: return "sidebar.right"
         case .actions:   return "puzzlepiece.fill"
+        case .metrics:   return "chart.line.uptrend.xyaxis"
         case .coPilot:   return "sparkles"
         }
     }
@@ -485,6 +501,16 @@ struct WorkspaceView: View {
             controller.rightPaneMode = .coPilot
             controller.inspectorShown = true
             controller.askPanelRequested = false
+        }
+        // Bounce back to the welcome screen the moment the last
+        // editor tab closes. We compare oldValue → newValue so the
+        // initial mount (which lands with openTabs empty before the
+        // user opens anything) doesn't immediately dismiss the
+        // workspace.
+        .onChange(of: controller.openTabs.isEmpty) { wasEmpty, isEmpty in
+            if isEmpty && !wasEmpty {
+                onClose()
+            }
         }
         // After a recorded run finishes, slurp the last-seen value
         // for every binding from .solaro/events.jsonl and merge it
@@ -1079,6 +1105,16 @@ struct WorkspaceView: View {
                 InspectorPaneView(controller: controller)
             case .actions:
                 ActionsListView(registry: controller.actionsRegistry)
+            case .metrics:
+                // Raw AppKit panel — the SwiftUI version crashes on
+                // macOS 26 because each snapshot re-renders the
+                // NSHostingView subtree, calls
+                // `NSHostingView.setNeedsUpdate()` inside an
+                // in-flight constraint pass, and the inspector
+                // column's SplitViewChildController hard-asserts.
+                // The AppKit panel updates text-field stringValues
+                // only, so no setNeedsUpdate chain ever fires.
+                MetricsAppKitPanel(process: consoleProcess)
             case .coPilot:
                 AICoPilotPanel(
                     project: project,
@@ -1141,7 +1177,6 @@ struct WorkspaceView: View {
             foldToggle
             minimapToggle
             inspectorToggle
-            closeProjectButton
         }
     }
 
@@ -1172,13 +1207,21 @@ struct WorkspaceView: View {
 
     private var playButton: some View {
         Button {
-            showConsole = true
-            consoleProcess.startRun(project: project)
+            if isRunning {
+                consoleProcess.stop()
+            } else {
+                showConsole = true
+                consoleProcess.startRun(project: project)
+            }
         } label: {
-            Label("Run", systemImage: "play.fill")
+            Label(
+                isRunning ? "Stop" : "Run",
+                systemImage: isRunning ? "stop.fill" : "play.fill"
+            )
         }
-        .disabled(isRunning)
-        .help("Run `aro run` and stream its output to the console")
+        .help(isRunning
+              ? "Stop the running `aro run` process"
+              : "Run `aro run` and stream its output to the console")
     }
 
     private var debugButton: some View {
@@ -1308,15 +1351,6 @@ struct WorkspaceView: View {
         .help("Toggle the right inspector pane")
     }
 
-    private var closeProjectButton: some View {
-        Button {
-            onClose()
-        } label: {
-            Label("Close project", systemImage: "xmark.circle")
-        }
-        .help("Return to the welcome screen")
-        .keyboardShortcut("w", modifiers: [.command, .shift])
-    }
 }
 
 // Real SidebarPaneView lives in Sidebar.swift (Phase 5).

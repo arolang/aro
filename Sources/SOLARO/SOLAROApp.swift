@@ -40,6 +40,13 @@ struct SOLAROApp: App {
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
+            CommandGroup(after: .toolbar) {
+                Divider()
+                Button("Internal Logs…") {
+                    InternalLogsWindow.show()
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift, .option])
+            }
             CommandGroup(after: .help) {
                 Button("Language Guide…") {
                     LanguageGuideWindow.show()

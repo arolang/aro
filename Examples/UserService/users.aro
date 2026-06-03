@@ -26,6 +26,8 @@
     (* Emit event for other handlers to react *)
     Emit a <UserCreated: event> with <stored-user>.
 
+
+
     Return a <Created: status> with <stored-user>.
 }
 

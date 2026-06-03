@@ -102,7 +102,7 @@ struct CanvasEdge: Identifiable, Equatable {
     let toNodeID: String
     /// Preposition flavor of the receiving pin (for color on data-
     /// flow wires): "from", "to", "with", "into", "against", "for".
-    /// Always nil for `.sequence` edges.
+    /// Always nil for `.sequence` and repo edges.
     let preposition: String?
     /// What this edge represents — used by the renderer to pick
     /// stroke style + color.
@@ -111,6 +111,15 @@ struct CanvasEdge: Identifiable, Equatable {
     enum Kind: Equatable, Hashable {
         case dataFlow
         case sequence
+        /// Statement reads from / writes to / watches a repository
+        /// node. The renderer picks a colour and arrow style per
+        /// operation: read = blue solid, write = amber solid +
+        /// filled arrow, watch = purple dashed.
+        case repoAccess(RepoOperation)
+    }
+
+    enum RepoOperation: String, Equatable, Hashable {
+        case read, write, watch
     }
 
     init(id: String, fromNodeID: String, toNodeID: String,
@@ -123,11 +132,37 @@ struct CanvasEdge: Identifiable, Equatable {
     }
 }
 
+/// A repository / store entity. Lives outside any feature set —
+/// it's a shared data resource the feature sets read from, write
+/// to, or observe. Rendered as a separate column in the canvas so
+/// the user can see at a glance which feature sets touch what.
+struct RepositoryNode: Identifiable, Equatable, Hashable {
+    let id: String            // "repo:<name>"
+    let name: String          // "user-repository" (object-name form)
+    /// Which kinds of access the program does against this repo.
+    /// Drives the icon hint and the wire-typology legend.
+    var usage: Usage
+    var x: Double
+    var y: Double
+
+    struct Usage: OptionSet, Equatable, Hashable {
+        let rawValue: Int
+        static let read   = Usage(rawValue: 1 << 0)
+        static let write  = Usage(rawValue: 1 << 1)
+        static let watch  = Usage(rawValue: 1 << 2)
+    }
+}
+
 /// Wraps a feature set's statements into a node + edge list ready
 /// for layout. Pure value type — no SwiftCrossUI dependency.
 struct CanvasGraph: Equatable {
     var nodes: [CanvasNode]
     var edges: [CanvasEdge]
+    /// Repository entities referenced anywhere in the program.
+    /// Rendered as a separate right-hand column by the canvas so
+    /// reads/writes/watches connect to one shared instance per
+    /// repo regardless of which feature set owns the statement.
+    var repositories: [RepositoryNode] = []
 
     /// Build a graph spanning every feature set in `program`. Each
     /// statement is tagged with its parent feature-set name so the
@@ -142,7 +177,133 @@ struct CanvasGraph: Equatable {
             allNodes.append(contentsOf: sub.nodes)
             allEdges.append(contentsOf: sub.edges)
         }
-        return CanvasGraph(nodes: allNodes, edges: allEdges)
+        // Detect repository entities + the wires that touch them.
+        let (repos, repoEdges) = detectRepositories(
+            program: program,
+            statementNodes: allNodes
+        )
+        allEdges.append(contentsOf: repoEdges)
+        return CanvasGraph(
+            nodes: allNodes,
+            edges: allEdges,
+            repositories: repos
+        )
+    }
+
+    /// Walk every statement + feature-set header for repository
+    /// references. Returns the deduped repos and the wires that
+    /// connect statement nodes to them.
+    ///
+    /// Heuristics:
+    /// - Any `<foo-repository>` or `<foo-store>` object slot is a
+    ///   read or a write depending on the action verb.
+    /// - A feature set whose business activity ends in `Observer`
+    ///   becomes a watcher of the repo named in the prefix.
+    private static func detectRepositories(
+        program: Program,
+        statementNodes: [CanvasNode]
+    ) -> (repos: [RepositoryNode], edges: [CanvasEdge]) {
+        var repoUsage: [String: RepositoryNode.Usage] = [:]
+        var edges: [CanvasEdge] = []
+
+        // Statement-level read/write detection.
+        for node in statementNodes {
+            guard let target = repoName(in: node) else { continue }
+            let op = repoOperation(for: node.verb)
+            switch op {
+            case .read:  repoUsage[target, default: []].insert(.read)
+            case .write: repoUsage[target, default: []].insert(.write)
+            case .watch: repoUsage[target, default: []].insert(.watch)
+            }
+            edges.append(CanvasEdge(
+                id: "\(node.id)→repo:\(target)→\(op.rawValue)",
+                fromNodeID: node.id,
+                toNodeID: "repo:\(target)",
+                preposition: nil,
+                kind: .repoAccess(op)
+            ))
+        }
+
+        // Feature-set-level watcher detection (`<repo> Observer`).
+        for fs in program.featureSets {
+            guard let watched = watchedRepoName(from: fs.businessActivity)
+            else { continue }
+            repoUsage[watched, default: []].insert(.watch)
+            // Anchor the watch wire on the feature set's first
+            // statement — gives us a real node to draw from.
+            guard let first = statementNodes.first(where: { $0.featureSetName == fs.name })
+            else { continue }
+            edges.append(CanvasEdge(
+                id: "\(first.id)→repo:\(watched)→watch-fs",
+                fromNodeID: first.id,
+                toNodeID: "repo:\(watched)",
+                preposition: nil,
+                kind: .repoAccess(.watch)
+            ))
+        }
+
+        let repos = repoUsage
+            .map { name, usage in
+                RepositoryNode(
+                    id: "repo:\(name)",
+                    name: name,
+                    usage: usage,
+                    x: 0, y: 0
+                )
+            }
+            .sorted { $0.name < $1.name }
+        return (repos, edges)
+    }
+
+    /// Returns the repo name a statement references, if any. Looks
+    /// at the object slot first; falls through to the with/to
+    /// clauses by scanning `referencedIdentifiers`.
+    private static func repoName(in node: CanvasNode) -> String? {
+        if let obj = node.objectName, isRepoLikeName(obj) {
+            return obj
+        }
+        for ref in node.referencedIdentifiers where isRepoLikeName(ref) {
+            return ref
+        }
+        return nil
+    }
+
+    /// Anything ending in `-repository`, `-repo`, `-store` reads as
+    /// a repository to the canvas. Deliberately heuristic — ARO's
+    /// repository nouns follow this convention everywhere we've
+    /// seen it.
+    private static func isRepoLikeName(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower.hasSuffix("-repository")
+            || lower.hasSuffix("-repo")
+            || lower.hasSuffix("-store")
+    }
+
+    /// Map a verb to the kind of repo access it performs. Read
+    /// verbs are the REQUEST role; write verbs are EXPORT plus
+    /// Create/Update/Delete; everything else is treated as read so
+    /// we never silently drop a wire.
+    private static func repoOperation(for verb: String) -> CanvasEdge.RepoOperation {
+        switch verb.lowercased() {
+        case "retrieve", "fetch", "pull", "request", "load", "read":
+            return .read
+        case "store", "save", "insert", "update", "delete", "create",
+             "commit", "push", "publish":
+            return .write
+        default:
+            return .read
+        }
+    }
+
+    /// `(Send Welcome Email: UserCreated Handler)` — not a repo.
+    /// `(Audit User Changes: user-repository Observer)` — watches
+    /// the `user-repository`.
+    private static func watchedRepoName(from activity: String) -> String? {
+        let trimmed = activity.trimmingCharacters(in: .whitespaces)
+        guard trimmed.lowercased().hasSuffix(" observer") else { return nil }
+        let prefix = String(trimmed.dropLast(" observer".count))
+            .trimmingCharacters(in: .whitespaces)
+        return prefix.isEmpty ? nil : prefix
     }
 
     /// Build a graph from a single `FeatureSet`. `fileKey` should be

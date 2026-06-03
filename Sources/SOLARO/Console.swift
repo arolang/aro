@@ -74,6 +74,22 @@ final class ConsoleProcess {
         case test(filter: String?)
     }
 
+    init() {
+        // Terminate any spawned `aro` subprocess when SOLARO quits.
+        // Without this the child keeps running and holds onto its
+        // listening ports (e.g. 8080) — surprising the user the
+        // next launch and forcing them to `lsof | kill -9`.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stop()
+            }
+        }
+    }
+
     /// Convenience for the Play button — always plain `aro run`,
     /// no breakpoints, no record file.
     func startRun(project: Project) {
@@ -148,6 +164,14 @@ final class ConsoleProcess {
             task.arguments = subArgs
         }
         task.currentDirectoryURL = project.rootPath
+
+        // Tell the runtime to open its metrics push socket so the
+        // Metrics tab can stream live snapshots. Inherit the rest
+        // of the env so PATH/TMPDIR/etc. stay intact — the client
+        // resolves the socket path from the child's TMPDIR.
+        var env = ProcessInfo.processInfo.environment
+        env["ARO_METRICS_SOCKET"] = "1"
+        task.environment = env
 
         let stdout = Pipe()
         let stderr = Pipe()

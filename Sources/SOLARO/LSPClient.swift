@@ -56,6 +56,16 @@ final class AROLSPClient {
     /// calls like `textDocument/definition` where we need to hand
     /// the result back to a SwiftUI caller.
     private var pendingResults: [Int: (Any?) -> Void] = [:]
+    /// Per-request timeout work items. Cancelled when the matching
+    /// response arrives; otherwise fire after `defaultRequestTimeout`
+    /// and call the pending callback with nil so SwiftUI doesn't
+    /// hang waiting on a silent server.
+    private var requestTimeouts: [Int: DispatchWorkItem] = [:]
+    /// Queued didOpen/didChange notifications that arrived before
+    /// `initialize` completed. Drained from `handleFrame` once
+    /// isReady flips true.
+    private var pendingDocOps: [() -> Void] = []
+    private static let defaultRequestTimeout: TimeInterval = 2.5
 
     /// A location returned by `textDocument/definition`, expressed
     /// in SOLARO's 1-based line convention so callers can hand it
@@ -90,11 +100,27 @@ final class AROLSPClient {
         }
     }
 
-    func start() {
+    func start(project: Project? = nil) {
         guard process == nil else { return }
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["aro", "lsp"]
+        // Use the same resolver as Console/AICoPilot so SOLARO prefers
+        // the in-repo `.build/release/aro` when run inside a SOLARO
+        // checkout — otherwise `/usr/bin/env aro` picks up whatever
+        // Homebrew has installed, which means LSP fixes shipped in the
+        // current branch never take effect.
+        if let project {
+            let resolved = ConsoleProcess.resolveAroBinary(near: project)
+            if resolved == "/usr/bin/env" {
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                task.arguments = ["aro", "lsp"]
+            } else {
+                task.executableURL = URL(fileURLWithPath: resolved)
+                task.arguments = ["lsp"]
+            }
+        } else {
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = ["aro", "lsp"]
+        }
         let stdin = Pipe()
         let stdout = Pipe()
         let stderr = Pipe()
@@ -147,7 +173,21 @@ final class AROLSPClient {
     // MARK: - Document lifecycle
 
     func didOpen(url: URL, text: String) {
-        guard isReady else { return }
+        guard isReady else {
+            // Queue until the initialize handshake completes —
+            // without this, every load-time didOpen got dropped and
+            // the server treated the project as empty, returning
+            // null from every completion request.
+            pendingDocOps.append { [weak self] in
+                self?.didOpen(url: url, text: text)
+            }
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .info,
+                summary: "queued didOpen \(url.lastPathComponent) — LSP not ready",
+                body: ""
+            )
+            return
+        }
         documentVersions[url] = 1
         sendNotification(method: "textDocument/didOpen", params: [
             "textDocument": [
@@ -160,7 +200,12 @@ final class AROLSPClient {
     }
 
     func didChange(url: URL, text: String) {
-        guard isReady else { return }
+        guard isReady else {
+            pendingDocOps.append { [weak self] in
+                self?.didChange(url: url, text: text)
+            }
+            return
+        }
         let version = (documentVersions[url] ?? 0) + 1
         documentVersions[url] = version
         sendNotification(method: "textDocument/didChange", params: [
@@ -492,11 +537,52 @@ final class AROLSPClient {
         guard
             let stdinPipe,
             let body = try? JSONSerialization.data(withJSONObject: jsonObject)
-        else { return }
+        else {
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .error,
+                summary: "send blocked — no stdin or JSON encode failed",
+                body: ""
+            )
+            return
+        }
         let header = "Content-Length: \(body.count)\r\n\r\n"
         guard let headerData = header.data(using: .utf8) else { return }
         stdinPipe.fileHandleForWriting.write(headerData)
         stdinPipe.fileHandleForWriting.write(body)
+
+        let method = (jsonObject["method"] as? String) ?? "unknown"
+        let id = jsonObject["id"] as? Int
+        let summary = id.map { "→ \(method)  ·  id \($0)" }
+            ?? "→ \(method)  ·  notify"
+        let pretty = String(data: body, encoding: .utf8) ?? ""
+        InternalLogStore.shared.record(
+            category: .lsp, direction: .outbound,
+            summary: summary, body: pretty
+        )
+        if let id { armTimeout(for: id, method: method) }
+    }
+
+    /// Schedule a fallback that fires the registered completion
+    /// with nil if no response arrives within the timeout window.
+    /// Without this, a hung server makes our SwiftUI callers wait
+    /// forever — the exact symptom we hit with ghost text.
+    private func armTimeout(for id: Int, method: String) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  let cb = self.pendingResults.removeValue(forKey: id)
+            else { return }
+            self.requestTimeouts.removeValue(forKey: id)
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .error,
+                summary: "⌛ \(method) timed out  ·  id \(id)",
+                body: "No response within \(Self.defaultRequestTimeout)s. The aro lsp subprocess may be hung or have no handler for this method."
+            )
+            cb(nil)
+        }
+        requestTimeouts[id] = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.defaultRequestTimeout, execute: work
+        )
     }
 
     // MARK: - Reading
@@ -536,18 +622,48 @@ final class AROLSPClient {
     }
 
     private func handleFrame(_ data: Data) {
+        let rawBody = String(data: data, encoding: .utf8) ?? ""
         guard
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
+        else {
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .error,
+                summary: "← un-decodable JSON frame", body: rawBody
+            )
+            return
+        }
         if let method = obj["method"] as? String {
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .inbound,
+                summary: "← \(method)  ·  notify", body: rawBody
+            )
             handleServerMessage(method: method, params: obj["params"])
         } else if let id = obj["id"] as? Int {
             // Response to one of our requests. Handshake responses
             // (id == 1) get matched here too — finish the handshake
             // and forward any registered completion handler.
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .inbound,
+                summary: obj["error"] == nil
+                    ? "← response  ·  id \(id)"
+                    : "← error response  ·  id \(id)",
+                body: rawBody
+            )
+            requestTimeouts.removeValue(forKey: id)?.cancel()
             if id == 1 && !isReady {
                 isReady = true
                 sendNotification(method: "initialized", params: [:])
+                // Flush load-time backlog of didOpen / didChange. Without
+                // this every source file is invisible to the server and
+                // completion returns null.
+                InternalLogStore.shared.record(
+                    category: .lsp, direction: .info,
+                    summary: "draining \(pendingDocOps.count) queued doc ops after initialize",
+                    body: ""
+                )
+                let ops = pendingDocOps
+                pendingDocOps.removeAll()
+                for op in ops { op() }
             }
             if let cb = pendingResults.removeValue(forKey: id) {
                 cb(obj["result"])

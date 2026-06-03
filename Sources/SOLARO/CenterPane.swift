@@ -111,7 +111,9 @@ struct CenterPaneView: View {
                     language: editorLanguage(for: url),
                     onSave: { saveAndReparse(text: $0, url: url) },
                     requestGhost: ghostRequest(for: url),
-                    acceptGhost: ghostAccept(for: url)
+                    requestAI: aiRequest(for: url),
+                    acceptGhost: ghostAccept(for: url),
+                    caretMoveTick: controller.caretMoveTick
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -241,8 +243,21 @@ struct CenterPaneView: View {
         return Binding(
             get: { (try? String(contentsOf: url, encoding: .utf8)) ?? "" },
             set: { newValue in
-                let formatted = formatIfEnabled(newValue, for: url)
-                try? formatted.write(to: url, atomically: true, encoding: .utf8)
+                // NB: do *not* run formatIfEnabled here — this
+                // setter fires on every keystroke, and the trailing-
+                // whitespace strip + final-newline injection would
+                // erase the space the user just typed and shift the
+                // caret onto the next line. Formatting runs only on
+                // explicit save (saveAndReparse) where the user
+                // actually meant to clean up the file.
+                try? newValue.write(to: url, atomically: true, encoding: .utf8)
+                // Push the fresh text into the LSP server too —
+                // otherwise its view of the document is stuck on
+                // whatever was last opened/saved, and
+                // textDocument/completion prefix-filters against
+                // stale content (the bug behind the alphabetical
+                // "Accept, Aggregate…" dump even after typing "Lo").
+                controller.lsp.didChange(url: url, text: newValue)
                 reparse(url: url)
             }
         )
@@ -263,14 +278,58 @@ struct CenterPaneView: View {
     /// Build the ghost-fetch closure bound to a specific file URL.
     /// Calls `aro lsp`'s textDocument/completion and returns the
     /// first item's insertText (or nil) on the main actor.
+    /// Reference-typed wrapper around the editor's non-Sendable
+    /// completion closure. Lets us hand a Sendable callback to the
+    /// AI fallback while still delivering the result on the main
+    /// actor where the editor expects it.
+    private final class GhostCompletionBridge: @unchecked Sendable {
+        private let onResult: (String?) -> Void
+        init(_ onResult: @escaping (String?) -> Void) {
+            self.onResult = onResult
+        }
+        func deliver(_ suggestion: String?) {
+            DispatchQueue.main.async { [onResult] in
+                onResult(suggestion)
+            }
+        }
+    }
+
+    /// LSP-only fetch — returns the full list. The popover handles
+    /// presentation + navigation. AI fallback now lives in
+    /// `aiRequest(for:)` and runs on its own 1s timer inside the
+    /// popover, *additive* to the LSP results instead of replacing
+    /// them.
     private func ghostRequest(for url: URL)
-        -> ((Int, Int, @escaping (String?) -> Void) -> Void)
+        -> ((Int, Int, @escaping ([AROLSPClient.CompletionItem]) -> Void) -> Void)
     {
         { [controller = controller] line0, char0, completion in
             controller.lsp.completion(
-                url: url, line0: line0, character0: char0, limit: 1
+                url: url, line0: line0, character0: char0, limit: 30
             ) { items in
-                completion(items.first?.insertText)
+                completion(items)
+            }
+        }
+    }
+
+    /// AI fallback wired up so the popover can fire it on its own
+    /// 1-second timer (only when `editorAIFallback` is on, which
+    /// the popover also checks before calling).
+    private func aiRequest(for url: URL)
+        -> ((Int, Int, @escaping (String?) -> Void) -> Void)
+    {
+        { [controller = controller] line0, char0, completion in
+            guard let project = controller.model?.root else {
+                completion(nil)
+                return
+            }
+            let bridge = GhostCompletionBridge(completion)
+            AICompletionFallback.predictNext(
+                sourceURL: url,
+                project: project,
+                line: line0,
+                column: char0
+            ) { suggestion in
+                bridge.deliver(suggestion)
             }
         }
     }
@@ -296,13 +355,75 @@ struct CenterPaneView: View {
             let lineStart = lineStarts[lineNumber - 1]
             let column = controller.currentColumn ?? 0
             let insertOffset = min(lineStart + column, ns.length)
+
+            // If the user has already typed part of the word (e.g.
+            // `Lo`) and the chosen suggestion begins with that
+            // prefix (e.g. `Log`), replace the typed prefix instead
+            // of inserting on top of it — without this, accepting
+            // `Log` after typing `Lo` produces `LoLog`.
+            let beforeCursor = insertOffset > lineStart
+                ? ns.substring(with: NSRange(
+                    location: lineStart,
+                    length: insertOffset - lineStart))
+                : ""
+            var prefixLen = 0
+            for ch in beforeCursor.reversed() {
+                if ch.isLetter || ch.isNumber || ch == "-" || ch == "_" {
+                    prefixLen += 1
+                } else {
+                    break
+                }
+            }
+            let typedPrefix = String(beforeCursor.suffix(prefixLen))
+            let replaceRange: NSRange
+            if !typedPrefix.isEmpty,
+               text.lowercased().hasPrefix(typedPrefix.lowercased())
+            {
+                let prefixNSLen = (typedPrefix as NSString).length
+                replaceRange = NSRange(
+                    location: insertOffset - prefixNSLen,
+                    length: prefixNSLen
+                )
+            } else {
+                replaceRange = NSRange(location: insertOffset, length: 0)
+            }
+
+            // Append a trailing space so the caret lands one column
+            // beyond the inserted word and the user can keep typing
+            // the next token without having to hit space themselves.
+            // Skip if the suggestion already ends with whitespace.
+            let textWithSpace = text.hasSuffix(" ") ? text : text + " "
             let updated = ns.replacingCharacters(
-                in: NSRange(location: insertOffset, length: 0),
-                with: text
+                in: replaceRange, with: textWithSpace
             )
             try? updated.write(to: url, atomically: true, encoding: .utf8)
             controller.lsp.didChange(url: url, text: updated)
             controller.openFile(url)
+            // Park the caret at the END of the current line in the
+            // *updated* buffer. The user explicitly asked for
+            // end-of-line after each acceptance — it works whether
+            // the line has trailing content or not, and avoids the
+            // column-math drift that a "right after the inserted
+            // word" target would suffer from. We recompute line
+            // offsets against `updated` (not the pre-insert source)
+            // so the column reflects the spliced text.
+            let updatedNS = updated as NSString
+            var updatedLineStarts: [Int] = [0]
+            for i in 0..<updatedNS.length
+                where updatedNS.character(at: i) == 0x0A
+            {
+                updatedLineStarts.append(i + 1)
+            }
+            let safeLineIdx = max(0, min(lineNumber - 1,
+                                         updatedLineStarts.count - 1))
+            let newLineStart = updatedLineStarts[safeLineIdx]
+            let newLineEnd: Int = (safeLineIdx + 1 < updatedLineStarts.count)
+                ? updatedLineStarts[safeLineIdx + 1] - 1  // before '\n'
+                : updatedNS.length
+            controller.requestCaretMove(
+                line: lineNumber,
+                column: newLineEnd - newLineStart
+            )
         }
     }
 
@@ -625,7 +746,9 @@ struct CenterPaneView: View {
                     language: editorLanguage(for: url),
                     onSave: { saveAndReparse(text: $0, url: url) },
                     requestGhost: ghostRequest(for: url),
-                    acceptGhost: ghostAccept(for: url)
+                    requestAI: aiRequest(for: url),
+                    acceptGhost: ghostAccept(for: url),
+                    caretMoveTick: controller.caretMoveTick
                 )
                 .frame(minWidth: 240)
             }

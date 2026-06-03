@@ -277,11 +277,16 @@ public final class Application: @unchecked Sendable {
             await eventRecorder.startRecording()
         }
 
+        // Expose live metrics to SOLARO (or any consumer) via a
+        // Unix socket. Gated on ARO_METRICS_SOCKET=1; idempotent.
+        MetricsSocketServer.shared.startIfEnabled()
+
         // Run the application
         let response: Response
         do {
             response = try await runtime.run(mainProgram, entryPoint: entryPoint)
         } catch {
+            MetricsSocketServer.shared.stop()
             // Flush writable stores before exiting on error
             await storeFlushService?.flushAll()
             // Stop recording and save even if execution fails
@@ -290,6 +295,8 @@ public final class Application: @unchecked Sendable {
             }
             throw error
         }
+
+        MetricsSocketServer.shared.stop()
 
         // Flush writable stores on shutdown
         await storeFlushService?.flushAll()
@@ -329,10 +336,15 @@ public final class Application: @unchecked Sendable {
             await eventRecorder.startRecording()
         }
 
+        // Expose live metrics to SOLARO (or any consumer) via a
+        // Unix socket. Gated on ARO_METRICS_SOCKET=1; idempotent.
+        MetricsSocketServer.shared.startIfEnabled()
+
         // Run the application with keepalive
         do {
             try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
         } catch {
+            MetricsSocketServer.shared.stop()
             // Flush writable stores before exiting on error
             await storeFlushService?.flushAll()
             // Stop recording and save even if execution fails
@@ -341,6 +353,8 @@ public final class Application: @unchecked Sendable {
             }
             throw error
         }
+
+        MetricsSocketServer.shared.stop()
 
         // Flush writable stores on shutdown
         await storeFlushService?.flushAll()

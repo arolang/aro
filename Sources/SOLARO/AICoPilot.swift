@@ -63,6 +63,14 @@ final class AICoPilotProcess {
         task.arguments = args
         task.currentDirectoryURL = project.rootPath
 
+        // Log the outgoing prompt in the Internal Logs window so
+        // the user can see exactly what we sent to `aro ask`.
+        InternalLogStore.shared.record(
+            category: .ask, direction: .outbound,
+            summary: "→ ask chat  ·  \(trimmed.prefix(60))",
+            body: trimmed
+        )
+
         let stdout = Pipe()
         let stderr = Pipe()
         let stdin = Pipe()
@@ -87,11 +95,24 @@ final class AICoPilotProcess {
         }
 
         task.terminationHandler = { [weak self] proc in
+            let exit = proc.terminationStatus
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isThinking = false
-                if proc.terminationStatus != 0 {
-                    self.lastError = "aro ask exited with status \(proc.terminationStatus)"
+                let body = self.currentAssistantTurnIndex
+                    .flatMap { idx -> String? in
+                        idx < self.turns.count ? self.turns[idx].text : nil
+                    } ?? ""
+                InternalLogStore.shared.record(
+                    category: .ask,
+                    direction: exit == 0 ? .inbound : .error,
+                    summary: exit == 0
+                        ? "← ask chat reply"
+                        : "← ask chat exited \(exit)",
+                    body: body.isEmpty ? "(empty stdout)" : body
+                )
+                if exit != 0 {
+                    self.lastError = "aro ask exited with status \(exit)"
                 }
                 self.process = nil
             }

@@ -22,6 +22,10 @@ struct SettingsView: View {
     private var formatOnSave: Bool = false
     @AppStorage(SolaroPrefs.editorGhostText.rawValue)
     private var editorGhostText: Bool = false
+    @AppStorage(SolaroPrefs.editorGhostDelay.rawValue)
+    private var editorGhostDelay: Double = 0.75
+    @AppStorage(SolaroPrefs.editorAIFallback.rawValue)
+    private var editorAIFallback: Bool = false
     @AppStorage(SolaroPrefs.aroOverride.rawValue)
     private var aroOverride: String = ""
     @AppStorage(SolaroPrefs.askEndpoint.rawValue)
@@ -94,8 +98,22 @@ struct SettingsView: View {
                 Toggle("Inspector visible by default", isOn: $inspectorVisible)
                 Toggle("Format on save — strip trailing whitespace + tidy final newline",
                        isOn: $formatOnSave)
-                Toggle("Inline suggestions — show LSP completions as you type (⇥ to accept)",
+                Toggle("Inline suggestions — show LSP completions as you type (⇥ to enter)",
                        isOn: $editorGhostText)
+                HStack {
+                    Text("Suggestion delay")
+                    Spacer()
+                    Slider(value: $editorGhostDelay, in: 0.2...3.0, step: 0.05)
+                        .frame(width: 200)
+                        .disabled(!editorGhostText)
+                    Text(String(format: "%.2f s", editorGhostDelay))
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 56, alignment: .trailing)
+                        .foregroundStyle(editorGhostText ? .primary : .secondary)
+                }
+                Toggle("AI fallback — after the popover sits open, also ask `aro ask` for a prediction (slower)",
+                       isOn: $editorAIFallback)
+                    .disabled(!editorGhostText)
             } header: {
                 Text("Defaults")
             }
@@ -188,4 +206,6 @@ enum SolaroPrefs: String {
     case editorMinimap    = "solaro.editor.minimap"
     case diffStyle        = "solaro.diff.style"
     case editorGhostText  = "solaro.editor.ghostText"
+    case editorGhostDelay = "solaro.editor.ghostDelay"
+    case editorAIFallback = "solaro.editor.aiFallback"
 }

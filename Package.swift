@@ -215,7 +215,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         // STTextView — TextKit 2 editor used by SOLARO's center pane.
         // Pinned to the minor while the API is still settling.
-        .package(url: "https://github.com/krzyzanowskim/STTextView.git", from: "2.3.0"),
+        .package(url: "https://github.com/krzyzanowskim/STTextView.git", from: "2.3.10"),
         // SwiftTerm — real ANSI terminal emulator for the bottom
         // panel's Terminal tab (#244).
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
