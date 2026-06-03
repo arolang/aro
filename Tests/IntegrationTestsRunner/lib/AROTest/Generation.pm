@@ -12,7 +12,7 @@ use File::Spec;
 use Time::HiRes qw(sleep);
 use Exporter 'import';
 
-use AROTest::Utils qw($is_windows $is_linux $is_macos colored);
+use AROTest::Utils qw($is_windows $is_linux $is_macos $is_ci colored);
 use AROTest::Config qw(%options $examples_dir);
 use AROTest::Hint qw(read_test_hint);
 use AROTest::Detect qw(detect_example_type);
@@ -51,6 +51,13 @@ sub generate_expected {
     # Skip on macOS if requested
     if ($is_macos && defined $hints->{'skip-on-macos'}) {
         say "Skipping $example_name on macOS: $hints->{'skip-on-macos'}";
+        return;
+    }
+
+    # Skip on CI runners if requested (used for examples that hit flaky
+    # external services like jsonplaceholder.typicode.com).
+    if ($is_ci && defined $hints->{'skip-on-ci'}) {
+        say "Skipping $example_name on CI: $hints->{'skip-on-ci'}";
         return;
     }
 

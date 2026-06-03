@@ -276,6 +276,16 @@ struct RunCommand: AsyncParsableCommand {
             print()
         }
 
+        // Open the metrics push socket — SOLARO (and any other
+        // tooling) connects to $TMPDIR/aro-metrics-<pid>.sock and
+        // receives NDJSON snapshots every 500ms. No flag needed:
+        // local-only Unix socket, cleaned up on shutdown below.
+        if let path = MetricsSocketServer.shared.start(), verbose {
+            print("Metrics socket: \(path)")
+            print()
+        }
+        defer { MetricsSocketServer.shared.stop() }
+
         do {
             if keepAlive {
                 try await application.runForever()

@@ -10,7 +10,7 @@ use File::Spec;
 use Exporter 'import';
 
 our @EXPORT_OK = qw(
-    $is_windows $is_linux $is_macos
+    $is_windows $is_linux $is_macos $is_ci
     $has_yaml $has_http_tiny $has_net_emptyport $has_term_color
     colored is_executable get_binary_path
 );
@@ -18,6 +18,11 @@ our @EXPORT_OK = qw(
 our $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys');
 our $is_linux   = ($^O eq 'linux');
 our $is_macos   = ($^O eq 'darwin');
+# CI detection — GitHub Actions, GitLab CI, generic harnesses all set
+# $CI=true. Used by Runner.pm `skip-on-ci` hint to skip examples that
+# depend on unreliable external services (jsonplaceholder.typicode.com,
+# httpbin.org, etc.) from cloud runners while still running locally.
+our $is_ci      = defined($ENV{CI}) && $ENV{CI} ne '' && $ENV{CI} ne 'false';
 
 # Optional modules — fall back gracefully if any is missing.
 our $has_yaml          = eval { require YAML::XS;       1; } || 0;

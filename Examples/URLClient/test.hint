@@ -6,3 +6,11 @@
 # correctly. The compile-mode regression is pre-existing (ARO-0052 / ded57b2d
 # era) and outside the scope of CI-stability fixes.
 mode: interpreter
+
+# URLClient hits two real external services: jsonplaceholder.typicode.com
+# and httpbin.org. Both are unreliable from cloud runners — GitHub Actions
+# and GitLab CI runners regularly get HTML error pages instead of the
+# expected JSON responses, which flakes the output comparison. The example
+# itself works fine locally; skip in CI until a local stub server is added
+# (see Examples/HTTPClient/stub.py for the pattern).
+skip-on-ci: requires reliable network access to jsonplaceholder.typicode.com and httpbin.org

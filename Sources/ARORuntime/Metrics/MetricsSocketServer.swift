@@ -1,15 +1,17 @@
 // ============================================================
 // MetricsSocketServer.swift
-// ARO Runtime - Push metrics over a Unix domain socket
+// ARO Runtime - Unix-socket live metrics push for IDEs
 // ============================================================
 //
-// Opens `$TMPDIR/aro-metrics-<pid>.sock` and pushes a
-// newline-delimited JSON snapshot to every connected client
-// roughly twice per second. Consumed by SOLARO's MetricsPanel.
+// Opens a Unix domain socket at $TMPDIR/aro-metrics-<pid>.sock
+// and pushes one JSON snapshot per line every ~500ms to each
+// connected client. SOLARO (and any other tooling) finds the
+// socket by PID, connects, and renders the stream in real time.
 //
-// Activation: only starts when `ARO_METRICS_SOCKET=1` is in
-// the environment, so headless `aro run` invocations don't
-// leave stray sockets in TMPDIR.
+// Wire format: newline-delimited JSON, server-pushed. No request/
+// response handshake — connect and you start receiving snapshots
+// on the next tick. Disconnect by closing the socket. Reconnect
+// works.
 
 import Foundation
 
@@ -19,68 +21,151 @@ import Darwin
 import Glibc
 #endif
 
+/// Wire DTO mirroring `MetricsSnapshot` with a stable, IDE-friendly
+/// shape. Hand-rolled instead of `Codable` on the existing types
+/// because those have computed properties we want serialised
+/// (`averageDurationMs`, `successRate`, …) and a few platform
+/// types (`Date`) that we'd rather emit as ISO-8601 strings than
+/// epoch doubles for log readability.
+private struct MetricsSnapshotDTO: Encodable {
+    let kind: String
+    let collectedAt: String
+    let uptimeSec: Double
+    let totalExecutions: Int
+    let totalSuccesses: Int
+    let totalFailures: Int
+    let featureSets: [FeatureSetDTO]
+    let process: ProcessDTO
+
+    struct FeatureSetDTO: Encodable {
+        let name: String
+        let businessActivity: String
+        let count: Int
+        let successes: Int
+        let failures: Int
+        let totalMs: Double
+        let minMs: Double
+        let maxMs: Double
+        let avgMs: Double
+        let successRate: Double
+    }
+
+    struct ProcessDTO: Encodable {
+        let cpuUserSec: Double
+        let cpuSystemSec: Double
+        let virtualMB: Double
+        let residentMB: Double
+        let openFDs: Int
+    }
+
+    init(from snap: MetricsSnapshot) {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        self.kind = "snapshot"
+        self.collectedAt = formatter.string(from: snap.collectedAt)
+        self.uptimeSec = snap.uptimeSeconds
+        self.totalExecutions = snap.totalExecutions
+        self.totalSuccesses = snap.totalSuccesses
+        self.totalFailures = snap.totalFailures
+        self.featureSets = snap.featureSets.map { fs in
+            FeatureSetDTO(
+                name: fs.name,
+                businessActivity: fs.businessActivity,
+                count: fs.executionCount,
+                successes: fs.successCount,
+                failures: fs.failureCount,
+                totalMs: fs.totalDurationMs,
+                // `minDurationMs` defaults to .infinity until the
+                // first execution lands — flatten that to 0 so
+                // JSON consumers don't have to special-case it.
+                minMs: fs.executionCount == 0 ? 0 : fs.minDurationMs,
+                maxMs: fs.maxDurationMs,
+                avgMs: fs.averageDurationMs,
+                successRate: fs.successRate
+            )
+        }
+        self.process = ProcessDTO(
+            cpuUserSec: snap.processMetrics.cpuUserTime,
+            cpuSystemSec: snap.processMetrics.cpuSystemTime,
+            virtualMB: snap.processMetrics.virtualMemoryMB,
+            residentMB: snap.processMetrics.residentMemoryMB,
+            openFDs: snap.processMetrics.openFileDescriptors
+        )
+    }
+}
+
+/// Pushes `MetricsCollector.shared.snapshot()` over a Unix domain
+/// socket every `pushInterval` to each connected client. Shared
+/// singleton so `aro run` and embedded callers both reach for the
+/// same instance.
 public final class MetricsSocketServer: @unchecked Sendable {
     public static let shared = MetricsSocketServer()
 
+    /// Cadence at which snapshots are pushed to each connected
+    /// client. 500ms is fast enough that the SOLARO panel feels
+    /// live without burning CPU re-serialising JSON.
+    public var pushInterval: TimeInterval = 0.5
+
     private let lock = NSLock()
     private var listenFD: Int32 = -1
-    private var clientFDs: [Int32] = []
-    private var socketPath: String = ""
-    private var stopFlag = false
+    private var socketPath: String?
+    private var clientFDs: Set<Int32> = []
     private var acceptThread: Thread?
-    private var broadcastThread: Thread?
-    private var started = false
+    private var pushTask: Task<Void, Never>?
+    private var isRunning = false
 
-    /// 500 ms between snapshots — matches SOLARO's ~2 Hz expectation.
-    private let snapshotIntervalSec: Double = 0.5
+    public init() {}
 
-    private init() {}
-
-    // MARK: - Public lifecycle
-
-    /// Start the server if `ARO_METRICS_SOCKET=1`. No-op otherwise,
-    /// and no-op if already started. Failures are logged to stderr
-    /// but never thrown — the metrics feed is non-essential.
-    public func startIfEnabled() {
-        guard ProcessInfo.processInfo.environment["ARO_METRICS_SOCKET"] == "1" else {
-            return
-        }
-        start()
+    /// Conventional socket path for a given PID. SOLARO mirrors this
+    /// computation to find the channel for the aro process it spawned.
+    public static func socketPath(forPID pid: Int32) -> String {
+        let dir = NSTemporaryDirectory()
+        // Trim trailing slash to avoid `//` in the joined path.
+        let trimmed = dir.hasSuffix("/") ? String(dir.dropLast()) : dir
+        return "\(trimmed)/aro-metrics-\(pid).sock"
     }
 
-    /// Force-start (ignores the env gate). Used by tests.
-    public func start() {
+    /// Open the socket, bind, listen, and start the accept + push
+    /// loops. Idempotent — calling `start()` twice is a no-op.
+    @discardableResult
+    public func start() -> String? {
         lock.lock()
-        if started {
-            lock.unlock()
-            return
-        }
-        started = true
-        stopFlag = false
-        lock.unlock()
+        defer { lock.unlock() }
+        guard !isRunning else { return socketPath }
 
-        let pid = getpid()
-        let path = Self.socketPath(forPID: pid)
-
-        // Clean up any stale socket file from a previous crash.
+        let path = MetricsSocketServer.socketPath(forPID: getpid())
+        // Clean up a stale socket from a crashed previous run before
+        // bind — otherwise `bind()` would fail with EADDRINUSE.
         unlink(path)
 
-        let fd = socket(AF_UNIX, socketStreamType, 0)
+        // On Linux glibc, SOCK_STREAM is `__socket_type` (an enum) and
+        // SHUT_RDWR is `Int`; on Darwin both are `Int32`. Use platform
+        // shims so the same source compiles on both.
+        #if canImport(Glibc)
+        let fd = socket(AF_UNIX, Int32(SOCK_STREAM.rawValue), 0)
+        #else
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #endif
         guard fd >= 0 else {
-            logError("socket() failed: errno \(errno)")
-            markStopped()
-            return
+            FileHandle.standardError.write(Data(
+                "[aro-metrics] socket() failed: \(String(cString: strerror(errno)))\n".utf8
+            ))
+            return nil
         }
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
+        // sun_path is a fixed-size C array tuple — copy bytes in via
+        // withUnsafeMutableBytes so we don't have to enumerate the
+        // tuple members manually.
         let pathBytes = Array(path.utf8) + [0]
-        let pathCap = MemoryLayout.size(ofValue: addr.sun_path)
-        if pathBytes.count > pathCap {
-            logError("socket path too long (\(pathBytes.count) > \(pathCap)): \(path)")
+        let pathLen = MemoryLayout.size(ofValue: addr.sun_path)
+        guard pathBytes.count <= pathLen else {
+            FileHandle.standardError.write(Data(
+                "[aro-metrics] socket path too long: \(path)\n".utf8
+            ))
             close(fd)
-            markStopped()
-            return
+            return nil
         }
         withUnsafeMutableBytes(of: &addr.sun_path) { rawBuf in
             pathBytes.withUnsafeBufferPointer { src in
@@ -96,199 +181,158 @@ public final class MetricsSocketServer: @unchecked Sendable {
                 bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        if bindResult != 0 {
-            logError("bind() failed: errno \(errno) path=\(path)")
+        guard bindResult == 0 else {
+            FileHandle.standardError.write(Data(
+                "[aro-metrics] bind(\(path)) failed: \(String(cString: strerror(errno)))\n".utf8
+            ))
             close(fd)
-            markStopped()
-            return
+            return nil
         }
-        if listen(fd, 8) != 0 {
-            logError("listen() failed: errno \(errno)")
+
+        guard listen(fd, 4) == 0 else {
+            FileHandle.standardError.write(Data(
+                "[aro-metrics] listen failed: \(String(cString: strerror(errno)))\n".utf8
+            ))
             close(fd)
             unlink(path)
-            markStopped()
-            return
+            return nil
         }
 
-        lock.lock()
-        listenFD = fd
-        socketPath = path
-        lock.unlock()
+        self.listenFD = fd
+        self.socketPath = path
+        self.isRunning = true
 
-        let acceptT = Thread { [weak self] in self?.acceptLoop() }
-        acceptT.name = "aro.metrics.accept"
-        acceptT.start()
+        // Accept loop on a dedicated thread (blocking accept()).
+        let thread = Thread { [weak self] in
+            self?.acceptLoop()
+        }
+        thread.name = "aro.metrics.accept"
+        thread.start()
+        self.acceptThread = thread
 
-        let broadcastT = Thread { [weak self] in self?.broadcastLoop() }
-        broadcastT.name = "aro.metrics.broadcast"
-        broadcastT.start()
+        // Push loop via Task — periodic snapshot fan-out to clients.
+        self.pushTask = Task.detached(priority: .utility) { [weak self] in
+            await self?.pushLoop()
+        }
 
-        lock.lock()
-        acceptThread = acceptT
-        broadcastThread = broadcastT
-        lock.unlock()
+        return path
     }
 
-    /// Stop the server, close any connected clients, remove the
-    /// socket file. Idempotent.
+    /// Close the listener and all connected client sockets, remove
+    /// the on-disk socket file. Called from RunCommand on shutdown
+    /// and from a signal handler so a Ctrl-C doesn't leave a stale
+    /// socket behind.
     public func stop() {
         lock.lock()
-        guard started else {
-            lock.unlock()
-            return
-        }
-        stopFlag = true
-        let listenCopy = listenFD
+        let fd = listenFD
+        let clients = clientFDs
+        let path = socketPath
         listenFD = -1
-        let clientsCopy = clientFDs
+        socketPath = nil
         clientFDs.removeAll()
-        let pathCopy = socketPath
-        socketPath = ""
-        started = false
+        isRunning = false
         lock.unlock()
 
-        if listenCopy >= 0 {
-            // Shutdown wakes any blocked accept() so the thread can
-            // notice stopFlag and exit. close() alone is racy here.
-            shutdown(listenCopy, shutdownReadWrite)
-            close(listenCopy)
-        }
-        for fd in clientsCopy {
-            shutdown(fd, shutdownReadWrite)
+        pushTask?.cancel()
+        pushTask = nil
+
+        if fd >= 0 {
+            // shutdown() unblocks any pending accept() in the
+            // dedicated thread, then close() releases the FD.
+            #if canImport(Glibc)
+            shutdown(fd, Int32(SHUT_RDWR))
+            #else
+            shutdown(fd, SHUT_RDWR)
+            #endif
             close(fd)
         }
-        if !pathCopy.isEmpty {
-            unlink(pathCopy)
+        for client in clients {
+            close(client)
+        }
+        if let path {
+            unlink(path)
         }
     }
 
-    // MARK: - Path
-
-    public static func socketPath(forPID pid: Int32) -> String {
-        let dir = NSTemporaryDirectory()
-        let trimmed = dir.hasSuffix("/") ? String(dir.dropLast()) : dir
-        return "\(trimmed)/aro-metrics-\(pid).sock"
-    }
-
-    // MARK: - Threads
+    // MARK: - Internals
 
     private func acceptLoop() {
         while true {
             lock.lock()
             let fd = listenFD
-            let stopping = stopFlag
+            let running = isRunning
             lock.unlock()
-            if stopping || fd < 0 { return }
+            guard running, fd >= 0 else { return }
 
-            var addr = sockaddr()
+            var clientAddr = sockaddr()
             var len = socklen_t(MemoryLayout<sockaddr>.size)
-            let client = accept(fd, &addr, &len)
+            let client = accept(fd, &clientAddr, &len)
             if client < 0 {
-                if errno == EINTR { continue }
-                // listen fd closed during stop() → exit cleanly.
+                // EBADF / EINVAL after shutdown — bail. Other errors
+                // (EINTR, …) shouldn't loop forever either; the
+                // socket is single-purpose so giving up is fine.
                 return
             }
-
-            // SIGPIPE on disconnected clients would otherwise kill
-            // the whole aro process. Suppress per-socket on Darwin;
-            // Linux uses MSG_NOSIGNAL at write time.
+            // Suppress SIGPIPE on writes to dead sockets so a client
+            // hanging up doesn't take down the whole aro process.
+            // Darwin uses a per-fd socket option; Linux relies on
+            // MSG_NOSIGNAL in the send() flags below.
             #if canImport(Darwin)
-            var one: Int32 = 1
+            var on: Int32 = 1
             setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE,
-                       &one, socklen_t(MemoryLayout<Int32>.size))
+                       &on, socklen_t(MemoryLayout<Int32>.size))
             #endif
-
             lock.lock()
-            if stopFlag {
-                lock.unlock()
-                close(client)
-                return
-            }
-            clientFDs.append(client)
+            clientFDs.insert(client)
             lock.unlock()
         }
     }
 
-    private func broadcastLoop() {
-        while true {
-            lock.lock()
-            let stopping = stopFlag
-            let clients = clientFDs
-            lock.unlock()
-            if stopping { return }
-
-            if !clients.isEmpty {
-                let snap = MetricsCollector.shared.snapshot()
-                var line = MetricsWireFormat.encode(snap)
-                line.append(0x0A) // LF terminator
-
-                var dead: [Int32] = []
-                line.withUnsafeBytes { rawBuf in
-                    guard let base = rawBuf.baseAddress else { return }
-                    for fd in clients {
-                        if !writeAll(fd: fd, base: base, count: rawBuf.count) {
-                            dead.append(fd)
-                        }
-                    }
-                }
-                if !dead.isEmpty {
-                    lock.lock()
-                    clientFDs.removeAll { dead.contains($0) }
-                    lock.unlock()
-                    for fd in dead {
-                        shutdown(fd, shutdownReadWrite)
-                        close(fd)
-                    }
-                }
-            }
-
-            Thread.sleep(forTimeInterval: snapshotIntervalSec)
+    private func pushLoop() async {
+        while !Task.isCancelled {
+            // Sleep first so we don't fire a snapshot before anyone
+            // could possibly have connected. 500ms cadence.
+            let nanos = UInt64(pushInterval * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            if Task.isCancelled { return }
+            pushOneSnapshot()
         }
     }
 
-    /// Write the whole buffer, retrying on partial writes / EINTR.
-    /// Returns false on hard errors → caller drops the client.
-    private func writeAll(fd: Int32, base: UnsafeRawPointer, count: Int) -> Bool {
-        var written = 0
-        while written < count {
-            let remaining = count - written
-            let ptr = base.advanced(by: written)
-            #if canImport(Glibc)
-            let n = send(fd, ptr, remaining, Int32(MSG_NOSIGNAL))
-            #else
-            let n = write(fd, ptr, remaining)
-            #endif
-            if n < 0 {
-                if errno == EINTR { continue }
-                return false
-            }
-            if n == 0 { return false }
-            written += n
-        }
-        return true
-    }
-
-    // MARK: - Helpers
-
-    private func markStopped() {
+    private func pushOneSnapshot() {
         lock.lock()
-        started = false
+        let clients = clientFDs
         lock.unlock()
-    }
+        guard !clients.isEmpty else { return }
 
-    private func logError(_ msg: String) {
-        FileHandle.standardError.write(
-            Data("[MetricsSocketServer] \(msg)\n".utf8)
-        )
+        let dto = MetricsSnapshotDTO(from: MetricsCollector.shared.snapshot())
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard var data = try? encoder.encode(dto) else { return }
+        data.append(0x0A) // newline terminator
+
+        var dead: [Int32] = []
+        #if canImport(Glibc)
+        let sendFlags: Int32 = Int32(MSG_NOSIGNAL)
+        #else
+        let sendFlags: Int32 = 0
+        #endif
+        data.withUnsafeBytes { (rawBuf: UnsafeRawBufferPointer) in
+            guard let base = rawBuf.baseAddress else { return }
+            for fd in clients {
+                let written = send(fd, base, data.count, sendFlags)
+                if written < 0 {
+                    dead.append(fd)
+                }
+            }
+        }
+        if !dead.isEmpty {
+            lock.lock()
+            for fd in dead {
+                clientFDs.remove(fd)
+                close(fd)
+            }
+            lock.unlock()
+        }
     }
 }
-
-// MARK: - Platform constants
-
-#if canImport(Darwin)
-private let socketStreamType: Int32 = SOCK_STREAM
-private let shutdownReadWrite: Int32 = SHUT_RDWR
-#else
-private let socketStreamType: Int32 = Int32(SOCK_STREAM.rawValue)
-private let shutdownReadWrite: Int32 = Int32(SHUT_RDWR)
-#endif

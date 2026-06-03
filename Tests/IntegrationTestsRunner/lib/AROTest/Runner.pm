@@ -16,7 +16,7 @@ use Time::HiRes qw(time);
 use List::Util qw(sum all);
 use Exporter 'import';
 
-use AROTest::Utils qw($is_windows $is_linux $is_macos colored);
+use AROTest::Utils qw($is_windows $is_linux $is_macos $is_ci colored);
 use AROTest::Config qw(%options %results $examples_dir $project_root);
 use AROTest::Hint qw(read_test_hint write_testrun_log);
 use AROTest::Detect qw(detect_example_type);
@@ -433,6 +433,27 @@ sub run_test {
             compiled_status => 'SKIP',
             interpreter_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
             compiled_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
+    # Handle CI-specific skip — used for examples that depend on
+    # unreliable external services (e.g. URLClient hits
+    # jsonplaceholder.typicode.com and httpbin.org). Local devs still
+    # run the test; CI runners get a deterministic SKIP.
+    if ($is_ci && defined $hints->{'skip-on-ci'}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped on CI: $hints->{'skip-on-ci'}",
+            compiled_message => "Skipped on CI: $hints->{'skip-on-ci'}",
             interpreter_duration => 0,
             compiled_duration => 0,
             build_duration => 0,
