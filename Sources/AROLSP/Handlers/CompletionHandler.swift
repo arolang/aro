@@ -101,14 +101,25 @@ public struct CompletionHandler: Sendable {
             return seen.insert(key).inserted
         }
 
-        // Hard cap so even a flood of variables doesn't overwhelm the UI.
-        // `isIncomplete = true` tells the client we'd return more if the
-        // user kept typing.
+        // Cap only the typeahead case — when the user has typed
+        // something to filter by, 30 best matches is plenty. With
+        // an empty prefix (just pressed `<`, or on a fresh line)
+        // the client is asking for the full menu, and capping
+        // there would silently amputate everything past the
+        // alphabetical cut (Extract, Return, Set, snippets…).
         let cap = 30
-        let capped = Array(deduped.prefix(cap))
+        let typedPrefix: String
+        switch triggerCharacter {
+        case "<", ":", ".":
+            typedPrefix = ""
+        default:
+            typedPrefix = context.prefix
+        }
+        let shouldCap = !typedPrefix.isEmpty && deduped.count > cap
+        let finalItems = shouldCap ? Array(deduped.prefix(cap)) : deduped
         return [
-            "isIncomplete": deduped.count > cap,
-            "items": capped
+            "isIncomplete": shouldCap,
+            "items": finalItems
         ]
     }
 
