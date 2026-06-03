@@ -225,6 +225,15 @@ struct DebugCommand: AsyncParsableCommand {
             print("Use 'h' for help, 'q' to quit, 's' to step.")
         }
 
+        // Open the metrics push socket so SOLARO's Metrics tab can
+        // stream live data during debug sessions too — same Unix
+        // socket as `aro run` (path keyed by PID), cleaned up via
+        // defer below regardless of how the debug session exits.
+        if MetricsSocketServer.shared.start() != nil, !dap {
+            print("Metrics socket: \(MetricsSocketServer.socketPath(forPID: getpid()))")
+        }
+        defer { MetricsSocketServer.shared.stop() }
+
         do {
             try await Debug.$controller.withValue(controller) {
                 try await Debug.$currentSourceFile.withValue(sourceFileHint) {
