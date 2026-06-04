@@ -332,6 +332,14 @@ let package = Package(
                 dependencies: ["AROPackageManager"],
                 path: "Tests/AROPackageManagerTests"
             ),
+            // CLI tests — covers the small pieces of pure logic that
+            // live inside CLI command structs (e.g. UILauncher path
+            // resolution). Uses @testable import AROCLI.
+            .testTarget(
+                name: "AROCLITests",
+                dependencies: ["AROCLI"],
+                path: "Tests/AROCLITests"
+            ),
         ]
 
         // SOLARO targets (macOS only) — appended unconditionally; the

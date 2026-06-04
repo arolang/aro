@@ -123,6 +123,7 @@ struct ARO: AsyncParsableCommand {
             RemoveCommand.self,
             PluginsCommand.self,
             ActionsCommand.self,
+            UICommand.self,
         ]
         #if !os(Windows)
         commands.append(LSPCommand.self)
