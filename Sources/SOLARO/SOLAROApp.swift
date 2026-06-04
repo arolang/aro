@@ -55,6 +55,37 @@ struct SOLAROApp: App {
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift, .option])
             }
+            // View menu — open the bottom panel and switch to the
+            // requested pane. The actual work happens inside the
+            // workspace via a NotificationCenter observer, since
+            // menu items live above the per-window @State.
+            CommandGroup(after: .toolbar) {
+                Divider()
+                Button("Show Console") {
+                    NotificationCenter.default.post(
+                        name: .solaroShowBottomPanel,
+                        object: nil,
+                        userInfo: ["tab": "console"]
+                    )
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                Button("Show Terminal") {
+                    NotificationCenter.default.post(
+                        name: .solaroShowBottomPanel,
+                        object: nil,
+                        userInfo: ["tab": "terminal"]
+                    )
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                Button("Show Tests") {
+                    NotificationCenter.default.post(
+                        name: .solaroShowBottomPanel,
+                        object: nil,
+                        userInfo: ["tab": "tests"]
+                    )
+                }
+                .keyboardShortcut("u", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .help) {
                 Button("Language Guide…") {
                     LanguageGuideWindow.show()
@@ -166,6 +197,11 @@ struct RootView: View {
 /// after the project has finished loading (#277).
 extension Notification.Name {
     static let solaroFocusFile = Notification.Name("solaroFocusFile")
+    /// Posted from the View menu to ask the front workspace to
+    /// open its bottom panel and switch to a specific pane. The
+    /// `userInfo["tab"]` value is one of `"console"`, `"terminal"`,
+    /// `"tests"` — matching `BottomTab.rawValue`.
+    static let solaroShowBottomPanel = Notification.Name("solaroShowBottomPanel")
 }
 
 /// Top-level routing between the welcome screen (no project open)

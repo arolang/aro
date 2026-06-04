@@ -548,6 +548,21 @@ struct WorkspaceView: View {
             controller.inspectorShown = true
             controller.askPanelRequested = false
         }
+        // View-menu commands ("Show Console" / "Show Terminal" /
+        // "Show Tests") post this notification. Open the bottom
+        // panel and switch to the requested tab. Posted to every
+        // workspace window — each one's onReceive runs, but the
+        // user only sees the key window respond visually.
+        .onReceive(
+            NotificationCenter.default.publisher(for: .solaroShowBottomPanel)
+        ) { note in
+            guard
+                let raw = note.userInfo?["tab"] as? String,
+                let tab = BottomTab(rawValue: raw)
+            else { return }
+            bottomTab = tab
+            showConsole = true
+        }
         // Bounce back to the welcome screen the moment the last
         // editor tab closes. We compare oldValue → newValue so the
         // initial mount (which lands with openTabs empty before the

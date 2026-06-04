@@ -471,7 +471,8 @@ struct CenterPaneView: View {
                 },
                 onNodeContextAction: { action, node in
                     handleNodeContextAction(action, node: node)
-                }
+                },
+                resetLayout: { resetLayoutSidecar() }
             )
         }
     }
@@ -735,6 +736,19 @@ struct CenterPaneView: View {
         try? sidecar.save(for: url)
     }
 
+    /// "Auto Layout" callback fired by the canvas's right-click
+    /// menu — wipes every persisted node position from the sidecar
+    /// so the next `canvasGraph` rebuild falls back to
+    /// `StackLayout.place()` defaults. The CanvasView additionally
+    /// clears its live drag state, so the user sees the re-flow
+    /// immediately without a reload.
+    private func resetLayoutSidecar() {
+        guard let url = controller.currentFile else { return }
+        var sidecar = LayoutSidecar.load(for: url)
+        sidecar.nodes.removeAll()
+        try? sidecar.save(for: url)
+    }
+
     // MARK: - Split
 
     @ViewBuilder
@@ -791,7 +805,8 @@ struct CenterPaneView: View {
                 },
                 onNodeContextAction: { action, node in
                     handleNodeContextAction(action, node: node)
-                }
+                },
+                resetLayout: { resetLayoutSidecar() }
             )
         }
     }

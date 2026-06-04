@@ -70,6 +70,13 @@ struct CanvasView: View {
     let onActionDrop: ((String, CGPoint) -> Void)?
     /// Right-click context-menu actions on a node card.
     let onNodeContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
+    /// Wipe the layout sidecar's stored positions so the next
+    /// graph build falls back to `StackLayout`'s defaults. Used by
+    /// the canvas's "Auto Layout" right-click menu — the caller
+    /// (CenterPane) owns the sidecar file and persists the empty
+    /// state. Optional so screens that don't need a reset action
+    /// (Project Map, OpenAPI canvas) can omit it.
+    let resetLayout: (() -> Void)?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -257,6 +264,29 @@ struct CanvasView: View {
                 deliver: onActionDrop
             )
         }
+        // Right-click on blank canvas space → "Auto Layout".
+        // Individual node cards declare their own `.contextMenu`,
+        // and SwiftUI picks the innermost menu for right-clicks
+        // that land on a node, so this catches only clicks that
+        // miss every card / wire.
+        .contextMenu {
+            if resetLayout != nil {
+                Button {
+                    triggerAutoLayout()
+                } label: {
+                    Label("Auto Layout", systemImage: "rectangle.3.group")
+                }
+                .help("Reset every user-dragged position and re-flow the graph")
+            }
+        }
+    }
+
+    /// Wipe live drag positions + persisted sidecar entries so the
+    /// next graph build seeds purely from `StackLayout.place()`.
+    /// Called from the canvas's "Auto Layout" context-menu item.
+    private func triggerAutoLayout() {
+        resetLayout?()
+        liveNodes.removeAll()
     }
 
     // MARK: - Position bookkeeping
