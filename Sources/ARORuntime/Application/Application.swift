@@ -363,6 +363,17 @@ public final class Application: @unchecked Sendable {
             return // No OpenAPI contract or HTTP server
         }
 
+        // Capture the current debugger context at setup time so each
+        // incoming HTTP request re-establishes it inside its own
+        // task. SwiftNIO dispatches requests on its event loops and
+        // *doesn't* propagate Swift TaskLocals, so without this hop
+        // the handler's call into FeatureSetExecutor would see a nil
+        // `Debug.controller` and skip every checkpoint — the symptom
+        // SOLARO hits today (HTTP traffic produces no pulse / no
+        // per-statement events).
+        let capturedDebugController = Debug.controller
+        let capturedSourceFile = Debug.currentSourceFile
+
         // Create a request handler that routes to feature sets
         let handler: HTTPRequestHandler = { [weak self] request in
             guard let self = self else {
@@ -415,9 +426,16 @@ public final class Application: @unchecked Sendable {
                 }
             }
 
-            // Execute the feature set
+            // Execute the feature set. Re-establish the debugger
+            // TaskLocals captured at handler-setup time so the
+            // statement boundary checkpoint in FeatureSetExecutor
+            // sees them — see the comment above the capture.
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                let response = try await Debug.$controller.withValue(capturedDebugController) {
+                    try await Debug.$currentSourceFile.withValue(capturedSourceFile) {
+                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                    }
+                }
                 var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
 
                 // Validate response body against OpenAPI response schema (ARO-0180)
