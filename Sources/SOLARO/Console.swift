@@ -81,6 +81,9 @@ final class ConsoleProcess {
     private var stderrPipe: Pipe?
     private var stdinPipe: Pipe?
     private var liveStream: LiveEventStream?
+    /// In-process runtime host (issue #282 phase 1). Used in place of
+    /// the subprocess when `SOLARO_EMBEDDED_RUNTIME=1`.
+    private var embeddedHost: EmbeddedRuntimeHost?
     /// True while we're running an `aro debug` session — the
     /// console exposes a stdin input field so the user can type
     /// debugger commands (continue, step, etc).
@@ -119,10 +122,63 @@ final class ConsoleProcess {
         }
     }
 
-    /// Convenience for the Play button — always plain `aro run`,
-    /// no breakpoints, no record file.
+    /// Convenience for the Play button — plain `aro run` by default,
+    /// or the in-process embedded runtime when
+    /// `SOLARO_EMBEDDED_RUNTIME=1` (issue #282 phase 1).
     func startRun(project: Project) {
-        start(project: project, mode: .run, breakpointsByFile: [:])
+        if EmbeddedRuntimeHost.isEnabled {
+            startEmbeddedRun(project: project)
+        } else {
+            start(project: project, mode: .run, breakpointsByFile: [:])
+        }
+    }
+
+    /// In-process variant of `startRun`. Reuses every downstream
+    /// pipeline the subprocess path feeds — `applyLiveBatch`,
+    /// `lastExecutedAt`, the per-FS glow, the repo card history —
+    /// just with records arriving through `EmbeddedRuntimeHost`
+    /// instead of `LiveEventStream`.
+    private func startEmbeddedRun(project: Project) {
+        if case .running = state { return }
+        log.removeAll()
+        pausedLine = nil
+        isPaused = false
+        pauseSymbols.removeAll(keepingCapacity: true)
+        lastExecutedAt.removeAll(keepingCapacity: true)
+        lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
+        repositoryValues.removeAll(keepingCapacity: true)
+        repositoryHistory.removeAll(keepingCapacity: true)
+        executionTick = 0
+        lastProject = project
+        breakpointLines = []
+        didAutoContinueFirstPause = false
+        acceptsStdin = false
+
+        let host = EmbeddedRuntimeHost()
+        host.onRecords = { [weak self] batch in
+            self?.applyLiveBatch(batch)
+        }
+        host.onEnded = { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.appendError("[embedded] \(error.localizedDescription)")
+                self.state = .exited(code: 1)
+            } else {
+                self.state = .exited(code: 0)
+            }
+            self.appendInfo("[embedded run complete]")
+            self.embeddedHost = nil
+        }
+        host.onLog = { [weak self] message in
+            self?.appendInfo(message)
+        }
+        embeddedHost = host
+        appendInfo("$ embedded-runtime \(project.rootPath.lastPathComponent)")
+        // Synthesize a fake PID — there's no subprocess to mark, but
+        // downstream observers expect `State.running` with *some*
+        // integer so they can flip UI affordances.
+        state = .running(pid: -1)
+        host.start(project: project)
     }
 
     /// Convenience for the Debug button — `aro debug` with whatever
@@ -318,6 +374,11 @@ final class ConsoleProcess {
     func stop() {
         liveStream?.stop()
         liveStream = nil
+        if let host = embeddedHost {
+            host.stop()
+            // The host's onEnded flips state to .exited.
+            return
+        }
         guard let process, process.isRunning else {
             process = nil
             return
