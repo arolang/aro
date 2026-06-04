@@ -28,6 +28,8 @@ struct SettingsView: View {
     private var editorAIFallback: Bool = false
     @AppStorage(SolaroPrefs.aroOverride.rawValue)
     private var aroOverride: String = ""
+    @AppStorage(SolaroPrefs.runtimeBackend.rawValue)
+    private var runtimeBackend: String = RuntimeBackend.embedded.rawValue
     @AppStorage(SolaroPrefs.askEndpoint.rawValue)
     private var askEndpoint: String = ""
     @AppStorage(SolaroPrefs.theme.rawValue)
@@ -124,6 +126,25 @@ struct SettingsView: View {
     private var backendsTab: some View {
         Form {
             Section {
+                Picker("Runtime", selection: $runtimeBackend) {
+                    ForEach(RuntimeBackend.allCases) { backend in
+                        Text(backend.label).tag(backend.rawValue)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                if let resolved = RuntimeBackend(rawValue: runtimeBackend) {
+                    Text(resolved.blurb)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Applies to the next Run. Already-running processes keep their current backend.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } header: {
+                Text("Runtime backend")
+            }
+            Section {
                 TextField("SOLARO_ARO", text: $aroOverride,
                           prompt: Text("/path/to/aro (overrides resolution)"))
                     .textFieldStyle(.roundedBorder)
@@ -131,7 +152,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
-                Text("`aro` binary")
+                Text("External `aro` binary")
             }
             Section {
                 TextField("ARO_ASK_ENDPOINT", text: $askEndpoint,
@@ -208,4 +229,48 @@ enum SolaroPrefs: String {
     case editorGhostText  = "solaro.editor.ghostText"
     case editorGhostDelay = "solaro.editor.ghostDelay"
     case editorAIFallback = "solaro.editor.aiFallback"
+    case runtimeBackend   = "solaro.runtimeBackend"
+}
+
+/// Which runtime drives the green Play button. The embedded path
+/// links ARORuntime in-process and gives the canvas live pulses +
+/// inline values for free; the external path shells out to a
+/// standalone `aro` and is what every prior release shipped.
+enum RuntimeBackend: String, CaseIterable, Identifiable {
+    case embedded
+    case external
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .embedded: return "Embedded (in-process)"
+        case .external: return "External `aro` subprocess"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .embedded:
+            return "Runs the project inside SOLARO. Statement-level events feed the canvas pulse and inline values directly; no subprocess, no JSONL round-trip."
+        case .external:
+            return "Spawns the configured `aro` binary. Matches every previous release. Statement-level pulses only fire under `aro debug`; plain `aro run` produces no live events."
+        }
+    }
+
+    /// Resolution order:
+    /// 1. The explicit user preference (Settings → Backends).
+    /// 2. `SOLARO_EMBEDDED_RUNTIME=1` env var (legacy override).
+    /// 3. Default: embedded.
+    static var current: RuntimeBackend {
+        let raw = UserDefaults.standard
+            .string(forKey: SolaroPrefs.runtimeBackend.rawValue)
+        if let raw, let parsed = RuntimeBackend(rawValue: raw) {
+            return parsed
+        }
+        if ProcessInfo.processInfo.environment["SOLARO_EMBEDDED_RUNTIME"] == "1" {
+            return .embedded
+        }
+        return .embedded
+    }
 }

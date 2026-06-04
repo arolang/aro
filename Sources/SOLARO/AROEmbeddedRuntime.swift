@@ -100,10 +100,12 @@ final class EmbeddedRuntimeFrontend: DebugFrontend {
 final class EmbeddedRuntimeHost {
 
     /// Read by the rest of SOLARO so it can pick the embedded vs.
-    /// subprocess path. The opt-in via env var matches how SOLARO
-    /// already exposes a handful of dev knobs (e.g. `SOLARO_ARO`).
+    /// subprocess path. Drains through `RuntimeBackend.current`,
+    /// which consults the user's Settings → Backends choice first,
+    /// falls back to the `SOLARO_EMBEDDED_RUNTIME=1` env var, and
+    /// defaults to embedded for fresh installs.
     static var isEnabled: Bool {
-        ProcessInfo.processInfo.environment["SOLARO_EMBEDDED_RUNTIME"] == "1"
+        RuntimeBackend.current == .embedded
     }
 
     /// Called for each new event the runtime produces. Same shape
