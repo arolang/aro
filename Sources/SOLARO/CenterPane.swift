@@ -458,6 +458,8 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
+                lastExecutedAt: controller.lastExecutedAt,
+                repositoryValues: controller.repositoryValues,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
@@ -771,6 +773,8 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
+                lastExecutedAt: controller.lastExecutedAt,
+                repositoryValues: controller.repositoryValues,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)

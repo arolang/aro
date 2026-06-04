@@ -42,6 +42,23 @@ final class ConsoleProcess {
     /// hover tooltips that show live variable values.
     var pauseSymbols: [String: SymbolValue] = [:]
 
+    /// Wall-clock time each source line was most recently executed
+    /// (per the JSONL event stream). Drives the canvas's "executing
+    /// now" pulse — node cards whose `lineHint` shows up here recent
+    /// enough light up a colored left border that fades out over
+    /// ~600 ms. Reset at the start of every new run.
+    var lastExecutedAt: [Int: Date] = [:]
+    /// Monotonically increases each time `lastExecutedAt` is updated.
+    /// SwiftUI watches this so TimelineView-driven animations keep
+    /// scheduling refreshes even when the same line fires twice in
+    /// a row (and the dict value stays nominally equal).
+    var executionTick: UInt64 = 0
+    /// Latest value the runtime wrote into / read from each
+    /// repository, keyed by repository object name (`"user-repository"`,
+    /// `"sessions-store"`, …). Surfaced by the canvas's repository
+    /// cards so the user sees the live payload alongside the wires.
+    var repositoryValues: [String: SymbolValue] = [:]
+
     struct SymbolValue: Equatable, Hashable {
         let name: String
         let typeName: String
@@ -52,6 +69,7 @@ final class ConsoleProcess {
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var stdinPipe: Pipe?
+    private var liveStream: LiveEventStream?
     /// True while we're running an `aro debug` session — the
     /// console exposes a stdin input field so the user can type
     /// debugger commands (continue, step, etc).
@@ -119,6 +137,9 @@ final class ConsoleProcess {
         pausedLine = nil
         isPaused = false
         pauseSymbols.removeAll(keepingCapacity: true)
+        lastExecutedAt.removeAll(keepingCapacity: true)
+        repositoryValues.removeAll(keepingCapacity: true)
+        executionTick = 0
         lastProject = project
         breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
         didAutoContinueFirstPause = false
@@ -142,7 +163,11 @@ final class ConsoleProcess {
             }
             appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
         case .run:
-            subArgs = ["run", project.rootPath.path]
+            // `--record` is on by default so SOLARO's canvas can
+            // light up executing nodes and surface live values
+            // without a separate "debug" mode.
+            subArgs = ["run", project.rootPath.path,
+                       "--record", recordPath(for: project)]
             appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
         case .test(let filter):
             subArgs = ["test", project.rootPath.path]
@@ -197,6 +222,8 @@ final class ConsoleProcess {
                 guard let self else { return }
                 self.state = .exited(code: proc.terminationStatus)
                 self.appendInfo("[exit \(proc.terminationStatus)]")
+                self.liveStream?.stop()
+                self.liveStream = nil
             }
         }
 
@@ -204,14 +231,59 @@ final class ConsoleProcess {
             try task.run()
             process = task
             state = .running(pid: task.processIdentifier)
+            // Begin tailing the JSONL stream so the canvas pulses
+            // and updates values in real time as the runtime runs.
+            // Debug + Run both feed the same file path here.
+            startLiveStream(at: recordPath(for: project))
         } catch {
             state = .failed(error.localizedDescription)
             appendError(error.localizedDescription)
         }
     }
 
+    /// Open the JSONL events file for live tailing. Each newly-
+    /// appended record updates `pauseSymbols` (latest value per
+    /// symbol name), `lastExecutedAt[line] = now`, and the bookkeeping
+    /// counter `executionTick` that SwiftUI watches to refresh
+    /// animation views.
+    private func startLiveStream(at path: String) {
+        liveStream?.stop()
+        let url = URL(fileURLWithPath: path)
+        let stream = LiveEventStream(url: url) { [weak self] record in
+            self?.applyLiveRecord(record)
+        }
+        liveStream = stream
+        stream.start()
+    }
+
+    private func applyLiveRecord(_ record: TimeTravelRecord) {
+        if let line = record.line, line > 0 {
+            lastExecutedAt[line] = Date()
+        }
+        for sym in record.symbols {
+            let value = SymbolValue(
+                name: sym.name,
+                typeName: sym.typeName,
+                value: sym.value
+            )
+            pauseSymbols[sym.name] = value
+            // Heuristic: if a symbol's name reads as a repository
+            // entity, surface its current value on the repo card too.
+            let lower = sym.name.lowercased()
+            if lower.hasSuffix("-repository")
+                || lower.hasSuffix("-repo")
+                || lower.hasSuffix("-store")
+            {
+                repositoryValues[sym.name] = value
+            }
+        }
+        executionTick &+= 1
+    }
+
     /// Stop the running process; no-op when nothing is running.
     func stop() {
+        liveStream?.stop()
+        liveStream = nil
         guard let process, process.isRunning else {
             process = nil
             return

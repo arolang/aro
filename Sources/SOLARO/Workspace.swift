@@ -70,6 +70,19 @@ final class WorkspaceController {
     /// JSONL stream. Used for hover-over-variable tooltips.
     var pauseSymbols: [String: ConsoleProcess.SymbolValue] = [:]
 
+    /// Wall-clock time each source line was last executed during the
+    /// currently-recording (or just-finished) run. Mirrored from
+    /// `ConsoleProcess.lastExecutedAt` so views that only depend on
+    /// the controller don't need to know about the console.
+    var lastExecutedAt: [Int: Date] = [:]
+    /// Tick counter incremented every time `lastExecutedAt` updates
+    /// — TimelineView-based animations watch this to keep redrawing
+    /// even when the same line fires twice in a row.
+    var executionTick: UInt64 = 0
+    /// Most recent value the runtime saw flowing into each
+    /// repository, keyed by repository object name.
+    var repositoryValues: [String: ConsoleProcess.SymbolValue] = [:]
+
     /// Currently-selected node in the graphical OpenAPI editor (if
     /// the user is on an openapi.yaml file). Drives the inspector
     /// form that lets them edit route / schema fields directly.
@@ -508,6 +521,12 @@ struct WorkspaceView: View {
         }
         .onChange(of: consoleProcess.pauseSymbols) { _, newValue in
             controller.pauseSymbols = newValue
+        }
+        .onChange(of: consoleProcess.executionTick) { _, _ in
+            controller.lastExecutedAt = consoleProcess.lastExecutedAt
+            controller.repositoryValues = consoleProcess.repositoryValues
+            controller.pauseSymbols = consoleProcess.pauseSymbols
+            controller.executionTick &+= 1
         }
         // When the canvas dispatches an Explain request, flip the
         // right pane to the Ask panel so the streaming response is

@@ -44,6 +44,14 @@ struct CanvasView: View {
     /// Live symbol bag for hover tooltips on nodes that reference
     /// one of these identifiers.
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
+    /// 1-indexed source lines → wall-clock time each line was most
+    /// recently observed executing (from the live JSONL stream).
+    /// Drives the per-card "executing now" pulse. Empty when no run
+    /// has happened yet — the cards then just render normally.
+    let lastExecutedAt: [Int: Date]
+    /// Latest payload observed flowing through each repository,
+    /// keyed by repo object name (e.g. `"user-repository"`).
+    let repositoryValues: [String: ConsoleProcess.SymbolValue]
     /// 1-indexed lines that carry a breakpoint. Nodes on those
     /// lines render a red dot in the top-left corner so the
     /// canvas mirrors the editor gutter.
@@ -64,6 +72,13 @@ struct CanvasView: View {
     /// Live per-node position overlay. Initialised from the graph's
     /// laid-out positions on first appearance; mutated by drags.
     @State private var liveNodes: [CanvasNode.ID: CGPoint] = [:]
+    /// Snapshot of every node's position when a feature-set header
+    /// drag begins, keyed by FS name → {node id → origin}. Cleared
+    /// on drag-end. Same anti-cumulative trick as `dragOrigins` in
+    /// the per-node drag — `DragGesture` reports cumulative
+    /// translations, so without a fixed origin every onChanged
+    /// would double-apply the delta.
+    @State private var fsDragOrigins: [String: [CanvasNode.ID: CGPoint]] = [:]
 
     private let nodeWidth: CGFloat = 240
     private let nodeHeight: CGFloat = 64
@@ -77,74 +92,9 @@ struct CanvasView: View {
                 SolaroColor.backdrop
                 dotGrid(in: geo.size)
 
-                ZStack(alignment: .topLeading) {
-                    FeatureSetContainersLayer(
-                        graph: graph,
-                        positions: nodePositions,
-                        nodeWidth: nodeWidth, nodeHeight: nodeHeight
-                    )
-                    .frame(width: contentSize.width, height: contentSize.height,
-                           alignment: .topLeading)
-                    WiresLayer(
-                        graph: graph,
-                        positions: nodePositions,
-                        nodeWidth: nodeWidth, nodeHeight: nodeHeight,
-                        repoWidth: repoWidth, repoHeight: repoHeight
-                    )
-                    .frame(width: contentSize.width, height: contentSize.height,
-                           alignment: .topLeading)
-                    RepoNodesLayer(
-                        repositories: graph.repositories,
-                        positions: nodePositions,
-                        repoWidth: repoWidth,
-                        repoHeight: repoHeight,
-                        onDrag: { id, newPos in
-                            liveNodes[id] = newPos
-                        },
-                        onDragEnd: { id, finalPos in
-                            liveNodes[id] = finalPos
-                            persistPosition(id, finalPos)
-                        }
-                    )
-                    .frame(width: contentSize.width, height: contentSize.height,
-                           alignment: .topLeading)
-                    NodesLayer(
-                        graph: graph,
-                        positions: nodePositions,
-                        nodeWidth: nodeWidth, nodeHeight: nodeHeight,
-                        selectedLine: currentLine,
-                        pausedLine: pausedLine,
-                        pauseSymbols: pauseSymbols,
-                        breakpointLines: breakpointLines,
-                        onContextAction: onNodeContextAction,
-                        onDrag: { id, newPos in
-                            liveNodes[id] = newPos
-                        },
-                        onDragEnd: { id, finalPos in
-                            liveNodes[id] = finalPos
-                            persistPosition(id, finalPos)
-                        },
-                        onSelect: { lineHint in
-                            // Push the node's source line back so
-                            // the editor moves its caret to match.
-                            if currentLine != lineHint {
-                                currentLine = lineHint
-                            }
-                        }
-                    )
-                    .frame(width: contentSize.width, height: contentSize.height,
-                           alignment: .topLeading)
-                }
+                canvasLayers(contentSize: contentSize)
                 .frame(width: contentSize.width, height: contentSize.height,
                        alignment: .topLeading)
-                .onDrop(of: [.plainText], isTargeted: nil) { providers, location in
-                    guard let onActionDrop else { return false }
-                    return handleActionDrop(
-                        providers: providers,
-                        location: location,
-                        deliver: onActionDrop
-                    )
-                }
                 .offset(x: pan.width + dragOffset.width,
                         y: pan.height + dragOffset.height)
                 .scaleEffect(zoom * magnify, anchor: .topLeading)
@@ -225,6 +175,81 @@ struct CanvasView: View {
         }
     }
 
+    /// Layered ZStack with feature-set boxes, wires, repos, and
+    /// statement nodes. Pulled out of `body` because the type-checker
+    /// timed out once the layer list grew past four entries.
+    @ViewBuilder
+    private func canvasLayers(contentSize: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            FeatureSetContainersLayer(
+                graph: graph,
+                positions: nodePositions,
+                nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                onHeaderDrag: { name, delta in
+                    moveFeatureSet(name, by: delta, persist: false)
+                },
+                onHeaderDragEnd: { name, delta in
+                    moveFeatureSet(name, by: delta, persist: true)
+                }
+            )
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+            WiresLayer(
+                graph: graph,
+                positions: nodePositions,
+                nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                repoWidth: repoWidth, repoHeight: repoHeight
+            )
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+            RepoNodesLayer(
+                repositories: graph.repositories,
+                positions: nodePositions,
+                repoWidth: repoWidth,
+                repoHeight: repoHeight,
+                repositoryValues: repositoryValues,
+                onDrag: { id, newPos in liveNodes[id] = newPos },
+                onDragEnd: { id, finalPos in
+                    liveNodes[id] = finalPos
+                    persistPosition(id, finalPos)
+                }
+            )
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+            NodesLayer(
+                graph: graph,
+                positions: nodePositions,
+                nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                selectedLine: currentLine,
+                pausedLine: pausedLine,
+                pauseSymbols: pauseSymbols,
+                lastExecutedAt: lastExecutedAt,
+                breakpointLines: breakpointLines,
+                onContextAction: onNodeContextAction,
+                onDrag: { id, newPos in liveNodes[id] = newPos },
+                onDragEnd: { id, finalPos in
+                    liveNodes[id] = finalPos
+                    persistPosition(id, finalPos)
+                },
+                onSelect: { lineHint in
+                    if currentLine != lineHint {
+                        currentLine = lineHint
+                    }
+                }
+            )
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+        }
+        .onDrop(of: [.plainText], isTargeted: nil) { providers, location in
+            guard let onActionDrop else { return false }
+            return handleActionDrop(
+                providers: providers,
+                location: location,
+                deliver: onActionDrop
+            )
+        }
+    }
+
     // MARK: - Position bookkeeping
 
     /// Effective position per node — drag overrides the laid-out
@@ -266,6 +291,37 @@ struct CanvasView: View {
             maxY = max(maxY, p.y + repoHeight)
         }
         return CGSize(width: maxX + 200, height: maxY + 200)
+    }
+
+    /// Translate every statement node in `featureSet` by `delta`,
+    /// using the positions snapshot captured at drag-start so
+    /// cumulative DragGesture translations don't multiply.
+    /// `persist=false` while dragging (live update only); `=true` on
+    /// drag-end (writes the final positions to the layout sidecar).
+    private func moveFeatureSet(
+        _ featureSet: String,
+        by delta: CGSize,
+        persist: Bool
+    ) {
+        // Capture origins on first onChanged.
+        if fsDragOrigins[featureSet] == nil {
+            var snapshot: [CanvasNode.ID: CGPoint] = [:]
+            for node in graph.nodes where node.featureSetName == featureSet {
+                snapshot[node.id] = liveNodes[node.id]
+                    ?? CGPoint(x: node.x, y: node.y)
+            }
+            fsDragOrigins[featureSet] = snapshot
+        }
+        guard let origins = fsDragOrigins[featureSet] else { return }
+        for (id, origin) in origins {
+            let next = CGPoint(
+                x: origin.x + delta.width,
+                y: origin.y + delta.height
+            )
+            liveNodes[id] = next
+            if persist { persistPosition(id, next) }
+        }
+        if persist { fsDragOrigins.removeValue(forKey: featureSet) }
     }
 
     private func seedPositionsIfNeeded() {
@@ -386,6 +442,14 @@ private struct FeatureSetContainersLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    /// Drag callback fired continuously while the user drags the
+    /// container's header strip. The receiver translates every
+    /// statement node belonging to the named feature set by the
+    /// running delta.
+    let onHeaderDrag: (String, CGSize) -> Void
+    /// Called once the header drag ends — the receiver should
+    /// persist the new positions to the layout sidecar.
+    let onHeaderDragEnd: (String, CGSize) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -394,7 +458,9 @@ private struct FeatureSetContainersLayer: View {
                 FeatureSetContainer(
                     name: group.name,
                     tint: color(for: group.name),
-                    rect: group.rect
+                    rect: group.rect,
+                    onHeaderDrag: { delta in onHeaderDrag(group.name, delta) },
+                    onHeaderDragEnd: { delta in onHeaderDragEnd(group.name, delta) }
                 )
                 .position(x: group.rect.midX, y: group.rect.midY)
                 .frame(width: group.rect.width, height: group.rect.height)
@@ -460,6 +526,8 @@ private struct FeatureSetContainer: View {
     let name: String
     let tint: Color
     let rect: CGRect
+    let onHeaderDrag: (CGSize) -> Void
+    let onHeaderDragEnd: (CGSize) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -476,6 +544,16 @@ private struct FeatureSetContainer: View {
             .padding(.horizontal, SolaroSpace.s)
             .padding(.top, SolaroSpace.xs)
             .padding(.bottom, 2)
+            // Limit the drag-grab area to the header strip so the
+            // user can still click into the body to interact with
+            // individual node cards.
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture()
+                    .onChanged { value in onHeaderDrag(value.translation) }
+                    .onEnded { value in onHeaderDragEnd(value.translation) }
+            )
+            .help("Drag the header to move the whole feature set")
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -649,6 +727,8 @@ struct NodesLayer: View {
     let pausedLine: Int?
     /// Live symbols for hover tooltips.
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
+    /// Per-line execution timestamps from the live event stream.
+    let lastExecutedAt: [Int: Date]
     /// Lines that carry a breakpoint — each matching node renders
     /// the red gutter dot in its corner.
     let breakpointLines: Set<Int>
@@ -679,7 +759,8 @@ struct NodesLayer: View {
                     isSelected: selectedLine == node.lineHint,
                     isPaused: pausedLine == node.lineHint,
                     hasBreakpoint: breakpointLines.contains(node.lineHint),
-                    symbols: relevantSymbols(for: node)
+                    symbols: relevantSymbols(for: node),
+                    lastExecutedAt: lastExecutedAt[node.lineHint]
                 )
                 // `.position` is absolute placement that puts the
                 // view's center at the given point in the parent's
@@ -777,15 +858,41 @@ private struct CanvasNodeCard: View {
     let isPaused: Bool
     let hasBreakpoint: Bool
     let symbols: [ConsoleProcess.SymbolValue]
+    /// Wall-clock time this node's source line was last seen
+    /// executing (from the JSONL stream). nil if it hasn't run yet
+    /// during this session. Drives the colored left-border pulse.
+    let lastExecutedAt: Date?
 
     @State private var hovering = false
     @State private var showPopover = false
 
+    /// Pulse fade-out duration. Picked to feel responsive without
+    /// missing fast back-to-back executions — the next pulse starts
+    /// as soon as a new timestamp arrives, even if this one's still
+    /// fading.
+    private let pulseDuration: TimeInterval = 0.6
+
     var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0,
+                                paused: !isPulseLive)) { context in
+            cardContent(at: context.date)
+        }
+    }
+
+    @ViewBuilder
+    private func cardContent(at now: Date) -> some View {
+        let pulse = pulseIntensity(at: now)
         HStack(spacing: 0) {
+            // Left role rail — pulses brighter when this line is
+            // actively executing so the user's eye tracks the run.
             Rectangle()
                 .fill(SolaroColor.roleColor(forVerb: node.verb))
-                .frame(width: 3)
+                .overlay(
+                    Rectangle()
+                        .fill(SolaroColor.stateOK)
+                        .opacity(pulse)
+                )
+                .frame(width: 3 + 2 * pulse)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(node.verb)
@@ -801,12 +908,33 @@ private struct CanvasNodeCard: View {
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textTertiary)
                 }
-                Text(summaryDisplay)
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.textSecondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if liveValues.isEmpty {
+                    Text(summaryDisplay)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // Show live runtime values inline so the canvas
+                    // reads like a wire diagram with the actual
+                    // payload visible — no hover required.
+                    ForEach(liveValues, id: \.name) { s in
+                        HStack(spacing: 4) {
+                            Text("<\(s.name)>")
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textTertiary)
+                            Text("=")
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textTertiary)
+                            Text(s.value)
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
             }
             .padding(.horizontal, SolaroSpace.s)
             .padding(.vertical, SolaroSpace.xs)
@@ -879,6 +1007,45 @@ private struct CanvasNodeCard: View {
         if isSelected { return SolaroColor.accent }
         if hovering   { return SolaroColor.accent.opacity(0.6) }
         return SolaroColor.divider
+    }
+
+    /// 0...1 fade between the most recent execution timestamp and
+    /// the cutoff. 0 means the pulse is over (or never started); 1
+    /// means the line just fired this frame.
+    private func pulseIntensity(at now: Date) -> Double {
+        guard let last = lastExecutedAt else { return 0 }
+        let dt = now.timeIntervalSince(last)
+        if dt < 0 { return 1 }
+        if dt >= pulseDuration { return 0 }
+        return 1 - dt / pulseDuration
+    }
+
+    /// True until the most recent execution fades out — keeps the
+    /// TimelineView ticking only while there's something to animate
+    /// so static cards don't waste frames.
+    private var isPulseLive: Bool {
+        guard let last = lastExecutedAt else { return false }
+        return Date().timeIntervalSince(last) < pulseDuration
+    }
+
+    /// Symbols to render inline on the card — prefer the statement's
+    /// result, then any object/value-source identifiers it touches.
+    /// Capped at 2 so the 64-pt card stays readable.
+    private var liveValues: [ConsoleProcess.SymbolValue] {
+        guard !symbols.isEmpty else { return [] }
+        var picked: [ConsoleProcess.SymbolValue] = []
+        var seen = Set<String>()
+        if let r = node.resultName,
+           let s = symbols.first(where: { $0.name == r })
+        {
+            picked.append(s); seen.insert(s.name)
+        }
+        for s in symbols where !seen.contains(s.name) {
+            picked.append(s)
+            seen.insert(s.name)
+            if picked.count == 2 { break }
+        }
+        return picked
     }
 
     /// Human-readable line shown under the verb. Falls back to the
@@ -1013,6 +1180,10 @@ private struct RepoNodesLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let repoWidth: CGFloat
     let repoHeight: CGFloat
+    /// Latest value the runtime saw flowing through each repository,
+    /// keyed by repo object name. Empty when no recorded run has
+    /// produced a value yet.
+    let repositoryValues: [String: ConsoleProcess.SymbolValue]
     let onDrag: (String, CGPoint) -> Void
     let onDragEnd: (String, CGPoint) -> Void
 
@@ -1023,7 +1194,12 @@ private struct RepoNodesLayer: View {
             Color.clear
             ForEach(repositories) { repo in
                 let p = positions[repo.id] ?? CGPoint(x: repo.x, y: repo.y)
-                RepoCard(repo: repo, width: repoWidth, height: repoHeight)
+                RepoCard(
+                    repo: repo,
+                    width: repoWidth,
+                    height: repoHeight,
+                    liveValue: repositoryValues[repo.name]
+                )
                     .position(x: p.x + repoWidth / 2,
                               y: p.y + repoHeight / 2)
                     .gesture(dragGesture(id: repo.id, livePosition: p))
@@ -1058,6 +1234,9 @@ private struct RepoCard: View {
     let repo: RepositoryNode
     let width: CGFloat
     let height: CGFloat
+    /// Most recent value seen on this repository during the current
+    /// recorded run, or `nil` if nothing has flowed through yet.
+    let liveValue: ConsoleProcess.SymbolValue?
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -1069,10 +1248,21 @@ private struct RepoCard: View {
                     .font(SolaroFont.mono)
                     .foregroundStyle(SolaroColor.textPrimary)
                     .lineLimit(1)
-                Text(usageLabel(repo.usage))
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.textSecondary)
-                    .lineLimit(1)
+                if let live = liveValue {
+                    // Replace the usage badge with the live payload
+                    // once we have one — surfaces the actual data
+                    // alongside the wires.
+                    Text(live.value)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else {
+                    Text(usageLabel(repo.usage))
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -1086,7 +1276,15 @@ private struct RepoCard: View {
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
                 .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
         )
-        .help("Repository: \(repo.name) — \(usageLabel(repo.usage))")
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        var msg = "Repository: \(repo.name) — \(usageLabel(repo.usage))"
+        if let live = liveValue {
+            msg += "\nCurrent value: \(live.value)"
+        }
+        return msg
     }
 
     private func usageLabel(_ u: RepositoryNode.Usage) -> String {
