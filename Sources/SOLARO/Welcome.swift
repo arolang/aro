@@ -66,7 +66,7 @@ struct WelcomeView: View {
 
     private var wordmark: some View {
         VStack(spacing: SolaroSpace.s) {
-            Text("SOLARO")
+            Text("Solaro")
                 .font(SolaroFont.wordmark)
                 .tracking(10)
                 .foregroundStyle(SolaroColor.textPrimary)

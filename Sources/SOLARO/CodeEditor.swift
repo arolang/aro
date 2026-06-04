@@ -1229,7 +1229,12 @@ struct AROCodeEditor: NSViewRepresentable {
 
     /// Pulse window — keep in step with `CanvasNodeCard.pulseDuration`
     /// so the editor and canvas feel like one animation.
-    fileprivate var executionPulseDuration: TimeInterval { 0.6 }
+    /// Matches the canvas's `pulseHold + pulseFade` so the editor
+    /// row tint stays on screen for the same window as the node
+    /// rail flash. AppKit doesn't easily animate an attribute fade,
+    /// so the editor uses a simple binary on/off — we hold the tint
+    /// for the full window then drop it in one go.
+    fileprivate var executionPulseDuration: TimeInterval { 1.0 }
 
     private func paintExecutionPulse(line: Int, on textView: STTextView) {
         guard let range = lineRange(line: line, in: textView),

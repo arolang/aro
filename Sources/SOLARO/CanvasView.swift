@@ -546,7 +546,12 @@ private struct FeatureSetContainer: View {
     let onHeaderDrag: (CGSize) -> Void
     let onHeaderDragEnd: (CGSize) -> Void
 
-    private let pulseDuration: TimeInterval = 0.9
+    // Same hold-then-fade shape as `CanvasNodeCard`'s rail pulse, a
+    // touch longer because the FS container is bigger and reads as
+    // ambient context rather than a focal element.
+    private let pulseHold: TimeInterval = 0.45
+    private let pulseFade: TimeInterval = 0.85
+    private var pulseDuration: TimeInterval { pulseHold + pulseFade }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0,
@@ -609,8 +614,10 @@ private struct FeatureSetContainer: View {
         guard let last = lastExecutedAt else { return 0 }
         let dt = now.timeIntervalSince(last)
         if dt < 0 { return 1 }
-        if dt >= pulseDuration { return 0 }
-        return 1 - dt / pulseDuration
+        if dt < pulseHold { return 1 }
+        let fadeDt = dt - pulseHold
+        if fadeDt >= pulseFade { return 0 }
+        return 1 - fadeDt / pulseFade
     }
 
     private var isPulseLive: Bool {
@@ -916,11 +923,16 @@ private struct CanvasNodeCard: View {
     @State private var hovering = false
     @State private var showPopover = false
 
-    /// Pulse fade-out duration. Picked to feel responsive without
-    /// missing fast back-to-back executions — the next pulse starts
-    /// as soon as a new timestamp arrives, even if this one's still
-    /// fading.
-    private let pulseDuration: TimeInterval = 0.6
+    /// Per-pulse hold-then-fade timings. A fresh event lands with a
+    /// short `pulseHold` at full brightness — long enough for the
+    /// eye to catch even when a program executes in single-digit
+    /// milliseconds — followed by `pulseFade` ramping back down to
+    /// zero. Every new event resets to T=0 of the hold so two
+    /// rapid-fire pulses on the same line don't visually collapse
+    /// into one.
+    private let pulseHold: TimeInterval = 0.35
+    private let pulseFade: TimeInterval = 0.65
+    private var pulseDuration: TimeInterval { pulseHold + pulseFade }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0,
@@ -933,21 +945,21 @@ private struct CanvasNodeCard: View {
     private func cardContent(at now: Date) -> some View {
         let pulse = pulseIntensity(at: now)
         HStack(spacing: 0) {
-            // Left role rail — same role colour the rail always
-            // uses, but brighter + wider while the line is actively
-            // executing so the user's eye tracks the run. We
-            // light up the role colour rather than a uniform green
-            // so REQUEST / OWN / RESPONSE / EXPORT remain visually
-            // distinct during execution too.
+            // Left role rail. Stacked role base + bright white
+            // overlay so the pulse is visible even on a small (~64-pt)
+            // card and a fast (sub-30 ms) program. The width also
+            // grows substantially on peak so there's no doubt about
+            // which node fired.
             let role = SolaroColor.roleColor(forVerb: node.verb)
-            Rectangle()
-                .fill(role)
-                .overlay(
-                    Rectangle()
-                        .fill(Color.white)
-                        .opacity(0.55 * pulse)
-                )
-                .frame(width: 3 + 2 * pulse)
+            ZStack {
+                Rectangle().fill(role)
+                Rectangle().fill(Color.white).opacity(0.85 * pulse)
+            }
+            .frame(width: 3 + 5 * pulse)
+            .shadow(
+                color: role.opacity(0.85 * pulse),
+                radius: 6 * pulse, x: 0, y: 0
+            )
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(node.verb)
@@ -1064,15 +1076,19 @@ private struct CanvasNodeCard: View {
         return SolaroColor.divider
     }
 
-    /// 0...1 fade between the most recent execution timestamp and
-    /// the cutoff. 0 means the pulse is over (or never started); 1
-    /// means the line just fired this frame.
+    /// 0...1 brightness for the role rail at `now`. Each event
+    /// guarantees a `pulseHold` window of full brightness so even
+    /// programs that finish in a handful of milliseconds register
+    /// visually, followed by a `pulseFade` ramp down to zero. A
+    /// fresh event resets the clock back to T=0 of the hold.
     private func pulseIntensity(at now: Date) -> Double {
         guard let last = lastExecutedAt else { return 0 }
         let dt = now.timeIntervalSince(last)
         if dt < 0 { return 1 }
-        if dt >= pulseDuration { return 0 }
-        return 1 - dt / pulseDuration
+        if dt < pulseHold { return 1 }
+        let fadeDt = dt - pulseHold
+        if fadeDt >= pulseFade { return 0 }
+        return 1 - fadeDt / pulseFade
     }
 
     /// True until the most recent execution fades out — keeps the
