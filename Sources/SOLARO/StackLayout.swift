@@ -36,9 +36,12 @@ enum StackLayout {
         columnPitch: Double = 320,
         featureSetGap: Double = 80,
         leftPadding: Double = 40,
-        topPadding: Double = 56     // extra room for the FS header
+        topPadding: Double = 56,    // extra room for the FS header
+        repoColumnGap: Double = 120,
+        repoRowPitch: Double = 96
     ) -> CanvasGraph {
         var nodes = graph.nodes
+        var repos = graph.repositories
         guard !nodes.isEmpty else { return graph }
 
         let edgesByTo: [String: [CanvasEdge]] = Dictionary(
@@ -95,6 +98,20 @@ enum StackLayout {
             localRow += 1
         }
 
-        return CanvasGraph(nodes: nodes, edges: graph.edges)
+        // Place repository entities in a column to the right of every
+        // laid-out feature set. Repos with a non-zero saved position
+        // (from the sidecar) keep their spot — the user moved them.
+        let rightmost = nodes.map(\.x).max() ?? 0
+        let repoX = rightmost + columnPitch + repoColumnGap
+        for i in repos.indices where repos[i].x == 0 && repos[i].y == 0 {
+            repos[i].x = repoX
+            repos[i].y = topPadding + Double(i) * repoRowPitch
+        }
+
+        return CanvasGraph(
+            nodes: nodes,
+            edges: graph.edges,
+            repositories: repos
+        )
     }
 }

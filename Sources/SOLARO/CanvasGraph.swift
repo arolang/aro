@@ -384,6 +384,12 @@ struct CanvasGraph: Equatable {
                 updated.nodes[i].y = saved.y
             }
         }
+        for i in updated.repositories.indices {
+            if let saved = sidecar.nodes[updated.repositories[i].id] {
+                updated.repositories[i].x = saved.x
+                updated.repositories[i].y = saved.y
+            }
+        }
         return updated
     }
 }

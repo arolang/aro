@@ -67,6 +67,8 @@ struct CanvasView: View {
 
     private let nodeWidth: CGFloat = 240
     private let nodeHeight: CGFloat = 64
+    private let repoWidth: CGFloat = 200
+    private let repoHeight: CGFloat = 72
 
     var body: some View {
         GeometryReader { geo in
@@ -86,7 +88,23 @@ struct CanvasView: View {
                     WiresLayer(
                         graph: graph,
                         positions: nodePositions,
-                        nodeWidth: nodeWidth, nodeHeight: nodeHeight
+                        nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                        repoWidth: repoWidth, repoHeight: repoHeight
+                    )
+                    .frame(width: contentSize.width, height: contentSize.height,
+                           alignment: .topLeading)
+                    RepoNodesLayer(
+                        repositories: graph.repositories,
+                        positions: nodePositions,
+                        repoWidth: repoWidth,
+                        repoHeight: repoHeight,
+                        onDrag: { id, newPos in
+                            liveNodes[id] = newPos
+                        },
+                        onDragEnd: { id, finalPos in
+                            liveNodes[id] = finalPos
+                            persistPosition(id, finalPos)
+                        }
                     )
                     .frame(width: contentSize.width, height: contentSize.height,
                            alignment: .topLeading)
@@ -221,6 +239,13 @@ struct CanvasView: View {
                 out[node.id] = CGPoint(x: node.x, y: node.y)
             }
         }
+        for repo in graph.repositories {
+            if let live = liveNodes[repo.id] {
+                out[repo.id] = live
+            } else {
+                out[repo.id] = CGPoint(x: repo.x, y: repo.y)
+            }
+        }
         return out
     }
 
@@ -235,6 +260,11 @@ struct CanvasView: View {
             maxX = max(maxX, p.x + nodeWidth)
             maxY = max(maxY, p.y + nodeHeight)
         }
+        for repo in graph.repositories {
+            let p = liveNodes[repo.id] ?? CGPoint(x: repo.x, y: repo.y)
+            maxX = max(maxX, p.x + repoWidth)
+            maxY = max(maxY, p.y + repoHeight)
+        }
         return CGSize(width: maxX + 200, height: maxY + 200)
     }
 
@@ -244,6 +274,9 @@ struct CanvasView: View {
         // preserving any drags the user already made this session.
         for node in graph.nodes where liveNodes[node.id] == nil {
             liveNodes[node.id] = CGPoint(x: node.x, y: node.y)
+        }
+        for repo in graph.repositories where liveNodes[repo.id] == nil {
+            liveNodes[repo.id] = CGPoint(x: repo.x, y: repo.y)
         }
     }
 
@@ -465,6 +498,8 @@ struct WiresLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    let repoWidth: CGFloat
+    let repoHeight: CGFloat
 
     var body: some View {
         Canvas { ctx, _ in
@@ -475,6 +510,14 @@ struct WiresLayer: View {
             }
             for edge in graph.edges where edge.kind == .dataFlow {
                 drawDataFlow(edge, ctx: ctx)
+            }
+            // Repo wires sit on top so the user can trace a write or
+            // a watch back to its repository without losing the line
+            // under a data-flow curve.
+            for edge in graph.edges {
+                if case .repoAccess(let op) = edge.kind {
+                    drawRepoAccess(edge, op: op, ctx: ctx)
+                }
             }
         }
     }
@@ -533,6 +576,61 @@ struct WiresLayer: View {
         let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
                              width: 6, height: 6)
         ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
+    }
+
+    /// Draw a wire from a statement node (left side) to a repository
+    /// box (right column). Color + stroke style read by operation:
+    ///   read  → blue solid
+    ///   write → amber solid + filled arrow at the repo end
+    ///   watch → purple dashed
+    private func drawRepoAccess(
+        _ edge: CanvasEdge,
+        op: CanvasEdge.RepoOperation,
+        ctx: GraphicsContext
+    ) {
+        guard
+            let from = positions[edge.fromNodeID],
+            let to = positions[edge.toNodeID]
+        else { return }
+        // Statement node origin (top-left): exits its right edge.
+        let start = CGPoint(x: from.x + nodeWidth,
+                            y: from.y + nodeHeight / 2)
+        // Repo node origin (top-left): enters its left edge.
+        let end = CGPoint(x: to.x,
+                          y: to.y + repoHeight / 2)
+        let dx = abs(end.x - start.x)
+        let curveOffset = max(dx * 0.5, 36)
+        let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
+        let c2 = CGPoint(x: end.x - curveOffset, y: end.y)
+        var path = Path()
+        path.move(to: start)
+        path.addCurve(to: end, control1: c1, control2: c2)
+
+        let (color, dash, drawArrow): (Color, [CGFloat], Bool) = {
+            switch op {
+            case .read:  return (SolaroColor.accent,     [],     false)
+            case .write: return (SolaroColor.stateWarn,  [],     true)
+            case .watch: return (SolaroColor.stateError, [5, 4], false)
+            }
+        }()
+        let style = StrokeStyle(lineWidth: 1.6, lineCap: .round, dash: dash)
+        ctx.stroke(path, with: .color(color.opacity(0.22)),
+                   style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: dash))
+        ctx.stroke(path, with: .color(color.opacity(0.92)), style: style)
+        if drawArrow {
+            // Filled triangle pointing into the repo's left edge.
+            var arrow = Path()
+            let size: CGFloat = 7
+            arrow.move(to: CGPoint(x: end.x, y: end.y))
+            arrow.addLine(to: CGPoint(x: end.x - size, y: end.y - size * 0.6))
+            arrow.addLine(to: CGPoint(x: end.x - size, y: end.y + size * 0.6))
+            arrow.closeSubpath()
+            ctx.fill(arrow, with: .color(color))
+        } else {
+            let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
+                                 width: 6, height: 6)
+            ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
+        }
     }
 }
 
@@ -902,5 +1000,100 @@ private struct EmptyCanvasNotice: View {
         .padding(SolaroSpace.m)
         .background(SolaroColor.surfaceRaised.opacity(0.85))
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
+    }
+}
+
+// MARK: - Repositories
+
+/// Draws each repository entity as a draggable card, positioned via
+/// the shared `positions` map so the wires layer connects to the
+/// exact same point.
+private struct RepoNodesLayer: View {
+    let repositories: [RepositoryNode]
+    let positions: [CanvasNode.ID: CGPoint]
+    let repoWidth: CGFloat
+    let repoHeight: CGFloat
+    let onDrag: (String, CGPoint) -> Void
+    let onDragEnd: (String, CGPoint) -> Void
+
+    @State private var dragOrigins: [String: CGPoint] = [:]
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(repositories) { repo in
+                let p = positions[repo.id] ?? CGPoint(x: repo.x, y: repo.y)
+                RepoCard(repo: repo, width: repoWidth, height: repoHeight)
+                    .position(x: p.x + repoWidth / 2,
+                              y: p.y + repoHeight / 2)
+                    .gesture(dragGesture(id: repo.id, livePosition: p))
+            }
+        }
+    }
+
+    private func dragGesture(id: String, livePosition: CGPoint) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                let origin = dragOrigins[id] ?? livePosition
+                if dragOrigins[id] == nil { dragOrigins[id] = origin }
+                let next = CGPoint(
+                    x: origin.x + value.translation.width,
+                    y: origin.y + value.translation.height
+                )
+                onDrag(id, next)
+            }
+            .onEnded { value in
+                let origin = dragOrigins[id] ?? livePosition
+                let final = CGPoint(
+                    x: origin.x + value.translation.width,
+                    y: origin.y + value.translation.height
+                )
+                dragOrigins.removeValue(forKey: id)
+                onDragEnd(id, final)
+            }
+    }
+}
+
+private struct RepoCard: View {
+    let repo: RepositoryNode
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        HStack(spacing: SolaroSpace.s) {
+            Image(systemName: "cylinder.split.1x2.fill")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SolaroColor.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(repo.name)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .lineLimit(1)
+                Text(usageLabel(repo.usage))
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .frame(width: width, height: height, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .fill(SolaroColor.surfaceRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
+        )
+        .help("Repository: \(repo.name) — \(usageLabel(repo.usage))")
+    }
+
+    private func usageLabel(_ u: RepositoryNode.Usage) -> String {
+        var parts: [String] = []
+        if u.contains(.read)  { parts.append("read") }
+        if u.contains(.write) { parts.append("write") }
+        if u.contains(.watch) { parts.append("watch") }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 }
