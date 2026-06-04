@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# build-solaro-app-local.sh — assemble a local SOLARO.app for dev use.
+# build-solaro-app-local.sh — assemble a local Solaro.app for dev use.
 # =============================================================================
 # CI uses its own packaging step (see .github/workflows/build.yml). This
-# script is for local development: build the SOLARO executable + launcher,
+# script is for local development: build the Solaro executable + launcher,
 # wrap the binary in a minimal .app bundle, and stage it under .build/ so
 # the `solaro` launcher can find it via SOLARO_APP=.
 #
@@ -11,7 +11,7 @@
 #   ./tools/build-solaro-app-local.sh [release|debug]
 #
 # Outputs:
-#   .build/SOLARO.app/...
+#   .build/Solaro.app/...
 #   .build/<config>/solaro       (the launcher CLI)
 # =============================================================================
 
@@ -42,14 +42,14 @@ if [ -d ".build/checkouts/mlx-swift" ]; then
     ./tools/build-metallib.sh "$CONFIG" 2>&1 | sed 's/^/[metallib] /'
 fi
 
-APP_DIR=".build/SOLARO.app"
+APP_DIR=".build/Solaro.app"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 # Copy the SolaroApp binary into the .app under its user-facing
-# name (SOLARO). The product is named SolaroApp internally only
+# name (Solaro). The product is named SolaroApp internally only
 # to dodge SwiftPM's case-insensitive-fs collision with the
 # launcher product `solaro`.
-cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/SOLARO"
+cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro"
 cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -59,16 +59,20 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleExecutable</key><string>SOLARO</string>
+  <key>CFBundleExecutable</key><string>Solaro</string>
+  <!-- CFBundleIdentifier intentionally keeps the SOLARO suffix even
+       though the app is now called Solaro — changing the bundle ID
+       would orphan every existing user's NSUserDefaults, Launch
+       Services file association, and crash-report history. -->
   <key>CFBundleIdentifier</key><string>com.arolang.SOLARO</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>SOLARO</string>
+  <key>CFBundleName</key><string>Solaro</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <!-- Tell Launch Services SOLARO opens folders (ARO projects)
+  <!-- Tell Launch Services Solaro opens folders (ARO projects)
        and individual .aro source files (#277). Double-click in
        Finder routes through RootView.onOpenURL. -->
   <key>CFBundleDocumentTypes</key>
@@ -115,7 +119,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
-      <key>CFBundleURLName</key><string>SOLARO deep link</string>
+      <key>CFBundleURLName</key><string>Solaro deep link</string>
       <key>CFBundleURLSchemes</key>
       <array><string>solaro</string></array>
     </dict>

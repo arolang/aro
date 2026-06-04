@@ -525,11 +525,11 @@ jobs:
           .build/release/solaro --version
           .build/release/solaro --help
 
-      - name: Assemble SOLARO.app bundle
+      - name: Assemble Solaro.app bundle
         run: |
-          APP_DIR="solaro-dist/SOLARO.app"
+          APP_DIR="solaro-dist/Solaro.app"
           mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-          cp .build/release/SolaroApp "$APP_DIR/Contents/MacOS/SOLARO"
+          cp .build/release/SolaroApp "$APP_DIR/Contents/MacOS/Solaro"
           cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -538,10 +538,12 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleDevelopmentRegion</key><string>en</string>
-            <key>CFBundleExecutable</key><string>SOLARO</string>
+            <key>CFBundleExecutable</key><string>Solaro</string>
+            <!-- CFBundleIdentifier kept stable to preserve user defaults
+                 and Launch Services associations across the rename. -->
             <key>CFBundleIdentifier</key><string>com.arolang.SOLARO</string>
             <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-            <key>CFBundleName</key><string>SOLARO</string>
+            <key>CFBundleName</key><string>Solaro</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>${VERSION}</string>
             <key>CFBundleVersion</key><string>${VERSION}</string>
@@ -566,7 +568,7 @@ jobs:
           # Launcher binary lives alongside (ADR-008 follow-up).
           cp .build/release/solaro solaro-dist/solaro
 
-      - name: Sign SOLARO.app (tags only)
+      - name: Sign Solaro.app (tags only)
         if: github.ref_type == 'tag'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -574,7 +576,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           if [ -z "$APPLE_CERTIFICATE_BASE64" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-            echo "Apple signing secrets not configured — leaving SOLARO.app unsigned."
+            echo "Apple signing secrets not configured — leaving Solaro.app unsigned."
             exit 0
           fi
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -590,13 +592,13 @@ jobs:
 
           codesign --force --options runtime --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" \
-            solaro-dist/SOLARO.app/Contents/MacOS/SOLARO
+            solaro-dist/Solaro.app/Contents/MacOS/Solaro
           codesign --force --options runtime --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" \
-            solaro-dist/SOLARO.app
-          codesign --verify --deep --strict solaro-dist/SOLARO.app
+            solaro-dist/Solaro.app
+          codesign --verify --deep --strict solaro-dist/Solaro.app
 
-      - name: Notarize SOLARO.app (tags only)
+      - name: Notarize Solaro.app (tags only)
         if: github.ref_type == 'tag'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -607,27 +609,27 @@ jobs:
             echo "Notarization secrets missing — skipping."
             exit 0
           fi
-          ditto -c -k --keepParent solaro-dist/SOLARO.app solaro-dist/SOLARO.app.zip
-          xcrun notarytool submit solaro-dist/SOLARO.app.zip \
+          ditto -c -k --keepParent solaro-dist/Solaro.app solaro-dist/Solaro.app.zip
+          xcrun notarytool submit solaro-dist/Solaro.app.zip \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --wait
-          xcrun stapler staple solaro-dist/SOLARO.app
-          rm -f solaro-dist/SOLARO.app.zip
+          xcrun stapler staple solaro-dist/Solaro.app
+          rm -f solaro-dist/Solaro.app.zip
 
-      - name: Package SOLARO.dmg
+      - name: Package Solaro.dmg
         run: |
           # Simple folder-style .dmg for now; the Phase 4 distribution
           # work (#228) replaces this with a proper background-image
           # disk image.
-          hdiutil create -volname SOLARO \
+          hdiutil create -volname Solaro \
             -srcfolder solaro-dist \
             -ov -format UDZO \
             solaro-macos-arm64.dmg
           ls -lh solaro-macos-arm64.dmg
 
-      - name: Upload SOLARO macOS artifact
+      - name: Upload Solaro macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: solaro-macos-arm64

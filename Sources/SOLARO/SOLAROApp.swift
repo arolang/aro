@@ -96,7 +96,7 @@ struct RootView: View {
             }
     }
 
-    /// macOS Launch Services delivers `open -a SOLARO.app <path>`
+    /// macOS Launch Services delivers `open -a Solaro.app <path>`
     /// invocations as an open-URL event rather than as argv. Two
     /// shapes land here now (#277):
     ///   * a directory URL — open it as the project root

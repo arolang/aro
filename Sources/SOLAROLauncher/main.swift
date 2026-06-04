@@ -64,11 +64,14 @@ if argv.count >= 2 {
 #if os(macOS)
 
 // 1. Honor SOLARO_APP env var first — point at a specific .app bundle.
-// 2. Fall back to /Applications/SOLARO.app.
-// 3. Then to a Homebrew-Cask-style /opt/homebrew/Caskroom/solaro/latest/SOLARO.app.
+// 2. Fall back to /Applications/Solaro.app (legacy `SOLARO.app` still
+//    accepted for installs that haven't been re-bundled yet).
+// 3. Then to the user's ~/Applications/ folder.
 let candidates: [String] = [
     ProcessInfo.processInfo.environment["SOLARO_APP"] ?? "",
+    "/Applications/Solaro.app",
     "/Applications/SOLARO.app",
+    "\(NSHomeDirectory())/Applications/Solaro.app",
     "\(NSHomeDirectory())/Applications/SOLARO.app",
 ].filter { !$0.isEmpty }
 
@@ -76,9 +79,9 @@ let appBundle = candidates.first { FileManager.default.fileExists(atPath: $0) }
 
 guard let appBundle else {
     FileHandle.standardError.write(Data("""
-    solaro: cannot find SOLARO.app — looked in:
+    solaro: cannot find Solaro.app — looked in:
     \(candidates.map { "  - \($0)" }.joined(separator: "\n"))
-    Set SOLARO_APP=/path/to/SOLARO.app or install via the .dmg.
+    Set SOLARO_APP=/path/to/Solaro.app or install via the .dmg.
     """.utf8))
     FileHandle.standardError.write(Data("\n".utf8))
     exit(1)

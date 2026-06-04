@@ -48,7 +48,7 @@ Sources/
 │   └── LICENSE-NOTICE.md         ← source-available paid (ADR-011)
 │
 └── SOLAROLauncher/               ← tiny launcher CLI (~140 LOC)
-    └── main.swift                ← `solaro <path>` → `open -a SOLARO.app <path>`
+    └── main.swift                ← `solaro <path>` → `open -a Solaro.app <path>`
 ```
 
 ## How the pieces connect

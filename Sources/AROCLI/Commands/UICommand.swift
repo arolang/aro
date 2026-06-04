@@ -1,6 +1,6 @@
 // ============================================================
 // UICommand.swift
-// AROCLI - Open SOLARO desktop app at a project path
+// AROCLI - Open Solaro desktop app at a project path
 // ============================================================
 
 import ArgumentParser
@@ -18,9 +18,14 @@ enum UILauncher {
     /// Ordered list of macOS bundle candidates given an environment snapshot
     /// and a home directory. Empty `SOLARO_APP` entries are filtered out.
     static func macCandidates(env: [String: String], home: String) -> [String] {
+        // `Solaro.app` is the new bundle name; `SOLARO.app` stays in
+        // the candidate list so installs from before the rename still
+        // launch from `aro ui`.
         return [
             env["SOLARO_APP"] ?? "",
+            "/Applications/Solaro.app",
             "/Applications/SOLARO.app",
+            "\(home)/Applications/Solaro.app",
             "\(home)/Applications/SOLARO.app",
         ].filter { !$0.isEmpty }
     }
@@ -46,21 +51,21 @@ enum UILauncher {
 struct UICommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ui",
-        abstract: "Open SOLARO (ARO desktop UI) at a project path",
+        abstract: "Open Solaro (ARO desktop UI) at a project path",
         discussion: """
-            Locates the SOLARO desktop app and opens it, optionally with a
+            Locates the Solaro desktop app and opens it, optionally with a
             project directory loaded. Mirrors the standalone `solaro`
             launcher so terminal users can stay on `aro` for everything.
 
             Examples:
-              aro ui                # Open SOLARO with no project
-              aro ui .              # Open SOLARO with the current directory
+              aro ui                # Open Solaro with no project
+              aro ui .              # Open Solaro with the current directory
               aro ui ./Examples/HelloWorld
 
             Discovery order on macOS:
               1. $SOLARO_APP
-              2. /Applications/SOLARO.app
-              3. ~/Applications/SOLARO.app
+              2. /Applications/Solaro.app  (legacy SOLARO.app accepted)
+              3. ~/Applications/Solaro.app (legacy SOLARO.app accepted)
 
             Discovery order on Linux:
               1. $SOLARO_APPIMAGE
@@ -87,9 +92,9 @@ struct UICommand: ParsableCommand {
 
         guard let appBundle = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
             FileHandle.standardError.write(Data("""
-            aro ui: cannot find SOLARO.app — looked in:
+            aro ui: cannot find Solaro.app — looked in:
             \(candidates.map { "  - \($0)" }.joined(separator: "\n"))
-            Set SOLARO_APP=/path/to/SOLARO.app or install via the .dmg.
+            Set SOLARO_APP=/path/to/Solaro.app or install via the .dmg.
 
             """.utf8))
             throw ExitCode.failure
@@ -150,7 +155,7 @@ struct UICommand: ParsableCommand {
         }
 
         #else
-        FileHandle.standardError.write(Data("aro ui: SOLARO is only available on macOS and Linux.\n".utf8))
+        FileHandle.standardError.write(Data("aro ui: Solaro is only available on macOS and Linux.\n".utf8))
         throw ExitCode.failure
         #endif
     }

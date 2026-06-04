@@ -20,7 +20,9 @@ struct UILauncherTests {
         )
         #expect(candidates == [
             "/tmp/Custom.app",
+            "/Applications/Solaro.app",
             "/Applications/SOLARO.app",
+            "/Users/test/Applications/Solaro.app",
             "/Users/test/Applications/SOLARO.app",
         ])
     }
@@ -32,7 +34,9 @@ struct UILauncherTests {
             home: "/Users/test"
         )
         #expect(candidates == [
+            "/Applications/Solaro.app",
             "/Applications/SOLARO.app",
+            "/Users/test/Applications/Solaro.app",
             "/Users/test/Applications/SOLARO.app",
         ])
     }
@@ -41,7 +45,9 @@ struct UILauncherTests {
     func macEnvMissing() {
         let candidates = UILauncher.macCandidates(env: [:], home: "/Users/test")
         #expect(candidates == [
+            "/Applications/Solaro.app",
             "/Applications/SOLARO.app",
+            "/Users/test/Applications/Solaro.app",
             "/Users/test/Applications/SOLARO.app",
         ])
     }
