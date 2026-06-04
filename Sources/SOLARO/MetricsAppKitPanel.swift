@@ -427,7 +427,13 @@ final class MetricsContentView: NSView {
     private func refresh() {
         syncConnectionToProcessState()
         applyConnectionState()
-        if let snap = client.latest {
+        // Prefer the embedded snapshot when present — short-lived
+        // programs (e.g. ConstantFolding finishing in <50 ms) never
+        // give the subprocess metrics socket a chance to stream
+        // anything, so the in-process accumulator is the only path
+        // that has real numbers. Falls back to `client.latest` for
+        // normal (subprocess) Runs.
+        if let snap = process.embeddedMetricsSnapshot ?? client.latest {
             applySnapshot(snap)
         }
     }
@@ -435,7 +441,12 @@ final class MetricsContentView: NSView {
     private func syncConnectionToProcessState() {
         switch process.state {
         case .running(let pid):
-            client.connect(pid: pid)
+            // Embedded runs use pid == -1 as a sentinel ("no
+            // subprocess"). Don't try to open a socket against it
+            // or the connection-state UI sticks in "connecting".
+            if pid > 0 {
+                client.connect(pid: pid)
+            }
         case .idle, .exited, .failed:
             client.disconnect()
         }

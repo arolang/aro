@@ -13,13 +13,19 @@ import SwiftUI
 
 struct MetricsPanel: View {
     let process: ConsoleProcess
-    @State private var client = MetricsClient()
+    private var client: MetricsClient { process.metricsClient }
 
     var body: some View {
-        ScrollView {
+        // Pick the embedded snapshot first when present — it covers
+        // short-lived programs where the subprocess push socket
+        // never had a chance to deliver anything. Falls back to
+        // `metricsClient.latest` for normal (subprocess) Runs.
+        let snapshot: MetricsSnapshot? = process.embeddedMetricsSnapshot
+            ?? client.latest
+        return ScrollView {
             VStack(alignment: .leading, spacing: SolaroSpace.m) {
                 header
-                if let snap = client.latest {
+                if let snap = snapshot {
                     summaryCard(snap: snap)
                     featureSetsCard(snap: snap)
                     processCard(snap: snap)
@@ -301,7 +307,13 @@ struct MetricsPanel: View {
 
     private func sync(state: ConsoleProcess.State) {
         if case .running(let pid) = state {
-            client.connect(pid: pid)
+            // Embedded runs use pid = -1 to signal "no subprocess".
+            // The metrics client builds snapshots from in-process
+            // bookkeeping in that case (publishSynthetic from
+            // ConsoleProcess); there's nothing to connect to.
+            if pid > 0 {
+                client.connect(pid: pid)
+            }
         } else {
             client.disconnect()
         }

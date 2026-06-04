@@ -945,21 +945,16 @@ private struct CanvasNodeCard: View {
     private func cardContent(at now: Date) -> some View {
         let pulse = pulseIntensity(at: now)
         HStack(spacing: 0) {
-            // Left role rail. Stacked role base + bright white
-            // overlay so the pulse is visible even on a small (~64-pt)
-            // card and a fast (sub-30 ms) program. The width also
-            // grows substantially on peak so there's no doubt about
-            // which node fired.
+            // Left role rail — always exactly 3 pt in layout so the
+            // verb/value text never shifts. The pulse animation
+            // lives on top of the card as an `.overlay(alignment:
+            // .leading)` (see the modifier near the bottom of this
+            // body), where it can paint a wider, brighter, glowing
+            // bar without affecting any other view's frame.
             let role = SolaroColor.roleColor(forVerb: node.verb)
-            ZStack {
-                Rectangle().fill(role)
-                Rectangle().fill(Color.white).opacity(0.85 * pulse)
-            }
-            .frame(width: 3 + 5 * pulse)
-            .shadow(
-                color: role.opacity(0.85 * pulse),
-                radius: 6 * pulse, x: 0, y: 0
-            )
+            Rectangle()
+                .fill(role)
+                .frame(width: 3)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(node.verb)
@@ -1013,6 +1008,24 @@ private struct CanvasNodeCard: View {
                 : SolaroColor.surfaceRaised
         )
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous))
+        // Pulse bar overlay — paints a wider, brighter version of
+        // the role rail on top of the 3 pt layout slot when the
+        // line is firing. Because it's an overlay on the whole card
+        // (not a sibling in the HStack), it never shifts the text.
+        .overlay(alignment: .leading) {
+            if pulse > 0 {
+                let role = SolaroColor.roleColor(forVerb: node.verb)
+                Rectangle()
+                    .fill(Color.white.opacity(0.85 * pulse))
+                    .frame(width: 3 + 5 * pulse)
+                    .shadow(
+                        color: role.opacity(0.85 * pulse),
+                        radius: 6 * pulse,
+                        x: 0, y: 0
+                    )
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
                 .stroke(borderColor, lineWidth: isPaused || isSelected ? 2 : 1)

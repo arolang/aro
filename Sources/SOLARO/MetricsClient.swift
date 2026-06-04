@@ -229,4 +229,22 @@ final class MetricsClient: @unchecked Sendable {
     private func decode(_ line: Data) -> MetricsSnapshot? {
         try? JSONDecoder().decode(MetricsSnapshot.self, from: line)
     }
+
+    /// Inject a snapshot built outside the socket reader — used by the
+    /// embedded runtime host (issue #282) so the Metrics tab still
+    /// populates when there's no subprocess to host the push socket.
+    /// Throttling deliberately doesn't apply: synthetic snapshots
+    /// arrive on run-end (or once per second from a long-running
+    /// embedded keepalive), so dropping them defeats the purpose.
+    func publishSynthetic(_ snapshot: MetricsSnapshot) {
+        connectionState = .streaming
+        latest = snapshot
+    }
+
+    /// Reset back to idle — used when an embedded run finishes and we
+    /// want the panel to show "no snapshot" until the next Run.
+    func resetIdle() {
+        connectionState = .idle
+        latest = nil
+    }
 }

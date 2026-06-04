@@ -70,6 +70,35 @@ final class ConsoleProcess {
     var repositoryHistory: [String: [SymbolValue]] = [:]
     private static let repositoryHistoryDepth = 5
 
+    /// Shared metrics client read by `MetricsPanel`. Owned here so
+    /// both transports — the push socket the subprocess opens, and
+    /// the synthetic snapshots the embedded runtime publishes —
+    /// converge on a single observable target. Created once per
+    /// process; runs reset it via `connect()` or
+    /// `publishSynthetic()`.
+    let metricsClient = MetricsClient()
+    /// Synthetic snapshot produced by the embedded runtime path.
+    /// Held directly on ConsoleProcess (an `@Observable` class) so
+    /// SwiftUI re-renders MetricsPanel deterministically on every
+    /// update — the previous `metricsClient.latest` route went
+    /// through a nested @Observable whose change notifications
+    /// weren't reliably propagating through MetricsPanel's
+    /// computed-property accessor.
+    var embeddedMetricsSnapshot: MetricsSnapshot?
+
+    /// In-flight metrics aggregation for the current embedded run.
+    /// Populated by `applyLiveBatch` while `embeddedHost != nil`,
+    /// snapshotted to `metricsClient` on a 1s timer (and on
+    /// completion) so the panel still shows numbers even when the
+    /// run finishes inside a single SwiftUI frame.
+    private struct EmbeddedAccumulator {
+        var startedAt: Date
+        var perFS: [String: (count: Int, firstAt: Date, lastAt: Date)] = [:]
+        var totalEvents: Int = 0
+    }
+    private var embeddedAccumulator: EmbeddedAccumulator?
+    private var embeddedMetricsTimer: Timer?
+
     struct SymbolValue: Equatable, Hashable {
         let name: String
         let typeName: String
@@ -160,6 +189,13 @@ final class ConsoleProcess {
         }
         host.onEnded = { [weak self] error in
             guard let self else { return }
+            // Final snapshot before tearing down — short-lived
+            // programs (e.g. ConstantFolding finishing in 5 ms)
+            // never give the 1 s timer a chance to fire, so this
+            // publish is what populates the panel.
+            self.publishEmbeddedMetricsSnapshot()
+            self.embeddedMetricsTimer?.invalidate()
+            self.embeddedMetricsTimer = nil
             if let error {
                 self.appendError("[embedded] \(error.localizedDescription)")
                 self.state = .exited(code: 1)
@@ -178,6 +214,21 @@ final class ConsoleProcess {
         // downstream observers expect `State.running` with *some*
         // integer so they can flip UI affordances.
         state = .running(pid: -1)
+        // Start metrics aggregation. Embedded runs don't have a push
+        // socket to read from, so we synthesise snapshots from our
+        // own per-statement bookkeeping and publish them on a 1 s
+        // cadence + once at completion. Short-lived programs
+        // (HelloWorld, ConstantFolding) finish before the cadence
+        // ticks, so the completion publish is what they rely on.
+        embeddedAccumulator = EmbeddedAccumulator(startedAt: Date())
+        embeddedMetricsSnapshot = nil
+        metricsClient.resetIdle()
+        embeddedMetricsTimer?.invalidate()
+        embeddedMetricsTimer = Timer.scheduledTimer(
+            withTimeInterval: 1.0, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor in self?.publishEmbeddedMetricsSnapshot() }
+        }
         host.start(project: project)
     }
 
@@ -338,6 +389,14 @@ final class ConsoleProcess {
             }
             if let fs = record.featureSet, !fs.isEmpty {
                 lastExecutedAtPerFeatureSet[fs] = now
+                if embeddedAccumulator != nil {
+                    var entry = embeddedAccumulator?.perFS[fs]
+                        ?? (count: 0, firstAt: now, lastAt: now)
+                    entry.count += 1
+                    entry.lastAt = now
+                    embeddedAccumulator?.perFS[fs] = entry
+                    embeddedAccumulator?.totalEvents += 1
+                }
             }
             for sym in record.symbols {
                 let value = SymbolValue(
@@ -410,6 +469,100 @@ final class ConsoleProcess {
     func finishFrame()       { sendInput("f") }
     /// Quit the debugger session.
     func quit()              { sendInput("q") }
+
+    /// Build a `MetricsSnapshot` from the embedded run's accumulator
+    /// (per-FS counts/timing) and the current process resource usage
+    /// (CPU + memory via mach), then hand it to the shared
+    /// `MetricsClient` for the panel to render.
+    fileprivate func publishEmbeddedMetricsSnapshot() {
+        guard let acc = embeddedAccumulator else { return }
+        let now = Date()
+        let uptime = now.timeIntervalSince(acc.startedAt)
+        let featureSets: [FeatureSetMetric] = acc.perFS
+            .map { name, agg in
+                let totalMs = max(0, agg.lastAt.timeIntervalSince(agg.firstAt) * 1000)
+                let avg = agg.count > 0 ? totalMs / Double(agg.count) : 0
+                return FeatureSetMetric(
+                    name: name,
+                    businessActivity: name,
+                    count: agg.count,
+                    successes: agg.count,
+                    failures: 0,
+                    totalMs: totalMs,
+                    minMs: avg,
+                    maxMs: avg,
+                    avgMs: avg,
+                    successRate: 100
+                )
+            }
+            .sorted { $0.name < $1.name }
+        let process = Self.currentProcessMetrics()
+        let snap = MetricsSnapshot(
+            kind: "embedded",
+            collectedAt: ISO8601DateFormatter().string(from: now),
+            uptimeSec: uptime,
+            totalExecutions: acc.totalEvents,
+            totalSuccesses: acc.totalEvents,
+            totalFailures: 0,
+            featureSets: featureSets,
+            process: process
+        )
+        metricsClient.publishSynthetic(snap)
+        embeddedMetricsSnapshot = snap
+    }
+
+    /// Snapshot the host process's CPU + memory. Reads
+    /// `mach_task_basic_info` for resident memory and `getrusage`
+    /// for accumulated user/system CPU seconds. Cheap (one syscall
+    /// each), safe to call on every Metrics tick.
+    private static func currentProcessMetrics() -> ProcessMetricsView {
+        var basicInfo = mach_task_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<mach_task_basic_info_data_t>.size
+                / MemoryLayout<integer_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &basicInfo) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    $0,
+                    &count
+                )
+            }
+        }
+        let residentMB: Double
+        let virtualMB: Double
+        if kr == KERN_SUCCESS {
+            residentMB = Double(basicInfo.resident_size) / 1024 / 1024
+            virtualMB = Double(basicInfo.virtual_size) / 1024 / 1024
+        } else {
+            residentMB = 0
+            virtualMB = 0
+        }
+        var usage = rusage()
+        let cpuUser: Double
+        let cpuSystem: Double
+        if getrusage(RUSAGE_SELF, &usage) == 0 {
+            cpuUser = Double(usage.ru_utime.tv_sec)
+                + Double(usage.ru_utime.tv_usec) / 1_000_000
+            cpuSystem = Double(usage.ru_stime.tv_sec)
+                + Double(usage.ru_stime.tv_usec) / 1_000_000
+        } else {
+            cpuUser = 0
+            cpuSystem = 0
+        }
+        // Count of open file descriptors — best-effort via fcntl
+        // F_MAXFD (Darwin); fall back to a fixed estimate.
+        let fdCount = Int(getdtablesize())
+        return ProcessMetricsView(
+            cpuUserSec: cpuUser,
+            cpuSystemSec: cpuSystem,
+            virtualMB: virtualMB,
+            residentMB: residentMB,
+            openFDs: fdCount
+        )
+    }
 
     /// Where `--record` writes its JSONL stream for time-travel
     /// playback in the Time-Travel view. Creates the parent
