@@ -15,19 +15,30 @@
 import Foundation
 
 /// Tails a JSONL file appendings live, decoding each new line via
-/// `TimeTravelReader` and delivering the resulting record on the
-/// main actor.
-@MainActor
-final class LiveEventStream {
+/// `TimeTravelReader` and delivering each batch on the main queue.
+///
+/// The class is intentionally **not** `@MainActor`-isolated. The
+/// DispatchSource callbacks fire on a utility queue, and capturing
+/// a `@MainActor`-isolated class via `[weak self]` from those
+/// callbacks triggers Swift Concurrency's runtime isolation
+/// assertion on entry — even when the work is then dispatched to
+/// main. By keeping the class nonisolated, the dispatch callbacks
+/// can touch its internal state directly under a queue serial, and
+/// only the user-visible callback hops to main.
+final class LiveEventStream: @unchecked Sendable {
 
     /// Closure run for every batch of new records, delivered on the
-    /// main actor. Receiving records in batches (vs. one at a time)
+    /// main queue. Receiving records in batches (vs. one at a time)
     /// lets ConsoleProcess apply them all under a single observation
     /// frame — a burst of 100 events from a hot loop produces one
     /// SwiftUI redraw instead of 100.
     let onRecords: ([TimeTravelRecord]) -> Void
 
     private let url: URL
+    /// Serial queue that owns `fileHandle`, `source`, and `carry`,
+    /// so the DispatchSource callbacks and `stop()` can mutate them
+    /// without racing.
+    private let queue = DispatchQueue(label: "com.arolang.solaro.LiveEventStream")
     private var fileHandle: FileHandle?
     private var source: DispatchSourceFileSystemObject?
     /// Bytes left over from the last read that didn't end on `\n` —
@@ -41,56 +52,63 @@ final class LiveEventStream {
     }
 
     deinit {
+        // Cancellation must happen on the owning queue; if we never
+        // started, nothing to do. We can't dispatch from deinit
+        // because the object is gone — but the source was already
+        // cancelled if stop() was called, and if not, the system
+        // will tear the descriptor down when the handle dies.
         source?.cancel()
-        try? fileHandle?.close()
     }
 
     /// Open the file (creating an empty one if missing so we can
     /// watch the parent directory immediately) and start the watch.
     /// Safe to call repeatedly — subsequent calls are no-ops.
     func start() {
-        guard source == nil else { return }
-        let fm = FileManager.default
-        let dir = url.deletingLastPathComponent()
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        if !fm.fileExists(atPath: url.path) {
-            fm.createFile(atPath: url.path, contents: nil)
-        }
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return }
-        fileHandle = handle
-        // Drain anything that's already in the file (a previous run
-        // may have left records; we want a clean live feed of *this*
-        // session). The caller relies on us calling `onRecord` only
-        // for fresh appends.
-        let _ = try? handle.seekToEnd()
-
-        let src = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: handle.fileDescriptor,
-            eventMask: [.write, .extend, .delete, .rename],
-            queue: .global(qos: .utility)
-        )
-        src.setEventHandler { [weak self] in
-            Task { @MainActor in self?.drain() }
-        }
-        src.setCancelHandler { [weak self] in
-            Task { @MainActor in
-                try? self?.fileHandle?.close()
-                self?.fileHandle = nil
+        queue.async { [self] in
+            guard source == nil else { return }
+            let fm = FileManager.default
+            let dir = url.deletingLastPathComponent()
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if !fm.fileExists(atPath: url.path) {
+                fm.createFile(atPath: url.path, contents: nil)
             }
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return }
+            fileHandle = handle
+            // Skip whatever's already in the file — we want a clean
+            // live feed of *this* session, not a replay of the last.
+            let _ = try? handle.seekToEnd()
+
+            let src = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: handle.fileDescriptor,
+                eventMask: [.write, .extend, .delete, .rename],
+                queue: queue
+            )
+            src.setEventHandler { [weak self] in
+                self?.drain()
+            }
+            src.setCancelHandler { [weak self] in
+                guard let self else { return }
+                try? self.fileHandle?.close()
+                self.fileHandle = nil
+            }
+            src.resume()
+            source = src
         }
-        src.resume()
-        source = src
     }
 
-    /// Cancel the watch. Records that arrive after this point are
-    /// ignored.
+    /// Cancel the watch. Safe to call from any thread; the actual
+    /// teardown runs on the internal queue.
     func stop() {
-        source?.cancel()
-        source = nil
+        queue.async { [self] in
+            source?.cancel()
+            source = nil
+        }
     }
 
     /// Read whatever's available from the file handle, split it into
     /// complete JSONL records, and dispatch them as a single batch.
+    /// Called on the internal queue; the user callback is hopped to
+    /// main before invocation.
     private func drain() {
         guard let handle = fileHandle else { return }
         let chunk: Data
@@ -121,6 +139,9 @@ final class LiveEventStream {
             carry = buffer[lo..<buffer.endIndex]
         }
         guard !batch.isEmpty else { return }
-        onRecords(batch)
+        let callback = onRecords
+        DispatchQueue.main.async {
+            callback(batch)
+        }
     }
 }
