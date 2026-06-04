@@ -113,7 +113,9 @@ struct CenterPaneView: View {
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
-                    caretMoveTick: controller.caretMoveTick
+                    caretMoveTick: controller.caretMoveTick,
+                    lastExecutedAt: controller.lastExecutedAt,
+                    executionTick: controller.executionTick
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -459,7 +461,10 @@ struct CenterPaneView: View {
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
                 lastExecutedAt: controller.lastExecutedAt,
+                lastExecutedAtPerFeatureSet:
+                    controller.lastExecutedAtPerFeatureSet,
                 repositoryValues: controller.repositoryValues,
+                repositoryHistory: controller.repositoryHistory,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
@@ -750,7 +755,9 @@ struct CenterPaneView: View {
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
-                    caretMoveTick: controller.caretMoveTick
+                    caretMoveTick: controller.caretMoveTick,
+                    lastExecutedAt: controller.lastExecutedAt,
+                    executionTick: controller.executionTick
                 )
                 .frame(minWidth: 160)
             }
@@ -774,7 +781,10 @@ struct CenterPaneView: View {
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
                 lastExecutedAt: controller.lastExecutedAt,
+                lastExecutedAtPerFeatureSet:
+                    controller.lastExecutedAtPerFeatureSet,
                 repositoryValues: controller.repositoryValues,
+                repositoryHistory: controller.repositoryHistory,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)

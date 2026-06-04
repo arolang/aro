@@ -942,6 +942,17 @@ struct AROCodeEditor: NSViewRepresentable {
     /// instead of column 0.
     var caretMoveTick: Int = 0
 
+    /// Wall-clock time each source line was last observed executing
+    /// (from the live JSONL event stream). When non-empty, the
+    /// editor paints a transient row tint on each executed line
+    /// that mirrors the canvas's "executing now" pulse.
+    var lastExecutedAt: [Int: Date] = [:]
+    /// Tick counter bumped by the workspace each time the runtime
+    /// emits a new batch of events. The editor watches this to
+    /// re-paint pulse tints — comparing dictionary identities isn't
+    /// reliable when the same line re-fires.
+    var executionTick: UInt64 = 0
+
     enum Language { case aro, yaml, plain }
 
     @AppStorage(SolaroPrefs.editorGhostText.rawValue)
@@ -1083,6 +1094,13 @@ struct AROCodeEditor: NSViewRepresentable {
             paintPausedLine(on: textView)
             context.coordinator.lastPausedLine = pausedLine
         }
+        // Paint a transient row tint for every line the runtime
+        // executed since the last tick. The tint clears after the
+        // pulse window so the editor stays readable.
+        if context.coordinator.lastSeenExecutionTick != executionTick {
+            applyExecutionPulses(on: textView, coordinator: context.coordinator)
+            context.coordinator.lastSeenExecutionTick = executionTick
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1177,6 +1195,79 @@ struct AROCodeEditor: NSViewRepresentable {
         forIdentifier name: String
     ) -> ConsoleProcess.SymbolValue? {
         pauseSymbols[name]
+    }
+
+    /// For every line whose `lastExecutedAt` timestamp moved forward
+    /// since the last applied tint, paint a transient row background
+    /// in the role color of the executing verb. The tint clears
+    /// after `executionPulseDuration` so the editor stays readable.
+    fileprivate func applyExecutionPulses(
+        on textView: STTextView,
+        coordinator: Coordinator
+    ) {
+        for (line, ts) in lastExecutedAt {
+            if coordinator.appliedPulseAt[line] == ts { continue }
+            coordinator.appliedPulseAt[line] = ts
+            paintExecutionPulse(line: line, on: textView)
+            // Schedule a clear after the pulse window. Capture line
+            // + ts so a later re-fire of the same line doesn't get
+            // its tint stomped by this clear.
+            let fireAt = ts
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + executionPulseDuration
+            ) { [weak textView, weak coordinator] in
+                guard let textView, let coordinator else { return }
+                // If the line has fired again since, the new clear
+                // closure will handle removing the (newer) tint —
+                // don't preempt it.
+                if coordinator.appliedPulseAt[line] != fireAt { return }
+                coordinator.appliedPulseAt.removeValue(forKey: line)
+                clearExecutionPulse(line: line, on: textView)
+            }
+        }
+    }
+
+    /// Pulse window — keep in step with `CanvasNodeCard.pulseDuration`
+    /// so the editor and canvas feel like one animation.
+    fileprivate var executionPulseDuration: TimeInterval { 0.6 }
+
+    private func paintExecutionPulse(line: Int, on textView: STTextView) {
+        guard let range = lineRange(line: line, in: textView),
+              range.length > 0 else { return }
+        textView.addAttributes([
+            .backgroundColor: NSColor(SolaroColor.stateOK).withAlphaComponent(0.16),
+        ], range: range)
+    }
+
+    private func clearExecutionPulse(line: Int, on textView: STTextView) {
+        guard let range = lineRange(line: line, in: textView),
+              range.length > 0 else { return }
+        // Background-only removal — foreground/syntax attrs stay
+        // intact, so we don't need to re-run AROSyntaxHighlighter.
+        textView.removeAttribute(.backgroundColor, range: range)
+        // Re-paint the paused-line tint if this line still happens
+        // to be paused; we don't want the execution clear to wipe it.
+        if pausedLine == line { paintPausedLine(on: textView) }
+    }
+
+    /// Character range of the given 1-indexed line, excluding the
+    /// trailing newline. Returns nil if the line doesn't exist.
+    private func lineRange(line: Int, in textView: STTextView) -> NSRange? {
+        let nsText = (textView.text ?? "") as NSString
+        let length = nsText.length
+        guard length > 0, line >= 1 else { return nil }
+        var start = 0
+        var current = 1
+        while current < line, start < length {
+            if nsText.character(at: start) == 0x0A { current += 1 }
+            start += 1
+        }
+        guard current == line else { return nil }
+        var end = start
+        while end < length, nsText.character(at: end) != 0x0A {
+            end += 1
+        }
+        return NSRange(location: start, length: end - start)
     }
 
     fileprivate func paintPausedLine(on textView: STTextView) {
@@ -1300,6 +1391,13 @@ struct AROCodeEditor: NSViewRepresentable {
         /// performs an explicit (line, column) caret move — used by
         /// the ghost-popover accept path.
         var lastCaretMoveTick: Int = 0
+
+        /// Last applied execution-pulse painting per line — used so
+        /// updateNSView only re-tints lines whose timestamp moved
+        /// forward (the same line firing twice both updates here).
+        var appliedPulseAt: [Int: Date] = [:]
+        /// Tick from the parent at the time we last applied pulses.
+        var lastSeenExecutionTick: UInt64 = 0
 
         init(parent: AROCodeEditor) {
             self.parent = parent

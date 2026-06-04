@@ -14,10 +14,31 @@ import SwiftUI
 struct TimeTravelView: View {
     let project: Project
     let onClose: () -> Void
+    /// Called whenever the scrubber lands on a new record — whether
+    /// via user drag, the timeline list, or the play timer. Receivers
+    /// drive the canvas's `lastExecutedAt` / `pauseSymbols` from this
+    /// so a replay animates identically to a live run.
+    let onFrameChange: ((TimeTravelRecord) -> Void)?
+
+    init(
+        project: Project,
+        onClose: @escaping () -> Void,
+        onFrameChange: ((TimeTravelRecord) -> Void)? = nil
+    ) {
+        self.project = project
+        self.onClose = onClose
+        self.onFrameChange = onFrameChange
+    }
 
     @State private var records: [TimeTravelRecord] = []
     @State private var currentIndex: Int = 0
     @State private var loadError: String?
+    /// Playback state: `nil` = paused. Otherwise the seconds-per-frame
+    /// at which the timer advances. Speed buttons set this.
+    @State private var playInterval: TimeInterval? = nil
+    /// Frame-advance timer. Spun up when `playInterval` becomes
+    /// non-nil, torn down on pause / unmount.
+    @State private var playTimer: Timer?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,6 +127,43 @@ struct TimeTravelView: View {
                 in: 0...Double(max(records.count - 1, 0)),
                 step: 1
             )
+            HStack(spacing: SolaroSpace.s) {
+                Button { stepBy(-1) } label: {
+                    Image(systemName: "backward.frame.fill")
+                }
+                .help("Step back one frame")
+                .disabled(currentIndex == 0)
+
+                Button {
+                    if playInterval == nil {
+                        startPlayback(interval: 1.0 / 4.0)
+                    } else {
+                        stopPlayback()
+                    }
+                } label: {
+                    Image(systemName: playInterval == nil
+                          ? "play.fill" : "pause.fill")
+                }
+                .help(playInterval == nil ? "Play" : "Pause")
+
+                Button { stepBy(1) } label: {
+                    Image(systemName: "forward.frame.fill")
+                }
+                .help("Step forward one frame")
+                .disabled(currentIndex >= records.count - 1)
+
+                Spacer()
+                Picker("Speed", selection: speedBinding) {
+                    Text("0.5x").tag(0.5)
+                    Text("1x").tag(1.0)
+                    Text("2x").tag(2.0)
+                    Text("4x").tag(4.0)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 180)
+            }
+            .buttonStyle(.borderless)
             HStack {
                 Text("frame \(currentIndex + 1) / \(records.count)")
                 Spacer()
@@ -119,6 +177,54 @@ struct TimeTravelView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(SolaroColor.divider).frame(height: 1)
         }
+        .onChange(of: currentIndex) { _, new in
+            guard new >= 0, new < records.count else { return }
+            onFrameChange?(records[new])
+        }
+        .onChange(of: records.isEmpty) { _, empty in
+            if empty { stopPlayback() }
+        }
+        .onDisappear { stopPlayback() }
+    }
+
+    /// Multiplier-style binding for the speed picker: 1x = 4 fps
+    /// (matches the default play start), 2x = 8 fps, etc. The
+    /// underlying timer interval is `0.25 / speed`.
+    private var speedBinding: Binding<Double> {
+        Binding(
+            get: { playInterval.map { 0.25 / $0 } ?? 1.0 },
+            set: { newSpeed in
+                guard playInterval != nil else { return }
+                startPlayback(interval: 0.25 / newSpeed)
+            }
+        )
+    }
+
+    private func stepBy(_ delta: Int) {
+        stopPlayback()
+        let next = max(0, min(records.count - 1, currentIndex + delta))
+        currentIndex = next
+    }
+
+    private func startPlayback(interval: TimeInterval) {
+        playTimer?.invalidate()
+        playInterval = interval
+        playTimer = Timer.scheduledTimer(withTimeInterval: interval,
+                                         repeats: true) { _ in
+            Task { @MainActor in
+                if currentIndex >= records.count - 1 {
+                    stopPlayback()
+                } else {
+                    currentIndex += 1
+                }
+            }
+        }
+    }
+
+    private func stopPlayback() {
+        playTimer?.invalidate()
+        playTimer = nil
+        playInterval = nil
     }
 
     @ViewBuilder

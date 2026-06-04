@@ -75,6 +75,9 @@ final class WorkspaceController {
     /// `ConsoleProcess.lastExecutedAt` so views that only depend on
     /// the controller don't need to know about the console.
     var lastExecutedAt: [Int: Date] = [:]
+    /// Same idea, but per feature-set name — drives the FS-container
+    /// glow that disambiguates concurrent runs.
+    var lastExecutedAtPerFeatureSet: [String: Date] = [:]
     /// Tick counter incremented every time `lastExecutedAt` updates
     /// — TimelineView-based animations watch this to keep redrawing
     /// even when the same line fires twice in a row.
@@ -82,6 +85,11 @@ final class WorkspaceController {
     /// Most recent value the runtime saw flowing into each
     /// repository, keyed by repository object name.
     var repositoryValues: [String: ConsoleProcess.SymbolValue] = [:]
+    /// Rolling history (newest first) of the last N payloads per
+    /// repository — driven by the same live event stream that fills
+    /// `repositoryValues`. Exposed via the repository card's hover
+    /// popover.
+    var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] = [:]
 
     /// Currently-selected node in the graphical OpenAPI editor (if
     /// the user is on an openapi.yaml file). Drives the inspector
@@ -524,7 +532,10 @@ struct WorkspaceView: View {
         }
         .onChange(of: consoleProcess.executionTick) { _, _ in
             controller.lastExecutedAt = consoleProcess.lastExecutedAt
+            controller.lastExecutedAtPerFeatureSet =
+                consoleProcess.lastExecutedAtPerFeatureSet
             controller.repositoryValues = consoleProcess.repositoryValues
+            controller.repositoryHistory = consoleProcess.repositoryHistory
             controller.pauseSymbols = consoleProcess.pauseSymbols
             controller.executionTick &+= 1
         }
@@ -581,9 +592,30 @@ struct WorkspaceView: View {
             )
         }
         .sheet(isPresented: $showTimeTravel) {
-            TimeTravelView(project: project) {
-                showTimeTravel = false
-            }
+            TimeTravelView(
+                project: project,
+                onClose: { showTimeTravel = false },
+                onFrameChange: { record in
+                    // Drive the canvas's "executing now" pulse and
+                    // the symbol bag from the replayed frame so the
+                    // canvas animates identically to a live run.
+                    if let line = record.line, line > 0 {
+                        controller.lastExecutedAt[line] = Date()
+                    }
+                    if let fs = record.featureSet, !fs.isEmpty {
+                        controller.lastExecutedAtPerFeatureSet[fs] = Date()
+                    }
+                    for sym in record.symbols {
+                        let v = ConsoleProcess.SymbolValue(
+                            name: sym.name,
+                            typeName: sym.typeName,
+                            value: sym.value
+                        )
+                        controller.pauseSymbols[sym.name] = v
+                    }
+                    controller.executionTick &+= 1
+                }
+            )
         }
         .sheet(isPresented: $showCommandPalette) {
             PaletteView(

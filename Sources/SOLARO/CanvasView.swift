@@ -49,9 +49,16 @@ struct CanvasView: View {
     /// Drives the per-card "executing now" pulse. Empty when no run
     /// has happened yet — the cards then just render normally.
     let lastExecutedAt: [Int: Date]
+    /// Feature-set name → most recent time any statement in that FS
+    /// fired. Drives the container's outline glow so concurrent
+    /// runs of multiple feature sets read as visually distinct.
+    let lastExecutedAtPerFeatureSet: [String: Date]
     /// Latest payload observed flowing through each repository,
     /// keyed by repo object name (e.g. `"user-repository"`).
     let repositoryValues: [String: ConsoleProcess.SymbolValue]
+    /// Rolling history (newest first) of the last few payloads per
+    /// repo. Used by `RepoCard`'s hover popover.
+    let repositoryHistory: [String: [ConsoleProcess.SymbolValue]]
     /// 1-indexed lines that carry a breakpoint. Nodes on those
     /// lines render a red dot in the top-left corner so the
     /// canvas mirrors the editor gutter.
@@ -185,6 +192,7 @@ struct CanvasView: View {
                 graph: graph,
                 positions: nodePositions,
                 nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                lastExecutedAtPerFeatureSet: lastExecutedAtPerFeatureSet,
                 onHeaderDrag: { name, delta in
                     moveFeatureSet(name, by: delta, persist: false)
                 },
@@ -208,6 +216,7 @@ struct CanvasView: View {
                 repoWidth: repoWidth,
                 repoHeight: repoHeight,
                 repositoryValues: repositoryValues,
+                repositoryHistory: repositoryHistory,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
                     liveNodes[id] = finalPos
@@ -442,6 +451,9 @@ private struct FeatureSetContainersLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    /// Feature-set name → wall-clock time of the most recent event
+    /// observed for that FS. Drives the container's outline glow.
+    let lastExecutedAtPerFeatureSet: [String: Date]
     /// Drag callback fired continuously while the user drags the
     /// container's header strip. The receiver translates every
     /// statement node belonging to the named feature set by the
@@ -459,6 +471,7 @@ private struct FeatureSetContainersLayer: View {
                     name: group.name,
                     tint: color(for: group.name),
                     rect: group.rect,
+                    lastExecutedAt: lastExecutedAtPerFeatureSet[group.name],
                     onHeaderDrag: { delta in onHeaderDrag(group.name, delta) },
                     onHeaderDragEnd: { delta in onHeaderDragEnd(group.name, delta) }
                 )
@@ -526,10 +539,24 @@ private struct FeatureSetContainer: View {
     let name: String
     let tint: Color
     let rect: CGRect
+    /// Most recent time any statement in this FS fired, or `nil` if
+    /// it hasn't run yet this session. Drives the container's
+    /// brighter glow during the pulse window.
+    let lastExecutedAt: Date?
     let onHeaderDrag: (CGSize) -> Void
     let onHeaderDragEnd: (CGSize) -> Void
 
+    private let pulseDuration: TimeInterval = 0.9
+
     var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0,
+                                paused: !isPulseLive)) { context in
+            content(intensity: intensity(at: context.date))
+        }
+    }
+
+    @ViewBuilder
+    private func content(intensity: Double) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: SolaroSpace.xs) {
                 Image(systemName: "square.grid.2x2.fill")
@@ -539,6 +566,11 @@ private struct FeatureSetContainer: View {
                     .font(SolaroFont.sectionTitle)
                     .foregroundStyle(tint)
                     .tracking(2)
+                if intensity > 0 {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(tint.opacity(0.6 + 0.4 * intensity))
+                }
                 Spacer()
             }
             .padding(.horizontal, SolaroSpace.s)
@@ -559,13 +591,31 @@ private struct FeatureSetContainer: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: SolaroRadius.l, style: .continuous)
-                .fill(tint.opacity(0.06))
+                .fill(tint.opacity(0.06 + 0.05 * intensity))
         )
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.l, style: .continuous)
-                .stroke(tint.opacity(0.45),
-                        style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                .stroke(
+                    tint.opacity(0.45 + 0.45 * intensity),
+                    style: StrokeStyle(
+                        lineWidth: 1.2 + 1.2 * intensity,
+                        dash: intensity > 0 ? [] : [4, 3]
+                    )
+                )
         )
+    }
+
+    private func intensity(at now: Date) -> Double {
+        guard let last = lastExecutedAt else { return 0 }
+        let dt = now.timeIntervalSince(last)
+        if dt < 0 { return 1 }
+        if dt >= pulseDuration { return 0 }
+        return 1 - dt / pulseDuration
+    }
+
+    private var isPulseLive: Bool {
+        guard let last = lastExecutedAt else { return false }
+        return Date().timeIntervalSince(last) < pulseDuration
     }
 }
 
@@ -883,14 +933,19 @@ private struct CanvasNodeCard: View {
     private func cardContent(at now: Date) -> some View {
         let pulse = pulseIntensity(at: now)
         HStack(spacing: 0) {
-            // Left role rail — pulses brighter when this line is
-            // actively executing so the user's eye tracks the run.
+            // Left role rail — same role colour the rail always
+            // uses, but brighter + wider while the line is actively
+            // executing so the user's eye tracks the run. We
+            // light up the role colour rather than a uniform green
+            // so REQUEST / OWN / RESPONSE / EXPORT remain visually
+            // distinct during execution too.
+            let role = SolaroColor.roleColor(forVerb: node.verb)
             Rectangle()
-                .fill(SolaroColor.roleColor(forVerb: node.verb))
+                .fill(role)
                 .overlay(
                     Rectangle()
-                        .fill(SolaroColor.stateOK)
-                        .opacity(pulse)
+                        .fill(Color.white)
+                        .opacity(0.55 * pulse)
                 )
                 .frame(width: 3 + 2 * pulse)
             VStack(alignment: .leading, spacing: 2) {
@@ -1184,6 +1239,8 @@ private struct RepoNodesLayer: View {
     /// keyed by repo object name. Empty when no recorded run has
     /// produced a value yet.
     let repositoryValues: [String: ConsoleProcess.SymbolValue]
+    /// Rolling history of recent payloads, newest first.
+    let repositoryHistory: [String: [ConsoleProcess.SymbolValue]]
     let onDrag: (String, CGPoint) -> Void
     let onDragEnd: (String, CGPoint) -> Void
 
@@ -1198,7 +1255,8 @@ private struct RepoNodesLayer: View {
                     repo: repo,
                     width: repoWidth,
                     height: repoHeight,
-                    liveValue: repositoryValues[repo.name]
+                    liveValue: repositoryValues[repo.name],
+                    history: repositoryHistory[repo.name] ?? []
                 )
                     .position(x: p.x + repoWidth / 2,
                               y: p.y + repoHeight / 2)
@@ -1237,6 +1295,12 @@ private struct RepoCard: View {
     /// Most recent value seen on this repository during the current
     /// recorded run, or `nil` if nothing has flowed through yet.
     let liveValue: ConsoleProcess.SymbolValue?
+    /// Rolling history (newest first) — shown in the hover popover
+    /// so the user can see the recent write sequence.
+    let history: [ConsoleProcess.SymbolValue]
+
+    @State private var hovering = false
+    @State private var showHistory = false
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -1276,6 +1340,13 @@ private struct RepoCard: View {
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
                 .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
         )
+        .onHover { isHovering in
+            hovering = isHovering
+            showHistory = isHovering && !history.isEmpty
+        }
+        .popover(isPresented: $showHistory, arrowEdge: .top) {
+            RepoHistoryPopover(repo: repo, history: history)
+        }
         .help(helpText)
     }
 
@@ -1293,5 +1364,47 @@ private struct RepoCard: View {
         if u.contains(.write) { parts.append("write") }
         if u.contains(.watch) { parts.append("watch") }
         return parts.isEmpty ? "—" : parts.joined(separator: " · ")
+    }
+}
+
+/// Hover popover for the repository card — lists the recent
+/// payloads the runtime saw flowing through this repo (newest
+/// first) so the user can trace the write sequence without
+/// running a separate tool.
+private struct RepoHistoryPopover: View {
+    let repo: RepositoryNode
+    let history: [ConsoleProcess.SymbolValue]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: "cylinder.split.1x2.fill")
+                    .foregroundStyle(SolaroColor.accent)
+                    .font(.system(size: 11))
+                Text(repo.name)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                Spacer()
+            }
+            Divider().background(SolaroColor.divider)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(history.enumerated()), id: \.offset) { idx, value in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(idx == 0 ? "now" : "−\(idx)")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textTertiary)
+                            .frame(minWidth: 28, alignment: .trailing)
+                        Text(value.value)
+                            .font(SolaroFont.mono)
+                            .foregroundStyle(SolaroColor.textPrimary)
+                            .lineLimit(3)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .padding(SolaroSpace.m)
+        .frame(minWidth: 240, maxWidth: 420, alignment: .topLeading)
     }
 }

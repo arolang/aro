@@ -20,9 +20,12 @@ import Foundation
 @MainActor
 final class LiveEventStream {
 
-    /// Closure run for every new record. Always called on the main
-    /// actor — safe to mutate `@Observable` state from the callback.
-    let onRecord: (TimeTravelRecord) -> Void
+    /// Closure run for every batch of new records, delivered on the
+    /// main actor. Receiving records in batches (vs. one at a time)
+    /// lets ConsoleProcess apply them all under a single observation
+    /// frame — a burst of 100 events from a hot loop produces one
+    /// SwiftUI redraw instead of 100.
+    let onRecords: ([TimeTravelRecord]) -> Void
 
     private let url: URL
     private var fileHandle: FileHandle?
@@ -32,9 +35,9 @@ final class LiveEventStream {
     /// records that arrive across read boundaries.
     private var carry: Data = Data()
 
-    init(url: URL, onRecord: @escaping (TimeTravelRecord) -> Void) {
+    init(url: URL, onRecords: @escaping ([TimeTravelRecord]) -> Void) {
         self.url = url
-        self.onRecord = onRecord
+        self.onRecords = onRecords
     }
 
     deinit {
@@ -87,7 +90,7 @@ final class LiveEventStream {
     }
 
     /// Read whatever's available from the file handle, split it into
-    /// complete JSONL records, and dispatch each one.
+    /// complete JSONL records, and dispatch them as a single batch.
     private func drain() {
         guard let handle = fileHandle else { return }
         let chunk: Data
@@ -102,6 +105,7 @@ final class LiveEventStream {
         carry = Data()
         // Split on \n; if the last segment doesn't end with \n, keep
         // it as carry for the next drain.
+        var batch: [TimeTravelRecord] = []
         var lo = buffer.startIndex
         while let nl = buffer[lo..<buffer.endIndex].firstIndex(of: 0x0A) {
             let line = buffer[lo..<nl]
@@ -109,12 +113,14 @@ final class LiveEventStream {
                let text = String(data: line, encoding: .utf8),
                let record = TimeTravelReader.parse(text).first
             {
-                onRecord(record)
+                batch.append(record)
             }
             lo = buffer.index(after: nl)
         }
         if lo < buffer.endIndex {
             carry = buffer[lo..<buffer.endIndex]
         }
+        guard !batch.isEmpty else { return }
+        onRecords(batch)
     }
 }

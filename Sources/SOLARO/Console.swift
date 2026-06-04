@@ -48,6 +48,11 @@ final class ConsoleProcess {
     /// enough light up a colored left border that fades out over
     /// ~600 ms. Reset at the start of every new run.
     var lastExecutedAt: [Int: Date] = [:]
+    /// Wall-clock time each feature set was most recently observed
+    /// to be running (any statement inside it fired). Drives the
+    /// container-level glow so concurrent feature sets are visually
+    /// distinct in the canvas. Reset at run start.
+    var lastExecutedAtPerFeatureSet: [String: Date] = [:]
     /// Monotonically increases each time `lastExecutedAt` is updated.
     /// SwiftUI watches this so TimelineView-driven animations keep
     /// scheduling refreshes even when the same line fires twice in
@@ -58,6 +63,12 @@ final class ConsoleProcess {
     /// `"sessions-store"`, …). Surfaced by the canvas's repository
     /// cards so the user sees the live payload alongside the wires.
     var repositoryValues: [String: SymbolValue] = [:]
+    /// Rolling history (newest first) of the last few payloads per
+    /// repository — exposed in the repository card's hover popover
+    /// so the user can see the recent write sequence. Capped so a
+    /// hot loop doesn't grow memory without bound.
+    var repositoryHistory: [String: [SymbolValue]] = [:]
+    private static let repositoryHistoryDepth = 5
 
     struct SymbolValue: Equatable, Hashable {
         let name: String
@@ -138,7 +149,9 @@ final class ConsoleProcess {
         isPaused = false
         pauseSymbols.removeAll(keepingCapacity: true)
         lastExecutedAt.removeAll(keepingCapacity: true)
+        lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
+        repositoryHistory.removeAll(keepingCapacity: true)
         executionTick = 0
         lastProject = project
         breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
@@ -249,32 +262,53 @@ final class ConsoleProcess {
     private func startLiveStream(at path: String) {
         liveStream?.stop()
         let url = URL(fileURLWithPath: path)
-        let stream = LiveEventStream(url: url) { [weak self] record in
-            self?.applyLiveRecord(record)
+        let stream = LiveEventStream(url: url) { [weak self] batch in
+            self?.applyLiveBatch(batch)
         }
         liveStream = stream
         stream.start()
     }
 
-    private func applyLiveRecord(_ record: TimeTravelRecord) {
-        if let line = record.line, line > 0 {
-            lastExecutedAt[line] = Date()
-        }
-        for sym in record.symbols {
-            let value = SymbolValue(
-                name: sym.name,
-                typeName: sym.typeName,
-                value: sym.value
-            )
-            pauseSymbols[sym.name] = value
-            // Heuristic: if a symbol's name reads as a repository
-            // entity, surface its current value on the repo card too.
-            let lower = sym.name.lowercased()
-            if lower.hasSuffix("-repository")
-                || lower.hasSuffix("-repo")
-                || lower.hasSuffix("-store")
-            {
-                repositoryValues[sym.name] = value
+    /// Apply a whole drain's worth of records under one observation
+    /// frame so a burst from a hot loop costs a single SwiftUI redraw
+    /// instead of one per record. The receiver bumps `executionTick`
+    /// exactly once at the end of the batch.
+    private func applyLiveBatch(_ batch: [TimeTravelRecord]) {
+        guard !batch.isEmpty else { return }
+        let now = Date()
+        for record in batch {
+            if let line = record.line, line > 0 {
+                lastExecutedAt[line] = now
+            }
+            if let fs = record.featureSet, !fs.isEmpty {
+                lastExecutedAtPerFeatureSet[fs] = now
+            }
+            for sym in record.symbols {
+                let value = SymbolValue(
+                    name: sym.name,
+                    typeName: sym.typeName,
+                    value: sym.value
+                )
+                pauseSymbols[sym.name] = value
+                let lower = sym.name.lowercased()
+                if lower.hasSuffix("-repository")
+                    || lower.hasSuffix("-repo")
+                    || lower.hasSuffix("-store")
+                {
+                    repositoryValues[sym.name] = value
+                    // Push onto the front of the history queue and
+                    // cap depth. Skip consecutive duplicates so the
+                    // history reads as a write *sequence* rather
+                    // than the same value re-emitted on every read.
+                    var hist = repositoryHistory[sym.name] ?? []
+                    if hist.first != value {
+                        hist.insert(value, at: 0)
+                        if hist.count > Self.repositoryHistoryDepth {
+                            hist.removeLast(hist.count - Self.repositoryHistoryDepth)
+                        }
+                        repositoryHistory[sym.name] = hist
+                    }
+                }
             }
         }
         executionTick &+= 1
