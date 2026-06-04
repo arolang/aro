@@ -734,7 +734,7 @@ struct CenterPaneView: View {
     private var splitMode: some View {
         HSplitView {
             splitLeftPane
-                .frame(minWidth: 240)
+                .frame(minWidth: 160)
             if let url = controller.currentFile {
                 AROCodeEditor(
                     text: editableBinding(for: url),
@@ -750,7 +750,7 @@ struct CenterPaneView: View {
                     acceptGhost: ghostAccept(for: url),
                     caretMoveTick: controller.caretMoveTick
                 )
-                .frame(minWidth: 240)
+                .frame(minWidth: 160)
             }
         }
     }

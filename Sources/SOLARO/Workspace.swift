@@ -49,6 +49,7 @@ final class WorkspaceController {
     var openTabs: [URL] = []
     var paneMode: PaneMode = .canvas
     var sidebarTab: SidebarTab = .files
+    var sidebarShown: Bool = true
     var inspectorShown: Bool = true
     var searchText: String = ""
     var loadError: String?
@@ -442,14 +443,25 @@ struct WorkspaceView: View {
     // aiCoPilot moved onto WorkspaceController (#273) so canvas
     // context menus can dispatch prompts directly. Access as
     // `controller.aiCoPilot` everywhere.
-    /// NavigationSplitView's column visibility — bound (not constant)
-    /// so the sidebar toggle in the title bar actually hides + shows
-    /// the left rail.
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    /// NavigationSplitView's column visibility, derived from
+    /// `controller.sidebarShown` so the toggle in the title bar and
+    /// SwiftUI's own auto-collapse both write to the same single
+    /// source of truth. When the user toggles the sidebar away,
+    /// we drop the window's minimum width accordingly; while the
+    /// sidebar is shown, the window is held wide enough that
+    /// NavigationSplitView never auto-collapses it.
+    private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { controller.sidebarShown ? .all : .detailOnly },
+            set: { new in
+                controller.sidebarShown = (new != .detailOnly)
+            }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
+            NavigationSplitView(columnVisibility: columnVisibilityBinding) {
                 SidebarPaneView(controller: controller)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
             } detail: {
@@ -466,9 +478,13 @@ struct WorkspaceView: View {
                 }
                 .inspector(isPresented: $controller.inspectorShown) {
                     rightPane
-                        .inspectorColumnWidth(min: 320, ideal: 360, max: 480)
+                        .inspectorColumnWidth(min: 260, ideal: 360, max: 480)
                 }
             }
+            .background(WorkspaceWindowSizer(
+                sidebarShown: controller.sidebarShown,
+                inspectorShown: controller.inspectorShown
+            ))
             if showConsole {
                 bottomPanel
                     .frame(height: 260)
@@ -1358,3 +1374,54 @@ struct WorkspaceView: View {
 // Real CenterPaneView lives in CenterPane.swift (Phase 7 onwards).
 
 // Real InspectorPaneView lives in Inspector.swift (Phase 6).
+
+/// Reaches up to the hosting NSWindow and pins its `contentMinSize`
+/// to a value that always fits the *currently shown* panels plus a
+/// reasonable center pane. This keeps two invariants:
+///   1. The user can never drag the window narrower than what the
+///      visible columns need, so the center always grows/shrinks
+///      while the side rails stay put at their declared widths.
+///   2. The floor is large enough that NavigationSplitView never
+///      auto-collapses a column SwiftUI thinks doesn't fit. The
+///      thresholds were measured empirically on macOS 26 — above
+///      these floors the split view leaves columns alone; below
+///      them it silently zeros the sidebar / overflows the inspector.
+private struct WorkspaceWindowSizer: NSViewRepresentable {
+    let sidebarShown: Bool
+    let inspectorShown: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { apply(to: view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { apply(to: nsView.window) }
+    }
+
+    private func apply(to window: NSWindow?) {
+        guard let window else { return }
+        let width: CGFloat = {
+            switch (sidebarShown, inspectorShown) {
+            case (true,  true):  return 1200  // sidebar + center + inspector
+            case (true,  false): return 800   // sidebar + center
+            case (false, true):  return 900   // center + inspector
+            case (false, false): return 700   // center only
+            }
+        }()
+        let target = NSSize(width: width, height: 800)
+        guard window.contentMinSize != target else { return }
+        window.contentMinSize = target
+        // If the window is currently below the new floor, snap it up
+        // so layout never lands in the auto-collapse band.
+        var frame = window.frame
+        let extraH = frame.height - window.contentLayoutRect.height
+        let needW = max(frame.width, target.width)
+        let needH = max(frame.height, target.height + extraH)
+        if needW != frame.width || needH != frame.height {
+            frame.size = NSSize(width: needW, height: needH)
+            window.setFrame(frame, display: true, animate: false)
+        }
+    }
+}

@@ -12,6 +12,7 @@
 // own copy. File → New Window (⌘N) opens a fresh welcome screen
 // without touching any other window; ⌘W closes the current one.
 
+import AppKit
 import SwiftUI
 import AROVersion
 
@@ -28,6 +29,14 @@ struct SOLAROApp: App {
         // automatic upload — the user opens an issue manually
         // via Help → Report a Bug…
         CrashReporter.install()
+        // AppKit calls `_crashOnException` for any NSException raised
+        // during the display cycle (e.g. Auto Layout contradictions
+        // inside NavigationSplitView when the window is dragged below
+        // the columns' implicit minima). The exception is recoverable
+        // for our purposes — the next layout pass succeeds — so we
+        // keep the app alive instead of trapping. The exception still
+        // logs to stderr so we can see it during development.
+        UserDefaults.standard.set(false, forKey: "NSApplicationCrashOnExceptions")
     }
 
     var body: some Scene {
@@ -36,7 +45,6 @@ struct SOLAROApp: App {
         }
         WindowGroup("SOLARO") {
             RootView(runtimeVersion: runtimeVersion)
-                .frame(minWidth: 1200, minHeight: 800)
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
@@ -179,3 +187,6 @@ struct ContentView: View {
         }
     }
 }
+
+// Per-window minimum size is enforced by `WorkspaceWindowSizer` in
+// Workspace.swift — it adapts the floor to which panels are shown.
