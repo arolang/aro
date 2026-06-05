@@ -324,6 +324,13 @@ struct CanvasView: View {
                         currentLine = lineHint
                     }
                 },
+                onSelectNode: { node in
+                    // Mirror the node into the controller so the
+                    // Inspector can render the same fields the
+                    // double-click expansion shows.
+                    controller.selectedNode = node
+                    controller.selectedNodeSource = rawSourceText(for: node)
+                },
                 editingNodeID: editingNodeID,
                 onDoubleTap: { id in editingNodeID = id },
                 onApplyEdit: { id, newText in
@@ -1148,6 +1155,10 @@ struct NodesLayer: View {
     /// `NodesLayer`; we just signal "this drag started".
     let onDragStart: (CanvasNode.ID) -> Void
     let onSelect: (Int) -> Void
+    /// Mirrors the just-selected node into the controller so the
+    /// Inspector can show the same fields the inline editor would.
+    /// Fires alongside `onSelect`.
+    let onSelectNode: (CanvasNode) -> Void
     /// Node currently in inline-edit mode. The matching card
     /// expands into `NodeEditorView` instead of its normal compact
     /// form.
@@ -1207,7 +1218,10 @@ struct NodesLayer: View {
                 // editor when its rect overlaps theirs.
                 .zIndex(editingNodeID == node.id ? 1000 : 0)
                 .onTapGesture(count: 2) { onDoubleTap(node.id) }
-                .onTapGesture { onSelect(node.lineHint) }
+                .onTapGesture {
+                    onSelect(node.lineHint)
+                    onSelectNode(node)
+                }
                 .gesture(dragGesture(id: node.id, livePosition: p))
                 .contextMenu {
                     if let onContextAction {

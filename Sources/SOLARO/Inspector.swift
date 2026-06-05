@@ -34,6 +34,7 @@ struct InspectorPaneView: View {
             VStack(alignment: .leading, spacing: SolaroSpace.m) {
                 fileHeader
                 openAPIEditorSection
+                SelectedStatementSection(controller: controller)
                 variablesSection
                 WatchesSection(controller: controller, store: controller.watches)
                 lspDiagnosticsSection

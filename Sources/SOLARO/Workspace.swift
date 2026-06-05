@@ -102,6 +102,16 @@ final class WorkspaceController {
     /// popover.
     var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] = [:]
 
+    /// Currently-selected canvas node. Populated on single-click in
+    /// the node editor so the Inspector can mirror the same fields
+    /// the double-click expansion shows (read-only summary). nil
+    /// when nothing is selected.
+    var selectedNode: CanvasNode? = nil
+    /// Raw source text spanned by `selectedNode`. Captured at click
+    /// time because the Inspector doesn't otherwise have access to
+    /// `rawSourceText` (lives on CanvasView).
+    var selectedNodeSource: String? = nil
+
     /// Currently-selected node in the graphical OpenAPI editor (if
     /// the user is on an openapi.yaml file). Drives the inspector
     /// form that lets them edit route / schema fields directly.
