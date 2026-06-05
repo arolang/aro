@@ -238,24 +238,48 @@ public final class FeatureSetExecutor: Sendable {
             )
         }
 
-        if let aroStatement = statement as? AROStatement {
-            try await executeAROStatement(aroStatement, context: context)
-        } else if let publishStatement = statement as? PublishStatement {
-            try await executePublishStatement(publishStatement, context: context)
-        } else if let matchStatement = statement as? MatchStatement {
-            try await executeMatchStatement(matchStatement, context: context)
-        } else if let requireStatement = statement as? RequireStatement {
-            try await executeRequireStatement(requireStatement, context: context)
-        } else if let forEachLoop = statement as? ForEachLoop {
-            try await executeForEachLoop(forEachLoop, context: context)
-        } else if let whileLoop = statement as? WhileLoop {
-            try await executeWhileLoop(whileLoop, context: context)
-        } else if statement is BreakStatement {
-            throw BreakSignal()
-        } else if let rangeLoop = statement as? RangeLoop {
-            try await executeRangeLoop(rangeLoop, context: context)
-        } else if let pipelineStatement = statement as? PipelineStatement {
-            try await executePipelineStatement(pipelineStatement, context: context)
+        do {
+            if let aroStatement = statement as? AROStatement {
+                try await executeAROStatement(aroStatement, context: context)
+            } else if let publishStatement = statement as? PublishStatement {
+                try await executePublishStatement(publishStatement, context: context)
+            } else if let matchStatement = statement as? MatchStatement {
+                try await executeMatchStatement(matchStatement, context: context)
+            } else if let requireStatement = statement as? RequireStatement {
+                try await executeRequireStatement(requireStatement, context: context)
+            } else if let forEachLoop = statement as? ForEachLoop {
+                try await executeForEachLoop(forEachLoop, context: context)
+            } else if let whileLoop = statement as? WhileLoop {
+                try await executeWhileLoop(whileLoop, context: context)
+            } else if statement is BreakStatement {
+                throw BreakSignal()
+            } else if let rangeLoop = statement as? RangeLoop {
+                try await executeRangeLoop(rangeLoop, context: context)
+            } else if let pipelineStatement = statement as? PipelineStatement {
+                try await executePipelineStatement(pipelineStatement, context: context)
+            }
+        } catch {
+            // Issue #229 / SOLARO error border (#?). The runtime
+            // declares `errorCheckpoint` on `DebugController` so a
+            // frontend can paint the failing statement red, but no
+            // call site ever fired it — SOLARO's `.errorAny`
+            // breakpoint was effectively dead. Fire it here so the
+            // frontend learns about the failure with the most-recent
+            // statement's source position still on its lookback. The
+            // hook is gated on the breakpoint being installed, so
+            // headless `aro run` pays only the TaskLocal load.
+            //
+            // BreakSignal isn't a real error — it's the control-flow
+            // signal for `break inner` etc. — so we skip it.
+            if !(error is BreakSignal),
+               let controller = Debug.controller {
+                await controller.errorCheckpoint(
+                    message: "\(error)",
+                    featureSetName: context.featureSetName,
+                    businessActivity: context.businessActivity
+                )
+            }
+            throw error
         }
     }
 
