@@ -89,6 +89,13 @@ final class WorkspaceController {
     /// Most recent value the runtime saw flowing into each
     /// repository, keyed by repository object name.
     var repositoryValues: [String: ConsoleProcess.SymbolValue] = [:]
+    /// User-dragged node and repository positions, keyed by node /
+    /// repo ID. Previously lived as `@State` on CanvasView, which
+    /// made undo impossible (a captured closure can't mutate a
+    /// view-struct's @State). Now owned here so the UndoManager
+    /// handler can restore an old position by writing to this
+    /// class property.
+    var liveNodes: [String: CGPoint] = [:]
     /// Rolling history (newest first) of the last N payloads per
     /// repository — driven by the same live event stream that fills
     /// `repositoryValues`. Exposed via the repository card's hover

@@ -480,6 +480,7 @@ struct CenterPaneView: View {
             openAPICanvas(for: url)
         } else {
             CanvasView(
+                controller: controller,
                 graph: canvasGraph,
                 persistPosition: persistNodePosition(_:to:),
                 currentLine: currentLineBinding,
@@ -896,6 +897,7 @@ struct CenterPaneView: View {
             openAPICanvas(for: url)
         } else {
             CanvasView(
+                controller: controller,
                 graph: canvasGraph,
                 persistPosition: persistNodePosition(_:to:),
                 currentLine: currentLineBinding,

@@ -29,6 +29,10 @@ enum CanvasNodeContextAction {
 }
 
 struct CanvasView: View {
+    /// Workspace state. Used directly for `liveNodes` (so drag
+    /// positions live on a class an UndoManager handler can mutate)
+    /// rather than going through callbacks for every coordinate.
+    @Bindable var controller: WorkspaceController
     let graph: CanvasGraph
     /// Persist a single node's position to the file's layout
     /// sidecar. Called on drag-end.
@@ -92,9 +96,14 @@ struct CanvasView: View {
     @GestureState private var dragOffset: CGSize = .zero
     @GestureState private var magnify: Double = 1.0
 
-    /// Live per-node position overlay. Initialised from the graph's
-    /// laid-out positions on first appearance; mutated by drags.
-    @State private var liveNodes: [CanvasNode.ID: CGPoint] = [:]
+    /// Convenience accessor for the controller-owned live drag
+    /// positions. Reads and writes proxy through the controller so
+    /// undo handlers (defined later in this file) can mutate the
+    /// same source of truth.
+    private var liveNodes: [CanvasNode.ID: CGPoint] {
+        get { controller.liveNodes }
+        nonmutating set { controller.liveNodes = newValue }
+    }
     /// Node ID currently being edited via the inline editor (the
     /// expanded card). nil when no node is in edit mode.
     @State private var editingNodeID: CanvasNode.ID? = nil
@@ -104,6 +113,12 @@ struct CanvasView: View {
     /// undo operation. macOS automatically wires this to the
     /// standard Edit menu's Undo / Redo items.
     @Environment(\.solaroUndoManager) private var undoManager
+
+    /// Snapshot of where each in-flight node drag started — needed
+    /// so the `onDragEnd` handler can register an undo step that
+    /// restores the *pre-drag* position rather than whatever the
+    /// drag's own `onChanged` last wrote.
+    @State private var dragStartPositions: [CanvasNode.ID: CGPoint] = [:]
 
     /// Snapshot of every node's position when a feature-set header
     /// drag begins, keyed by FS name → {node id → origin}. Cleared
@@ -252,8 +267,23 @@ struct CanvasView: View {
                 repositoryHistory: repositoryHistory,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
+                    let oldPos = dragStartPositions[id]
+                        ?? graph.repositories.first(where: { $0.id == id })
+                            .map { CGPoint(x: $0.x, y: $0.y) }
+                        ?? .zero
                     liveNodes[id] = finalPos
                     persistPosition(id, finalPos)
+                    registerNodeMoveUndo(id: id,
+                                         from: oldPos, to: finalPos)
+                    dragStartPositions.removeValue(forKey: id)
+                },
+                onDragStart: { id in
+                    if dragStartPositions[id] == nil {
+                        dragStartPositions[id] = liveNodes[id]
+                            ?? graph.repositories.first(where: { $0.id == id })
+                                .map { CGPoint(x: $0.x, y: $0.y) }
+                            ?? .zero
+                    }
                 }
             )
             .frame(width: contentSize.width, height: contentSize.height,
@@ -271,8 +301,22 @@ struct CanvasView: View {
                 onContextAction: onNodeContextAction,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
+                    let oldPos = dragStartPositions[id]
+                        ?? CGPoint(x: graph.nodes.first(where: { $0.id == id })?.x ?? 0,
+                                   y: graph.nodes.first(where: { $0.id == id })?.y ?? 0)
                     liveNodes[id] = finalPos
                     persistPosition(id, finalPos)
+                    registerNodeMoveUndo(id: id,
+                                         from: oldPos, to: finalPos)
+                    dragStartPositions.removeValue(forKey: id)
+                },
+                onDragStart: { id in
+                    if dragStartPositions[id] == nil {
+                        dragStartPositions[id] = liveNodes[id]
+                            ?? graph.nodes.first(where: { $0.id == id })
+                                .map { CGPoint(x: $0.x, y: $0.y) }
+                            ?? .zero
+                    }
                 },
                 onSelect: { lineHint in
                     if currentLine != lineHint {
@@ -319,8 +363,81 @@ struct CanvasView: View {
     /// next graph build seeds purely from `StackLayout.place()`.
     /// Called from the canvas's "Auto Layout" context-menu item.
     private func triggerAutoLayout() {
+        let snapshot = controller.liveNodes
         resetLayout?()
         liveNodes.removeAll()
+        registerAutoLayoutUndo(snapshot: snapshot)
+    }
+
+    // MARK: - Undo registration
+
+    /// Register an undo step for a per-node drag — restoring both
+    /// the live-position dict (visible immediately) and the layout
+    /// sidecar (persists across reloads).
+    private func registerNodeMoveUndo(
+        id: CanvasNode.ID,
+        from oldPos: CGPoint,
+        to newPos: CGPoint
+    ) {
+        guard let mgr = undoManager else { return }
+        let controllerRef = controller
+        let persist = persistPosition
+        mgr.setActionName("Move Node")
+        mgr.registerUndo(withTarget: controllerRef) { _ in
+            controllerRef.liveNodes[id] = oldPos
+            persist(id, oldPos)
+            // Re-register the inverse so ⇧⌘Z (redo) round-trips.
+            registerNodeMoveUndo(id: id, from: newPos, to: oldPos)
+        }
+    }
+
+    /// Register an undo step for a feature-set header drag — the
+    /// whole snapshot of body-node positions captured at drag start
+    /// gets restored at once.
+    private func registerFeatureSetMoveUndo(
+        featureSet: String,
+        origins: [CanvasNode.ID: CGPoint],
+        endPositions: [CanvasNode.ID: CGPoint]
+    ) {
+        guard let mgr = undoManager else { return }
+        let controllerRef = controller
+        let persist = persistPosition
+        mgr.setActionName("Move Feature Set")
+        mgr.registerUndo(withTarget: controllerRef) { _ in
+            for (id, pos) in origins {
+                controllerRef.liveNodes[id] = pos
+                persist(id, pos)
+            }
+            registerFeatureSetMoveUndo(
+                featureSet: featureSet,
+                origins: endPositions,
+                endPositions: origins
+            )
+        }
+    }
+
+    /// Register an undo step for the Auto Layout reset — the
+    /// pre-reset `liveNodes` snapshot is restored verbatim, and
+    /// each persisted position is written back to the sidecar.
+    private func registerAutoLayoutUndo(
+        snapshot: [CanvasNode.ID: CGPoint]
+    ) {
+        guard let mgr = undoManager, !snapshot.isEmpty else { return }
+        let controllerRef = controller
+        let persist = persistPosition
+        mgr.setActionName("Auto Layout")
+        mgr.registerUndo(withTarget: controllerRef) { _ in
+            controllerRef.liveNodes = snapshot
+            for (id, pos) in snapshot {
+                persist(id, pos)
+            }
+            registerAutoLayoutUndo(snapshot: [:])
+            // Note: redoing an Auto Layout just re-triggers the
+            // user-visible button; the undo handler intentionally
+            // doesn't try to re-clear positions, because the user
+            // is expected to hit the menu item again to "redo"
+            // the reset.
+        }
     }
 
     // MARK: - Position bookkeeping
@@ -386,15 +503,24 @@ struct CanvasView: View {
             fsDragOrigins[featureSet] = snapshot
         }
         guard let origins = fsDragOrigins[featureSet] else { return }
+        var endPositions: [CanvasNode.ID: CGPoint] = [:]
         for (id, origin) in origins {
             let next = CGPoint(
                 x: origin.x + delta.width,
                 y: origin.y + delta.height
             )
             liveNodes[id] = next
+            endPositions[id] = next
             if persist { persistPosition(id, next) }
         }
-        if persist { fsDragOrigins.removeValue(forKey: featureSet) }
+        if persist {
+            registerFeatureSetMoveUndo(
+                featureSet: featureSet,
+                origins: origins,
+                endPositions: endPositions
+            )
+            fsDragOrigins.removeValue(forKey: featureSet)
+        }
     }
 
     private func seedPositionsIfNeeded() {
@@ -952,6 +1078,11 @@ struct NodesLayer: View {
     let onContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
+    /// Fires once at the start of each drag so the caller can
+    /// snapshot the pre-drag position for undo registration. The
+    /// drag gesture's own origin bookkeeping is kept inside
+    /// `NodesLayer`; we just signal "this drag started".
+    let onDragStart: (CanvasNode.ID) -> Void
     let onSelect: (Int) -> Void
     /// Node currently in inline-edit mode. The matching card
     /// expands into `NodeEditorView` instead of its normal compact
@@ -1094,6 +1225,7 @@ struct NodesLayer: View {
                 // from the gesture start) lands at the correct spot.
                 if dragOrigins[id] == nil {
                     dragOrigins[id] = livePosition
+                    onDragStart(id)
                 }
                 let origin = dragOrigins[id] ?? livePosition
                 onDrag(id,
@@ -1499,6 +1631,8 @@ private struct RepoNodesLayer: View {
     let repositoryHistory: [String: [ConsoleProcess.SymbolValue]]
     let onDrag: (String, CGPoint) -> Void
     let onDragEnd: (String, CGPoint) -> Void
+    /// Snapshot point — same role as `NodesLayer.onDragStart`.
+    let onDragStart: (String) -> Void
 
     @State private var dragOrigins: [String: CGPoint] = [:]
 
@@ -1525,7 +1659,10 @@ private struct RepoNodesLayer: View {
         DragGesture()
             .onChanged { value in
                 let origin = dragOrigins[id] ?? livePosition
-                if dragOrigins[id] == nil { dragOrigins[id] = origin }
+                if dragOrigins[id] == nil {
+                    dragOrigins[id] = origin
+                    onDragStart(id)
+                }
                 let next = CGPoint(
                     x: origin.x + value.translation.width,
                     y: origin.y + value.translation.height
