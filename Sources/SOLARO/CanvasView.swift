@@ -998,6 +998,12 @@ struct NodesLayer: View {
                 }
                 .position(x: p.x + nodeWidth / 2,
                           y: p.y + nodeHeight / 2)
+                // Float the inline editor above every other node
+                // card. Without an explicit z-index, ForEach uses
+                // source order, so cards positioned later (further
+                // down the canvas) end up drawn on top of the
+                // editor when its rect overlaps theirs.
+                .zIndex(editingNodeID == node.id ? 1000 : 0)
                 .onTapGesture(count: 2) { onDoubleTap(node.id) }
                 .onTapGesture { onSelect(node.lineHint) }
                 .gesture(dragGesture(id: node.id, livePosition: p))

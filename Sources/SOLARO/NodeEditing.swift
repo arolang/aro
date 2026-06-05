@@ -473,16 +473,21 @@ struct NodeEditorView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SolaroSpace.s) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 6) {
+            // Single-line header — no subtitle. Compact title +
+            // close button on the trailing edge.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(schema.title)
                     .font(SolaroFont.bodyBold)
                     .foregroundStyle(SolaroColor.textPrimary)
-                if let sub = schema.subtitle {
-                    Text(sub)
-                        .font(SolaroFont.caption)
-                        .foregroundStyle(SolaroColor.textSecondary)
+                Spacer(minLength: 0)
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(SolaroColor.textTertiary)
                 }
+                .buttonStyle(.borderless)
+                .help("Cancel and keep the original statement")
             }
             ForEach(schema.fields) { field in
                 fieldRow(field)
@@ -491,15 +496,19 @@ struct NodeEditorView: View {
                 Spacer()
                 Button("Cancel", action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .controlSize(.small)
                 Button("Apply") {
                     if let next = schema.render() { onApply(next) }
                 }
                 .keyboardShortcut(.defaultAction)
+                .controlSize(.small)
                 .disabled(schema.render() == nil)
             }
         }
-        .padding(SolaroSpace.m)
-        .frame(width: 360, alignment: .leading)
+        .padding(.horizontal, SolaroSpace.s)
+        .padding(.vertical, SolaroSpace.xs)
+        .frame(width: 320, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(
             RoundedRectangle(cornerRadius: SolaroRadius.m,
                              style: .continuous)
@@ -515,19 +524,21 @@ struct NodeEditorView: View {
 
     @ViewBuilder
     private func fieldRow(_ field: EditableField) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            switch field {
-            case let .stringLiteral(id, label, value, placeholder):
-                fieldLabel(label)
+        switch field {
+        case let .stringLiteral(id, label, value, placeholder):
+            inlineRow(label) {
                 TextField(placeholder, text: bindString(id: id, fallback: value))
                     .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+            }
 
-            case let .identifier(id, label, value, suggestions):
-                fieldLabel(label)
+        case let .identifier(id, label, value, suggestions):
+            inlineRow(label) {
                 HStack(spacing: 4) {
                     TextField("<name>",
                               text: bindIdentifier(id: id, fallback: value))
                         .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
                     if !suggestions.isEmpty {
                         Menu {
                             ForEach(suggestions, id: \.self) { s in
@@ -535,36 +546,34 @@ struct NodeEditorView: View {
                             }
                         } label: {
                             Image(systemName: "chevron.down.circle")
+                                .font(.system(size: 12))
                         }
                         .menuStyle(.borderlessButton)
-                        .frame(width: 22)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
                         .help("Pick an in-scope variable")
                     }
                 }
+            }
 
-            case let .expression(id, label, value, placeholder):
-                fieldLabel(label)
-                TextEditor(text: bindExpression(id: id, fallback: value))
+        case let .expression(id, label, value, placeholder):
+            // Single-line by default. Long expressions wrap into
+            // the same compact field — the user can paste multi-
+            // line content and SwiftUI will scroll inside the
+            // text field; keeping the row tall by default would
+            // make every editor too big.
+            inlineRow(label) {
+                TextField(placeholder,
+                          text: bindExpression(id: id, fallback: value),
+                          axis: .vertical)
+                    .lineLimit(1...4)
                     .font(SolaroFont.mono)
-                    .frame(minHeight: 56)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(SolaroColor.divider, lineWidth: 1)
-                    )
-                    .background(SolaroColor.backdrop.opacity(0.6))
-                    .overlay(alignment: .topLeading) {
-                        if (rawExpression(id) ?? value).isEmpty {
-                            Text(placeholder)
-                                .font(SolaroFont.mono)
-                                .foregroundStyle(SolaroColor.textTertiary)
-                                .padding(.horizontal, 4)
-                                .padding(.top, 6)
-                                .allowsHitTesting(false)
-                        }
-                    }
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+            }
 
-            case let .picker(id, label, value, options):
-                fieldLabel(label)
+        case let .picker(id, label, value, options):
+            inlineRow(label) {
                 Picker(label, selection: bindPicker(id: id, fallback: value)) {
                     ForEach(options, id: \.self) { opt in
                         Text(opt).tag(opt)
@@ -572,11 +581,26 @@ struct NodeEditorView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .controlSize(.small)
+            }
 
-            case let .record(id, label, rows):
+        case let .record(id, label, rows):
+            VStack(alignment: .leading, spacing: 4) {
                 fieldLabel(label)
                 recordTable(id: id, rows: rows)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func inlineRow<Content: View>(
+        _ label: String,
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            fieldLabel(label)
+                .frame(width: 80, alignment: .trailing)
+            content()
         }
     }
 
