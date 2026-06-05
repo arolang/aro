@@ -300,7 +300,6 @@ struct CanvasView: View {
                 lastExecutedAt: lastExecutedAt,
                 errorLines: errorLines,
                 breakpointLines: breakpointLines,
-                testResults: controller.testResults,
                 onContextAction: onNodeContextAction,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
@@ -918,40 +917,52 @@ private struct FeatureSetContainer: View {
         }
     }
 
-    /// Small PASS/FAIL chip rendered next to the FS title when the
-    /// container belongs to a test feature set and the test has
-    /// been executed at least once this session.
+    /// PASS/FAIL chip on the FS container header. Bumped up in
+    /// size (#?) so the test result is the most obvious thing on
+    /// the container, matching the editor gutter's chip vocabulary.
     @ViewBuilder
     private var testBadge: some View {
         switch testResult {
         case .passed:
-            HStack(spacing: 2) {
-                Image(systemName: "checkmark.seal.fill")
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
                 Text("PASS")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(0.5)
             }
-            .font(.system(size: 9, weight: .bold))
             .foregroundStyle(SolaroColor.stateOK)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(SolaroColor.stateOK.opacity(0.12))
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(SolaroColor.stateOK.opacity(0.18))
             )
-            .help("Last run: passed")
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(SolaroColor.stateOK.opacity(0.5), lineWidth: 1)
+            )
+            .help("Last test run: passed")
         case .failed(let message):
-            HStack(spacing: 2) {
-                Image(systemName: "xmark.octagon.fill")
+            HStack(spacing: 4) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
                 Text("FAIL")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(0.5)
             }
-            .font(.system(size: 9, weight: .bold))
             .foregroundStyle(SolaroColor.stateError)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(SolaroColor.stateError.opacity(0.14))
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(SolaroColor.stateError.opacity(0.18))
             )
-            .help("Last run: \(message)")
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(SolaroColor.stateError.opacity(0.5), lineWidth: 1)
+            )
+            .help("Last test run: \(message)")
         case .none:
             EmptyView()
         }
@@ -973,8 +984,12 @@ private struct FeatureSetContainer: View {
                         .font(.system(size: 9))
                         .foregroundStyle(tint.opacity(0.6 + 0.4 * intensity))
                 }
-                testBadge
                 Spacer()
+                // PASS / FAIL chip on the right side of the
+                // header strip (#?). Anchoring it past the Spacer
+                // means it never overlaps the FS name even when
+                // the container is narrow.
+                testBadge
             }
             .padding(.horizontal, SolaroSpace.s)
             .padding(.top, SolaroSpace.xs)
@@ -1195,10 +1210,6 @@ struct NodesLayer: View {
     /// Lines that carry a breakpoint — each matching node renders
     /// the red gutter dot in its corner.
     let breakpointLines: Set<Int>
-    /// Most recent `aro test` outcome per test feature-set name.
-    /// CanvasNodeCard renders a small chip in the corner when its
-    /// node belongs to one of these test FSes.
-    let testResults: [String: TestNodeResult]
     /// Right-click context menu on each node card.
     let onContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
@@ -1259,8 +1270,7 @@ struct NodesLayer: View {
                             hasBreakpoint: breakpointLines.contains(node.lineHint),
                             symbols: relevantSymbols(for: node),
                             lastExecutedAt: lastExecutedAt[node.lineHint],
-                            errorMessage: errorLines[node.lineHint],
-                            testResult: testResults[node.featureSetName]
+                            errorMessage: errorLines[node.lineHint]
                         )
                     }
                 }
@@ -1394,11 +1404,6 @@ private struct CanvasNodeCard: View {
     /// or nil if the statement ran cleanly. Drives the red border
     /// + tooltip + error icon.
     let errorMessage: String?
-    /// Outcome of the most recent `aro test` invocation for the
-    /// test feature set this node belongs to (or nil if the node
-    /// is in a production FS, or no test has run yet). Drives a
-    /// small chip in the upper-right corner of the card.
-    let testResult: TestNodeResult?
 
     @State private var hovering = false
     @State private var showPopover = false
@@ -1513,10 +1518,6 @@ private struct CanvasNodeCard: View {
                     lineWidth: (errorMessage != nil || isPaused || isSelected) ? 2 : 1
                 )
         )
-        .overlay(alignment: .topTrailing) {
-            testResultChip
-                .padding(4)
-        }
         .shadow(
             color: Color.black.opacity(
                 isPaused ? 0.55 :
@@ -1579,37 +1580,6 @@ private struct CanvasNodeCard: View {
         if isSelected { return SolaroColor.accent }
         if hovering   { return SolaroColor.accent.opacity(0.6) }
         return SolaroColor.divider
-    }
-
-    /// Small chip in the upper-right corner that mirrors the
-    /// container header's PASS/FAIL badge. Surfaces the per-test
-    /// outcome at the node level too so individual `Given`/`When`/
-    /// `Then` statements stand out even when the FS header scrolled
-    /// off-screen.
-    @ViewBuilder
-    private var testResultChip: some View {
-        switch testResult {
-        case .passed:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(SolaroColor.stateOK)
-                .background(
-                    Circle().fill(SolaroColor.surface.opacity(0.85))
-                        .padding(-1)
-                )
-                .help("Last test run: passed")
-        case .failed(let message):
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(SolaroColor.stateError)
-                .background(
-                    Circle().fill(SolaroColor.surface.opacity(0.85))
-                        .padding(-1)
-                )
-                .help("Last test run: \(message)")
-        case .none:
-            EmptyView()
-        }
     }
 
     /// 0...1 brightness for the role rail at `now`. Each event
