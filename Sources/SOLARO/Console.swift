@@ -328,7 +328,12 @@ final class ConsoleProcess {
             }
             appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
         case .test(let filter):
-            subArgs = ["test", project.rootPath.path]
+            // `--record` so the canvas pulse / executed-line tint
+            // light up while a test run is in progress (#?). The
+            // same JSONL file the run path tails fans events out
+            // through `LiveEventStream`.
+            subArgs = ["test", project.rootPath.path,
+                       "--record", recordPath(for: project)]
             if let filter, !filter.isEmpty {
                 subArgs.append(contentsOf: ["--filter", filter])
                 appendInfo("$ aro test \(project.rootPath.lastPathComponent) --filter \(filter)")

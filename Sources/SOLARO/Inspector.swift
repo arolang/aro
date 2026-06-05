@@ -402,7 +402,7 @@ struct InspectorPaneView: View {
                     .foregroundStyle(SolaroColor.textSecondary)
                     .tracking(2)
                 ForEach(program.featureSets, id: \.name) { fs in
-                    FeatureSetCard(fs: fs)
+                    FeatureSetCard(fs: fs, controller: controller)
                 }
             }
             .padding(.top, SolaroSpace.s)
@@ -1155,6 +1155,7 @@ private struct LSPDiagnosticRow: View {
 
 private struct FeatureSetCard: View {
     let fs: FeatureSet
+    @Bindable var controller: WorkspaceController
 
     @State private var expanded: Bool = false
 
@@ -1186,6 +1187,7 @@ private struct FeatureSetCard: View {
                             .lineLimit(1)
                     }
                     Spacer()
+                    testIcon
                     Text("\(fs.statements.count)")
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textTertiary)
@@ -1213,6 +1215,77 @@ private struct FeatureSetCard: View {
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
                 .stroke(SolaroColor.divider, lineWidth: 1)
         )
+    }
+
+    /// Small "T" badge that surfaces the test status of this
+    /// feature set: green when the last `aro test` recorded a
+    /// pass, red on fail / error. While a test run is in
+    /// progress (the FS recently fired a statement) the icon
+    /// blinks to signal "the runtime is touching this right now".
+    @ViewBuilder
+    private var testIcon: some View {
+        let result = controller.testResults[fs.name]
+        let isTestFS = fs.businessActivity.hasSuffix("Test")
+            || fs.businessActivity.hasSuffix("Tests")
+        // Only show the icon for actual test feature sets so the
+        // production rows stay visually quiet.
+        if isTestFS {
+            let _: UInt64 = controller.executionTick
+            let recentExec = controller.lastExecutedAtPerFeatureSet[fs.name]
+            TimelineView(.animation(minimumInterval: 1.0 / 12.0,
+                                    paused: !isCurrentlyRunning(recentExec))) { ctx in
+                let pulsing = isCurrentlyRunning(recentExec)
+                let alpha = pulsing ? blinkAlpha(at: ctx.date) : 1.0
+                Text("T")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(testIconColor(for: result, pulsing: pulsing))
+                    .opacity(alpha)
+                    .frame(width: 14, height: 14)
+                    .background(
+                        Circle()
+                            .fill(testIconColor(for: result, pulsing: pulsing)
+                                  .opacity(0.18))
+                    )
+                    .help(testIconTooltip(for: result, pulsing: pulsing))
+            }
+        }
+    }
+
+    private func isCurrentlyRunning(_ last: Date?) -> Bool {
+        guard let last else { return false }
+        return Date().timeIntervalSince(last) < 0.6
+    }
+
+    private func blinkAlpha(at now: Date) -> Double {
+        // 1.2 Hz square-ish blink so the user catches it even out
+        // of the corner of their eye.
+        let t = now.timeIntervalSince1970
+        return (sin(t * .pi * 2.4) > 0) ? 1.0 : 0.35
+    }
+
+    private func testIconColor(
+        for result: TestNodeResult?,
+        pulsing: Bool
+    ) -> Color {
+        switch result {
+        case .passed: return SolaroColor.stateOK
+        case .failed: return SolaroColor.stateError
+        case nil:     return pulsing
+            ? SolaroColor.accent
+            : SolaroColor.textTertiary
+        }
+    }
+
+    private func testIconTooltip(
+        for result: TestNodeResult?,
+        pulsing: Bool
+    ) -> String {
+        if pulsing { return "Test running…" }
+        switch result {
+        case .passed: return "Last run: passed"
+        case .failed(let msg): return "Last run: \(msg)"
+        case nil: return "Test (no run yet)"
+        }
     }
 
     /// Dominant role tint across the feature set's statements. Uses a
