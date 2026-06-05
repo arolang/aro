@@ -80,6 +80,12 @@ struct CanvasView: View {
     /// state. Optional so screens that don't need a reset action
     /// (Project Map, OpenAPI canvas) can omit it.
     let resetLayout: (() -> Void)?
+    /// Persist a node's new statement source back to the .aro
+    /// file. Called on the editor's Apply. The caller (CenterPane)
+    /// reads the current file, finds the statement, replaces its
+    /// span, and writes the result. Optional so non-source-backed
+    /// canvases (OpenAPI graph, Project Map) can omit it.
+    let applyNodeEdit: ((CanvasNode.ID, String) -> Void)?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -89,6 +95,10 @@ struct CanvasView: View {
     /// Live per-node position overlay. Initialised from the graph's
     /// laid-out positions on first appearance; mutated by drags.
     @State private var liveNodes: [CanvasNode.ID: CGPoint] = [:]
+    /// Node ID currently being edited via the inline editor (the
+    /// expanded card). nil when no node is in edit mode.
+    @State private var editingNodeID: CanvasNode.ID? = nil
+
     /// Snapshot of every node's position when a feature-set header
     /// drag begins, keyed by FS name → {node id → origin}. Cleared
     /// on drag-end. Same anti-cumulative trick as `dragOrigins` in
@@ -262,7 +272,14 @@ struct CanvasView: View {
                     if currentLine != lineHint {
                         currentLine = lineHint
                     }
-                }
+                },
+                editingNodeID: editingNodeID,
+                onDoubleTap: { id in editingNodeID = id },
+                onApplyEdit: { id, newText in
+                    applyNodeEdit?(id, newText)
+                    editingNodeID = nil
+                },
+                onCancelEdit: { editingNodeID = nil }
             )
             .frame(width: contentSize.width, height: contentSize.height,
                    alignment: .topLeading)
@@ -930,6 +947,13 @@ struct NodesLayer: View {
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
     let onDragEnd: (CanvasNode.ID, CGPoint) -> Void
     let onSelect: (Int) -> Void
+    /// Node currently in inline-edit mode. The matching card
+    /// expands into `NodeEditorView` instead of its normal compact
+    /// form.
+    let editingNodeID: CanvasNode.ID?
+    let onDoubleTap: (CanvasNode.ID) -> Void
+    let onApplyEdit: (CanvasNode.ID, String) -> Void
+    let onCancelEdit: () -> Void
 
     /// Position of each node at the moment its drag began. Captured
     /// once on the first `onChanged` event, cleared on `onEnded`.
@@ -946,24 +970,35 @@ struct NodesLayer: View {
             Color.clear
             ForEach(graph.nodes) { node in
                 let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
-                CanvasNodeCard(
-                    node: node,
-                    width: nodeWidth, height: nodeHeight,
-                    isSelected: selectedLine == node.lineHint,
-                    isPaused: pausedLine == node.lineHint,
-                    hasBreakpoint: breakpointLines.contains(node.lineHint),
-                    symbols: relevantSymbols(for: node),
-                    lastExecutedAt: lastExecutedAt[node.lineHint],
-                    errorMessage: errorLines[node.lineHint]
-                )
-                // `.position` is absolute placement that puts the
-                // view's center at the given point in the parent's
-                // coordinate space — unlike `.offset`, it counts as
-                // layout. The +width/2, +height/2 converts from the
-                // (top-left) node origin we store on disk to the
-                // (center) point .position expects.
+                Group {
+                    if editingNodeID == node.id {
+                        NodeEditorView(
+                            schema: NodeEditingSchemaFactory.infer(
+                                node: node,
+                                statementSource: node.summary,
+                                availableIdentifiers: scopeFor(node: node)
+                            ),
+                            onApply: { newText in
+                                onApplyEdit(node.id, newText)
+                            },
+                            onCancel: { onCancelEdit() }
+                        )
+                    } else {
+                        CanvasNodeCard(
+                            node: node,
+                            width: nodeWidth, height: nodeHeight,
+                            isSelected: selectedLine == node.lineHint,
+                            isPaused: pausedLine == node.lineHint,
+                            hasBreakpoint: breakpointLines.contains(node.lineHint),
+                            symbols: relevantSymbols(for: node),
+                            lastExecutedAt: lastExecutedAt[node.lineHint],
+                            errorMessage: errorLines[node.lineHint]
+                        )
+                    }
+                }
                 .position(x: p.x + nodeWidth / 2,
                           y: p.y + nodeHeight / 2)
+                .onTapGesture(count: 2) { onDoubleTap(node.id) }
                 .onTapGesture { onSelect(node.lineHint) }
                 .gesture(dragGesture(id: node.id, livePosition: p))
                 .contextMenu {
@@ -1005,6 +1040,27 @@ struct NodesLayer: View {
 
     /// Filter the global symbol bag down to identifiers this node
     /// produces or reads. Drives the per-node hover tooltip.
+    /// In-scope identifiers the user can pick from in the editor's
+    /// variable dropdown. Defined as the set of result names from
+    /// every statement that appears earlier in the same feature
+    /// set (source order), so a later Compute can pick the result
+    /// of an earlier Extract.
+    private func scopeFor(node: CanvasNode) -> [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for other in graph.nodes {
+            if other.id == node.id { break }
+            if other.featureSetName != node.featureSetName { continue }
+            if let name = other.resultName,
+               !name.hasPrefix("_"),
+               !seen.contains(name) {
+                seen.insert(name)
+                out.append(name)
+            }
+        }
+        return out
+    }
+
     private func relevantSymbols(for node: CanvasNode)
         -> [ConsoleProcess.SymbolValue]
     {

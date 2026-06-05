@@ -473,7 +473,11 @@ struct CenterPaneView: View {
                 onNodeContextAction: { action, node in
                     handleNodeContextAction(action, node: node)
                 },
-                resetLayout: { resetLayoutSidecar() }
+                resetLayout: { resetLayoutSidecar() },
+                applyNodeEdit: { nodeID, newStatementText in
+                    applyNodeEdit(nodeID: nodeID,
+                                  newStatementText: newStatementText)
+                }
             )
         }
     }
@@ -737,6 +741,85 @@ struct CenterPaneView: View {
         try? sidecar.save(for: url)
     }
 
+    /// Apply an inline-editor edit by replacing the AROStatement's
+    /// source span with `newStatementText`. The canvas node ID
+    /// encodes the start offset (`"\(fileKey):\(offset)"`); we find
+    /// the AST statement by matching that offset, then rewrite the
+    /// file in place. SOLARO's existing file-change watcher picks
+    /// the new content up and re-parses.
+    private func applyNodeEdit(
+        nodeID: CanvasNode.ID,
+        newStatementText: String
+    ) {
+        guard let url = controller.currentFile else { return }
+        // The node ID's last `:offset` segment is the statement's
+        // span.start.offset. We find the statement that matches it
+        // by walking the parsed program; that gives us start + end
+        // and the full source span we need to replace.
+        let parts = nodeID.split(separator: ":")
+        guard let lastSlice = parts.last,
+              let startOffset = Int(String(lastSlice)) else { return }
+        guard let program = controller.programs[url] else { return }
+        var span: SourceSpan? = nil
+        for fs in program.featureSets {
+            if let found = locateStatement(
+                inStatements: fs.statements,
+                matching: startOffset
+            ) {
+                span = found
+                break
+            }
+        }
+        guard let span else { return }
+        guard let source = try? String(contentsOf: url, encoding: .utf8)
+        else { return }
+        let newSource = replacingStatement(
+            in: source,
+            byteRange: span.start.offset ..< span.end.offset,
+            with: newStatementText
+        )
+        do {
+            try newSource.write(to: url, atomically: true, encoding: .utf8)
+            saveAndReparse(text: newSource, url: url)
+        } catch {
+            // Surface to the user via the inspector's error rail —
+            // for now, just stderr so the failure isn't silent.
+            FileHandle.standardError.write(Data(
+                "[node-edit] failed to write \(url.lastPathComponent): \(error)\n".utf8
+            ))
+        }
+    }
+
+    /// Depth-first search for the statement whose `span.start.offset`
+    /// matches. Handles AROStatement directly, plus recurses into
+    /// ForEachLoop and RangeLoop bodies because their nested
+    /// statements have spans of their own. Match suffixes (`:foreach`,
+    /// `:range`) on the node ID would be needed to edit the *loop*
+    /// header itself; for now those nodes don't render as
+    /// directly-editable cards (the bracket pill is decorative).
+    private func locateStatement(
+        inStatements statements: [Statement],
+        matching offset: Int
+    ) -> SourceSpan? {
+        for statement in statements {
+            if let aro = statement as? AROStatement,
+               aro.span.start.offset == offset {
+                return aro.span
+            }
+            if let loop = statement as? ForEachLoop {
+                if let nested = locateStatement(
+                    inStatements: loop.body, matching: offset
+                ) { return nested }
+            }
+            if let loop = statement as? RangeLoop {
+                if let nested = locateStatement(
+                    inStatements: loop.body, matching: offset
+                ) { return nested }
+            }
+        }
+        return nil
+    }
+
     /// "Auto Layout" callback fired by the canvas's right-click
     /// menu — wipes every persisted node position from the sidecar
     /// so the next `canvasGraph` rebuild falls back to
@@ -808,7 +891,11 @@ struct CenterPaneView: View {
                 onNodeContextAction: { action, node in
                     handleNodeContextAction(action, node: node)
                 },
-                resetLayout: { resetLayoutSidecar() }
+                resetLayout: { resetLayoutSidecar() },
+                applyNodeEdit: { nodeID, newStatementText in
+                    applyNodeEdit(nodeID: nodeID,
+                                  newStatementText: newStatementText)
+                }
             )
         }
     }
