@@ -273,10 +273,19 @@ public final class FeatureSetExecutor: Sendable {
             // signal for `break inner` etc. — so we skip it.
             if !(error is BreakSignal),
                let controller = Debug.controller {
+                // Pass the failing statement's line directly — the
+                // frontend's lookback only sees lines from
+                // checkpoints that actually called `didPause`, and a
+                // .continue / sampled run skips most of them.
+                let span = statement.span
+                let basename = Debug.currentSourceFile.isEmpty
+                    ? "" : URL(fileURLWithPath: Debug.currentSourceFile).lastPathComponent
                 await controller.errorCheckpoint(
                     message: "\(error)",
                     featureSetName: context.featureSetName,
-                    businessActivity: context.businessActivity
+                    businessActivity: context.businessActivity,
+                    line: span.start.line,
+                    file: basename
                 )
             }
             throw error

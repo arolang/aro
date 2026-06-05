@@ -219,16 +219,25 @@ public actor DebugController {
     }
 
     /// Called from the runtime when a statement is about to fail.
-    /// Pauses only when `.errorAny` is set.
-    public func errorCheckpoint(message: String, featureSetName: String, businessActivity: String) async {
+    /// Pauses only when `.errorAny` is set. `line`/`file` should be
+    /// the source location of the failing statement so the frontend
+    /// can paint the right node (the frontend's lookback-fallback
+    /// gets stale when `checkpoint()` short-circuits at sampling).
+    public func errorCheckpoint(
+        message: String,
+        featureSetName: String,
+        businessActivity: String,
+        line: Int = 0,
+        file: String = ""
+    ) async {
         let hasErrorBP = breakpoints.contains(.errorAny)
         guard hasErrorBP else { return }
         let info = PauseInfo(
             reason: .error(message),
             featureSetName: featureSetName,
             businessActivity: businessActivity,
-            file: "",
-            line: 0,
+            file: file,
+            line: line,
             column: 0,
             statementSummary: "[error] \(message)",
             verb: nil,
