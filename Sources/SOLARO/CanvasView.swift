@@ -1318,32 +1318,38 @@ private struct CanvasNodeHoverPopover: View {
             Text(node.summary)
                 .font(SolaroFont.mono)
                 .foregroundStyle(SolaroColor.textPrimary)
-                .lineLimit(3)
-                .truncationMode(.tail)
+                // Let the source wrap rather than truncate — the
+                // popover sits on top of the canvas backdrop, so a
+                // taller balloon is fine and the user actually
+                // needs to *read* what the statement does.
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             Divider().background(SolaroColor.divider)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(symbols, id: \.name) { s in
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(s.name)
-                            .font(SolaroFont.mono)
-                            .foregroundStyle(SolaroColor.accent)
-                        Text(":")
-                            .font(SolaroFont.monoCaption)
-                            .foregroundStyle(SolaroColor.textTertiary)
-                        Text(s.typeName)
-                            .font(SolaroFont.monoCaption)
-                            .foregroundStyle(SolaroColor.textSecondary)
-                        Text("=")
-                            .font(SolaroFont.monoCaption)
-                            .foregroundStyle(SolaroColor.textTertiary)
+                    // Stacked `name : type` row on top, then the
+                    // value on its own line so long strings can
+                    // wrap freely instead of being clipped at the
+                    // popover's right edge. Solves the "messages
+                    // longer than the popover get cut off" gripe.
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(s.name)
+                                .font(SolaroFont.mono)
+                                .foregroundStyle(SolaroColor.accent)
+                            Text(":")
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textTertiary)
+                            Text(s.typeName)
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(SolaroColor.textSecondary)
+                        }
                         Text(s.value)
                             .font(SolaroFont.mono)
                             .foregroundStyle(SolaroColor.textPrimary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
-                        Spacer(minLength: 0)
                     }
                 }
             }
@@ -1353,7 +1359,11 @@ private struct CanvasNodeHoverPopover: View {
         }
         .padding(.horizontal, SolaroSpace.m)
         .padding(.vertical, SolaroSpace.s)
-        .frame(minWidth: 260, maxWidth: 420, alignment: .leading)
+        // Wider envelope so common payloads — JSON object previews,
+        // multi-segment error messages — fit without forcing a
+        // wrap. `fixedSize(vertical:)` on the rows lets the balloon
+        // grow downward when content exceeds this width.
+        .frame(minWidth: 280, maxWidth: 520, alignment: .leading)
     }
 }
 
@@ -1575,14 +1585,14 @@ private struct RepoHistoryPopover: View {
                         Text(value.value)
                             .font(SolaroFont.mono)
                             .foregroundStyle(SolaroColor.textPrimary)
-                            .lineLimit(3)
-                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
                 }
             }
         }
         .padding(SolaroSpace.m)
-        .frame(minWidth: 240, maxWidth: 420, alignment: .topLeading)
+        .frame(minWidth: 260, maxWidth: 520, alignment: .topLeading)
     }
 }
