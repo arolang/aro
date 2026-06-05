@@ -78,6 +78,10 @@ final class WorkspaceController {
     /// Same idea, but per feature-set name — drives the FS-container
     /// glow that disambiguates concurrent runs.
     var lastExecutedAtPerFeatureSet: [String: Date] = [:]
+    /// Source line → runtime error message; mirrored from
+    /// `ConsoleProcess.errorLines`. Painted as a red border on the
+    /// corresponding canvas node.
+    var errorLines: [Int: String] = [:]
     /// Tick counter incremented every time `lastExecutedAt` updates
     /// — TimelineView-based animations watch this to keep redrawing
     /// even when the same line fires twice in a row.
@@ -534,6 +538,7 @@ struct WorkspaceView: View {
             controller.lastExecutedAt = consoleProcess.lastExecutedAt
             controller.lastExecutedAtPerFeatureSet =
                 consoleProcess.lastExecutedAtPerFeatureSet
+            controller.errorLines = consoleProcess.errorLines
             controller.repositoryValues = consoleProcess.repositoryValues
             controller.repositoryHistory = consoleProcess.repositoryHistory
             controller.pauseSymbols = consoleProcess.pauseSymbols

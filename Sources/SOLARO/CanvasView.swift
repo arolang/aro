@@ -53,6 +53,9 @@ struct CanvasView: View {
     /// fired. Drives the container's outline glow so concurrent
     /// runs of multiple feature sets read as visually distinct.
     let lastExecutedAtPerFeatureSet: [String: Date]
+    /// Source line → runtime error message for statements the
+    /// runtime failed on. Drives the per-card red border + tooltip.
+    let errorLines: [Int: String]
     /// Latest payload observed flowing through each repository,
     /// keyed by repo object name (e.g. `"user-repository"`).
     let repositoryValues: [String: ConsoleProcess.SymbolValue]
@@ -240,6 +243,7 @@ struct CanvasView: View {
                 pausedLine: pausedLine,
                 pauseSymbols: pauseSymbols,
                 lastExecutedAt: lastExecutedAt,
+                errorLines: errorLines,
                 breakpointLines: breakpointLines,
                 onContextAction: onNodeContextAction,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
@@ -816,6 +820,9 @@ struct NodesLayer: View {
     let pauseSymbols: [String: ConsoleProcess.SymbolValue]
     /// Per-line execution timestamps from the live event stream.
     let lastExecutedAt: [Int: Date]
+    /// Source line → runtime error message; matching nodes get a
+    /// red border and a tooltip with the message.
+    let errorLines: [Int: String]
     /// Lines that carry a breakpoint — each matching node renders
     /// the red gutter dot in its corner.
     let breakpointLines: Set<Int>
@@ -847,7 +854,8 @@ struct NodesLayer: View {
                     isPaused: pausedLine == node.lineHint,
                     hasBreakpoint: breakpointLines.contains(node.lineHint),
                     symbols: relevantSymbols(for: node),
-                    lastExecutedAt: lastExecutedAt[node.lineHint]
+                    lastExecutedAt: lastExecutedAt[node.lineHint],
+                    errorMessage: errorLines[node.lineHint]
                 )
                 // `.position` is absolute placement that puts the
                 // view's center at the given point in the parent's
@@ -949,6 +957,10 @@ private struct CanvasNodeCard: View {
     /// executing (from the JSONL stream). nil if it hasn't run yet
     /// during this session. Drives the colored left-border pulse.
     let lastExecutedAt: Date?
+    /// Runtime error message attributed to this node's source line,
+    /// or nil if the statement ran cleanly. Drives the red border
+    /// + tooltip + error icon.
+    let errorMessage: String?
 
     @State private var hovering = false
     @State private var showPopover = false
@@ -1058,7 +1070,10 @@ private struct CanvasNodeCard: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(borderColor, lineWidth: isPaused || isSelected ? 2 : 1)
+                .stroke(
+                    borderColor,
+                    lineWidth: (errorMessage != nil || isPaused || isSelected) ? 2 : 1
+                )
         )
         .shadow(
             color: Color.black.opacity(
@@ -1102,6 +1117,10 @@ private struct CanvasNodeCard: View {
     /// captured for identifiers this statement reads or produces.
     private var tooltipText: String {
         var lines = ["Line \(node.lineHint): \(node.summary)"]
+        if let error = errorMessage {
+            lines.append("")
+            lines.append("Runtime error: \(error)")
+        }
         if !symbols.isEmpty {
             lines.append("")
             lines.append("Current values:")
@@ -1113,6 +1132,7 @@ private struct CanvasNodeCard: View {
     }
 
     private var borderColor: Color {
+        if errorMessage != nil { return SolaroColor.stateError }
         if isPaused   { return SolaroColor.stateWarn }
         if isSelected { return SolaroColor.accent }
         if hovering   { return SolaroColor.accent.opacity(0.6) }

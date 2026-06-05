@@ -463,6 +463,7 @@ struct CenterPaneView: View {
                 lastExecutedAt: controller.lastExecutedAt,
                 lastExecutedAtPerFeatureSet:
                     controller.lastExecutedAtPerFeatureSet,
+                errorLines: controller.errorLines,
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
                 breakpointLines: breakpointsBinding.wrappedValue,
@@ -797,6 +798,7 @@ struct CenterPaneView: View {
                 lastExecutedAt: controller.lastExecutedAt,
                 lastExecutedAtPerFeatureSet:
                     controller.lastExecutedAtPerFeatureSet,
+                errorLines: controller.errorLines,
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
                 breakpointLines: breakpointsBinding.wrappedValue,

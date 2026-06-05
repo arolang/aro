@@ -53,6 +53,11 @@ final class ConsoleProcess {
     /// container-level glow so concurrent feature sets are visually
     /// distinct in the canvas. Reset at run start.
     var lastExecutedAtPerFeatureSet: [String: Date] = [:]
+    /// Source line → runtime error message. Populated when an
+    /// embedded-mode `errorCheckpoint` fires for that line; drives
+    /// the red border + tooltip on the failing canvas node. Reset
+    /// at the start of every new run.
+    var errorLines: [Int: String] = [:]
     /// Monotonically increases each time `lastExecutedAt` is updated.
     /// SwiftUI watches this so TimelineView-driven animations keep
     /// scheduling refreshes even when the same line fires twice in
@@ -175,6 +180,7 @@ final class ConsoleProcess {
         pauseSymbols.removeAll(keepingCapacity: true)
         lastExecutedAt.removeAll(keepingCapacity: true)
         lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
+        errorLines.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
         executionTick = 0
@@ -257,6 +263,7 @@ final class ConsoleProcess {
         pauseSymbols.removeAll(keepingCapacity: true)
         lastExecutedAt.removeAll(keepingCapacity: true)
         lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
+        errorLines.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
         executionTick = 0
@@ -384,6 +391,17 @@ final class ConsoleProcess {
         guard !batch.isEmpty else { return }
         let now = Date()
         for record in batch {
+            if record.kind == .error, let line = record.line, line > 0 {
+                // Strip the Swift case-printing wrapper: PauseInfo.Reason
+                // prints as `error("…")`, but the user-facing tooltip
+                // looks nicer with just the message.
+                var msg = record.reason ?? "runtime error"
+                if msg.hasPrefix("error(\""), msg.hasSuffix("\")") {
+                    msg = String(msg.dropFirst("error(\"".count)
+                                    .dropLast("\")".count))
+                }
+                errorLines[line] = msg
+            }
             if let line = record.line, line > 0 {
                 lastExecutedAt[line] = now
             }

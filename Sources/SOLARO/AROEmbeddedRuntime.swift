@@ -34,11 +34,19 @@ import ARORuntime
 /// into a `TimeTravelRecord` and forwards it to the host. Always
 /// returns `.stepOver` so the runtime keeps firing checkpoints for
 /// every statement — that's how we keep the canvas pulse live.
-final class EmbeddedRuntimeFrontend: DebugFrontend {
+final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
 
     let onPause: @Sendable (TimeTravelRecord) -> Void
     let onEnd: @Sendable (Error?) -> Void
     private let startedAt = Date()
+    /// Tracks the most recent line a regular checkpoint fired for.
+    /// `errorCheckpoint()` from the runtime arrives with `file=""`,
+    /// `line=0` (it's a statement-failure hook, not a source position),
+    /// so we need this lookback to point the canvas's error badge at
+    /// the actual offending node.
+    private var lastCheckpointLine: Int = 0
+    private var lastCheckpointFile: String? = nil
+    private let trackingQueue = DispatchQueue(label: "com.arolang.solaro.EmbeddedFrontend")
 
     init(
         onPause: @escaping @Sendable (TimeTravelRecord) -> Void,
@@ -52,7 +60,22 @@ final class EmbeddedRuntimeFrontend: DebugFrontend {
         _ pause: PauseInfo,
         controller: DebugController
     ) async -> StepMode {
-        let record = Self.makeRecord(from: pause, startedAt: startedAt)
+        // Snapshot the running line so a subsequent errorCheckpoint
+        // (no line of its own) can be attributed to the right node.
+        if case .error = pause.reason {
+            // Errors fall through to record-building below.
+        } else if pause.line > 0 {
+            trackingQueue.sync {
+                lastCheckpointLine = pause.line
+                lastCheckpointFile = pause.file.isEmpty ? nil : pause.file
+            }
+        }
+        let record = Self.makeRecord(
+            from: pause,
+            startedAt: startedAt,
+            fallbackLine: trackingQueue.sync { lastCheckpointLine },
+            fallbackFile: trackingQueue.sync { lastCheckpointFile }
+        )
         onPause(record)
         // Keep stepping. Returning `.continue` here would shut off
         // every subsequent checkpoint — the canvas would only flash
@@ -66,7 +89,9 @@ final class EmbeddedRuntimeFrontend: DebugFrontend {
 
     private static func makeRecord(
         from pause: PauseInfo,
-        startedAt: Date
+        startedAt: Date,
+        fallbackLine: Int,
+        fallbackFile: String?
     ) -> TimeTravelRecord {
         let symbols = pause.symbols.map {
             TimeTravelRecord.Symbol(
@@ -75,12 +100,26 @@ final class EmbeddedRuntimeFrontend: DebugFrontend {
                 value: $0.valuePreview
             )
         }
+        // Errors arrive without a source location of their own; reuse
+        // the most recent checkpointed line so the canvas can paint a
+        // red border on the failing statement.
+        let isError: Bool
+        if case .error = pause.reason { isError = true } else { isError = false }
+        let line: Int?
+        let file: String?
+        if isError {
+            line = pause.line > 0 ? pause.line : (fallbackLine > 0 ? fallbackLine : nil)
+            file = pause.file.isEmpty ? fallbackFile : pause.file
+        } else {
+            line = pause.line > 0 ? pause.line : nil
+            file = pause.file.isEmpty ? nil : pause.file
+        }
         return TimeTravelRecord(
             time: Date().timeIntervalSince(startedAt),
-            kind: .pause,
+            kind: isError ? .error : .pause,
             featureSet: pause.featureSetName,
-            file: pause.file.isEmpty ? nil : pause.file,
-            line: pause.line > 0 ? pause.line : nil,
+            file: file,
+            line: line,
             column: pause.column > 0 ? pause.column : nil,
             statement: pause.statementSummary,
             verb: pause.verb,
@@ -154,6 +193,11 @@ final class EmbeddedRuntimeHost {
         let controller = DebugController(frontend: frontend)
 
         runTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // Install `.errorAny` so the runtime's `errorCheckpoint`
+            // actually fires `didPause`; without this the embedded
+            // frontend never sees runtime failures and the canvas
+            // can't paint the failed node's red border.
+            await controller.addBreakpoint(.errorAny)
             do {
                 try await Self.runProject(at: path, controller: controller)
             } catch is DebuggerQuit {

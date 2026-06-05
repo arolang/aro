@@ -62,6 +62,57 @@ struct CanvasNode: Identifiable, Equatable {
         )
     }
 
+    /// Build a synthetic "loop header" node for a `ForEachLoop`.
+    /// The body's real statements still emit their own nodes via
+    /// `make(from:)`; this node is what the canvas draws so the
+    /// user can see the loop boundary, jump to it in the editor,
+    /// and follow data-flow into the iteration variable.
+    static func makeForEach(
+        loop: ForEachLoop,
+        fileKey: String,
+        featureSetName: String
+    ) -> CanvasNode {
+        var refs: Set<String> = []
+        if accept(loop.collection.base) { refs.insert(loop.collection.base) }
+        let collection = loop.collection.fullName
+        let summary = "for each <\(loop.itemVariable)> in <\(collection)>"
+        return CanvasNode(
+            id: "\(fileKey):\(loop.span.start.offset):foreach",
+            verb: "ForEach",
+            summary: summary,
+            // The iteration variable IS the loop's "result" — body
+            // statements that read `<entry>` should wire back to here.
+            resultName: loop.itemVariable,
+            objectPreposition: "in",
+            objectName: loop.collection.base,
+            referencedIdentifiers: Array(refs).sorted(),
+            lineHint: loop.span.start.line,
+            featureSetName: featureSetName,
+            x: 0, y: 0
+        )
+    }
+
+    /// Same idea for the C-style `for <var> from <low> to <high>`.
+    static func makeRangeLoop(
+        loop: RangeLoop,
+        fileKey: String,
+        featureSetName: String
+    ) -> CanvasNode {
+        let summary = "for <\(loop.variable)> in range"
+        return CanvasNode(
+            id: "\(fileKey):\(loop.span.start.offset):range",
+            verb: "For",
+            summary: summary,
+            resultName: loop.variable,
+            objectPreposition: "from",
+            objectName: nil,
+            referencedIdentifiers: [],
+            lineHint: loop.span.start.line,
+            featureSetName: featureSetName,
+            x: 0, y: 0
+        )
+    }
+
     /// Walks the object slot + valueSource + range modifiers to
     /// collect every `<name>` reference. Used by the edge builder.
     private static func collectReferenced(_ statement: AROStatement) -> [String] {
@@ -312,12 +363,17 @@ struct CanvasGraph: Equatable {
         var nodes: [CanvasNode] = []
         var edges: [CanvasEdge] = []
 
-        for statement in featureSet.statements {
-            guard let aro = statement as? AROStatement else { continue }
-            nodes.append(.make(from: aro,
-                               fileKey: fileKey,
-                               featureSetName: featureSet.name))
-        }
+        // Walk depth-first so for-each / range loops expose their
+        // body nodes too. Without the recursion the canvas silently
+        // dropped any statement nested inside a loop (e.g.
+        // DirectoryLister's `Log <entry: name>`), so the user saw
+        // no nodes for code that was actually running.
+        flattenStatements(
+            featureSet.statements,
+            featureSetName: featureSet.name,
+            fileKey: fileKey,
+            into: &nodes
+        )
 
         // Build edges by `<result>` → referenced-identifier match.
         // A statement `B` reads identifier `<x>` (via object slot,
@@ -370,6 +426,44 @@ struct CanvasGraph: Equatable {
             }
         }
         return CanvasGraph(nodes: nodes, edges: edges)
+    }
+
+    /// Flatten `statements` into the canvas-node list, recursing
+    /// into ForEachLoop / RangeLoop bodies so nested AROStatements
+    /// appear too. Each loop also emits a synthetic header node so
+    /// the loop boundary is visible.
+    private static func flattenStatements(
+        _ statements: [Statement],
+        featureSetName: String,
+        fileKey: String,
+        into nodes: inout [CanvasNode]
+    ) {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                nodes.append(.make(from: aro,
+                                   fileKey: fileKey,
+                                   featureSetName: featureSetName))
+            } else if let loop = statement as? ForEachLoop {
+                nodes.append(.makeForEach(loop: loop,
+                                          fileKey: fileKey,
+                                          featureSetName: featureSetName))
+                flattenStatements(loop.body,
+                                  featureSetName: featureSetName,
+                                  fileKey: fileKey,
+                                  into: &nodes)
+            } else if let loop = statement as? RangeLoop {
+                nodes.append(.makeRangeLoop(loop: loop,
+                                            fileKey: fileKey,
+                                            featureSetName: featureSetName))
+                flattenStatements(loop.body,
+                                  featureSetName: featureSetName,
+                                  fileKey: fileKey,
+                                  into: &nodes)
+            }
+            // PublishStatement / MatchStatement / RequireStatement
+            // intentionally skipped at this layer — they're either
+            // pure metadata or have their own renderers elsewhere.
+        }
     }
 
     /// Apply saved positions from a `LayoutSidecar`. Nodes not
