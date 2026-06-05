@@ -952,6 +952,12 @@ struct AROCodeEditor: NSViewRepresentable {
     /// re-paint pulse tints — comparing dictionary identities isn't
     /// reliable when the same line re-fires.
     var executionTick: UInt64 = 0
+    /// 1-indexed source lines to badge with the most recent
+    /// `aro test` outcome. Typically populated for every line
+    /// inside a test feature set so the user can see at a glance
+    /// which `Given`/`When`/`Then` rows belong to a passed or
+    /// failed test, plus the FS header line itself.
+    var testMarkers: [Int: TestNodeResult] = [:]
 
     enum Language { case aro, yaml, plain }
 
@@ -1087,6 +1093,17 @@ struct AROCodeEditor: NSViewRepresentable {
         if context.coordinator.lastRenderedBreakpoints != breakpoints {
             renderBreakpoints(on: textView)
             context.coordinator.lastRenderedBreakpoints = breakpoints
+        }
+        // Same idea for the test-result chips. Breakpoints win the
+        // line if both want it — we render breakpoints last in
+        // renderTestResults so the order produces "breakpoint over
+        // test marker" visually.
+        if context.coordinator.lastRenderedTestMarkers != testMarkers {
+            renderTestResults(on: textView)
+            // Breakpoints share the gutter; re-stamp them on top so
+            // the user's debug intent stays visible.
+            renderBreakpoints(on: textView)
+            context.coordinator.lastRenderedTestMarkers = testMarkers
         }
         // Re-apply the paused-line tint whenever it changes.
         if context.coordinator.lastPausedLine != pausedLine {
@@ -1335,6 +1352,28 @@ struct AROCodeEditor: NSViewRepresentable {
         }
     }
 
+    /// Stamp a small PASS / FAIL chip on every line that belongs
+    /// to a test feature set with a known outcome (#?). We strip
+    /// the entire `testMarkers` line set first so a passing test
+    /// re-run replaces the previous FAIL chip cleanly.
+    fileprivate func renderTestResults(on textView: STTextView) {
+        guard let gutter = textView.gutterView else { return }
+        // Clear any line that *might* still be holding a stale
+        // test marker. The last-rendered set is the previous one,
+        // so we union both sides; new lines might come in for the
+        // first time too.
+        let stale = Set(testMarkers.keys)
+        for line in stale {
+            gutter.removeMarker(lineNumber: line)
+        }
+        for (line, result) in testMarkers {
+            let view = TestResultMarkerView(result: result)
+            gutter.addMarker(
+                STGutterMarker(lineNumber: line, view: view)
+            )
+        }
+    }
+
     fileprivate func applyHighlight(_ textView: STTextView) {
         let source = textView.text ?? ""
         let nsString = source as NSString
@@ -1377,6 +1416,10 @@ struct AROCodeEditor: NSViewRepresentable {
         /// sidecar reload) without re-rendering on every body
         /// re-evaluation.
         var lastRenderedBreakpoints: Set<Int> = []
+        /// Last rendered set of test-result markers. Used by
+        /// updateNSView to skip the gutter render when the
+        /// test status hasn't actually changed since the last pass.
+        var lastRenderedTestMarkers: [Int: TestNodeResult] = [:]
         /// Tracks the most recently painted paused line so updateNSView
         /// only re-applies the tint when it actually changes.
         var lastPausedLine: Int?
@@ -1619,4 +1662,65 @@ private func layoutGhostGutter(
         width: gutter.frame.width,
         height: belowH
     )
+}
+
+/// Gutter marker view backing the PASS / FAIL chip the editor
+/// stamps on every line that belongs to a test feature set.
+/// Draws an SF Symbol tinted with the corresponding `SolaroColor`.
+/// Replaces STGutterMarker's default blue pentagon — that's the
+/// breakpoint indicator and would be visually confusing here.
+final class TestResultMarkerView: NSView {
+    private let result: TestNodeResult
+
+    init(result: TestNodeResult) {
+        self.result = result
+        super.init(frame: .zero)
+        wantsLayer = true
+        clipsToBounds = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let symbolName: String
+        let tint: NSColor
+        let tooltip: String
+        switch result {
+        case .passed:
+            symbolName = "checkmark.circle.fill"
+            tint = NSColor(SolaroColor.stateOK)
+            tooltip = "Last run: passed"
+        case .failed(let message):
+            symbolName = "xmark.circle.fill"
+            tint = NSColor(SolaroColor.stateError)
+            tooltip = "Last run: \(message)"
+        }
+        toolTip = tooltip
+        // Palette colour so the symbol renders in our tint
+        // straight out of NSImage. `image.draw(...)` doesn't pick
+        // up `NSColor.set()` for non-template images, which left
+        // the first version drawing in dark gray.
+        let config = NSImage.SymbolConfiguration(
+            pointSize: 12, weight: .semibold
+        ).applying(.init(paletteColors: [tint]))
+        guard let image = NSImage(systemSymbolName: symbolName,
+                                   accessibilityDescription: tooltip)?
+            .withSymbolConfiguration(config)
+        else { return }
+        let imageSize = image.size
+        let origin = CGPoint(
+            x: (bounds.width - imageSize.width) / 2,
+            y: (bounds.height - imageSize.height) / 2
+        )
+        image.draw(in: NSRect(origin: origin, size: imageSize),
+                   from: .zero,
+                   operation: .sourceOver,
+                   fraction: 1.0,
+                   respectFlipped: true,
+                   hints: [.interpolation: NSImageInterpolation.high])
+    }
 }

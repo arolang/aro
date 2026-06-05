@@ -119,7 +119,8 @@ struct CenterPaneView: View {
                     acceptGhost: ghostAccept(for: url),
                     caretMoveTick: controller.caretMoveTick,
                     lastExecutedAt: controller.lastExecutedAt,
-                    executionTick: controller.executionTick
+                    executionTick: controller.executionTick,
+                    testMarkers: testGutterMarkers(for: url)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -267,6 +268,32 @@ struct CenterPaneView: View {
                 reparse(url: url)
             }
         )
+    }
+
+    /// Build the line→TestNodeResult map the editor's gutter
+    /// markers consume. We badge every line inside a known-result
+    /// test feature set (and the FS header itself), so the green
+    /// check / red X is visible without having to scroll to the
+    /// `Then` line specifically. Lines outside a result-bearing FS
+    /// are left untagged. Returns empty when the file's program
+    /// hasn't parsed yet or no `aro test` run has produced
+    /// results.
+    private func testGutterMarkers(for url: URL) -> [Int: TestNodeResult] {
+        guard !controller.testResults.isEmpty,
+              let program = controller.programs[url] else { return [:] }
+        var out: [Int: TestNodeResult] = [:]
+        for fs in program.featureSets {
+            guard let result = controller.testResults[fs.name] else {
+                continue
+            }
+            let first = fs.span.start.line
+            let last = fs.span.end.line
+            guard first > 0, last >= first else { continue }
+            for line in first...last {
+                out[line] = result
+            }
+        }
+        return out
     }
 
     private func saveAndReparse(text: String, url: URL) {
@@ -890,7 +917,8 @@ struct CenterPaneView: View {
                     acceptGhost: ghostAccept(for: url),
                     caretMoveTick: controller.caretMoveTick,
                     lastExecutedAt: controller.lastExecutedAt,
-                    executionTick: controller.executionTick
+                    executionTick: controller.executionTick,
+                    testMarkers: testGutterMarkers(for: url)
                 )
                 .frame(minWidth: 160)
             }
