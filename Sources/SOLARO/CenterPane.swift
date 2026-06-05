@@ -506,6 +506,15 @@ struct CenterPaneView: View {
                                   newStatementText: newStatementText)
                 }
             )
+            .onAppear {
+                // Hand the same write-back path to the Inspector
+                // so its editable "Selected Statement" form can
+                // save through the canvas's apply pipeline.
+                controller.nodeEditApply = { nodeID, text in
+                    applyNodeEdit(nodeID: nodeID,
+                                  newStatementText: text)
+                }
+            }
         }
     }
 
@@ -924,6 +933,15 @@ struct CenterPaneView: View {
                                   newStatementText: newStatementText)
                 }
             )
+            .onAppear {
+                // Hand the same write-back path to the Inspector
+                // so its editable "Selected Statement" form can
+                // save through the canvas's apply pipeline.
+                controller.nodeEditApply = { nodeID, text in
+                    applyNodeEdit(nodeID: nodeID,
+                                  newStatementText: text)
+                }
+            }
         }
     }
 

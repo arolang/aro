@@ -234,6 +234,7 @@ struct CanvasView: View {
                 positions: nodePositions,
                 nodeWidth: nodeWidth, nodeHeight: nodeHeight,
                 lastExecutedAtPerFeatureSet: lastExecutedAtPerFeatureSet,
+                testResults: controller.testResults,
                 onHeaderDrag: { name, delta in
                     moveFeatureSet(name, by: delta, persist: false)
                 },
@@ -710,6 +711,9 @@ private struct FeatureSetContainersLayer: View {
     /// Feature-set name → wall-clock time of the most recent event
     /// observed for that FS. Drives the container's outline glow.
     let lastExecutedAtPerFeatureSet: [String: Date]
+    /// Feature-set name → most recent `aro test` outcome. Drives
+    /// the PASS/FAIL chip in the header.
+    let testResults: [String: TestNodeResult]
     /// Drag callback fired continuously while the user drags the
     /// container's header strip. The receiver translates every
     /// statement node belonging to the named feature set by the
@@ -728,6 +732,7 @@ private struct FeatureSetContainersLayer: View {
                     tint: color(for: group.name),
                     rect: group.rect,
                     lastExecutedAt: lastExecutedAtPerFeatureSet[group.name],
+                    testResult: testResults[group.name],
                     onHeaderDrag: { delta in onHeaderDrag(group.name, delta) },
                     onHeaderDragEnd: { delta in onHeaderDragEnd(group.name, delta) }
                 )
@@ -891,6 +896,10 @@ private struct FeatureSetContainer: View {
     /// it hasn't run yet this session. Drives the container's
     /// brighter glow during the pulse window.
     let lastExecutedAt: Date?
+    /// Outcome of the most recent `aro test` invocation for this
+    /// feature set, if it's a test FS. Drives the pass/fail badge
+    /// next to the header title.
+    let testResult: TestNodeResult?
     let onHeaderDrag: (CGSize) -> Void
     let onHeaderDragEnd: (CGSize) -> Void
 
@@ -905,6 +914,45 @@ private struct FeatureSetContainer: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0,
                                 paused: !isPulseLive)) { context in
             content(intensity: intensity(at: context.date))
+        }
+    }
+
+    /// Small PASS/FAIL chip rendered next to the FS title when the
+    /// container belongs to a test feature set and the test has
+    /// been executed at least once this session.
+    @ViewBuilder
+    private var testBadge: some View {
+        switch testResult {
+        case .passed:
+            HStack(spacing: 2) {
+                Image(systemName: "checkmark.seal.fill")
+                Text("PASS")
+            }
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(SolaroColor.stateOK)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(SolaroColor.stateOK.opacity(0.12))
+            )
+            .help("Last run: passed")
+        case .failed(let message):
+            HStack(spacing: 2) {
+                Image(systemName: "xmark.octagon.fill")
+                Text("FAIL")
+            }
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(SolaroColor.stateError)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(SolaroColor.stateError.opacity(0.14))
+            )
+            .help("Last run: \(message)")
+        case .none:
+            EmptyView()
         }
     }
 
@@ -924,6 +972,7 @@ private struct FeatureSetContainer: View {
                         .font(.system(size: 9))
                         .foregroundStyle(tint.opacity(0.6 + 0.4 * intensity))
                 }
+                testBadge
                 Spacer()
             }
             .padding(.horizontal, SolaroSpace.s)

@@ -297,11 +297,16 @@ enum NodeEditingSchemaFactory {
         // individual extractors don't pull the guard into their
         // values. The guard is exposed as its own field below.
         let (head, whenExpr) = splitWhen(statementSource)
+        // No placeholder: the When clause is optional, and an empty
+        // field is the right idle state (per #?). A placeholder
+        // reads as a hint that the user "should" enter something,
+        // which is the opposite of what unconditional execution
+        // means.
         let whenField: EditableField = .expression(
             id: "when",
             label: "When",
             value: whenExpr,
-            placeholder: "<value> = <other> · leave empty for unconditional"
+            placeholder: ""
         )
         switch lower {
         case "log":

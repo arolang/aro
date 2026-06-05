@@ -102,6 +102,14 @@ final class WorkspaceController {
     /// popover.
     var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] = [:]
 
+    /// Outcome of the most recent `aro test` run, keyed by test
+    /// feature-set name (e.g. `"length-of-hello"`). Drives the
+    /// pass/fail badge on the canvas FS container header and on the
+    /// Inspector's feature set list. Cleared whenever a new test
+    /// run starts; populated by parsing the runner's PASS/FAIL
+    /// stdout lines in `ConsoleProcess`.
+    var testResults: [String: TestNodeResult] = [:]
+
     /// Currently-selected canvas node. Populated on single-click in
     /// the node editor so the Inspector can mirror the same fields
     /// the double-click expansion shows (read-only summary). nil
@@ -111,6 +119,12 @@ final class WorkspaceController {
     /// time because the Inspector doesn't otherwise have access to
     /// `rawSourceText` (lives on CanvasView).
     var selectedNodeSource: String? = nil
+    /// CenterPane installs this so the Inspector's editable
+    /// "Selected Statement" form can hit the same write-back path
+    /// the canvas's double-click editor uses. Stored as a closure
+    /// (not a method on this class) because the rewrite logic
+    /// needs CenterPane-private helpers like `saveAndReparse`.
+    var nodeEditApply: (@MainActor (CanvasNode.ID, String) -> Void)? = nil
 
     /// Currently-selected node in the graphical OpenAPI editor (if
     /// the user is on an openapi.yaml file). Drives the inspector
@@ -586,6 +600,7 @@ struct WorkspaceView: View {
             controller.lastExecutedAtPerFeatureSet =
                 consoleProcess.lastExecutedAtPerFeatureSet
             controller.errorLines = consoleProcess.errorLines
+            controller.testResults = consoleProcess.testResults
             controller.repositoryValues = consoleProcess.repositoryValues
             controller.repositoryHistory = consoleProcess.repositoryHistory
             controller.pauseSymbols = consoleProcess.pauseSymbols

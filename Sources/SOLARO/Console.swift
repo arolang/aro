@@ -59,6 +59,10 @@ final class ConsoleProcess {
     /// the red border + tooltip on the failing canvas node. Reset
     /// at the start of every new run.
     var errorLines: [Int: String] = [:]
+    /// PASS/FAIL outcome per test feature-set name, parsed from the
+    /// runner's stdout. Cleared at the start of each `aro test` run
+    /// and read by the canvas / inspector to badge containers.
+    var testResults: [String: TestNodeResult] = [:]
     /// Monotonically increases each time `lastExecutedAt` is updated.
     /// SwiftUI watches this so TimelineView-driven animations keep
     /// scheduling refreshes even when the same line fires twice in
@@ -190,6 +194,7 @@ final class ConsoleProcess {
         lastExecutedAt.removeAll(keepingCapacity: true)
         lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
         errorLines.removeAll(keepingCapacity: true)
+        testResults.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
         executionTick = 0
@@ -282,6 +287,7 @@ final class ConsoleProcess {
         lastExecutedAt.removeAll(keepingCapacity: true)
         lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
         errorLines.removeAll(keepingCapacity: true)
+        testResults.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
         executionTick = 0
@@ -700,6 +706,10 @@ final class ConsoleProcess {
     private func appendLine(_ line: String, kind: LogEntry.Kind) {
         log.append(LogEntry(kind: kind, text: line, timestamp: Date()))
         detectPause(in: line)
+        if let hit = TestResultParser.match(line) {
+            testResults[hit.name] = hit.result
+            executionTick &+= 1
+        }
     }
 
     /// Scan a freshly-logged line for the debugger's pause notice.
