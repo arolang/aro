@@ -40,10 +40,11 @@ struct SOLAROApp: App {
     }
 
     var body: some Scene {
-        Settings {
-            SettingsView()
-        }
-        WindowGroup("Solaro") {
+        // WindowGroup goes first so it owns the .commands modifier
+        // and so SwiftUI's auto-launched window is the main one,
+        // not Settings (#276 — moving Settings before the group
+        // suppressed the main window on launch).
+        WindowGroup("Solaro", id: SolaroWindowID.workspace) {
             RootView(runtimeVersion: runtimeVersion)
         }
         .defaultSize(width: 1400, height: 900)
@@ -113,6 +114,9 @@ struct SOLAROApp: App {
                 }
             }
         }
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -135,6 +139,16 @@ struct RootView: View {
             .onChange(of: themeRaw) { _, new in
                 if let resolved = SolaroTheme(rawValue: new) {
                     SolaroTheme.apply(resolved)
+                }
+            }
+            .task {
+                // Pick up an ⌘-click "open in new window" hand-off
+                // (#276). The welcome screen drops the project here
+                // before asking SwiftUI for a new window; the first
+                // RootView to appear after that consumes it.
+                if case .welcome = workspace,
+                   let pending = PendingNewWindowProject.take() {
+                    workspace = .open(pending)
                 }
             }
     }

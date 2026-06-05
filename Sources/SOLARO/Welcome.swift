@@ -15,6 +15,7 @@ struct WelcomeView: View {
     let runtimeVersion: String
     let onOpen: (Project) -> Void
 
+    @Environment(\.openWindow) private var openWindow
     @State private var recents: [Project] = RecentProjects.load()
     @State private var errorText: String?
 
@@ -119,15 +120,37 @@ struct WelcomeView: View {
                 .buttonStyle(.plain)
             }
 
-            VStack(spacing: SolaroSpace.xs) {
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: SolaroSpace.m),
+                          GridItem(.flexible(), spacing: SolaroSpace.m)],
+                spacing: SolaroSpace.m
+            ) {
                 ForEach(recents) { project in
-                    RecentProjectRow(project: project) {
-                        openProject(project)
-                    }
+                    RecentProjectCard(
+                        project: project,
+                        onOpen: { openProject(project) },
+                        onOpenInNewWindow: { openInNewWindow(project) },
+                        onRemove: { removeRecent(project) }
+                    )
                 }
             }
         }
         .padding(.top, SolaroSpace.m)
+    }
+
+    private func openInNewWindow(_ project: Project) {
+        // Per #276: ⌘-click opens the project in a fresh SwiftUI
+        // window. We can't pass an argument through `openWindow`
+        // because the WindowGroup is value-less, so we hand the
+        // project off via a one-shot global slot that the new
+        // RootView consumes on its first appearance.
+        PendingNewWindowProject.queue(project)
+        openWindow(id: SolaroWindowID.workspace)
+    }
+
+    private func removeRecent(_ project: Project) {
+        RecentProjects.forget(project)
+        recents.removeAll { $0.rootPath == project.rootPath }
     }
 
     // MARK: - Actions
@@ -232,39 +255,194 @@ private struct WelcomeActionTile: View {
     }
 }
 
-private struct RecentProjectRow: View {
+/// Each recent project gets one of these cards on the welcome
+/// screen (#276). The card shows the project name + path plus a
+/// row of subtle metadata chips — last modified, feature-set
+/// count, git branch + ahead/behind — that load asynchronously
+/// off the main actor. Click opens, ⌘-click opens in a new
+/// window, right-click surfaces Remove / Reveal in Finder.
+private struct RecentProjectCard: View {
     let project: Project
-    let action: () -> Void
+    let onOpen: () -> Void
+    let onOpenInNewWindow: () -> Void
+    let onRemove: () -> Void
 
     @State private var hovering = false
+    @State private var metadata: RecentProjectMetadata = .empty
+    @State private var loaded = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: SolaroSpace.m) {
+        Button {
+            if NSEvent.modifierFlags.contains(.command) {
+                onOpenInNewWindow()
+            } else {
+                onOpen()
+            }
+        } label: {
+            cardBody
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Open") { onOpen() }
+            Button("Open in New Window") { onOpenInNewWindow() }
+            Divider()
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([project.rootPath])
+            }
+            Divider()
+            Button("Remove from List", role: .destructive, action: onRemove)
+        }
+        .task {
+            // Run once per card instance. Pulled off the main
+            // actor inside the loader — the .task block itself
+            // is `@MainActor` so we await the result before
+            // storing it in @State.
+            guard !loaded else { return }
+            loaded = true
+            metadata = await RecentProjectMetadataLoader.load(project)
+        }
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            HStack(alignment: .top, spacing: SolaroSpace.s) {
                 Image(systemName: "folder.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SolaroColor.accent.opacity(0.8))
-                    .frame(width: 18, alignment: .center)
+                    .font(.system(size: 16))
+                    .foregroundStyle(SolaroColor.accent.opacity(0.85))
+                    .frame(width: 20, alignment: .center)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.displayName)
-                        .font(SolaroFont.body)
+                        .font(SolaroFont.bodyBold)
                         .foregroundStyle(SolaroColor.textPrimary)
+                        .lineLimit(1)
                     Text(project.rootPath.path)
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, SolaroSpace.s)
-            .padding(.horizontal, SolaroSpace.m)
-            .background(
-                RoundedRectangle(cornerRadius: SolaroRadius.s, style: .continuous)
-                    .fill(hovering ? SolaroColor.selection : Color.clear)
-            )
+            metadataRow
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .padding(SolaroSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            SolaroColor.surfaceRaised.opacity(hovering ? 0.95 : 0.55)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .stroke(
+                    hovering ? SolaroColor.accent.opacity(0.55) : SolaroColor.divider,
+                    lineWidth: 1
+                )
+        )
     }
+
+    /// Subtle row of metadata chips. Each piece renders only if
+    /// the loader produced a value — a stale entry that can't be
+    /// reached, or a non-repo folder, just shows fewer chips
+    /// rather than empty placeholders.
+    private var metadataRow: some View {
+        HStack(spacing: SolaroSpace.s) {
+            if let stamp = metadata.lastModified {
+                MetadataChip(
+                    icon: "clock",
+                    text: Self.relativeDateFormatter.localizedString(
+                        for: stamp, relativeTo: Date()
+                    )
+                )
+            }
+            if let count = metadata.featureSetCount {
+                MetadataChip(
+                    icon: "square.stack.3d.up",
+                    text: "\(count) feature set\(count == 1 ? "" : "s")"
+                )
+            }
+            if let git = metadata.git {
+                GitChip(status: git)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(SolaroFont.caption)
+        .foregroundStyle(SolaroColor.textSecondary)
+    }
+
+    static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+}
+
+private struct MetadataChip: View {
+    let icon: String
+    let text: String
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+            Text(text)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(SolaroColor.surfaceRaised.opacity(0.5))
+        )
+    }
+}
+
+private struct GitChip: View {
+    let status: RecentProjectMetadata.GitStatus
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 10))
+            Text(status.branch + (status.dirty ? "*" : ""))
+            if status.ahead > 0 {
+                Text("↑\(status.ahead)")
+                    .foregroundStyle(SolaroColor.stateOK)
+            }
+            if status.behind > 0 {
+                Text("↓\(status.behind)")
+                    .foregroundStyle(SolaroColor.stateWarn)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(SolaroColor.surfaceRaised.opacity(0.5))
+        )
+    }
+}
+
+/// One-shot hand-off used when the welcome screen opens a recent
+/// project in a brand-new window via ⌘-click. SwiftUI's
+/// `openWindow(id:)` on a value-less WindowGroup gives us a fresh
+/// `RootView`, but it has no way to pass an argument; the new
+/// RootView pops the queue on first appearance and routes itself
+/// straight into the workspace. The queue is a list (not a single
+/// slot) so back-to-back ⌘-clicks don't clobber each other.
+@MainActor
+enum PendingNewWindowProject {
+    private static var pending: [Project] = []
+
+    static func queue(_ project: Project) {
+        pending.append(project)
+    }
+
+    static func take() -> Project? {
+        guard !pending.isEmpty else { return nil }
+        return pending.removeFirst()
+    }
+}
+
+/// Canonical IDs for our `WindowGroup`s so we can reach them via
+/// the `openWindow` environment action.
+enum SolaroWindowID {
+    static let workspace = "solaro-workspace"
 }

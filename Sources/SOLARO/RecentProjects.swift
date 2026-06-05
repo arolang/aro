@@ -45,12 +45,21 @@ enum RecentProjects {
     static func load() -> [Project] {
         guard
             let data = try? Data(contentsOf: fileURL),
-            let entries = try? JSONDecoder().decode([Entry].self, from: data)
+            let entries = try? decoder().decode([Entry].self, from: data)
         else { return [] }
         return entries
             .sorted { $0.openedAt > $1.openedAt }
             .prefix(10)
             .map { Project(rootPath: URL(fileURLWithPath: $0.path)) }
+    }
+
+    /// Decoder matched to `save()`'s ISO8601 encoder. Without this
+    /// the file never round-trips and `load()` silently returns []
+    /// on relaunch.
+    private static func decoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
     }
 
     /// Insert / refresh a project at the top of the list, capped at 10.
@@ -65,7 +74,7 @@ enum RecentProjects {
 
     private static func loadEntries() throws -> [Entry] {
         let data = try Data(contentsOf: fileURL)
-        return try JSONDecoder().decode([Entry].self, from: data)
+        return try decoder().decode([Entry].self, from: data)
     }
 
     private static func save(_ entries: [Entry]) throws {
@@ -82,5 +91,13 @@ enum RecentProjects {
     /// menu item in the workspace — privacy-friendly per ADR-007.
     static func clear() {
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    /// Remove a single project from the list — surfaced as
+    /// "Remove from list" on each card's right-click menu.
+    static func forget(_ project: Project) {
+        var existing = (try? loadEntries()) ?? []
+        existing.removeAll { $0.path == project.rootPath.path }
+        try? save(existing)
     }
 }
