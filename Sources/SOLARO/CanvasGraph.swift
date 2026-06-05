@@ -62,57 +62,6 @@ struct CanvasNode: Identifiable, Equatable {
         )
     }
 
-    /// Build a synthetic "loop header" node for a `ForEachLoop`.
-    /// The body's real statements still emit their own nodes via
-    /// `make(from:)`; this node is what the canvas draws so the
-    /// user can see the loop boundary, jump to it in the editor,
-    /// and follow data-flow into the iteration variable.
-    static func makeForEach(
-        loop: ForEachLoop,
-        fileKey: String,
-        featureSetName: String
-    ) -> CanvasNode {
-        var refs: Set<String> = []
-        if accept(loop.collection.base) { refs.insert(loop.collection.base) }
-        let collection = loop.collection.fullName
-        let summary = "for each <\(loop.itemVariable)> in <\(collection)>"
-        return CanvasNode(
-            id: "\(fileKey):\(loop.span.start.offset):foreach",
-            verb: "ForEach",
-            summary: summary,
-            // The iteration variable IS the loop's "result" — body
-            // statements that read `<entry>` should wire back to here.
-            resultName: loop.itemVariable,
-            objectPreposition: "in",
-            objectName: loop.collection.base,
-            referencedIdentifiers: Array(refs).sorted(),
-            lineHint: loop.span.start.line,
-            featureSetName: featureSetName,
-            x: 0, y: 0
-        )
-    }
-
-    /// Same idea for the C-style `for <var> from <low> to <high>`.
-    static func makeRangeLoop(
-        loop: RangeLoop,
-        fileKey: String,
-        featureSetName: String
-    ) -> CanvasNode {
-        let summary = "for <\(loop.variable)> in range"
-        return CanvasNode(
-            id: "\(fileKey):\(loop.span.start.offset):range",
-            verb: "For",
-            summary: summary,
-            resultName: loop.variable,
-            objectPreposition: "from",
-            objectName: nil,
-            referencedIdentifiers: [],
-            lineHint: loop.span.start.line,
-            featureSetName: featureSetName,
-            x: 0, y: 0
-        )
-    }
-
     /// Walks the object slot + valueSource + range modifiers to
     /// collect every `<name>` reference. Used by the edge builder.
     private static func collectReferenced(_ statement: AROStatement) -> [String] {
@@ -183,6 +132,27 @@ struct CanvasEdge: Identifiable, Equatable {
     }
 }
 
+/// A loop boundary — `for each <x> in <xs>` or `for <i> from a to
+/// b`. Body statements emit their own `CanvasNode`s as usual; this
+/// struct just records which nodes belong inside the loop so the
+/// canvas can paint a bracket / meta-pill container around them.
+struct LoopGroup: Identifiable, Equatable, Hashable {
+    let id: String
+    /// Header text rendered above the bracket, e.g.
+    /// `"for each <entry> in <entries>"`.
+    let label: String
+    /// 1-indexed source line of the loop keyword, used for the
+    /// editor jump-to-source link on the bracket header.
+    let lineHint: Int
+    /// Which feature set this loop lives in. Determines the tint
+    /// color (matches the FS container).
+    let featureSetName: String
+    /// IDs of every statement node inside the loop body, in source
+    /// order. The renderer computes the bracket's bounding rect
+    /// from these.
+    let bodyNodeIDs: [String]
+}
+
 /// A repository / store entity. Lives outside any feature set —
 /// it's a shared data resource the feature sets read from, write
 /// to, or observe. Rendered as a separate column in the canvas so
@@ -214,6 +184,10 @@ struct CanvasGraph: Equatable {
     /// reads/writes/watches connect to one shared instance per
     /// repo regardless of which feature set owns the statement.
     var repositories: [RepositoryNode] = []
+    /// Loop boundaries (for-each / range). The canvas paints a
+    /// rounded meta-pill around each group's body nodes so the
+    /// reader can see which statements are inside an iteration.
+    var loops: [LoopGroup] = []
 
     /// Build a graph spanning every feature set in `program`. Each
     /// statement is tagged with its parent feature-set name so the
@@ -223,10 +197,12 @@ struct CanvasGraph: Equatable {
     static func build(program: Program, fileKey: String) -> CanvasGraph {
         var allNodes: [CanvasNode] = []
         var allEdges: [CanvasEdge] = []
+        var allLoops: [LoopGroup] = []
         for fs in program.featureSets {
             let sub = build(featureSet: fs, fileKey: fileKey)
             allNodes.append(contentsOf: sub.nodes)
             allEdges.append(contentsOf: sub.edges)
+            allLoops.append(contentsOf: sub.loops)
         }
         // Detect repository entities + the wires that touch them.
         let (repos, repoEdges) = detectRepositories(
@@ -237,7 +213,8 @@ struct CanvasGraph: Equatable {
         return CanvasGraph(
             nodes: allNodes,
             edges: allEdges,
-            repositories: repos
+            repositories: repos,
+            loops: allLoops
         )
     }
 
@@ -362,6 +339,7 @@ struct CanvasGraph: Equatable {
     static func build(featureSet: FeatureSet, fileKey: String) -> CanvasGraph {
         var nodes: [CanvasNode] = []
         var edges: [CanvasEdge] = []
+        var loops: [LoopGroup] = []
 
         // Walk depth-first so for-each / range loops expose their
         // body nodes too. Without the recursion the canvas silently
@@ -372,7 +350,8 @@ struct CanvasGraph: Equatable {
             featureSet.statements,
             featureSetName: featureSet.name,
             fileKey: fileKey,
-            into: &nodes
+            into: &nodes,
+            loops: &loops
         )
 
         // Build edges by `<result>` → referenced-identifier match.
@@ -425,18 +404,19 @@ struct CanvasGraph: Equatable {
                 ))
             }
         }
-        return CanvasGraph(nodes: nodes, edges: edges)
+        return CanvasGraph(nodes: nodes, edges: edges, loops: loops)
     }
 
     /// Flatten `statements` into the canvas-node list, recursing
     /// into ForEachLoop / RangeLoop bodies so nested AROStatements
-    /// appear too. Each loop also emits a synthetic header node so
-    /// the loop boundary is visible.
+    /// appear too. Each loop also records a `LoopGroup` so the
+    /// renderer can paint a bracket / meta-pill around its body.
     private static func flattenStatements(
         _ statements: [Statement],
         featureSetName: String,
         fileKey: String,
-        into nodes: inout [CanvasNode]
+        into nodes: inout [CanvasNode],
+        loops: inout [LoopGroup]
     ) {
         for statement in statements {
             if let aro = statement as? AROStatement {
@@ -444,21 +424,37 @@ struct CanvasGraph: Equatable {
                                    fileKey: fileKey,
                                    featureSetName: featureSetName))
             } else if let loop = statement as? ForEachLoop {
-                nodes.append(.makeForEach(loop: loop,
-                                          fileKey: fileKey,
-                                          featureSetName: featureSetName))
+                let startIdx = nodes.count
                 flattenStatements(loop.body,
                                   featureSetName: featureSetName,
                                   fileKey: fileKey,
-                                  into: &nodes)
+                                  into: &nodes,
+                                  loops: &loops)
+                let bodyIDs = nodes[startIdx..<nodes.count].map(\.id)
+                let label = "for each <\(loop.itemVariable)> in <\(loop.collection.fullName)>"
+                loops.append(LoopGroup(
+                    id: "\(fileKey):\(loop.span.start.offset):foreach",
+                    label: label,
+                    lineHint: loop.span.start.line,
+                    featureSetName: featureSetName,
+                    bodyNodeIDs: bodyIDs
+                ))
             } else if let loop = statement as? RangeLoop {
-                nodes.append(.makeRangeLoop(loop: loop,
-                                            fileKey: fileKey,
-                                            featureSetName: featureSetName))
+                let startIdx = nodes.count
                 flattenStatements(loop.body,
                                   featureSetName: featureSetName,
                                   fileKey: fileKey,
-                                  into: &nodes)
+                                  into: &nodes,
+                                  loops: &loops)
+                let bodyIDs = nodes[startIdx..<nodes.count].map(\.id)
+                let label = "for <\(loop.variable)> in range"
+                loops.append(LoopGroup(
+                    id: "\(fileKey):\(loop.span.start.offset):range",
+                    label: label,
+                    lineHint: loop.span.start.line,
+                    featureSetName: featureSetName,
+                    bodyNodeIDs: bodyIDs
+                ))
             }
             // PublishStatement / MatchStatement / RequireStatement
             // intentionally skipped at this layer — they're either

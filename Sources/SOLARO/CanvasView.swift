@@ -212,6 +212,13 @@ struct CanvasView: View {
             )
             .frame(width: contentSize.width, height: contentSize.height,
                    alignment: .topLeading)
+            LoopContainersLayer(
+                graph: graph,
+                positions: nodePositions,
+                nodeWidth: nodeWidth, nodeHeight: nodeHeight
+            )
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
             WiresLayer(
                 graph: graph,
                 positions: nodePositions,
@@ -566,6 +573,98 @@ private struct FeatureSetContainersLayer: View {
             hash = ((hash << 5) &+ hash) &+ Int(byte)
         }
         return palette[abs(hash) % palette.count]
+    }
+}
+
+/// Paints a rounded "meta pill" around the body nodes of each
+/// `LoopGroup` in the graph, with the loop header (`for each
+/// <entry> in <entries>`) rendered as a small chip above the
+/// bracket. The pill is purely decorative — body statement nodes
+/// keep their normal drag / click behaviour.
+private struct LoopContainersLayer: View {
+    let graph: CanvasGraph
+    let positions: [CanvasNode.ID: CGPoint]
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(loopRects(), id: \.id) { rect in
+                LoopBracket(label: rect.label, tint: SolaroColor.textTertiary)
+                    .position(x: rect.rect.midX, y: rect.rect.midY)
+                    .frame(width: rect.rect.width, height: rect.rect.height)
+            }
+        }
+    }
+
+    private struct LoopRect {
+        let id: String
+        let label: String
+        let rect: CGRect
+    }
+
+    private func loopRects() -> [LoopRect] {
+        let inset: CGFloat = 8
+        let headerExtra: CGFloat = 22
+        return graph.loops.compactMap { loop in
+            var bounds: CGRect? = nil
+            for id in loop.bodyNodeIDs {
+                guard let p = positions[id] else { continue }
+                let nodeRect = CGRect(x: p.x, y: p.y,
+                                      width: nodeWidth, height: nodeHeight)
+                bounds = bounds?.union(nodeRect) ?? nodeRect
+            }
+            guard let core = bounds else { return nil }
+            let r = CGRect(
+                x: core.minX - inset,
+                y: core.minY - inset - headerExtra,
+                width: core.width + inset * 2,
+                height: core.height + inset * 2 + headerExtra
+            )
+            return LoopRect(id: loop.id, label: loop.label, rect: r)
+        }
+    }
+}
+
+/// The dotted-bracket pill itself. Slimmer than the feature-set
+/// container and drawn in the neutral text-tertiary tint so it
+/// reads as syntactic structure rather than a colored region.
+private struct LoopBracket: View {
+    let label: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 9))
+                    .foregroundStyle(tint)
+                Text(label)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, SolaroSpace.s)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .fill(tint.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .stroke(
+                    tint.opacity(0.5),
+                    style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                )
+        )
+        .allowsHitTesting(false)
     }
 }
 

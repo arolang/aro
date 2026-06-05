@@ -111,7 +111,8 @@ enum StackLayout {
         return CanvasGraph(
             nodes: nodes,
             edges: graph.edges,
-            repositories: repos
+            repositories: repos,
+            loops: graph.loops
         )
     }
 }
