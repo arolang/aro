@@ -44,6 +44,7 @@ struct CenterPaneView: View {
     // MARK: - Text
 
     @State private var showConflictResolver: Bool = false
+    @State private var showCreateFeatureSetSheet: Bool = false
 
     @ViewBuilder
     private var textMode: some View {
@@ -67,8 +68,40 @@ struct CenterPaneView: View {
                         onComplete: { showConflictResolver = false }
                     )
                 }
+                .sheet(isPresented: $showCreateFeatureSetSheet) {
+                    CreateFeatureSetSheet(
+                        onCancel: { showCreateFeatureSetSheet = false },
+                        onCreate: { draft in
+                            appendNewFeatureSet(draft, to: url)
+                            showCreateFeatureSetSheet = false
+                        }
+                    )
+                }
             }
         }
+    }
+
+    /// Render the draft into source and append it to `url`'s
+    /// current contents. A blank line separator keeps the file
+    /// readable when there are already feature sets defined; if
+    /// the file ends mid-line we add a leading newline too.
+    /// `saveAndReparse` handles the LSP sync + undo registration
+    /// downstream, so a fresh FS reparses without further work.
+    private func appendNewFeatureSet(_ draft: NewFeatureSetDraft,
+                                     to url: URL) {
+        let block = FeatureSetTemplate.render(draft)
+        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let glue: String
+        if existing.isEmpty {
+            glue = ""
+        } else if existing.hasSuffix("\n\n") {
+            glue = ""
+        } else if existing.hasSuffix("\n") {
+            glue = "\n"
+        } else {
+            glue = "\n\n"
+        }
+        saveAndReparse(text: existing + glue + block + "\n", url: url)
     }
 
     /// Cheap scan of the current file's text for git conflict
@@ -523,6 +556,7 @@ struct CenterPaneView: View {
                     handleNodeContextAction(action, node: node)
                 },
                 resetLayout: { resetLayoutSidecar() },
+                requestCreateFeatureSet: { showCreateFeatureSetSheet = true },
                 applyNodeEdit: { nodeID, newStatementText in
                     applyNodeEdit(nodeID: nodeID,
                                   newStatementText: newStatementText)
@@ -951,6 +985,7 @@ struct CenterPaneView: View {
                     handleNodeContextAction(action, node: node)
                 },
                 resetLayout: { resetLayoutSidecar() },
+                requestCreateFeatureSet: { showCreateFeatureSetSheet = true },
                 applyNodeEdit: { nodeID, newStatementText in
                     applyNodeEdit(nodeID: nodeID,
                                   newStatementText: newStatementText)

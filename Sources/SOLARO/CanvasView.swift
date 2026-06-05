@@ -84,6 +84,12 @@ struct CanvasView: View {
     /// state. Optional so screens that don't need a reset action
     /// (Project Map, OpenAPI canvas) can omit it.
     let resetLayout: (() -> Void)?
+    /// Asks the parent (CenterPane) to open the "Create new
+    /// Feature Set" sheet. Wired into the canvas's blank-area
+    /// context menu next to Auto Layout (#?). Optional so canvases
+    /// that don't back a source file (Project Map, OpenAPI graph)
+    /// can omit it.
+    let requestCreateFeatureSet: (() -> Void)?
     /// Persist a node's new statement source back to the .aro
     /// file. Called on the editor's Apply. The caller (CenterPane)
     /// reads the current file, finds the statement, replaces its
@@ -364,6 +370,15 @@ struct CanvasView: View {
                     Label("Auto Layout", systemImage: "rectangle.3.group")
                 }
                 .help("Reset every user-dragged position and re-flow the graph")
+            }
+            if let requestCreateFeatureSet {
+                Button {
+                    requestCreateFeatureSet()
+                } label: {
+                    Label("Create new Feature Set…",
+                          systemImage: "rectangle.badge.plus")
+                }
+                .help("Append a new empty feature set to the current file")
             }
         }
     }
