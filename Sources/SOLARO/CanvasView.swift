@@ -300,6 +300,7 @@ struct CanvasView: View {
                 lastExecutedAt: lastExecutedAt,
                 errorLines: errorLines,
                 breakpointLines: breakpointLines,
+                testResults: controller.testResults,
                 onContextAction: onNodeContextAction,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
@@ -1194,6 +1195,10 @@ struct NodesLayer: View {
     /// Lines that carry a breakpoint — each matching node renders
     /// the red gutter dot in its corner.
     let breakpointLines: Set<Int>
+    /// Most recent `aro test` outcome per test feature-set name.
+    /// CanvasNodeCard renders a small chip in the corner when its
+    /// node belongs to one of these test FSes.
+    let testResults: [String: TestNodeResult]
     /// Right-click context menu on each node card.
     let onContextAction: ((CanvasNodeContextAction, CanvasNode) -> Void)?
     let onDrag: (CanvasNode.ID, CGPoint) -> Void
@@ -1254,7 +1259,8 @@ struct NodesLayer: View {
                             hasBreakpoint: breakpointLines.contains(node.lineHint),
                             symbols: relevantSymbols(for: node),
                             lastExecutedAt: lastExecutedAt[node.lineHint],
-                            errorMessage: errorLines[node.lineHint]
+                            errorMessage: errorLines[node.lineHint],
+                            testResult: testResults[node.featureSetName]
                         )
                     }
                 }
@@ -1388,6 +1394,11 @@ private struct CanvasNodeCard: View {
     /// or nil if the statement ran cleanly. Drives the red border
     /// + tooltip + error icon.
     let errorMessage: String?
+    /// Outcome of the most recent `aro test` invocation for the
+    /// test feature set this node belongs to (or nil if the node
+    /// is in a production FS, or no test has run yet). Drives a
+    /// small chip in the upper-right corner of the card.
+    let testResult: TestNodeResult?
 
     @State private var hovering = false
     @State private var showPopover = false
@@ -1502,6 +1513,10 @@ private struct CanvasNodeCard: View {
                     lineWidth: (errorMessage != nil || isPaused || isSelected) ? 2 : 1
                 )
         )
+        .overlay(alignment: .topTrailing) {
+            testResultChip
+                .padding(4)
+        }
         .shadow(
             color: Color.black.opacity(
                 isPaused ? 0.55 :
@@ -1564,6 +1579,37 @@ private struct CanvasNodeCard: View {
         if isSelected { return SolaroColor.accent }
         if hovering   { return SolaroColor.accent.opacity(0.6) }
         return SolaroColor.divider
+    }
+
+    /// Small chip in the upper-right corner that mirrors the
+    /// container header's PASS/FAIL badge. Surfaces the per-test
+    /// outcome at the node level too so individual `Given`/`When`/
+    /// `Then` statements stand out even when the FS header scrolled
+    /// off-screen.
+    @ViewBuilder
+    private var testResultChip: some View {
+        switch testResult {
+        case .passed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(SolaroColor.stateOK)
+                .background(
+                    Circle().fill(SolaroColor.surface.opacity(0.85))
+                        .padding(-1)
+                )
+                .help("Last test run: passed")
+        case .failed(let message):
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(SolaroColor.stateError)
+                .background(
+                    Circle().fill(SolaroColor.surface.opacity(0.85))
+                        .padding(-1)
+                )
+                .help("Last test run: \(message)")
+        case .none:
+            EmptyView()
+        }
     }
 
     /// 0...1 brightness for the role rail at `now`. Each event
