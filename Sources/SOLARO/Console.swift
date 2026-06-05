@@ -14,6 +14,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import ARORuntime
 
 @MainActor
 @Observable
@@ -159,11 +160,18 @@ final class ConsoleProcess {
     /// Convenience for the Play button — plain `aro run` by default,
     /// or the in-process embedded runtime when
     /// `SOLARO_EMBEDDED_RUNTIME=1` (issue #282 phase 1).
-    func startRun(project: Project) {
+    ///
+    /// `parameters` carries CLI-style key/value pairs collected by
+    /// the run-parameters sheet (see `RunParameters.swift`). Embedded
+    /// path writes them into `ParameterStorage.shared` before the run
+    /// begins; subprocess path appends them as `--key value` to argv.
+    func startRun(project: Project, parameters: [String: String] = [:]) {
         if EmbeddedRuntimeHost.isEnabled {
-            startEmbeddedRun(project: project)
+            startEmbeddedRun(project: project, parameters: parameters)
         } else {
-            start(project: project, mode: .run, breakpointsByFile: [:])
+            start(project: project, mode: .run,
+                  breakpointsByFile: [:],
+                  parameters: parameters)
         }
     }
 
@@ -172,7 +180,8 @@ final class ConsoleProcess {
     /// `lastExecutedAt`, the per-FS glow, the repo card history —
     /// just with records arriving through `EmbeddedRuntimeHost`
     /// instead of `LiveEventStream`.
-    private func startEmbeddedRun(project: Project) {
+    private func startEmbeddedRun(project: Project,
+                                  parameters: [String: String] = [:]) {
         if case .running = state { return }
         log.removeAll()
         pausedLine = nil
@@ -235,6 +244,14 @@ final class ConsoleProcess {
         ) { [weak self] _ in
             Task { @MainActor in self?.publishEmbeddedMetricsSnapshot() }
         }
+        // Inject scanned run parameters into the shared storage so
+        // `<parameter: NAME>` extracts resolve. The embedded runtime
+        // reads from `ParameterStorage.shared` directly; clear first
+        // so a previous run's values don't leak into an empty form.
+        ParameterStorage.shared.clear()
+        for (key, value) in parameters {
+            ParameterStorage.shared.set(key, value: value)
+        }
         host.start(project: project)
     }
 
@@ -255,7 +272,8 @@ final class ConsoleProcess {
     /// Lower-level entry that both convenience helpers funnel through.
     func start(project: Project,
                mode: Mode,
-               breakpointsByFile: [URL: Set<Int>] = [:]) {
+               breakpointsByFile: [URL: Set<Int>] = [:],
+               parameters: [String: String] = [:]) {
         if case .running = state { return }
         log.removeAll()
         pausedLine = nil
@@ -295,6 +313,13 @@ final class ConsoleProcess {
             // without a separate "debug" mode.
             subArgs = ["run", project.rootPath.path,
                        "--record", recordPath(for: project)]
+            // Append `--name value` for each parameter collected by
+            // the run-parameters sheet so the child process's
+            // `ParameterStorage` picks them up.
+            for (key, value) in parameters.sorted(by: { $0.key < $1.key }) {
+                subArgs.append("--\(key)")
+                subArgs.append(value)
+            }
             appendInfo("$ aro run \(project.rootPath.lastPathComponent)")
         case .test(let filter):
             subArgs = ["test", project.rootPath.path]

@@ -488,6 +488,12 @@ struct WorkspaceView: View {
     @State private var findInProjectModel = FindInProjectModel()
     @State private var showSymbolPalette = false
     @State private var referencesSymbol: String? = nil
+    /// Pre-run parameter dialog state. Populated by `playButton`
+    /// when the project references `<parameter: NAME>`; the sheet
+    /// renders, the user fills it, and Execute calls back into
+    /// `startRun(project:parameters:)`.
+    @State private var showRunParameters: Bool = false
+    @State private var pendingRunParameters: [String] = []
     /// Co-pilot (`aro ask`) process.
     // aiCoPilot moved onto WorkspaceController (#273) so canvas
     // context menus can dispatch prompts directly. Access as
@@ -649,6 +655,20 @@ struct WorkspaceView: View {
                         controller.setPaneMode(.text)
                     }
                     showOpenAPIPalette = false
+                }
+            )
+        }
+        .sheet(isPresented: $showRunParameters) {
+            RunParametersSheet(
+                parameters: pendingRunParameters,
+                project: project,
+                onCancel: { showRunParameters = false },
+                onExecute: { values in
+                    showRunParameters = false
+                    showConsole = true
+                    consoleProcess.startRun(
+                        project: project, parameters: values
+                    )
                 }
             )
         }
@@ -1333,13 +1353,28 @@ struct WorkspaceView: View {
             .frame(width: 220)
     }
 
+    /// Run-button click handler. If the project's source references
+    /// any `<parameter: NAME>`, opens the run-parameters sheet so the
+    /// user can fill them in (pre-filled from the last successful
+    /// run); otherwise starts the run immediately. The sheet's
+    /// Execute button calls `consoleProcess.startRun(project:parameters:)`.
+    private func requestRun() {
+        let needed = RunParameterScanner.scan(programs: controller.programs)
+        if needed.isEmpty {
+            showConsole = true
+            consoleProcess.startRun(project: project)
+        } else {
+            pendingRunParameters = needed
+            showRunParameters = true
+        }
+    }
+
     private var playButton: some View {
         Button {
             if isRunning {
                 consoleProcess.stop()
             } else {
-                showConsole = true
-                consoleProcess.startRun(project: project)
+                requestRun()
             }
         } label: {
             Label(
