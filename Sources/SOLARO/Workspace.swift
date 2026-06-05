@@ -444,6 +444,13 @@ struct WorkspaceView: View {
     /// the user has explicitly opened it.
     @State private var consoleProcess = ConsoleProcess()
     @State private var showConsole = false
+    /// Per-workspace undo manager. SwiftUI doesn't supply a
+    /// non-document UndoManager on its own; we create one, push it
+    /// into the environment, and every canvas mutation (drag,
+    /// auto-layout reset, node-edit apply) registers an undo
+    /// operation against it. AppKit picks the standard Edit-menu
+    /// "Undo …" / "Redo …" titles from this manager automatically.
+    @State private var undoManager = UndoManager()
     @State private var bottomTab: BottomTab = .console
     /// Palette sheets: command (⌘⇧P), quick open (⌘P),
     /// find-in-project (⌘⇧F).
@@ -485,6 +492,18 @@ struct WorkspaceView: View {
     }
 
     var body: some View {
+        // SwiftUI 6's `\.undoManager` is read-only at the
+        // environment level, so we expose our workspace-scoped
+        // manager via a custom key (`\.solaroUndoManager`). The
+        // app-level `Edit → Undo / Redo` commands check it via
+        // `FocusedValues.solaroUndoManager` so ⌘Z works app-wide.
+        workspaceBody
+            .environment(\.solaroUndoManager, undoManager)
+            .focusedSceneValue(\.solaroUndoManager, undoManager)
+    }
+
+    @ViewBuilder
+    private var workspaceBody: some View {
         VStack(spacing: 0) {
             NavigationSplitView(columnVisibility: columnVisibilityBinding) {
                 SidebarPaneView(controller: controller)
@@ -1496,3 +1515,28 @@ private struct WorkspaceWindowSizer: NSViewRepresentable {
         }
     }
 }
+
+/// Custom Environment + FocusedScene key for the workspace's
+/// UndoManager. SwiftUI 6 made the built-in `\.undoManager`
+/// non-writable; we mirror it under our own key so canvas code can
+/// register undo actions and so app-level command items (⌘Z / ⇧⌘Z)
+/// can drive the workspace manager when the canvas is focused.
+private struct SolaroUndoManagerKey: EnvironmentKey {
+    static let defaultValue: UndoManager? = nil
+}
+extension EnvironmentValues {
+    var solaroUndoManager: UndoManager? {
+        get { self[SolaroUndoManagerKey.self] }
+        set { self[SolaroUndoManagerKey.self] = newValue }
+    }
+}
+private struct SolaroFocusedUndoKey: FocusedValueKey {
+    typealias Value = UndoManager
+}
+extension FocusedValues {
+    var solaroUndoManager: UndoManager? {
+        get { self[SolaroFocusedUndoKey.self] }
+        set { self[SolaroFocusedUndoKey.self] = newValue }
+    }
+}
+

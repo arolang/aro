@@ -99,6 +99,12 @@ struct CanvasView: View {
     /// expanded card). nil when no node is in edit mode.
     @State private var editingNodeID: CanvasNode.ID? = nil
 
+    /// Workspace-scoped UndoManager. Used so every canvas
+    /// mutation (drag, FS drag, auto-layout reset) can register an
+    /// undo operation. macOS automatically wires this to the
+    /// standard Edit menu's Undo / Redo items.
+    @Environment(\.solaroUndoManager) private var undoManager
+
     /// Snapshot of every node's position when a feature-set header
     /// drag begins, keyed by FS name → {node id → origin}. Cleared
     /// on drag-end. Same anti-cumulative trick as `dragOrigins` in

@@ -14,6 +14,10 @@ import Yams
 
 struct CenterPaneView: View {
     @Bindable var controller: WorkspaceController
+    /// Workspace-scoped UndoManager pulled from the environment so
+    /// every node-edit Apply registers an undo step. ⌘Z then walks
+    /// the .aro file back through the edit history.
+    @Environment(\.solaroUndoManager) private var undoManager
 
     var body: some View {
         // Touch the OpenAPI document's root so SwiftUI subscribes
@@ -266,6 +270,7 @@ struct CenterPaneView: View {
     }
 
     private func saveAndReparse(text: String, url: URL) {
+        let oldText = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         let formatted = formatIfEnabled(text, for: url)
         try? formatted.write(to: url, atomically: true, encoding: .utf8)
         // Keep the LSP server's view of the document in sync so
@@ -273,6 +278,26 @@ struct CenterPaneView: View {
         // requiring a restart.
         controller.lsp.didChange(url: url, text: formatted)
         reparse(url: url)
+        // Register an undo step that snaps the file back to its
+        // pre-save contents. STTextView already gives you
+        // character-level undo *inside the editor* via the first-
+        // responder UndoManager; this complements that by making
+        // saved revisions (including formatter rewrites) reversible
+        // from the canvas-side undo stack.
+        registerSourceEditUndo(url: url, oldText: oldText,
+                               newText: formatted)
+    }
+
+    private func registerSourceEditUndo(
+        url: URL,
+        oldText: String,
+        newText: String
+    ) {
+        guard let mgr = undoManager, oldText != newText else { return }
+        mgr.setActionName("Edit \(url.lastPathComponent)")
+        mgr.registerUndo(withTarget: controller) { _ in
+            saveAndReparse(text: oldText, url: url)
+        }
     }
 
     // MARK: - Ghost text (#272)
@@ -778,17 +803,15 @@ struct CenterPaneView: View {
             byteRange: span.start.offset ..< span.end.offset,
             with: newStatementText
         )
-        do {
-            try newSource.write(to: url, atomically: true, encoding: .utf8)
-            saveAndReparse(text: newSource, url: url)
-        } catch {
-            // Surface to the user via the inspector's error rail —
-            // for now, just stderr so the failure isn't silent.
-            FileHandle.standardError.write(Data(
-                "[node-edit] failed to write \(url.lastPathComponent): \(error)\n".utf8
-            ))
-        }
+        // saveAndReparse handles both the disk write and the undo
+        // registration via its own setActionName — overriding it
+        // here so the menu item reads "Undo Edit Statement" instead
+        // of "Undo Edit <file>.aro" when the trigger was a canvas
+        // apply rather than a free-form editor save.
+        saveAndReparse(text: newSource, url: url)
+        undoManager?.setActionName("Edit Statement")
     }
+
 
     /// Depth-first search for the statement whose `span.start.offset`
     /// matches. Handles AROStatement directly, plus recurses into

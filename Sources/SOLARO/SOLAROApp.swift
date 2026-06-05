@@ -48,6 +48,18 @@ struct SOLAROApp: App {
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
+            // Edit → Undo / Redo. SwiftUI 6 makes `\.undoManager`
+            // read-only at the environment level, so each workspace
+            // window publishes its UndoManager as a focused-scene
+            // value and these commands drive whichever workspace
+            // is currently key. STTextView still gets its own
+            // first-responder undo for in-editor character edits;
+            // these items handle the canvas-driven mutations and
+            // node-edit Apply calls.
+            CommandGroup(replacing: .undoRedo) {
+                SolaroUndoCommand()
+                SolaroRedoCommand()
+            }
             CommandGroup(after: .toolbar) {
                 Divider()
                 Button("Internal Logs…") {
@@ -268,3 +280,34 @@ final class OpenWorkspaceTracker {
 
 // Per-window minimum size is enforced by `WorkspaceWindowSizer` in
 // Workspace.swift — it adapts the floor to which panels are shown.
+
+/// Standard-shape Undo command bound to the workspace UndoManager
+/// published by the front WorkspaceView. Reads the focused scene
+/// value so each window gets its own undo stack.
+struct SolaroUndoCommand: View {
+    @FocusedValue(\.solaroUndoManager) private var undoManager
+
+    var body: some View {
+        Button {
+            undoManager?.undo()
+        } label: {
+            Text(undoManager?.undoMenuItemTitle ?? "Undo")
+        }
+        .keyboardShortcut("z", modifiers: [.command])
+        .disabled(undoManager?.canUndo != true)
+    }
+}
+
+struct SolaroRedoCommand: View {
+    @FocusedValue(\.solaroUndoManager) private var undoManager
+
+    var body: some View {
+        Button {
+            undoManager?.redo()
+        } label: {
+            Text(undoManager?.redoMenuItemTitle ?? "Redo")
+        }
+        .keyboardShortcut("z", modifiers: [.command, .shift])
+        .disabled(undoManager?.canRedo != true)
+    }
+}
