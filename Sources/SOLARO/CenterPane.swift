@@ -298,6 +298,7 @@ struct CenterPaneView: View {
         mgr.registerUndo(withTarget: controller) { _ in
             saveAndReparse(text: oldText, url: url)
         }
+        WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
     // MARK: - Ghost text (#272)
@@ -811,6 +812,7 @@ struct CenterPaneView: View {
         // apply rather than a free-form editor save.
         saveAndReparse(text: newSource, url: url)
         undoManager?.setActionName("Edit Statement")
+        WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
 

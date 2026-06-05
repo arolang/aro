@@ -292,6 +292,7 @@ struct CanvasView: View {
                 graph: graph,
                 positions: nodePositions,
                 nodeWidth: nodeWidth, nodeHeight: nodeHeight,
+                rawSourceText: { rawSourceText(for: $0) },
                 selectedLine: currentLine,
                 pausedLine: pausedLine,
                 pauseSymbols: pauseSymbols,
@@ -389,6 +390,7 @@ struct CanvasView: View {
             // Re-register the inverse so ⇧⌘Z (redo) round-trips.
             registerNodeMoveUndo(id: id, from: newPos, to: oldPos)
         }
+        WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
     /// Register an undo step for a feature-set header drag — the
@@ -414,6 +416,7 @@ struct CanvasView: View {
                 endPositions: origins
             )
         }
+        WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
     /// Register an undo step for the Auto Layout reset — the
@@ -438,6 +441,7 @@ struct CanvasView: View {
             // is expected to hit the menu item again to "redo"
             // the reset.
         }
+        WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
     // MARK: - Position bookkeeping
@@ -467,6 +471,61 @@ struct CanvasView: View {
     /// Bounding box (in canvas coordinates) of all currently-placed
     /// nodes, with generous padding so the wires/nodes container has
     /// a consistent frame for both layers and pan reaches everything.
+    /// Read the raw source-span text for `node` from the current
+    /// file. Used by the inline editor to prefill with the actual
+    /// literal the user typed (e.g. `"/tmp"`) rather than the AST
+    /// description's pretty-printed `<_expression_>` placeholder.
+    private func rawSourceText(for node: CanvasNode) -> String? {
+        guard let url = controller.currentFile,
+              let program = controller.programs[url] else { return nil }
+        let parts = node.id.split(separator: ":")
+        guard let lastSlice = parts.last,
+              let startOffset = Int(String(lastSlice)) else { return nil }
+        var found: SourceSpan? = nil
+        for fs in program.featureSets {
+            if let span = locateStatementSpan(
+                in: fs.statements, offset: startOffset
+            ) {
+                found = span
+                break
+            }
+        }
+        guard let span = found,
+              let source = try? String(contentsOf: url, encoding: .utf8)
+        else { return nil }
+        let utf8 = source.utf8
+        let length = utf8.count
+        let lo = max(0, min(span.start.offset, length))
+        let hi = max(lo, min(span.end.offset, length))
+        return String(decoding: utf8.dropFirst(lo).prefix(hi - lo),
+                      as: UTF8.self)
+    }
+
+    private func locateStatementSpan(
+        in statements: [Statement],
+        offset: Int
+    ) -> SourceSpan? {
+        for statement in statements {
+            if let aro = statement as? AROStatement,
+               aro.span.start.offset == offset {
+                return aro.span
+            }
+            if let loop = statement as? ForEachLoop,
+               let nested = locateStatementSpan(
+                in: loop.body, offset: offset
+               ) {
+                return nested
+            }
+            if let loop = statement as? RangeLoop,
+               let nested = locateStatementSpan(
+                in: loop.body, offset: offset
+               ) {
+                return nested
+            }
+        }
+        return nil
+    }
+
     private func contentBounds() -> CGSize {
         var maxX: CGFloat = 800
         var maxY: CGFloat = 600
@@ -1058,6 +1117,11 @@ struct NodesLayer: View {
     let positions: [CanvasNode.ID: CGPoint]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
+    /// Resolve a node's raw source-span text. Used by the inline
+    /// editor so its fields prefill with the user-meaningful
+    /// literal (e.g. `"/tmp"`) rather than the AST description's
+    /// `<_expression_>` placeholder.
+    let rawSourceText: (CanvasNode) -> String?
     /// Currently-highlighted source line (from the editor caret).
     /// The node with `lineHint == selectedLine` gets an accent border.
     let selectedLine: Int?
@@ -1112,7 +1176,8 @@ struct NodesLayer: View {
                         NodeEditorView(
                             schema: NodeEditingSchemaFactory.infer(
                                 node: node,
-                                statementSource: node.summary,
+                                statementSource: rawSourceText(node)
+                                    ?? node.summary,
                                 availableIdentifiers: scopeFor(node: node)
                             ),
                             onApply: { newText in

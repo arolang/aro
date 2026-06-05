@@ -94,7 +94,8 @@ extension NodeEditingSchema {
 
 // MARK: - Per-action presets
 
-/// `Log <message> to the <target>.`
+/// `Log <message> to the <target>.` Optionally trailed by a
+/// `when <expression>` guard.
 struct LogEditing: NodeEditingSchema {
     var title: String { "Edit Log statement" }
     var subtitle: String? { "Message to print, plus the target sink." }
@@ -105,8 +106,18 @@ struct LogEditing: NodeEditingSchema {
               let target = fields.firstIdentifier("target"),
               !target.isEmpty else { return nil }
         let escaped = msg.replacingOccurrences(of: "\"", with: "\\\"")
-        return "Log \"\(escaped)\" to the <\(target)>."
+        let when = appendWhen(fields)
+        return "Log \"\(escaped)\" to the <\(target)>\(when)."
     }
+}
+
+/// Helper used by every schema with an optional `when` clause —
+/// returns the trailing ` when …` string (with leading space) or
+/// the empty string when the guard field is blank.
+private func appendWhen(_ fields: [EditableField]) -> String {
+    let expr = fields.firstExpression("when")?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return expr.isEmpty ? "" : " when \(expr)"
 }
 
 /// `Create the <result> with <expression>.`
@@ -120,7 +131,8 @@ struct CreateEditing: NodeEditingSchema {
               let expr = fields.firstExpression("expression"),
               !result.isEmpty,
               !expr.isEmpty else { return nil }
-        return "Create the <\(result)> with \(expr)."
+        let when = appendWhen(fields)
+        return "Create the <\(result)> with \(expr)\(when)."
     }
 }
 
@@ -136,7 +148,8 @@ struct ComputeEditing: NodeEditingSchema {
               let expr = fields.firstExpression("expression"),
               !result.isEmpty,
               !expr.isEmpty else { return nil }
-        return "Compute the <\(result)> from \(expr)."
+        let when = appendWhen(fields)
+        return "Compute the <\(result)> from \(expr)\(when)."
     }
 }
 
@@ -158,7 +171,8 @@ struct ReturnEditing: NodeEditingSchema {
               !status.isEmpty,
               !subject.isEmpty else { return nil }
         let article = "aeiouAEIOU".contains(status.first ?? " ") ? "an" : "a"
-        return "Return \(article) <\(status): status> for the <\(subject)>."
+        let when = appendWhen(fields)
+        return "Return \(article) <\(status): status> for the <\(subject)>\(when)."
     }
 }
 
@@ -174,7 +188,8 @@ struct EmitEditing: NodeEditingSchema {
               let payload = fields.firstExpression("payload"),
               !name.isEmpty,
               !payload.isEmpty else { return nil }
-        return "Emit a <\(name): event> with \(payload)."
+        let when = appendWhen(fields)
+        return "Emit a <\(name): event> with \(payload)\(when)."
     }
 }
 
@@ -278,52 +293,67 @@ enum NodeEditingSchemaFactory {
         let verb = node.verb
         let lower = verb.lowercased()
         let result = node.resultName ?? ""
+        // Strip a trailing `.` and any `when <expr>` guard so the
+        // individual extractors don't pull the guard into their
+        // values. The guard is exposed as its own field below.
+        let (head, whenExpr) = splitWhen(statementSource)
+        let whenField: EditableField = .expression(
+            id: "when",
+            label: "When",
+            value: whenExpr,
+            placeholder: "<value> = <other> · leave empty for unconditional"
+        )
         switch lower {
         case "log":
             return LogEditing(fields: [
                 .stringLiteral(id: "message", label: "Message",
-                               value: extractLogMessage(from: statementSource),
+                               value: extractLogMessage(from: head),
                                placeholder: "Hello, world"),
                 .identifier(id: "target", label: "Target",
-                            value: extractLogTarget(from: statementSource)
+                            value: extractLogTarget(from: head)
                                    ?? "console",
                             suggestions: ["console", "stderr"] +
                                          availableIdentifiers),
+                whenField,
             ])
         case "create":
             return CreateEditing(fields: [
                 .identifier(id: "result", label: "Result name",
                             value: result, suggestions: []),
                 .expression(id: "expression", label: "Value expression",
-                            value: extractWithExpression(from: statementSource),
+                            value: extractWithExpression(from: head),
                             placeholder: "{ … }"),
+                whenField,
             ])
         case "compute":
             return ComputeEditing(fields: [
                 .identifier(id: "result", label: "Result name",
                             value: result, suggestions: []),
                 .expression(id: "expression", label: "Expression",
-                            value: extractFromExpression(from: statementSource),
+                            value: extractFromExpression(from: head),
                             placeholder: "5 + 2 * <count>"),
+                whenField,
             ])
         case "return":
             return ReturnEditing(fields: [
                 .picker(id: "status", label: "Status",
-                        value: extractStatus(from: statementSource) ?? "OK",
+                        value: extractStatus(from: head) ?? "OK",
                         options: ReturnEditing.statusOptions),
                 .identifier(id: "subject", label: "Subject",
                             value: node.objectName ?? "result",
                             suggestions: availableIdentifiers),
+                whenField,
             ])
         case "emit":
             return EmitEditing(fields: [
                 .identifier(id: "event", label: "Event name",
-                            value: extractEventName(from: statementSource)
+                            value: extractEventName(from: head)
                                    ?? "EventName",
                             suggestions: []),
                 .expression(id: "payload", label: "Payload",
-                            value: extractWithExpression(from: statementSource),
+                            value: extractWithExpression(from: head),
                             placeholder: "<binding> or { key: value }"),
+                whenField,
             ])
         default:
             // Anything that takes a `with { ... }` clause gets the
@@ -356,6 +386,25 @@ enum NodeEditingSchemaFactory {
 /// source text. Built deliberately tolerant — we'd rather give the
 /// user a partly-prefilled editor than refuse to open one because
 /// the regex didn't match.
+/// Splits a statement's source into `(head, whenExpr)` so the
+/// per-field extractors don't have to handle the optional guard
+/// themselves. Returns the trimmed head (no trailing `.`) and the
+/// raw guard expression (no leading `when`).
+private func splitWhen(_ source: String) -> (head: String,
+                                              whenExpr: String) {
+    let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+    let withoutDot = trimmed.hasSuffix(".")
+        ? String(trimmed.dropLast())
+        : trimmed
+    if let match = withoutDot.firstMatch(of: #/(.*?)\s+when\s+(.+)$/#) {
+        return (head: String(match.1)
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                whenExpr: String(match.2)
+                .trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return (head: withoutDot, whenExpr: "")
+}
+
 private func extractLogMessage(from source: String) -> String {
     if let match = source.firstMatch(of: #/"([^"]*)"/#) {
         return String(match.1)
@@ -371,15 +420,15 @@ private func extractLogTarget(from source: String) -> String? {
 }
 
 private func extractWithExpression(from source: String) -> String {
-    if let match = source.firstMatch(of: #/with\s+(.*?)\.\s*$/#) {
-        return String(match.1)
+    if let match = source.firstMatch(of: #/with\s+(.+)$/#) {
+        return String(match.1).trimmingCharacters(in: .whitespaces)
     }
     return ""
 }
 
 private func extractFromExpression(from source: String) -> String {
-    if let match = source.firstMatch(of: #/from\s+(.*?)\.\s*$/#) {
-        return String(match.1)
+    if let match = source.firstMatch(of: #/from\s+(.+)$/#) {
+        return String(match.1).trimmingCharacters(in: .whitespaces)
     }
     return ""
 }

@@ -48,14 +48,14 @@ struct SOLAROApp: App {
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
-            // Edit → Undo / Redo. SwiftUI 6 makes `\.undoManager`
-            // read-only at the environment level, so each workspace
-            // window publishes its UndoManager as a focused-scene
-            // value and these commands drive whichever workspace
-            // is currently key. STTextView still gets its own
-            // first-responder undo for in-editor character edits;
-            // these items handle the canvas-driven mutations and
-            // node-edit Apply calls.
+            // Custom Undo / Redo that route between the focused
+            // text view's UndoManager (so STTextView keeps its
+            // character-level undo) and the workspace UndoManager
+            // (for canvas drags, Auto Layout, node-edit Apply,
+            // save-back). Picking the right manager at click time
+            // means we don't have to install anything on AppKit's
+            // window delegate — SwiftUI was racing us for that
+            // delegate slot anyway.
             CommandGroup(replacing: .undoRedo) {
                 SolaroUndoCommand()
                 SolaroRedoCommand()
@@ -281,33 +281,63 @@ final class OpenWorkspaceTracker {
 // Per-window minimum size is enforced by `WorkspaceWindowSizer` in
 // Workspace.swift — it adapts the floor to which panels are shown.
 
-/// Standard-shape Undo command bound to the workspace UndoManager
-/// published by the front WorkspaceView. Reads the focused scene
-/// value so each window gets its own undo stack.
+/// Undo command that picks the right UndoManager at click time:
+/// the focused text-view's manager (so STTextView keeps character-
+/// level undo) when a text field has focus, otherwise the front
+/// workspace's UndoManager from `WorkspaceUndoRegistry.shared`.
 struct SolaroUndoCommand: View {
-    @FocusedValue(\.solaroUndoManager) private var undoManager
-
     var body: some View {
-        Button {
-            undoManager?.undo()
+        let registry = WorkspaceUndoRegistry.shared
+        _ = registry.tick
+        let textMgr = activeTextResponderUndoManager()
+        let workspaceMgr = registry.current
+        let active = textMgr ?? workspaceMgr
+        return Button {
+            active?.undo()
+            registry.noteUndoChange()
         } label: {
-            Text(undoManager?.undoMenuItemTitle ?? "Undo")
+            Text(active?.undoMenuItemTitle ?? "Undo")
         }
         .keyboardShortcut("z", modifiers: [.command])
-        .disabled(undoManager?.canUndo != true)
+        .disabled(active?.canUndo != true)
     }
 }
 
 struct SolaroRedoCommand: View {
-    @FocusedValue(\.solaroUndoManager) private var undoManager
-
     var body: some View {
-        Button {
-            undoManager?.redo()
+        let registry = WorkspaceUndoRegistry.shared
+        _ = registry.tick
+        let textMgr = activeTextResponderUndoManager()
+        let workspaceMgr = registry.current
+        let active = textMgr ?? workspaceMgr
+        return Button {
+            active?.redo()
+            registry.noteUndoChange()
         } label: {
-            Text(undoManager?.redoMenuItemTitle ?? "Redo")
+            Text(active?.redoMenuItemTitle ?? "Redo")
         }
         .keyboardShortcut("z", modifiers: [.command, .shift])
-        .disabled(undoManager?.canRedo != true)
+        .disabled(active?.canRedo != true)
     }
+}
+
+/// Walks the front window's responder chain looking for an
+/// `NSText` (the AppKit base for every text input — STTextView's
+/// underlying view conforms). Returns its UndoManager so the Edit
+/// menu can route ⌘Z to character-level undo while the editor has
+/// focus. Returns nil when the focus is on the canvas or any other
+/// non-text view, in which case the workspace UndoManager handles
+/// it.
+@MainActor
+private func activeTextResponderUndoManager() -> UndoManager? {
+    guard let window = NSApp.keyWindow,
+          let first = window.firstResponder else { return nil }
+    var responder: NSResponder? = first
+    while let r = responder {
+        if r is NSText {
+            return r.undoManager
+        }
+        responder = r.nextResponder
+    }
+    return nil
 }

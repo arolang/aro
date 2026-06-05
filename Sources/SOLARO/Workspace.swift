@@ -499,14 +499,19 @@ struct WorkspaceView: View {
     }
 
     var body: some View {
-        // SwiftUI 6's `\.undoManager` is read-only at the
-        // environment level, so we expose our workspace-scoped
-        // manager via a custom key (`\.solaroUndoManager`). The
-        // app-level `Edit → Undo / Redo` commands check it via
-        // `FocusedValues.solaroUndoManager` so ⌘Z works app-wide.
+        // Expose the workspace's UndoManager via a custom env key
+        // so canvas-side code can register against it, and install
+        // it on the hosting NSWindow via an NSViewRepresentable so
+        // AppKit's responder chain (Edit menu ⌘Z) finds it when
+        // the user isn't inside a text-editor first responder.
         workspaceBody
             .environment(\.solaroUndoManager, undoManager)
-            .focusedSceneValue(\.solaroUndoManager, undoManager)
+            .background(WorkspaceWindowUndoBinder(manager: undoManager))
+            .task(id: ObjectIdentifier(undoManager)) {
+                WorkspaceUndoRegistry.shared.push(undoManager)
+                defer { WorkspaceUndoRegistry.shared.pop(undoManager) }
+                try? await Task.sleep(nanoseconds: .max)
+            }
     }
 
     @ViewBuilder
@@ -1523,11 +1528,48 @@ private struct WorkspaceWindowSizer: NSViewRepresentable {
     }
 }
 
-/// Custom Environment + FocusedScene key for the workspace's
-/// UndoManager. SwiftUI 6 made the built-in `\.undoManager`
-/// non-writable; we mirror it under our own key so canvas code can
-/// register undo actions and so app-level command items (⌘Z / ⇧⌘Z)
-/// can drive the workspace manager when the canvas is focused.
+/// Walks up from a SwiftUI background view to the hosting NSWindow
+/// and installs `manager` as the window delegate's "return undo
+/// manager" so AppKit's standard responder chain — the one Edit →
+/// Undo and ⌘Z route through — finds it whenever no first
+/// responder in the chain has its own (e.g. when the canvas is
+/// focused). STTextView still gets character-level undo via its
+/// own first-responder undoManager because the chain consults the
+/// responder before the window delegate.
+struct WorkspaceWindowUndoBinder: NSViewRepresentable {
+    let manager: UndoManager
+
+    func makeNSView(context: Context) -> NSView {
+        // No-op placeholder. We don't actually install the
+        // UndoManager via the window delegate any more — SwiftUI
+        // races us for that slot and overwriting it breaks SwiftUI's
+        // own window plumbing. Instead `SolaroUndoCommand` picks
+        // the right manager at click time by walking the responder
+        // chain itself. Leaving this view in place so the call
+        // site stays unchanged.
+        let view = NSView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(manager: manager)
+    }
+
+    final class Coordinator: NSObject, NSWindowDelegate {
+        let manager: UndoManager
+        init(manager: UndoManager) { self.manager = manager }
+        func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+            manager
+        }
+    }
+}
+
+/// Custom Environment key for the workspace's UndoManager. SwiftUI
+/// 6 made the built-in `\.undoManager` read-only, so canvas code
+/// pulls the manager from this key instead.
 private struct SolaroUndoManagerKey: EnvironmentKey {
     static let defaultValue: UndoManager? = nil
 }
@@ -1537,13 +1579,45 @@ extension EnvironmentValues {
         set { self[SolaroUndoManagerKey.self] = newValue }
     }
 }
-private struct SolaroFocusedUndoKey: FocusedValueKey {
-    typealias Value = UndoManager
-}
-extension FocusedValues {
-    var solaroUndoManager: UndoManager? {
-        get { self[SolaroFocusedUndoKey.self] }
-        set { self[SolaroFocusedUndoKey.self] = newValue }
+
+/// Process-wide registry that knows which workspace's UndoManager
+/// the app-level Edit-menu commands should act on. We use this
+/// instead of `@FocusedValue` because that route was returning nil
+/// inside `CommandGroup` closures — the menu items stayed disabled
+/// even after a successful registerUndo, because the focused-scene
+/// value wasn't propagating into the CommandGroup builder.
+///
+/// `WorkspaceView` pushes its manager on appear and pops it on
+/// disappear. The most-recently-pushed manager is treated as the
+/// "current" one — close enough for single-window flows, and a
+/// reasonable approximation for multi-window (the front window
+/// generally pushed most recently).
+@Observable
+@MainActor
+final class WorkspaceUndoRegistry {
+    static let shared = WorkspaceUndoRegistry()
+    private init() {}
+    /// LIFO stack of managers. `current` is the last one pushed.
+    /// Stored as a tuple of (instance pointer, manager) so a
+    /// pop matches by identity even after the manager mutates.
+    private var stack: [UndoManager] = []
+    /// Bumped on every push / pop / undo-stack notification so
+    /// SwiftUI command bodies that read this registry re-render.
+    private(set) var tick: UInt64 = 0
+    var current: UndoManager? { stack.last }
+
+    func push(_ mgr: UndoManager) {
+        stack.append(mgr)
+        tick &+= 1
     }
+    func pop(_ mgr: UndoManager) {
+        if let idx = stack.lastIndex(where: { $0 === mgr }) {
+            stack.remove(at: idx)
+        }
+        tick &+= 1
+    }
+    /// Called when an UndoManager fires its change notification so
+    /// the menu items re-evaluate `canUndo` / `canRedo`.
+    func noteUndoChange() { tick &+= 1 }
 }
 
