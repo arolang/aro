@@ -361,6 +361,31 @@ struct WorkspaceView: View {
         .navigationSubtitle(currentFileLabel)
         .toolbar { toolbarContent }
         .background(SolaroColor.backdrop)
+        // Global-search results overlay. Anchored to the body
+        // (not the toolbar item) because SwiftUI popovers
+        // hosted inside a `ToolbarItem` don't display on
+        // macOS — the toolbar's NSView tree strips the
+        // popover attachment. Top-trailing places it roughly
+        // below the toolbar Search field; the trailing inset
+        // skips the play / debug / test / fold / minimap /
+        // inspector buttons sitting to the right of the
+        // field.
+        .overlay(alignment: .topTrailing) {
+            if controller.globalSearchPanelVisible {
+                GlobalSearchPanel(controller: controller) { hit in
+                    controller.openFile(hit.url)
+                    if let line = hit.line {
+                        controller.currentLine = line
+                        controller.setPaneMode(.text)
+                    }
+                }
+                .padding(.top, SolaroSpace.s)
+                .padding(.trailing, 240)
+                .transition(.move(edge: .top)
+                            .combined(with: .opacity))
+                .zIndex(100)
+            }
+        }
         .sheet(isPresented: $showOpenAPIPalette) {
             OpenAPIPaletteView(
                 endpoints: openAPIEndpoints,

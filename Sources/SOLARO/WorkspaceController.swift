@@ -172,6 +172,26 @@ final class WorkspaceController {
         editorFindSelectionTick &+= 1
     }
 
+    // MARK: - Global search (toolbar field)
+
+    /// Live result list for the toolbar search. Recomputed on
+    /// every keystroke into the search field; consumed by the
+    /// results panel rendered as a workspace-body overlay (not
+    /// a popover — SwiftUI popovers anchored to a toolbar item
+    /// don't reliably display on macOS, which is why the panel
+    /// has to live outside the toolbar tree).
+    var globalSearchHits: [GlobalSearchHit] = []
+
+    /// 0-indexed position of the keyboard-/hover-highlighted
+    /// row in `globalSearchHits`. Up / Down move it; Return
+    /// opens the hit at this index; hover sets it.
+    var globalSearchSelectedIndex: Int = 0
+
+    /// True when the results panel should be visible — set to
+    /// true when search text becomes non-empty, false on Esc,
+    /// on focus loss, or after a hit is opened.
+    var globalSearchPanelVisible: Bool = false
+
     /// Drives the Extract-as-Action sheet. The sheet's binding
     /// pulls from this state; setting it from a context-menu
     /// click pops the sheet open.

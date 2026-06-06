@@ -18,9 +18,17 @@
 //
 // Selecting a result (Return or click/tap) opens the file,
 // jumps to the right line, and dismisses the panel. Up / Down
-// move the highlight; Escape closes the panel. The popover is
-// borderless so it reads as a panel anchored to the field
-// rather than a callout.
+// move the highlight; Escape closes the panel. Hits, the
+// highlight index, and the visibility flag all live on
+// `WorkspaceController` so the toolbar TextField and the
+// body-level results panel can share state without going
+// through bindings or PreferenceKeys.
+//
+// Why not a popover? SwiftUI popovers anchored to a SwiftUI
+// view that lives inside a macOS `ToolbarItem` don't reliably
+// display — the toolbar item hosts the field in a separate
+// NSView tree that strips popover attachments. So the panel
+// is rendered as a body overlay in `WorkspaceView` instead.
 
 import SwiftUI
 import AROParser
@@ -37,8 +45,9 @@ struct GlobalSearchHit: Identifiable, Hashable {
     let headline: String
 
     /// The portion of `headline` that matched the query, used
-    /// to bold the match in the rendered row. Both ends are
-    /// inclusive offsets into `headline`.
+    /// to bold the match in the rendered row. nil when we
+    /// couldn't compute it (e.g. the match got trimmed out of
+    /// the snippet window).
     let highlightRange: Range<String.Index>?
 
     /// Breadcrumb under the headline: `file.aro:42 · FeatureSet`.
@@ -191,7 +200,6 @@ enum GlobalSearchEngine {
                                          to: trimmedLeading.startIndex)
         let trimmed = String(trimmedLeading)
         let target = 90
-        let lower = lowerLine.dropFirst(leadingDrop)
         let matchStart = line.distance(from: line.startIndex,
                                         to: match.lowerBound) - leadingDrop
         let matchLen = line.distance(from: match.lowerBound,
@@ -217,16 +225,11 @@ enum GlobalSearchEngine {
         let endIdx = trimmed.index(trimmed.startIndex, offsetBy: endOffset)
         var s = String(trimmed[startIdx..<endIdx])
         var leftEllipsis = false
-        var rightEllipsis = false
         if startOffset > 0 {
             s = "…" + s
             leftEllipsis = true
         }
-        if endOffset < trimmed.count {
-            s += "…"
-            rightEllipsis = true
-        }
-        _ = rightEllipsis
+        if endOffset < trimmed.count { s += "…" }
         let snippetMatchStart = matchStart - startOffset
             + (leftEllipsis ? 1 : 0)
         let snippetMatchEnd = snippetMatchStart + matchLen
@@ -235,7 +238,6 @@ enum GlobalSearchEngine {
         else { return (s, nil) }
         let start = s.index(s.startIndex, offsetBy: snippetMatchStart)
         let end = s.index(s.startIndex, offsetBy: snippetMatchEnd)
-        _ = lower
         return (s, start..<end)
     }
 
@@ -281,105 +283,139 @@ enum GlobalSearchEngine {
     }
 }
 
-/// Toolbar search field + results panel. Owned by
-/// `WorkspaceView` so the panel state lives next to the other
-/// toolbar state.
+// MARK: - Toolbar TextField
+
+/// Toolbar TextField — owns no panel UI; just updates the
+/// controller's search state. The actual results panel is
+/// rendered as a body overlay in `WorkspaceView`.
 struct GlobalSearchField: View {
     @Bindable var controller: WorkspaceController
     let onOpenHit: (GlobalSearchHit) -> Void
 
-    @State private var hits: [GlobalSearchHit] = []
-    @State private var showPanel: Bool = false
-    @State private var selectedIndex: Int = 0
-    @FocusState private var focused: Bool
-
     var body: some View {
         TextField("Search", text: $controller.searchText)
             .textFieldStyle(.roundedBorder)
-            .frame(width: 280)
-            .focused($focused)
+            .frame(width: 260)
             .onChange(of: controller.searchText) { _, _ in
                 refresh()
             }
             .onSubmit {
-                guard !hits.isEmpty else { return }
-                let idx = max(0, min(selectedIndex, hits.count - 1))
-                deliver(hits[idx])
+                openSelectedHit()
             }
             .onKeyPress(.escape) {
-                if showPanel {
-                    showPanel = false
+                if controller.globalSearchPanelVisible {
+                    closePanel()
                     return .handled
                 }
                 return .ignored
             }
             .onKeyPress(.downArrow) {
-                guard !hits.isEmpty else { return .ignored }
-                selectedIndex = min(selectedIndex + 1, hits.count - 1)
+                guard !controller.globalSearchHits.isEmpty
+                else { return .ignored }
+                controller.globalSearchSelectedIndex = min(
+                    controller.globalSearchSelectedIndex + 1,
+                    controller.globalSearchHits.count - 1
+                )
                 return .handled
             }
             .onKeyPress(.upArrow) {
-                guard !hits.isEmpty else { return .ignored }
-                selectedIndex = max(selectedIndex - 1, 0)
+                guard !controller.globalSearchHits.isEmpty
+                else { return .ignored }
+                controller.globalSearchSelectedIndex = max(
+                    controller.globalSearchSelectedIndex - 1,
+                    0
+                )
                 return .handled
-            }
-            .popover(isPresented: $showPanel,
-                     attachmentAnchor: .point(.bottom),
-                     arrowEdge: .top) {
-                resultsPanel
-                    .frame(minWidth: 520, idealWidth: 600,
-                           maxWidth: 720,
-                           minHeight: 60, idealHeight: 420,
-                           maxHeight: 520)
             }
     }
 
     private func refresh() {
-        hits = GlobalSearchEngine.search(
+        controller.globalSearchHits = GlobalSearchEngine.search(
             query: controller.searchText,
             controller: controller
         )
-        showPanel = !controller.searchText.isEmpty
-        selectedIndex = 0
+        controller.globalSearchPanelVisible = !controller.searchText.isEmpty
+        controller.globalSearchSelectedIndex = 0
     }
 
-    // MARK: - Panel
+    private func openSelectedHit() {
+        let hits = controller.globalSearchHits
+        guard !hits.isEmpty else { return }
+        let idx = max(0, min(controller.globalSearchSelectedIndex,
+                              hits.count - 1))
+        deliver(hits[idx])
+    }
 
-    @ViewBuilder
-    private var resultsPanel: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0,
-                           pinnedViews: [.sectionHeaders]) {
-                    if hits.isEmpty {
-                        emptyState
-                    } else {
-                        ForEach(GlobalSearchHit.Kind.allCases, id: \.self) { kind in
-                            let bucket = hits.filter { $0.kind == kind }
-                            if !bucket.isEmpty {
-                                Section {
-                                    ForEach(bucket) { hit in
-                                        row(hit)
-                                            .id(hit.id)
+    private func closePanel() {
+        controller.globalSearchPanelVisible = false
+    }
+
+    private func deliver(_ hit: GlobalSearchHit) {
+        controller.globalSearchPanelVisible = false
+        onOpenHit(hit)
+    }
+}
+
+// MARK: - Body overlay panel
+
+/// Results panel rendered as a top-trailing overlay on the
+/// workspace body. Visible whenever
+/// `controller.globalSearchPanelVisible` is true; otherwise
+/// the caller should branch on the same flag and not render
+/// us at all.
+struct GlobalSearchPanel: View {
+    @Bindable var controller: WorkspaceController
+    let onOpenHit: (GlobalSearchHit) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0,
+                               pinnedViews: [.sectionHeaders]) {
+                        let hits = controller.globalSearchHits
+                        if hits.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(GlobalSearchHit.Kind.allCases,
+                                    id: \.self) { kind in
+                                let bucket = hits.filter { $0.kind == kind }
+                                if !bucket.isEmpty {
+                                    Section {
+                                        ForEach(bucket) { hit in
+                                            row(hit)
+                                                .id(hit.id)
+                                        }
+                                    } header: {
+                                        sectionHeader(title: kind.rawValue,
+                                                      symbol: kind.symbol,
+                                                      count: bucket.count)
                                     }
-                                } header: {
-                                    sectionHeader(title: kind.rawValue,
-                                                  symbol: kind.symbol,
-                                                  count: bucket.count)
                                 }
                             }
                         }
                     }
                 }
-            }
-            .background(SolaroColor.surface)
-            .onChange(of: selectedIndex) { _, newValue in
-                guard hits.indices.contains(newValue) else { return }
-                withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(hits[newValue].id, anchor: .center)
+                .onChange(of: controller.globalSearchSelectedIndex) { _, idx in
+                    let hits = controller.globalSearchHits
+                    guard hits.indices.contains(idx) else { return }
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(hits[idx].id, anchor: .center)
+                    }
                 }
             }
         }
+        .frame(width: 560, height: 420)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(SolaroColor.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(SolaroColor.textTertiary.opacity(0.3))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: Color.black.opacity(0.35), radius: 14, x: 0, y: 6)
     }
 
     private var emptyState: some View {
@@ -424,10 +460,12 @@ struct GlobalSearchField: View {
     }
 
     private func row(_ hit: GlobalSearchHit) -> some View {
+        let hits = controller.globalSearchHits
         let globalIdx = hits.firstIndex(of: hit) ?? -1
-        let isSelected = globalIdx == selectedIndex
+        let isSelected = globalIdx == controller.globalSearchSelectedIndex
         return Button {
-            deliver(hit)
+            controller.globalSearchPanelVisible = false
+            onOpenHit(hit)
         } label: {
             HStack(alignment: .top, spacing: SolaroSpace.s) {
                 Image(systemName: hit.kind.symbol)
@@ -471,8 +509,8 @@ struct GlobalSearchField: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            if hovering, let idx = hits.firstIndex(of: hit) {
-                selectedIndex = idx
+            if hovering, let idx = controller.globalSearchHits.firstIndex(of: hit) {
+                controller.globalSearchSelectedIndex = idx
             }
         }
     }
@@ -489,70 +527,19 @@ struct GlobalSearchField: View {
             let prefix = String(hit.headline[..<r.lowerBound])
             let match = String(hit.headline[r])
             let suffix = String(hit.headline[r.upperBound...])
-            let highlightFill: Color = isSelected
-                ? Color.white.opacity(0.22)
-                : SolaroColor.accent.opacity(0.22)
             let highlightFG: Color = isSelected
                 ? Color.white
                 : SolaroColor.textPrimary
             (Text(prefix).foregroundStyle(primaryColor)
                 + Text(match)
                     .foregroundStyle(highlightFG)
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                 + Text(suffix).foregroundStyle(primaryColor))
                 .font(SolaroFont.body)
-                .background(
-                    GeometryReader { _ in
-                        Color.clear
-                    }
-                )
-                .padding(.vertical, 0)
-                .overlay(alignment: .topLeading) {
-                    EmptyView()
-                }
-                .background(
-                    HighlightUnderlay(text: hit.headline,
-                                       range: r,
-                                       fill: highlightFill)
-                )
         } else {
             Text(hit.headline)
                 .font(SolaroFont.body)
                 .foregroundStyle(primaryColor)
-        }
-    }
-
-    private func deliver(_ hit: GlobalSearchHit) {
-        showPanel = false
-        focused = false
-        onOpenHit(hit)
-    }
-}
-
-/// Paints a soft fill behind the matched substring of a row's
-/// headline. Sized by measuring the prefix vs. match widths
-/// with the same font the headline renders in, so the
-/// highlight tracks the actual glyph run even when the row is
-/// resized.
-private struct HighlightUnderlay: View {
-    let text: String
-    let range: Range<String.Index>
-    let fill: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            let prefix = String(text[..<range.lowerBound])
-            let match = String(text[range])
-            let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font]
-            let prefixWidth = (prefix as NSString).size(withAttributes: attrs).width
-            let matchWidth = (match as NSString).size(withAttributes: attrs).width
-            let maxWidth = max(0, geo.size.width - prefixWidth)
-            let clipped = min(matchWidth, maxWidth)
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(fill)
-                .frame(width: clipped, height: geo.size.height)
-                .offset(x: prefixWidth, y: 0)
         }
     }
 }
