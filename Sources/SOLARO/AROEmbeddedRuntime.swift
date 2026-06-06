@@ -167,6 +167,12 @@ final class EmbeddedRuntimeHost {
     /// into one canvas redraw per runloop tick instead of one per
     /// record.
     private var flushScheduled: Bool = false
+    /// Reference to the currently-running `Application` so
+    /// `stop()` can tear down its HTTP listener + writable
+    /// stores before the next run starts (#282 phase 2 — service
+    /// cleanup). Set by `runProject` once the application is
+    /// built, cleared inside `finish`.
+    private var currentApplication: Application?
 
     /// Spawn an in-process run of `project`. The closure that hops
     /// through `Debug.$controller.withValue` runs on a detached task
@@ -210,8 +216,24 @@ final class EmbeddedRuntimeHost {
             // can't paint the failed node's red border.
             await controller.addBreakpoint(.errorAny)
             do {
+                let hostBox: WeakHostBox? = await MainActor.run {
+                    guard let h = self else { return nil }
+                    return WeakHostBox(host: h)
+                }
                 try await ConsoleObject.$sink.withValue(sink) {
-                    try await Self.runProject(at: path, controller: controller)
+                    try await Self.runProject(
+                        at: path,
+                        controller: controller,
+                        onApplication: { app in
+                            // Hand the live Application back to
+                            // the host so stop() can tear down
+                            // its HTTP listener + store flush
+                            // before the next run.
+                            Task { @MainActor in
+                                hostBox?.host?.currentApplication = app
+                            }
+                        }
+                    )
                 }
             } catch is DebuggerQuit {
                 await frontend.didEnd(error: nil)
@@ -227,13 +249,20 @@ final class EmbeddedRuntimeHost {
         }
     }
 
-    /// Cancel the in-flight run. The runtime unwinds at the next
-    /// statement boundary (which may take a moment for a tight
-    /// computation loop, since cancellation is cooperative).
+    /// Cancel the in-flight run and tear down any services the
+    /// previous application started (HTTP listener, writable
+    /// stores). Without the second step, a Run-twice scenario
+    /// on a server project would fail to bind the same port —
+    /// the listener from the previous run is still alive
+    /// because Application.stop() alone doesn't unwind it.
     func stop() {
         guard isRunning else { return }
         log("[embedded] stop requested")
+        let app = currentApplication
         runTask?.cancel()
+        if let app {
+            Task.detached { await app.stopAsync() }
+        }
     }
 
     private func enqueue(_ record: TimeTravelRecord) {
@@ -255,6 +284,15 @@ final class EmbeddedRuntimeHost {
         guard isRunning else { return }
         isRunning = false
         runTask = nil
+        // Tear the application down before signalling end so
+        // HTTP / store services are released by the time the
+        // next run starts (#282 phase 2). The teardown is
+        // detached because we can't await from this sync hop,
+        // but it's idempotent against a follow-up start().
+        if let app = currentApplication {
+            currentApplication = nil
+            Task.detached { await app.stopAsync() }
+        }
         // Flush anything still buffered before signaling end so the
         // canvas's final state matches the runtime's.
         if !pendingRecords.isEmpty {
@@ -274,7 +312,8 @@ final class EmbeddedRuntimeHost {
     /// Detached so the calling context isn't bound to MainActor.
     private static func runProject(
         at path: URL,
-        controller: DebugController
+        controller: DebugController,
+        onApplication: @Sendable (Application) -> Void = { _ in }
     ) async throws {
         let discovery = ApplicationDiscovery()
         let appConfig = try await discovery.discoverWithImports(
@@ -312,11 +351,23 @@ final class EmbeddedRuntimeHost {
             replayPath: nil,
             storeFiles: appConfig.storeFiles
         )
+        onApplication(application)
 
         try await Debug.$controller.withValue(controller) {
             _ = try await application.run()
         }
     }
+}
+
+/// Tiny `@MainActor`-isolated box that hands a weak reference
+/// to `EmbeddedRuntimeHost` into a concurrent closure without
+/// triggering a sendability complaint. The host is `final
+/// @MainActor`, so reads are always isolated on construction
+/// and use.
+@MainActor
+private final class WeakHostBox: Sendable {
+    weak var host: EmbeddedRuntimeHost?
+    init(host: EmbeddedRuntimeHost) { self.host = host }
 }
 
 enum EmbeddedRuntimeError: Error, LocalizedError {

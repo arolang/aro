@@ -356,6 +356,28 @@ public final class Application: @unchecked Sendable {
         runtime.stop()
     }
 
+    /// Async variant of `stop()` that also tears down resources
+    /// the synchronous path can't await — most importantly any
+    /// HTTP listener (#282 phase 2). Without this an embedded
+    /// rerun would fail to bind because the previous run's
+    /// listening socket was still alive. Safe to call from any
+    /// concurrent context — every tear-down step is idempotent.
+    public func stopAsync() async {
+        runtime.stop()
+        if let httpServer {
+            do {
+                try await httpServer.stop()
+            } catch {
+                // Best-effort — a failure here just means the
+                // socket will linger until the process exits,
+                // which is the current behaviour anyway.
+            }
+        }
+        // Flush writable stores so an embedded rerun starts
+        // from a consistent state.
+        await storeFlushService?.flushAll()
+    }
+
     /// Set up the HTTP request handler for routing requests to feature sets
     private func setupHTTPRequestHandler(for program: AnalyzedProgram) {
         guard let routeRegistry = routeRegistry,
