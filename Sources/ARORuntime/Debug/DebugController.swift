@@ -373,11 +373,19 @@ public actor DebugController {
         return (0, 0, "<unknown statement>", nil)
     }
 
-    /// Resident memory the runtime process currently holds, via
-    /// the BSD `task_info` call (#282 phase 2). Returns 0 when the
-    /// platform refuses to answer so callers can treat 0 as
-    /// "unknown" rather than "no memory."
+    /// Resident memory the runtime process currently holds
+    /// (#282 phase 2). Platform-specific:
+    ///
+    /// - macOS / Darwin: BSD `task_info(TASK_BASIC_INFO)` —
+    ///   matches Activity Monitor's "Real Memory."
+    /// - Linux: parses `VmRSS` out of `/proc/self/status` and
+    ///   converts from kB to bytes.
+    /// - Other: returns 0.
+    ///
+    /// 0 is the platform's "I don't know" sentinel — callers
+    /// should treat it as "unknown" rather than "no memory."
     nonisolated static func residentMemoryBytes() -> UInt64 {
+        #if canImport(Darwin)
         var info = task_basic_info()
         var count = mach_msg_type_number_t(
             MemoryLayout<task_basic_info_data_t>.size
@@ -393,5 +401,24 @@ public actor DebugController {
         }
         guard kr == KERN_SUCCESS else { return 0 }
         return UInt64(info.resident_size)
+        #elseif canImport(Glibc) || canImport(Musl)
+        guard let text = try? String(
+            contentsOfFile: "/proc/self/status",
+            encoding: .utf8
+        ) else { return 0 }
+        for line in text.split(separator: "\n") {
+            if line.hasPrefix("VmRSS:") {
+                // `VmRSS:    12345 kB`
+                let parts = line.split(separator: " ",
+                                       omittingEmptySubsequences: true)
+                if parts.count >= 2, let kb = UInt64(parts[1]) {
+                    return kb * 1024
+                }
+            }
+        }
+        return 0
+        #else
+        return 0
+        #endif
     }
 }
