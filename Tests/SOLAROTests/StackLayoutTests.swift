@@ -15,8 +15,10 @@ struct StackLayoutTests {
                           x: Double = 0, y: Double = 0) -> CanvasNode {
         CanvasNode(
             id: id, verb: verb, summary: "Log to console",
-            resultName: nil, objectPreposition: "to",
-            objectName: "console", referencedIdentifiers: [],
+            resultName: nil, resultModifier: nil,
+            objectPreposition: "to",
+            objectName: "console", objectModifier: nil,
+            referencedIdentifiers: [],
             lineHint: 1, featureSetName: featureSetName, x: x, y: y
         )
     }
