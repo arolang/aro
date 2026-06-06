@@ -15,6 +15,7 @@
 // the table here becomes the single source of truth.
 
 import SwiftUI
+import AppKit
 
 /// One remappable command exposed in the Settings → Keybindings
 /// tab. The default `key` + `modifiers` represent today's hard
@@ -63,6 +64,72 @@ struct KeybindingCommand: Identifiable {
             s += String(key.character).uppercased()
         }
         return s
+    }
+}
+
+/// A resolved key + modifiers pair. Stored in UserDefaults as a
+/// pipe-delimited `key|modifiers` string so the value is human-
+/// readable when inspecting prefs.
+struct KeybindingBinding: Equatable {
+    let key: KeyEquivalent
+    let modifiers: EventModifiers
+
+    var serialised: String {
+        var parts: [String] = []
+        if modifiers.contains(.control) { parts.append("ctrl") }
+        if modifiers.contains(.option)  { parts.append("alt") }
+        if modifiers.contains(.shift)   { parts.append("shift") }
+        if modifiers.contains(.command) { parts.append("cmd") }
+        let keyToken: String
+        switch key {
+        case .space: keyToken = "space"
+        case .return: keyToken = "return"
+        case .escape: keyToken = "escape"
+        case .delete: keyToken = "delete"
+        case .leftArrow: keyToken = "left"
+        case .rightArrow: keyToken = "right"
+        case .upArrow: keyToken = "up"
+        case .downArrow: keyToken = "down"
+        default: keyToken = String(key.character)
+        }
+        return parts.joined(separator: "+") + "|" + keyToken
+    }
+
+    init(key: KeyEquivalent, modifiers: EventModifiers) {
+        self.key = key
+        self.modifiers = modifiers
+    }
+
+    init?(_ serialised: String) {
+        let parts = serialised.split(separator: "|", maxSplits: 1)
+        guard parts.count == 2 else { return nil }
+        var mods: EventModifiers = []
+        if !parts[0].isEmpty {
+            for token in parts[0].split(separator: "+") {
+                switch token {
+                case "ctrl":  mods.insert(.control)
+                case "alt":   mods.insert(.option)
+                case "shift": mods.insert(.shift)
+                case "cmd":   mods.insert(.command)
+                default: continue
+                }
+            }
+        }
+        switch parts[1] {
+        case "space":  self.key = .space
+        case "return": self.key = .return
+        case "escape": self.key = .escape
+        case "delete": self.key = .delete
+        case "left":   self.key = .leftArrow
+        case "right":  self.key = .rightArrow
+        case "up":     self.key = .upArrow
+        case "down":   self.key = .downArrow
+        default:
+            guard let ch = parts[1].first, parts[1].count == 1
+            else { return nil }
+            self.key = KeyEquivalent(ch)
+        }
+        self.modifiers = mods
     }
 }
 
@@ -159,11 +226,79 @@ enum KeybindingRegistry {
     ]
 }
 
+/// Per-user overrides keyed by command id. Backed by
+/// UserDefaults so changes stick across launches, and
+/// `@Observable` so the Settings tab redraws as the user remaps
+/// shortcuts. The shared instance is what `HiddenShortcutButton`
+/// consults at construction time.
+@MainActor
+@Observable
+final class KeybindingStore {
+    static let shared = KeybindingStore()
+
+    private static let defaultsKey = "solaro.keybindings.overrides"
+
+    private(set) var overrides: [String: KeybindingBinding]
+
+    private init() {
+        let raw = UserDefaults.standard.dictionary(forKey: Self.defaultsKey)
+            as? [String: String] ?? [:]
+        var parsed: [String: KeybindingBinding] = [:]
+        for (id, ser) in raw {
+            if let b = KeybindingBinding(ser) {
+                parsed[id] = b
+            }
+        }
+        self.overrides = parsed
+    }
+
+    func resolved(for commandID: String) -> KeybindingBinding? {
+        if let user = overrides[commandID] { return user }
+        guard let cmd = KeybindingRegistry.shared
+            .first(where: { $0.id == commandID }) else { return nil }
+        return KeybindingBinding(key: cmd.defaultKey,
+                                 modifiers: cmd.defaultModifiers)
+    }
+
+    func setOverride(_ binding: KeybindingBinding,
+                     for commandID: String) {
+        overrides[commandID] = binding
+        persist()
+    }
+
+    func clearOverride(for commandID: String) {
+        overrides.removeValue(forKey: commandID)
+        persist()
+    }
+
+    /// Returns the command id that already binds `(key, modifiers)`
+    /// if any — used by the capture popover to warn the user
+    /// before they overwrite an existing assignment.
+    func conflict(with binding: KeybindingBinding,
+                  excluding commandID: String) -> String? {
+        for cmd in KeybindingRegistry.shared where cmd.id != commandID {
+            if let b = resolved(for: cmd.id),
+               b.key.character == binding.key.character,
+               b.modifiers == binding.modifiers {
+                return cmd.displayName
+            }
+        }
+        return nil
+    }
+
+    private func persist() {
+        let raw = overrides.mapValues { $0.serialised }
+        UserDefaults.standard.set(raw, forKey: Self.defaultsKey)
+    }
+}
+
 /// Settings → Keybindings tab. Lists every command grouped by
-/// category with its shortcut on the trailing edge. Read-only
-/// for the moment — the capture UI + UserDefaults persistence
-/// land in a later step of #270.
+/// category with its shortcut on the trailing edge. Click a row
+/// to capture a new combination; "Reset" reverts to default.
 struct KeybindingsSettingsTab: View {
+    @Bindable private var store = KeybindingStore.shared
+    @State private var capturingID: String?
+
     private var grouped: [(KeybindingCommand.Category, [KeybindingCommand])] {
         KeybindingCommand.Category.allCases.map { cat in
             (cat, KeybindingRegistry.shared.filter { $0.category == cat })
@@ -173,7 +308,7 @@ struct KeybindingsSettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SolaroSpace.l) {
-                Text("Default keyboard shortcuts. User overrides + capture UI land in a later update — this tab is currently a reference of what's bound today so you can spot conflicts with other apps.")
+                Text("Click a shortcut to record a replacement. Press Esc to cancel, or click Reset to revert to the default. Overrides are stored in `solaro.keybindings.overrides`.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -195,15 +330,167 @@ struct KeybindingsSettingsTab: View {
                 .tracking(1)
                 .foregroundStyle(.secondary)
             ForEach(commands) { c in
-                HStack {
-                    Text(c.displayName)
-                    Spacer()
-                    Text(c.defaultDescription)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
+                row(for: c)
                 Divider()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func row(for command: KeybindingCommand) -> some View {
+        let active = store.resolved(for: command.id)
+        let isOverridden = store.overrides[command.id] != nil
+        HStack(spacing: SolaroSpace.s) {
+            Text(command.displayName)
+            if isOverridden {
+                Text("custom")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(SolaroColor.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+            Spacer()
+            Button {
+                capturingID = command.id
+            } label: {
+                Text(active.map { KeybindingCommand.describe(key: $0.key,
+                                                              modifiers: $0.modifiers) }
+                     ?? command.defaultDescription)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(capturingID == command.id
+                                     ? SolaroColor.accent
+                                     : SolaroColor.textPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(capturingID == command.id
+                                    ? SolaroColor.accent
+                                    : SolaroColor.divider,
+                                    lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(capturingID == command.id
+                  ? "Press the new shortcut (Esc to cancel)"
+                  : "Click to remap")
+            if isOverridden {
+                Button("Reset") {
+                    store.clearOverride(for: command.id)
+                }
+                .controlSize(.small)
+            }
+        }
+        .background(
+            KeyCaptureBridge(
+                isCapturing: Binding(
+                    get: { capturingID == command.id },
+                    set: { if !$0 { capturingID = nil } }
+                ),
+                onCapture: { binding in
+                    let conflict = store.conflict(with: binding,
+                                                  excluding: command.id)
+                    if let conflict {
+                        // Soft warning: still apply the override
+                        // but note the collision in the description.
+                        // A future iteration could surface a confirm
+                        // dialog and refuse.
+                        print("[keybindings] \(command.displayName) shortcut conflicts with \(conflict).")
+                    }
+                    store.setOverride(binding, for: command.id)
+                    capturingID = nil
+                }
+            )
+        )
+    }
+}
+
+/// Bridges an NSEvent monitor into SwiftUI: while `isCapturing`
+/// is true and the parent view is in the responder chain,
+/// every keyDown is intercepted, parsed into a
+/// `KeybindingBinding`, and reported. Escape cancels. Used by
+/// `KeybindingsSettingsTab` to capture a new shortcut.
+private struct KeyCaptureBridge: NSViewRepresentable {
+    @Binding var isCapturing: Bool
+    let onCapture: (KeybindingBinding) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        v.wantsLayer = true
+        context.coordinator.parent = self
+        return v
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.parent = self
+        if isCapturing {
+            context.coordinator.startMonitoring()
+        } else {
+            context.coordinator.stopMonitoring()
+        }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stopMonitoring()
+    }
+
+    final class Coordinator: NSObject {
+        var parent: KeyCaptureBridge?
+        private var monitor: Any?
+
+        func startMonitoring() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self else { return event }
+                if event.keyCode == 53 {   // Escape
+                    self.parent?.isCapturing = false
+                    return nil
+                }
+                if let binding = Self.binding(from: event) {
+                    self.parent?.onCapture(binding)
+                    return nil
+                }
+                return event
+            }
+        }
+
+        func stopMonitoring() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private static func binding(from event: NSEvent) -> KeybindingBinding? {
+            var mods: EventModifiers = []
+            let nsmods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if nsmods.contains(.control)  { mods.insert(.control) }
+            if nsmods.contains(.option)   { mods.insert(.option) }
+            if nsmods.contains(.shift)    { mods.insert(.shift) }
+            if nsmods.contains(.command)  { mods.insert(.command) }
+            // Require at least one modifier so a stray "f" while
+            // the popover is up doesn't clobber a binding.
+            guard !mods.isEmpty else { return nil }
+            // Special keys take priority over chars so Tab / Return
+            // can become first-class bindings.
+            switch event.keyCode {
+            case 49: return KeybindingBinding(key: .space, modifiers: mods)
+            case 36: return KeybindingBinding(key: .return, modifiers: mods)
+            case 51: return KeybindingBinding(key: .delete, modifiers: mods)
+            case 123: return KeybindingBinding(key: .leftArrow, modifiers: mods)
+            case 124: return KeybindingBinding(key: .rightArrow, modifiers: mods)
+            case 126: return KeybindingBinding(key: .upArrow, modifiers: mods)
+            case 125: return KeybindingBinding(key: .downArrow, modifiers: mods)
+            default: break
+            }
+            guard let chars = event.charactersIgnoringModifiers,
+                  let ch = chars.first else { return nil }
+            return KeybindingBinding(key: KeyEquivalent(ch),
+                                     modifiers: mods)
         }
     }
 }

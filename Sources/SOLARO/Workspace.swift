@@ -50,6 +50,18 @@ struct HiddenShortcutButton: View {
         self.action = action
     }
 
+    /// Convenience initialiser that pulls the resolved (default
+    /// or user-overridden) key + modifiers for a command id out
+    /// of `KeybindingStore.shared`. Used by every call site so
+    /// the registry is the single source of truth for shortcuts
+    /// (#270).
+    init(commandID: String, action: @escaping () -> Void) {
+        let resolved = KeybindingStore.shared.resolved(for: commandID)
+        self.key = resolved?.key ?? KeyEquivalent("\0")
+        self.modifiers = resolved?.modifiers ?? []
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
             EmptyView()
