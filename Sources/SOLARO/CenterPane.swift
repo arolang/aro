@@ -151,11 +151,28 @@ struct CenterPaneView: View {
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
                     caretMoveTick: controller.caretMoveTick,
+                    findSelection: controller.editorFindSelection,
+                    findSelectionTick: controller.editorFindSelectionTick,
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topTrailing) {
+                    if controller.editorFindActive {
+                        EditorFindBar(
+                            controller: controller,
+                            fileText: {
+                                (try? String(contentsOf: url, encoding: .utf8))
+                                    ?? ""
+                            }
+                        )
+                        .padding(.top, SolaroSpace.s)
+                        .padding(.trailing, SolaroSpace.m)
+                        .transition(.move(edge: .top)
+                                    .combined(with: .opacity))
+                    }
+                }
             }
             if minimap && !folded {
                 MinimapView(
@@ -1026,11 +1043,28 @@ struct CenterPaneView: View {
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
                     caretMoveTick: controller.caretMoveTick,
+                    findSelection: controller.editorFindSelection,
+                    findSelectionTick: controller.editorFindSelectionTick,
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url)
                 )
                 .frame(minWidth: 160)
+                .overlay(alignment: .topTrailing) {
+                    if controller.editorFindActive {
+                        EditorFindBar(
+                            controller: controller,
+                            fileText: {
+                                (try? String(contentsOf: url, encoding: .utf8))
+                                    ?? ""
+                            }
+                        )
+                        .padding(.top, SolaroSpace.s)
+                        .padding(.trailing, SolaroSpace.m)
+                        .transition(.move(edge: .top)
+                                    .combined(with: .opacity))
+                    }
+                }
             }
         }
     }

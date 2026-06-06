@@ -142,6 +142,36 @@ final class WorkspaceController {
         caretMoveTick &+= 1
     }
 
+    // MARK: - Find in current file (⌘F)
+
+    /// True when the in-editor find bar is visible. Toggled by
+    /// the ⌘F shortcut and the bar's close button. Lives on the
+    /// controller so the shortcut can flip it from outside the
+    /// CenterPane subtree.
+    var editorFindActive: Bool = false
+
+    /// Live query typed into the find bar. The bar binds to this
+    /// directly; the workspace recomputes match ranges on change.
+    var editorFindQuery: String = ""
+
+    /// Match selection the editor should apply on the next
+    /// `updateNSView` pass — UTF-16 offsets into the editor's
+    /// document. Cleared after the editor consumes it (the
+    /// editor watches `editorFindSelectionTick` to know when to
+    /// re-apply).
+    var editorFindSelection: NSRange?
+
+    /// Bumped each time a new selection is pushed. The editor
+    /// stores the last tick it consumed and only applies when
+    /// the tick advances; that way re-entering the same range
+    /// (e.g. wrapping around to match 0) still works.
+    var editorFindSelectionTick: UInt64 = 0
+
+    func requestEditorFindSelection(_ range: NSRange) {
+        editorFindSelection = range
+        editorFindSelectionTick &+= 1
+    }
+
     /// Drives the Extract-as-Action sheet. The sheet's binding
     /// pulls from this state; setting it from a context-menu
     /// click pops the sheet open.

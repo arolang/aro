@@ -671,6 +671,15 @@ struct AROCodeEditor: NSViewRepresentable {
     /// instead of column 0.
     var caretMoveTick: Int = 0
 
+    /// Most recent find-bar selection request — UTF-16 offsets
+    /// into the document. The editor selects the range +
+    /// scrolls it on-screen whenever `findSelectionTick`
+    /// advances; that tick lets us re-fire the same range
+    /// (e.g. wrap-around back to match #0) without churning the
+    /// caret on every unrelated `updateNSView`.
+    var findSelection: NSRange?
+    var findSelectionTick: UInt64 = 0
+
     /// Wall-clock time each source line was last observed executing
     /// (from the live JSONL event stream). When non-empty, the
     /// editor paints a transient row tint on each executed line
@@ -818,6 +827,23 @@ struct AROCodeEditor: NSViewRepresentable {
                 }
             }
         }
+        // Find-bar selection: bumped whenever ⌘F's Next / Previous
+        // (or a query change) lands on a fresh match. The bar
+        // hands us a UTF-16 range; we both select it (so the
+        // user gets a real visible highlight, not just a caret)
+        // and scroll it into view.
+        if context.coordinator.lastFindSelectionTick != findSelectionTick,
+           let range = findSelection {
+            context.coordinator.lastFindSelectionTick = findSelectionTick
+            let docLength = (textView.text ?? "").utf16.count
+            let clamped = NSRange(
+                location: min(range.location, docLength),
+                length: min(range.length, max(0, docLength - range.location))
+            )
+            textView.textSelection = clamped
+            textView.scrollRangeToVisible(clamped)
+        }
+
         // Re-render breakpoint markers whenever the binding changes.
         if context.coordinator.lastRenderedBreakpoints != breakpoints {
             renderBreakpoints(on: textView)
@@ -1168,6 +1194,12 @@ struct AROCodeEditor: NSViewRepresentable {
         /// performs an explicit (line, column) caret move — used by
         /// the ghost-popover accept path.
         var lastCaretMoveTick: Int = 0
+
+        /// Last applied find-bar selection tick. Same idea as
+        /// `lastCaretMoveTick` but for ⌘F's Next / Previous: when
+        /// the parent bumps the tick we apply the new selection
+        /// and scroll to it; otherwise we leave the caret alone.
+        var lastFindSelectionTick: UInt64 = 0
 
         /// Last applied execution-pulse painting per line — used so
         /// updateNSView only re-tints lines whose timestamp moved

@@ -546,6 +546,25 @@ struct WorkspaceView: View {
             HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
                 showFindInProject = true
             }
+            // ⌘F — find inside the currently open source file.
+            // Only fires when the editor pane is the visible
+            // surface; in canvas / map modes it falls through so
+            // the standard Edit > Find menu item remains the
+            // expected NSResponder action.
+            HiddenShortcutButton(key: "f", modifiers: [.command]) {
+                let editorVisible = controller.paneMode == .text
+                    || controller.paneMode == .split
+                guard editorVisible,
+                      controller.currentFile != nil
+                else { return }
+                if !controller.editorFindActive {
+                    controller.editorFindActive = true
+                } else {
+                    // Re-pressing ⌘F while the bar is open closes it.
+                    controller.editorFindActive = false
+                    controller.editorFindQuery = ""
+                }
+            }
             HiddenShortcutButton(key: "w", modifiers: [.command]) {
                 if let url = controller.currentFile {
                     controller.closeTab(url)
