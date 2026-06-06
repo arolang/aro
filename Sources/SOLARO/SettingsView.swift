@@ -32,6 +32,13 @@ struct SettingsView: View {
     private var runtimeBackend: String = RuntimeBackend.embedded.rawValue
     @AppStorage(SolaroPrefs.askEndpoint.rawValue)
     private var askEndpoint: String = ""
+    /// Optional GitHub Personal Access Token used by the plugin
+    /// marketplace fetcher (#263). When set, the rate limit on
+    /// `api.github.com/search/repositories` rises from 60 to
+    /// 5000 requests/hour — useful when several developers
+    /// share an IP.
+    @AppStorage(GitHubMarketplaceFetcher.patDefaultsKey)
+    private var githubPAT: String = ""
     @AppStorage(SolaroPrefs.theme.rawValue)
     private var theme: String = SolaroTheme.dark.rawValue
 
@@ -165,6 +172,17 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Text("AI · `aro ask`")
+            }
+            Section {
+                SecureField("GitHub PAT", text: $githubPAT,
+                            prompt: Text("ghp_… (optional)"))
+                    .textFieldStyle(.roundedBorder)
+                Text("Optional token used by the plugin marketplace to query `topic:aro topic:plugin` on api.github.com. Raises the rate limit from 60 to 5000 requests / hour. Stored in this user's defaults — leave empty for unauthenticated requests.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Plugin marketplace")
             }
         }
         .formStyle(.grouped)
