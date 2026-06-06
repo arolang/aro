@@ -33,6 +33,15 @@ swift build -c "$CONFIG" --product SolaroApp
 echo "[solaro-app] swift build -c $CONFIG --product solaro"
 swift build -c "$CONFIG" --product solaro
 
+# Also rebuild the `aro` CLI so SOLARO's runtime resolver
+# (Console.resolveAroBinary) finds a binary that matches the
+# checkout. Without this step a developer who adds a CLI flag
+# (e.g. `aro test --record`) and runs this script keeps invoking
+# a stale `aro` from a previous build and the flag fails with
+# "Unknown option" — issue #283.
+echo "[solaro-app] swift build -c $CONFIG --product aro"
+swift build -c "$CONFIG" --product aro
+
 # `aro ask`'s native MLX backend looks for `mlx.metallib` alongside the
 # binary. SwiftPM doesn't compile .metal sources, so we shell out to the
 # dedicated build script — first run only compiles, subsequent calls
