@@ -29,6 +29,11 @@ public struct PauseInfo: Sendable {
     public let statementSummary: String     // human-readable, e.g. "Emit <UserCreated: event> with <user>"
     public let verb: String?
     public let symbols: [SymbolSnapshot]    // visible bindings at this point
+    /// First-class per-statement instrumentation (#282 phase 2).
+    /// Populated by `DebugController.checkpoint` from monotonic
+    /// timestamps + Mach task info; nil only when the platform
+    /// helpers refuse to answer.
+    public let metrics: PauseMetrics?
 
     public init(
         reason: Reason,
@@ -39,7 +44,8 @@ public struct PauseInfo: Sendable {
         column: Int,
         statementSummary: String,
         verb: String?,
-        symbols: [SymbolSnapshot]
+        symbols: [SymbolSnapshot],
+        metrics: PauseMetrics? = nil
     ) {
         self.reason = reason
         self.featureSetName = featureSetName
@@ -50,6 +56,27 @@ public struct PauseInfo: Sendable {
         self.statementSummary = statementSummary
         self.verb = verb
         self.symbols = symbols
+        self.metrics = metrics
+    }
+}
+
+/// First-class per-statement instrumentation handed to the
+/// frontend on every pause (#282 phase 2). Both fields are
+/// best-effort: when the platform helpers refuse (e.g. running
+/// under a sandbox that blocks Mach calls) the values stay at
+/// zero and the frontend should treat them as "unknown" rather
+/// than "actually zero."
+public struct PauseMetrics: Sendable, Equatable {
+    /// Elapsed wall-clock nanoseconds between this checkpoint and
+    /// the previous one in the same execution.
+    public let elapsedNanos: UInt64
+    /// Resident memory the runtime process currently holds, in
+    /// bytes. Sampled with `task_info()`.
+    public let residentMemoryBytes: UInt64
+
+    public init(elapsedNanos: UInt64, residentMemoryBytes: UInt64) {
+        self.elapsedNanos = elapsedNanos
+        self.residentMemoryBytes = residentMemoryBytes
     }
 }
 

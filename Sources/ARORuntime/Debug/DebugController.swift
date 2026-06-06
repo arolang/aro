@@ -25,6 +25,10 @@ public actor DebugController {
     private var nextMode: StepMode = .stepOver   // first checkpoint pauses
     private var hasFiredEntry = false
     private var recorder: DebugEventLogWriter?
+    /// Wall-clock at the most recent checkpoint we built a
+    /// PauseInfo for (#282 phase 2). Used to compute the
+    /// `elapsedNanos` between successive statements.
+    private var previousCheckpointAt: DispatchTime?
 
     // Phase 5 — sampling. When >1, the controller only enters the pause
     // path on every N-th eligible checkpoint. Used for `--attach` style
@@ -178,6 +182,19 @@ public actor DebugController {
         }
         hasFiredEntry = true
 
+        let now = DispatchTime.now()
+        let elapsed: UInt64
+        if let prev = previousCheckpointAt {
+            elapsed = now.uptimeNanoseconds - prev.uptimeNanoseconds
+        } else {
+            elapsed = 0
+        }
+        previousCheckpointAt = now
+        let metrics = PauseMetrics(
+            elapsedNanos: elapsed,
+            residentMemoryBytes: Self.residentMemoryBytes()
+        )
+
         let info = PauseInfo(
             reason: reason,
             featureSetName: featureSetName,
@@ -187,7 +204,8 @@ public actor DebugController {
             column: column,
             statementSummary: summary,
             verb: verb,
-            symbols: symbols
+            symbols: symbols,
+            metrics: metrics
         )
 
         await record(pause: info)
@@ -353,5 +371,27 @@ public actor DebugController {
         }
         // BreakStatement and any future Statement types fall through here.
         return (0, 0, "<unknown statement>", nil)
+    }
+
+    /// Resident memory the runtime process currently holds, via
+    /// the BSD `task_info` call (#282 phase 2). Returns 0 when the
+    /// platform refuses to answer so callers can treat 0 as
+    /// "unknown" rather than "no memory."
+    nonisolated static func residentMemoryBytes() -> UInt64 {
+        var info = task_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_basic_info_data_t>.size
+            / MemoryLayout<integer_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr -> kern_return_t in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { p in
+                task_info(mach_task_self_,
+                          task_flavor_t(TASK_BASIC_INFO),
+                          p,
+                          &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        return UInt64(info.resident_size)
     }
 }
