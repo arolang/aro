@@ -1084,9 +1084,13 @@ struct WorkspaceView: View {
     }
 
     private var searchField: some View {
-        TextField("Search", text: $controller.searchText)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 220)
+        GlobalSearchField(controller: controller) { hit in
+            controller.openFile(hit.url)
+            if let line = hit.line {
+                controller.currentLine = line
+                controller.setPaneMode(.text)
+            }
+        }
     }
 
     /// Run-button click handler. If the project's source references
