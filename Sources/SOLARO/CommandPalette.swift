@@ -24,7 +24,8 @@ enum CommandPaletteBuilder {
         onOpenTimeTravel: @escaping () -> Void,
         onOpenAddPlugin: @escaping () -> Void,
         onGoToDefinition: @escaping () -> Void,
-        onHoverAtCaret: @escaping () -> Void
+        onHoverAtCaret: @escaping () -> Void,
+        onExportCanvas: @escaping () -> Void = {}
     ) -> [PaletteItem] {
         var items: [PaletteItem] = []
 
@@ -240,6 +241,17 @@ enum CommandPaletteBuilder {
             trailing: nil,
             symbol: "puzzlepiece.extension",
             action: { onOpenAddPlugin() }
+        ))
+
+        // Canvas export (#267)
+        items.append(.init(
+            id: "export-canvas-png",
+            title: "Export Canvas as PNG…",
+            subtitle: "Light-mode 2× render of the current canvas",
+            category: "Canvas",
+            trailing: nil,
+            symbol: "square.and.arrow.up.on.square",
+            action: { onExportCanvas() }
         ))
 
         // Bottom-panel actions

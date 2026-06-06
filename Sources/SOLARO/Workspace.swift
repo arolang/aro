@@ -431,7 +431,8 @@ struct WorkspaceView: View {
                     onOpenTimeTravel: { showTimeTravel = true },
                     onOpenAddPlugin: { controller.sidebarTab = .plugins },
                     onGoToDefinition: { goToDefinition() },
-                    onHoverAtCaret: { hoverAtCaret() }
+                    onHoverAtCaret: { hoverAtCaret() },
+                    onExportCanvas: { exportCanvasPNG() }
                 ),
                 onClose: { showCommandPalette = false }
             )
@@ -629,6 +630,21 @@ struct WorkspaceView: View {
     /// otherwise we fall back to the first `<` on the line (which
     /// is where ARO identifier references start) or the first
     /// non-whitespace character.
+    /// Build a `CanvasGraph` for the currently-open file and hand
+    /// it to `CanvasExporter.exportPNG` (#267). The exporter runs
+    /// its own NSSavePanel and writes the PNG; nothing on the
+    /// view changes.
+    private func exportCanvasPNG() {
+        guard let url = controller.currentFile,
+              let program = controller.programs[url] else { return }
+        let sidecar = LayoutSidecar.load(for: url)
+        let graph = CanvasGraph
+            .build(program: program, fileKey: url.path)
+            .withPositions(from: sidecar)
+        let placed = StackLayout.place(graph)
+        CanvasExporter.exportPNG(graph: placed, project: project)
+    }
+
     private func goToDefinition() {
         guard
             let url = controller.currentFile,
