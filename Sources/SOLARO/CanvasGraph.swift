@@ -24,8 +24,16 @@ struct CanvasNode: Identifiable, Equatable {
     let verb: String            // "Create", "Emit", "Return", …
     let summary: String         // human-readable "Create the <user> with <data>."
     let resultName: String?     // pin label, lowercase: "user"
+    /// Optional qualifier / type annotation following the colon in
+    /// `<result: qualifier>` — e.g. `length`, `uppercase`,
+    /// `collections.reverse`. Carried separately from `resultName`
+    /// so the node editor can render it as its own picker field.
+    let resultModifier: String?
     let objectPreposition: String?  // "with", "from", …
     let objectName: String?     // "data"
+    /// Same idea for the object slot — the qualifier after the
+    /// colon in `<source: qualifier>`.
+    let objectModifier: String?
     /// All identifiers referenced by this statement (from the object
     /// slot, the valueSource expression, and with/to clauses). The
     /// edge builder matches these against previous statements'
@@ -52,8 +60,10 @@ struct CanvasNode: Identifiable, Equatable {
             verb: statement.action.verb,
             summary: statement.description,
             resultName: statement.result.base,
+            resultModifier: statement.result.typeAnnotation,
             objectPreposition: prepositionLabel(statement.object.preposition),
             objectName: statement.object.noun.base,
+            objectModifier: statement.object.noun.typeAnnotation,
             referencedIdentifiers: refs,
             lineHint: statement.span.start.line,
             featureSetName: featureSetName,

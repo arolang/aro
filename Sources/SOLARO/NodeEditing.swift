@@ -45,6 +45,14 @@ enum EditableField: Identifiable, Equatable {
     /// A key/value table — the `with { key: expression, … }` clause.
     /// Each row is one record entry.
     case record(id: String, label: String, rows: [RecordRow])
+    /// A free-text field with a dropdown of suggested values —
+    /// used for the qualifier slot in `<name: qualifier>` (#?). The
+    /// dropdown is populated from `QualifierCatalog.snapshot()` so
+    /// plugin-registered qualifiers appear automatically. Empty
+    /// `value` means "no qualifier" and the renderer omits the
+    /// colon suffix.
+    case combo(id: String, label: String, value: String,
+               placeholder: String, options: [QualifierOption])
 
     var id: String {
         switch self {
@@ -52,7 +60,8 @@ enum EditableField: Identifiable, Equatable {
              .identifier(let id, _, _, _),
              .expression(let id, _, _, _),
              .picker(let id, _, _, _),
-             .record(let id, _, _):
+             .record(let id, _, _),
+             .combo(let id, _, _, _, _):
             return id
         }
     }
@@ -120,10 +129,21 @@ private func appendWhen(_ fields: [EditableField]) -> String {
     return expr.isEmpty ? "" : " when \(expr)"
 }
 
+/// Composes `name` and optional `modifier` into the canonical
+/// `<name>` / `<name: modifier>` form. Centralised so every
+/// schema that splits an identifier into the name + modifier
+/// pair renders it the same way.
+private func renderTaggedIdentifier(name: String, modifier: String?) -> String? {
+    let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !n.isEmpty else { return nil }
+    let m = (modifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return m.isEmpty ? "<\(n)>" : "<\(n): \(m)>"
+}
+
 /// `Create the <result> with <expression>.`
 struct CreateEditing: NodeEditingSchema {
     var title: String { "Edit Create statement" }
-    var subtitle: String? { "Name of the new binding and its value expression." }
+    var subtitle: String? { "Name of the new binding, an optional modifier, and its value expression." }
     var fields: [EditableField]
 
     func render() -> String? {
@@ -131,16 +151,22 @@ struct CreateEditing: NodeEditingSchema {
               let expr = fields.firstExpression("expression"),
               !result.isEmpty,
               !expr.isEmpty else { return nil }
+        let modifier = fields.firstCombo("modifier")
+        guard let tagged = renderTaggedIdentifier(name: result,
+                                                  modifier: modifier)
+        else { return nil }
         let when = appendWhen(fields)
-        return "Create the <\(result)> with \(expr)\(when)."
+        return "Create the \(tagged) with \(expr)\(when)."
     }
 }
 
-/// `Compute the <result> from <expression>.` — same shape as Create
-/// but reads more naturally with `from`.
+/// `Compute the <result: qualifier> from <expression>.` —
+/// same shape as Create but reads more naturally with `from`,
+/// and the qualifier is the common case for builtin Compute
+/// operations (`length`, `uppercase`, …).
 struct ComputeEditing: NodeEditingSchema {
     var title: String { "Edit Compute statement" }
-    var subtitle: String? { "Derived binding name and the expression it's computed from." }
+    var subtitle: String? { "Derived binding name, an optional qualifier, and the expression it's computed from." }
     var fields: [EditableField]
 
     func render() -> String? {
@@ -148,8 +174,12 @@ struct ComputeEditing: NodeEditingSchema {
               let expr = fields.firstExpression("expression"),
               !result.isEmpty,
               !expr.isEmpty else { return nil }
+        let modifier = fields.firstCombo("modifier")
+        guard let tagged = renderTaggedIdentifier(name: result,
+                                                  modifier: modifier)
+        else { return nil }
         let when = appendWhen(fields)
-        return "Compute the <\(result)> from \(expr)\(when)."
+        return "Compute the \(tagged) from \(expr)\(when)."
     }
 }
 
@@ -276,6 +306,15 @@ private extension Array where Element == EditableField {
         }
         return nil
     }
+
+    func firstCombo(_ id: String) -> String? {
+        for f in self {
+            if case let .combo(fid, _, value, _, _) = f, fid == id {
+                return value
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Inference
@@ -325,6 +364,10 @@ enum NodeEditingSchemaFactory {
             return CreateEditing(fields: [
                 .identifier(id: "result", label: "Result name",
                             value: result, suggestions: []),
+                .combo(id: "modifier", label: "Modifier",
+                       value: node.resultModifier ?? "",
+                       placeholder: "uppercase, collections.reverse, …",
+                       options: QualifierCatalog.snapshot()),
                 .expression(id: "expression", label: "Value expression",
                             value: extractWithExpression(from: head),
                             placeholder: "{ … }"),
@@ -334,6 +377,10 @@ enum NodeEditingSchemaFactory {
             return ComputeEditing(fields: [
                 .identifier(id: "result", label: "Result name",
                             value: result, suggestions: []),
+                .combo(id: "modifier", label: "Modifier",
+                       value: node.resultModifier ?? "",
+                       placeholder: "length, uppercase, hash, …",
+                       options: QualifierCatalog.snapshot()),
                 .expression(id: "expression", label: "Expression",
                             value: extractFromExpression(from: head),
                             placeholder: "5 + 2 * <count>"),
@@ -643,6 +690,36 @@ struct NodeEditorView: View {
                 fieldLabel(label)
                 recordTable(id: id, rows: rows)
             }
+
+        case let .combo(id, label, value, placeholder, options):
+            inlineRow(label) {
+                HStack(spacing: 4) {
+                    TextField(placeholder,
+                              text: bindCombo(id: id, fallback: value))
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                    Menu {
+                        if !value.isEmpty {
+                            Button("Clear modifier") {
+                                setCombo(id: id, to: "")
+                            }
+                            Divider()
+                        }
+                        ForEach(options) { opt in
+                            Button(opt.label) {
+                                setCombo(id: id, to: opt.value)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down.circle")
+                            .font(.system(size: 12))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Pick a registered qualifier")
+                }
+            }
         }
     }
 
@@ -730,6 +807,24 @@ struct NodeEditorView: View {
     private func setIdentifier(id: String, to newVal: String) {
         bindIdentifier(id: id, fallback: "").wrappedValue = newVal
     }
+    private func bindCombo(id: String, fallback: String) -> Binding<String> {
+        Binding(
+            get: { rawCombo(id) ?? fallback },
+            set: { newVal in
+                schema.fields = schema.fields.map { f in
+                    if case let .combo(fid, label, _, ph, opts) = f, fid == id {
+                        return .combo(id: fid, label: label,
+                                      value: newVal,
+                                      placeholder: ph, options: opts)
+                    }
+                    return f
+                }
+            }
+        )
+    }
+    private func setCombo(id: String, to newVal: String) {
+        bindCombo(id: id, fallback: "").wrappedValue = newVal
+    }
     private func bindExpression(id: String, fallback: String) -> Binding<String> {
         Binding(
             get: { rawExpression(id) ?? fallback },
@@ -813,6 +908,12 @@ struct NodeEditorView: View {
     private func rawRecord(_ id: String) -> [RecordRow]? {
         for f in schema.fields {
             if case let .record(fid, _, rows) = f, fid == id { return rows }
+        }
+        return nil
+    }
+    private func rawCombo(_ id: String) -> String? {
+        for f in schema.fields {
+            if case let .combo(fid, _, v, _, _) = f, fid == id { return v }
         }
         return nil
     }
