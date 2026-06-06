@@ -136,6 +136,10 @@ final class Service {
     }
 
     private func finish(runID: String, error: String?) {
+        // Make sure no buffered batch is left behind — would
+        // otherwise show up as missing pulses on the canvas after
+        // a successful run.
+        currentFrontend?.flushRemainingBatch()
         if let app = currentApplication {
             currentApplication = nil
             Task.detached { await app.stopAsync() }
@@ -172,7 +176,19 @@ final class Service {
                 )
             }
         }
-        try? UnifiedPluginLoader.shared.loadPlugins(from: appConfig.rootPath)
+        // Plugin loading happens inside the service process so a
+        // segfaulting C plugin takes the service down, not SOLARO
+        // (#282 phase 3 — option C rationale). The loader is the
+        // same UnifiedPluginLoader the CLI uses, so any plugin
+        // that works under `aro run` works here.
+        do {
+            try UnifiedPluginLoader.shared
+                .loadPlugins(from: appConfig.rootPath)
+        } catch {
+            try? stderr.write(contentsOf: Data(
+                "[AROXPCService] plugin load failed: \(error)\n".utf8
+            ))
+        }
 
         let app = Application(
             programs: compiledPrograms,
@@ -203,6 +219,21 @@ final class ServiceFrontend: DebugFrontend, @unchecked Sendable {
     private let startedAt = Date()
     private let lock = NSLock()
     private var pending: CheckedContinuation<StepMode, Never>?
+    /// Coalesces pause records into batches before they hit the
+    /// wire (#282 phase 3 — batching). Single records still go
+    /// out individually if the buffer doesn't accumulate before
+    /// a flush; the goal is to fold hot loops, not delay first
+    /// pulses.
+    private var batchBuffer: [AROXPCPauseRecord] = []
+    private let batchLock = NSLock()
+    private var batchScheduled = false
+    private let batchQueue = DispatchQueue(
+        label: "com.arolang.AROXPCService.batch"
+    )
+    /// Batch hold window. 1 ms is enough to fold ~95 % of the
+    /// records emitted by a tight Compute loop while staying
+    /// well below the human visual threshold (~100 ms).
+    private let batchInterval: DispatchTimeInterval = .milliseconds(1)
 
     init(runID: String) { self.runID = runID }
 
@@ -218,16 +249,49 @@ final class ServiceFrontend: DebugFrontend, @unchecked Sendable {
                   controller: DebugController) async -> StepMode {
         let record = Self.record(from: pause, runID: runID,
                                  startedAt: startedAt)
-        send(.pause(runID: runID, record: record))
+        // Breakpoints get their own immediate send — the user is
+        // waiting on the UI to update, no benefit to delaying.
+        // Everything else funnels through the batcher.
         if case .breakpoint = pause.reason {
+            flushBatch()
+            send(.pause(runID: runID, record: record))
             return await withCheckedContinuation { continuation in
                 lock.lock()
                 pending = continuation
                 lock.unlock()
             }
         }
+        appendToBatch(record)
         return .stepOver
     }
+
+    private func appendToBatch(_ record: AROXPCPauseRecord) {
+        batchLock.lock()
+        batchBuffer.append(record)
+        let needsSchedule = !batchScheduled
+        if needsSchedule { batchScheduled = true }
+        batchLock.unlock()
+        guard needsSchedule else { return }
+        batchQueue.asyncAfter(deadline: .now() + batchInterval) { [weak self] in
+            self?.flushBatch()
+        }
+    }
+
+    private func flushBatch() {
+        batchLock.lock()
+        let records = batchBuffer
+        batchBuffer.removeAll(keepingCapacity: true)
+        batchScheduled = false
+        batchLock.unlock()
+        guard !records.isEmpty else { return }
+        if records.count == 1 {
+            send(.pause(runID: runID, record: records[0]))
+        } else {
+            send(.pauseBatch(runID: runID, records: records))
+        }
+    }
+
+    func flushRemainingBatch() { flushBatch() }
 
     func didEnd(error: Error?) async {}
 

@@ -153,6 +153,12 @@ final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
             line = pause.line > 0 ? pause.line : nil
             file = pause.file.isEmpty ? nil : pause.file
         }
+        let metrics = pause.metrics.map {
+            TimeTravelRecord.Metrics(
+                elapsedNanos: $0.elapsedNanos,
+                residentMemoryBytes: $0.residentMemoryBytes
+            )
+        }
         return TimeTravelRecord(
             time: Date().timeIntervalSince(startedAt),
             kind: isError ? .error : .pause,
@@ -163,7 +169,8 @@ final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
             statement: pause.statementSummary,
             verb: pause.verb,
             reason: String(describing: pause.reason),
-            symbols: symbols
+            symbols: symbols,
+            metrics: metrics
         )
     }
 }

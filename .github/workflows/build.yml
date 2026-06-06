@@ -518,10 +518,11 @@ jobs:
           }
           EOF
 
-      - name: Build SOLARO + launcher
+      - name: Build SOLARO + launcher + XPC service
         run: |
           swift build -c release --product SolaroApp
           swift build -c release --product solaro
+          swift build -c release --product AROXPCService
           .build/release/solaro --version
           .build/release/solaro --help
 
@@ -530,6 +531,12 @@ jobs:
           APP_DIR="solaro-dist/Solaro.app"
           mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
           cp .build/release/SolaroApp "$APP_DIR/Contents/MacOS/Solaro"
+          # Out-of-process runtime host (#282 phase 3). Ships in
+          # Resources/ so AROXPCRuntimeProxy can resolve it from
+          # the bundle without falling back to a user-built
+          # binary.
+          cp .build/release/AROXPCService "$APP_DIR/Contents/Resources/AROXPCService"
+          chmod +x "$APP_DIR/Contents/Resources/AROXPCService"
           cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -616,6 +623,15 @@ jobs:
             --entitlements /tmp/solaro-entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" \
             solaro-dist/Solaro.app/Contents/MacOS/Solaro
+          # Sign the XPC service binary with the same entitlements
+          # as the main app (#282 phase 3). The hardened runtime
+          # rejects unsigned executables launched as a child
+          # process; without this Notarized installs would fail
+          # the first time the user picks the XPC backend.
+          codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            solaro-dist/Solaro.app/Contents/Resources/AROXPCService
           codesign --force --options runtime --timestamp \
             --entitlements /tmp/solaro-entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" \

@@ -24,11 +24,23 @@ final class ConsoleProcess {
         case running(pid: Int32)
         case exited(code: Int32)
         case failed(String)
+        /// XPC service died mid-run (#282 phase 3). Distinct from
+        /// `.failed` so the UI can offer a "Reload" affordance —
+        /// SOLARO is alive, the user's project is still loaded,
+        /// the next click of Run restarts a fresh service.
+        case serviceCrashed(message: String)
     }
 
     /// Append-only log of captured stdout+stderr lines.
     var log: [LogEntry] = []
     var state: State = .idle
+
+    /// True when the last XPC service died unexpectedly — drives
+    /// the toolbar's Run → Reload swap.
+    var didServiceCrash: Bool {
+        if case .serviceCrashed = state { return true }
+        return false
+    }
     /// 1-indexed line of the most recent `⏸  paused (…) at file:LINE`
     /// notice from the debugger. SwiftUI binds to this so the editor
     /// caret can jump to the pause point automatically.
@@ -221,8 +233,18 @@ final class ConsoleProcess {
         proxy.onEnded = { [weak self] error in
             guard let self else { return }
             if let error {
+                let ns = error as NSError
                 self.appendError("[xpc] \(error.localizedDescription)")
-                self.state = .exited(code: 1)
+                // Code 3 = the service process exited non-zero
+                // mid-run. Surface a dedicated state so the
+                // toolbar can swap Run → Reload.
+                if ns.domain == "AROXPCRuntimeProxy", ns.code == 3 {
+                    self.state = .serviceCrashed(
+                        message: error.localizedDescription
+                    )
+                } else {
+                    self.state = .exited(code: 1)
+                }
             } else {
                 self.state = .exited(code: 0)
             }
@@ -1063,6 +1085,7 @@ struct ConsolePanelView: View {
         case .exited(let code): return code == 0 ? SolaroColor.stateOK
                                                  : SolaroColor.stateError
         case .failed:  return SolaroColor.stateError
+        case .serviceCrashed: return SolaroColor.stateError
         }
     }
 
@@ -1078,6 +1101,7 @@ struct ConsolePanelView: View {
         case .running(let pid): return "running · pid \(pid)"
         case .exited(let code): return "exit \(code)"
         case .failed(let msg): return "failed: \(msg)"
+        case .serviceCrashed(let msg): return "service crashed: \(msg)"
         }
     }
 

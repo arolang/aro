@@ -1126,16 +1126,41 @@ struct WorkspaceView: View {
             }
         } label: {
             Label(
-                isRunning ? "Stop" : "Run",
-                systemImage: isRunning ? "stop.fill" : "play.fill"
+                playButtonTitle,
+                systemImage: playButtonIcon
+            )
+            // Tint the icon when the XPC service crashed so the
+            // Reload affordance is obvious without changing the
+            // button's position on the toolbar (#282 phase 3).
+            .foregroundStyle(
+                consoleProcess.didServiceCrash
+                ? SolaroColor.stateError
+                : SolaroColor.textPrimary
             )
         }
         .disabled(controller.isLoading)
-        .help(isRunning
-              ? "Stop the running `aro run` process"
-              : (controller.isLoading
-                  ? "Loading project…"
-                  : "Run `aro run` and stream its output to the console"))
+        .help(playButtonHelp)
+    }
+
+    private var playButtonTitle: String {
+        if isRunning { return "Stop" }
+        if consoleProcess.didServiceCrash { return "Reload" }
+        return "Run"
+    }
+
+    private var playButtonIcon: String {
+        if isRunning { return "stop.fill" }
+        if consoleProcess.didServiceCrash { return "arrow.clockwise.circle.fill" }
+        return "play.fill"
+    }
+
+    private var playButtonHelp: String {
+        if isRunning { return "Stop the running `aro run` process" }
+        if controller.isLoading { return "Loading project…" }
+        if consoleProcess.didServiceCrash {
+            return "The XPC runtime service crashed; click to launch a fresh one."
+        }
+        return "Run `aro run` and stream its output to the console"
     }
 
     private var debugButton: some View {
@@ -1214,6 +1239,7 @@ struct WorkspaceView: View {
         case .exited(let code): return code == 0 ? SolaroColor.stateOK
                                                  : SolaroColor.stateError
         case .failed:  return SolaroColor.stateError
+        case .serviceCrashed: return SolaroColor.stateError
         }
     }
 
@@ -1224,6 +1250,7 @@ struct WorkspaceView: View {
         case .exited(let code): return code == 0 ? "Last run succeeded"
                                                  : "Last run exited \(code)"
         case .failed(let msg): return "Failed: \(msg)"
+        case .serviceCrashed(let msg): return "XPC service crashed: \(msg). Click Run to launch a fresh one."
         }
     }
 

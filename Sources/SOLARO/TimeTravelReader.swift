@@ -24,6 +24,28 @@ struct TimeTravelRecord: Equatable {
     let verb: String?
     let reason: String?
     let symbols: [Symbol]
+    /// Per-checkpoint timing + memory (#282 phase 2). Optional
+    /// because older JSONL recordings and the subprocess path
+    /// don't include them; views render the metrics row only
+    /// when present.
+    let metrics: Metrics?
+
+    init(time: Double, kind: Kind,
+         featureSet: String?, file: String?, line: Int?, column: Int?,
+         statement: String?, verb: String?, reason: String?,
+         symbols: [Symbol], metrics: Metrics? = nil) {
+        self.time = time
+        self.kind = kind
+        self.featureSet = featureSet
+        self.file = file
+        self.line = line
+        self.column = column
+        self.statement = statement
+        self.verb = verb
+        self.reason = reason
+        self.symbols = symbols
+        self.metrics = metrics
+    }
 
     enum Kind: String {
         case pause
@@ -36,6 +58,16 @@ struct TimeTravelRecord: Equatable {
         let name: String
         let typeName: String
         let value: String
+    }
+
+    struct Metrics: Equatable {
+        /// Wall-clock nanoseconds between this checkpoint and
+        /// the previous one in the same execution.
+        let elapsedNanos: UInt64
+        /// RSS of the runtime process at the moment of the
+        /// checkpoint, in bytes. Zero when the platform refused
+        /// to answer.
+        let residentMemoryBytes: UInt64
     }
 }
 

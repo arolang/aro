@@ -67,6 +67,14 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro"
 cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
+# Ship the AROXPCService binary alongside the main executable
+# (#282 phase 3). SOLARO's proxy resolver checks Resources/
+# first before walking the dev build dirs — keeps the .app
+# self-contained for release while still letting devs override
+# with whatever .build/<config>/AROXPCService is freshest.
+cp ".build/$CONFIG/AROXPCService" "$APP_DIR/Contents/Resources/AROXPCService"
+chmod +x "$APP_DIR/Contents/Resources/AROXPCService"
+
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST

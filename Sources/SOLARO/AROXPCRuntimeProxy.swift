@@ -33,12 +33,16 @@ final class AROXPCRuntimeProxy {
     /// gate on it the same way the in-process path does.
     private(set) var isPausedAtBreakpoint: Bool = false
 
-    /// Path to the AROXPCService binary. Resolved the same way
-    /// `aro` is — Settings override → env var → walking up from
-    /// the project root → `/usr/local` → `/opt/homebrew` →
-    /// the SOLARO bundle. Fails silently on first use if the
-    /// service isn't built; the proxy reports an end-of-run
-    /// error so the user knows.
+    /// Path to the AROXPCService binary. Resolution order:
+    ///
+    /// 1. `AROXPC_SERVICE` env override (devs pointing at a
+    ///    custom build).
+    /// 2. The .app bundle's `Resources/AROXPCService` — what
+    ///    end users hit. The bundle script copies it there.
+    /// 3. Newest-by-mtime under `.build/{release,debug}/` going
+    ///    up from the project root — devs running an uninstalled
+    ///    build; mirrors `resolveAroBinary`'s behaviour so
+    ///    rebuilds always win.
     static func resolveServiceBinary(near project: Project) -> String? {
         let fm = FileManager.default
         if let envPath = ProcessInfo.processInfo
@@ -46,13 +50,31 @@ final class AROXPCRuntimeProxy {
            fm.isExecutableFile(atPath: envPath) {
             return envPath
         }
+        // Bundle-local copy — the release/distribution path.
+        if let bundleResources = Bundle.main.resourceURL {
+            let candidate = bundleResources
+                .appendingPathComponent("AROXPCService").path
+            if fm.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        // Project-adjacent build artifacts, newest mtime wins.
         var dir = project.rootPath.deletingLastPathComponent()
         for _ in 0..<8 {
+            var candidates: [(path: String, mtime: Date)] = []
             for cfg in ["release", "debug"] {
                 let candidate = dir
                     .appendingPathComponent(".build/\(cfg)/AROXPCService")
                     .path
-                if fm.isExecutableFile(atPath: candidate) { return candidate }
+                if fm.isExecutableFile(atPath: candidate) {
+                    let mtime = (try? fm
+                        .attributesOfItem(atPath: candidate)[.modificationDate]
+                        as? Date) ?? .distantPast
+                    candidates.append((candidate, mtime))
+                }
+            }
+            if let newest = candidates.max(by: { $0.mtime < $1.mtime }) {
+                return newest.path
             }
             let parent = dir.deletingLastPathComponent()
             if parent.path == dir.path { break }
@@ -192,6 +214,14 @@ final class AROXPCRuntimeProxy {
                 isPausedAtBreakpoint = true
             }
             onRecords?([Self.timeTravel(from: record)])
+        case .pauseBatch(_, let records):
+            // Batched form (#282 phase 3). Service combines per-
+            // checkpoint records into one frame; we flatten the
+            // map back into the existing single-batch callback
+            // so the canvas redraws once per batch instead of
+            // per record.
+            let mapped = records.map(Self.timeTravel)
+            onRecords?(mapped)
         case .consoleOutput(_, let line, _):
             onLog?(line)
         case .log(_, let message):
@@ -241,6 +271,12 @@ final class AROXPCRuntimeProxy {
         case .event:      kind = .pause
         case .breakpoint: kind = .pause
         }
+        let metrics = record.metrics.map {
+            TimeTravelRecord.Metrics(
+                elapsedNanos: $0.elapsedNanos,
+                residentMemoryBytes: $0.residentMemoryBytes
+            )
+        }
         return TimeTravelRecord(
             time: record.time,
             kind: kind,
@@ -251,7 +287,8 @@ final class AROXPCRuntimeProxy {
             statement: record.statement,
             verb: record.verb,
             reason: record.reason,
-            symbols: symbols
+            symbols: symbols,
+            metrics: metrics
         )
     }
 }

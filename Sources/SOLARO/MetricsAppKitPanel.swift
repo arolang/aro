@@ -447,7 +447,7 @@ final class MetricsContentView: NSView {
             if pid > 0 {
                 client.connect(pid: pid)
             }
-        case .idle, .exited, .failed:
+        case .idle, .exited, .failed, .serviceCrashed:
             client.disconnect()
         }
     }

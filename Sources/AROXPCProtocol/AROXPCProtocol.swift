@@ -62,6 +62,12 @@ public enum AROXPCEvent: Codable, Sendable {
     case ready(handshake: AROXPCHandshakeReply)
     case started(runID: String)
     case pause(runID: String, record: AROXPCPauseRecord)
+    /// Batched form of `pause` (#282 phase 3 — wire batching).
+    /// Service buffers per-checkpoint records over a short
+    /// window (~1 ms) and ships them in one frame so a hot
+    /// statement loop costs one syscall + one decode per N
+    /// records instead of per record.
+    case pauseBatch(runID: String, records: [AROXPCPauseRecord])
     case consoleOutput(runID: String, line: String, isError: Bool)
     case log(runID: String, message: String)
     case ended(runID: String, error: String?)
