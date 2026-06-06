@@ -191,6 +191,17 @@ final class WorkspaceController {
     /// Features tab, the Inspector AST tree, the Canvas, and the
     /// Map view.
     var programs: [URL: Program] = [:]
+    /// True while `load()` is parsing the project's `.aro` files
+    /// in the background (#286). The Run / Debug / Test buttons
+    /// gate on this so the user can't fire a launch with a
+    /// half-populated programs cache. Defaults to false because
+    /// the very first load() is kicked off from `.onAppear`.
+    var isLoading: Bool = false
+    /// In-flight load task — cancelled when the user reloads or
+    /// switches projects (latter not reachable today; same window
+    /// stays bound to one project), so an old slow parse can't
+    /// land on top of a fresh one.
+    private var loadTask: Task<Void, Never>?
 
     /// Parse-failure messages keyed by source-file URL. Empty when
     /// every file parsed cleanly. Surfaced by the Inspector's
@@ -249,40 +260,102 @@ final class WorkspaceController {
     }
 
     func load() {
-        do {
-            let loaded = try ProjectModel.load(project)
-            self.model = loaded
-            for url in loaded.sourceFiles {
-                guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-                    parseErrors[url] = "Could not read file."
-                    continue
-                }
+        // Cancel any in-flight load — happens when the user picks
+        // "Reload" from a future menu, or when SwiftUI re-fires
+        // .onAppear during a window transition.
+        loadTask?.cancel()
+        isLoading = true
+        parseErrors.removeAll()
+        let projectRoot = project
+        loadTask = Task { [weak self] in
+            // File discovery + parse off the main actor (#286). A
+            // small project finishes in single-digit ms; a large
+            // one with dozens of files no longer blocks the first
+            // body render. Cancellation checks happen between
+            // files so a re-load shuts a long parse down promptly.
+            let parsed: ParseResult? = await Task.detached(priority: .userInitiated) {
                 do {
-                    programs[url] = try Parser.parse(text)
+                    let loaded = try ProjectModel.load(projectRoot)
+                    var programs: [URL: Program] = [:]
+                    var errors: [URL: String] = [:]
+                    for url in loaded.sourceFiles {
+                        if Task.isCancelled { return nil }
+                        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                            errors[url] = "Could not read file."
+                            continue
+                        }
+                        do {
+                            programs[url] = try Parser.parse(text)
+                        } catch {
+                            errors[url] = "\(error)"
+                        }
+                    }
+                    return ParseResult(model: loaded,
+                                       programs: programs,
+                                       errors: errors)
                 } catch {
-                    parseErrors[url] = "\(error)"
+                    return ParseResult(error: error)
                 }
+            }.value
+
+            guard let self else { return }
+            await MainActor.run {
+                self.applyParse(parsed)
+                self.isLoading = false
+                self.loadTask = nil
             }
-            if let first = loaded.sourceFiles.first {
-                openFile(first)
-            }
-            RecentProjects.remember(project)
-            // Kick the LSP off in parallel — the handshake takes a
-            // couple hundred ms but doesn't block project load.
-            lsp.start(project: project)
-            // Same for the actions registry — runs `aro actions`
-            // off the main actor and feeds the right-rail tab.
-            actionsRegistry.reload(for: project)
-            // Git status — populates file-tree decorations + branch
-            // chip. Refreshed on file save and via the command palette.
-            gitMonitor.refresh(for: project)
-            for url in loaded.sourceFiles {
-                if let text = try? String(contentsOf: url, encoding: .utf8) {
-                    lsp.didOpen(url: url, text: text)
-                }
-            }
-        } catch {
+        }
+    }
+
+    private struct ParseResult: Sendable {
+        var model: ProjectModel?
+        var programs: [URL: Program]
+        var errors: [URL: String]
+        var error: Error?
+
+        init(model: ProjectModel,
+             programs: [URL: Program],
+             errors: [URL: String]) {
+            self.model = model
+            self.programs = programs
+            self.errors = errors
+            self.error = nil
+        }
+
+        init(error: Error) {
+            self.model = nil
+            self.programs = [:]
+            self.errors = [:]
+            self.error = error
+        }
+    }
+
+    private func applyParse(_ result: ParseResult?) {
+        guard let result else { return }   // cancelled
+        if let error = result.error {
             loadError = "Failed to load project: \(error.localizedDescription)"
+            return
+        }
+        guard let loaded = result.model else { return }
+        self.model = loaded
+        self.programs = result.programs
+        for (url, msg) in result.errors {
+            parseErrors[url] = msg
+        }
+        if let first = loaded.sourceFiles.first, currentFile == nil {
+            openFile(first)
+        }
+        RecentProjects.remember(project)
+        // Side-effect services (LSP, actions registry, git
+        // monitor) keep their original onAppear-time fire order
+        // so behaviour outside of programs is unchanged.
+        lsp.start(project: project)
+        actionsRegistry.reload(for: project)
+        gitMonitor.refresh(for: project)
+        for url in loaded.sourceFiles {
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                lsp.didOpen(url: url, text: text)
+            }
         }
     }
 
@@ -1435,9 +1508,12 @@ struct WorkspaceView: View {
                 systemImage: isRunning ? "stop.fill" : "play.fill"
             )
         }
+        .disabled(controller.isLoading)
         .help(isRunning
               ? "Stop the running `aro run` process"
-              : "Run `aro run` and stream its output to the console")
+              : (controller.isLoading
+                  ? "Loading project…"
+                  : "Run `aro run` and stream its output to the console"))
     }
 
     private var debugButton: some View {
@@ -1450,8 +1526,8 @@ struct WorkspaceView: View {
         } label: {
             Label("Debug", systemImage: "ant.fill")
         }
-        .disabled(isRunning)
-        .help(debugButtonHelp)
+        .disabled(isRunning || controller.isLoading)
+        .help(controller.isLoading ? "Loading project…" : debugButtonHelp)
     }
 
     /// Scan every project source file's sidecar for breakpoints
@@ -1489,8 +1565,10 @@ struct WorkspaceView: View {
         } label: {
             Label("Test", systemImage: "checkmark.diamond")
         }
-        .disabled(isRunning)
-        .help("Run `aro test` and stream output to the console (⌃⌘U)")
+        .disabled(isRunning || controller.isLoading)
+        .help(controller.isLoading
+              ? "Loading project…"
+              : "Run `aro test` and stream output to the console (⌃⌘U)")
         .keyboardShortcut("u", modifiers: [.control, .command])
     }
 
