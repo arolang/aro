@@ -102,7 +102,14 @@ solaroTargets = [
             // SwiftTerm — ANSI terminal emulator for the bottom panel.
             .product(name: "SwiftTerm", package: "SwiftTerm"),
         ],
-        path: "Sources/SOLARO"
+        path: "Sources/SOLARO",
+        // Docs aimed at engineers reading the source tree — neither
+        // is a runtime resource. Without the exclude SwiftPM warns
+        // on every clean build (#291).
+        exclude: [
+            "LICENSE-NOTICE.md",
+            "ARCHITECTURE.md",
+        ]
     ),
     .executableTarget(
         name: "SOLAROLauncher",

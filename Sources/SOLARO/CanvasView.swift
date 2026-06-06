@@ -337,6 +337,17 @@ struct CanvasView: View {
                     // double-click expansion shows.
                     controller.selectedNode = node
                     controller.selectedNodeSource = rawSourceText(for: node)
+                    // Multi-select (#266): ⌘-click toggles
+                    // membership, a plain click replaces the set.
+                    if NSEvent.modifierFlags.contains(.command) {
+                        if controller.selectedNodeIDs.contains(node.id) {
+                            controller.selectedNodeIDs.remove(node.id)
+                        } else {
+                            controller.selectedNodeIDs.insert(node.id)
+                        }
+                    } else {
+                        controller.selectedNodeIDs = [node.id]
+                    }
                 },
                 editingNodeID: editingNodeID,
                 onDoubleTap: { id in editingNodeID = id },

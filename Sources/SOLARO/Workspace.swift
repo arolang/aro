@@ -110,6 +110,15 @@ final class WorkspaceController {
     /// stdout lines in `ConsoleProcess`.
     var testResults: [String: TestNodeResult] = [:]
 
+    /// Multi-node selection on the canvas (#266). Plain click sets
+    /// a single ID, ⌘-click toggles membership, the rubber-band on
+    /// blank space replaces the set with everything inside the
+    /// rect. Empty when nothing is selected. The single-node
+    /// `selectedNode` mirror below stays in sync with the *most
+    /// recently* added member so the Inspector form keeps showing
+    /// one node at a time even when several are highlighted.
+    var selectedNodeIDs: Set<String> = []
+
     /// Currently-selected canvas node. Populated on single-click in
     /// the node editor so the Inspector can mirror the same fields
     /// the double-click expansion shows (read-only summary). nil
