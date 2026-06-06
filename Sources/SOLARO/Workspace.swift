@@ -1578,6 +1578,11 @@ struct WorkspaceView: View {
             .frame(width: 10, height: 10)
             .foregroundStyle(statusPipColor)
             .help(statusPipHelp)
+            // VoiceOver users get the same "idle / running / failed"
+            // summary as a hover tooltip user (#278); the dot
+            // colour alone wouldn't be perceivable.
+            .accessibilityLabel("Runtime status")
+            .accessibilityValue(statusPipHelp)
     }
 
     private var statusPipColor: Color {

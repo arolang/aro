@@ -105,6 +105,12 @@ struct CanvasView: View {
     @State private var zoom: Double = 1.0
     @GestureState private var dragOffset: CGSize = .zero
     @GestureState private var magnify: Double = 1.0
+    /// Honour System Settings → Accessibility → Display → Reduce
+    /// Motion (#278). When set, the canvas drops its smooth zoom
+    /// + scroll-to-node animations and snaps to the target value
+    /// instantly so the user isn't subjected to a transition
+    /// they've explicitly opted out of.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Convenience accessor for the controller-owned live drag
     /// positions. Reads and writes proxy through the controller so
@@ -156,7 +162,9 @@ struct CanvasView: View {
                 .offset(x: pan.width + dragOffset.width,
                         y: pan.height + dragOffset.height)
                 .scaleEffect(zoom * magnify, anchor: .topLeading)
-                .animation(.easeOut(duration: 0.15), value: zoom)
+                .animation(reduceMotion ? nil
+                                        : .easeOut(duration: 0.15),
+                           value: zoom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .contentShape(Rectangle())
@@ -228,7 +236,7 @@ struct CanvasView: View {
             width: viewportSize.width / 2 - nodeCenter.x * zoom,
             height: viewportSize.height / 2 - nodeCenter.y * zoom
         )
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             pan = newPan
         }
     }
@@ -680,6 +688,10 @@ struct CanvasView: View {
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
+        // Dot grid is purely decorative — hide from VoiceOver so a
+        // user navigating with assistive tech doesn't hear "image,
+        // image, image, …" on every focus shift (#278).
+        .accessibilityHidden(true)
     }
 
     // MARK: - Zoom HUD
