@@ -15,6 +15,11 @@ import AROParser
 
 struct ProjectMapView: View {
     let map: ProjectMap
+    /// Most recent `aro test` outcome per feature-set name. Read
+    /// by each node card to paint a small PASS / FAIL chip on the
+    /// trailing edge so the project-level map mirrors the per-FS
+    /// canvas containers' test badge.
+    let testResults: [String: TestNodeResult]
     let onSelect: (ProjectMapNode) -> Void
 
     @State private var pan: CGSize = .zero
@@ -59,7 +64,10 @@ struct ProjectMapView: View {
                     // Then the node cards on top.
                     ForEach(map.nodes) { node in
                         if let pos = layout.nodePositions[node.id] {
-                            ProjectMapNodeCard(node: node)
+                            ProjectMapNodeCard(
+                                node: node,
+                                testResult: testResults[node.featureSetName]
+                            )
                                 .frame(width: domainWidth - 2 * domainPadding,
                                        height: nodeHeight)
                                 .offset(x: pos.x, y: pos.y)
@@ -205,6 +213,10 @@ private struct DomainContainer: View {
 
 private struct ProjectMapNodeCard: View {
     let node: ProjectMapNode
+    /// PASS / FAIL chip painted on the trailing edge when this
+    /// feature set is a test FS and the runner has produced an
+    /// outcome for it. nil for production FSes.
+    let testResult: TestNodeResult?
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -223,6 +235,7 @@ private struct ProjectMapNodeCard: View {
                     .lineLimit(1)
             }
             Spacer()
+            testBadge
             Text("\(node.statementCount)")
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.textTertiary)
@@ -233,9 +246,42 @@ private struct ProjectMapNodeCard: View {
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m)
-                .stroke(tint.opacity(0.5), lineWidth: 1)
+                .stroke(borderTint, lineWidth: 1)
         )
         .help("\(node.featureSetName) · \(node.statementCount) statements")
+    }
+
+    /// Test-status chip — green check for PASS, red X for FAIL.
+    /// Renders nothing when the FS isn't a test or hasn't been run
+    /// yet so production rows stay visually quiet.
+    @ViewBuilder
+    private var testBadge: some View {
+        switch testResult {
+        case .passed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(SolaroColor.stateOK)
+                .help("Last test run: passed")
+        case .failed(let message):
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(SolaroColor.stateError)
+                .help("Last test run: \(message)")
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// Border tint follows the test result so a glance picks out
+    /// failures even when the chip is off-screen during a zoom-out
+    /// — falls back to the trigger tint for production rows and
+    /// untested test feature sets.
+    private var borderTint: Color {
+        switch testResult {
+        case .passed: return SolaroColor.stateOK.opacity(0.55)
+        case .failed: return SolaroColor.stateError.opacity(0.65)
+        case .none:   return tint.opacity(0.5)
+        }
     }
 
     private var symbol: String {

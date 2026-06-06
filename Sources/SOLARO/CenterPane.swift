@@ -1011,7 +1011,10 @@ struct CenterPaneView: View {
     @ViewBuilder
     private var mapMode: some View {
         let map = ProjectMap.build(from: controller.allPrograms)
-        ProjectMapView(map: map) { node in
+        ProjectMapView(
+            map: map,
+            testResults: controller.testResults
+        ) { node in
             // Phase 10: locate which source file declares this
             // feature set and switch to it. The text editor's
             // scroll-to-feature-set position lands as a follow-up.
