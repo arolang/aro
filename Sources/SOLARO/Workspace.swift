@@ -1374,7 +1374,19 @@ struct WorkspaceView: View {
     /// run); otherwise starts the run immediately. The sheet's
     /// Execute button calls `consoleProcess.startRun(project:parameters:)`.
     private func requestRun() {
-        let needed = RunParameterScanner.scan(programs: controller.programs)
+        // Prefer the cached programs dict (cheap, in-memory) but
+        // fall back to a fresh disk scan when it's still empty —
+        // happens on a fresh project the very first time the user
+        // clicks Run before SwiftUI has finished its post-mount
+        // `controller.load()` pass (#?). Without the fallback the
+        // dialog would render with zero fields and the user
+        // would press Execute against an empty parameter set.
+        var needed = RunParameterScanner.scan(programs: controller.programs)
+        if needed.isEmpty, controller.programs.isEmpty {
+            needed = RunParameterScanner.scanFromDisk(
+                projectRoot: project.rootPath
+            )
+        }
         if needed.isEmpty {
             showConsole = true
             consoleProcess.startRun(project: project)

@@ -41,6 +41,37 @@ enum RunParameterScanner {
         return ordered
     }
 
+    /// Force-parses every `.aro` file under `projectRoot` directly
+    /// from disk and scans the resulting programs (#?). Used as a
+    /// fallback path by `requestRun` when the workspace's cached
+    /// `programs` dict is empty — happens on a freshly-opened
+    /// project if the user reaches the Run button between the
+    /// initial view render (programs=0) and `.onAppear`'s
+    /// `controller.load()` completion (programs=N). Scanning from
+    /// disk takes a millisecond per file and is safe to run on
+    /// every click; if we already have an up-to-date cache we
+    /// just throw the result away.
+    static func scanFromDisk(projectRoot: URL) -> [String] {
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: projectRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+        while let url = enumerator.nextObject() as? URL {
+            guard url.pathExtension == "aro" else { continue }
+            guard let text = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            guard let program = try? Parser.parse(text) else { continue }
+            for fs in program.featureSets {
+                walk(fs.statements, seen: &seen, ordered: &ordered)
+            }
+        }
+        return ordered
+    }
+
     private static func walk(
         _ statements: [Statement],
         seen: inout Set<String>,
