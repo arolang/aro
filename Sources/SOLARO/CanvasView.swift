@@ -26,6 +26,10 @@ enum CanvasNodeContextAction {
     case delete
     case extractAsAction
     case explainWithAsk
+    /// Multi-select (#266) — applies to every member of
+    /// `controller.selectedNodeIDs` instead of the clicked node.
+    case copyAsAROSelection
+    case deleteSelection
 }
 
 struct CanvasView: View {
@@ -301,6 +305,7 @@ struct CanvasView: View {
                 nodeWidth: nodeWidth, nodeHeight: nodeHeight,
                 rawSourceText: { rawSourceText(for: $0) },
                 selectedLine: currentLine,
+                selectedNodeIDs: controller.selectedNodeIDs,
                 pausedLine: pausedLine,
                 pauseSymbols: pauseSymbols,
                 lastExecutedAt: lastExecutedAt,
@@ -1223,6 +1228,12 @@ struct NodesLayer: View {
     /// Currently-highlighted source line (from the editor caret).
     /// The node with `lineHint == selectedLine` gets an accent border.
     let selectedLine: Int?
+    /// Multi-select (#266) — any node whose `id` is in this set
+    /// renders the same accent border. Plain selection (single
+    /// click) replaces the set with the clicked node's ID;
+    /// ⌘-click toggles. The CanvasView wires this from
+    /// `controller.selectedNodeIDs`.
+    let selectedNodeIDs: Set<String>
     /// Debugger-paused line — the matching node gets a warm
     /// "paused here" outline.
     let pausedLine: Int?
@@ -1291,7 +1302,8 @@ struct NodesLayer: View {
                         CanvasNodeCard(
                             node: node,
                             width: nodeWidth, height: nodeHeight,
-                            isSelected: selectedLine == node.lineHint,
+                            isSelected: selectedLine == node.lineHint
+                                || selectedNodeIDs.contains(node.id),
                             isPaused: pausedLine == node.lineHint,
                             hasBreakpoint: breakpointLines.contains(node.lineHint),
                             symbols: relevantSymbols(for: node),
@@ -1344,6 +1356,26 @@ struct NodesLayer: View {
                             onContextAction(.delete, node)
                         } label: {
                             Label("Delete statement", systemImage: "trash")
+                        }
+                        // Multi-selection (#266) — only show the
+                        // bulk actions when more than the clicked
+                        // node is selected so the single-node menu
+                        // stays uncluttered for the common case.
+                        if selectedNodeIDs.count > 1,
+                           selectedNodeIDs.contains(node.id) {
+                            Divider()
+                            Button {
+                                onContextAction(.copyAsAROSelection, node)
+                            } label: {
+                                Label("Copy \(selectedNodeIDs.count) statements as ARO",
+                                      systemImage: "doc.on.doc")
+                            }
+                            Button(role: .destructive) {
+                                onContextAction(.deleteSelection, node)
+                            } label: {
+                                Label("Delete \(selectedNodeIDs.count) statements",
+                                      systemImage: "trash.circle")
+                            }
                         }
                     }
                 }

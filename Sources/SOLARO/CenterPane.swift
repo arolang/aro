@@ -759,7 +759,88 @@ struct CenterPaneView: View {
         case .explainWithAsk:
             guard let project = controller.model?.root else { return }
             controller.askToExplain(node: node, in: project)
+        case .copyAsAROSelection:
+            copySelectionAsARO()
+        case .deleteSelection:
+            deleteSelection()
         }
+    }
+
+    /// Joins the raw source text of every statement in
+    /// `controller.selectedNodeIDs` (newline-separated) and writes
+    /// it to the general pasteboard. Order follows source order
+    /// across the program, not the click order.
+    private func copySelectionAsARO() {
+        let chunks = collectSelectedSpans().compactMap { hit -> String? in
+            let lo = max(0, hit.start)
+            let hi = max(lo, hit.end)
+            guard hi <= hit.text.utf8.count else { return nil }
+            let utf8 = hit.text.utf8
+            return String(decoding: utf8.dropFirst(lo).prefix(hi - lo),
+                          as: UTF8.self)
+        }
+        guard !chunks.isEmpty else { return }
+        let joined = chunks.joined(separator: "\n")
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(joined, forType: .string)
+    }
+
+    /// Removes every selected statement's source span from its file
+    /// in a single saveAndReparse pass per file. Spans are deleted
+    /// in descending offset order so earlier offsets stay valid
+    /// while we walk the list.
+    private func deleteSelection() {
+        var perFile: [URL: [(start: Int, end: Int)]] = [:]
+        for hit in collectSelectedSpans() {
+            perFile[hit.url, default: []].append((hit.start, hit.end))
+        }
+        for (url, var spans) in perFile {
+            guard var text = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            spans.sort { $0.start > $1.start }
+            let ns = (text as NSString).mutableCopy() as! NSMutableString
+            for s in spans {
+                let lo = max(0, s.start)
+                let hi = max(lo, s.end)
+                guard hi <= ns.length else { continue }
+                ns.deleteCharacters(in: NSRange(location: lo, length: hi - lo))
+            }
+            text = ns as String
+            saveAndReparse(text: text, url: url)
+        }
+        controller.selectedNodeIDs.removeAll()
+    }
+
+    /// Resolves every selected node ID to its file URL, byte span,
+    /// and the file's current text snapshot. Returns an empty list
+    /// when nothing's selected or when programs hasn't loaded.
+    private func collectSelectedSpans()
+    -> [(url: URL, text: String, start: Int, end: Int)] {
+        var out: [(URL, String, Int, Int)] = []
+        for id in controller.selectedNodeIDs {
+            // `<file>:<offset>` per CanvasNode.id construction in
+            // CanvasGraph.swift — the file part may include colons
+            // on Windows but on macOS we just split on the final ':'.
+            guard let colon = id.lastIndex(of: ":") else { continue }
+            let path = String(id[..<colon])
+            let offsetStr = String(id[id.index(after: colon)...])
+            guard let startOffset = Int(offsetStr) else { continue }
+            let url = URL(fileURLWithPath: path)
+            guard let program = controller.programs[url],
+                  let text = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            for fs in program.featureSets {
+                for s in fs.statements {
+                    if s.span.start.offset == startOffset {
+                        out.append((url, text,
+                                    s.span.start.offset,
+                                    s.span.end.offset))
+                    }
+                }
+            }
+        }
+        return out.sorted { $0.2 < $1.2 }
     }
 
     private enum StatementMutation { case duplicate, delete }
