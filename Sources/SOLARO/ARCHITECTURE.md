@@ -150,12 +150,42 @@ export SOLARO_APP="$(pwd)/.build/SOLARO.app"
 | 11 — Palette + time travel + status bar | ✅ shipped | ⌘K palette, JSONL scrubber, bottom status bar |
 | 12 — CI + tests + docs | ✅ shipped | Linux CI jobs dropped; docs refreshed |
 
+## Recent additions (2026-06)
+
+Live-state pipeline. Every per-statement update — canvas pulses,
+inline values, paused-line tint, error border, repository
+payloads, test PASS/FAIL chips — flows through one fanout:
+`Debug.controller` (TaskLocal in ARORuntime) → `JSONLEventWriter`
+→ `.solaro/events.jsonl` → `LiveEventStream` → `ConsoleProcess`
+→ controller state slots. Adding a new live indicator means
+adding one field to `ConsoleProcess`, mirroring it onto
+`WorkspaceController`, and reading it from the view. Surfaces
+that already do this: canvas FS container, canvas node card,
+gutter marker, inspector watches, inspector test T badge,
+project map.
+
+| File | What it owns |
+|---|---|
+| `RunParameters.swift` | The pre-run dialog (`RunParametersSheet`), per-project saved values (`RunParameterDefaults`), and the scanner that walks every `AROStatement.object.noun` for `<parameter: NAME>` references — including a disk-fallback (`scanFromDisk`) used when the controller's program cache hasn't filled yet. The dialog disables Execute on blank fields and ships smart per-name placeholders (`https://example.com` for `url`, `localhost` for `host`, etc.). |
+| `TestResults.swift` | `TestNodeResult` (passed / failed-with-message) and `TestResultParser.match` — strips ANSI escapes from `aro test` stdout and matches PASS / FAIL / ERROR lines. `Console.appendLine` calls it on every stdout line so the test status mirror updates as the runner walks tests. |
+| `NodeEditing.swift` + `SelectedStatementSection.swift` | Per-action editor schemas (`LogEditing`, `CreateEditing`, `ComputeEditing`, `ReturnEditing`, `EmitEditing`, `WithClauseEditing`, `GenericEditing`) wrap a single `EditableField` enum with cases for stringLiteral / identifier / expression / picker / record / combo. `NodeEditorView` renders the field list, `SelectedStatementSection` renders the same form read-write inside the Inspector. Apply hits `controller.nodeEditApply` which CenterPane wires to the existing save-and-reparse pipeline. |
+| `QualifierCatalog.swift` | Snapshot of `ARORuntime.QualifierRegistry.allRegistrations()` keyed by `namespace.qualifier`. Used to populate the modifier dropdown in the editor; built-ins drop the `_builtin` namespace, plugin qualifiers keep theirs so `collections.reverse` and a future `stats.reverse` stay distinct. |
+| `CreateFeatureSetSheet.swift` | Canvas right-click → "Create new Feature Set…" dialog. `NewFeatureSetDraft` collects name, business activity, optional `when`, and (for `Action` activities) the `takes <name: Type>` parameter. `FeatureSetTemplate.render` emits a minimal valid block; CenterPane appends it through the same `saveAndReparse` pipeline that statement edits use. |
+| `AroBinaryVersion.swift` | Probes the resolved `aro --version` once per workspace open and shows a yellow banner when the version disagrees with `AROVersion.shortVersion`. Dismissal is scoped to the `(path, binary version, solaro version)` triple so a new drift still surfaces. |
+| `RunParameterDefaults` in `RunParameters.swift` | Per-project parameter persistence at `~/Library/Application Support/SOLARO/parameters/<hash>.json` keyed by a deterministic hash of the project root path. |
+| `WorkspaceController.testResults: [String: TestNodeResult]` | The single source of truth for test PASS/FAIL state across every surface. Populated from `ConsoleProcess.testResults` via the `executionTick` onChange in `WorkspaceView`. |
+| `WorkspaceController.selectedNode` + `selectedNodeSource` | Single-clicking a canvas node mirrors it here so the Inspector's "Selected Statement" form renders without re-resolving the source span. |
+| `WorkspaceController.isLoading` + `loadTask` | The project parse runs on a detached task off the main actor; `isLoading` gates the Run / Debug / Test buttons so a launch can't fire with a half-populated cache. |
+| Runtime `errorCheckpoint` plumbing | `FeatureSetExecutor.executeStatement` catches every throw, calls `Debug.controller?.errorCheckpoint(message:line:file:)` with the failing statement's span, and re-throws. SOLARO's embedded frontend translates the `.error` reason into a `TimeTravelRecord(kind: .error)` and the canvas paints the red border via `errorLines[line]`. |
+
 ## Where to learn more
 
 - [Issue #228](https://git.ausdertechnik.de/arolang/aro/-/issues/228) — design + wireframes
 - [Issue #229](https://git.ausdertechnik.de/arolang/aro/-/issues/229) — debugger; SOLARO consumes its JSONL log
 - [Issue #232](https://git.ausdertechnik.de/arolang/aro/-/issues/232) — Bézier wires (delivered)
-- [Issue #233](https://git.ausdertechnik.de/arolang/aro/-/issues/233) — remaining follow-ups (PR diff,
-  live wires, sub-graph publish, LLM co-pilot, Report a Bug, Map polish)
+- [Issue #233](https://git.ausdertechnik.de/arolang/aro/-/issues/233) — remaining follow-ups
 - [Issue #234](https://git.ausdertechnik.de/arolang/aro/-/issues/234) — Phase 4 distribution
-  items (iPad, AppImage, MSI, landing page, deploy adapters)
+- [Issue #266](https://git.ausdertechnik.de/arolang/aro/-/issues/266) — canvas multi-select (partial)
+- [Issue #282](https://git.ausdertechnik.de/arolang/aro/-/issues/282) — embedded ARO runtime (phase 1)
+- [Issues #284 / #285 / #289](https://git.ausdertechnik.de/arolang/aro/-/issues/284) — file-size split refactors
+- [Issue #292](https://git.ausdertechnik.de/arolang/aro/-/issues/292) — this doc's last refresh
