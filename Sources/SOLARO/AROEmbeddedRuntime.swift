@@ -192,6 +192,17 @@ final class EmbeddedRuntimeHost {
         )
         let controller = DebugController(frontend: frontend)
 
+        // Console sink (#282 phase 2). Every `<Log "x" to console>`
+        // inside the embedded run lands here instead of leaking to
+        // SOLARO's stdout. We hop back to the main actor before
+        // forwarding to keep the `onLog` closure's actor isolation
+        // honest — Console.appendInfo touches main-actor state.
+        let sink: @Sendable (String) -> Void = { [weak self] msg in
+            Task { @MainActor [weak self] in
+                self?.onLog?(msg)
+            }
+        }
+
         runTask = Task.detached(priority: .userInitiated) { [weak self] in
             // Install `.errorAny` so the runtime's `errorCheckpoint`
             // actually fires `didPause`; without this the embedded
@@ -199,7 +210,9 @@ final class EmbeddedRuntimeHost {
             // can't paint the failed node's red border.
             await controller.addBreakpoint(.errorAny)
             do {
-                try await Self.runProject(at: path, controller: controller)
+                try await ConsoleObject.$sink.withValue(sink) {
+                    try await Self.runProject(at: path, controller: controller)
+                }
             } catch is DebuggerQuit {
                 await frontend.didEnd(error: nil)
             } catch {
