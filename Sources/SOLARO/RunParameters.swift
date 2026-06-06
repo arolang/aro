@@ -196,13 +196,50 @@ struct RunParametersSheet: View {
                 .font(SolaroFont.caption)
                 .tracking(1)
                 .foregroundStyle(SolaroColor.textTertiary)
-            TextField("--\(name)", text: Binding(
+            TextField(placeholder(for: name), text: Binding(
                 get: { values[name] ?? "" },
                 set: { values[name] = $0 }
             ))
             .textFieldStyle(.roundedBorder)
             .controlSize(.regular)
         }
+    }
+
+    /// Shape a reasonable placeholder for the field based on its
+    /// name so the user sees the *kind* of value expected instead
+    /// of just `--url`. Falls back to the CLI flag form for
+    /// anything we don't recognise.
+    private func placeholder(for name: String) -> String {
+        switch name.lowercased() {
+        case "url", "uri", "endpoint":
+            return "https://example.com"
+        case "path", "file", "dir", "directory":
+            return "./output"
+        case "name":
+            return "name"
+        case "port":
+            return "8080"
+        case "host":
+            return "localhost"
+        case "count", "limit", "max", "min", "n":
+            return "10"
+        default:
+            return "--\(name)"
+        }
+    }
+
+    private var canExecute: Bool {
+        // Every collected field must hold a non-blank value before
+        // we let the user press Execute (#?). Empty values silently
+        // resolved to `""` at runtime, which the ARO program then
+        // tried to use as the actual parameter, producing
+        // confusing downstream failures ("can't fetch from URL "").
+        for name in parameters {
+            let trimmed = (values[name] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return false }
+        }
+        return true
     }
 
     private var footer: some View {
@@ -215,6 +252,7 @@ struct RunParametersSheet: View {
                 onExecute(values)
             }
             .keyboardShortcut(.defaultAction)
+            .disabled(!canExecute)
         }
     }
 }
