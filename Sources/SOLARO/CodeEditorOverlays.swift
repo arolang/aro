@@ -49,6 +49,16 @@ func attachGhostGutter(textView: STTextView) {
     scroll.addFloatingSubview(ghost, for: .horizontal)
     layoutGhostGutter(ghost: ghost, gutter: gutter, scroll: scroll)
 
+    // Swift 6 strict concurrency rejects sending non-Sendable
+    // NSView references into NotificationCenter's @Sendable
+    // observer closure. Wrapping the weak refs in
+    // `@unchecked Sendable` boxes lets the closure compile; the
+    // boxed values are only read on the main queue (the only
+    // place the closures fire) so the "unchecked" is honest.
+    let ghostBox = WeakViewBox(ghost)
+    let gutterBox = WeakViewBox(gutter)
+    let scrollBox = WeakViewBox(scroll)
+
     // Redraw + reposition on scroll: cells inside the gutter move
     // as the user scrolls, which changes our anchor.
     scroll.contentView.postsBoundsChangedNotifications = true
@@ -56,9 +66,11 @@ func attachGhostGutter(textView: STTextView) {
         forName: NSView.boundsDidChangeNotification,
         object: scroll.contentView,
         queue: .main
-    ) { [weak ghost, weak gutter, weak scroll] _ in
+    ) { _ in
         MainActor.assumeIsolated {
-            guard let ghost, let gutter, let scroll else { return }
+            guard let ghost = ghostBox.value,
+                  let gutter = gutterBox.value,
+                  let scroll = scrollBox.value else { return }
             layoutGhostGutter(ghost: ghost, gutter: gutter, scroll: scroll)
             ghost.needsDisplay = true
         }
@@ -69,9 +81,11 @@ func attachGhostGutter(textView: STTextView) {
         forName: NSView.frameDidChangeNotification,
         object: scroll,
         queue: .main
-    ) { [weak ghost, weak gutter, weak scroll] _ in
+    ) { _ in
         MainActor.assumeIsolated {
-            guard let ghost, let gutter, let scroll else { return }
+            guard let ghost = ghostBox.value,
+                  let gutter = gutterBox.value,
+                  let scroll = scrollBox.value else { return }
             layoutGhostGutter(ghost: ghost, gutter: gutter, scroll: scroll)
             ghost.needsDisplay = true
         }
@@ -246,4 +260,16 @@ final class TestResultMarkerView: NSView {
                    respectFlipped: true,
                    hints: [.interpolation: NSImageInterpolation.high])
     }
+}
+
+/// Thin `@unchecked Sendable` weak box used by the gutter's
+/// notification observer closures. NSView subclasses aren't
+/// Sendable, so the closures fail Swift 6 strict concurrency
+/// when they capture an NSView reference directly. The box
+/// hands the reference through; callers only ever read it on
+/// the main queue (the observer's dispatch target), so the
+/// "unchecked" is honest.
+final class WeakViewBox<T: AnyObject>: @unchecked Sendable {
+    weak var value: T?
+    init(_ value: T?) { self.value = value }
 }
