@@ -258,6 +258,7 @@ enum SolaroPrefs: String {
 /// standalone `aro` and is what every prior release shipped.
 enum RuntimeBackend: String, CaseIterable, Identifiable {
     case embedded
+    case xpc
     case external
 
     var id: String { rawValue }
@@ -265,6 +266,7 @@ enum RuntimeBackend: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .embedded: return "Embedded (in-process)"
+        case .xpc:      return "Isolated (XPC service)"
         case .external: return "External `aro` subprocess"
         }
     }
@@ -273,6 +275,8 @@ enum RuntimeBackend: String, CaseIterable, Identifiable {
         switch self {
         case .embedded:
             return "Runs the project inside SOLARO. Statement-level events feed the canvas pulse and inline values directly; no subprocess, no JSONL round-trip."
+        case .xpc:
+            return "Runs the project in the AROXPCService child process. A crash in user code or a plugin terminates the service — SOLARO keeps every buffer and offers to re-launch. Adds ~50 µs per checkpoint over the embedded path."
         case .external:
             return "Spawns the configured `aro` binary. Matches every previous release. Statement-level pulses only fire under `aro debug`; plain `aro run` produces no live events."
         }

@@ -85,6 +85,14 @@ solaroProducts = [
         name: "solaro",
         targets: ["SOLAROLauncher"]
     ),
+    .executable(
+        name: "AROXPCService",
+        targets: ["AROXPCService"]
+    ),
+    .library(
+        name: "AROXPCProtocol",
+        targets: ["AROXPCProtocol"]
+    ),
 ]
 solaroTargets = [
     .executableTarget(
@@ -93,6 +101,7 @@ solaroTargets = [
             "AROVersion",
             "AROParser",
             "ARORuntime",
+            "AROXPCProtocol",
             .product(name: "Logging", package: "swift-log"),
             .product(name: "Yams", package: "Yams"),
             // STTextView (TextKit 2 editor) for the code-editing pane —
@@ -117,6 +126,29 @@ solaroTargets = [
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
         ],
         path: "Sources/SOLAROLauncher"
+    ),
+    // Shared types used by both SOLARO and the XPC service to
+    // describe runtime events crossing the process boundary
+    // (#282 phase 3). Codable structs — kept tiny so the wire
+    // format stays stable.
+    .target(
+        name: "AROXPCProtocol",
+        dependencies: [],
+        path: "Sources/AROXPCProtocol"
+    ),
+    // Out-of-process host for the ARO runtime. SOLARO launches
+    // it via NSXPCConnection, hands it a project root, and gets
+    // pause records / end notifications back across the
+    // boundary. Crashes don't take SOLARO down with them.
+    .executableTarget(
+        name: "AROXPCService",
+        dependencies: [
+            "AROVersion",
+            "AROParser",
+            "ARORuntime",
+            "AROXPCProtocol",
+        ],
+        path: "Sources/AROXPCService"
     ),
     .testTarget(
         name: "SOLAROTests",

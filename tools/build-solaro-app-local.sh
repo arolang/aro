@@ -42,6 +42,12 @@ swift build -c "$CONFIG" --product solaro
 echo "[solaro-app] swift build -c $CONFIG --product aro"
 swift build -c "$CONFIG" --product aro
 
+# Build the out-of-process XPC runtime host (#282 phase 3). The
+# SOLARO-side proxy walks up from the project root looking for
+# `.build/<config>/AROXPCService` — same resolver shape as `aro`.
+echo "[solaro-app] swift build -c $CONFIG --product AROXPCService"
+swift build -c "$CONFIG" --product AROXPCService
+
 # `aro ask`'s native MLX backend looks for `mlx.metallib` alongside the
 # binary. SwiftPM doesn't compile .metal sources, so we shell out to the
 # dedicated build script — first run only compiles, subsequent calls

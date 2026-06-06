@@ -123,6 +123,10 @@ final class ConsoleProcess {
     /// In-process runtime host (issue #282 phase 1). Used in place of
     /// the subprocess when `SOLARO_EMBEDDED_RUNTIME=1`.
     private var embeddedHost: EmbeddedRuntimeHost?
+    /// Active XPC proxy when the project is running under the
+    /// isolated backend (#282 phase 3). Same role as
+    /// `embeddedHost` for the in-process path.
+    private var xpcProxy: AROXPCRuntimeProxy?
     /// True while we're running an `aro debug` session — the
     /// console exposes a stdin input field so the user can type
     /// debugger commands (continue, step, etc).
@@ -170,13 +174,68 @@ final class ConsoleProcess {
     /// path writes them into `ParameterStorage.shared` before the run
     /// begins; subprocess path appends them as `--key value` to argv.
     func startRun(project: Project, parameters: [String: String] = [:]) {
-        if EmbeddedRuntimeHost.isEnabled {
+        switch RuntimeBackend.current {
+        case .embedded:
             startEmbeddedRun(project: project, parameters: parameters)
-        } else {
+        case .xpc:
+            startXPCRun(project: project, parameters: parameters)
+        case .external:
             start(project: project, mode: .run,
                   breakpointsByFile: [:],
                   parameters: parameters)
         }
+    }
+
+    /// XPC-isolated variant (#282 phase 3). Mirrors
+    /// `startEmbeddedRun` but routes through `AROXPCRuntimeProxy`
+    /// so the runtime lives in the AROXPCService process. A
+    /// crash there shows up as a non-zero termination status
+    /// instead of dragging the whole IDE down.
+    private func startXPCRun(project: Project,
+                             parameters: [String: String] = [:]) {
+        if case .running = state { return }
+        log.removeAll()
+        pausedLine = nil
+        isPaused = false
+        pauseSymbols.removeAll(keepingCapacity: true)
+        lastExecutedAt.removeAll(keepingCapacity: true)
+        lastExecutedAtPerFeatureSet.removeAll(keepingCapacity: true)
+        errorLines.removeAll(keepingCapacity: true)
+        testResults.removeAll(keepingCapacity: true)
+        repositoryValues.removeAll(keepingCapacity: true)
+        repositoryHistory.removeAll(keepingCapacity: true)
+        executionTick = 0
+        lastProject = project
+        breakpointLines = []
+        didAutoContinueFirstPause = false
+
+        ParameterStorage.shared.clear()
+        for (key, value) in parameters {
+            ParameterStorage.shared.set(key, value: value)
+        }
+
+        let proxy = AROXPCRuntimeProxy()
+        proxy.onRecords = { [weak self] batch in
+            self?.applyLiveBatch(batch)
+        }
+        proxy.onEnded = { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.appendError("[xpc] \(error.localizedDescription)")
+                self.state = .exited(code: 1)
+            } else {
+                self.state = .exited(code: 0)
+            }
+            self.appendInfo("[xpc run complete]")
+            self.xpcProxy = nil
+        }
+        proxy.onLog = { [weak self] message in
+            self?.appendInfo(message)
+        }
+        xpcProxy = proxy
+        appendInfo("$ xpc-service \(project.rootPath.lastPathComponent)")
+        state = .running(pid: -1)
+        proxy.start(project: project)
     }
 
     /// In-process variant of `startRun`. Reuses every downstream
@@ -492,6 +551,10 @@ final class ConsoleProcess {
             // The host's onEnded flips state to .exited.
             return
         }
+        if let proxy = xpcProxy {
+            proxy.stop()
+            return
+        }
         guard let process, process.isRunning else {
             process = nil
             return
@@ -519,32 +582,40 @@ final class ConsoleProcess {
     /// using the stdin-fed `c` / `s` / `n` / `f` commands.
     func continueExecution() {
         if let host = embeddedHost, host.isPausedAtBreakpoint {
-            host.continueExecution()
-            return
+            host.continueExecution(); return
+        }
+        if let proxy = xpcProxy, proxy.isPausedAtBreakpoint {
+            proxy.continueExecution(); return
         }
         sendInput("c")
     }
     /// Advance into the next statement (follows emits/calls).
     func stepInto() {
         if let host = embeddedHost, host.isPausedAtBreakpoint {
-            host.stepIn()
-            return
+            host.stepIn(); return
+        }
+        if let proxy = xpcProxy, proxy.isPausedAtBreakpoint {
+            proxy.stepIn(); return
         }
         sendInput("s")
     }
     /// Advance over the next statement.
     func stepOver() {
         if let host = embeddedHost, host.isPausedAtBreakpoint {
-            host.stepOver()
-            return
+            host.stepOver(); return
+        }
+        if let proxy = xpcProxy, proxy.isPausedAtBreakpoint {
+            proxy.stepOver(); return
         }
         sendInput("n")
     }
     /// Run until the current feature set returns.
     func finishFrame() {
         if let host = embeddedHost, host.isPausedAtBreakpoint {
-            host.stepOut()
-            return
+            host.stepOut(); return
+        }
+        if let proxy = xpcProxy, proxy.isPausedAtBreakpoint {
+            proxy.stepOut(); return
         }
         sendInput("f")
     }
