@@ -41,11 +41,13 @@ struct SettingsView: View {
                 .tabItem { Label("Editor", systemImage: "text.alignleft") }
             backendsTab
                 .tabItem { Label("Backends", systemImage: "shippingbox") }
+            KeybindingsSettingsTab()
+                .tabItem { Label("Keybindings", systemImage: "keyboard") }
             privacyTab
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
         .padding(SolaroSpace.l)
-        .frame(width: 520, height: 380)
+        .frame(width: 520, height: 480)
     }
 
     private var editorTab: some View {
