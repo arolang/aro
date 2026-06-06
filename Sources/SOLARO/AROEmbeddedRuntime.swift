@@ -48,12 +48,40 @@ final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
     private var lastCheckpointFile: String? = nil
     private let trackingQueue = DispatchQueue(label: "com.arolang.solaro.EmbeddedFrontend")
 
+    /// Step-via-API (#282 phase 2). When a breakpoint pauses,
+    /// `didPause` parks a continuation here and waits for the
+    /// host to call `resume(with:)`. Other reasons (step / entry
+    /// / event) still pass through immediately to keep the
+    /// run-mode pulse alive without blocking.
+    private let pauseLock = NSLock()
+    private var pendingContinuation: CheckedContinuation<StepMode, Never>?
+
     init(
         onPause: @escaping @Sendable (TimeTravelRecord) -> Void,
         onEnd: @escaping @Sendable (Error?) -> Void
     ) {
         self.onPause = onPause
         self.onEnd = onEnd
+    }
+
+    /// True while a breakpoint has the runtime parked — the host
+    /// uses this to enable / disable the toolbar Continue / Step
+    /// buttons without polling.
+    var isParked: Bool {
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        return pendingContinuation != nil
+    }
+
+    /// Resume a parked execution with the given step mode. The
+    /// runtime's `FeatureSetExecutor` then runs until the next
+    /// pause-worthy event. No-op when nothing is parked.
+    func resume(with mode: StepMode) {
+        pauseLock.lock()
+        let continuation = pendingContinuation
+        pendingContinuation = nil
+        pauseLock.unlock()
+        continuation?.resume(returning: mode)
     }
 
     func didPause(
@@ -77,9 +105,20 @@ final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
             fallbackFile: trackingQueue.sync { lastCheckpointFile }
         )
         onPause(record)
-        // Keep stepping. Returning `.continue` here would shut off
-        // every subsequent checkpoint — the canvas would only flash
-        // the very first statement.
+        // Breakpoint pauses block until the host resolves the
+        // continuation — that's what gives SOLARO step-via-API
+        // (Continue / Step Over / Step Into / Step Out buttons
+        // call EmbeddedRuntimeHost.<verb>() which then funnels
+        // through `resume(with:)` here). Every other reason
+        // keeps the original stream behaviour so the live
+        // canvas pulse doesn't stall.
+        if case .breakpoint = pause.reason {
+            return await withCheckedContinuation { continuation in
+                pauseLock.lock()
+                pendingContinuation = continuation
+                pauseLock.unlock()
+            }
+        }
         return .stepOver
     }
 
@@ -173,6 +212,11 @@ final class EmbeddedRuntimeHost {
     /// cleanup). Set by `runProject` once the application is
     /// built, cleared inside `finish`.
     private var currentApplication: Application?
+    /// Reference to the frontend that's parked the runtime on a
+    /// breakpoint. The Continue / Step Over / Step Into / Step
+    /// Out buttons call into the host, the host funnels through
+    /// `frontend.resume(with:)`. nil when no run is active.
+    private var currentFrontend: EmbeddedRuntimeFrontend?
 
     /// Spawn an in-process run of `project`. The closure that hops
     /// through `Debug.$controller.withValue` runs on a detached task
@@ -196,6 +240,7 @@ final class EmbeddedRuntimeHost {
                 }
             }
         )
+        currentFrontend = frontend
         let controller = DebugController(frontend: frontend)
 
         // Console sink (#282 phase 2). Every `<Log "x" to console>`
@@ -259,10 +304,27 @@ final class EmbeddedRuntimeHost {
         guard isRunning else { return }
         log("[embedded] stop requested")
         let app = currentApplication
+        // Release any breakpoint pause first so the runtime
+        // unwinds cleanly instead of leaking the cooperative
+        // continuation across cancellation.
+        currentFrontend?.resume(with: .continue)
         runTask?.cancel()
         if let app {
             Task.detached { await app.stopAsync() }
         }
+    }
+
+    /// Resume from a breakpoint with the given step mode. The
+    /// SOLARO toolbar's Continue / Step Over / Step Into / Step
+    /// Out buttons funnel through these four helpers (#282 phase
+    /// 2). No-op when the runtime isn't currently parked.
+    func continueExecution() { currentFrontend?.resume(with: .continue) }
+    func stepOver()          { currentFrontend?.resume(with: .stepOver) }
+    func stepIn()            { currentFrontend?.resume(with: .stepIn) }
+    func stepOut()           { currentFrontend?.resume(with: .stepOut) }
+
+    var isPausedAtBreakpoint: Bool {
+        currentFrontend?.isParked == true
     }
 
     private func enqueue(_ record: TimeTravelRecord) {
@@ -284,6 +346,7 @@ final class EmbeddedRuntimeHost {
         guard isRunning else { return }
         isRunning = false
         runTask = nil
+        currentFrontend = nil
         // Tear the application down before signalling end so
         // HTTP / store services are released by the time the
         // next run starts (#282 phase 2). The teardown is

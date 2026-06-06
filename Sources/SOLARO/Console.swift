@@ -514,15 +514,42 @@ final class ConsoleProcess {
     // MARK: - Step commands
 
     /// Continue execution until the next breakpoint / program end.
-    func continueExecution() { sendInput("c") }
+    /// Embedded path calls into `EmbeddedRuntimeHost`'s
+    /// step-via-API helpers (#282 phase 2); subprocess path keeps
+    /// using the stdin-fed `c` / `s` / `n` / `f` commands.
+    func continueExecution() {
+        if let host = embeddedHost, host.isPausedAtBreakpoint {
+            host.continueExecution()
+            return
+        }
+        sendInput("c")
+    }
     /// Advance into the next statement (follows emits/calls).
-    func stepInto()          { sendInput("s") }
+    func stepInto() {
+        if let host = embeddedHost, host.isPausedAtBreakpoint {
+            host.stepIn()
+            return
+        }
+        sendInput("s")
+    }
     /// Advance over the next statement.
-    func stepOver()          { sendInput("n") }
+    func stepOver() {
+        if let host = embeddedHost, host.isPausedAtBreakpoint {
+            host.stepOver()
+            return
+        }
+        sendInput("n")
+    }
     /// Run until the current feature set returns.
-    func finishFrame()       { sendInput("f") }
+    func finishFrame() {
+        if let host = embeddedHost, host.isPausedAtBreakpoint {
+            host.stepOut()
+            return
+        }
+        sendInput("f")
+    }
     /// Quit the debugger session.
-    func quit()              { sendInput("q") }
+    func quit() { sendInput("q") }
 
     /// Build a `MetricsSnapshot` from the embedded run's accumulator
     /// (per-FS counts/timing) and the current process resource usage
