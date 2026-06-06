@@ -251,24 +251,46 @@ private struct ProjectMapNodeCard: View {
         .help("\(node.featureSetName) · \(node.statementCount) statements")
     }
 
-    /// Test-status chip — green check for PASS, red X for FAIL.
-    /// Renders nothing when the FS isn't a test or hasn't been run
-    /// yet so production rows stay visually quiet.
+    /// Same `T` badge the Inspector's FeatureSetCard renders:
+    /// green when the last `aro test` passed, red on fail/error,
+    /// muted tertiary for a test FS that hasn't been run yet, and
+    /// hidden entirely for production feature sets so they stay
+    /// visually quiet.
     @ViewBuilder
     private var testBadge: some View {
+        if isTestFS {
+            Text("T")
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(testIconColor)
+                .frame(width: 14, height: 14)
+                .background(
+                    Circle().fill(testIconColor.opacity(0.18))
+                )
+                .help(testIconTooltip)
+        }
+    }
+
+    /// Mirrors `TestRunner.isTestFeatureSet` from ARORuntime —
+    /// a test feature set is identified by its business activity
+    /// ending in "Test" or "Tests".
+    private var isTestFS: Bool {
+        node.businessActivity.hasSuffix("Test")
+            || node.businessActivity.hasSuffix("Tests")
+    }
+
+    private var testIconColor: Color {
         switch testResult {
-        case .passed:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(SolaroColor.stateOK)
-                .help("Last test run: passed")
-        case .failed(let message):
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(SolaroColor.stateError)
-                .help("Last test run: \(message)")
-        case .none:
-            EmptyView()
+        case .passed: return SolaroColor.stateOK
+        case .failed: return SolaroColor.stateError
+        case nil:     return SolaroColor.textTertiary
+        }
+    }
+
+    private var testIconTooltip: String {
+        switch testResult {
+        case .passed: return "Last test run: passed"
+        case .failed(let msg): return "Last test run: \(msg)"
+        case nil: return "Test (no run yet)"
         }
     }
 
