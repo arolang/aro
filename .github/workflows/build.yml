@@ -590,10 +590,34 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           rm certificate.p12
 
+          # Same library-loading entitlement the aro CLI uses
+          # (#268). SOLARO dlopen's plugin binaries from a project's
+          # `Plugins/` directory — those are signed by the plugin
+          # author with a different Team ID, so the hardened runtime
+          # otherwise rejects them.
+          cat > /tmp/solaro-entitlements.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+            <!-- SOLARO runs `aro` subprocesses for the LSP, run/test,
+                 and `aro ask` flows; the hardened runtime needs this
+                 to spawn unsigned children inherited from $PATH. -->
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
           codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" \
             solaro-dist/Solaro.app/Contents/MacOS/Solaro
           codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" \
             solaro-dist/Solaro.app
           codesign --verify --deep --strict solaro-dist/Solaro.app
