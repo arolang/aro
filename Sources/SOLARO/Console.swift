@@ -657,15 +657,29 @@ final class ConsoleProcess {
         }
 
         // Walk up from the project root looking for an ARO source
-        // checkout. We accept anywhere up to filesystem root.
+        // checkout. When both `.build/release/aro` and
+        // `.build/debug/aro` exist we pick whichever was built more
+        // recently — otherwise a stale release binary from an old
+        // build would shadow a freshly-rebuilt debug binary, and
+        // SOLARO would silently keep launching the old CLI even
+        // after the developer ran `swift build` (issue: tests
+        // failing with "Unknown option '--record'" after a CLI
+        // option was added).
         var dir = project.rootPath.deletingLastPathComponent()
         let configs = ["release", "debug"]
         for _ in 0..<8 {  // hard cap so we never recurse forever
+            var candidates: [(path: String, mtime: Date)] = []
             for cfg in configs {
                 let candidate = dir.appendingPathComponent(".build/\(cfg)/aro").path
                 if fm.isExecutableFile(atPath: candidate) {
-                    return candidate
+                    let mtime = (try? FileManager.default
+                        .attributesOfItem(atPath: candidate)[.modificationDate]
+                        as? Date) ?? .distantPast
+                    candidates.append((candidate, mtime))
                 }
+            }
+            if let newest = candidates.max(by: { $0.mtime < $1.mtime }) {
+                return newest.path
             }
             let parent = dir.deletingLastPathComponent()
             if parent.path == dir.path { break }
