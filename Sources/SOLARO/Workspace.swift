@@ -517,6 +517,11 @@ struct WorkspaceView: View {
     /// `startRun(project:parameters:)`.
     @State private var showRunParameters: Bool = false
     @State private var pendingRunParameters: [String] = []
+    /// Probes `aro --version` once per workspace open and surfaces
+    /// a banner when the version disagrees with SOLARO's build
+    /// stamp (#287). Lives on the view so it's torn down with the
+    /// window — the result isn't useful across workspaces.
+    @StateObject private var aroProbe = AroBinaryProbe()
     /// Co-pilot (`aro ask`) process.
     // aiCoPilot moved onto WorkspaceController (#273) so canvas
     // context menus can dispatch prompts directly. Access as
@@ -556,6 +561,15 @@ struct WorkspaceView: View {
     @ViewBuilder
     private var workspaceBody: some View {
         VStack(spacing: 0) {
+            if aroProbe.shouldShowBanner,
+               let r = aroProbe.result {
+                AroBinaryMismatchBanner(
+                    binaryPath: r.binaryPath,
+                    binaryVersion: r.binaryVersion ?? "unknown",
+                    solaroVersion: r.solaroVersion,
+                    onDismiss: { aroProbe.dismissCurrent() }
+                )
+            }
             NavigationSplitView(columnVisibility: columnVisibilityBinding) {
                 SidebarPaneView(controller: controller)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
@@ -894,7 +908,10 @@ struct WorkspaceView: View {
                 showBlame()
             }
         }
-        .onAppear { controller.load() }
+        .onAppear {
+            controller.load()
+            aroProbe.probe(binaryPath: ConsoleProcess.resolveAroBinary(near: project))
+        }
         .onReceive(NotificationCenter.default
                     .publisher(for: .solaroFocusFile)) { note in
             // A double-click on an .aro in Finder routes through
