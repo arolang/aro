@@ -50,11 +50,13 @@ struct SettingsView: View {
                 .tabItem { Label("Backends", systemImage: "shippingbox") }
             KeybindingsSettingsTab()
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
+            BooksSettingsTab()
+                .tabItem { Label("Books", systemImage: "books.vertical") }
             privacyTab
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
         .padding(SolaroSpace.l)
-        .frame(width: 520, height: 480)
+        .frame(width: 560, height: 520)
     }
 
     private var editorTab: some View {
