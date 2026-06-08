@@ -424,6 +424,25 @@ final class EmbeddedRuntimeHost {
         )
         onApplication(application)
 
+        // Embedded runs share SOLARO's process, so the runtime's
+        // file I/O resolves relative paths (`./output/foo.md`,
+        // store files, plugin lookups) against whatever cwd macOS
+        // launched the app with — usually `/`. Without a chdir
+        // the Crawler example wrote to `/output/...` and the user
+        // saw zero files appear in the project. Match the
+        // subprocess path's `task.currentDirectoryURL` by
+        // chdir'ing in for the duration of the run and restoring
+        // afterwards so other SOLARO operations (Git, search,
+        // workspace I/O) keep their original cwd.
+        let fm = FileManager.default
+        let originalCWD = fm.currentDirectoryPath
+        let chdirOK = fm.changeCurrentDirectoryPath(appConfig.rootPath.path)
+        defer {
+            if chdirOK {
+                _ = fm.changeCurrentDirectoryPath(originalCWD)
+            }
+        }
+
         try await Debug.$controller.withValue(controller) {
             _ = try await application.run()
         }
