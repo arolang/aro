@@ -30,6 +30,20 @@ enum StackLayout {
     /// own pair of horizontal columns (with `featureSetGap` between
     /// neighbouring feature sets) so the canvas can render colored
     /// containing boxes around each group.
+    /// Width and height assumed for statement-node cards during
+     /// auto-layout — kept in sync with `CanvasView.nodeWidth` /
+     /// `nodeHeight` so the overlap-resolve pass uses the same box
+     /// the renderer draws.
+    static let assumedNodeWidth: Double = 240
+    static let assumedNodeHeight: Double = 64
+    /// Padding the feature-set container draws around its child
+    /// nodes (see `FeatureSetContainersLayer.groupedFeatureSets`).
+    /// Mirrored here so overlap detection uses the same rect the
+    /// renderer paints, otherwise resolving "no node overlap" would
+    /// still leave visible container borders crossing through cards.
+    static let fsContainerInset: Double = 14
+    static let fsContainerHeaderExtra: Double = 28
+
     static func place(
         _ graph: CanvasGraph,
         rowPitch: Double = 78,
@@ -108,11 +122,96 @@ enum StackLayout {
             repos[i].y = topPadding + Double(i) * repoRowPitch
         }
 
+        nodes = resolveFeatureSetOverlaps(
+            nodes: nodes,
+            gap: featureSetGap
+        )
+
         return CanvasGraph(
             nodes: nodes,
             edges: graph.edges,
             repositories: repos,
             loops: graph.loops
         )
+    }
+
+    /// Walk feature-set bounding rects left to right and shift any
+    /// FS whose container rect overlaps an earlier FS's rect to the
+    /// right by the overlap amount + `gap`. Catches the case where
+    /// the column-stack math placed two FSes side-by-side correctly
+    /// but a single tall / dragged statement from one of them
+    /// happens to land inside the neighbour's container (#?). The
+    /// shift is applied uniformly to every node of the overlapping
+    /// FS so its internal layout is preserved.
+    private static func resolveFeatureSetOverlaps(
+        nodes: [CanvasNode],
+        gap: Double
+    ) -> [CanvasNode] {
+        guard !nodes.isEmpty else { return nodes }
+        var out = nodes
+        // Iterate until no overlaps remain. A single shift can push
+        // FS_n into FS_{n+1}'s space, so we re-check after each pass.
+        // Hard-cap at the FS count: each FS can shift at most once
+        // per other FS, so n² iterations is the worst case.
+        let allNames = Array(NSOrderedSet(array: out.map { $0.featureSetName })) as! [String]
+        for _ in 0..<allNames.count {
+            var shifted = false
+            let rects = featureSetRects(in: out)
+            // Walk in left-to-right order so shifting a later FS
+            // can't cascade back into already-resolved earlier ones.
+            let ordered = rects.sorted { $0.value.minX < $1.value.minX }
+            for i in 1..<ordered.count {
+                let (name, rect) = ordered[i]
+                // Find the largest overlap with any earlier rect —
+                // shift just enough to clear them all in one go.
+                var maxOverlap: Double = 0
+                for j in 0..<i {
+                    let other = ordered[j].value
+                    if rect.intersects(other) {
+                        maxOverlap = max(maxOverlap, other.maxX - rect.minX)
+                    }
+                }
+                if maxOverlap > 0 {
+                    let delta = maxOverlap + gap
+                    for k in out.indices where out[k].featureSetName == name {
+                        out[k].x += delta
+                    }
+                    shifted = true
+                    break  // restart with updated rects
+                }
+            }
+            if !shifted { break }
+        }
+        return out
+    }
+
+    /// Bounding rect per feature set, mirroring
+    /// `FeatureSetContainersLayer.groupedFeatureSets()` so overlap
+    /// detection matches what the user sees on screen.
+    private static func featureSetRects(
+        in nodes: [CanvasNode]
+    ) -> [String: CGRect] {
+        var bounds: [String: CGRect] = [:]
+        for node in nodes {
+            let rect = CGRect(
+                x: node.x, y: node.y,
+                width: assumedNodeWidth, height: assumedNodeHeight
+            )
+            if let existing = bounds[node.featureSetName] {
+                bounds[node.featureSetName] = existing.union(rect)
+            } else {
+                bounds[node.featureSetName] = rect
+            }
+        }
+        let inset = fsContainerInset
+        let header = fsContainerHeaderExtra
+        return bounds.mapValues { core in
+            CGRect(
+                x: core.minX - inset,
+                y: core.minY - inset - header,
+                width: core.width + inset * 2,
+                height: core.height + inset * 2 + header
+            )
+        }
     }
 }
