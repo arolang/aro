@@ -62,6 +62,19 @@ struct HiddenShortcutButton: View {
         self.action = action
     }
 
+    /// Variant accepting a `KeyEquivalent` directly (for shortcuts
+    /// bound to special keys like `.delete`, `.escape`, `.return`
+    /// that `Character` can't express literally). Uses a distinct
+    /// `keyEquivalent:` label so it doesn't fight the
+    /// `Character`-based init for overload resolution against
+    /// string literals like `"p"`.
+    init(keyEquivalent: KeyEquivalent, modifiers: EventModifiers,
+         action: @escaping () -> Void) {
+        self.key = keyEquivalent
+        self.modifiers = modifiers
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
             EmptyView()
@@ -143,6 +156,66 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// "Failed to load" alert extracted to a `ViewModifier` for the
+/// same type-checker-budget reason as `DeleteFileAlertModifier`.
+private struct LoadErrorAlertModifier: ViewModifier {
+    @Bindable var controller: WorkspaceController
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "Failed to load",
+            isPresented: isPresentedBinding,
+            actions: {
+                Button("OK") { controller.loadError = nil }
+            },
+            message: {
+                Text(controller.loadError ?? "")
+            }
+        )
+    }
+
+    private var isPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { controller.loadError != nil },
+            set: { if !$0 { controller.loadError = nil } }
+        )
+    }
+}
+
+/// Pulled out into a `ViewModifier` because inlining the alert
+/// next to the other sheets/alerts in `WorkspaceView` blew up the
+/// type-checker — "the compiler is unable to type-check this
+/// expression in reasonable time" once more than ~15 sheets/alerts
+/// stack on a single SwiftUI body. Keeping each branch isolated
+/// keeps inference linear.
+private struct DeleteFileAlertModifier: ViewModifier {
+    @Binding var target: URL?
+    let onConfirm: (URL) -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "Move \(target?.lastPathComponent ?? "file") to Trash?",
+            isPresented: isPresentedBinding,
+            presenting: target
+        ) { url in
+            Button("Move to Trash", role: .destructive) {
+                onConfirm(url)
+                target = nil
+            }
+            Button("Cancel", role: .cancel) { target = nil }
+        } message: { url in
+            Text("This will move \(url.lastPathComponent) to the Trash. You can restore it from there if needed.")
+        }
+    }
+
+    private var isPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { target != nil },
+            set: { if !$0 { target = nil } }
+        )
+    }
+}
+
 /// Which subcommand the user picked from the toolbar. Carried
 /// through the pre-run parameter sheet so Execute can dispatch to
 /// the right `startRun` / `startDebug` helper.
@@ -198,6 +271,10 @@ struct WorkspaceView: View {
     @State private var showCommandPalette = false
     @State private var showQuickOpen = false
     @State private var showCommitOverlay = false
+    /// Set when the user hits ⌘⌫ with a file selected. The alert
+    /// reads from this — non-nil = visible. Cleared on cancel or
+    /// after the file is moved to Trash.
+    @State private var pendingDeleteFile: URL? = nil
     @State private var commitModel = GitCommitModel()
     @State private var showHoverSheet = false
     @State private var hoverState = HoverSheetState()
@@ -364,30 +441,31 @@ struct WorkspaceView: View {
             bottomTab = tab
             showConsole = true
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .solaroMenuAction)
+        ) { note in
+            guard let raw = note.userInfo?["id"] as? String,
+                  let action = SolaroMenuAction(rawValue: raw)
+            else { return }
+            handleMenuAction(action)
+        }
         // Bounce back to the welcome screen the moment the last
         // editor tab closes. We compare oldValue → newValue so the
         // initial mount (which lands with openTabs empty before the
         // user opens anything) doesn't immediately dismiss the
         // workspace.
-        .onChange(of: controller.openTabs.isEmpty) { wasEmpty, isEmpty in
-            if isEmpty && !wasEmpty {
-                onClose()
-            }
-        }
+        // Closing the last tab used to bounce back to the welcome
+        // screen via `onClose()`. The user keeps the project open
+        // either way — CenterPane already shows
+        // `emptyPane("Select a file from the sidebar.")` when no
+        // file is current, so we just let that empty state render
+        // instead of unmounting the whole workspace.
         // After a recorded run finishes, slurp the last-seen value
         // for every binding from .solaro/events.jsonl and merge it
         // into pauseSymbols. The canvas's existing hover popover
         // surfaces them as "live wire values" with no extra plumbing.
         .onChange(of: consoleProcess.state) { _, newState in
-            if case .exited = newState {
-                let live = LiveValueIndex.load(for: project)
-                guard !live.isEmpty else { return }
-                var merged = controller.pauseSymbols
-                for (name, value) in live where merged[name] == nil {
-                    merged[name] = value
-                }
-                controller.pauseSymbols = merged
-            }
+            handleConsoleStateChange(newState)
         }
         .navigationTitle(project.displayName)
         .navigationSubtitle(currentFileLabel)
@@ -432,6 +510,10 @@ struct WorkspaceView: View {
                 }
             )
         }
+        .modifier(DeleteFileAlertModifier(
+            target: $pendingDeleteFile,
+            onConfirm: { url in deleteFile(url) }
+        ))
         .sheet(item: $pendingParameterRequest) { request in
             RunParametersSheet(
                 parameters: request.parameters,
@@ -459,26 +541,7 @@ struct WorkspaceView: View {
             TimeTravelView(
                 project: project,
                 onClose: { showTimeTravel = false },
-                onFrameChange: { record in
-                    // Drive the canvas's "executing now" pulse and
-                    // the symbol bag from the replayed frame so the
-                    // canvas animates identically to a live run.
-                    if let line = record.line, line > 0 {
-                        controller.lastExecutedAt[line] = Date()
-                    }
-                    if let fs = record.featureSet, !fs.isEmpty {
-                        controller.lastExecutedAtPerFeatureSet[fs] = Date()
-                    }
-                    for sym in record.symbols {
-                        let v = ConsoleProcess.SymbolValue(
-                            name: sym.name,
-                            typeName: sym.typeName,
-                            value: sym.value
-                        )
-                        controller.pauseSymbols[sym.name] = v
-                    }
-                    controller.executionTick &+= 1
-                }
+                onFrameChange: applyTimeTravelFrame
             )
         }
         .sheet(isPresented: $showCommandPalette) {
@@ -600,81 +663,7 @@ struct WorkspaceView: View {
                 }
             )
         }
-        .background {
-            // Hidden buttons hold the three palette shortcuts. SwiftUI
-            // keyboard shortcuts only fire from views in the hierarchy,
-            // and we want them active regardless of focus — invisible
-            // buttons accomplish that without leaking visual clutter.
-            HiddenShortcutButton(key: "p", modifiers: [.command, .shift]) {
-                showCommandPalette = true
-            }
-            HiddenShortcutButton(key: "p", modifiers: [.command]) {
-                showQuickOpen = true
-            }
-            HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
-                showFindInProject = true
-            }
-            // ⌘F — find inside the currently open source file.
-            // Only fires when the editor pane is the visible
-            // surface; in canvas / map modes it falls through so
-            // the standard Edit > Find menu item remains the
-            // expected NSResponder action.
-            HiddenShortcutButton(key: "f", modifiers: [.command]) {
-                let editorVisible = controller.paneMode == .text
-                    || controller.paneMode == .split
-                guard editorVisible,
-                      controller.currentFile != nil
-                else { return }
-                if !controller.editorFindActive {
-                    controller.editorFindActive = true
-                } else {
-                    // Re-pressing ⌘F while the bar is open closes it.
-                    controller.editorFindActive = false
-                    controller.editorFindQuery = ""
-                }
-            }
-            HiddenShortcutButton(key: "w", modifiers: [.command]) {
-                if let url = controller.currentFile {
-                    controller.closeTab(url)
-                }
-            }
-            HiddenShortcutButton(key: "]", modifiers: [.command, .shift]) {
-                controller.cycleTab(by: 1)
-            }
-            HiddenShortcutButton(key: "[", modifiers: [.command, .shift]) {
-                controller.cycleTab(by: -1)
-            }
-            HiddenShortcutButton(key: "o", modifiers: [.command, .shift]) {
-                showSymbolPalette = true
-            }
-            HiddenShortcutButton(key: "`", modifiers: [.control]) {
-                bottomTab = .terminal
-                showConsole = true
-            }
-            // Go to Definition — ⌃⌘D mirrors Xcode and most LSP UIs.
-            HiddenShortcutButton(key: "d", modifiers: [.control, .command]) {
-                goToDefinition()
-            }
-            HiddenShortcutButton(key: "h", modifiers: [.control, .command]) {
-                hoverAtCaret()
-            }
-            // ⌃Space — LSP autocompletion (#254)
-            HiddenShortcutButton(key: " ", modifiers: [.control]) {
-                triggerCompletion()
-            }
-            // ⌃⌘R — rename refactor (#256)
-            HiddenShortcutButton(key: "r", modifiers: [.control, .command]) {
-                beginRename()
-            }
-            // ⇧⌥F — format document (#257)
-            HiddenShortcutButton(key: "f", modifiers: [.option, .shift]) {
-                formatDocument()
-            }
-            // ⌃⌘B — git blame for current file (#260)
-            HiddenShortcutButton(key: "b", modifiers: [.control, .command]) {
-                showBlame()
-            }
-        }
+        .background { workspaceShortcuts }
         .onAppear {
             controller.load()
             aroProbe.probe(binaryPath: ConsoleProcess.resolveAroBinary(near: project))
@@ -689,19 +678,7 @@ struct WorkspaceView: View {
                 controller.openFile(url)
             }
         }
-        .alert(
-            "Failed to load",
-            isPresented: Binding(
-                get: { controller.loadError != nil },
-                set: { if !$0 { controller.loadError = nil } }
-            ),
-            actions: {
-                Button("OK") { controller.loadError = nil }
-            },
-            message: {
-                Text(controller.loadError ?? "")
-            }
-        )
+        .modifier(LoadErrorAlertModifier(controller: controller))
     }
 
     /// All endpoints discovered in the project's `openapi.yaml`,
@@ -1310,6 +1287,310 @@ struct WorkspaceView: View {
     /// Scan every project source file's sidecar for breakpoints
     /// and collect them by file. Empty result → `aro debug` will
     /// pause on every statement (its default behavior).
+    /// Every global keyboard shortcut hosted by the workspace,
+    /// pulled into its own view so the body's type-checker budget
+    /// has room for the rest. Each button is invisible but
+    /// participates in SwiftUI's shortcut routing; they fire
+    /// regardless of which control has focus.
+    @ViewBuilder
+    private var workspaceShortcuts: some View {
+        Group {
+            HiddenShortcutButton(key: "p", modifiers: [.command, .shift]) {
+                showCommandPalette = true
+            }
+            HiddenShortcutButton(key: "p", modifiers: [.command]) {
+                showQuickOpen = true
+            }
+            HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
+                showFindInProject = true
+            }
+            HiddenShortcutButton(key: "f", modifiers: [.command]) {
+                handleFindInFile()
+            }
+            HiddenShortcutButton(key: "w", modifiers: [.command]) {
+                if let url = controller.currentFile {
+                    controller.closeTab(url)
+                }
+            }
+            HiddenShortcutButton(keyEquivalent: .delete, modifiers: [.command]) {
+                if let url = controller.currentFile,
+                   !isTextEditorFocused() {
+                    pendingDeleteFile = url
+                }
+            }
+            HiddenShortcutButton(key: "]", modifiers: [.command, .shift]) {
+                controller.cycleTab(by: 1)
+            }
+            HiddenShortcutButton(key: "[", modifiers: [.command, .shift]) {
+                controller.cycleTab(by: -1)
+            }
+            HiddenShortcutButton(key: "o", modifiers: [.command, .shift]) {
+                showSymbolPalette = true
+            }
+            HiddenShortcutButton(key: "`", modifiers: [.control]) {
+                bottomTab = .terminal
+                showConsole = true
+            }
+            HiddenShortcutButton(key: "d", modifiers: [.control, .command]) {
+                goToDefinition()
+            }
+            HiddenShortcutButton(key: "h", modifiers: [.control, .command]) {
+                hoverAtCaret()
+            }
+            HiddenShortcutButton(key: " ", modifiers: [.control]) {
+                triggerCompletion()
+            }
+            HiddenShortcutButton(key: "r", modifiers: [.control, .command]) {
+                beginRename()
+            }
+            HiddenShortcutButton(key: "f", modifiers: [.option, .shift]) {
+                formatDocument()
+            }
+            HiddenShortcutButton(key: "b", modifiers: [.control, .command]) {
+                showBlame()
+            }
+        }
+    }
+
+    /// ⌘F handler — toggle the editor's find bar when the editor
+    /// pane is visible, otherwise fall through so the standard
+    /// Edit > Find menu item keeps working.
+    private func handleFindInFile() {
+        let editorVisible = controller.paneMode == .text
+            || controller.paneMode == .split
+        guard editorVisible, controller.currentFile != nil else { return }
+        if !controller.editorFindActive {
+            controller.editorFindActive = true
+        } else {
+            controller.editorFindActive = false
+            controller.editorFindQuery = ""
+        }
+    }
+
+    /// Merge end-of-run live values from `.solaro/events.jsonl`
+    /// into `pauseSymbols`. Extracted from the body's `onChange`
+    /// closure for the same type-checker-budget reason as
+    /// `applyTimeTravelFrame`.
+    private func handleConsoleStateChange(_ newState: ConsoleProcess.State) {
+        guard case .exited = newState else { return }
+        let live = LiveValueIndex.load(for: project)
+        guard !live.isEmpty else { return }
+        var merged = controller.pauseSymbols
+        for (name, value) in live where merged[name] == nil {
+            merged[name] = value
+        }
+        controller.pauseSymbols = merged
+    }
+
+    /// Apply a replayed time-travel frame to the live controller
+    /// state — pulled out of the `sheet`'s `onFrameChange` closure
+    /// because the surrounding body grew complex enough that the
+    /// Swift type-checker started timing out trying to infer it
+    /// in-place.
+    private func applyTimeTravelFrame(_ record: TimeTravelRecord) {
+        if let line = record.line, line > 0 {
+            controller.lastExecutedAt[line] = Date()
+        }
+        if let fs = record.featureSet, !fs.isEmpty {
+            controller.lastExecutedAtPerFeatureSet[fs] = Date()
+        }
+        for sym in record.symbols {
+            let v = ConsoleProcess.SymbolValue(
+                name: sym.name,
+                typeName: sym.typeName,
+                value: sym.value
+            )
+            controller.pauseSymbols[sym.name] = v
+        }
+        controller.executionTick &+= 1
+    }
+
+    /// Route a menu-bar action to the right handler. Centralised
+    /// dispatch keeps the menu definitions in `SOLAROApp.swift`
+    /// data-driven (each item only knows the action ID) and stops
+    /// us from threading 30+ named notifications.
+    private func handleMenuAction(_ action: SolaroMenuAction) {
+        switch action {
+        // File
+        case .fileRevealInFinder:
+            if let url = controller.currentFile {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        case .fileCopyPath:
+            if let url = controller.currentFile {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(url.path, forType: .string)
+            }
+        case .fileRename:
+            // Inline rename via NSAlert — the sidebar uses a
+            // SwiftUI alert with a TextField, but we'd have to
+            // route a Binding through the menu observer to share
+            // it. NSAlert is shorter and equally functional from
+            // a menu-driven entry point.
+            if let url = controller.currentFile {
+                renameCurrentFile(at: url)
+            }
+        case .fileMoveToTrash:
+            if let url = controller.currentFile {
+                pendingDeleteFile = url
+            }
+        case .fileCloseTab:
+            if let url = controller.currentFile {
+                controller.closeTab(url)
+            }
+        // Edit
+        case .editFindInFile:
+            handleFindInFile()
+        case .editFindInProject:
+            showFindInProject = true
+        case .editFormatDocument:
+            formatDocument()
+        case .editRenameRefactor:
+            beginRename()
+        case .editTriggerCompletion:
+            triggerCompletion()
+        // View
+        case .viewToggleSidebar:
+            controller.sidebarShown.toggle()
+        case .viewToggleInspector:
+            controller.inspectorShown.toggle()
+        case .viewPaneMap:    controller.setPaneMode(.map)
+        case .viewPaneCanvas: controller.setPaneMode(.canvas)
+        case .viewPaneText:   controller.setPaneMode(.text)
+        case .viewPaneSplit:  controller.setPaneMode(.split)
+        case .viewCommandPalette:
+            showCommandPalette = true
+        case .viewQuickOpen:
+            showQuickOpen = true
+        case .viewSymbolPalette:
+            showSymbolPalette = true
+        // Navigate
+        case .navGoToDefinition: goToDefinition()
+        case .navHover:          hoverAtCaret()
+        case .navNextTab:        controller.cycleTab(by: 1)
+        case .navPrevTab:        controller.cycleTab(by: -1)
+        // Run
+        case .runPlay:           requestRun()
+        case .runDebug:          requestDebug()
+        case .runTests:
+            showConsole = true
+            consoleProcess.startTests(project: project)
+        case .runStop:           consoleProcess.stop()
+        case .runAutoLayout:
+            NotificationCenter.default.post(
+                name: .solaroResetCanvasLayout, object: nil
+            )
+        case .runExportCanvas:   exportCanvasPNG()
+        case .runTimeTravel:     showTimeTravel = true
+        // Git
+        case .gitCommit:         openCommitOverlay()
+        case .gitBlame:          showBlame()
+        case .gitRevertFile:
+            guard let url = controller.currentFile,
+                  let status = controller.gitMonitor.status.files[url.path]
+            else { return }
+            Task {
+                _ = await controller.gitMonitor.revertLocalChanges(
+                    in: project, path: url.path, status: status
+                )
+            }
+        // AI
+        case .aiOpenPanel:
+            controller.rightPaneMode = .coPilot
+            controller.inspectorShown = true
+        case .aiReset:
+            controller.aiCoPilot.reset(in: project)
+        }
+    }
+
+    /// Rename the file at `url` via an NSAlert prompt. Used by
+    /// the File → Rename… menu item. Mirrors the sidebar's
+    /// context-menu rename, but uses AppKit's NSAlert directly so
+    /// we don't have to thread a SwiftUI alert binding through
+    /// the menu observer.
+    private func renameCurrentFile(at url: URL) {
+        let alert = NSAlert()
+        alert.messageText = "Rename \(url.lastPathComponent)"
+        alert.informativeText = "Enter a new filename. The file stays in its current directory."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: url.lastPathComponent)
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 22)
+        alert.accessoryView = field
+        // Pre-select the basename (without extension) so the user
+        // can just type a new name and hit Return.
+        let stem = url.deletingPathExtension().lastPathComponent
+        field.currentEditor()?.selectedRange = NSRange(
+            location: 0, length: stem.count
+        )
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let newName = field.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty, !newName.contains("/"),
+              newName != url.lastPathComponent
+        else { return }
+        let dest = url.deletingLastPathComponent()
+            .appendingPathComponent(newName)
+        do {
+            try FileManager.default.moveItem(at: url, to: dest)
+            if controller.currentFile == url {
+                controller.openFile(dest)
+            }
+        } catch {
+            let err = NSAlert()
+            err.messageText = "Couldn't rename \(url.lastPathComponent)"
+            err.informativeText = error.localizedDescription
+            err.alertStyle = .warning
+            err.runModal()
+        }
+    }
+
+    /// Whether the keyboard focus is inside a text editor /
+    /// text field — used to suppress the ⌘⌫ file-delete shortcut
+    /// so it never steals NSTextView's "delete to start of line"
+    /// behavior while the user is typing.
+    private func isTextEditorFocused() -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else {
+            return false
+        }
+        if responder is NSTextView { return true }
+        if responder is NSTextField { return true }
+        // NSText covers NSTextView's field editor flavors.
+        if responder is NSText { return true }
+        return false
+    }
+
+    /// Move the file at `url` to the Trash and clean up SOLARO's
+    /// internal state. Closes the tab if it was open and removes
+    /// the file's persisted layout entry so a stale row doesn't
+    /// linger in the consolidated `.layout.json`.
+    private func deleteFile(_ url: URL) {
+        var trashed: NSURL? = nil
+        do {
+            try FileManager.default.trashItem(
+                at: url, resultingItemURL: &trashed
+            )
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't move \(url.lastPathComponent) to Trash"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
+        controller.closeTab(url)
+        // Drop the file's layout entry too — without this, the
+        // consolidated store would keep an orphan key for a file
+        // that no longer exists.
+        var store = ProjectLayoutStore.load(for: url)
+        let key = store.key(for: url)
+        if store.files.removeValue(forKey: key) != nil {
+            try? store.save()
+        }
+    }
+
     private func collectBreakpoints() -> [URL: Set<Int>] {
         guard let model = controller.model else { return [:] }
         var out: [URL: Set<Int>] = [:]

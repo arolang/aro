@@ -49,73 +49,361 @@ struct SOLAROApp: App {
         }
         .defaultSize(width: 1400, height: 900)
         .commands {
-            // Custom Undo / Redo that route between the focused
-            // text view's UndoManager (so STTextView keeps its
-            // character-level undo) and the workspace UndoManager
-            // (for canvas drags, Auto Layout, node-edit Apply,
-            // save-back). Picking the right manager at click time
-            // means we don't have to install anything on AppKit's
-            // window delegate — SwiftUI was racing us for that
-            // delegate slot anyway.
+            // Custom Undo / Redo (see comment on SolaroUndoCommand
+            // — routes between the focused NSTextView's UndoManager
+            // and the workspace's UndoManager at click time).
             CommandGroup(replacing: .undoRedo) {
                 SolaroUndoCommand()
                 SolaroRedoCommand()
             }
-            CommandGroup(after: .toolbar) {
-                Divider()
-                Button("Internal Logs…") {
-                    InternalLogsWindow.show()
-                }
-                .keyboardShortcut("l", modifiers: [.command, .shift, .option])
-            }
-            // View menu — open the bottom panel and switch to the
-            // requested pane. The actual work happens inside the
-            // workspace via a NotificationCenter observer, since
-            // menu items live above the per-window @State.
-            CommandGroup(after: .toolbar) {
-                Divider()
-                Button("Show Console") {
-                    NotificationCenter.default.post(
-                        name: .solaroShowBottomPanel,
-                        object: nil,
-                        userInfo: ["tab": "console"]
-                    )
-                }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-                Button("Show Terminal") {
-                    NotificationCenter.default.post(
-                        name: .solaroShowBottomPanel,
-                        object: nil,
-                        userInfo: ["tab": "terminal"]
-                    )
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-                Button("Show Tests") {
-                    NotificationCenter.default.post(
-                        name: .solaroShowBottomPanel,
-                        object: nil,
-                        userInfo: ["tab": "tests"]
-                    )
-                }
-                .keyboardShortcut("u", modifiers: [.command, .shift])
-            }
+            solaroFileMenu
+            solaroEditMenu
+            solaroViewMenu
+            solaroNavigateMenu
+            solaroRunMenu
+            solaroGitMenu
+            solaroAIMenu
             CommandGroup(after: .help) {
-                Button("Language Guide…") {
-                    LanguageGuideWindow.show()
+                Menu {
+                    ForEach(Book.all, id: \.id) { book in
+                        Button {
+                            BookWindow.show(book)
+                        } label: {
+                            Label(book.title, systemImage: book.symbol)
+                        }
+                    }
+                } label: {
+                    Label("Books", systemImage: "books.vertical")
                 }
                 .keyboardShortcut("?", modifiers: [.command])
                 Divider()
-                Button("Report a Bug…") {
+                Button {
                     CrashReporter.openReportBugPage()
+                } label: {
+                    Label("Report a Bug…", systemImage: "ant.fill")
                 }
                 .keyboardShortcut("?", modifiers: [.command, .shift])
-                Button("Reveal crash logs in Finder") {
+                Button {
                     NSWorkspace.shared.open(CrashReporter.crashesDirectory)
+                } label: {
+                    Label("Reveal Crash Logs in Finder", systemImage: "doc.text.magnifyingglass")
                 }
             }
         }
         Settings {
             SettingsView()
+        }
+    }
+
+    // MARK: - Menu bar
+
+    /// File menu additions (slots in after the .newItem / .openItem
+    /// groups SwiftUI provides). SOLARO's editor auto-saves, so
+    /// the menu omits explicit "Save" entries — what's left is the
+    /// file-management surface: Reveal, Copy Path, Rename, Move to
+    /// Trash, Close Tab.
+    @CommandsBuilder
+    private var solaroFileMenu: some Commands {
+        CommandGroup(after: .newItem) {
+            Divider()
+            Button {
+                postSolaroMenuAction(.fileRevealInFinder)
+            } label: {
+                Label("Reveal in Finder", systemImage: "folder")
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift, .option])
+            Button {
+                postSolaroMenuAction(.fileCopyPath)
+            } label: {
+                Label("Copy File Path", systemImage: "doc.on.clipboard")
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift, .option])
+            Button {
+                postSolaroMenuAction(.fileRename)
+            } label: {
+                Label("Rename…", systemImage: "pencil")
+            }
+            Divider()
+            Button(role: .destructive) {
+                postSolaroMenuAction(.fileMoveToTrash)
+            } label: {
+                Label("Move to Trash", systemImage: "trash")
+            }
+            .keyboardShortcut(.delete, modifiers: [.command])
+            Divider()
+            Button {
+                postSolaroMenuAction(.fileCloseTab)
+            } label: {
+                Label("Close Tab", systemImage: "xmark")
+            }
+            .keyboardShortcut("w", modifiers: [.command])
+        }
+    }
+
+    /// Edit menu — Find / Replace, refactor, format. Sits after
+    /// the system-provided pasteboard items.
+    @CommandsBuilder
+    private var solaroEditMenu: some Commands {
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button {
+                postSolaroMenuAction(.editFindInFile)
+            } label: {
+                Label("Find in File…", systemImage: "magnifyingglass")
+            }
+            .keyboardShortcut("f", modifiers: [.command])
+            Button {
+                postSolaroMenuAction(.editFindInProject)
+            } label: {
+                Label("Find in Project…", systemImage: "text.magnifyingglass")
+            }
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+            Divider()
+            Button {
+                postSolaroMenuAction(.editFormatDocument)
+            } label: {
+                Label("Format Document", systemImage: "text.alignleft")
+            }
+            .keyboardShortcut("f", modifiers: [.option, .shift])
+            Button {
+                postSolaroMenuAction(.editRenameRefactor)
+            } label: {
+                Label("Rename Symbol…", systemImage: "character.cursor.ibeam")
+            }
+            .keyboardShortcut("r", modifiers: [.control, .command])
+            Button {
+                postSolaroMenuAction(.editTriggerCompletion)
+            } label: {
+                Label("Trigger Completion", systemImage: "text.append")
+            }
+            .keyboardShortcut(" ", modifiers: [.control])
+        }
+    }
+
+    /// View menu — sidebar/inspector toggles, pane-mode picker,
+    /// bottom panel reveal, internal logs.
+    @CommandsBuilder
+    private var solaroViewMenu: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button {
+                postSolaroMenuAction(.viewToggleSidebar)
+            } label: {
+                Label("Toggle Sidebar", systemImage: "sidebar.left")
+            }
+            .keyboardShortcut("0", modifiers: [.command])
+            Button {
+                postSolaroMenuAction(.viewToggleInspector)
+            } label: {
+                Label("Toggle Inspector", systemImage: "sidebar.right")
+            }
+            .keyboardShortcut("0", modifiers: [.command, .option])
+        }
+        CommandGroup(after: .toolbar) {
+            Divider()
+            Menu {
+                Button {
+                    postSolaroMenuAction(.viewPaneMap)
+                } label: {
+                    Label("Map", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                Button {
+                    postSolaroMenuAction(.viewPaneCanvas)
+                } label: {
+                    Label("Canvas", systemImage: "circle.hexagongrid")
+                }
+                Button {
+                    postSolaroMenuAction(.viewPaneText)
+                } label: {
+                    Label("Text", systemImage: "text.alignleft")
+                }
+                Button {
+                    postSolaroMenuAction(.viewPaneSplit)
+                } label: {
+                    Label("Split", systemImage: "rectangle.split.2x1")
+                }
+            } label: {
+                Label("Pane Mode", systemImage: "rectangle.3.group")
+            }
+            Divider()
+            Button {
+                NotificationCenter.default.post(
+                    name: .solaroShowBottomPanel,
+                    object: nil,
+                    userInfo: ["tab": "console"]
+                )
+            } label: {
+                Label("Show Console", systemImage: "terminal")
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+            Button {
+                NotificationCenter.default.post(
+                    name: .solaroShowBottomPanel,
+                    object: nil,
+                    userInfo: ["tab": "terminal"]
+                )
+            } label: {
+                Label("Show Terminal", systemImage: "apple.terminal")
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button {
+                NotificationCenter.default.post(
+                    name: .solaroShowBottomPanel,
+                    object: nil,
+                    userInfo: ["tab": "tests"]
+                )
+            } label: {
+                Label("Show Tests", systemImage: "checkmark.diamond")
+            }
+            .keyboardShortcut("u", modifiers: [.command, .shift])
+            Divider()
+            Button {
+                InternalLogsWindow.show()
+            } label: {
+                Label("Internal Logs…", systemImage: "doc.text")
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift, .option])
+        }
+    }
+
+    /// Navigate menu — palettes, jump-to, tab cycling.
+    @CommandsBuilder
+    private var solaroNavigateMenu: some Commands {
+        CommandMenu("Navigate") {
+            Button {
+                postSolaroMenuAction(.navGoToDefinition)
+            } label: {
+                Label("Go to Definition", systemImage: "arrow.right.circle")
+            }
+            .keyboardShortcut("d", modifiers: [.control, .command])
+            Button {
+                postSolaroMenuAction(.navHover)
+            } label: {
+                Label("Show Hover Info", systemImage: "info.circle")
+            }
+            .keyboardShortcut("h", modifiers: [.control, .command])
+            Divider()
+            Button {
+                postSolaroMenuAction(.viewCommandPalette)
+            } label: {
+                Label("Command Palette…", systemImage: "command")
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            Button {
+                postSolaroMenuAction(.viewQuickOpen)
+            } label: {
+                Label("Quick Open…", systemImage: "doc.text.magnifyingglass")
+            }
+            .keyboardShortcut("p", modifiers: [.command])
+            Button {
+                postSolaroMenuAction(.viewSymbolPalette)
+            } label: {
+                Label("Symbol Palette…", systemImage: "list.bullet.rectangle")
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
+            Divider()
+            Button {
+                postSolaroMenuAction(.navNextTab)
+            } label: {
+                Label("Next Tab", systemImage: "arrow.right")
+            }
+            .keyboardShortcut("]", modifiers: [.command, .shift])
+            Button {
+                postSolaroMenuAction(.navPrevTab)
+            } label: {
+                Label("Previous Tab", systemImage: "arrow.left")
+            }
+            .keyboardShortcut("[", modifiers: [.command, .shift])
+        }
+    }
+
+    /// Run menu — Play / Debug / Tests / Stop, canvas tooling.
+    @CommandsBuilder
+    private var solaroRunMenu: some Commands {
+        CommandMenu("Run") {
+            Button {
+                postSolaroMenuAction(.runPlay)
+            } label: {
+                Label("Run", systemImage: "play.fill")
+            }
+            .keyboardShortcut("r", modifiers: [.command])
+            Button {
+                postSolaroMenuAction(.runDebug)
+            } label: {
+                Label("Debug", systemImage: "ant.fill")
+            }
+            .keyboardShortcut("y", modifiers: [.command])
+            Button {
+                postSolaroMenuAction(.runTests)
+            } label: {
+                Label("Run Tests", systemImage: "checkmark.diamond")
+            }
+            .keyboardShortcut("u", modifiers: [.control, .command])
+            Button {
+                postSolaroMenuAction(.runStop)
+            } label: {
+                Label("Stop", systemImage: "stop.fill")
+            }
+            .keyboardShortcut(".", modifiers: [.command])
+            Divider()
+            Button {
+                postSolaroMenuAction(.runAutoLayout)
+            } label: {
+                Label("Auto Layout Canvas", systemImage: "rectangle.3.group")
+            }
+            Button {
+                postSolaroMenuAction(.runExportCanvas)
+            } label: {
+                Label("Export Canvas as PNG…", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                postSolaroMenuAction(.runTimeTravel)
+            } label: {
+                Label("Time Travel…", systemImage: "clock.arrow.circlepath")
+            }
+        }
+    }
+
+    /// Git menu — commit, blame, revert. Grouped together so the
+    /// menu bar stays scannable.
+    @CommandsBuilder
+    private var solaroGitMenu: some Commands {
+        CommandMenu("Git") {
+            Button {
+                postSolaroMenuAction(.gitCommit)
+            } label: {
+                Label("Commit Changes…", systemImage: "checkmark.seal")
+            }
+            .keyboardShortcut("k", modifiers: [.command])
+            Divider()
+            Button {
+                postSolaroMenuAction(.gitBlame)
+            } label: {
+                Label("Blame Current File", systemImage: "person.crop.circle.badge.questionmark")
+            }
+            .keyboardShortcut("b", modifiers: [.control, .command])
+            Button(role: .destructive) {
+                postSolaroMenuAction(.gitRevertFile)
+            } label: {
+                Label("Revert Local Changes…", systemImage: "arrow.uturn.backward.circle")
+            }
+        }
+    }
+
+    /// AI menu — Ask panel, conversation reset.
+    @CommandsBuilder
+    private var solaroAIMenu: some Commands {
+        CommandMenu("AI") {
+            Button {
+                postSolaroMenuAction(.aiOpenPanel)
+            } label: {
+                Label("Open Ask Panel", systemImage: "sparkles")
+            }
+            .keyboardShortcut("i", modifiers: [.command, .shift])
+            Button {
+                postSolaroMenuAction(.aiReset)
+            } label: {
+                Label("Reset Conversation", systemImage: "arrow.counterclockwise")
+            }
         }
     }
 }
@@ -228,6 +516,75 @@ extension Notification.Name {
     /// `userInfo["tab"]` value is one of `"console"`, `"terminal"`,
     /// `"tests"` — matching `BottomTab.rawValue`.
     static let solaroShowBottomPanel = Notification.Name("solaroShowBottomPanel")
+    /// Generic dispatch from menu bar items to the front workspace.
+    /// `userInfo["id"]` carries one of `SolaroMenuAction.rawValue`.
+    /// Centralising on a single notification keeps the listener
+    /// short — the workspace switches on the action ID in one place
+    /// rather than wiring 30+ named notifications.
+    static let solaroMenuAction = Notification.Name("solaroMenuAction")
+    /// Posted from the Run menu's "Auto Layout Canvas" item.
+    /// `CenterPane` subscribes and wipes the saved positions in the
+    /// project's layout store so the next graph build flows
+    /// through `StackLayout.place()` defaults.
+    static let solaroResetCanvasLayout = Notification.Name("solaroResetCanvasLayout")
+}
+
+/// Every menu-bar action the workspace knows how to route. New
+/// menu items pick a raw value here and the workspace handler
+/// gets a `default:` warning when it's added without a handler.
+enum SolaroMenuAction: String {
+    // File
+    case fileRevealInFinder
+    case fileCopyPath
+    case fileRename
+    case fileMoveToTrash
+    case fileCloseTab
+    // Edit
+    case editFindInFile
+    case editFindInProject
+    case editFormatDocument
+    case editRenameRefactor
+    case editTriggerCompletion
+    // View
+    case viewToggleSidebar
+    case viewToggleInspector
+    case viewPaneMap
+    case viewPaneCanvas
+    case viewPaneText
+    case viewPaneSplit
+    case viewCommandPalette
+    case viewQuickOpen
+    case viewSymbolPalette
+    // Navigate
+    case navGoToDefinition
+    case navHover
+    case navNextTab
+    case navPrevTab
+    // Run
+    case runPlay
+    case runDebug
+    case runTests
+    case runStop
+    case runAutoLayout
+    case runExportCanvas
+    case runTimeTravel
+    // Git
+    case gitCommit
+    case gitBlame
+    case gitRevertFile
+    // AI
+    case aiOpenPanel
+    case aiReset
+}
+
+/// Post a menu action to the front workspace. Used by every
+/// menu-bar item below.
+func postSolaroMenuAction(_ action: SolaroMenuAction) {
+    NotificationCenter.default.post(
+        name: .solaroMenuAction,
+        object: nil,
+        userInfo: ["id": action.rawValue]
+    )
 }
 
 /// Top-level routing between the welcome screen (no project open)

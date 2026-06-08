@@ -68,8 +68,10 @@ enum CrashReporter {
         }.first
     }
 
-    /// Open the GitLab new-issue URL with the most recent crash
-    /// log embedded in the description as a fenced block.
+    /// Open the GitHub new-issue URL with the most recent crash
+    /// log embedded in the description as a fenced block. The
+    /// public mirror at github.com/arolang/aro is where bug
+    /// reports go — the GitLab origin is private to the team.
     static func openReportBugPage() {
         let url = composeReportURL()
         NSWorkspace.shared.open(url)
@@ -78,7 +80,7 @@ enum CrashReporter {
     /// Build the new-issue URL. Public so a SwiftUI button can
     /// trigger it; tests can also exercise the URL composition.
     static func composeReportURL() -> URL {
-        let base = "https://git.ausdertechnik.de/arolang/aro/-/issues/new"
+        let base = "https://github.com/arolang/aro/issues/new"
         var components = URLComponents(string: base)!
         var description = "**SOLARO version:** \(AROVersion.shortVersion)\n"
         description += "**Platform:** macOS\n\n"
@@ -91,10 +93,12 @@ enum CrashReporter {
             description += "<details>\n<summary>\(log.lastPathComponent)</summary>\n\n"
             description += "```\n\(text)\n```\n\n</details>\n"
         }
+        // GitHub's `new issue` form uses `title` / `body` query
+        // parameters (not GitLab's `issue[title]` / `issue[description]`).
         components.queryItems = [
-            URLQueryItem(name: "issue[title]",
+            URLQueryItem(name: "title",
                          value: "SOLARO crash / bug report"),
-            URLQueryItem(name: "issue[description]", value: description),
+            URLQueryItem(name: "body", value: description),
         ]
         return components.url!
     }

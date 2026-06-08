@@ -120,6 +120,25 @@ final class GitStatusMonitor {
         return err
     }
 
+    /// Stage only the listed file paths and commit with the given
+    /// message. Used by the commit dialog's per-file checkbox
+    /// list so the user can commit a subset of the working-tree
+    /// changes. `paths` are absolute (the same shape that
+    /// `GitStatus.files` uses). Empty `paths` short-circuits with
+    /// an error so we never produce an empty commit.
+    func commit(
+        message: String,
+        files paths: [String],
+        in project: Project
+    ) async -> String? {
+        guard !paths.isEmpty else { return "Nothing to commit — select at least one file." }
+        let err = await Self.runScopedCommit(
+            message: message, paths: paths, project: project
+        )
+        if err == nil { refresh(for: project) }
+        return err
+    }
+
     private struct Result {
         let available: Bool
         let status: GitStatus
@@ -276,6 +295,34 @@ final class GitStatusMonitor {
         if let path { args.append(contentsOf: ["--", path]) }
         let tracked = runGit(args: args, project: project)
         return tracked.stdout
+    }
+
+    /// Stage exactly the listed paths and commit with the given
+    /// message. Wipes the index first via `git reset` so any
+    /// already-staged-but-unselected files don't sneak into the
+    /// commit. Untracked + modified are both handled by `git add`.
+    nonisolated private static func runScopedCommit(
+        message: String,
+        paths: [String],
+        project: Project
+    ) async -> String? {
+        _ = runGit(args: ["reset"], project: project)
+        var addArgs = ["add", "--"]
+        addArgs.append(contentsOf: paths)
+        let add = runGit(args: addArgs, project: project)
+        if add.exitCode != 0 {
+            let err = add.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return err.isEmpty
+                ? "git add failed (exit \(add.exitCode))"
+                : err
+        }
+        let commit = runGit(args: ["commit", "-m", message], project: project)
+        if commit.exitCode == 0 { return nil }
+        let err = (commit.stderr + commit.stdout)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return err.isEmpty
+            ? "git commit failed (exit \(commit.exitCode))"
+            : err
     }
 
     nonisolated private static func runCommit(message: String, project: Project) async -> String? {

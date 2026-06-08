@@ -39,6 +39,14 @@ struct CenterPaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SolaroColor.backdrop)
+        // Run → Auto Layout Canvas menu item posts this so we can
+        // wipe the saved positions in the project's layout store
+        // from outside the canvas's right-click context menu.
+        .onReceive(
+            NotificationCenter.default.publisher(for: .solaroResetCanvasLayout)
+        ) { _ in
+            resetLayoutSidecar()
+        }
     }
 
     // MARK: - Text

@@ -206,6 +206,12 @@ struct GitCommitSheet: View {
     /// nil = "All files" view; otherwise an absolute project path
     /// from `GitStatus.files.keys`.
     @State private var selectedFile: String? = nil
+    /// Paths the user has checked for inclusion in the commit.
+    /// Seeded with every file in `monitor.status.files` on first
+    /// open so the default behaviour (commit everything) matches
+    /// what the dialog used to do. Cleared / repopulated via the
+    /// per-row checkbox and the "All / None" header buttons.
+    @State private var checkedFiles: Set<String> = []
     /// Live width of the file-list column. Persisted via @AppStorage
     /// so the user's preferred proportion survives across sessions.
     /// Clamped on read so a wildly out-of-range stored value doesn't
@@ -246,6 +252,9 @@ struct GitCommitSheet: View {
             fullDiff = text
             displayedDiff = text
             loadingDiff = false
+            // Default to "commit everything" — same as the prior
+            // behaviour. The user unchecks rows to scope.
+            checkedFiles = Set(monitor.status.files.keys)
             // Kick off the suggestion right away. The result still
             // arrives async; in the meantime the editor is empty
             // and clearly labelled "(suggesting…)".
@@ -341,24 +350,45 @@ struct GitCommitSheet: View {
     }
 
     private var fileList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 1) {
-                fileRow(label: "All files",
-                        statusLetter: nil,
-                        statusColor: SolaroColor.textTertiary,
-                        path: nil)
-                ForEach(monitor.status.files.sorted { $0.key < $1.key },
-                        id: \.key) { (path, status) in
-                    fileRow(
-                        label: relativePath(path),
-                        statusLetter: letter(for: status),
-                        statusColor: color(for: status),
-                        path: path
-                    )
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: SolaroSpace.xs) {
+                Text("\(checkedFiles.count) / \(monitor.status.files.count) selected")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Spacer()
+                Button("All") {
+                    checkedFiles = Set(monitor.status.files.keys)
                 }
+                .controlSize(.small)
+                .disabled(checkedFiles.count == monitor.status.files.count)
+                Button("None") {
+                    checkedFiles.removeAll()
+                }
+                .controlSize(.small)
+                .disabled(checkedFiles.isEmpty)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SolaroSpace.xs)
+            .padding(.horizontal, SolaroSpace.s)
+            .padding(.vertical, SolaroSpace.xs)
+            Divider().background(SolaroColor.divider.opacity(0.5))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    fileRow(label: "All files",
+                            statusLetter: nil,
+                            statusColor: SolaroColor.textTertiary,
+                            path: nil)
+                    ForEach(monitor.status.files.sorted { $0.key < $1.key },
+                            id: \.key) { (path, status) in
+                        fileRow(
+                            label: relativePath(path),
+                            statusLetter: letter(for: status),
+                            statusColor: color(for: status),
+                            path: path
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SolaroSpace.xs)
+            }
         }
         .background(SolaroColor.backdrop)
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.s))
@@ -371,23 +401,28 @@ struct GitCommitSheet: View {
         path: String?
     ) -> some View {
         let active = (selectedFile == path)
-        return Button {
-            selectFile(path)
-        } label: {
-            HStack(spacing: SolaroSpace.xs) {
-                Text(statusLetter ?? " ")
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(statusColor)
-                    .frame(width: 14, alignment: .leading)
-                Text(label)
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(active
-                        ? SolaroColor.textPrimary
-                        : SolaroColor.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-            }
+        return HStack(spacing: 4) {
+            // Per-file commit checkbox. The "All files" row's box
+            // (path == nil) acts as a master toggle that flips
+            // every file's selection in one click.
+            checkbox(for: path)
+            Button {
+                selectFile(path)
+            } label: {
+                HStack(spacing: SolaroSpace.xs) {
+                    Text(statusLetter ?? " ")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(statusColor)
+                        .frame(width: 14, alignment: .leading)
+                    Text(label)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(active
+                            ? SolaroColor.textPrimary
+                            : SolaroColor.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
             .padding(.vertical, 3)
             .padding(.horizontal, SolaroSpace.s)
             .background(
@@ -397,8 +432,68 @@ struct GitCommitSheet: View {
                         : Color.clear)
             )
             .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Checkbox for one file row. `nil` path = the "All files"
+    /// master row: clicking it toggles every file's selection.
+    /// Solid path = a single file's checkbox.
+    @ViewBuilder
+    private func checkbox(for path: String?) -> some View {
+        if let path {
+            Button {
+                if checkedFiles.contains(path) {
+                    checkedFiles.remove(path)
+                } else {
+                    checkedFiles.insert(path)
+                }
+            } label: {
+                Image(systemName: checkedFiles.contains(path)
+                      ? "checkmark.square.fill"
+                      : "square")
+                    .font(.system(size: 13))
+                    .foregroundStyle(checkedFiles.contains(path)
+                        ? SolaroColor.accent
+                        : SolaroColor.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 18)
+        } else {
+            masterCheckbox
+        }
+    }
+
+    /// "All files" master toggle. Tri-state glyph: empty, dash,
+    /// or full check depending on whether 0, some, or all files
+    /// are selected. Click cycles to the opposite extreme.
+    private var masterCheckbox: some View {
+        let total = monitor.status.files.count
+        let checked = checkedFiles.count
+        let glyph: String
+        if checked == 0 {
+            glyph = "square"
+        } else if checked == total {
+            glyph = "checkmark.square.fill"
+        } else {
+            glyph = "minus.square.fill"
+        }
+        return Button {
+            if checked == total {
+                checkedFiles.removeAll()
+            } else {
+                checkedFiles = Set(monitor.status.files.keys)
+            }
+        } label: {
+            Image(systemName: glyph)
+                .font(.system(size: 13))
+                .foregroundStyle(checked > 0
+                    ? SolaroColor.accent
+                    : SolaroColor.textTertiary)
         }
         .buttonStyle(.plain)
+        .frame(width: 18)
     }
 
     private var diffPane: some View {
@@ -526,8 +621,11 @@ struct GitCommitSheet: View {
         guard !trimmed.isEmpty else { return }
         model.isCommitting = true
         model.commitError = nil
+        let paths = Array(checkedFiles)
         Task {
-            let err = await monitor.commit(message: trimmed, in: project)
+            let err = await monitor.commit(
+                message: trimmed, files: paths, in: project
+            )
             model.isCommitting = false
             if let err {
                 model.commitError = err

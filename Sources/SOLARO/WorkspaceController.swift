@@ -376,6 +376,13 @@ final class WorkspaceController {
         }
         guard let loaded = result.model else { return }
         self.model = loaded
+        // One-shot migration of legacy per-file `*.layout.json`
+        // files into the consolidated `<root>/.layout.json`. Idle
+        // after the first project open since later passes find no
+        // legacy files to fold in.
+        ProjectLayoutStore.migrateLegacySidecars(
+            at: loaded.root.rootPath
+        )
         self.programs = result.programs
         for (url, msg) in result.errors {
             parseErrors[url] = msg
