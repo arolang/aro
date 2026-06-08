@@ -85,10 +85,21 @@ public struct SymbolSnapshot: Sendable {
     public let name: String
     public let typeName: String
     public let valuePreview: String   // truncated rendering, safe to print
+    /// Current contents of a repository, projected to flat
+    /// string-keyed rows. Nil for non-repository symbols.
+    /// Lets the SOLARO repo card show a live table without
+    /// having to parse `valuePreview` (see #284 step 3).
+    public let records: [[String: String]]?
 
-    public init(name: String, typeName: String, valuePreview: String) {
+    public init(
+        name: String,
+        typeName: String,
+        valuePreview: String,
+        records: [[String: String]]? = nil
+    ) {
         self.name = name
         self.typeName = typeName
         self.valuePreview = valuePreview
+        self.records = records
     }
 }

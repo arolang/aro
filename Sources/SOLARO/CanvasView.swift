@@ -70,6 +70,9 @@ struct CanvasView: View {
     /// Rolling history (newest first) of the last few payloads per
     /// repo. Used by `RepoCard`'s hover popover.
     let repositoryHistory: [String: [ConsoleProcess.SymbolValue]]
+    /// Current rows held by each repository — drives the inline
+    /// table inside `RepoCard` (#284 step 3).
+    let repositoryRecords: [String: [[String: String]]]
     /// 1-indexed lines that carry a breakpoint. Nodes on those
     /// lines render a red dot in the top-left corner so the
     /// canvas mirrors the editor gutter.
@@ -284,6 +287,7 @@ struct CanvasView: View {
                 repoHeight: repoHeight,
                 repositoryValues: repositoryValues,
                 repositoryHistory: repositoryHistory,
+                repositoryRecords: repositoryRecords,
                 onDrag: { id, newPos in liveNodes[id] = newPos },
                 onDragEnd: { id, finalPos in
                     let oldPos = dragStartPositions[id]

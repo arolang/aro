@@ -90,6 +90,11 @@ final class ConsoleProcess {
     /// so the user can see the recent write sequence. Capped so a
     /// hot loop doesn't grow memory without bound.
     var repositoryHistory: [String: [SymbolValue]] = [:]
+    /// Current rows held by each repository, projected to flat
+    /// `[field: rendered-value]` dictionaries (#284 step 3).
+    /// Surfaced by `RepoCard` as a live table during a run. Reset
+    /// alongside `repositoryValues` on every fresh start.
+    var repositoryRecords: [String: [[String: String]]] = [:]
     private static let repositoryHistoryDepth = 5
 
     /// Shared metrics client read by `MetricsPanel`. Owned here so
@@ -125,6 +130,17 @@ final class ConsoleProcess {
         let name: String
         let typeName: String
         let value: String
+        /// Current rows of a repository symbol (#284 step 3). Nil
+        /// for non-repository symbols.
+        let records: [[String: String]]?
+
+        init(name: String, typeName: String, value: String,
+             records: [[String: String]]? = nil) {
+            self.name = name
+            self.typeName = typeName
+            self.value = value
+            self.records = records
+        }
     }
 
     private var process: Process?
@@ -216,6 +232,7 @@ final class ConsoleProcess {
         testResults.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
+        repositoryRecords.removeAll(keepingCapacity: true)
         executionTick = 0
         lastProject = project
         breakpointLines = []
@@ -278,6 +295,7 @@ final class ConsoleProcess {
         testResults.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
+        repositoryRecords.removeAll(keepingCapacity: true)
         executionTick = 0
         lastProject = project
         breakpointLines = []
@@ -371,6 +389,7 @@ final class ConsoleProcess {
         testResults.removeAll(keepingCapacity: true)
         repositoryValues.removeAll(keepingCapacity: true)
         repositoryHistory.removeAll(keepingCapacity: true)
+        repositoryRecords.removeAll(keepingCapacity: true)
         executionTick = 0
         lastProject = project
         breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
@@ -537,7 +556,8 @@ final class ConsoleProcess {
                 let value = SymbolValue(
                     name: sym.name,
                     typeName: sym.typeName,
-                    value: sym.value
+                    value: sym.value,
+                    records: sym.records
                 )
                 pauseSymbols[sym.name] = value
                 let lower = sym.name.lowercased()
@@ -546,6 +566,9 @@ final class ConsoleProcess {
                     || lower.hasSuffix("-store")
                 {
                     repositoryValues[sym.name] = value
+                    if let recs = sym.records {
+                        repositoryRecords[sym.name] = recs
+                    }
                     // Push onto the front of the history queue and
                     // cap depth. Skip consecutive duplicates so the
                     // history reads as a write *sequence* rather

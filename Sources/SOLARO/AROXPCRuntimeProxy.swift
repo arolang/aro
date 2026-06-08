@@ -262,7 +262,8 @@ final class AROXPCRuntimeProxy {
         let symbols = record.symbols.map {
             TimeTravelRecord.Symbol(name: $0.name,
                                     typeName: $0.typeName,
-                                    value: $0.value)
+                                    value: $0.value,
+                                    records: $0.records)
         }
         let kind: TimeTravelRecord.Kind
         switch record.kind {

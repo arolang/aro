@@ -26,6 +26,9 @@ struct RepoNodesLayer: View {
     let repositoryValues: [String: ConsoleProcess.SymbolValue]
     /// Rolling history of recent payloads, newest first.
     let repositoryHistory: [String: [ConsoleProcess.SymbolValue]]
+    /// Current rows held by each repository — drives the inline
+    /// table inside `RepoCard` (#284 step 3).
+    let repositoryRecords: [String: [[String: String]]]
     let onDrag: (String, CGPoint) -> Void
     let onDragEnd: (String, CGPoint) -> Void
     /// Snapshot point — same role as `NodesLayer.onDragStart`.
@@ -41,12 +44,16 @@ struct RepoNodesLayer: View {
                 RepoCard(
                     repo: repo,
                     width: repoWidth,
-                    height: repoHeight,
+                    collapsedHeight: repoHeight,
                     liveValue: repositoryValues[repo.name],
-                    history: repositoryHistory[repo.name] ?? []
+                    history: repositoryHistory[repo.name] ?? [],
+                    records: repositoryRecords[repo.name]
                 )
-                    .position(x: p.x + repoWidth / 2,
-                              y: p.y + repoHeight / 2)
+                    // Place by top-left so the card grows downward
+                    // when it has records. The wires layer always
+                    // anchors to the top edge of the card, so a
+                    // taller card doesn't move the connection point.
+                    .offset(x: p.x, y: p.y)
                     .gesture(dragGesture(id: repo.id, livePosition: p))
             }
         }
@@ -81,18 +88,75 @@ struct RepoNodesLayer: View {
 struct RepoCard: View {
     let repo: RepositoryNode
     let width: CGFloat
-    let height: CGFloat
+    /// Height of the always-visible header row. The card grows
+    /// taller than this when it has `records` to render as a table.
+    let collapsedHeight: CGFloat
     /// Most recent value seen on this repository during the current
     /// recorded run, or `nil` if nothing has flowed through yet.
     let liveValue: ConsoleProcess.SymbolValue?
     /// Rolling history (newest first) — shown in the hover popover
     /// so the user can see the recent write sequence.
     let history: [ConsoleProcess.SymbolValue]
+    /// Current rows held by the repository, projected to flat
+    /// `[field: rendered]` dictionaries. `nil` means the runtime
+    /// hasn't reported on this repo yet (so we render the empty
+    /// capsule). An empty array means "the repo is currently empty"
+    /// and we render a single "(no entries)" hint.
+    let records: [[String: String]]?
 
     @State private var hovering = false
     @State private var showHistory = false
 
+    /// Cap the visible row count so a hot loop doesn't blow up the
+    /// card. Overflow is summarized as a "+N more" footer row.
+    private static let visibleRowLimit = 4
+
+    /// Cap how wide the card may grow when records push it open.
+    /// Long URL / hash payloads otherwise produce a card that
+    /// stretches across the whole canvas. 480pt fits ~80 chars of
+    /// monospaced text — wider values wrap to a second line.
+    private static let expandedMaxWidth: CGFloat = 480
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .frame(maxWidth: .infinity,
+                       minHeight: collapsedHeight,
+                       alignment: .leading)
+            if let records, !records.isEmpty {
+                Divider()
+                    .background(SolaroColor.divider)
+                recordsTable(records)
+                    .padding(.horizontal, SolaroSpace.s)
+                    .padding(.vertical, SolaroSpace.xs)
+            }
+        }
+        // Collapsed card keeps the historical fixed width; once
+        // there are rows, it may grow up to `expandedMaxWidth` to
+        // give cells room to render long values without
+        // truncation (#284 step 3).
+        .frame(minWidth: width,
+               maxWidth: (records?.isEmpty == false) ? Self.expandedMaxWidth : width,
+               alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .fill(SolaroColor.surfaceRaised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
+                .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
+        )
+        .onHover { isHovering in
+            hovering = isHovering
+            showHistory = isHovering && !history.isEmpty
+        }
+        .popover(isPresented: $showHistory, arrowEdge: .top) {
+            RepoHistoryPopover(repo: repo, history: history)
+        }
+        .help(helpText)
+    }
+
+    private var header: some View {
         HStack(spacing: SolaroSpace.s) {
             Image(systemName: "cylinder.split.1x2.fill")
                 .font(.system(size: 18, weight: .medium))
@@ -121,29 +185,76 @@ struct RepoCard: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, SolaroSpace.m)
-        .frame(width: width, height: height, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .fill(SolaroColor.surfaceRaised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
-        )
-        .onHover { isHovering in
-            hovering = isHovering
-            showHistory = isHovering && !history.isEmpty
+    }
+
+    @ViewBuilder
+    private func recordsTable(_ records: [[String: String]]) -> some View {
+        let columns = Self.columnOrder(for: records)
+        let visible = Array(records.prefix(Self.visibleRowLimit))
+        let overflow = records.count - visible.count
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: SolaroSpace.s) {
+                ForEach(columns, id: \.self) { col in
+                    Text(col)
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
+                }
+            }
+            ForEach(Array(visible.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: SolaroSpace.s) {
+                    ForEach(columns, id: \.self) { col in
+                        // No `lineLimit`/`truncationMode` — long
+                        // payloads (URLs, hashes) wrap to multiple
+                        // lines so the card always shows the full
+                        // string. `fixedSize(vertical:)` lets the
+                        // row's height match its tallest cell;
+                        // `textSelection(.enabled)` lets the user
+                        // copy the value with ⌘C.
+                        Text(row[col] ?? "—")
+                            .font(SolaroFont.monoCaption)
+                            .foregroundStyle(SolaroColor.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            if overflow > 0 {
+                Text("+\(overflow) more")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
         }
-        .popover(isPresented: $showHistory, arrowEdge: .top) {
-            RepoHistoryPopover(repo: repo, history: history)
+    }
+
+    /// Column ordering preserves the first row's key order and then
+    /// appends any new keys discovered in later rows. Keeps the
+    /// rendering stable across redraws without an explicit schema.
+    private static func columnOrder(for records: [[String: String]]) -> [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for row in records {
+            for key in row.keys where !seen.contains(key) {
+                seen.insert(key)
+                out.append(key)
+            }
         }
-        .help(helpText)
+        // Sort within the first row to keep the order deterministic
+        // (Swift dictionaries don't promise insertion order). Stable
+        // alphabetical is good enough — the user already gets the
+        // raw record under hover.
+        return out.sorted()
     }
 
     private var helpText: String {
         var msg = "Repository: \(repo.name) — \(usageLabel(repo.usage))"
         if let live = liveValue {
             msg += "\nCurrent value: \(live.value)"
+        }
+        if let records {
+            msg += "\nRows: \(records.count)"
         }
         return msg
     }

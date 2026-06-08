@@ -227,7 +227,7 @@ public final class FeatureSetExecutor: Sendable {
         // Cheap fast-path: TaskLocal pointer load + nil check when no
         // debugger is attached.
         if let controller = Debug.controller {
-            let symbols = Self.snapshotSymbols(from: context)
+            let symbols = await Self.snapshotSymbols(from: context)
             try await controller.checkpoint(
                 statement: statement,
                 featureSetName: context.featureSetName,
@@ -297,8 +297,9 @@ public final class FeatureSetExecutor: Sendable {
     /// frontend can print them safely. Internal underscore-prefixed
     /// bookkeeping bindings are filtered out — they are noise to a
     /// debugger user.
-    private static func snapshotSymbols(from context: ExecutionContext) -> [SymbolSnapshot] {
+    private static func snapshotSymbols(from context: ExecutionContext) async -> [SymbolSnapshot] {
         var out: [SymbolSnapshot] = []
+        var emittedRepoNames = Set<String>()
         let names = context.variableNames.filter { !$0.hasPrefix("_") }
         for name in names.sorted() {
             let typed = context.resolveTyped(name)
@@ -309,7 +310,43 @@ public final class FeatureSetExecutor: Sendable {
             } else {
                 preview = "nil"
             }
-            out.append(SymbolSnapshot(name: name, typeName: typeName, valuePreview: preview))
+            let records: [[String: String]]? = await Self.snapshotRecords(
+                forSymbol: name, context: context
+            )
+            if records != nil { emittedRepoNames.insert(name) }
+            out.append(SymbolSnapshot(
+                name: name,
+                typeName: typeName,
+                valuePreview: preview,
+                records: records
+            ))
+        }
+        // Repositories are global state, not symbol-table entries —
+        // a feature set that only writes to (or never references)
+        // a repo won't have it in `context.variableNames`. To keep
+        // SOLARO's repository cards live regardless of which feature
+        // set fired the checkpoint, walk every known repo and emit
+        // a synthetic snapshot for any we haven't already covered
+        // via the symbol-table path above (#284 step 3).
+        // Prefer the context-scoped storage override when one is
+        // registered (mirrors how Store/Retrieve actions resolve it
+        // — without that fallback, a test that swaps in a custom
+        // storage would see the canvas reading from the wrong one).
+        let storage = context.service(RepositoryStorageService.self)
+            ?? context.container.repositoryStorage
+        let knownRepos = await storage.knownRepositoryNames()
+        for repoName in knownRepos where !emittedRepoNames.contains(repoName) {
+            let rows = await storage.retrieve(
+                from: repoName,
+                businessActivity: context.businessActivity
+            )
+            let projected = rows.map { Self.flattenRow($0) }
+            out.append(SymbolSnapshot(
+                name: repoName,
+                typeName: "Repository",
+                valuePreview: "\(projected.count) row\(projected.count == 1 ? "" : "s")",
+                records: projected
+            ))
         }
         return out
     }
@@ -319,6 +356,44 @@ public final class FeatureSetExecutor: Sendable {
         if s.count <= maxLength { return s }
         let idx = s.index(s.startIndex, offsetBy: maxLength)
         return String(s[..<idx]) + "…"
+    }
+
+    /// Snapshot the current contents of a repository for symbols
+    /// whose name ends in `-repository` / `-repo` / `-store`. Rows
+    /// are flattened to `[String: String]` so the wire format stays
+    /// flat-strings (see `DebugEventLog.swift` and SOLARO's repo
+    /// card, which renders the result as a table). Returns nil for
+    /// non-repository symbols so the snapshot stays compact.
+    private static func snapshotRecords(
+        forSymbol name: String,
+        context: ExecutionContext
+    ) async -> [[String: String]]? {
+        let lower = name.lowercased()
+        guard lower.hasSuffix("-repository")
+            || lower.hasSuffix("-repo")
+            || lower.hasSuffix("-store")
+        else { return nil }
+        let storage = context.container.repositoryStorage
+        let rows = await storage.retrieve(
+            from: name,
+            businessActivity: context.businessActivity
+        )
+        return rows.map { Self.flattenRow($0) }
+    }
+
+    /// Project a single repository row to flat string values. Top-level
+    /// dictionaries keep their keys; other shapes collapse into a
+    /// single `value` column so the table view always has something to
+    /// render.
+    private static func flattenRow(_ row: any Sendable) -> [String: String] {
+        if let dict = row as? [String: any Sendable] {
+            var out: [String: String] = [:]
+            for (k, v) in dict {
+                out[k] = Self.previewValue(v, maxLength: 120)
+            }
+            return out
+        }
+        return ["value": Self.previewValue(row, maxLength: 120)]
     }
 
     /// ARO-0067: Execute pipeline statement

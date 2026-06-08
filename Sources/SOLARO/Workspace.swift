@@ -305,6 +305,7 @@ struct WorkspaceView: View {
             controller.testResults = consoleProcess.testResults
             controller.repositoryValues = consoleProcess.repositoryValues
             controller.repositoryHistory = consoleProcess.repositoryHistory
+            controller.repositoryRecords = consoleProcess.repositoryRecords
             controller.pauseSymbols = consoleProcess.pauseSymbols
             controller.executionTick &+= 1
         }

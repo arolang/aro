@@ -98,10 +98,16 @@ public struct AROXPCPauseRecord: Codable, Sendable {
         public let name: String
         public let typeName: String
         public let value: String
-        public init(name: String, typeName: String, value: String) {
+        /// Current rows for repository-typed symbols (#284 step 3).
+        /// Nil for non-repository symbols; an empty array means the
+        /// repository exists but holds no entries yet.
+        public let records: [[String: String]]?
+        public init(name: String, typeName: String, value: String,
+                    records: [[String: String]]? = nil) {
             self.name = name
             self.typeName = typeName
             self.value = value
+            self.records = records
         }
     }
 

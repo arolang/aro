@@ -58,6 +58,18 @@ struct TimeTravelRecord: Equatable {
         let name: String
         let typeName: String
         let value: String
+        /// Current rows for repository-typed symbols (#284 step 3).
+        /// Nil for non-repository symbols; an empty array means the
+        /// repository exists but holds no entries yet.
+        let records: [[String: String]]?
+
+        init(name: String, typeName: String, value: String,
+             records: [[String: String]]? = nil) {
+            self.name = name
+            self.typeName = typeName
+            self.value = value
+            self.records = records
+        }
     }
 
     struct Metrics: Equatable {
@@ -107,10 +119,21 @@ enum TimeTravelReader {
            let symsData = symsJSON.data(using: .utf8),
            let symsArr = try? JSONSerialization.jsonObject(with: symsData) as? [[String: String]] {
             for entry in symsArr {
+                // Repository symbols carry a JSON-encoded `recs`
+                // string (see DebugController.record(pause:)). We
+                // decode it back into an array of flat dicts so the
+                // UI doesn't need to know about the wire format.
+                var records: [[String: String]]? = nil
+                if let recsStr = entry["recs"],
+                   let recsData = recsStr.data(using: .utf8),
+                   let recsArr = try? JSONSerialization.jsonObject(with: recsData) as? [[String: String]] {
+                    records = recsArr
+                }
                 symbols.append(.init(
                     name: entry["n"] ?? "",
                     typeName: entry["ty"] ?? "?",
-                    value: entry["v"] ?? ""
+                    value: entry["v"] ?? "",
+                    records: records
                 ))
             }
         }

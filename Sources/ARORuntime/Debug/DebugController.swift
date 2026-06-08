@@ -290,7 +290,23 @@ public actor DebugController {
         if let verb = pause.verb { body["verb"] = verb }
         // Serialize symbol snapshots as a single JSON string so the
         // JSONL line stays flat (DebugEventRecord values are strings).
-        let symsArr = pause.symbols.map { ["n": $0.name, "ty": $0.typeName, "v": $0.valuePreview] }
+        // Per-sym dicts are mostly flat strings, but repository symbols
+        // carry an additional `recs` field whose value is a JSON-encoded
+        // array of flat row dictionaries (#284 step 3). We pre-serialize
+        // it here so the JSONL line itself stays string-keyed.
+        let symsArr: [[String: String]] = pause.symbols.map { sym in
+            var entry: [String: String] = [
+                "n": sym.name, "ty": sym.typeName, "v": sym.valuePreview
+            ]
+            if let records = sym.records,
+               let recsData = try? JSONSerialization.data(
+                   withJSONObject: records, options: [.sortedKeys]
+               ),
+               let recsStr = String(data: recsData, encoding: .utf8) {
+                entry["recs"] = recsStr
+            }
+            return entry
+        }
         if let symsData = try? JSONSerialization.data(withJSONObject: symsArr, options: [.sortedKeys]),
            let symsStr = String(data: symsData, encoding: .utf8) {
             body["syms"] = symsStr

@@ -308,7 +308,8 @@ final class ServiceFrontend: DebugFrontend, @unchecked Sendable {
         let symbols = pause.symbols.map {
             AROXPCPauseRecord.Symbol(name: $0.name,
                                      typeName: $0.typeName,
-                                     value: $0.valuePreview)
+                                     value: $0.valuePreview,
+                                     records: $0.records)
         }
         let metrics = pause.metrics.map {
             AROXPCPauseRecord.Metrics(elapsedNanos: $0.elapsedNanos,

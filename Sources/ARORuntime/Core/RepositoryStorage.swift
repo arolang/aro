@@ -153,6 +153,18 @@ public protocol RepositoryStorageService: Sendable {
     ///   - ttl: Time-to-live in seconds (nil = no expiry)
     ///   - maxSize: Maximum item count; oldest item evicted when exceeded (nil = unlimited)
     func configure(repository: String, ttl: TimeInterval?, maxSize: Int?) async
+
+    /// Names of every repository the storage currently knows about,
+    /// regardless of which business activity owns them. Used by the
+    /// debug checkpoint hook to enumerate live repositories for the
+    /// SOLARO canvas — repos are global state, not symbol-table
+    /// entries, so the executor can't infer their names from
+    /// `context.variableNames` alone (#284 step 3).
+    func knownRepositoryNames() async -> [String]
+}
+
+public extension RepositoryStorageService {
+    func knownRepositoryNames() async -> [String] { [] }
 }
 
 /// Storage key for repository name only (repositories are application-scoped)
@@ -625,6 +637,10 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     /// Get all repository names (for debugging)
     public func allRepositories() async -> [(repository: String, count: Int)] {
         return await actor.allRepositories()
+    }
+
+    public func knownRepositoryNames() async -> [String] {
+        await actor.allRepositories().map { $0.repository }
     }
 
     /// Clear all repositories (for testing)

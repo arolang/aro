@@ -85,6 +85,10 @@ final class WorkspaceController {
     /// `repositoryValues`. Exposed via the repository card's hover
     /// popover.
     var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] = [:]
+    /// Current rows held by each repository (#284 step 3). Mirrored
+    /// from `ConsoleProcess.repositoryRecords` and consumed by
+    /// `RepoCard` to render the inline table.
+    var repositoryRecords: [String: [[String: String]]] = [:]
 
     /// Outcome of the most recent `aro test` run, keyed by test
     /// feature-set name (e.g. `"length-of-hello"`). Drives the

@@ -136,7 +136,8 @@ final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
             TimeTravelRecord.Symbol(
                 name: $0.name,
                 typeName: $0.typeName,
-                value: $0.valuePreview
+                value: $0.valuePreview,
+                records: $0.records
             )
         }
         // Errors arrive without a source location of their own; reuse

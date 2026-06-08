@@ -565,6 +565,7 @@ struct CenterPaneView: View {
                 errorLines: controller.errorLines,
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
+                repositoryRecords: controller.repositoryRecords,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
@@ -1092,6 +1093,7 @@ struct CenterPaneView: View {
                 errorLines: controller.errorLines,
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
+                repositoryRecords: controller.repositoryRecords,
                 breakpointLines: breakpointsBinding.wrappedValue,
                 onActionDrop: { template, point in
                     insertDroppedAction(template: template, at: point)
