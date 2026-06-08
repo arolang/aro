@@ -25,7 +25,15 @@ enum CommandPaletteBuilder {
         onOpenAddPlugin: @escaping () -> Void,
         onGoToDefinition: @escaping () -> Void,
         onHoverAtCaret: @escaping () -> Void,
-        onExportCanvas: @escaping () -> Void = {}
+        onExportCanvas: @escaping () -> Void = {},
+        /// Triggers the shared scan-and-prompt path Workspace owns
+        /// so palette-initiated Run / Debug get the same pre-run
+        /// parameter sheet the toolbar buttons do. Without this the
+        /// palette would silently fire `startRun` / `startDebug`
+        /// and a project using `<parameter: NAME>` would fail at
+        /// runtime ("can't extract from parameter").
+        onRequestRun: @escaping () -> Void = {},
+        onRequestDebug: @escaping () -> Void = {}
     ) -> [PaletteItem] {
         var items: [PaletteItem] = []
 
@@ -37,7 +45,7 @@ enum CommandPaletteBuilder {
             category: "Run",
             trailing: nil,
             symbol: "play.fill",
-            action: { consoleProcess.startRun(project: project) }
+            action: { onRequestRun() }
         ))
         items.append(.init(
             id: "debug",
@@ -46,12 +54,7 @@ enum CommandPaletteBuilder {
             category: "Run",
             trailing: nil,
             symbol: "ant.fill",
-            action: {
-                consoleProcess.startDebug(
-                    project: project,
-                    breakpointsByFile: Self.collectBreakpoints(controller: controller)
-                )
-            }
+            action: { onRequestDebug() }
         ))
         items.append(.init(
             id: "test",

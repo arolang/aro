@@ -143,6 +143,28 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which subcommand the user picked from the toolbar. Carried
+/// through the pre-run parameter sheet so Execute can dispatch to
+/// the right `startRun` / `startDebug` helper.
+enum RunIntent {
+    case play
+    case debug
+}
+
+/// Atomic state for the pre-run parameter sheet. Wrapping the
+/// parameter list and intent in a single `Identifiable` lets the
+/// view use `.sheet(item:)`, which guarantees the sheet sees the
+/// updated values at presentation time. The earlier pair of
+/// `@State` (a `Bool` and a separate `[String]`) was vulnerable to
+/// a SwiftUI quirk where the boolean flipped to `true` before the
+/// array reached the sheet builder — the first press showed an
+/// empty form, the second showed the right fields.
+struct PendingParameterRequest: Identifiable {
+    let id = UUID()
+    let parameters: [String]
+    let intent: RunIntent
+}
+
 // MARK: - Workspace root view
 
 struct WorkspaceView: View {
@@ -190,12 +212,13 @@ struct WorkspaceView: View {
     @State private var findInProjectModel = FindInProjectModel()
     @State private var showSymbolPalette = false
     @State private var referencesSymbol: String? = nil
-    /// Pre-run parameter dialog state. Populated by `playButton`
-    /// when the project references `<parameter: NAME>`; the sheet
-    /// renders, the user fills it, and Execute calls back into
-    /// `startRun(project:parameters:)`.
-    @State private var showRunParameters: Bool = false
-    @State private var pendingRunParameters: [String] = []
+    /// Pre-run parameter dialog state. Populated by the Play / Debug
+    /// button when the project references `<parameter: NAME>`; the
+    /// sheet renders, the user fills it, and Execute dispatches
+    /// based on the intent inside `pendingParameterRequest` to
+    /// either `startRun` or `startDebug`. Single optional state so
+    /// `.sheet(item:)` stays atomic — see `PendingParameterRequest`.
+    @State private var pendingParameterRequest: PendingParameterRequest?
     /// Probes `aro --version` once per workspace open and surfaces
     /// a banner when the version disagrees with SOLARO's build
     /// stamp (#287). Lives on the view so it's torn down with the
@@ -401,17 +424,26 @@ struct WorkspaceView: View {
                 }
             )
         }
-        .sheet(isPresented: $showRunParameters) {
+        .sheet(item: $pendingParameterRequest) { request in
             RunParametersSheet(
-                parameters: pendingRunParameters,
+                parameters: request.parameters,
                 project: project,
-                onCancel: { showRunParameters = false },
+                onCancel: { pendingParameterRequest = nil },
                 onExecute: { values in
-                    showRunParameters = false
+                    pendingParameterRequest = nil
                     showConsole = true
-                    consoleProcess.startRun(
-                        project: project, parameters: values
-                    )
+                    switch request.intent {
+                    case .play:
+                        consoleProcess.startRun(
+                            project: project, parameters: values
+                        )
+                    case .debug:
+                        consoleProcess.startDebug(
+                            project: project,
+                            breakpointsByFile: collectBreakpoints(),
+                            parameters: values
+                        )
+                    }
                 }
             )
         }
@@ -458,7 +490,9 @@ struct WorkspaceView: View {
                     onOpenAddPlugin: { controller.sidebarTab = .plugins },
                     onGoToDefinition: { goToDefinition() },
                     onHoverAtCaret: { hoverAtCaret() },
-                    onExportCanvas: { exportCanvasPNG() }
+                    onExportCanvas: { exportCanvasPNG() },
+                    onRequestRun: { requestRun() },
+                    onRequestDebug: { requestDebug() }
                 ),
                 onClose: { showCommandPalette = false }
             )
@@ -1141,28 +1175,59 @@ struct WorkspaceView: View {
     /// Run-button click handler. If the project's source references
     /// any `<parameter: NAME>`, opens the run-parameters sheet so the
     /// user can fill them in (pre-filled from the last successful
-    /// run); otherwise starts the run immediately. The sheet's
-    /// Execute button calls `consoleProcess.startRun(project:parameters:)`.
+    /// run); otherwise starts the run immediately.
     private func requestRun() {
+        requestStart(intent: .play)
+    }
+
+    /// Debug-button click handler. Mirrors `requestRun()` — same
+    /// `<parameter: NAME>` scan, same sheet, just dispatches to
+    /// `startDebug` on Execute.
+    private func requestDebug() {
+        requestStart(intent: .debug)
+    }
+
+    /// Shared scan-and-prompt path for the Play / Debug buttons.
+    /// Without this both buttons would re-implement the same scan
+    /// and the parameter sheet would silently no-op for whichever
+    /// path forgot to wire it (Debug used to be the broken one).
+    private func requestStart(intent: RunIntent) {
         // Prefer the cached programs dict (cheap, in-memory) but
         // fall back to a fresh disk scan when it's still empty —
         // happens on a fresh project the very first time the user
-        // clicks Run before SwiftUI has finished its post-mount
-        // `controller.load()` pass (#?). Without the fallback the
+        // clicks before SwiftUI has finished its post-mount
+        // `controller.load()` pass. Without the fallback the
         // dialog would render with zero fields and the user
         // would press Execute against an empty parameter set.
         var needed = RunParameterScanner.scan(programs: controller.programs)
-        if needed.isEmpty, controller.programs.isEmpty {
+        if needed.isEmpty {
+            // Always fall back to a fresh disk scan when the cache
+            // came up empty. Previously we only fell back when
+            // `controller.programs` was completely empty, but the
+            // cache can be partially loaded (some files parsed,
+            // others still pending) and yield zero matches even
+            // when the project really does reference
+            // `<parameter: NAME>`. Disk scan is a millisecond per
+            // file — cheap to do unconditionally on a button press.
             needed = RunParameterScanner.scanFromDisk(
                 projectRoot: project.rootPath
             )
         }
         if needed.isEmpty {
             showConsole = true
-            consoleProcess.startRun(project: project)
+            switch intent {
+            case .play:
+                consoleProcess.startRun(project: project)
+            case .debug:
+                consoleProcess.startDebug(
+                    project: project,
+                    breakpointsByFile: collectBreakpoints()
+                )
+            }
         } else {
-            pendingRunParameters = needed
-            showRunParameters = true
+            pendingParameterRequest = PendingParameterRequest(
+                parameters: needed, intent: intent
+            )
         }
     }
 
@@ -1214,11 +1279,7 @@ struct WorkspaceView: View {
 
     private var debugButton: some View {
         Button {
-            showConsole = true
-            consoleProcess.startDebug(
-                project: project,
-                breakpointsByFile: collectBreakpoints()
-            )
+            requestDebug()
         } label: {
             Label("Debug", systemImage: "ant.fill")
         }

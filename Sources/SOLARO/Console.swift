@@ -360,9 +360,15 @@ final class ConsoleProcess {
     }
 
     /// Convenience for the Debug button — `aro debug` with whatever
-    /// breakpoints the workspace has accumulated.
-    func startDebug(project: Project, breakpointsByFile: [URL: Set<Int>]) {
-        start(project: project, mode: .debug, breakpointsByFile: breakpointsByFile)
+    /// breakpoints the workspace has accumulated, plus optional
+    /// `<parameter: NAME>` values collected by the pre-run sheet.
+    func startDebug(project: Project,
+                    breakpointsByFile: [URL: Set<Int>],
+                    parameters: [String: String] = [:]) {
+        start(project: project,
+              mode: .debug,
+              breakpointsByFile: breakpointsByFile,
+              parameters: parameters)
     }
 
     /// Convenience for the Tests command — runs `aro test` with an
@@ -411,6 +417,13 @@ final class ConsoleProcess {
             for line in lines {
                 subArgs.append("--breakpoint")
                 subArgs.append(String(line))
+            }
+            // Forward `<parameter: NAME>` values exactly the same
+            // way `.run` does so the Debug button can prompt for
+            // them too (parity with the Play button).
+            for (key, value) in parameters.sorted(by: { $0.key < $1.key }) {
+                subArgs.append("--\(key)")
+                subArgs.append(value)
             }
             appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
         case .run:
