@@ -128,6 +128,12 @@ enum StackLayout {
             repos[i].y = topPadding + Double(i) * repoRowPitch
         }
 
+        nodes = barycenterReorder(
+            nodes: nodes,
+            edges: graph.edges,
+            topPadding: topPadding,
+            rowPitch: rowPitch
+        )
         nodes = resolveIntraColumnOverlaps(
             nodes: nodes,
             minGap: 20
@@ -145,41 +151,167 @@ enum StackLayout {
         )
     }
 
-    /// Within each feature set, group nodes into columns by their X
-    /// coordinate and ensure no two nodes in the same column overlap
-    /// vertically. Catches both the auto-layout case where the row
-    /// pitch was undersized for a tall card, and the user-dragged
-    /// case where the sidecar holds positions that no longer fit
-    /// the current node height. Always shifts the *lower* node down
-    /// so the existing top-down execution order stays intact.
+    /// Reorder rows inside each column so wires from earlier
+    /// columns hit them in roughly the same vertical order — the
+    /// classic barycenter heuristic for 1-sided crossing
+    /// minimization. The first column (sources) stays in source
+    /// order so reading top-to-bottom still matches the source
+    /// file; later columns sort by the average y of their incoming
+    /// edges' source nodes. Four sweeps converge on every real
+    /// graph we've measured — the algorithm is O(E + N log N) per
+    /// sweep so it's cheap even for hundred-node feature sets.
+    ///
+    /// Y positions get re-flowed against the column's `rowPitch`
+    /// at the end of each sweep so the next sweep reads the
+    /// updated geometry. Nodes the user has dragged to a specific
+    /// Y (sidecar positions) are *not* preserved here — Auto Layout
+    /// is the user's explicit "redo placement" signal, so it's OK
+    /// to override.
+    private static func barycenterReorder(
+        nodes: [CanvasNode],
+        edges: [CanvasEdge],
+        topPadding: Double,
+        rowPitch: Double
+    ) -> [CanvasNode] {
+        guard !nodes.isEmpty else { return nodes }
+        var out = nodes
+
+        // Group node indices by (featureSet, column-bucket). Same
+        // bucket-width trick as `resolveIntraColumnOverlaps` so
+        // sidecar-drifted nodes still group correctly.
+        let bucket = assumedNodeWidth * 0.5
+        struct ColumnKey: Hashable {
+            let fs: String
+            let column: Int
+        }
+        var byColumn: [ColumnKey: [Int]] = [:]
+        for i in out.indices {
+            let key = ColumnKey(
+                fs: out[i].featureSetName,
+                column: Int((out[i].x / bucket).rounded())
+            )
+            byColumn[key, default: []].append(i)
+        }
+        // Index edges so we can look up incoming sources per node.
+        let edgesByTo = Dictionary(grouping: edges, by: { $0.toNodeID })
+        let indexByID = Dictionary(
+            uniqueKeysWithValues: out.enumerated().map { ($1.id, $0) }
+        )
+
+        // Four sweeps. After the first sweep the ordering tends to
+        // stabilize; the extras catch graphs where moving column N
+        // exposes a crossing in column N+1 that wasn't visible at
+        // the first sweep's barycenter calculation.
+        for _ in 0..<4 {
+            // Process feature-sets independently. Within an FS,
+            // process columns left to right (we sort each column
+            // by the y of its predecessors, which is only stable
+            // when predecessors have been positioned already).
+            let fsToColumns = Dictionary(
+                grouping: byColumn.keys, by: { $0.fs }
+            )
+            for (_, keys) in fsToColumns {
+                let sortedKeys = keys.sorted { $0.column < $1.column }
+                for (idx, key) in sortedKeys.enumerated() {
+                    guard idx > 0 else { continue }  // first column locked
+                    let indices = byColumn[key] ?? []
+                    if indices.count < 2 { continue }
+                    let withBarycenter: [(idx: Int, b: Double)] = indices.map { i in
+                        let node = out[i]
+                        let incoming = edgesByTo[node.id] ?? []
+                        var sum: Double = 0
+                        var count = 0
+                        for e in incoming {
+                            if let srcIdx = indexByID[e.fromNodeID] {
+                                sum += out[srcIdx].y
+                                count += 1
+                            }
+                        }
+                        // Nodes with no incoming edge keep their
+                        // current y so they don't bubble to row 0
+                        // and shove unrelated rows down.
+                        let bary = count > 0 ? sum / Double(count) : node.y
+                        return (i, bary)
+                    }
+                    // Stable sort so ties preserve source order
+                    // (Swift's `sort` isn't stable, so use a
+                    // tiebreaker on the original y).
+                    let sorted = withBarycenter.sorted {
+                        if $0.b == $1.b { return out[$0.idx].y < out[$1.idx].y }
+                        return $0.b < $1.b
+                    }
+                    // Re-flow y values along the column's rowPitch.
+                    for (row, entry) in sorted.enumerated() {
+                        out[entry.idx].y = topPadding + Double(row) * rowPitch
+                    }
+                    // Update bookkeeping for the next sweep.
+                    byColumn[key] = sorted.map(\.idx)
+                }
+            }
+        }
+        return out
+    }
+
+    /// Generic node-vs-node overlap resolver: for any two cards in
+    /// the same feature set whose bboxes intersect, shift the
+    /// lower one down until it clears the upper one + `minGap`.
+    /// Replaces the earlier column-bucket pass that missed
+    /// adjacent-column overlaps (cards are 240pt wide so two cards
+    /// at, say, x=840 and x=1005 are in different "columns" by
+    /// step-120 bucketing but their bboxes still horizontally
+    /// overlap by ~80pt, and the bucket pass left them stacked on
+    /// top of each other).
     private static func resolveIntraColumnOverlaps(
         nodes: [CanvasNode],
         minGap: Double
     ) -> [CanvasNode] {
         guard !nodes.isEmpty else { return nodes }
         var out = nodes
-        // Group by (feature set, column bucket). Column bucket uses
-        // a quantization step half the assumed card width — any two
-        // x positions within that bucket are treated as the same
-        // visual column, which tolerates a few pixels of sidecar
-        // drift without false-bucketing nearby columns together.
-        let bucket = assumedNodeWidth * 0.5
-        var groups: [String: [Int]] = [:]   // key → indices into `out`
-        for i in out.indices {
-            let n = out[i]
-            let columnKey = Int((n.x / bucket).rounded())
-            groups["\(n.featureSetName)|\(columnKey)", default: []].append(i)
-        }
-        for indices in groups.values where indices.count > 1 {
-            // Sort by current y so the lower node yields, never the
-            // upper one. Stable across re-runs.
-            let sorted = indices.sorted { out[$0].y < out[$1].y }
-            for k in 1..<sorted.count {
-                let prev = sorted[k - 1]
-                let cur  = sorted[k]
-                let minY = out[prev].y + assumedNodeHeight + minGap
-                if out[cur].y < minY {
-                    out[cur].y = minY
+        // Process feature sets independently — overlap between two
+        // different FSes is the job of `resolveFeatureSetOverlaps`.
+        let byFS = Dictionary(grouping: out.indices, by: { out[$0].featureSetName })
+        for indices in byFS.values where indices.count > 1 {
+            // Iterate top-down so each node's eventual position is
+            // determined by the (possibly already-shifted) nodes
+            // above it. Keep iterating until a pass makes no
+            // changes — a single shift can introduce a new overlap
+            // with the *next* row, so we re-check until stable.
+            var changed = true
+            var safety = indices.count * 4
+            while changed && safety > 0 {
+                changed = false
+                safety -= 1
+                let sorted = indices.sorted { out[$0].y < out[$1].y }
+                for k in 1..<sorted.count {
+                    let cur = sorted[k]
+                    let curRect = CGRect(
+                        x: out[cur].x, y: out[cur].y,
+                        width: assumedNodeWidth, height: assumedNodeHeight
+                    )
+                    // Find the lowest-bottom predecessor whose
+                    // bbox horizontally overlaps the current node.
+                    var requiredTop: Double? = nil
+                    for j in 0..<k {
+                        let prev = sorted[j]
+                        let prevRect = CGRect(
+                            x: out[prev].x, y: out[prev].y,
+                            width: assumedNodeWidth, height: assumedNodeHeight
+                        )
+                        // Only "horizontal overlap" matters here —
+                        // two cards that don't share any x range
+                        // can sit at the same y without overlap.
+                        guard curRect.minX < prevRect.maxX,
+                              curRect.maxX > prevRect.minX
+                        else { continue }
+                        let bottom = out[prev].y + assumedNodeHeight + minGap
+                        if requiredTop == nil || bottom > requiredTop! {
+                            requiredTop = bottom
+                        }
+                    }
+                    if let requiredTop, out[cur].y < requiredTop {
+                        out[cur].y = requiredTop
+                        changed = true
+                    }
                 }
             }
         }

@@ -827,10 +827,10 @@ struct WiresLayer: View {
         let centerFromY = from.y + nodeHeight / 2
         let centerToX   = to.x + nodeWidth / 2
         let centerToY   = to.y + nodeHeight / 2
-        let start: CGPoint
-        let end: CGPoint
-        let c1: CGPoint
-        let c2: CGPoint
+        var start: CGPoint
+        var end: CGPoint
+        var c1: CGPoint
+        var c2: CGPoint
         if abs(dy) > abs(dx), dy > 0 {
             // Bottom of source → top of receiver.
             start = CGPoint(x: centerFromX, y: from.y + nodeHeight)
@@ -851,6 +851,38 @@ struct WiresLayer: View {
             c1 = CGPoint(x: start.x + curve * dir, y: start.y)
             c2 = CGPoint(x: end.x   - curve * dir, y: end.y)
         }
+        // Final pass: if the straight-ish curve would clip through
+        // another node's bbox (a sibling node that happens to sit
+        // on the wire's path after the barycenter reorder), nudge
+        // the control points away from that obstacle. Picks the
+        // shorter detour (above or below for horizontal wires;
+        // left or right for vertical), and only fires when there's
+        // an actual collision so direct routes stay direct.
+        let pad: CGFloat = 12
+        let isVertical = abs(dy) > abs(dx) && dy > 0
+        if let blocker = blockingNode(
+            from: edge.fromNodeID, to: edge.toNodeID,
+            start: start, end: end,
+            vertical: isVertical, pad: pad
+        ) {
+            if isVertical {
+                // Push the control points sideways past the
+                // obstacle's nearest x edge.
+                let midX = (start.x + end.x) / 2
+                let offsetSign: CGFloat = midX <= blocker.midX ? -1 : 1
+                let push: CGFloat = (blocker.width / 2 + 32) * offsetSign
+                c1 = CGPoint(x: c1.x + push, y: c1.y)
+                c2 = CGPoint(x: c2.x + push, y: c2.y)
+            } else {
+                // Push the control points up or down past the
+                // obstacle's nearest y edge.
+                let midY = (start.y + end.y) / 2
+                let offsetSign: CGFloat = midY <= blocker.midY ? -1 : 1
+                let push: CGFloat = (blocker.height / 2 + 28) * offsetSign
+                c1 = CGPoint(x: c1.x, y: c1.y + push)
+                c2 = CGPoint(x: c2.x, y: c2.y + push)
+            }
+        }
         var path = Path()
         path.move(to: start)
         path.addCurve(to: end, control1: c1, control2: c2)
@@ -864,6 +896,65 @@ struct WiresLayer: View {
         let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
                              width: 6, height: 6)
         ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
+    }
+
+    /// Detect whether the straight line from `start` to `end` would
+    /// clip through any node other than the edge's own endpoints.
+    /// Returns the closest blocker's bbox so the caller can push
+    /// the curve's control points around it. `vertical` switches
+    /// the swept region (a thin column for vertical wires, a thin
+    /// row for horizontal ones).
+    private func blockingNode(
+        from fromID: String, to toID: String,
+        start: CGPoint, end: CGPoint,
+        vertical: Bool, pad: CGFloat
+    ) -> CGRect? {
+        // Build the swept rectangle the wire's straight body would
+        // sit in. Pad by `pad` so a wire that "just clears" still
+        // gets routed around the obstacle.
+        let minX = min(start.x, end.x) - pad
+        let maxX = max(start.x, end.x) + pad
+        let minY = min(start.y, end.y) - pad
+        let maxY = max(start.y, end.y) + pad
+        let sweep = CGRect(x: minX, y: minY,
+                           width: maxX - minX, height: maxY - minY)
+        var closest: (rect: CGRect, dist: CGFloat)? = nil
+        for (id, p) in positions {
+            if id == fromID || id == toID { continue }
+            let box = CGRect(x: p.x, y: p.y,
+                             width: nodeWidth, height: nodeHeight)
+            guard box.intersects(sweep) else { continue }
+            // For vertical wires we only care about boxes whose
+            // x-range overlaps the wire's narrow column; for
+            // horizontal wires it's the y-range. Without this we
+            // pick up boxes in distant columns that happen to share
+            // a y range.
+            if vertical {
+                let wireMinX = min(start.x, end.x) - pad
+                let wireMaxX = max(start.x, end.x) + pad
+                if box.maxX < wireMinX || box.minX > wireMaxX { continue }
+            } else {
+                let wireMinY = min(start.y, end.y) - pad
+                let wireMaxY = max(start.y, end.y) + pad
+                if box.maxY < wireMinY || box.minY > wireMaxY { continue }
+            }
+            // Distance from the wire midpoint to the box center —
+            // prefer the obstacle nearest the wire so the detour
+            // is minimal.
+            let midX = (start.x + end.x) / 2
+            let midY = (start.y + end.y) / 2
+            let dx = box.midX - midX
+            let dy = box.midY - midY
+            let dist = sqrt(dx * dx + dy * dy)
+            if let current = closest {
+                if dist < current.dist {
+                    closest = (box, dist)
+                }
+            } else {
+                closest = (box, dist)
+            }
+        }
+        return closest?.rect
     }
 
     /// Draw a wire from a statement node (left side) to a repository
