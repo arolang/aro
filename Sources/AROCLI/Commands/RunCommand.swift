@@ -260,13 +260,40 @@ struct RunCommand: AsyncParsableCommand {
             }
         }
 
+        // If --record was set, install a no-op DebugController + JSONL
+        // writer so the runtime emits a per-statement pause record to
+        // the file. SOLARO tails this file with `LiveEventStream` to
+        // pulse executing nodes and populate the repository cards
+        // (#284 step 3). The silent frontend never blocks — it just
+        // hands back `.stepOver` so `DebugController.checkpoint`
+        // keeps recording rather than early-returning under
+        // `.continue`. EventRecorder's end-of-run JSON would clobber
+        // the JSONL, so we pass `recordPath: nil` to Application
+        // here and own the file ourselves.
+        let debugController: DebugController?
+        if let recordPath {
+            let controller = DebugController(frontend: SilentRunFrontend())
+            do {
+                let recorder = try DebugEventLogWriter(path: recordPath)
+                await controller.setRecorder(recorder)
+                debugController = controller
+            } catch {
+                if verbose {
+                    print("warning: failed to open recorder \(recordPath): \(error)")
+                }
+                debugController = nil
+            }
+        } else {
+            debugController = nil
+        }
+
         // Create and run application
         let application = Application(
             programs: compiledPrograms,
             entryPoint: entryPoint,
             config: ApplicationConfig(verbose: verbose, workingDirectory: appConfig.rootPath.path),
             openAPISpec: appConfig.openAPISpec,
-            recordPath: recordPath,
+            recordPath: debugController == nil ? recordPath : nil,
             replayPath: replayPath,
             storeFiles: appConfig.storeFiles
         )
@@ -286,21 +313,29 @@ struct RunCommand: AsyncParsableCommand {
         }
         defer { MetricsSocketServer.shared.stop() }
 
-        do {
-            if keepAlive {
-                try await application.runForever()
-            } else {
-                let response = try await application.run()
+        // Pick a source-file hint so DebugController's pause records
+        // include a basename for the canvas to attribute lines to.
+        let sourceFileHint = appConfig.sourceFiles.first?.path ?? ""
 
-                if verbose {
-                    print("\nExecution completed:")
+        do {
+            if let controller = debugController {
+                try await Debug.$controller.withValue(controller) {
+                    try await Debug.$currentSourceFile.withValue(sourceFileHint) {
+                        try await self.runApplication(
+                            application,
+                            keepAlive: keepAlive,
+                            verbose: verbose,
+                            debug: debug
+                        )
+                    }
                 }
-                // Use context-aware formatting for response output
-                let outputContext: OutputContext = debug ? .developer : .human
-                // Don't print lifecycle exit response (e.g., "Return ... for the <application>")
-                if response.reason != "application" {
-                    print(response.format(for: outputContext))
-                }
+            } else {
+                try await self.runApplication(
+                    application,
+                    keepAlive: keepAlive,
+                    verbose: verbose,
+                    debug: debug
+                )
             }
         } catch let error as ActionError {
             if TTYDetector.stderrIsTTY {
@@ -318,4 +353,37 @@ struct RunCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
     }
+
+    private func runApplication(
+        _ application: Application,
+        keepAlive: Bool,
+        verbose: Bool,
+        debug: Bool
+    ) async throws {
+        if keepAlive {
+            try await application.runForever()
+        } else {
+            let response = try await application.run()
+            if verbose {
+                print("\nExecution completed:")
+            }
+            let outputContext: OutputContext = debug ? .developer : .human
+            if response.reason != "application" {
+                print(response.format(for: outputContext))
+            }
+        }
+    }
+}
+
+/// `DebugFrontend` for `aro run --record`: never prompts, never
+/// blocks, just lets the controller keep recording. Returning
+/// `.stepOver` keeps `DebugController.checkpoint` writing pause
+/// records at every statement (vs. `.continue`, which short-
+/// circuits after entry). SOLARO tails those records to drive the
+/// canvas pulse / live values / repository tables (#284 step 3).
+final class SilentRunFrontend: DebugFrontend {
+    func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
+        .stepOver
+    }
+    func didEnd(error: Error?) async {}
 }
