@@ -35,7 +35,7 @@ enum StackLayout {
      /// `nodeHeight` so the overlap-resolve pass uses the same box
      /// the renderer draws.
     static let assumedNodeWidth: Double = 240
-    static let assumedNodeHeight: Double = 64
+    static let assumedNodeHeight: Double = 84
     /// Padding the feature-set container draws around its child
     /// nodes (see `FeatureSetContainersLayer.groupedFeatureSets`).
     /// Mirrored here so overlap detection uses the same rect the
@@ -46,11 +46,17 @@ enum StackLayout {
 
     static func place(
         _ graph: CanvasGraph,
-        rowPitch: Double = 78,
+        rowPitch: Double = 104,   // assumedNodeHeight (84) + 20pt gap
         columnPitch: Double = 320,
         featureSetGap: Double = 80,
         leftPadding: Double = 40,
-        topPadding: Double = 56,    // extra room for the FS header
+        // Big enough that the *feature-set container's* top edge
+        // (which sits `inset + headerExtra` = 42pt above the first
+        // node) lands well below the file-tab + breadcrumb strips
+        // the workspace stacks on top of the canvas. Previously 56,
+        // which put the container ~14pt from the canvas top and
+        // visually crowded the breadcrumb row.
+        topPadding: Double = 110,
         repoColumnGap: Double = 120,
         repoRowPitch: Double = 96
     ) -> CanvasGraph {
@@ -122,6 +128,10 @@ enum StackLayout {
             repos[i].y = topPadding + Double(i) * repoRowPitch
         }
 
+        nodes = resolveIntraColumnOverlaps(
+            nodes: nodes,
+            minGap: 20
+        )
         nodes = resolveFeatureSetOverlaps(
             nodes: nodes,
             gap: featureSetGap
@@ -133,6 +143,47 @@ enum StackLayout {
             repositories: repos,
             loops: graph.loops
         )
+    }
+
+    /// Within each feature set, group nodes into columns by their X
+    /// coordinate and ensure no two nodes in the same column overlap
+    /// vertically. Catches both the auto-layout case where the row
+    /// pitch was undersized for a tall card, and the user-dragged
+    /// case where the sidecar holds positions that no longer fit
+    /// the current node height. Always shifts the *lower* node down
+    /// so the existing top-down execution order stays intact.
+    private static func resolveIntraColumnOverlaps(
+        nodes: [CanvasNode],
+        minGap: Double
+    ) -> [CanvasNode] {
+        guard !nodes.isEmpty else { return nodes }
+        var out = nodes
+        // Group by (feature set, column bucket). Column bucket uses
+        // a quantization step half the assumed card width — any two
+        // x positions within that bucket are treated as the same
+        // visual column, which tolerates a few pixels of sidecar
+        // drift without false-bucketing nearby columns together.
+        let bucket = assumedNodeWidth * 0.5
+        var groups: [String: [Int]] = [:]   // key → indices into `out`
+        for i in out.indices {
+            let n = out[i]
+            let columnKey = Int((n.x / bucket).rounded())
+            groups["\(n.featureSetName)|\(columnKey)", default: []].append(i)
+        }
+        for indices in groups.values where indices.count > 1 {
+            // Sort by current y so the lower node yields, never the
+            // upper one. Stable across re-runs.
+            let sorted = indices.sorted { out[$0].y < out[$1].y }
+            for k in 1..<sorted.count {
+                let prev = sorted[k - 1]
+                let cur  = sorted[k]
+                let minY = out[prev].y + assumedNodeHeight + minGap
+                if out[cur].y < minY {
+                    out[cur].y = minY
+                }
+            }
+        }
+        return out
     }
 
     /// Walk feature-set bounding rects left to right and shift any

@@ -285,7 +285,15 @@ struct WorkspaceView: View {
                         BreadcrumbView(controller: controller)
                         Divider().background(SolaroColor.divider)
                     }
+                    // Clip the center pane so canvas content
+                    // (nodes, edges, FS containers) can never
+                    // render outside its frame and bleed up into
+                    // the tab bar / breadcrumb above. Without
+                    // this a node dragged to negative y or a wide
+                    // FS container can spill into the header
+                    // strips and obscure the tab labels.
                     CenterPaneView(controller: controller)
+                        .clipped()
                 }
                 .inspector(isPresented: $controller.inspectorShown) {
                     rightPane

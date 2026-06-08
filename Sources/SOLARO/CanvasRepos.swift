@@ -106,9 +106,14 @@ struct RepoCard: View {
 
     @State private var hovering = false
     @State private var showHistory = false
+    /// Set by clicking the "+N more" footer. Toggles the table
+    /// between the compact preview (`visibleRowLimit` rows) and the
+    /// full list of records held by the repository.
+    @State private var expanded = false
 
-    /// Cap the visible row count so a hot loop doesn't blow up the
-    /// card. Overflow is summarized as a "+N more" footer row.
+    /// Cap the visible row count when the card is collapsed. The
+    /// footer row turns into a button that expands the table to all
+    /// rows when the repository holds more than this.
     private static let visibleRowLimit = 4
 
     /// Cap how wide the card may grow when records push it open.
@@ -190,7 +195,9 @@ struct RepoCard: View {
     @ViewBuilder
     private func recordsTable(_ records: [[String: String]]) -> some View {
         let columns = Self.columnOrder(for: records)
-        let visible = Array(records.prefix(Self.visibleRowLimit))
+        let visible = expanded
+            ? records
+            : Array(records.prefix(Self.visibleRowLimit))
         let overflow = records.count - visible.count
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: SolaroSpace.s) {
@@ -222,9 +229,31 @@ struct RepoCard: View {
                 }
             }
             if overflow > 0 {
-                Text("+\(overflow) more")
-                    .font(SolaroFont.monoCaption)
-                    .foregroundStyle(SolaroColor.textTertiary)
+                // Clickable footer: tap to expand the table to the
+                // full row set. PlainButtonStyle keeps the chrome
+                // borderless so it visually reads as a link, not a
+                // button-with-shadow.
+                Button {
+                    expanded = true
+                } label: {
+                    Text("+\(overflow) more")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.accent)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .help("Show all \(records.count) rows")
+            } else if expanded, records.count > Self.visibleRowLimit {
+                Button {
+                    expanded = false
+                } label: {
+                    Text("Show fewer")
+                        .font(SolaroFont.monoCaption)
+                        .foregroundStyle(SolaroColor.accent)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .help("Collapse the table to the most recent \(Self.visibleRowLimit) rows")
             }
         }
     }

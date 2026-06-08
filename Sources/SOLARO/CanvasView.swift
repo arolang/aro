@@ -148,7 +148,13 @@ struct CanvasView: View {
     @State private var fsDragOrigins: [String: [CanvasNode.ID: CGPoint]] = [:]
 
     private let nodeWidth: CGFloat = 240
-    private let nodeHeight: CGFloat = 64
+    /// Tall enough to hold a 2-line statement body without
+    /// overflowing the `.frame(height:)` slot. Previous value (64)
+    /// was calibrated for 1-line bodies and made the next row in
+    /// `StackLayout` (rowPitch 78) visually overlap with cards that
+    /// wrapped (e.g. multi-line Extract / Emit statements in the
+    /// Crawler example).
+    private let nodeHeight: CGFloat = 84
     private let repoWidth: CGFloat = 200
     private let repoHeight: CGFloat = 72
 
@@ -809,14 +815,42 @@ struct WiresLayer: View {
             let from = positions[edge.fromNodeID],
             let to = positions[edge.toNodeID]
         else { return }
-        let start = CGPoint(x: from.x + nodeWidth,
-                            y: from.y + nodeHeight / 2)
-        let end = CGPoint(x: to.x,
-                          y: to.y + nodeHeight / 2)
-        let dx = abs(end.x - start.x)
-        let curveOffset = max(dx * 0.5, 36)
-        let c1 = CGPoint(x: start.x + curveOffset, y: start.y)
-        let c2 = CGPoint(x: end.x - curveOffset, y: end.y)
+        // Pick anchors based on the dominant axis. A same-column
+        // connection (receiver directly below source) used to take
+        // right/left anchors and detour ~360pt horizontally just to
+        // bend back — the loopy wires the user saw in "Crawl Page".
+        // Switch to bottom/top anchors when the vertical distance
+        // dominates and the receiver isn't above the source.
+        let dx = to.x - from.x
+        let dy = to.y - from.y
+        let centerFromX = from.x + nodeWidth / 2
+        let centerFromY = from.y + nodeHeight / 2
+        let centerToX   = to.x + nodeWidth / 2
+        let centerToY   = to.y + nodeHeight / 2
+        let start: CGPoint
+        let end: CGPoint
+        let c1: CGPoint
+        let c2: CGPoint
+        if abs(dy) > abs(dx), dy > 0 {
+            // Bottom of source → top of receiver.
+            start = CGPoint(x: centerFromX, y: from.y + nodeHeight)
+            end   = CGPoint(x: centerToX,   y: to.y)
+            let curve = max(abs(dy) * 0.4, 24)
+            c1 = CGPoint(x: start.x, y: start.y + curve)
+            c2 = CGPoint(x: end.x,   y: end.y - curve)
+        } else {
+            // Horizontal — anchor on the side closest to the
+            // receiver so we never loop around the source card.
+            let goingRight = dx >= 0
+            start = CGPoint(x: goingRight ? from.x + nodeWidth : from.x,
+                            y: centerFromY)
+            end   = CGPoint(x: goingRight ? to.x : to.x + nodeWidth,
+                            y: centerToY)
+            let curve = max(abs(dx) * 0.5, 36)
+            let dir: Double = goingRight ? 1 : -1
+            c1 = CGPoint(x: start.x + curve * dir, y: start.y)
+            c2 = CGPoint(x: end.x   - curve * dir, y: end.y)
+        }
         var path = Path()
         path.move(to: start)
         path.addCurve(to: end, control1: c1, control2: c2)
