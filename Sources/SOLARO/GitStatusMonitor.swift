@@ -72,7 +72,44 @@ final class GitStatusMonitor {
     /// large-but-bounded size so prompts to `aro ask` stay reasonable.
     /// Returns "" if there's nothing to diff or git fails.
     func diffAgainstHEAD(in project: Project) async -> String {
-        await Self.runDiff(project: project)
+        await Self.runDiff(project: project, path: nil)
+    }
+
+    /// Per-file diff against HEAD. Used by the commit dialog when
+    /// the user clicks a file in the sidebar to scope the diff
+    /// view to just that file. Returns "" when the file has no
+    /// tracked changes or git can't resolve it.
+    func diffAgainstHEAD(in project: Project, path: String) async -> String {
+        await Self.runDiff(project: project, path: path)
+    }
+
+    /// Discard a tracked file's local changes by restoring its
+    /// HEAD contents. For untracked files we just delete from the
+    /// working tree — `git restore` doesn't know about them. The
+    /// returned string is nil on success and the trimmed stderr on
+    /// failure so the caller can surface it.
+    func revertLocalChanges(
+        in project: Project,
+        path: String,
+        status: GitStatus.FileStatus
+    ) async -> String? {
+        let err: String?
+        switch status {
+        case .untracked:
+            do {
+                try FileManager.default.removeItem(
+                    atPath: path
+                )
+                err = nil
+            } catch {
+                err = error.localizedDescription
+            }
+        case .modified, .added, .deleted, .renamed,
+             .ignored, .conflicted:
+            err = await Self.runRestore(project: project, path: path)
+        }
+        if err == nil { refresh(for: project) }
+        return err
     }
 
     /// Stage everything and commit with the given message. Trims
@@ -209,12 +246,35 @@ final class GitStatusMonitor {
         return err.isEmpty ? "git checkout failed (exit \(result.exitCode))" : err
     }
 
-    nonisolated private static func runDiff(project: Project) async -> String {
+    /// Restore a path to its HEAD contents — both index (`--staged`)
+    /// and working tree (`--worktree`) so the file reads as if the
+    /// user never edited it. Returns nil on success, trimmed
+    /// stderr on failure.
+    nonisolated private static func runRestore(
+        project: Project,
+        path: String
+    ) async -> String? {
+        let run = runGit(args: ["restore", "--staged", "--worktree", "--", path],
+                         project: project)
+        if run.exitCode == 0 { return nil }
+        let err = (run.stderr + run.stdout)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return err.isEmpty
+            ? "git restore failed (exit \(run.exitCode))"
+            : err
+    }
+
+    nonisolated private static func runDiff(
+        project: Project,
+        path: String?
+    ) async -> String {
         // Untracked files don't show up in `git diff HEAD` — we
         // include their full text via `git diff --no-index` for any
         // file the porcelain marked `??`. For tracked changes a
         // single `git diff HEAD` covers staged + unstaged combined.
-        let tracked = runGit(args: ["diff", "HEAD", "--no-color"], project: project)
+        var args = ["diff", "HEAD", "--no-color"]
+        if let path { args.append(contentsOf: ["--", path]) }
+        let tracked = runGit(args: args, project: project)
         return tracked.stdout
     }
 
