@@ -60,6 +60,97 @@ enum FileTreeBuilder {
         return groupByPath(files: allFiles, root: model.root.rootPath)
     }
 
+    /// Directory entries the "All files" view never surfaces.
+    /// Mostly toolchain output and SCM state — keeping the sidebar
+    /// useful instead of drowning the user in `.build/` and `.git/`.
+    private static let ignoredDirs: Set<String> = [
+        ".build", ".git", ".solaro", ".swiftpm", "node_modules",
+        ".idea", ".vscode", "DerivedData"
+    ]
+
+    /// Walk the project root on disk and return every file/directory
+    /// (sans the well-known noise set). Used when the user flips the
+    /// sidebar Files tab into "All files" mode. Known ARO file types
+    /// (`*.aro`, `*.store`, `openapi.yaml`) still get their tinted
+    /// icons; everything else is `.other`.
+    static func buildAll(model: ProjectModel) -> [FileTreeNode] {
+        return scanDirectory(model.root.rootPath, model: model)
+    }
+
+    private static func scanDirectory(
+        _ dir: URL,
+        model: ProjectModel
+    ) -> [FileTreeNode] {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey]
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: keys,
+            options: [.skipsPackageDescendants]
+        ) else { return [] }
+
+        var directories: [FileTreeNode] = []
+        var files: [FileTreeNode] = []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            if name.hasPrefix(".") { continue }   // hidden — skip
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey])
+                .isDirectory) == true
+            if isDir {
+                if ignoredDirs.contains(name) { continue }
+                let children = scanDirectory(entry, model: model)
+                directories.append(FileTreeNode(
+                    id: entry.standardizedFileURL.path,
+                    name: name,
+                    url: entry,
+                    kind: .directory,
+                    children: children
+                ))
+            } else {
+                files.append(FileTreeNode(
+                    id: entry.standardizedFileURL.path,
+                    name: name,
+                    url: entry,
+                    kind: classify(entry, model: model)
+                ))
+            }
+        }
+        directories.sort { $0.name < $1.name }
+        files.sort { lhs, rhs in
+            if lhs.kind == .openapi, rhs.kind != .openapi { return true }
+            if rhs.kind == .openapi, lhs.kind != .openapi { return false }
+            return lhs.name < rhs.name
+        }
+        return directories + files
+    }
+
+    /// Map a URL to a `FileTreeNode.Kind` using the project model's
+    /// known file lists so `.aro`, `.store`, and `openapi.yaml` keep
+    /// their tinted icons in "All files" mode.
+    private static func classify(
+        _ url: URL,
+        model: ProjectModel
+    ) -> FileTreeNode.Kind {
+        let path = url.standardizedFileURL.path
+        if model.sourceFiles.contains(where: { $0.standardizedFileURL.path == path }) {
+            return .aroSource
+        }
+        if model.storeFiles.contains(where: { $0.standardizedFileURL.path == path }) {
+            return .storeFile
+        }
+        if let spec = model.openAPISpec,
+           spec.standardizedFileURL.path == path {
+            return .openapi
+        }
+        // Catch ARO files outside the discovered set (e.g. an .aro
+        // file in a subdirectory not currently treated as a source
+        // root) so they still render as code, not generic `other`.
+        if url.pathExtension.lowercased() == "aro" {
+            return .aroSource
+        }
+        return .other
+    }
+
     /// Recursively partition `files` into:
     ///   - leaves whose parent equals `root`, and
     ///   - subdirectory groups whose first relative component is

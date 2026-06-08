@@ -250,6 +250,7 @@ enum SolaroPrefs: String {
     case editorGhostDelay = "solaro.editor.ghostDelay"
     case editorAIFallback = "solaro.editor.aiFallback"
     case runtimeBackend   = "solaro.runtimeBackend"
+    case filesTabMode     = "solaro.filesTabMode"
 }
 
 /// Which runtime drives the green Play button. The embedded path

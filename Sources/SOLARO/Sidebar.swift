@@ -14,6 +14,35 @@ import SwiftUI
 import AROParser
 import Yams
 
+/// View mode for the sidebar's Files tab. Toggled via the two
+/// little icons at the top of the tab. `.project` keeps the
+/// original ARO-aware view (sources, store files, openapi.yaml);
+/// `.all` walks the project root and shows every file/directory
+/// (minus the well-known noise dirs like `.build/`, `.git/`).
+enum FilesViewMode: String, CaseIterable, Identifiable {
+    case project
+    case all
+
+    var id: String { rawValue }
+
+    /// SF Symbol drawn in the toggle. `.project` reads as "ARO docs
+    /// only" via the bullet-list glyph; `.all` reads as "every file"
+    /// via the folder glyph.
+    var symbol: String {
+        switch self {
+        case .project: return "list.bullet.rectangle"
+        case .all:     return "folder"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .project: return "Show only ARO project files (.aro, .store, openapi.yaml)"
+        case .all:     return "Show every file in the project directory"
+        }
+    }
+}
+
 struct SidebarPaneView: View {
     @Bindable var controller: WorkspaceController
 
@@ -24,6 +53,13 @@ struct SidebarPaneView: View {
     /// install. `PluginScanner.scan` reads from disk on every
     /// view eval so changing the integer is enough.
     @State private var pluginsRefreshToken: Int = 0
+    /// Files-tab view mode. `.project` shows only ARO sources / store
+    /// files / openapi.yaml (the original behavior); `.all` walks
+    /// the project root on disk and shows every file/directory the
+    /// noise filter doesn't drop. Persisted via `@AppStorage` so the
+    /// user's choice survives across sessions.
+    @AppStorage(SolaroPrefs.filesTabMode.rawValue)
+    private var filesTabMode: FilesViewMode = .project
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,7 +72,12 @@ struct SidebarPaneView: View {
             case .plugins:  pluginsPane
             }
         }
-        .background(SolaroColor.surface)
+        // Frosted-glass sidebar. `.ultraThinMaterial` carries the
+        // bulk of the blur; the thin tint on top is just enough to
+        // stop text from disappearing under bright wallpapers,
+        // without flattening the wallpaper itself.
+        .background(SolaroColor.surface.opacity(0.08))
+        .background(.ultraThinMaterial)
         .sheet(isPresented: $showAddPlugin) {
             if let project = controller.model?.root {
                 AddPluginSheet(
@@ -70,7 +111,9 @@ struct SidebarPaneView: View {
                 tabButton(tab)
             }
         }
-        .background(SolaroColor.surface)
+        // Tab strip stays transparent so the sidebar's frosted
+        // material reads as one continuous surface.
+        .background(Color.clear)
     }
 
     private func tabButton(_ tab: SidebarTab) -> some View {
@@ -101,22 +144,73 @@ struct SidebarPaneView: View {
     // MARK: - Files tab
 
     private var filesPane: some View {
-        Group {
-            if let model = controller.model {
-                let nodes = FileTreeBuilder.build(model: model)
-                if nodes.isEmpty {
-                    emptyMessage("No .aro files in this project.")
-                } else {
-                    FileTreeList(
-                        nodes: nodes,
-                        selection: selectionBinding,
-                        gitStatus: controller.gitMonitor.status
-                    )
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            filesModeToggle
+            Divider().background(SolaroColor.divider.opacity(0.5))
+            filesPaneBody
+        }
+    }
+
+    @ViewBuilder
+    private var filesPaneBody: some View {
+        if let model = controller.model {
+            let nodes = filesTabMode == .all
+                ? FileTreeBuilder.buildAll(model: model)
+                : FileTreeBuilder.build(model: model)
+            if nodes.isEmpty {
+                emptyMessage(filesTabMode == .project
+                    ? "No .aro files in this project."
+                    : "No files in this directory.")
             } else {
-                emptyMessage("Loading…")
+                FileTreeList(
+                    nodes: nodes,
+                    selection: selectionBinding,
+                    gitStatus: controller.gitMonitor.status,
+                    project: model.root,
+                    monitor: controller.gitMonitor,
+                    onRename: { url, newName in renameFile(url, to: newName) }
+                )
+            }
+        } else {
+            emptyMessage("Loading…")
+        }
+    }
+
+    /// Two-icon switch at the top of the Files tab. `.project` is
+    /// the ARO-aware view (sources + stores + openapi only),
+    /// `.all` walks the project root from disk so the user sees
+    /// every file the noise filter doesn't drop.
+    private var filesModeToggle: some View {
+        HStack(spacing: 4) {
+            Spacer()
+            ForEach(FilesViewMode.allCases) { mode in
+                filesModeButton(mode)
             }
         }
+        .padding(.horizontal, SolaroSpace.s)
+        .padding(.vertical, 4)
+    }
+
+    private func filesModeButton(_ mode: FilesViewMode) -> some View {
+        let active = filesTabMode == mode
+        return Button {
+            filesTabMode = mode
+        } label: {
+            Image(systemName: mode.symbol)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(active
+                    ? SolaroColor.textPrimary
+                    : SolaroColor.textTertiary)
+                .frame(width: 22, height: 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(active
+                            ? SolaroColor.selection.opacity(0.6)
+                            : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(mode.help)
     }
 
     private var selectionBinding: Binding<URL?> {
@@ -297,6 +391,31 @@ struct SidebarPaneView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Prompt the user for a new filename and rename the on-disk
+    /// file. Keeps the file in its current directory; the new name
+    /// is taken as a leaf (no `/` allowed). Rename failures surface
+    /// via a follow-up alert so the user can copy the path/message.
+    private func renameFile(_ url: URL, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("/") else { return }
+        let dest = url.deletingLastPathComponent()
+            .appendingPathComponent(trimmed)
+        guard dest.path != url.path else { return }
+        do {
+            try FileManager.default.moveItem(at: url, to: dest)
+            // If the renamed file was the open tab, follow it.
+            if controller.currentFile == url {
+                controller.openFile(dest)
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't rename \(url.lastPathComponent)"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+    }
+
     private func relativeName(of url: URL, in model: ProjectModel) -> String {
         let rootPath = model.root.rootPath.standardizedFileURL.path
         let filePath = url.standardizedFileURL.path
@@ -313,6 +432,11 @@ private struct FileTreeList: View {
     let nodes: [FileTreeNode]
     @Binding var selection: URL?
     let gitStatus: GitStatus
+    let project: Project
+    let monitor: GitStatusMonitor
+    let onRename: (URL, String) -> Void
+    @State private var renameTarget: URL?
+    @State private var renameDraft: String = ""
 
     var body: some View {
         List(selection: selectionBinding) {
@@ -320,11 +444,73 @@ private struct FileTreeList: View {
                 FileRow(node: node, gitStatus: gitStatus.files[node.url.path])
                     .tag(node.id)
                     .listRowBackground(Color.clear)
+                    .contextMenu { menuItems(for: node) }
             }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(SolaroColor.surface)
+        // Transparent list bg so the sidebar's frosted material
+        // shows through; rows still get their own selection tint.
+        .background(Color.clear)
+        .alert("Rename file", isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            TextField("Filename", text: $renameDraft)
+            Button("Rename") {
+                if let url = renameTarget {
+                    onRename(url, renameDraft)
+                }
+                renameTarget = nil
+            }
+            Button("Cancel", role: .cancel) {
+                renameTarget = nil
+            }
+        } message: {
+            if let url = renameTarget {
+                Text("Rename \(url.lastPathComponent) in \(url.deletingLastPathComponent().lastPathComponent)/")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menuItems(for node: FileTreeNode) -> some View {
+        let url = node.url
+        let status = gitStatus.files[url.path]
+        Button("Open") {
+            selection = url
+        }
+        Divider()
+        Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        Button("Copy File Path") {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(url.path, forType: .string)
+        }
+        Button("Copy Filename") {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(url.lastPathComponent, forType: .string)
+        }
+        if node.kind != .directory {
+            Divider()
+            Button("Rename…") {
+                renameDraft = url.lastPathComponent
+                renameTarget = url
+            }
+        }
+        if let status, status != .ignored {
+            Divider()
+            Button("Git: Revert Local Changes", role: .destructive) {
+                Task {
+                    _ = await monitor.revertLocalChanges(
+                        in: project, path: url.path, status: status
+                    )
+                }
+            }
+        }
     }
 
     private var selectionBinding: Binding<String?> {

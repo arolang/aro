@@ -78,10 +78,12 @@ struct LayoutSidecar: Codable, Equatable {
 /// The four center-pane projections. Mirrors the wireframe set
 /// (notes 8467 and 8519 on issue #228).
 enum PaneMode: String, Codable, CaseIterable, Equatable, Identifiable {
+    // Map leads the picker so the project-overview view is the
+    // first icon — relative order of the others is unchanged.
+    case map
     case canvas
     case text
     case split
-    case map
 
     var id: String { rawValue }
 

@@ -46,7 +46,10 @@ struct InspectorPaneView: View {
             .padding(.top, SolaroSpace.m)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(SolaroColor.surface)
+        // Transparent so the right rail's frosted-glass background
+        // shows through. The pane outside owns the material; this
+        // view just paints its content.
+        .background(Color.clear)
     }
 
     // MARK: - File header

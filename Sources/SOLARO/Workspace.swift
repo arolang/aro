@@ -1090,10 +1090,17 @@ struct WorkspaceView: View {
                 AICoPilotPanel(
                     project: project,
                     process: controller.aiCoPilot,
+                    currentFile: controller.currentFile,
                     onClose: { controller.rightPaneMode = .inspector }
                 )
             }
         }
+        // Same frosted-glass treatment as the left sidebar so both
+        // rails read as floating panels over the workspace surface.
+        // Tint is intentionally weak — let the material carry the
+        // translucency.
+        .background(SolaroColor.surface.opacity(0.08))
+        .background(.ultraThinMaterial)
     }
 
     private var rightPaneTabStrip: some View {
@@ -1102,7 +1109,9 @@ struct WorkspaceView: View {
                 rightPaneTab(mode)
             }
         }
-        .background(SolaroColor.surface)
+        // Transparent so the frosted-glass background on the
+        // right rail flows through the tab strip uninterrupted.
+        .background(Color.clear)
     }
 
     private func rightPaneTab(_ mode: RightPaneMode) -> some View {
@@ -1136,10 +1145,13 @@ struct WorkspaceView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            paneModePicker
-        }
         ToolbarItemGroup(placement: .primaryAction) {
+            // Center-pane projection picker leads the trailing icon
+            // row so the four view-mode glyphs (Canvas / Text / Split
+            // / Map) sit next to the other view toggles (fold,
+            // minimap, inspector) instead of floating alone in the
+            // `.principal` slot.
+            paneModePicker
             searchField
             playButton
             debugButton
