@@ -60,6 +60,10 @@ struct SidebarPaneView: View {
     /// user's choice survives across sessions.
     @AppStorage(SolaroPrefs.filesTabMode.rawValue)
     private var filesTabMode: FilesViewMode = .project
+    /// Directory the file tree currently has highlighted as a
+    /// drop / focus target — used as the destination folder for
+    /// the new file. `nil` means "use the project root".
+    @State private var selectedDirectory: URL? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -101,6 +105,22 @@ struct SidebarPaneView: View {
                 )
             }
         }
+    }
+
+    /// Where the next "New file…" lands. Honors the file tree's
+    /// current directory selection when there is one; otherwise
+    /// drops the file at the project root next to `main.aro`.
+    private func destinationDirectory(in model: ProjectModel) -> URL {
+        if let dir = selectedDirectory {
+            return dir
+        }
+        // Use the currently open file's parent when nothing is
+        // explicitly selected in the tree — keeps the new file
+        // near whatever the user was just editing.
+        if let current = controller.currentFile {
+            return current.deletingLastPathComponent()
+        }
+        return model.root.rootPath
     }
 
     // MARK: - Tab strip
@@ -165,6 +185,7 @@ struct SidebarPaneView: View {
                 FileTreeList(
                     nodes: nodes,
                     selection: selectionBinding,
+                    directorySelection: $selectedDirectory,
                     gitStatus: controller.gitMonitor.status,
                     project: model.root,
                     monitor: controller.gitMonitor,
@@ -182,6 +203,31 @@ struct SidebarPaneView: View {
     /// every file the noise filter doesn't drop.
     private var filesModeToggle: some View {
         HStack(spacing: 4) {
+            // "New file" — opens a sheet asking for the file type
+            // (.aro / openapi.yaml) and a name. When the user has
+            // a directory row selected in the tree the new file
+            // lands inside it; otherwise it lands at the project
+            // root.
+            Button {
+                // Post a notification so the workspace root
+                // hosts the sheet, not the sidebar — see
+                // `solaroRequestNewFile` for the rationale.
+                let model = controller.model
+                let dir = model.map { destinationDirectory(in: $0).path }
+                NotificationCenter.default.post(
+                    name: .solaroRequestNewFile,
+                    object: nil,
+                    userInfo: dir.map { ["dir": $0] } ?? [:]
+                )
+            } label: {
+                Image(systemName: "doc.badge.plus")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SolaroColor.textTertiary)
+                    .frame(width: 22, height: 18)
+            }
+            .buttonStyle(.plain)
+            .help("New file…")
+            .disabled(controller.model == nil)
             Spacer()
             ForEach(FilesViewMode.allCases) { mode in
                 filesModeButton(mode)
@@ -431,6 +477,10 @@ struct SidebarPaneView: View {
 private struct FileTreeList: View {
     let nodes: [FileTreeNode]
     @Binding var selection: URL?
+    /// Highlighted directory (if any). Click a folder row to set
+    /// this; SidebarPaneView reads it when placing "New file…"
+    /// so the file lands inside the picked folder.
+    @Binding var directorySelection: URL?
     let gitStatus: GitStatus
     let project: Project
     let monitor: GitStatusMonitor
@@ -515,10 +565,31 @@ private struct FileTreeList: View {
 
     private var selectionBinding: Binding<String?> {
         Binding(
-            get: { selection?.standardizedFileURL.path },
+            get: {
+                directorySelection?.standardizedFileURL.path
+                    ?? selection?.standardizedFileURL.path
+            },
             set: { newPath in
-                guard let newPath else { selection = nil; return }
-                selection = URL(fileURLWithPath: newPath)
+                guard let newPath else {
+                    selection = nil
+                    directorySelection = nil
+                    return
+                }
+                let url = URL(fileURLWithPath: newPath)
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(
+                    atPath: url.path, isDirectory: &isDir
+                )
+                if isDir.boolValue {
+                    // Folder rows just set the new-file
+                    // destination — they don't open in the editor.
+                    directorySelection = url
+                } else {
+                    // File rows take over selection and clear any
+                    // folder highlight.
+                    directorySelection = nil
+                    selection = url
+                }
             }
         )
     }
@@ -588,21 +659,23 @@ private struct FileRow: View {
 
     private var icon: String {
         switch node.kind {
-        case .directory: return "folder.fill"
-        case .aroSource: return "doc.text.fill"
-        case .storeFile: return "tray.full"
-        case .openapi:   return "rectangle.connected.to.line.below"
-        case .other:     return "doc"
+        case .directory:       return "folder.fill"
+        case .aroSource:       return "doc.text.fill"
+        case .storeFile:       return "tray.full"
+        case .openapi:         return "rectangle.connected.to.line.below"
+        case .projectManifest: return "gearshape.fill"
+        case .other:           return "doc"
         }
     }
 
     private var tint: Color {
         switch node.kind {
-        case .directory: return SolaroColor.accent.opacity(0.85)
-        case .aroSource: return SolaroColor.accent
-        case .storeFile: return SolaroColor.roleExport
-        case .openapi:   return SolaroColor.roleRequest
-        case .other:     return SolaroColor.textTertiary
+        case .directory:       return SolaroColor.accent.opacity(0.85)
+        case .aroSource:       return SolaroColor.accent
+        case .storeFile:       return SolaroColor.roleExport
+        case .openapi:         return SolaroColor.roleRequest
+        case .projectManifest: return SolaroColor.stateOK
+        case .other:           return SolaroColor.textTertiary
         }
     }
 }
@@ -823,5 +896,200 @@ private struct PluginRow: View {
             Spacer()
         }
         .padding(.vertical, SolaroSpace.xs)
+    }
+}
+
+// MARK: - New file sheet
+
+/// "New file…" picker — choose a file type and a name. The
+/// destination directory is decided by the caller (typically the
+/// selected tree row, with the project root as fallback) and
+/// shown read-only at the top so the user knows where the file
+/// will land.
+struct NewFileSheet: View {
+    enum Kind: String, CaseIterable, Identifiable {
+        case aro
+        case openapi
+        case empty
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .aro:     return "ARO Source (.aro)"
+            case .openapi: return "OpenAPI Contract (openapi.yaml)"
+            case .empty:   return "Empty File"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .aro:     return "doc.text"
+            case .openapi: return "rectangle.connected.to.line.below"
+            case .empty:   return "doc"
+            }
+        }
+
+        var blurb: String {
+            switch self {
+            case .aro:
+                return "A new `.aro` source file with a stub feature set ready to fill in."
+            case .openapi:
+                return "An `openapi.yaml` skeleton. The runtime needs this for the HTTP server to start."
+            case .empty:
+                return "A blank file. Pick the extension yourself — useful for READMEs, notes, JSON fixtures, etc."
+            }
+        }
+    }
+
+    let destinationDirectory: URL
+    let onCancel: () -> Void
+    let onCreate: (Kind, String) -> Void
+
+    @State private var selectedKind: Kind = .aro
+    @State private var filename: String = "untitled.aro"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.m) {
+            Text("New File")
+                .font(SolaroFont.toolbarTitle)
+            Text("In \(destinationDirectory.lastPathComponent)/")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+                .textSelection(.enabled)
+            Divider()
+            VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                ForEach(Kind.allCases) { kind in
+                    kindRow(kind)
+                }
+            }
+            // We always render this block — even for openapi where
+            // the field is disabled — so the sheet's layout shape
+            // stays constant. Showing/hiding it on selectedKind
+            // change made SwiftUI animate the sheet's height, which
+            // fed `NSHostingView.updateAnimatedWindowSize` →
+            // `NSWindow._persistFrame` → an NSUserDefaults
+            // notification → a re-entrant `setNeedsUpdate` during
+            // the very layout cycle that started it. macOS 26
+            // catches that re-entry and aborts the app.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FILENAME")
+                    .font(SolaroFont.caption)
+                    .tracking(1)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                TextField(
+                    selectedKind == .aro ? "untitled.aro" : "README.md",
+                    text: filenameBinding
+                )
+                .textFieldStyle(.roundedBorder)
+                .disabled(selectedKind == .openapi)
+                .opacity(selectedKind == .openapi ? 0.5 : 1)
+            }
+            Spacer(minLength: 0)
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Create") {
+                    onCreate(selectedKind, effectiveName)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValid)
+            }
+        }
+        .padding(SolaroSpace.l)
+        .frame(width: 480, height: 360)
+    }
+
+    private func kindRow(_ kind: Kind) -> some View {
+        Button {
+            // Mutate the state with animations disabled — see the
+            // comment on the FILENAME block above for why an
+            // animated sheet height change here aborts the app on
+            // macOS 26.
+            var tx = Transaction()
+            tx.disablesAnimations = true
+            withTransaction(tx) {
+                selectedKind = kind
+                // Snap the filename field to the kind's default so
+                // the user can hit Return without re-typing for the
+                // common case. Only override when the field still
+                // holds a stale default from another kind — never
+                // clobber a name the user has hand-typed.
+                let stale: Set<String> = [
+                    "openapi.yaml", "untitled.aro", "README.md", ""
+                ]
+                switch kind {
+                case .openapi:
+                    // Don't overwrite `filename` here — the
+                    // openapi-mode field is bound to a read-only
+                    // binding that reports "openapi.yaml" without
+                    // touching the stored draft.
+                    break
+                case .aro:
+                    if stale.contains(filename) { filename = "untitled.aro" }
+                case .empty:
+                    if stale.contains(filename) { filename = "README.md" }
+                }
+            }
+        } label: {
+            HStack(alignment: .top, spacing: SolaroSpace.s) {
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 18))
+                    .foregroundStyle(SolaroColor.accent)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(kind.label)
+                        .font(SolaroFont.bodyBold)
+                    Text(kind.blurb)
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                // Keep the slot reserved with `.opacity` rather
+                // than `if` — same reason as the FILENAME field
+                // above. We don't want any geometry change here.
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(SolaroColor.accent)
+                    .opacity(selectedKind == kind ? 1 : 0)
+            }
+            .padding(SolaroSpace.s)
+            .background(
+                RoundedRectangle(cornerRadius: SolaroRadius.s)
+                    .fill(selectedKind == kind
+                        ? SolaroColor.selection.opacity(0.4)
+                        : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SolaroRadius.s)
+                    .stroke(SolaroColor.divider.opacity(0.5), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var effectiveName: String {
+        // openapi.yaml is the only valid name for that kind, so
+        // ignore whatever the user typed.
+        selectedKind == .openapi ? "openapi.yaml" : filename
+    }
+
+    /// For openapi the field shows "openapi.yaml" but doesn't
+    /// touch `filename`, so flipping back to .aro restores the
+    /// user's previous draft.
+    private var filenameBinding: Binding<String> {
+        Binding(
+            get: { selectedKind == .openapi ? "openapi.yaml" : filename },
+            set: { newValue in
+                if selectedKind != .openapi { filename = newValue }
+            }
+        )
+    }
+
+    private var isValid: Bool {
+        let name = effectiveName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && !name.contains("/")
     }
 }

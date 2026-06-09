@@ -327,6 +327,12 @@ final class ConsoleProcess {
         host.onLog = { [weak self] message in
             self?.appendInfo(message)
         }
+        // Application Log output goes through the stdout path so
+        // the console panel renders it in the foreground colour
+        // (matches what the user sees in external `aro run` mode).
+        host.onAppOutput = { [weak self] line in
+            self?.appendLine(line, kind: .stdout)
+        }
         embeddedHost = host
         appendInfo("$ embedded-runtime \(project.rootPath.lastPathComponent)")
         // Synthesize a fake PID — there's no subprocess to mark, but

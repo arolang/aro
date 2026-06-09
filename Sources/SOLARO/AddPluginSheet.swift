@@ -44,7 +44,7 @@ final class AddPluginProcess {
             return
         }
         guard isLikelyGitURL(trimmed) else {
-            state = .failed("That doesn't look like a Git URL — expected git@host:path.git or https://host/path.git.")
+            state = .failed("That doesn't look like a Git URL or known shorthand. Try `github:org/repo`, `https://…`, `git@host:path.git`, or a local path.")
             return
         }
         log = ""
@@ -131,12 +131,49 @@ final class AddPluginProcess {
     }
 
     private func isLikelyGitURL(_ string: String) -> Bool {
-        // Accept the two common shapes: SSH (`git@host:path[.git]`)
-        // and HTTPS (`https://host/path[.git]`). `git://` and
-        // bare paths are intentionally rejected to avoid mistakes.
-        if string.hasPrefix("git@") && string.contains(":") { return true }
-        if string.hasPrefix("https://") || string.hasPrefix("http://") { return true }
-        return false
+        // `aro add` accepts a lot of shapes — the IDE shouldn't be
+        // pickier than the CLI. The branches below cover every
+        // shape the CLI documents (CLAUDE.md mentions
+        // `github:org/repo` shorthand, plus the canonical SSH /
+        // HTTPS / git:// forms) and falls through to a permissive
+        // "looks like a path or URL" check so user repos on
+        // self-hosted forges aren't rejected for not matching a
+        // recognised prefix.
+        let scheme = string.split(separator: ":", maxSplits: 1)
+            .first
+            .map { String($0).lowercased() } ?? ""
+
+        // Forge shorthand (`github:org/repo`, `gitlab:org/repo`,
+        // `codeberg:…`, etc.). The set is open-ended; any prefix
+        // followed by `:org/repo` flows through.
+        let forgeShorthand: Set<String> = [
+            "github", "gitlab", "bitbucket", "codeberg", "sourcehut", "sr.ht"
+        ]
+        if forgeShorthand.contains(scheme),
+           string.contains(":") && string.contains("/")
+        { return true }
+
+        // Known URL schemes the CLI hands to git directly.
+        let knownSchemes: Set<String> = [
+            "https", "http", "git", "ssh", "file"
+        ]
+        if knownSchemes.contains(scheme),
+           string.contains("://")
+        { return true }
+
+        // SCP-style SSH (`git@host:path`, `kris@host:path`).
+        if string.contains("@") && string.contains(":") { return true }
+
+        // Local filesystem path (absolute or `./foo`).
+        if string.hasPrefix("/") || string.hasPrefix("./")
+            || string.hasPrefix("~/")
+        { return true }
+
+        // Last-chance heuristic — anything that contains a `/` is
+        // probably a path or a forge shorthand and worth handing
+        // to `aro add`. The CLI surfaces a precise error if it
+        // can't make sense of the input.
+        return string.contains("/")
     }
 }
 

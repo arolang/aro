@@ -136,7 +136,9 @@ struct ProjectLayoutStore: Codable, Equatable {
     static func projectRoot(for source: URL) -> URL {
         let fm = FileManager.default
         var dir = source.deletingLastPathComponent()
-        let markers = ["aro.toml", "openapi.yaml", storeFilename]
+        // `aro.yaml` is the canonical project manifest; `aro.toml`
+        // is kept for backwards-compatibility with older projects.
+        let markers = ["aro.yaml", "aro.toml", "openapi.yaml", storeFilename]
         for _ in 0..<8 {
             for marker in markers {
                 let candidate = dir.appendingPathComponent(marker)

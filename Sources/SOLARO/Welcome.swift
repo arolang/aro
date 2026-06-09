@@ -189,6 +189,18 @@ struct WelcomeView: View {
             }
             """
             try scaffold.write(to: mainAro, atomically: true, encoding: .utf8)
+            // Drop an `aro.yaml` next to main.aro so the project
+            // root is unambiguous (the layout sidecar and the
+            // build script both use that marker) and so the user
+            // has a stub for project-level config to grow into.
+            let aroYaml = url.appendingPathComponent("aro.yaml")
+            let yamlStub = """
+            # \(url.lastPathComponent) — ARO project manifest
+            name: \(url.lastPathComponent)
+            version: 0.1.0
+            entrypoint: main.aro
+            """
+            try yamlStub.write(to: aroYaml, atomically: true, encoding: .utf8)
             let project = Project(rootPath: url)
             RecentProjects.remember(project)
             onOpen(project)

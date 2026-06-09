@@ -527,6 +527,16 @@ extension Notification.Name {
     /// project's layout store so the next graph build flows
     /// through `StackLayout.place()` defaults.
     static let solaroResetCanvasLayout = Notification.Name("solaroResetCanvasLayout")
+    /// Posted by the sidebar's "+" button so the new-file sheet is
+    /// hosted on the workspace root instead of inside the sidebar's
+    /// NSHostingView. Presenting the sheet from inside the split
+    /// view's child column triggered a constraint loop on macOS 26
+    /// (`SplitViewChildController.hostingView(_:didUpdateMinSize:
+    /// maxSize:)` rebroadcast every TextField keystroke to the
+    /// split view, which re-invalidated layout, which re-rendered…).
+    /// userInfo["dir"] carries the destination directory as a path
+    /// string; nil/missing = "use the project root".
+    static let solaroRequestNewFile = Notification.Name("solaroRequestNewFile")
 }
 
 /// Every menu-bar action the workspace knows how to route. New

@@ -20,12 +20,18 @@ struct CenterPaneView: View {
     @Environment(\.solaroUndoManager) private var undoManager
 
     var body: some View {
-        // Touch the OpenAPI document's root so SwiftUI subscribes
-        // to its @Observable mutations — this is what makes
-        // canvas-driven edits (add route / add schema / etc.) flow
-        // through to the text editor view without a manual refresh.
-        _ = controller.openAPIDocument?.root.count
-        return Group {
+        // NB: we used to read `controller.openAPIDocument?.root
+        // .count` here to subscribe the whole center pane to the
+        // document's @Observable. That re-rendered the entire pane
+        // on every YAML keystroke (the editableBinding setter
+        // writes back to `document.root` whenever the parse
+        // succeeds), and the rebuild kept feeding new sizes into
+        // `NSHostingView.SizeConstraints` →
+        // `SplitViewChildController` → invalidateLayout → render
+        // again — the macOS 26 constraint-loop crash we kept
+        // hitting. The canvas/openAPI subview that actually cares
+        // about `root` subscribes on its own when it reads it.
+        Group {
             if controller.currentFile == nil, controller.paneMode != .map {
                 emptyPane("Select a file from the sidebar.")
             } else {
@@ -59,6 +65,12 @@ struct CenterPaneView: View {
         if let url = controller.currentFile {
             if isDiffFile(url) {
                 DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if url.lastPathComponent == "aro.yaml" {
+                // Xcode-style settings editor for the project
+                // manifest. The user can still flip to "Raw"
+                // inside the editor to fall back to source view.
+                AroYamlEditorView(url: url)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 0) {
@@ -287,24 +299,15 @@ struct CenterPaneView: View {
     }
 
     private func editableBinding(for url: URL) -> Binding<String> {
-        // OpenAPI files: route text through the @Observable
-        // OpenAPIDocument so the canvas (which mutates document.root
-        // directly when the user adds a route etc.) and the text
-        // editor stay in lock-step both directions. The Inspector's
-        // Save button is still what persists to disk.
-        if let document = controller.openAPIDocument, document.url == url {
-            return Binding(
-                get: {
-                    (try? Yams.dump(object: document.root, sortKeys: false)) ?? ""
-                },
-                set: { newValue in
-                    if let parsed = try? Yams.load(yaml: newValue) as? [String: Any] {
-                        document.root = parsed
-                        document.markDirty()
-                    }
-                }
-            )
-        }
+        // Read directly from / write directly to disk. We used to
+        // route `openapi.yaml` through `OpenAPIDocument.root`'s
+        // parsed dictionary so canvas-side mutations (add route
+        // etc.) would flow back into the editor, but that path
+        // dropped every keystroke that produced transient invalid
+        // YAML (`Yams.load(...) as? [String: Any]` returned nil →
+        // setter no-op → getter re-emitted the old dict and the
+        // text snapped back), and `Yams.dump` re-formatted valid
+        // edits (sorted keys, changed quoting).
         return Binding(
             get: { (try? String(contentsOf: url, encoding: .utf8)) ?? "" },
             set: { newValue in
@@ -316,7 +319,27 @@ struct CenterPaneView: View {
                 // explicit save (saveAndReparse) where the user
                 // actually meant to clean up the file.
                 try? newValue.write(to: url, atomically: true, encoding: .utf8)
-                // Push the fresh text into the LSP server too —
+
+                // openapi.yaml takes the leanest possible path:
+                // write to disk and stop. We deliberately do *not*
+                // push the parsed YAML into `OpenAPIDocument.root`
+                // here — that's an `@Observable` mutation, and
+                // notifying it on every keystroke re-renders every
+                // view that reads `root`, which on macOS 26 cascades
+                // through `NSHostingView.SizeConstraints` and
+                // `SplitViewChildController` until the constraint-
+                // loop guard kills the app. The canvas catches up
+                // on save / on next open via `OpenAPIDocument.load`.
+                // `lsp.didChange` and `Parser.parse` are also
+                // skipped because they're heavy and irrelevant to
+                // OpenAPI files.
+                if isOpenAPIFile(url) {
+                    return
+                }
+
+                // ARO source files (and anything else): keep LSP
+                // and the cached AST in sync per keystroke.
+                // Push the fresh text into the LSP server —
                 // otherwise its view of the document is stuck on
                 // whatever was last opened/saved, and
                 // textDocument/completion prefix-filters against
@@ -637,6 +660,13 @@ struct CenterPaneView: View {
                 jumpToYAMLDefinition(of: node, in: url, yaml: yaml)
             }
         )
+        // Anchor the graph to the available frame and clip
+        // overflow so its intrinsic content size can't leak back
+        // up through `NSHostingView.SizeConstraints` into
+        // `SplitViewChildController` on macOS 26 — that pipe was
+        // the crash trigger when we just clicked openapi.yaml.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     /// Double-clicking an OpenAPI node should drop the editor's

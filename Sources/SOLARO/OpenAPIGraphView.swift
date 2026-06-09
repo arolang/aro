@@ -56,58 +56,92 @@ struct OpenAPIGraphView: View {
 
     var body: some View {
         let graph = laidOut()
-        GeometryReader { geo in
-            let contentSize = contentBounds(graph: graph)
-            ZStack {
-                SolaroColor.backdrop
-                dotGrid(in: geo.size)
+        let contentSize = contentBounds(graph: graph)
+        return ZStack {
+            SolaroColor.backdrop
+            // Inline `Canvas` (replaces the old `dotGrid(in:)`
+            // helper) — its drawing closure already receives the
+            // rendering rect's size, so we don't need a wrapping
+            // `GeometryReader` to read `geo.size`. The
+            // `GeometryReader` here was the macOS 26 crash
+            // trigger: combined with the inner `.frame(width:
+            // height:)` and `.scaleEffect()`, it cycled sizes back
+            // through `NSHostingView.SizeConstraints` →
+            // `SplitViewChildController` until AppKit's
+            // constraint-loop guard fired.
+            Canvas { ctx, size in
+                let spacing: CGFloat = 24
+                let cols = Int(size.width / spacing) + 2
+                let rows = Int(size.height / spacing) + 2
+                let color = GraphicsContext.Shading.color(
+                    SolaroColor.textTertiary.opacity(0.18)
+                )
+                for row in 0..<rows {
+                    for col in 0..<cols {
+                        let x = CGFloat(col) * spacing
+                        let y = CGFloat(row) * spacing
+                        let rect = CGRect(
+                            x: x - 0.8, y: y - 0.8,
+                            width: 1.6, height: 1.6
+                        )
+                        ctx.fill(
+                            Path(ellipseIn: rect), with: color
+                        )
+                    }
+                }
+            }
+            .allowsHitTesting(false)
 
-                ZStack(alignment: .topLeading) {
-                    Color.clear
-                    OpenAPIWiresLayer(graph: graph)
-                    OpenAPINodesLayer(
-                        graph: graph,
-                        selectedID: selectedID,
-                        warningsByNode: warningsByNode,
-                        onTap: { node in
-                            selectedID = node.id
-                            onSelect(node)
-                        },
-                        onDoubleTap: { node in
-                            onJumpToCode?(node)
-                        }
-                    )
-                }
-                .frame(width: contentSize.width, height: contentSize.height,
-                       alignment: .topLeading)
-                .offset(x: pan.width + dragOffset.width,
-                        y: pan.height + dragOffset.height)
-                .scaleEffect(zoom * magnify, anchor: .topLeading)
-                .animation(.easeOut(duration: 0.15), value: zoom)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                OpenAPIWiresLayer(graph: graph)
+                OpenAPINodesLayer(
+                    graph: graph,
+                    selectedID: selectedID,
+                    warningsByNode: warningsByNode,
+                    onTap: { node in
+                        selectedID = node.id
+                        onSelect(node)
+                    },
+                    onDoubleTap: { node in
+                        onJumpToCode?(node)
+                    }
+                )
             }
-            .contentShape(Rectangle())
-            .gesture(panGesture)
-            .gesture(magnifyGesture)
-            .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: SolaroSpace.s) {
-                    titleBar(graph: graph)
-                    addToolbar
-                }
-                .padding(SolaroSpace.l)
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+            .offset(x: pan.width + dragOffset.width,
+                    y: pan.height + dragOffset.height)
+            .scaleEffect(zoom * magnify, anchor: .topLeading)
+            .animation(.easeOut(duration: 0.15), value: zoom)
+        }
+        // Anchor the whole view to whatever the column gives us
+        // and clip overflow so the inner explicit-size content
+        // can't propagate its intrinsic size back up to the
+        // hosting view.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+        .contentShape(Rectangle())
+        .gesture(panGesture)
+        .gesture(magnifyGesture)
+        .overlay(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: SolaroSpace.s) {
+                titleBar(graph: graph)
+                addToolbar
             }
-            .overlay(alignment: .topTrailing) {
-                if !graph.refs.isEmpty {
-                    legend.padding(SolaroSpace.l)
-                }
+            .padding(SolaroSpace.l)
+        }
+        .overlay(alignment: .topTrailing) {
+            if !graph.refs.isEmpty {
+                legend.padding(SolaroSpace.l)
             }
-            .overlay(alignment: .bottomTrailing) {
-                zoomControls.padding(SolaroSpace.m)
-            }
-            .overlay(alignment: .center) {
-                if graph.nodes.isEmpty {
-                    EmptyOpenAPINotice().padding(SolaroSpace.l)
-                }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            zoomControls.padding(SolaroSpace.m)
+        }
+        .overlay(alignment: .center) {
+            if graph.nodes.isEmpty {
+                EmptyOpenAPINotice().padding(SolaroSpace.l)
             }
         }
     }
@@ -173,30 +207,6 @@ struct OpenAPIGraphView: View {
             maxY = max(maxY, CGFloat(node.y) + 200)
         }
         return CGSize(width: maxX + 200, height: maxY + 200)
-    }
-
-    // MARK: - Backdrop
-
-    @ViewBuilder
-    private func dotGrid(in size: CGSize) -> some View {
-        Canvas { ctx, _ in
-            let spacing: CGFloat = 24
-            let cols = Int(size.width / spacing) + 2
-            let rows = Int(size.height / spacing) + 2
-            let color = GraphicsContext.Shading.color(
-                SolaroColor.textTertiary.opacity(0.18)
-            )
-            for row in 0..<rows {
-                for col in 0..<cols {
-                    let x = CGFloat(col) * spacing
-                    let y = CGFloat(row) * spacing
-                    let rect = CGRect(x: x - 0.8, y: y - 0.8, width: 1.6, height: 1.6)
-                    ctx.fill(Path(ellipseIn: rect), with: color)
-                }
-            }
-        }
-        .frame(width: size.width, height: size.height)
-        .allowsHitTesting(false)
     }
 
     // MARK: - Title + legend + zoom HUD

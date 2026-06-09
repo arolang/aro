@@ -504,16 +504,28 @@ public struct LogAction: ActionImplementation {
             formattedMessage = "LOG[\(target)] \(context.featureSetName): \(message)"
         }
 
-        // Route output to appropriate stream based on target and qualifier
-        // Check if target is "stderr" (backward compatibility) OR qualifier is "error"
-        if target.lowercased() == "stderr" || outputStream == "error" {
-            // Write to stderr using FileHandle for immediate flush
+        // Route output to appropriate stream based on target and qualifier.
+        // Check if target is "stderr" (backward compatibility) OR qualifier is "error".
+        let isError = target.lowercased() == "stderr" || outputStream == "error"
+        if isError {
+            // stderr path stays direct — it's only used by the CLI
+            // and the user's terminal. An embedded host that wants
+            // to capture stderr can install a `LoggingService` (the
+            // branch above), which is the supported override seam.
             if let data = (formattedMessage + "\n").data(using: .utf8) {
                 try FileHandle.standardError.write(contentsOf: data)
             }
+        } else if let sink = ConsoleObject.sink {
+            // SOLARO's embedded runtime installs a TaskLocal sink so
+            // every `<Log "x" to <console>>` lands in the IDE console
+            // panel instead of SOLARO's invisible process stdout.
+            // Without this branch the user only saw the embedded
+            // host's own start/end markers — no application output.
+            sink(formattedMessage)
         } else {
-            // Write to stdout using FileHandle for immediate flush
-            // (print() uses full buffering when piped, which loses output on Linux CI)
+            // Default CLI path: write to stdout using FileHandle for
+            // immediate flush (`print()` uses full buffering when
+            // piped, which loses output on Linux CI).
             if let data = (formattedMessage + "\n").data(using: .utf8) {
                 try FileHandle.standardOutput.write(contentsOf: data)
             }

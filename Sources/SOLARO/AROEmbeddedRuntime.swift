@@ -206,6 +206,13 @@ final class EmbeddedRuntimeHost {
     /// itself (not from the running ARO program; those still go
     /// to the SOLARO process's real stdout).
     var onLog: ((String) -> Void)?
+    /// Lines coming out of the ARO application's own `<Log "x" to
+    /// <console>>` statements. Kept separate from `onLog` (which
+    /// carries host-internal status messages like "starting in-
+    /// process run") so the console panel can render the two in
+    /// different colors — application output stays white, internal
+    /// chatter is the dimmer accent blue.
+    var onAppOutput: ((String) -> Void)?
 
     private(set) var isRunning: Bool = false
     private var runTask: Task<Void, Never>?
@@ -258,7 +265,11 @@ final class EmbeddedRuntimeHost {
         // honest — Console.appendInfo touches main-actor state.
         let sink: @Sendable (String) -> Void = { [weak self] msg in
             Task { @MainActor [weak self] in
-                self?.onLog?(msg)
+                // Route through `onAppOutput` so the console
+                // panel can paint application output white,
+                // separate from the embedded host's own status
+                // messages (which keep using `onLog`).
+                self?.onAppOutput?(msg)
             }
         }
 

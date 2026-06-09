@@ -33,6 +33,11 @@ struct FileTreeNode: Identifiable, Hashable {
         case aroSource
         case storeFile
         case openapi
+        /// Project manifest — `aro.yaml` next to `main.aro`. Marks
+        /// the project root and carries the entrypoint / name /
+        /// version metadata. Gets its own icon + tint so the file
+        /// tree reads it as configuration, not source.
+        case projectManifest
         case other
     }
 
@@ -56,6 +61,14 @@ enum FileTreeBuilder {
         for url in model.sourceFiles { allFiles.append((url, .aroSource)) }
         for url in model.storeFiles  { allFiles.append((url, .storeFile)) }
         if let spec = model.openAPISpec { allFiles.append((spec, .openapi)) }
+        // `aro.yaml` at the root is the project manifest. The
+        // model doesn't track it explicitly, so check the disk
+        // and inject the entry when present.
+        let manifest = model.root.rootPath
+            .appendingPathComponent("aro.yaml")
+        if FileManager.default.fileExists(atPath: manifest.path) {
+            allFiles.append((manifest, .projectManifest))
+        }
 
         return groupByPath(files: allFiles, root: model.root.rootPath)
     }
@@ -117,6 +130,14 @@ enum FileTreeBuilder {
         }
         directories.sort { $0.name < $1.name }
         files.sort { lhs, rhs in
+            // Project manifest bubbles to the very top, then the
+            // OpenAPI contract, then everything else alphabetical.
+            // Both files are "project shape" — the user usually
+            // glances at them first.
+            if lhs.kind == .projectManifest, rhs.kind != .projectManifest { return true }
+            if rhs.kind == .projectManifest, lhs.kind != .projectManifest { return false }
+            if lhs.kind == .projectManifest, rhs.kind != .projectManifest { return true }
+            if rhs.kind == .projectManifest, lhs.kind != .projectManifest { return false }
             if lhs.kind == .openapi, rhs.kind != .openapi { return true }
             if rhs.kind == .openapi, lhs.kind != .openapi { return false }
             return lhs.name < rhs.name
@@ -141,6 +162,10 @@ enum FileTreeBuilder {
         if let spec = model.openAPISpec,
            spec.standardizedFileURL.path == path {
             return .openapi
+        }
+        // `aro.yaml` at the project root is the project manifest.
+        if url.lastPathComponent == "aro.yaml" {
+            return .projectManifest
         }
         // Catch ARO files outside the discovered set (e.g. an .aro
         // file in a subdirectory not currently treated as a source
@@ -212,6 +237,8 @@ enum FileTreeBuilder {
         // but `openapi.yaml` bubbles to the very top of the file group.
         subdirNodes.sort { $0.name < $1.name }
         directLeaves.sort { lhs, rhs in
+            if lhs.kind == .projectManifest, rhs.kind != .projectManifest { return true }
+            if rhs.kind == .projectManifest, lhs.kind != .projectManifest { return false }
             if lhs.kind == .openapi, rhs.kind != .openapi { return true }
             if rhs.kind == .openapi, lhs.kind != .openapi { return false }
             return lhs.name < rhs.name

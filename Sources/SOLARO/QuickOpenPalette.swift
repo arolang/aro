@@ -41,11 +41,12 @@ enum QuickOpenBuilder {
 
     private static func symbol(for kind: FileTreeNode.Kind) -> String {
         switch kind {
-        case .aroSource: return "doc.text.fill"
-        case .storeFile: return "tray.full"
-        case .openapi:   return "rectangle.connected.to.line.below"
-        case .directory: return "folder.fill"
-        case .other:     return "doc"
+        case .aroSource:       return "doc.text.fill"
+        case .storeFile:       return "tray.full"
+        case .openapi:         return "rectangle.connected.to.line.below"
+        case .projectManifest: return "gearshape.fill"
+        case .directory:       return "folder.fill"
+        case .other:           return "doc"
         }
     }
 }

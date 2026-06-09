@@ -156,6 +156,30 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// Wraps a horizontal cluster of toolbar items in a capsule
+/// background so each logical group reads as its own island.
+/// Mirrors the search field's pill so the toolbar's four clusters
+/// share the same visual vocabulary.
+struct ToolbarPill<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 4) {
+            content
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(SolaroColor.surfaceRaised.opacity(0.5))
+        )
+        .overlay(
+            Capsule()
+                .stroke(SolaroColor.divider.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
 /// "Failed to load" alert extracted to a `ViewModifier` for the
 /// same type-checker-budget reason as `DeleteFileAlertModifier`.
 private struct LoadErrorAlertModifier: ViewModifier {
@@ -224,6 +248,16 @@ enum RunIntent {
     case debug
 }
 
+/// Atomic state for the "New file…" sheet hosted on the
+/// workspace root. Identifiable so SwiftUI's `.sheet(item:)`
+/// presents the sheet atomically — the sheet sees the directory
+/// at the moment it's instantiated rather than racing with a
+/// separate `@State Bool`.
+struct PendingNewFileRequest: Identifiable {
+    let id = UUID()
+    let destination: URL
+}
+
 /// Atomic state for the pre-run parameter sheet. Wrapping the
 /// parameter list and intent in a single `Identifiable` lets the
 /// view use `.sheet(item:)`, which guarantees the sheet sees the
@@ -275,6 +309,15 @@ struct WorkspaceView: View {
     /// reads from this — non-nil = visible. Cleared on cancel or
     /// after the file is moved to Trash.
     @State private var pendingDeleteFile: URL? = nil
+    /// Destination URL the next "New file…" sheet will use. nil
+    /// while the sheet is dismissed; non-nil drives the sheet's
+    /// presentation. Hosted on `WorkspaceView` (not the sidebar)
+    /// because presenting the sheet from inside the split view's
+    /// child column triggered a SwiftUI/AppKit constraint loop on
+    /// macOS 26 — every TextField keystroke pushed an updated
+    /// min/max up to `SplitViewChildController`, which re-flushed
+    /// layout, which re-rendered the sheet…
+    @State private var pendingNewFileRequest: PendingNewFileRequest? = nil
     @State private var commitModel = GitCommitModel()
     @State private var showHoverSheet = false
     @State private var hoverState = HoverSheetState()
@@ -514,6 +557,52 @@ struct WorkspaceView: View {
             target: $pendingDeleteFile,
             onConfirm: { url in deleteFile(url) }
         ))
+        .onReceive(
+            NotificationCenter.default.publisher(for: .solaroRequestNewFile)
+        ) { note in
+            let dir: URL
+            if let s = note.userInfo?["dir"] as? String, !s.isEmpty {
+                dir = URL(fileURLWithPath: s)
+            } else if let model = controller.model {
+                dir = model.root.rootPath
+            } else { return }
+            pendingNewFileRequest = PendingNewFileRequest(destination: dir)
+        }
+        .sheet(item: $pendingNewFileRequest) { request in
+            NewFileSheet(
+                destinationDirectory: request.destination,
+                onCancel: { pendingNewFileRequest = nil },
+                onCreate: { kind, name in
+                    let dir = request.destination
+                    // Dismiss the sheet WITHOUT the default
+                    // animation, then wait long enough for the
+                    // animation context to finish unwinding
+                    // before running the heavy reload. On
+                    // macOS 26 a `controller.load()` that lands
+                    // inside the sheet's still-running animation
+                    // group fires `NSHostingView.layout()` →
+                    // `flushTransactions` →
+                    // `setNeedsUpdateConstraints` during layout,
+                    // which the system now aborts on. A bare
+                    // `DispatchQueue.main.async` wasn't enough —
+                    // it queued the reload right back into the
+                    // animation cycle. `withTransaction(_:)`
+                    // suppresses the dismissal animation so the
+                    // hosting view has nothing to animate, and
+                    // the 0.4s deadline gives Core Animation a
+                    // chance to commit before we touch the
+                    // observable graph again.
+                    var tx = Transaction()
+                    tx.disablesAnimations = true
+                    withTransaction(tx) {
+                        pendingNewFileRequest = nil
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        createNewFile(kind: kind, name: name, in: dir)
+                    }
+                }
+            )
+        }
         .sheet(item: $pendingParameterRequest) { request in
             RunParametersSheet(
                 parameters: request.parameters,
@@ -1122,21 +1211,38 @@ struct WorkspaceView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            // Center-pane projection picker leads the trailing icon
-            // row so the four view-mode glyphs (Canvas / Text / Split
-            // / Map) sit next to the other view toggles (fold,
-            // minimap, inspector) instead of floating alone in the
-            // `.principal` slot.
-            paneModePicker
-            searchField
-            playButton
-            debugButton
-            testButton
-            statusPip
-            foldToggle
-            minimapToggle
-            inspectorToggle
+        // Four logical clusters, each rendered as its own pill so
+        // the user sees them as distinct islands instead of one
+        // long row of icons. Hosted in a single `ToolbarItem` so
+        // we control the inter-pill spacing directly (SwiftUI's
+        // automatic spacing between `ToolbarItemGroup`s vanished
+        // on macOS 26 for adjacent `.primaryAction` items).
+        ToolbarItem(placement: .primaryAction) {
+            // 20pt gap between pills so each cluster reads as a
+            // distinct island. `fixedSize()` pins the HStack to
+            // its natural width — without it AppKit tries to
+            // compress the toolbar when the window is narrow, the
+            // embedded TextField in the search pill fights back
+            // through NSHostingView's intrinsic-size cycle, and
+            // the constraint loop trips `_postWindowNeedsUpdate
+            // Constraints`'s recursion guard (crash signature in
+            // the latest IPS).
+            HStack(spacing: 20) {
+                ToolbarPill { paneModePicker }
+                ToolbarPill { searchField }
+                ToolbarPill {
+                    playButton
+                    debugButton
+                    testButton
+                    statusPip
+                }
+                ToolbarPill {
+                    foldToggle
+                    minimapToggle
+                    inspectorToggle
+                }
+            }
+            .fixedSize()
         }
     }
 
@@ -1501,6 +1607,67 @@ struct WorkspaceView: View {
             controller.inspectorShown = true
         case .aiReset:
             controller.aiCoPilot.reset(in: project)
+        }
+    }
+
+    /// Create a new file in `dir` according to the picked
+    /// `NewFileSheet.Kind`. Moved out of the sidebar so the
+    /// sheet can be hosted on the workspace root (see
+    /// `solaroRequestNewFile`) without losing the helper.
+    private func createNewFile(
+        kind: NewFileSheet.Kind, name: String, in dir: URL
+    ) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("/") else { return }
+        let filename: String
+        let template: String
+        switch kind {
+        case .aro:
+            filename = trimmed.hasSuffix(".aro") ? trimmed : "\(trimmed).aro"
+            let fsName = trimmed
+                .replacingOccurrences(of: ".aro", with: "")
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map { $0.capitalized }
+                .joined()
+            template = """
+            (\(fsName.isEmpty ? "NewFeatureSet" : fsName): TODO Business Activity) {
+                (* Describe what this feature set does *)
+                Return an <OK: status> for the <\(fsName.lowercased().isEmpty ? "result" : fsName.lowercased())>.
+            }
+            """
+        case .openapi:
+            filename = "openapi.yaml"
+            template = """
+            openapi: 3.0.3
+            info:
+              title: \(controller.model?.root.displayName ?? "My API")
+              version: 0.1.0
+            paths: {}
+            """
+        case .empty:
+            filename = trimmed
+            template = ""
+        }
+        let url = dir.appendingPathComponent(filename)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) {
+            let alert = NSAlert()
+            alert.messageText = "\(filename) already exists"
+            alert.informativeText = "Pick a different name or open the existing file instead."
+            alert.runModal()
+            return
+        }
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            try template.write(to: url, atomically: true, encoding: .utf8)
+            controller.load()
+            controller.openFile(url)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't create \(filename)"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
         }
     }
 
