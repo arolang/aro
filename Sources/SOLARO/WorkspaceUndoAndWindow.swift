@@ -100,7 +100,9 @@ struct WorkspaceWindowUndoBinder: NSViewRepresentable {
 /// 6 made the built-in `\.undoManager` read-only, so canvas code
 /// pulls the manager from this key instead.
 struct SolaroUndoManagerKey: EnvironmentKey {
-    static let defaultValue: UndoManager? = nil
+    // macOS 26 SDK marks UndoManager Sendable; the macos-15 CI runner's
+    // SDK does not, so the nil default trips strict-concurrency there.
+    nonisolated(unsafe) static let defaultValue: UndoManager? = nil
 }
 extension EnvironmentValues {
     var solaroUndoManager: UndoManager? {

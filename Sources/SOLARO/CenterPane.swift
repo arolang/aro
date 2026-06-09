@@ -66,12 +66,6 @@ struct CenterPaneView: View {
             if isDiffFile(url) {
                 DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if url.lastPathComponent == "aro.yaml" {
-                // Xcode-style settings editor for the project
-                // manifest. The user can still flip to "Raw"
-                // inside the editor to fall back to source view.
-                AroYamlEditorView(url: url)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 0) {
                     let conflicts = currentFileConflicts(url)
