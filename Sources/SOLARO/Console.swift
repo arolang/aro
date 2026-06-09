@@ -433,11 +433,13 @@ final class ConsoleProcess {
             }
             appendInfo("$ aro debug \(project.rootPath.lastPathComponent)  (breakpoints: \(lines))")
         case .run:
-            // `--record` is on by default so SOLARO's canvas can
-            // light up executing nodes and surface live values
-            // without a separate "debug" mode.
+            // `--debug-record` is on by default so SOLARO's canvas
+            // can light up executing nodes and surface live values
+            // without a separate "debug" mode. Distinct from
+            // `--record`, which is reserved for the
+            // EventRecorder/EventReplayer pair.
             subArgs = ["run", project.rootPath.path,
-                       "--record", recordPath(for: project)]
+                       "--debug-record", recordPath(for: project)]
             // Append `--name value` for each parameter collected by
             // the run-parameters sheet so the child process's
             // `ParameterStorage` picks them up.

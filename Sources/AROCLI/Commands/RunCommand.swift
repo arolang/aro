@@ -39,6 +39,15 @@ struct RunCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Replay events from JSON file")
     var replay: String?
 
+    /// SOLARO and other live debuggers use this to capture a JSONL
+    /// stream of per-statement pause records, without disturbing the
+    /// pre-existing `--record` event-recording path (which writes a
+    /// single pretty-printed `EventRecording` JSON object the
+    /// `--replay` flag consumes). Kept separate so EventReplay tests
+    /// keep their original wire format.
+    @Option(name: .long, help: "Stream per-statement debug JSONL to file (SOLARO live view)")
+    var debugRecord: String?
+
     /// Extract run command flags from captured application arguments
     /// This handles cases where flags are placed after the path argument
     mutating func extractRunCommandFlags() {
@@ -86,6 +95,14 @@ struct RunCommand: AsyncParsableCommand {
                     remainingArgs.append(arg)
                     i += 1
                 }
+            case "--debug-record":
+                if i + 1 < applicationArguments.count {
+                    debugRecord = applicationArguments[i + 1]
+                    i += 2
+                } else {
+                    remainingArgs.append(arg)
+                    i += 1
+                }
             default:
                 // Not a run command flag, keep it for the application
                 remainingArgs.append(arg)
@@ -128,6 +145,7 @@ struct RunCommand: AsyncParsableCommand {
         let applicationArguments = mutableSelf.applicationArguments
         let recordPath = mutableSelf.record
         let replayPath = mutableSelf.replay
+        let debugRecordPath = mutableSelf.debugRecord
 
         if verbose {
             AROLogger.setLevel(.debug)
@@ -260,26 +278,23 @@ struct RunCommand: AsyncParsableCommand {
             }
         }
 
-        // If --record was set, install a no-op DebugController + JSONL
-        // writer so the runtime emits a per-statement pause record to
-        // the file. SOLARO tails this file with `LiveEventStream` to
-        // pulse executing nodes and populate the repository cards
-        // (#284 step 3). The silent frontend never blocks — it just
-        // hands back `.stepOver` so `DebugController.checkpoint`
-        // keeps recording rather than early-returning under
-        // `.continue`. EventRecorder's end-of-run JSON would clobber
-        // the JSONL, so we pass `recordPath: nil` to Application
-        // here and own the file ourselves.
+        // SOLARO's live debug stream uses `--debug-record` to get a
+        // per-statement JSONL trace without touching the event-
+        // recording semantics of `--record` (which writes a single
+        // EventRecording JSON object that `--replay` consumes). The
+        // silent frontend never blocks — it just hands back
+        // `.stepOver` so `DebugController.checkpoint` keeps recording
+        // rather than early-returning under `.continue`.
         let debugController: DebugController?
-        if let recordPath {
+        if let debugRecordPath {
             let controller = DebugController(frontend: SilentRunFrontend())
             do {
-                let recorder = try DebugEventLogWriter(path: recordPath)
+                let recorder = try DebugEventLogWriter(path: debugRecordPath)
                 await controller.setRecorder(recorder)
                 debugController = controller
             } catch {
                 if verbose {
-                    print("warning: failed to open recorder \(recordPath): \(error)")
+                    print("warning: failed to open debug recorder \(debugRecordPath): \(error)")
                 }
                 debugController = nil
             }
@@ -287,13 +302,15 @@ struct RunCommand: AsyncParsableCommand {
             debugController = nil
         }
 
-        // Create and run application
+        // Create and run application — `--record` still flows
+        // straight to EventRecorder/EventReplayer for the existing
+        // event-record/replay workflow.
         let application = Application(
             programs: compiledPrograms,
             entryPoint: entryPoint,
             config: ApplicationConfig(verbose: verbose, workingDirectory: appConfig.rootPath.path),
             openAPISpec: appConfig.openAPISpec,
-            recordPath: debugController == nil ? recordPath : nil,
+            recordPath: recordPath,
             replayPath: replayPath,
             storeFiles: appConfig.storeFiles
         )
