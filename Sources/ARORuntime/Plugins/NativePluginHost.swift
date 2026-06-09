@@ -117,6 +117,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 
     /// Registered actions
     private var actions: [String: NativeActionDescriptor] = [:]
+    /// Action name → declared verbs (from `aro_plugin_info`).
+    /// Used by `execute` to pick the right Rust function name
+    /// when the SDK's dispatch table doesn't recognise a verb —
+    /// see the snake_case fallback below.
+    private var actionVerbs: [String: [String]] = [:]
 
     // MARK: - Function Types (using raw pointers for C ABI compatibility)
 
@@ -993,6 +998,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
                 outputSchema: nil,
                 metadata: meta
             )
+            // Keep the verb list so `execute` can pick the right
+            // Rust function name when the SDK dispatch goes via
+            // function names instead of declared verbs.
+            actionVerbs[actionName] = verbsMap[actionName]
+                ?? [actionName.lowercased()]
         }
 
         // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
@@ -1049,32 +1059,107 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         let inputData = try JSONSerialization.data(withJSONObject: envelope)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
-        // Call the plugin
-        let resultPtr = action.withCString { actionCStr in
-            inputJSON.withCString { inputCStr in
-                execFunc(actionCStr, inputCStr)
+        // Try the verb the runtime gave us first. If the plugin
+        // answers with `Unknown action: <verb>`, that's a known
+        // mis-dispatch in older `aro-plugin-sdk-rust` builds —
+        // the macro generates the manifest with the declared
+        // `name:` / `verbs:` but only registers the Rust function
+        // name (snake_case of the action name) in the dispatch
+        // table. Re-try with the snake_case form of every action
+        // name the manifest advertises for this verb before
+        // failing. Result is the same successful payload the
+        // plugin would have returned for the correct dispatch.
+        var candidates = [action]
+        candidates.append(contentsOf: snakeCaseCandidates(for: action))
+        candidates = Array(NSOrderedSet(array: candidates)) as! [String]
+
+        var lastResultJSON: String = ""
+        for candidate in candidates {
+            let resultPtr = candidate.withCString { actionCStr in
+                inputJSON.withCString { inputCStr in
+                    execFunc(actionCStr, inputCStr)
+                }
             }
-        }
-
-        defer {
-            if let ptr = resultPtr {
-                freeFunc?(ptr)
+            guard let resultPtr else {
+                continue
             }
+            let resultJSON = String(cString: resultPtr)
+            freeFunc?(resultPtr)
+            lastResultJSON = resultJSON
+            // If the SDK returned its "Unknown action" sentinel,
+            // keep trying. Otherwise we're done.
+            if resultJSON.contains("Unknown action:") {
+                continue
+            }
+            guard let resultData = resultJSON.data(using: .utf8),
+                  let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
+                return resultJSON
+            }
+            return convertToSendable(result)
         }
 
-        guard let resultPtr = resultPtr else {
-            return [String: any Sendable]()
-        }
-
-        let resultJSON = String(cString: resultPtr)
-
-        // Parse result
-        guard let resultData = resultJSON.data(using: .utf8),
+        // Every candidate returned "Unknown action" — surface the
+        // last response so the user sees the real error.
+        guard let resultData = lastResultJSON.data(using: .utf8),
               let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
-            return resultJSON
+            return lastResultJSON
         }
-
         return convertToSendable(result)
+    }
+
+    /// Candidate Rust function names for a given verb. Buggy
+    /// versions of `aro-plugin-sdk-rust` only register the Rust
+    /// function name in the plugin's `aro_plugin_execute`
+    /// dispatch table, so when the runtime hands them a verb
+    /// from the manifest (`parsecsv`) they answer with
+    /// `Unknown action`. We try the snake_case derivative of the
+    /// canonical action *name* whose verbs list contains the
+    /// failing verb (`ParseCSV` → `parse_csv`), and only that —
+    /// trying every action name would dispatch CSVToJSON
+    /// requests into parse_csv.
+    private func snakeCaseCandidates(for verb: String) -> [String] {
+        var out: [String] = []
+        let lowered = verb.lowercased()
+        for (name, verbs) in actionVerbs {
+            if name.lowercased() == lowered
+                || verbs.contains(where: { $0.lowercased() == lowered }) {
+                out.append(toSnakeCase(name))
+            }
+        }
+        out.append(toSnakeCase(verb))
+        return out
+    }
+
+    /// CamelCase → snake_case, matching the Rust convention
+    /// `aro-plugin-sdk-rust` uses for function-name derivation:
+    ///
+    ///   ParseCSV   → parse_csv
+    ///   CSVToJSON  → csv_to_json
+    ///   FormatCSV  → format_csv
+    ///
+    /// Rule: insert `_` between (lowercase | digit) and uppercase
+    /// (start of a new word), and between two uppercases when
+    /// the second is followed by a lowercase (end of an acronym
+    /// run). Otherwise consecutive uppercases stay together so
+    /// CSV doesn't become c_s_v.
+    private func toSnakeCase(_ s: String) -> String {
+        let chars = Array(s)
+        guard !chars.isEmpty else { return s }
+        var out = ""
+        for i in 0..<chars.count {
+            let ch = chars[i]
+            if i > 0, ch.isUppercase {
+                let prev = chars[i - 1]
+                let nextLower = i + 1 < chars.count
+                    && chars[i + 1].isLowercase
+                if prev.isLowercase || prev.isNumber
+                    || (prev.isUppercase && nextLower) {
+                    out.append("_")
+                }
+            }
+            out.append(Character(ch.lowercased()))
+        }
+        return out
     }
 
     // MARK: - Action Registration

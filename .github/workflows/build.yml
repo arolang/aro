@@ -471,6 +471,211 @@ jobs:
           path: aro-dist/
           retention-days: 30
 
+  # SOLARO Linux build was dropped (ADR-001 follow-up 2026-06): the
+  # SwiftCrossUI cross-platform approach couldn't render the wireframes,
+  # and SOLARO is now a native SwiftUI / AppKit app shipped on macOS only.
+  # Linux + Windows may return later; the design stays portable in spirit.
+
+  # ===========================================================================
+  # SOLARO — macOS build + signing (#228 Phase 0 + ADR-012)
+  # ===========================================================================
+  solaro-macos:
+    needs: test
+    name: SOLARO · macOS
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Cache Swift packages
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: macos-solaro-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved', 'Sources/**/*.swift') }}
+
+      - name: Generate version file
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          cat > Sources/AROVersion/Version.swift << EOF
+          import Foundation
+          public enum AROVersion {
+              public static let version: String = "$VERSION"
+              public static let commit: String = "$COMMIT"
+              public static let buildDate: String = "$BUILD_DATE"
+              public static let isRelease: Bool = { !version.contains("-dirty") && !version.hasPrefix("dev") }()
+              public static var fullVersion: String { "\(version) (\(commit)) built on \(buildDate)" }
+              public static var shortVersion: String { version }
+          }
+          EOF
+
+      - name: Build SOLARO + launcher + XPC service
+        run: |
+          swift build -c release --product SolaroApp
+          swift build -c release --product solaro
+          swift build -c release --product AROXPCService
+          .build/release/solaro --version
+          .build/release/solaro --help
+
+      - name: Assemble Solaro.app bundle
+        run: |
+          APP_DIR="solaro-dist/Solaro.app"
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+          cp .build/release/SolaroApp "$APP_DIR/Contents/MacOS/Solaro"
+          # Out-of-process runtime host (#282 phase 3). Ships in
+          # Resources/ so AROXPCRuntimeProxy can resolve it from
+          # the bundle without falling back to a user-built
+          # binary.
+          cp .build/release/AROXPCService "$APP_DIR/Contents/Resources/AROXPCService"
+          chmod +x "$APP_DIR/Contents/Resources/AROXPCService"
+          cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
+
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          cat > "$APP_DIR/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleDevelopmentRegion</key><string>en</string>
+            <key>CFBundleExecutable</key><string>Solaro</string>
+            <!-- CFBundleIdentifier kept stable to preserve user defaults
+                 and Launch Services associations across the rename. -->
+            <key>CFBundleIdentifier</key><string>com.arolang.SOLARO</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>Solaro</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>15.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>CFBundleDocumentTypes</key>
+            <array>
+              <dict>
+                <key>CFBundleTypeName</key><string>ARO project folder</string>
+                <key>CFBundleTypeRole</key><string>Editor</string>
+                <key>LSHandlerRank</key><string>Alternate</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>public.folder</string>
+                  <string>public.directory</string>
+                </array>
+              </dict>
+            </array>
+          </dict></plist>
+          PLIST
+
+          # Launcher binary lives alongside (ADR-008 follow-up).
+          cp .build/release/solaro solaro-dist/solaro
+
+      - name: Sign Solaro.app (tags only)
+        if: github.ref_type == 'tag'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_BASE64" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "Apple signing secrets not configured — leaving Solaro.app unsigned."
+            exit 0
+          fi
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security import certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          rm certificate.p12
+
+          # Same library-loading entitlement the aro CLI uses
+          # (#268). SOLARO dlopen's plugin binaries from a project's
+          # `Plugins/` directory — those are signed by the plugin
+          # author with a different Team ID, so the hardened runtime
+          # otherwise rejects them.
+          cat > /tmp/solaro-entitlements.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+            <!-- SOLARO runs `aro` subprocesses for the LSP, run/test,
+                 and `aro ask` flows; the hardened runtime needs this
+                 to spawn unsigned children inherited from $PATH. -->
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            solaro-dist/Solaro.app/Contents/MacOS/Solaro
+          # Sign the XPC service binary with the same entitlements
+          # as the main app (#282 phase 3). The hardened runtime
+          # rejects unsigned executables launched as a child
+          # process; without this Notarized installs would fail
+          # the first time the user picks the XPC backend.
+          codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            solaro-dist/Solaro.app/Contents/Resources/AROXPCService
+          codesign --force --options runtime --timestamp \
+            --entitlements /tmp/solaro-entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            solaro-dist/Solaro.app
+          codesign --verify --deep --strict solaro-dist/Solaro.app
+
+      - name: Notarize Solaro.app (tags only)
+        if: github.ref_type == 'tag'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_PASSWORD" ]; then
+            echo "Notarization secrets missing — skipping."
+            exit 0
+          fi
+          ditto -c -k --keepParent solaro-dist/Solaro.app solaro-dist/Solaro.app.zip
+          xcrun notarytool submit solaro-dist/Solaro.app.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple solaro-dist/Solaro.app
+          rm -f solaro-dist/Solaro.app.zip
+
+      - name: Package Solaro.dmg
+        run: |
+          # Simple folder-style .dmg for now; the Phase 4 distribution
+          # work (#228) replaces this with a proper background-image
+          # disk image.
+          hdiutil create -volname Solaro \
+            -srcfolder solaro-dist \
+            -ov -format UDZO \
+            solaro-macos-arm64.dmg
+          ls -lh solaro-macos-arm64.dmg
+
+      - name: Upload Solaro macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solaro-macos-arm64
+          path: solaro-macos-arm64.dmg
+          retention-days: 30
+
   # ===========================================================================
   # Windows Build & Test (temporarily disabled)
   # ===========================================================================
@@ -1301,7 +1506,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation]
+    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation, solaro-macos]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
@@ -1354,6 +1559,7 @@ jobs:
             artifacts/aro-linux-amd64.tar.gz \
             artifacts/aro-macos-arm64.tar.gz \
             artifacts/aro-windows-amd64.zip \
+            artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg \
             artifacts/aro-language-guide/ARO-Language-Guide.pdf \
             artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf \
             artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf \
@@ -1376,6 +1582,9 @@ jobs:
           if [ -f "artifacts/aro-windows-amd64.zip" ]; then
             DOWNLOADS="${DOWNLOADS}| Windows | x86_64 | [aro-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-windows-amd64.zip) |\n"
           fi
+          if [ -f "artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg" ]; then
+            DOWNLOADS="${DOWNLOADS}| SOLARO desktop · macOS | Apple Silicon | [solaro-macos-arm64.dmg](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/solaro-macos-arm64.dmg) |\n"
+          fi
 
           # Store for the next step
           {
@@ -1395,6 +1604,7 @@ jobs:
             artifacts/aro-linux-amd64.tar.gz
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
+            artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
             artifacts/aro-debugging-guide/ARO-Debugging-Guide.pdf
             artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf

@@ -1891,9 +1891,14 @@ extension Parser {
             // Short-hand logical: `<x> = "a" or "b"` → `<x> = "a" or <x> = "b"`
             // When `or`/`and` joins a comparison on the left with a bare value on the right,
             // distribute the left-hand comparison's subject and operator to the right side.
+            // Skip distribution when the right side is a GroupedExpression — the parens are
+            // an explicit signal from the user that this is a self-contained sub-expression
+            // (e.g. `<x> contains <y> and (<a> == 0 or <b> <= <a>)` must not become
+            // `<x> contains <y> and <x> contains (...)`, which silently evaluates to false).
             if (actualOp == .or || actualOp == .and),
                let leftBin = left as? BinaryExpression,
                leftBin.op.isComparison,
+               !(right is GroupedExpression),
                !((right as? BinaryExpression)?.op.isComparison ?? false),
                !((right as? BinaryExpression)?.op.isLogical ?? false) {
                 let expandedRight = BinaryExpression(

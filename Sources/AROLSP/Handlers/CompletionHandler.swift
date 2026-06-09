@@ -14,93 +14,309 @@ public struct CompletionHandler: Sendable {
 
     public init() {}
 
-    /// Handle a completion request
+    /// Handle a completion request.
+    ///
+    /// Strategy: look at the prefix of the current line up to the cursor,
+    /// classify what the user is *probably* typing right now, and only
+    /// return suggestions valid in that position. Prefix-filtered server
+    /// side so the client doesn't have to discard hundreds of items.
     public func handle(
         position: Position,
         content: String,
         compilationResult: CompilationResult?,
         triggerCharacter: String?
     ) -> [String: Any] {
+        let context = Self.parseContext(
+            content: content,
+            line: position.line,
+            character: position.character
+        )
+
         var items: [[String: Any]] = []
 
+        // The explicit trigger character takes priority — typing `<` is
+        // always an identifier opener, `:` is always a qualifier slot,
+        // `.` is always member access. Otherwise fall back to the
+        // textual-context classifier.
         switch triggerCharacter {
         case "<":
-            // Suggest actions and variables
-            items.append(contentsOf: actionCompletions())
-            if let result = compilationResult {
-                items.append(contentsOf: variableCompletions(from: result))
-            }
-
+            items.append(contentsOf: variableCompletions(
+                compilationResult: compilationResult,
+                prefix: "",
+                appendBracket: true
+            ))
+            items.append(contentsOf: actionCompletions(
+                prefix: "", appendBracket: true
+            ))
         case ":":
-            // Suggest qualifiers/types
-            items.append(contentsOf: qualifierCompletions())
-
+            items.append(contentsOf: qualifierCompletions(prefix: ""))
         case ".":
-            // Suggest member properties (context-dependent)
             items.append(contentsOf: memberCompletions())
-
         default:
-            // General completions - actions, keywords, and snippets
-            items.append(contentsOf: actionCompletions())
-            items.append(contentsOf: keywordCompletions())
-            items.append(contentsOf: snippetCompletions())
-            if let result = compilationResult {
-                items.append(contentsOf: variableCompletions(from: result))
+            switch context.kind {
+            case .startOfStatement:
+                items.append(contentsOf: actionCompletions(
+                    prefix: context.prefix, appendBracket: false
+                ))
+                items.append(contentsOf: keywordCompletions(
+                    prefix: context.prefix, scope: .statementOpener
+                ))
+                if context.prefix.isEmpty {
+                    items.append(contentsOf: snippetCompletions())
+                }
+            case .afterAction, .afterArticle, .afterPreposition:
+                // The user just finished a verb / preposition + space and
+                // is about to introduce an `<identifier>`. Suggest the
+                // article words and a `<` snippet — no verbs, no
+                // variables out of context.
+                items.append(contentsOf: keywordCompletions(
+                    prefix: context.prefix, scope: .afterVerbOrPrep
+                ))
+                items.append(contentsOf: openBracketSnippet())
+            case .insideIdentifier:
+                items.append(contentsOf: variableCompletions(
+                    compilationResult: compilationResult,
+                    prefix: context.prefix,
+                    appendBracket: true
+                ))
+            case .afterColon:
+                items.append(contentsOf: qualifierCompletions(
+                    prefix: context.prefix
+                ))
+            case .inFeatureSetHeader:
+                // Inside `(Name: Activity)` — no action verbs, just hint
+                // the snippet keywords that legitimately appear there.
+                items.append(contentsOf: keywordCompletions(
+                    prefix: context.prefix, scope: .featureSetHeader
+                ))
             }
         }
 
+        // De-dupe by `(kind, label)` so AROCatalog's duplicate verbs
+        // (the catalog can list "Map" twice if a plugin re-registers it)
+        // collapse into one item per name.
+        var seen: Set<String> = []
+        let deduped = items.filter { item in
+            let key = "\(item["kind"] ?? "?"):\(item["label"] ?? "?")"
+            return seen.insert(key).inserted
+        }
+
+        // Cap only the typeahead case — when the user has typed
+        // something to filter by, 30 best matches is plenty. With
+        // an empty prefix (just pressed `<`, or on a fresh line)
+        // the client is asking for the full menu, and capping
+        // there would silently amputate everything past the
+        // alphabetical cut (Extract, Return, Set, snippets…).
+        let cap = 30
+        let typedPrefix: String
+        switch triggerCharacter {
+        case "<", ":", ".":
+            typedPrefix = ""
+        default:
+            typedPrefix = context.prefix
+        }
+        let shouldCap = !typedPrefix.isEmpty && deduped.count > cap
+        let finalItems = shouldCap ? Array(deduped.prefix(cap)) : deduped
         return [
-            "isIncomplete": false,
-            "items": items
+            "isIncomplete": shouldCap,
+            "items": finalItems
         ]
+    }
+
+    // MARK: - Context detection
+
+    /// What kind of token the user is probably typing at the cursor.
+    private enum ContextKind {
+        case startOfStatement     // empty line / partial action verb
+        case afterAction          // `Log ` or `Compute ` — expecting article + `<`
+        case afterArticle         // `the ` — expecting `<`
+        case afterPreposition     // `from `, `to `, `with `… — expecting article / `<`
+        case insideIdentifier     // typing inside `<…` not yet closed
+        case afterColon           // inside `<name: …` — expecting qualifier
+        case inFeatureSetHeader   // typing inside `(Name: …)`
+    }
+
+    private struct CompletionContext {
+        let kind: ContextKind
+        /// Partial word the user has typed at the cursor (case preserved).
+        /// Used for prefix-filtering candidates server-side.
+        let prefix: String
+    }
+
+    private static let prepositions: Set<String> = [
+        "from", "to", "with", "into", "against", "for", "by", "at", "on", "via",
+    ]
+    private static let articles: Set<String> = ["the", "a", "an"]
+
+    private static func parseContext(
+        content: String,
+        line: Int,
+        character: Int
+    ) -> CompletionContext {
+        let lines = content.components(separatedBy: "\n")
+        guard line < lines.count else {
+            return .init(kind: .startOfStatement, prefix: "")
+        }
+        let lineText = lines[line]
+        let safeChar = min(max(0, character), lineText.count)
+        let upToCursor = String(
+            lineText.prefix(safeChar)
+        )
+
+        // Are we inside an unclosed `<…>` on this line?
+        var openCount = 0
+        var closeCount = 0
+        for ch in upToCursor {
+            if ch == "<" { openCount += 1 }
+            if ch == ">" { closeCount += 1 }
+        }
+        let insideBracket = openCount > closeCount
+
+        if insideBracket, let lastOpen = upToCursor.lastIndex(of: "<") {
+            let inner = upToCursor[upToCursor.index(after: lastOpen)...]
+            if let colonIdx = inner.firstIndex(of: ":") {
+                let afterColon = inner[inner.index(after: colonIdx)...]
+                let prefix = String(afterColon)
+                    .trimmingCharacters(in: .whitespaces)
+                return .init(kind: .afterColon, prefix: prefix)
+            }
+            return .init(kind: .insideIdentifier, prefix: String(inner))
+        }
+
+        // Feature-set header: cursor sits inside `(...)` that hasn't closed.
+        var parenDepth = 0
+        for ch in upToCursor {
+            if ch == "(" { parenDepth += 1 }
+            if ch == ")" { parenDepth -= 1 }
+        }
+        if parenDepth > 0 {
+            let lastWord = upToCursor
+                .split(whereSeparator: { $0.isWhitespace || $0 == "(" })
+                .last
+                .map(String.init) ?? ""
+            return .init(
+                kind: .inFeatureSetHeader,
+                prefix: upToCursor.hasSuffix(" ") ? "" : lastWord
+            )
+        }
+
+        // Outside brackets: classify by the last completed word + whether
+        // we're mid-word or just past a space.
+        let trimmed = upToCursor.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            return .init(kind: .startOfStatement, prefix: "")
+        }
+
+        // Words on this line so far, in order.
+        let words = trimmed.split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        let lastWord = words.last ?? ""
+        let mid = !upToCursor.hasSuffix(" ")
+
+        if mid {
+            // We're still typing `lastWord`. Always treat as
+            // start-of-statement so the action-verb catalogue + keywords
+            // get prefix-filtered.
+            return .init(kind: .startOfStatement, prefix: lastWord)
+        }
+
+        // Cursor sits right after a space.
+        let lower = lastWord.lowercased()
+        if prepositions.contains(lower) {
+            return .init(kind: .afterPreposition, prefix: "")
+        }
+        if articles.contains(lower) {
+            return .init(kind: .afterArticle, prefix: "")
+        }
+        // Heuristic: a verb-shape word (Capitalised) followed by space.
+        if let first = lastWord.first, first.isUppercase, words.count == 1 {
+            return .init(kind: .afterAction, prefix: "")
+        }
+        // Default: still in statement, ready for next word.
+        return .init(kind: .startOfStatement, prefix: "")
+    }
+
+    /// Single-item completion that opens an identifier bracket. Surfaced
+    /// in the after-verb / after-preposition contexts so the user has a
+    /// one-keystroke path to `<…>`.
+    private func openBracketSnippet() -> [[String: Any]] {
+        return [[
+            "label": "<…>",
+            "kind": 15,  // Snippet
+            "detail": "Open an identifier reference",
+            "insertText": "<${1:name}>",
+            "insertTextFormat": 2,
+        ]]
     }
 
     // MARK: - Action Completions
 
     /// Build action completion items from the AROCatalog snapshot.
-    /// The catalog merges built-ins with plugin-supplied actions, so any plugin
-    /// loaded by the LSP at workspace init shows up automatically.
-    private func actionCompletions() -> [[String: Any]] {
+    ///
+    /// `appendBracket` controls whether the inserted text gets a trailing
+    /// `>`. Inside `<…>` the `>` is what closes the identifier reference;
+    /// outside, appending one produces broken syntax like `Log >`, which
+    /// is exactly what the prior implementation did.
+    private func actionCompletions(
+        prefix: String,
+        appendBracket: Bool
+    ) -> [[String: Any]] {
+        let needle = prefix.lowercased()
         let entries = AROCatalog.actionsSnapshot()
-        return entries.map { entry in
-            let detail = "[\(entry.role.rawValue.uppercased())] \(entry.description ?? "")"
-            var item: [String: Any] = [
-                "label": entry.verb,
-                "kind": 3,  // Function
-                "detail": detail,
-                "insertText": "\(entry.verb)>",
-                "insertTextFormat": 1  // PlainText
-            ]
-            // Tag plugin-supplied actions so users see where the verb came from.
-            if case .plugin(let name, _) = entry.origin {
-                item["documentation"] = [
-                    "kind": "markdown",
-                    "value": "From plugin **\(name)**.\n\n\(entry.description ?? "")"
-                ]
+        return entries
+            .filter { entry in
+                needle.isEmpty
+                    || entry.verb.lowercased().hasPrefix(needle)
             }
-            return item
-        }
+            .map { entry in
+                let detail = "[\(entry.role.rawValue.uppercased())] \(entry.description ?? "")"
+                let insert = appendBracket ? "\(entry.verb)>" : entry.verb
+                var item: [String: Any] = [
+                    "label": entry.verb,
+                    "kind": 3,  // Function
+                    "detail": detail,
+                    "insertText": insert,
+                    "insertTextFormat": 1,
+                ]
+                if case .plugin(let name, _) = entry.origin {
+                    item["documentation"] = [
+                        "kind": "markdown",
+                        "value": "From plugin **\(name)**.\n\n\(entry.description ?? "")",
+                    ]
+                }
+                return item
+            }
     }
 
     // MARK: - Variable Completions
 
-    private func variableCompletions(from result: CompilationResult) -> [[String: Any]] {
+    private func variableCompletions(
+        compilationResult: CompilationResult?,
+        prefix: String,
+        appendBracket: Bool
+    ) -> [[String: Any]] {
+        guard let result = compilationResult else { return [] }
+        let needle = prefix.lowercased()
         var items: [[String: Any]] = []
-
         for analyzed in result.analyzedProgram.featureSets {
             for (name, symbol) in analyzed.symbolTable.symbols {
+                if !needle.isEmpty,
+                   !name.lowercased().hasPrefix(needle)
+                {
+                    continue
+                }
                 let typeStr = symbol.dataType?.description ?? "Unknown"
+                let insert = appendBracket ? "\(name)>" : name
                 items.append([
                     "label": name,
                     "kind": 6,  // Variable
                     "detail": typeStr,
                     "documentation": "Source: \(symbol.source)",
-                    "insertText": "\(name)>",
-                    "insertTextFormat": 1
+                    "insertText": insert,
+                    "insertTextFormat": 1,
                 ])
             }
         }
-
         return items
     }
 
@@ -109,7 +325,14 @@ public struct CompletionHandler: Sendable {
     /// Build qualifier completion items from the AROCatalog snapshot.
     /// Built-in qualifiers appear bare (`uppercase`); plugin qualifiers appear
     /// twice — once bare (`reverse`) and once namespaced (`collections.reverse`).
-    private func qualifierCompletions() -> [[String: Any]] {
+    /// `prefix` filters by case-insensitive `hasPrefix`. Caller is
+    /// responsible for the surrounding context (we're always inside
+    /// `<name: …>`), so the inserted text is the qualifier name alone —
+    /// no leading space, no trailing `>`. The user closes the bracket
+    /// themselves, which means the suggestion stops being position-
+    /// sensitive about typing-state.
+    private func qualifierCompletions(prefix: String) -> [[String: Any]] {
+        let needle = prefix.lowercased()
         var items: [[String: Any]] = []
 
         for entry in AROCatalog.qualifiersSnapshot() {
@@ -119,42 +342,49 @@ public struct CompletionHandler: Sendable {
             }()
             let detail = (entry.description ?? "qualifier") + originLabel
 
-            // Bare form (e.g. "uppercase" or "reverse")
-            items.append([
-                "label": entry.qualifier,
-                "kind": 10,  // Property
-                "detail": detail,
-                "insertText": " \(entry.qualifier)>",
-                "insertTextFormat": 1
-            ])
+            if needle.isEmpty
+                || entry.qualifier.lowercased().hasPrefix(needle)
+            {
+                items.append([
+                    "label": entry.qualifier,
+                    "kind": 10,
+                    "detail": detail,
+                    "insertText": entry.qualifier,
+                    "insertTextFormat": 1,
+                ])
+            }
 
-            // Namespaced form for plugin qualifiers (e.g. "collections.reverse")
-            if !entry.namespace.isEmpty {
+            if !entry.namespace.isEmpty,
+               needle.isEmpty
+                || entry.fullName.lowercased().hasPrefix(needle)
+            {
                 items.append([
                     "label": entry.fullName,
                     "kind": 10,
                     "detail": detail,
-                    "insertText": " \(entry.fullName)>",
-                    "insertTextFormat": 1
+                    "insertText": entry.fullName,
+                    "insertTextFormat": 1,
                 ])
             }
         }
 
-        // List element specifiers (ARO-0038) — these aren't true qualifiers in
-        // the registry but show up after `:` in completion contexts.
+        // List element specifiers (ARO-0038) — these aren't true qualifiers
+        // in the registry but show up after `:` in completion contexts.
         let specifiers: [(String, String)] = [
             ("0", "Last element (reverse index)"),
             ("1", "Second-to-last element"),
             ("2", "Third-to-last element"),
         ]
         for (label, detail) in specifiers {
-            items.append([
-                "label": label,
-                "kind": 10,
-                "detail": detail,
-                "insertText": " \(label)>",
-                "insertTextFormat": 1
-            ])
+            if needle.isEmpty || label.hasPrefix(needle) {
+                items.append([
+                    "label": label,
+                    "kind": 10,
+                    "detail": detail,
+                    "insertText": label,
+                    "insertTextFormat": 1,
+                ])
+            }
         }
 
         return items
@@ -317,8 +547,23 @@ public struct CompletionHandler: Sendable {
 
     // MARK: - Keyword Completions
 
-    private func keywordCompletions() -> [[String: Any]] {
-        let keywords = [
+    enum KeywordScope {
+        case statementOpener   // beginning of a statement / partial verb
+        case afterVerbOrPrep   // just past `Log ` / `from ` — articles only
+        case featureSetHeader  // inside `(Name: Activity)`
+    }
+
+    private func keywordCompletions(
+        prefix: String,
+        scope: KeywordScope
+    ) -> [[String: Any]] {
+        let needle = prefix.lowercased()
+
+        // Statement openers: control-flow + the "default" keyword used in
+        // optional retrieve clauses. Prepositions and articles aren't
+        // here — those are only valid *after* a verb so they live in the
+        // afterVerbOrPrep bucket.
+        let opener: [(String, String)] = [
             ("match", "Pattern matching"),
             ("when", "Condition branch"),
             ("for each", "Iterate over a collection"),
@@ -327,22 +572,34 @@ public struct CompletionHandler: Sendable {
             ("break", "Exit current loop"),
             ("if", "Conditional"),
             ("else", "Alternative branch"),
-            ("the", "Article"),
-            ("from", "Source preposition"),
-            ("to", "Target preposition"),
-            ("with", "Parameter preposition"),
-            ("default", "Default value for optional retrieve"),
         ]
 
-        return keywords.map { keyword in
-            [
-                "label": keyword.0,
-                "kind": 14,  // Keyword
-                "detail": keyword.1,
-                "insertText": keyword.0,
-                "insertTextFormat": 1
-            ]
+        // After a verb / preposition the next legal tokens are an article
+        // or a `<identifier>` — no other verb, no other preposition.
+        let afterVerbOrPrep: [(String, String)] = [
+            ("the", "Article"),
+            ("a", "Article"),
+            ("an", "Article"),
+        ]
+
+        let pool: [(String, String)]
+        switch scope {
+        case .statementOpener: pool = opener
+        case .afterVerbOrPrep: pool = afterVerbOrPrep
+        case .featureSetHeader: pool = []
         }
+
+        return pool
+            .filter { needle.isEmpty || $0.0.lowercased().hasPrefix(needle) }
+            .map { keyword in
+                [
+                    "label": keyword.0,
+                    "kind": 14,  // Keyword
+                    "detail": keyword.1,
+                    "insertText": keyword.0,
+                    "insertTextFormat": 1,
+                ]
+            }
     }
 
     // MARK: - Snippet Completions

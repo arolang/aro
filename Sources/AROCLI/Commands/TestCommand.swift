@@ -27,6 +27,9 @@ struct TestCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Disable colored output")
     var noColor: Bool = false
 
+    @Option(name: .long, help: "JSONL file to record statement events to (SOLARO uses this for the live canvas pulse during a test run).")
+    var record: String?
+
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
 
@@ -141,13 +144,41 @@ struct TestCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        // If --record was set, install a DebugController +
+        // JSONL recorder so each statement boundary lands in the
+        // file as a `pause` event. SOLARO tails the same JSONL
+        // and uses the records to flash the canvas while a test
+        // is running — same wiring as `aro run --record`.
+        let debugController: DebugController?
+        if let recordPath = record {
+            let recorder = try DebugEventLogWriter(path: recordPath)
+            let frontend = HeadlessTestFrontend()
+            let controller = DebugController(frontend: frontend)
+            await controller.setRecorder(recorder)
+            debugController = controller
+        } else {
+            debugController = nil
+        }
+
         // Run tests
         let runner = TestRunner(verbose: verbose)
-        let results = await runner.run(
-            tests: testFeatureSets,
-            allFeatureSets: allFeatureSets,
-            filter: filter
-        )
+        let results: TestSuiteResult
+        if let debugController {
+            results = await Debug.$controller.withValue(debugController) {
+                await runner.run(
+                    tests: testFeatureSets,
+                    allFeatureSets: allFeatureSets,
+                    filter: filter
+                )
+            }
+            await debugController.didEnd(error: nil)
+        } else {
+            results = await runner.run(
+                tests: testFeatureSets,
+                allFeatureSets: allFeatureSets,
+                filter: filter
+            )
+        }
 
         // Report results
         let reporter = TestReporter(verbose: verbose, useColors: !noColor)
@@ -158,4 +189,16 @@ struct TestCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
     }
+}
+
+/// Minimal `DebugFrontend` used when `--record` is set: keeps
+/// stepping past every checkpoint so the recorder sees every
+/// statement, but never blocks the test run waiting for user
+/// input. The records themselves are what SOLARO consumes —
+/// nothing observes `didPause` here.
+private final class HeadlessTestFrontend: DebugFrontend, @unchecked Sendable {
+    func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
+        .stepOver
+    }
+    func didEnd(error: Error?) async {}
 }

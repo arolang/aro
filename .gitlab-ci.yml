@@ -219,6 +219,10 @@ build:linux:
       - aro-dist/
     expire_in: 30 days
 
+# SOLARO Linux job was removed (ADR-001 follow-up 2026-06): SOLARO is
+# now a native SwiftUI/AppKit macOS app — see .github/workflows/build.yml
+# for the macOS pipeline.
+
 # =============================================================================
 # Integration Tests Stage
 # =============================================================================
@@ -424,6 +428,9 @@ release:
   needs:
     - job: build:linux
       artifacts: true
+    - job: build:solaro:linux
+      artifacts: true
+      optional: true
     - job: integration:linux
     - job: documentation
       artifacts: true
@@ -460,6 +467,7 @@ release:
   artifacts:
     paths:
       - aro-linux-amd64.tar.gz
+      - solaro-linux-amd64.tar.gz
       - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
       - Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
       - Book/AROByExample/output/ARO-By-Example.pdf
@@ -477,6 +485,7 @@ release:
       | Platform | Architecture | Download |
       |----------|--------------|----------|
       | Linux | x86_64 | [aro-linux-amd64.tar.gz]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/aro-linux-amd64.tar.gz) |
+      | SOLARO Linux | x86_64 | [solaro-linux-amd64.tar.gz]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/solaro-linux-amd64.tar.gz) |
 
       ### Documentation
 
@@ -500,6 +509,10 @@ release:
         - name: 'aro-linux-amd64.tar.gz'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/aro-linux-amd64.tar.gz?job=release'
           filepath: '/aro-linux-amd64.tar.gz'
+          link_type: 'package'
+        - name: 'solaro-linux-amd64.tar.gz'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/solaro-linux-amd64.tar.gz?job=release'
+          filepath: '/solaro-linux-amd64.tar.gz'
           link_type: 'package'
         - name: 'ARO-Language-Guide.pdf'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheLanguageGuide/output/ARO-Language-Guide.pdf?job=release'

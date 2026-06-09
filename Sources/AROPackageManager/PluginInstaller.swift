@@ -40,6 +40,10 @@ public final class PluginInstaller: Sendable {
         ref: String? = nil,
         currentAROVersion: String? = nil
     ) throws -> InstallResult {
+        // Expand forge shorthand (`github:org/repo`) to a real
+        // clone URL up-front. Without this `git clone` tries to
+        // resolve `github:` as a hostname and fails.
+        let url = Self.normalizeGitURL(url)
         // Parse URL to get plugin name
         let repoName = git.extractRepoName(from: url)
 
@@ -409,6 +413,55 @@ public final class PluginInstaller: Sendable {
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw InstallerError.buildFailed("pip install failed: \(errorMessage)")
         }
+    }
+
+    // MARK: - URL normalisation
+
+    /// Expand forge shorthand into an HTTPS clone URL. `aro add`
+    /// documents `github:org/repo` (and friends) as a supported
+    /// shape, but git itself doesn't understand the shorthand —
+    /// running `git clone github:foo/bar` produces "failed to
+    /// resolve address for github" because git tries to look up
+    /// `github` as a host. We rewrite each known prefix into the
+    /// host's canonical HTTPS URL before any subprocess sees it.
+    ///
+    /// Unknown shorthands and already-canonical URLs (`https://`,
+    /// `git@…:…`, `git://`, `file://`, local paths) pass through
+    /// unchanged.
+    static func normalizeGitURL(_ raw: String) -> String {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let colon = s.firstIndex(of: ":") else { return s }
+        // Don't touch URLs with a recognised scheme — those already
+        // have a `://` or are SCP-style `user@host:path`.
+        let prefix = s[..<colon].lowercased()
+        let rest = String(s[s.index(after: colon)...])
+        if s.contains("://") { return s }
+        if s.contains("@") { return s }                   // SCP-style SSH
+        if prefix.isEmpty || rest.isEmpty { return s }
+
+        // Map prefix → host. Keep the table near the call site so a
+        // new forge is one line.
+        let hosts: [String: String] = [
+            "github":    "github.com",
+            "gitlab":    "gitlab.com",
+            "bitbucket": "bitbucket.org",
+            "codeberg":  "codeberg.org",
+            "sr.ht":     "git.sr.ht",
+            "sourcehut": "git.sr.ht",
+        ]
+        guard let host = hosts[prefix] else { return s }
+
+        // sourcehut paths are `~user/repo` — accept either form.
+        let path: String
+        if (prefix == "sr.ht" || prefix == "sourcehut")
+           && !rest.hasPrefix("~")
+        {
+            path = "~\(rest)"
+        } else {
+            path = rest
+        }
+        let suffix = path.hasSuffix(".git") ? "" : ".git"
+        return "https://\(host)/\(path)\(suffix)"
     }
 }
 

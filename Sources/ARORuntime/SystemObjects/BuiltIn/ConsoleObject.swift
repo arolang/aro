@@ -22,11 +22,22 @@ public struct ConsoleObject: SystemObject, Instantiable {
 
     public var capabilities: SystemObjectCapabilities { .sink }
 
+    /// TaskLocal-overridable sink so an embedded host (SOLARO's
+    /// in-process runtime, #282 phase 2) can capture every `<Log>`
+    /// to its console panel instead of letting it leak to the
+    /// host process's real stdout. The CLI runtime leaves this
+    /// nil and `write` falls back to `print`.
+    @TaskLocal public static var sink: (@Sendable (String) -> Void)?
+
     public init() {}
 
     public func write(_ value: any Sendable) async throws {
         let message = formatValue(value)
-        print(message)
+        if let sink = Self.sink {
+            sink(message)
+        } else {
+            print(message)
+        }
     }
 
     public func read(property: String?) async throws -> any Sendable {

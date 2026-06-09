@@ -39,6 +39,15 @@ struct RunCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Replay events from JSON file")
     var replay: String?
 
+    /// SOLARO and other live debuggers use this to capture a JSONL
+    /// stream of per-statement pause records, without disturbing the
+    /// pre-existing `--record` event-recording path (which writes a
+    /// single pretty-printed `EventRecording` JSON object the
+    /// `--replay` flag consumes). Kept separate so EventReplay tests
+    /// keep their original wire format.
+    @Option(name: .long, help: "Stream per-statement debug JSONL to file (SOLARO live view)")
+    var debugRecord: String?
+
     /// Extract run command flags from captured application arguments
     /// This handles cases where flags are placed after the path argument
     mutating func extractRunCommandFlags() {
@@ -86,6 +95,14 @@ struct RunCommand: AsyncParsableCommand {
                     remainingArgs.append(arg)
                     i += 1
                 }
+            case "--debug-record":
+                if i + 1 < applicationArguments.count {
+                    debugRecord = applicationArguments[i + 1]
+                    i += 2
+                } else {
+                    remainingArgs.append(arg)
+                    i += 1
+                }
             default:
                 // Not a run command flag, keep it for the application
                 remainingArgs.append(arg)
@@ -128,6 +145,7 @@ struct RunCommand: AsyncParsableCommand {
         let applicationArguments = mutableSelf.applicationArguments
         let recordPath = mutableSelf.record
         let replayPath = mutableSelf.replay
+        let debugRecordPath = mutableSelf.debugRecord
 
         if verbose {
             AROLogger.setLevel(.debug)
@@ -260,7 +278,33 @@ struct RunCommand: AsyncParsableCommand {
             }
         }
 
-        // Create and run application
+        // SOLARO's live debug stream uses `--debug-record` to get a
+        // per-statement JSONL trace without touching the event-
+        // recording semantics of `--record` (which writes a single
+        // EventRecording JSON object that `--replay` consumes). The
+        // silent frontend never blocks — it just hands back
+        // `.stepOver` so `DebugController.checkpoint` keeps recording
+        // rather than early-returning under `.continue`.
+        let debugController: DebugController?
+        if let debugRecordPath {
+            let controller = DebugController(frontend: SilentRunFrontend())
+            do {
+                let recorder = try DebugEventLogWriter(path: debugRecordPath)
+                await controller.setRecorder(recorder)
+                debugController = controller
+            } catch {
+                if verbose {
+                    print("warning: failed to open debug recorder \(debugRecordPath): \(error)")
+                }
+                debugController = nil
+            }
+        } else {
+            debugController = nil
+        }
+
+        // Create and run application — `--record` still flows
+        // straight to EventRecorder/EventReplayer for the existing
+        // event-record/replay workflow.
         let application = Application(
             programs: compiledPrograms,
             entryPoint: entryPoint,
@@ -286,21 +330,29 @@ struct RunCommand: AsyncParsableCommand {
         }
         defer { MetricsSocketServer.shared.stop() }
 
-        do {
-            if keepAlive {
-                try await application.runForever()
-            } else {
-                let response = try await application.run()
+        // Pick a source-file hint so DebugController's pause records
+        // include a basename for the canvas to attribute lines to.
+        let sourceFileHint = appConfig.sourceFiles.first?.path ?? ""
 
-                if verbose {
-                    print("\nExecution completed:")
+        do {
+            if let controller = debugController {
+                try await Debug.$controller.withValue(controller) {
+                    try await Debug.$currentSourceFile.withValue(sourceFileHint) {
+                        try await self.runApplication(
+                            application,
+                            keepAlive: keepAlive,
+                            verbose: verbose,
+                            debug: debug
+                        )
+                    }
                 }
-                // Use context-aware formatting for response output
-                let outputContext: OutputContext = debug ? .developer : .human
-                // Don't print lifecycle exit response (e.g., "Return ... for the <application>")
-                if response.reason != "application" {
-                    print(response.format(for: outputContext))
-                }
+            } else {
+                try await self.runApplication(
+                    application,
+                    keepAlive: keepAlive,
+                    verbose: verbose,
+                    debug: debug
+                )
             }
         } catch let error as ActionError {
             if TTYDetector.stderrIsTTY {
@@ -318,4 +370,37 @@ struct RunCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
     }
+
+    private func runApplication(
+        _ application: Application,
+        keepAlive: Bool,
+        verbose: Bool,
+        debug: Bool
+    ) async throws {
+        if keepAlive {
+            try await application.runForever()
+        } else {
+            let response = try await application.run()
+            if verbose {
+                print("\nExecution completed:")
+            }
+            let outputContext: OutputContext = debug ? .developer : .human
+            if response.reason != "application" {
+                print(response.format(for: outputContext))
+            }
+        }
+    }
+}
+
+/// `DebugFrontend` for `aro run --record`: never prompts, never
+/// blocks, just lets the controller keep recording. Returning
+/// `.stepOver` keeps `DebugController.checkpoint` writing pause
+/// records at every statement (vs. `.continue`, which short-
+/// circuits after entry). SOLARO tails those records to drive the
+/// canvas pulse / live values / repository tables (#284 step 3).
+final class SilentRunFrontend: DebugFrontend {
+    func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
+        .stepOver
+    }
+    func didEnd(error: Error?) async {}
 }

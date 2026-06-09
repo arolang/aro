@@ -356,12 +356,45 @@ public final class Application: @unchecked Sendable {
         runtime.stop()
     }
 
+    /// Async variant of `stop()` that also tears down resources
+    /// the synchronous path can't await — most importantly any
+    /// HTTP listener (#282 phase 2). Without this an embedded
+    /// rerun would fail to bind because the previous run's
+    /// listening socket was still alive. Safe to call from any
+    /// concurrent context — every tear-down step is idempotent.
+    public func stopAsync() async {
+        runtime.stop()
+        if let httpServer {
+            do {
+                try await httpServer.stop()
+            } catch {
+                // Best-effort — a failure here just means the
+                // socket will linger until the process exits,
+                // which is the current behaviour anyway.
+            }
+        }
+        // Flush writable stores so an embedded rerun starts
+        // from a consistent state.
+        await storeFlushService?.flushAll()
+    }
+
     /// Set up the HTTP request handler for routing requests to feature sets
     private func setupHTTPRequestHandler(for program: AnalyzedProgram) {
         guard let routeRegistry = routeRegistry,
               let httpServer = httpServer else {
             return // No OpenAPI contract or HTTP server
         }
+
+        // Capture the current debugger context at setup time so each
+        // incoming HTTP request re-establishes it inside its own
+        // task. SwiftNIO dispatches requests on its event loops and
+        // *doesn't* propagate Swift TaskLocals, so without this hop
+        // the handler's call into FeatureSetExecutor would see a nil
+        // `Debug.controller` and skip every checkpoint — the symptom
+        // SOLARO hits today (HTTP traffic produces no pulse / no
+        // per-statement events).
+        let capturedDebugController = Debug.controller
+        let capturedSourceFile = Debug.currentSourceFile
 
         // Create a request handler that routes to feature sets
         let handler: HTTPRequestHandler = { [weak self] request in
@@ -415,9 +448,16 @@ public final class Application: @unchecked Sendable {
                 }
             }
 
-            // Execute the feature set
+            // Execute the feature set. Re-establish the debugger
+            // TaskLocals captured at handler-setup time so the
+            // statement boundary checkpoint in FeatureSetExecutor
+            // sees them — see the comment above the capture.
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                let response = try await Debug.$controller.withValue(capturedDebugController) {
+                    try await Debug.$currentSourceFile.withValue(capturedSourceFile) {
+                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                    }
+                }
                 var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
 
                 // Validate response body against OpenAPI response schema (ARO-0180)

@@ -1,0 +1,483 @@
+// ============================================================
+// AROEmbeddedRuntime.swift
+// SOLARO — link the ARO runtime directly (issue #282 phase 1)
+// ============================================================
+//
+// First cut at running an ARO project in-process inside SOLARO,
+// instead of shelling out to `aro run --record` and tailing the
+// JSONL events file.
+//
+// Goals (per issue #282):
+//   * Pre/post hooks on every statement without a JSON round-trip.
+//   * The same wire schema we already feed the canvas, so the
+//     downstream pipeline (`applyLiveBatch`, `lastExecutedAt`,
+//     `pauseSymbols`, the FS glow, the repo card history) keeps
+//     working unchanged.
+//   * Opt-in for now — set `SOLARO_EMBEDDED_RUNTIME=1` in the
+//     environment to switch the Run button from subprocess to
+//     embedded. The subprocess path stays the default until the
+//     embedded host has soaked.
+//
+// Out of scope for phase 1:
+//   * Step-over / step-into UX over the in-process controller —
+//     reuses the existing CLI-driven flow for Debug mode.
+//   * stdout / stderr capture into the SOLARO console — embedded
+//     prints go to the SOLARO process's real stdout.
+//   * Crash isolation. A bad ARO program crashes SOLARO too.
+//     Move to XPC if we want to fix that — tracked in issue #282.
+
+import Foundation
+import AROParser
+import ARORuntime
+
+/// `DebugFrontend` that converts every `PauseInfo` the runtime emits
+/// into a `TimeTravelRecord` and forwards it to the host. Always
+/// returns `.stepOver` so the runtime keeps firing checkpoints for
+/// every statement — that's how we keep the canvas pulse live.
+final class EmbeddedRuntimeFrontend: DebugFrontend, @unchecked Sendable {
+
+    let onPause: @Sendable (TimeTravelRecord) -> Void
+    let onEnd: @Sendable (Error?) -> Void
+    private let startedAt = Date()
+    /// Tracks the most recent line a regular checkpoint fired for.
+    /// `errorCheckpoint()` from the runtime arrives with `file=""`,
+    /// `line=0` (it's a statement-failure hook, not a source position),
+    /// so we need this lookback to point the canvas's error badge at
+    /// the actual offending node.
+    private var lastCheckpointLine: Int = 0
+    private var lastCheckpointFile: String? = nil
+    private let trackingQueue = DispatchQueue(label: "com.arolang.solaro.EmbeddedFrontend")
+
+    /// Step-via-API (#282 phase 2). When a breakpoint pauses,
+    /// `didPause` parks a continuation here and waits for the
+    /// host to call `resume(with:)`. Other reasons (step / entry
+    /// / event) still pass through immediately to keep the
+    /// run-mode pulse alive without blocking.
+    private let pauseLock = NSLock()
+    private var pendingContinuation: CheckedContinuation<StepMode, Never>?
+
+    init(
+        onPause: @escaping @Sendable (TimeTravelRecord) -> Void,
+        onEnd: @escaping @Sendable (Error?) -> Void
+    ) {
+        self.onPause = onPause
+        self.onEnd = onEnd
+    }
+
+    /// True while a breakpoint has the runtime parked — the host
+    /// uses this to enable / disable the toolbar Continue / Step
+    /// buttons without polling.
+    var isParked: Bool {
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        return pendingContinuation != nil
+    }
+
+    /// Resume a parked execution with the given step mode. The
+    /// runtime's `FeatureSetExecutor` then runs until the next
+    /// pause-worthy event. No-op when nothing is parked.
+    func resume(with mode: StepMode) {
+        pauseLock.lock()
+        let continuation = pendingContinuation
+        pendingContinuation = nil
+        pauseLock.unlock()
+        continuation?.resume(returning: mode)
+    }
+
+    func didPause(
+        _ pause: PauseInfo,
+        controller: DebugController
+    ) async -> StepMode {
+        // Snapshot the running line so a subsequent errorCheckpoint
+        // (no line of its own) can be attributed to the right node.
+        if case .error = pause.reason {
+            // Errors fall through to record-building below.
+        } else if pause.line > 0 {
+            trackingQueue.sync {
+                lastCheckpointLine = pause.line
+                lastCheckpointFile = pause.file.isEmpty ? nil : pause.file
+            }
+        }
+        let record = Self.makeRecord(
+            from: pause,
+            startedAt: startedAt,
+            fallbackLine: trackingQueue.sync { lastCheckpointLine },
+            fallbackFile: trackingQueue.sync { lastCheckpointFile }
+        )
+        onPause(record)
+        // Breakpoint pauses block until the host resolves the
+        // continuation — that's what gives SOLARO step-via-API
+        // (Continue / Step Over / Step Into / Step Out buttons
+        // call EmbeddedRuntimeHost.<verb>() which then funnels
+        // through `resume(with:)` here). Every other reason
+        // keeps the original stream behaviour so the live
+        // canvas pulse doesn't stall.
+        if case .breakpoint = pause.reason {
+            return await withCheckedContinuation { continuation in
+                pauseLock.lock()
+                pendingContinuation = continuation
+                pauseLock.unlock()
+            }
+        }
+        return .stepOver
+    }
+
+    func didEnd(error: Error?) async {
+        onEnd(error)
+    }
+
+    private static func makeRecord(
+        from pause: PauseInfo,
+        startedAt: Date,
+        fallbackLine: Int,
+        fallbackFile: String?
+    ) -> TimeTravelRecord {
+        let symbols = pause.symbols.map {
+            TimeTravelRecord.Symbol(
+                name: $0.name,
+                typeName: $0.typeName,
+                value: $0.valuePreview,
+                records: $0.records
+            )
+        }
+        // Errors arrive without a source location of their own; reuse
+        // the most recent checkpointed line so the canvas can paint a
+        // red border on the failing statement.
+        let isError: Bool
+        if case .error = pause.reason { isError = true } else { isError = false }
+        let line: Int?
+        let file: String?
+        if isError {
+            line = pause.line > 0 ? pause.line : (fallbackLine > 0 ? fallbackLine : nil)
+            file = pause.file.isEmpty ? fallbackFile : pause.file
+        } else {
+            line = pause.line > 0 ? pause.line : nil
+            file = pause.file.isEmpty ? nil : pause.file
+        }
+        let metrics = pause.metrics.map {
+            TimeTravelRecord.Metrics(
+                elapsedNanos: $0.elapsedNanos,
+                residentMemoryBytes: $0.residentMemoryBytes
+            )
+        }
+        return TimeTravelRecord(
+            time: Date().timeIntervalSince(startedAt),
+            kind: isError ? .error : .pause,
+            featureSet: pause.featureSetName,
+            file: file,
+            line: line,
+            column: pause.column > 0 ? pause.column : nil,
+            statement: pause.statementSummary,
+            verb: pause.verb,
+            reason: String(describing: pause.reason),
+            symbols: symbols,
+            metrics: metrics
+        )
+    }
+}
+
+/// Drives an ARO project in-process — discover → compile → run,
+/// with a `DebugController` installed so every statement boundary
+/// hands us a `PauseInfo` we can stream to the canvas.
+///
+/// The host owns one in-flight run at a time. `start` is a no-op
+/// while a run is in progress; call `stop` first.
+@MainActor
+final class EmbeddedRuntimeHost {
+
+    /// Read by the rest of SOLARO so it can pick the embedded vs.
+    /// subprocess path. Drains through `RuntimeBackend.current`,
+    /// which consults the user's Settings → Backends choice first,
+    /// falls back to the `SOLARO_EMBEDDED_RUNTIME=1` env var, and
+    /// defaults to embedded for fresh installs.
+    static var isEnabled: Bool {
+        RuntimeBackend.current == .embedded
+    }
+
+    /// Called for each new event the runtime produces. Same shape
+    /// `LiveEventStream` delivers so the receiver doesn't care
+    /// which transport was used.
+    var onRecords: (([TimeTravelRecord]) -> Void)?
+    /// Called when the run ends (cleanly, with an error, or because
+    /// `stop` was invoked). Roughly equivalent to the subprocess
+    /// path's `terminationHandler`.
+    var onEnded: ((Error?) -> Void)?
+    /// Loose stdout-style sink — printed messages from the host
+    /// itself (not from the running ARO program; those still go
+    /// to the SOLARO process's real stdout).
+    var onLog: ((String) -> Void)?
+    /// Lines coming out of the ARO application's own `<Log "x" to
+    /// <console>>` statements. Kept separate from `onLog` (which
+    /// carries host-internal status messages like "starting in-
+    /// process run") so the console panel can render the two in
+    /// different colors — application output stays white, internal
+    /// chatter is the dimmer accent blue.
+    var onAppOutput: ((String) -> Void)?
+
+    private(set) var isRunning: Bool = false
+    private var runTask: Task<Void, Never>?
+    private var pendingRecords: [TimeTravelRecord] = []
+    /// Schedules the batched delivery so a hot statement loop turns
+    /// into one canvas redraw per runloop tick instead of one per
+    /// record.
+    private var flushScheduled: Bool = false
+    /// Reference to the currently-running `Application` so
+    /// `stop()` can tear down its HTTP listener + writable
+    /// stores before the next run starts (#282 phase 2 — service
+    /// cleanup). Set by `runProject` once the application is
+    /// built, cleared inside `finish`.
+    private var currentApplication: Application?
+    /// Reference to the frontend that's parked the runtime on a
+    /// breakpoint. The Continue / Step Over / Step Into / Step
+    /// Out buttons call into the host, the host funnels through
+    /// `frontend.resume(with:)`. nil when no run is active.
+    private var currentFrontend: EmbeddedRuntimeFrontend?
+
+    /// Spawn an in-process run of `project`. The closure that hops
+    /// through `Debug.$controller.withValue` runs on a detached task
+    /// so the SOLARO main actor stays responsive while the program
+    /// is doing its thing.
+    func start(project: Project) {
+        guard !isRunning else { return }
+        isRunning = true
+        let path = project.rootPath
+        log("[embedded] starting in-process run of \(path.lastPathComponent)")
+
+        let frontend = EmbeddedRuntimeFrontend(
+            onPause: { [weak self] record in
+                Task { @MainActor [weak self] in
+                    self?.enqueue(record)
+                }
+            },
+            onEnd: { [weak self] error in
+                Task { @MainActor [weak self] in
+                    self?.finish(error: error)
+                }
+            }
+        )
+        currentFrontend = frontend
+        let controller = DebugController(frontend: frontend)
+
+        // Console sink (#282 phase 2). Every `<Log "x" to console>`
+        // inside the embedded run lands here instead of leaking to
+        // SOLARO's stdout. We hop back to the main actor before
+        // forwarding to keep the `onLog` closure's actor isolation
+        // honest — Console.appendInfo touches main-actor state.
+        let sink: @Sendable (String) -> Void = { [weak self] msg in
+            Task { @MainActor [weak self] in
+                // Route through `onAppOutput` so the console
+                // panel can paint application output white,
+                // separate from the embedded host's own status
+                // messages (which keep using `onLog`).
+                self?.onAppOutput?(msg)
+            }
+        }
+
+        runTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // Install `.errorAny` so the runtime's `errorCheckpoint`
+            // actually fires `didPause`; without this the embedded
+            // frontend never sees runtime failures and the canvas
+            // can't paint the failed node's red border.
+            await controller.addBreakpoint(.errorAny)
+            do {
+                let hostBox: WeakHostBox? = await MainActor.run {
+                    guard let h = self else { return nil }
+                    return WeakHostBox(host: h)
+                }
+                try await ConsoleObject.$sink.withValue(sink) {
+                    try await Self.runProject(
+                        at: path,
+                        controller: controller,
+                        onApplication: { app in
+                            // Hand the live Application back to
+                            // the host so stop() can tear down
+                            // its HTTP listener + store flush
+                            // before the next run.
+                            Task { @MainActor in
+                                hostBox?.host?.currentApplication = app
+                            }
+                        }
+                    )
+                }
+            } catch is DebuggerQuit {
+                await frontend.didEnd(error: nil)
+            } catch {
+                await frontend.didEnd(error: error)
+                await MainActor.run { [weak self] in
+                    self?.log("[embedded] run failed: \(error)")
+                }
+                return
+            }
+            await frontend.didEnd(error: nil)
+            _ = self  // silence unused capture warning when log is gone
+        }
+    }
+
+    /// Cancel the in-flight run and tear down any services the
+    /// previous application started (HTTP listener, writable
+    /// stores). Without the second step, a Run-twice scenario
+    /// on a server project would fail to bind the same port —
+    /// the listener from the previous run is still alive
+    /// because Application.stop() alone doesn't unwind it.
+    func stop() {
+        guard isRunning else { return }
+        log("[embedded] stop requested")
+        let app = currentApplication
+        // Release any breakpoint pause first so the runtime
+        // unwinds cleanly instead of leaking the cooperative
+        // continuation across cancellation.
+        currentFrontend?.resume(with: .continue)
+        runTask?.cancel()
+        if let app {
+            Task.detached { await app.stopAsync() }
+        }
+    }
+
+    /// Resume from a breakpoint with the given step mode. The
+    /// SOLARO toolbar's Continue / Step Over / Step Into / Step
+    /// Out buttons funnel through these four helpers (#282 phase
+    /// 2). No-op when the runtime isn't currently parked.
+    func continueExecution() { currentFrontend?.resume(with: .continue) }
+    func stepOver()          { currentFrontend?.resume(with: .stepOver) }
+    func stepIn()            { currentFrontend?.resume(with: .stepIn) }
+    func stepOut()           { currentFrontend?.resume(with: .stepOut) }
+
+    var isPausedAtBreakpoint: Bool {
+        currentFrontend?.isParked == true
+    }
+
+    private func enqueue(_ record: TimeTravelRecord) {
+        pendingRecords.append(record)
+        if !flushScheduled {
+            flushScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.flushScheduled = false
+                guard !self.pendingRecords.isEmpty else { return }
+                let batch = self.pendingRecords
+                self.pendingRecords.removeAll(keepingCapacity: true)
+                self.onRecords?(batch)
+            }
+        }
+    }
+
+    private func finish(error: Error?) {
+        guard isRunning else { return }
+        isRunning = false
+        runTask = nil
+        currentFrontend = nil
+        // Tear the application down before signalling end so
+        // HTTP / store services are released by the time the
+        // next run starts (#282 phase 2). The teardown is
+        // detached because we can't await from this sync hop,
+        // but it's idempotent against a follow-up start().
+        if let app = currentApplication {
+            currentApplication = nil
+            Task.detached { await app.stopAsync() }
+        }
+        // Flush anything still buffered before signaling end so the
+        // canvas's final state matches the runtime's.
+        if !pendingRecords.isEmpty {
+            let batch = pendingRecords
+            pendingRecords.removeAll(keepingCapacity: true)
+            onRecords?(batch)
+        }
+        onEnded?(error)
+    }
+
+    private func log(_ message: String) {
+        onLog?(message)
+    }
+
+    /// Mirrors the discovery → compile → run pipeline in
+    /// `AROCLI.RunCommand` but condensed to what SOLARO needs.
+    /// Detached so the calling context isn't bound to MainActor.
+    private static func runProject(
+        at path: URL,
+        controller: DebugController,
+        onApplication: @Sendable (Application) -> Void = { _ in }
+    ) async throws {
+        let discovery = ApplicationDiscovery()
+        let appConfig = try await discovery.discoverWithImports(
+            at: path, entryPoint: "Application-Start"
+        )
+
+        let compiler = Compiler()
+        var compiledPrograms: [AnalyzedProgram] = []
+        for sourceFile in appConfig.sourceFiles {
+            let source = try String(contentsOf: sourceFile, encoding: .utf8)
+            let result = compiler.compile(source)
+            if result.isSuccess {
+                compiledPrograms.append(result.analyzedProgram)
+            } else {
+                let errs = result.diagnostics.filter { $0.severity == .error }
+                if let first = errs.first {
+                    throw EmbeddedRuntimeError.compilationFailed(
+                        file: sourceFile.lastPathComponent,
+                        message: "\(first)"
+                    )
+                }
+            }
+        }
+
+        try? UnifiedPluginLoader.shared.loadPlugins(from: appConfig.rootPath)
+
+        let application = Application(
+            programs: compiledPrograms,
+            entryPoint: "Application-Start",
+            config: ApplicationConfig(
+                verbose: false,
+                workingDirectory: appConfig.rootPath.path
+            ),
+            openAPISpec: appConfig.openAPISpec,
+            replayPath: nil,
+            storeFiles: appConfig.storeFiles
+        )
+        onApplication(application)
+
+        // Embedded runs share SOLARO's process, so the runtime's
+        // file I/O resolves relative paths (`./output/foo.md`,
+        // store files, plugin lookups) against whatever cwd macOS
+        // launched the app with — usually `/`. Without a chdir
+        // the Crawler example wrote to `/output/...` and the user
+        // saw zero files appear in the project. Match the
+        // subprocess path's `task.currentDirectoryURL` by
+        // chdir'ing in for the duration of the run and restoring
+        // afterwards so other SOLARO operations (Git, search,
+        // workspace I/O) keep their original cwd.
+        let fm = FileManager.default
+        let originalCWD = fm.currentDirectoryPath
+        let chdirOK = fm.changeCurrentDirectoryPath(appConfig.rootPath.path)
+        defer {
+            if chdirOK {
+                _ = fm.changeCurrentDirectoryPath(originalCWD)
+            }
+        }
+
+        try await Debug.$controller.withValue(controller) {
+            _ = try await application.run()
+        }
+    }
+}
+
+/// Tiny `@MainActor`-isolated box that hands a weak reference
+/// to `EmbeddedRuntimeHost` into a concurrent closure without
+/// triggering a sendability complaint. The host is `final
+/// @MainActor`, so reads are always isolated on construction
+/// and use.
+@MainActor
+private final class WeakHostBox: Sendable {
+    weak var host: EmbeddedRuntimeHost?
+    init(host: EmbeddedRuntimeHost) { self.host = host }
+}
+
+enum EmbeddedRuntimeError: Error, LocalizedError {
+    case compilationFailed(file: String, message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .compilationFailed(let file, let msg):
+            return "compilation failed in \(file): \(msg)"
+        }
+    }
+}

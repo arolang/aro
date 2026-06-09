@@ -16,6 +16,7 @@
     Keepalive the <application> for the <events>.
 
     Return an <OK: status> for the <startup>.
+
 }
 
 (* Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop) *)

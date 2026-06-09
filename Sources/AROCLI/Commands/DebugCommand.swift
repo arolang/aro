@@ -48,6 +48,9 @@ struct DebugCommand: AsyncParsableCommand {
     @Argument(help: "Path to the application directory or .aro file (omit with --replay)")
     var path: String = ""
 
+    @Argument(parsing: .captureForPassthrough, help: "Arguments to pass to the application (e.g. --url …)")
+    var applicationArguments: [String] = []
+
     @Option(name: .shortAndLong, help: "Override the entry point feature set")
     var entryPoint: String = "Application-Start"
 
@@ -75,10 +78,100 @@ struct DebugCommand: AsyncParsableCommand {
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
 
+    /// Pull DebugCommand-owned flags out of the passthrough array
+    /// so the remainder can flow into `ParameterStorage` as
+    /// `<parameter: NAME>` values. Mirror of
+    /// `RunCommand.extractRunCommandFlags()`. Needed because
+    /// `.captureForPassthrough` greedily slurps everything after
+    /// the path argument — without this, SOLARO's
+    /// `--breakpoint`/`--record` would land in `applicationArguments`
+    /// and `--url`-style user params would have nowhere to go.
+    mutating func extractDebugCommandFlags() {
+        var remaining: [String] = []
+        var i = 0
+        while i < applicationArguments.count {
+            let arg = applicationArguments[i]
+            switch arg {
+            case "--verbose", "-v":
+                verbose = true
+                i += 1
+            case "--dap":
+                dap = true
+                i += 1
+            case "--entry-point", "-e":
+                if i + 1 < applicationArguments.count {
+                    entryPoint = applicationArguments[i + 1]
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--record":
+                if i + 1 < applicationArguments.count {
+                    record = applicationArguments[i + 1]
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--replay":
+                if i + 1 < applicationArguments.count {
+                    replay = applicationArguments[i + 1]
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--dap-port":
+                if i + 1 < applicationArguments.count,
+                   let v = Int(applicationArguments[i + 1]) {
+                    dapPort = v
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--dap-log":
+                if i + 1 < applicationArguments.count {
+                    dapLog = applicationArguments[i + 1]
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--sample":
+                if i + 1 < applicationArguments.count,
+                   let v = Int(applicationArguments[i + 1]) {
+                    sample = v
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--breakpoint":
+                if i + 1 < applicationArguments.count {
+                    breakpoint.append(applicationArguments[i + 1])
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            default:
+                remaining.append(arg)
+                i += 1
+            }
+        }
+        applicationArguments = remaining
+    }
+
     func run() async throws {
         #if canImport(Darwin)
         setvbuf(stdout, nil, _IONBF, 0)
         #endif
+
+        // Re-parse any flags / `<parameter: NAME>` values that landed
+        // in the passthrough array. SOLARO appends them after the
+        // path (e.g. `aro debug <path> --record … --breakpoint 12
+        // --url https://…`); without this the runtime would either
+        // ignore its own flags or refuse to start with "Unknown
+        // option '--url'".
+        var mutableSelf = self
+        mutableSelf.extractDebugCommandFlags()
+        if !mutableSelf.applicationArguments.isEmpty {
+            ParameterStorage.shared.parseArguments(mutableSelf.applicationArguments)
+        }
+        // Shadow the @Argument/@Option properties with locals so the
+        // rest of the function reads the post-extraction values
+        // without having to thread `mutableSelf.` everywhere.
+        let path = mutableSelf.path
+        let entryPoint = mutableSelf.entryPoint
+        let verbose = mutableSelf.verbose
+        let breakpoint = mutableSelf.breakpoint
+        let record = mutableSelf.record
+        let replay = mutableSelf.replay
+        let dap = mutableSelf.dap
+        let dapPort = mutableSelf.dapPort
+        let dapLog = mutableSelf.dapLog
+        let sample = mutableSelf.sample
 
         // Phase 4 — replay short-circuits the runtime entirely.
         if let replay {

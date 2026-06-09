@@ -25,6 +25,10 @@ public actor DebugController {
     private var nextMode: StepMode = .stepOver   // first checkpoint pauses
     private var hasFiredEntry = false
     private var recorder: DebugEventLogWriter?
+    /// Wall-clock at the most recent checkpoint we built a
+    /// PauseInfo for (#282 phase 2). Used to compute the
+    /// `elapsedNanos` between successive statements.
+    private var previousCheckpointAt: DispatchTime?
 
     // Phase 5 — sampling. When >1, the controller only enters the pause
     // path on every N-th eligible checkpoint. Used for `--attach` style
@@ -178,6 +182,19 @@ public actor DebugController {
         }
         hasFiredEntry = true
 
+        let now = DispatchTime.now()
+        let elapsed: UInt64
+        if let prev = previousCheckpointAt {
+            elapsed = now.uptimeNanoseconds - prev.uptimeNanoseconds
+        } else {
+            elapsed = 0
+        }
+        previousCheckpointAt = now
+        let metrics = PauseMetrics(
+            elapsedNanos: elapsed,
+            residentMemoryBytes: Self.residentMemoryBytes()
+        )
+
         let info = PauseInfo(
             reason: reason,
             featureSetName: featureSetName,
@@ -187,7 +204,8 @@ public actor DebugController {
             column: column,
             statementSummary: summary,
             verb: verb,
-            symbols: symbols
+            symbols: symbols,
+            metrics: metrics
         )
 
         await record(pause: info)
@@ -219,16 +237,25 @@ public actor DebugController {
     }
 
     /// Called from the runtime when a statement is about to fail.
-    /// Pauses only when `.errorAny` is set.
-    public func errorCheckpoint(message: String, featureSetName: String, businessActivity: String) async {
+    /// Pauses only when `.errorAny` is set. `line`/`file` should be
+    /// the source location of the failing statement so the frontend
+    /// can paint the right node (the frontend's lookback-fallback
+    /// gets stale when `checkpoint()` short-circuits at sampling).
+    public func errorCheckpoint(
+        message: String,
+        featureSetName: String,
+        businessActivity: String,
+        line: Int = 0,
+        file: String = ""
+    ) async {
         let hasErrorBP = breakpoints.contains(.errorAny)
         guard hasErrorBP else { return }
         let info = PauseInfo(
             reason: .error(message),
             featureSetName: featureSetName,
             businessActivity: businessActivity,
-            file: "",
-            line: 0,
+            file: file,
+            line: line,
             column: 0,
             statementSummary: "[error] \(message)",
             verb: nil,
@@ -263,7 +290,23 @@ public actor DebugController {
         if let verb = pause.verb { body["verb"] = verb }
         // Serialize symbol snapshots as a single JSON string so the
         // JSONL line stays flat (DebugEventRecord values are strings).
-        let symsArr = pause.symbols.map { ["n": $0.name, "ty": $0.typeName, "v": $0.valuePreview] }
+        // Per-sym dicts are mostly flat strings, but repository symbols
+        // carry an additional `recs` field whose value is a JSON-encoded
+        // array of flat row dictionaries (#284 step 3). We pre-serialize
+        // it here so the JSONL line itself stays string-keyed.
+        let symsArr: [[String: String]] = pause.symbols.map { sym in
+            var entry: [String: String] = [
+                "n": sym.name, "ty": sym.typeName, "v": sym.valuePreview
+            ]
+            if let records = sym.records,
+               let recsData = try? JSONSerialization.data(
+                   withJSONObject: records, options: [.sortedKeys]
+               ),
+               let recsStr = String(data: recsData, encoding: .utf8) {
+                entry["recs"] = recsStr
+            }
+            return entry
+        }
         if let symsData = try? JSONSerialization.data(withJSONObject: symsArr, options: [.sortedKeys]),
            let symsStr = String(data: symsData, encoding: .utf8) {
             body["syms"] = symsStr
@@ -344,5 +387,54 @@ public actor DebugController {
         }
         // BreakStatement and any future Statement types fall through here.
         return (0, 0, "<unknown statement>", nil)
+    }
+
+    /// Resident memory the runtime process currently holds
+    /// (#282 phase 2). Platform-specific:
+    ///
+    /// - macOS / Darwin: BSD `task_info(TASK_BASIC_INFO)` —
+    ///   matches Activity Monitor's "Real Memory."
+    /// - Linux: parses `VmRSS` out of `/proc/self/status` and
+    ///   converts from kB to bytes.
+    /// - Other: returns 0.
+    ///
+    /// 0 is the platform's "I don't know" sentinel — callers
+    /// should treat it as "unknown" rather than "no memory."
+    nonisolated static func residentMemoryBytes() -> UInt64 {
+        #if canImport(Darwin)
+        var info = task_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_basic_info_data_t>.size
+            / MemoryLayout<integer_t>.size
+        )
+        let kr = withUnsafeMutablePointer(to: &info) { ptr -> kern_return_t in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { p in
+                task_info(mach_task_self_,
+                          task_flavor_t(TASK_BASIC_INFO),
+                          p,
+                          &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        return UInt64(info.resident_size)
+        #elseif canImport(Glibc) || canImport(Musl)
+        guard let text = try? String(
+            contentsOfFile: "/proc/self/status",
+            encoding: .utf8
+        ) else { return 0 }
+        for line in text.split(separator: "\n") {
+            if line.hasPrefix("VmRSS:") {
+                // `VmRSS:    12345 kB`
+                let parts = line.split(separator: " ",
+                                       omittingEmptySubsequences: true)
+                if parts.count >= 2, let kb = UInt64(parts[1]) {
+                    return kb * 1024
+                }
+            }
+        }
+        return 0
+        #else
+        return 0
+        #endif
     }
 }

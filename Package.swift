@@ -69,6 +69,95 @@ compilerLLVMDependency = [
 ]
 #endif
 
+// Issue #228 — SOLARO desktop app (macOS only). The product + target
+// + test wiring is gated here so Linux/Windows builds don't trip on
+// the AppKit/SwiftUI imports. See ADR-001 follow-up note about the
+// SwiftCrossUI -> native-SwiftUI pivot.
+var solaroProducts: [Product] = []
+var solaroTargets: [Target] = []
+#if os(macOS)
+solaroProducts = [
+    .executable(
+        name: "SolaroApp",
+        targets: ["SOLARO"]
+    ),
+    .executable(
+        name: "solaro",
+        targets: ["SOLAROLauncher"]
+    ),
+    .executable(
+        name: "AROXPCService",
+        targets: ["AROXPCService"]
+    ),
+    .library(
+        name: "AROXPCProtocol",
+        targets: ["AROXPCProtocol"]
+    ),
+]
+solaroTargets = [
+    .executableTarget(
+        name: "SOLARO",
+        dependencies: [
+            "AROVersion",
+            "AROParser",
+            "ARORuntime",
+            "AROXPCProtocol",
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "Yams", package: "Yams"),
+            // STTextView (TextKit 2 editor) for the code-editing pane —
+            // gives us a gutter, proper attributed-text editing, and
+            // a plugin surface for syntax highlighting + breakpoints.
+            .product(name: "STTextView", package: "STTextView"),
+            // SwiftTerm — ANSI terminal emulator for the bottom panel.
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
+        ],
+        path: "Sources/SOLARO",
+        // Docs aimed at engineers reading the source tree — neither
+        // is a runtime resource. Without the exclude SwiftPM warns
+        // on every clean build (#291).
+        exclude: [
+            "LICENSE-NOTICE.md",
+            "ARCHITECTURE.md",
+        ]
+    ),
+    .executableTarget(
+        name: "SOLAROLauncher",
+        dependencies: [
+            .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        ],
+        path: "Sources/SOLAROLauncher"
+    ),
+    // Shared types used by both SOLARO and the XPC service to
+    // describe runtime events crossing the process boundary
+    // (#282 phase 3). Codable structs — kept tiny so the wire
+    // format stays stable.
+    .target(
+        name: "AROXPCProtocol",
+        dependencies: [],
+        path: "Sources/AROXPCProtocol"
+    ),
+    // Out-of-process host for the ARO runtime. SOLARO launches
+    // it via NSXPCConnection, hands it a project root, and gets
+    // pause records / end notifications back across the
+    // boundary. Crashes don't take SOLARO down with them.
+    .executableTarget(
+        name: "AROXPCService",
+        dependencies: [
+            "AROVersion",
+            "AROParser",
+            "ARORuntime",
+            "AROXPCProtocol",
+        ],
+        path: "Sources/AROXPCService"
+    ),
+    .testTarget(
+        name: "SOLAROTests",
+        dependencies: ["SOLARO"],
+        path: "Tests/SOLAROTests"
+    ),
+]
+#endif
+
 // MLX dependencies — macOS Apple Silicon only (Linux uses llama.cpp/CUDA)
 #if os(macOS)
 mlxDependencies = [
@@ -148,8 +237,10 @@ let package = Package(
         .executable(
             name: "aro",
             targets: ["AROCLI"]
-        )
-    ],
+        ),
+        // SOLARO products (macOS only) are appended via `solaroProducts`
+        // below — see the top of this file for the gated definition.
+    ] + solaroProducts,
     dependencies: platformDependencies + lspDependencies + mlxDependencies + [
         // Swift Argument Parser for CLI
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
@@ -161,6 +252,12 @@ let package = Package(
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
         // Swift Log for structured logging
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        // STTextView — TextKit 2 editor used by SOLARO's center pane.
+        // Pinned to the minor while the API is still settling.
+        .package(url: "https://github.com/krzyzanowskim/STTextView.git", from: "2.3.10"),
+        // SwiftTerm — real ANSI terminal emulator for the bottom
+        // panel's Terminal tab (#244).
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
@@ -248,6 +345,8 @@ let package = Package(
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings
             ),
+            // SOLARO targets (macOS only) are appended below via
+            // `solaroTargets` — see the top of this file.
             // Parser tests
             .testTarget(
                 name: "AROParserTests",
@@ -272,7 +371,19 @@ let package = Package(
                 dependencies: ["AROPackageManager"],
                 path: "Tests/AROPackageManagerTests"
             ),
+            // CLI tests — covers the small pieces of pure logic that
+            // live inside CLI command structs (e.g. UILauncher path
+            // resolution). Uses @testable import AROCLI.
+            .testTarget(
+                name: "AROCLITests",
+                dependencies: ["AROCLI"],
+                path: "Tests/AROCLITests"
+            ),
         ]
+
+        // SOLARO targets (macOS only) — appended unconditionally; the
+        // array is empty on non-macOS hosts.
+        targets.append(contentsOf: solaroTargets)
 
         // LSP targets - not available on Windows (no compatible library)
         #if !os(Windows)
