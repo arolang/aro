@@ -92,33 +92,50 @@ struct OpenAPIGraphView: View {
             }
             .allowsHitTesting(false)
 
-            ZStack(alignment: .topLeading) {
-                Color.clear
-                OpenAPIWiresLayer(graph: graph)
-                OpenAPINodesLayer(
-                    graph: graph,
-                    selectedID: selectedID,
-                    warningsByNode: warningsByNode,
-                    onTap: { node in
-                        selectedID = node.id
-                        onSelect(node)
-                    },
-                    onDoubleTap: { node in
-                        onJumpToCode?(node)
-                    }
-                )
+            // The wires/nodes layer needs an explicit
+            // `width × height == contentSize` so wires can be
+            // drawn at absolute coordinates and the scale/offset
+            // transforms behave. But that explicit frame is the
+            // SwiftUI tree's ideal size — and NSHostingView feeds
+            // the ideal size into its SizeConstraints, which is
+            // what `SplitViewChildController` reads. On macOS 26
+            // the resulting min/max-size update re-enqueues a
+            // layout pass per render, eventually tripping AppKit's
+            // "more update-constraints passes than views" guard
+            // and aborting the app.
+            //
+            // Hosting the explicit-size content in
+            // `Color.clear.overlay { ... }` keeps the inner frame
+            // for rendering but breaks the size-propagation pipe:
+            // `Color.clear` is the layout-defining child and has a
+            // flexible ideal size, so the outer ZStack's ideal
+            // size stays "fill available," NSHostingView's min/max
+            // doesn't churn, and SplitViewChildController stops
+            // re-entering.
+            Color.clear.overlay(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    OpenAPIWiresLayer(graph: graph)
+                    OpenAPINodesLayer(
+                        graph: graph,
+                        selectedID: selectedID,
+                        warningsByNode: warningsByNode,
+                        onTap: { node in
+                            selectedID = node.id
+                            onSelect(node)
+                        },
+                        onDoubleTap: { node in
+                            onJumpToCode?(node)
+                        }
+                    )
+                }
+                .frame(width: contentSize.width, height: contentSize.height,
+                       alignment: .topLeading)
+                .offset(x: pan.width + dragOffset.width,
+                        y: pan.height + dragOffset.height)
+                .scaleEffect(zoom * magnify, anchor: .topLeading)
+                .animation(.easeOut(duration: 0.15), value: zoom)
             }
-            .frame(width: contentSize.width, height: contentSize.height,
-                   alignment: .topLeading)
-            .offset(x: pan.width + dragOffset.width,
-                    y: pan.height + dragOffset.height)
-            .scaleEffect(zoom * magnify, anchor: .topLeading)
-            .animation(.easeOut(duration: 0.15), value: zoom)
         }
-        // Anchor the whole view to whatever the column gives us
-        // and clip overflow so the inner explicit-size content
-        // can't propagate its intrinsic size back up to the
-        // hosting view.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
         .contentShape(Rectangle())

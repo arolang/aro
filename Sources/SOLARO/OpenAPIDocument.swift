@@ -137,6 +137,10 @@ final class OpenAPIDocument {
         paths[path] = pathObj
         root["paths"] = paths
         isDirty = true
+        // Persist immediately so the code panel (which re-reads
+        // from disk) reflects canvas/Inspector edits without the
+        // user having to press the Save button.
+        save()
     }
 
     /// Convenience: read the current operation dictionary.
@@ -166,6 +170,7 @@ final class OpenAPIDocument {
         components["schemas"] = schemas
         root["components"] = components
         isDirty = true
+        save()
     }
 
     func schema(name: String) -> [String: Any]? {
@@ -203,6 +208,7 @@ final class OpenAPIDocument {
         ] as [String: Any]
         root["paths"] = paths
         isDirty = true
+        save()
         return (pathName, "GET")
     }
 
@@ -227,6 +233,7 @@ final class OpenAPIDocument {
         components["schemas"] = schemas
         root["components"] = components
         isDirty = true
+        save()
         return name
     }
 
@@ -243,6 +250,7 @@ final class OpenAPIDocument {
         }
         root["paths"] = paths
         isDirty = true
+        save()
     }
 
     /// Remove a component schema.
@@ -253,6 +261,7 @@ final class OpenAPIDocument {
         components["schemas"] = schemas
         root["components"] = components
         isDirty = true
+        save()
     }
 
     /// Rename a component schema. Updates every `$ref` pointing
@@ -274,6 +283,7 @@ final class OpenAPIDocument {
         rewriteRefs(from: "#/components/schemas/\(oldName)",
                     to: "#/components/schemas/\(trimmed)")
         isDirty = true
+        save()
         return true
     }
 

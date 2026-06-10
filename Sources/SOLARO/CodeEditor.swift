@@ -96,6 +96,63 @@ final class AROHoverTextView: STTextView {
     /// react regardless of the responder chain.
     private var mouseMonitor: Any?
 
+    /// Re-entrance guard for `layout()`. STTextView 2.3.10's
+    /// `setupTextLayoutManager` installs a KVO observer on
+    /// `NSTextLayoutManager.usageBoundsForTextContainer` (CGRect)
+    /// that fires inside the layout pass itself: the observer's
+    /// closure invalidates layout, which schedules another pass,
+    /// which fires the observer again. On macOS 26 AppKit's
+    /// "more update-constraints passes than views" guard aborts
+    /// the process — that's the SplitView crash we kept hitting.
+    /// `sizeThatFits` on the SwiftUI representable broke one
+    /// re-entry path (parent-driven), but the layout-manager
+    /// observer is internal to STTextView and STTextView 2.3.10
+    /// is the latest release; this flag breaks the inner loop
+    /// without modifying upstream.
+    private var isLayingOut: Bool = false
+
+    override func layout() {
+        guard !isLayingOut else { return }
+        isLayingOut = true
+        defer { isLayingOut = false }
+        super.layout()
+    }
+
+    /// STTextView's layout-manager KVO observer doesn't *recurse*
+    /// into `layout()` directly — instead it marks the view as
+    /// needing layout, which AppKit then drains on the next run-
+    /// loop tick → re-fires `layout()` → KVO observer again. The
+    /// re-entrance guard on `layout()` alone can't see this because
+    /// each layout pass exits before the next one starts. Catch the
+    /// schedule path here: while we're inside our own layout, drop
+    /// any "needs layout" mark set by the KVO closure. AppKit's own
+    /// post-layout reconciliation still gets the geometry correct
+    /// — STTextView's KVO observer is just opportunistically asking
+    /// for another pass after its bounds change, which is exactly
+    /// what creates the infinite loop on macOS 26.
+    override var needsLayout: Bool {
+        get { super.needsLayout }
+        set {
+            if isLayingOut && newValue { return }
+            super.needsLayout = newValue
+        }
+    }
+
+    /// Same guard for `invalidateIntrinsicContentSize`. SwiftUI's
+    /// `AppKitPlatformViewHost` observes the hosted NSView's
+    /// `intrinsicContentSize`; an invalidation triggers
+    /// `_layoutMetricsInvalidatedForHostedView`, which schedules
+    /// the SwiftUI graph for another layout pass, which lays out
+    /// STTextView again, which fires the KVO observer, which calls
+    /// `invalidateIntrinsicContentSize` — the exact cycle we keep
+    /// catching downstream. The `needsLayout` filter doesn't help
+    /// because this path bypasses AppKit's own scheduling and goes
+    /// straight through SwiftUI's view-graph invalidator.
+    override func invalidateIntrinsicContentSize() {
+        if isLayingOut { return }
+        super.invalidateIntrinsicContentSize()
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         // Belt: ask the window to deliver mouseMoved.
@@ -752,6 +809,31 @@ struct AROCodeEditor: NSViewRepresentable {
             attachGhostGutter(textView: textView)
         }
         return scroll
+    }
+
+    /// Accept SwiftUI's proposed size verbatim instead of asking the
+    /// scroll view (and therefore STTextView) for an intrinsic size.
+    /// STTextView's internal layout fires a KVO observer on its
+    /// container bounds during `layout()`; querying its intrinsic
+    /// size during a parent layout pass means the SwiftUI host
+    /// re-asks → STTextView re-lays out → KVO fires →
+    /// `setNeedsUpdate` enqueues another pass, and on macOS 26 the
+    /// `_updateConstraintsForSubtreeIfNeeded` cycle guard aborts
+    /// the app. Same crash as STTextView upstream PR #102
+    /// (NavigationSplitView invalidation loop); the fix lived in
+    /// `STTextViewSwiftUIAppKit.TextView` but SOLARO has its own
+    /// representable wrapper, which never inherited it. SOLARO's
+    /// split mode (HSplitView with the code editor on one side) hits
+    /// the same loop on macOS 26 — split mode crashed reliably until
+    /// this method was added.
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView: NSScrollView,
+        context: Context
+    ) -> CGSize? {
+        let width = proposal.width ?? nsView.frame.size.width
+        let height = proposal.height ?? nsView.frame.size.height
+        return CGSize(width: width, height: height)
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {

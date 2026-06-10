@@ -60,6 +60,18 @@ struct CenterPaneView: View {
     @State private var showConflictResolver: Bool = false
     @State private var showCreateFeatureSetSheet: Bool = false
 
+    /// Left-pane width in split mode. We hand-roll the splitter
+    /// instead of using `HSplitView` because the legacy split-view
+    /// API drives `_layoutMetricsInvalidatedForHostedView` cycles on
+    /// macOS 26 even after every defense we could apply to
+    /// AROCodeEditor + STTextView. An HStack with an explicit
+    /// width + a draggable divider sidesteps the SplitView host
+    /// machinery entirely.
+    @State private var splitLeftWidth: CGFloat = 480
+    @State private var splitDragStartWidth: CGFloat? = nil
+    private let splitLeftMin: CGFloat = 200
+    private let splitLeftMax: CGFloat = 1200
+
     @ViewBuilder
     private var textMode: some View {
         if let url = controller.currentFile {
@@ -314,20 +326,32 @@ struct CenterPaneView: View {
                 // actually meant to clean up the file.
                 try? newValue.write(to: url, atomically: true, encoding: .utf8)
 
-                // openapi.yaml takes the leanest possible path:
-                // write to disk and stop. We deliberately do *not*
-                // push the parsed YAML into `OpenAPIDocument.root`
-                // here — that's an `@Observable` mutation, and
-                // notifying it on every keystroke re-renders every
-                // view that reads `root`, which on macOS 26 cascades
-                // through `NSHostingView.SizeConstraints` and
-                // `SplitViewChildController` until the constraint-
-                // loop guard kills the app. The canvas catches up
-                // on save / on next open via `OpenAPIDocument.load`.
-                // `lsp.didChange` and `Parser.parse` are also
-                // skipped because they're heavy and irrelevant to
-                // OpenAPI files.
+                // openapi.yaml: keep the canvas in sync with the
+                // text editor by pushing the parsed YAML into
+                // `OpenAPIDocument.root`. The previous comment here
+                // disabled this path because the resulting
+                // @Observable re-render storm tripped the macOS-26
+                // layout-cycle abort. That hazard is now absorbed by
+                // the layout-cycle defenses (sizeThatFits +
+                // layout/needsLayout/invalidateIntrinsicContentSize
+                // guards on STTextView, plus Color.clear.overlay
+                // wraps on the split-view columns + inspector), so
+                // the cascade no longer reaches the cycle guard.
+                //
+                // Transient invalid YAML mid-keystroke is fine:
+                // `Yams.load` returns nil, we leave `root` alone,
+                // and the getter still reads the latest text from
+                // disk — no snap-back. `lsp.didChange` and
+                // `Parser.parse` are still skipped because they're
+                // heavy and irrelevant to a YAML file.
                 if isOpenAPIFile(url) {
+                    if let doc = controller.openAPIDocument,
+                       doc.url == url,
+                       let parsed = try? Yams.load(yaml: newValue) as? [String: Any]
+                    {
+                        doc.root = parsed
+                        doc.markDirty()
+                    }
                     return
                 }
 
@@ -639,6 +663,8 @@ struct CenterPaneView: View {
             },
             onAddRoute: document.map { d in
                 {
+                    // `addRoute` auto-saves so the code panel
+                    // (reads-from-disk) stays in sync.
                     let added = d.addRoute()
                     controller.openAPISelectedNodeID =
                         "route:\(added.method) \(added.path)"
@@ -1059,9 +1085,11 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private var splitMode: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             splitLeftPane
-                .frame(minWidth: 160)
+                .frame(width: splitLeftWidth)
+                .clipped()
+            splitDivider
             if let url = controller.currentFile {
                 AROCodeEditor(
                     text: editableBinding(for: url),
@@ -1082,7 +1110,7 @@ struct CenterPaneView: View {
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url)
                 )
-                .frame(minWidth: 160)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .topTrailing) {
                     if controller.editorFindActive {
                         EditorFindBar(
@@ -1100,6 +1128,46 @@ struct CenterPaneView: View {
                 }
             }
         }
+    }
+
+    /// Vertical drag handle between the canvas and editor in split
+    /// mode. Replaces `HSplitView`'s built-in divider — see the
+    /// `splitLeftWidth` comment for why.
+    private var splitDivider: some View {
+        Rectangle()
+            .fill(SolaroColor.divider)
+            .frame(width: 1)
+            .overlay {
+                // Wider invisible hit target so the user doesn't
+                // have to land the cursor on a 1pt line.
+                Color.clear
+                    .frame(width: 6)
+                    .contentShape(Rectangle())
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if splitDragStartWidth == nil {
+                                    splitDragStartWidth = splitLeftWidth
+                                }
+                                let start = splitDragStartWidth ?? splitLeftWidth
+                                let proposed = start + value.translation.width
+                                splitLeftWidth = min(
+                                    splitLeftMax,
+                                    max(splitLeftMin, proposed)
+                                )
+                            }
+                            .onEnded { _ in
+                                splitDragStartWidth = nil
+                            }
+                    )
+            }
     }
 
     /// Picks the canvas-side view for split mode based on the

@@ -30,20 +30,32 @@ struct InspectorPaneView: View {
     @Bindable var controller: WorkspaceController
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SolaroSpace.m) {
-                fileHeader
-                openAPIEditorSection
-                SelectedStatementSection(controller: controller)
-                variablesSection
-                WatchesSection(controller: controller, store: controller.watches)
-                lspDiagnosticsSection
-                featureSetSection
-                deployRail
-                Spacer(minLength: SolaroSpace.l)
+        // Same anti-cycle defense as OpenAPIGraphView: Color.clear
+        // is the layout-defining child (flexible ideal size), so
+        // the inspector's @Observable-driven content (sections that
+        // expand and contract on every controller mutation) can't
+        // propagate its ideal size up to the NSHostingView hosting
+        // this column. That feedback path was triggering
+        // `SplitViewChildController.hostingController_didUpdateMinSize_maxSize`
+        // on every file selection — same macOS 26 hard-assert the
+        // `.metrics` case (Workspace.swift:1146) already documents
+        // and works around with a raw AppKit panel.
+        Color.clear.overlay {
+            ScrollView {
+                VStack(alignment: .leading, spacing: SolaroSpace.m) {
+                    fileHeader
+                    openAPIEditorSection
+                    SelectedStatementSection(controller: controller)
+                    variablesSection
+                    WatchesSection(controller: controller, store: controller.watches)
+                    lspDiagnosticsSection
+                    featureSetSection
+                    deployRail
+                    Spacer(minLength: SolaroSpace.l)
+                }
+                .padding(.horizontal, SolaroSpace.m)
+                .padding(.top, SolaroSpace.m)
             }
-            .padding(.horizontal, SolaroSpace.m)
-            .padding(.top, SolaroSpace.m)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // Transparent so the right rail's frosted-glass background
@@ -82,7 +94,14 @@ struct InspectorPaneView: View {
 
     @ViewBuilder
     private var parseStatus: some View {
-        if let error = controller.currentParseError {
+        // openapi.yaml never goes through the ARO Parser — only
+        // `.aro` files are discovered as source. Reflect the
+        // OpenAPIDocument load state instead so the inspector
+        // doesn't get stuck on "Parsing…" the moment the user
+        // clicks the spec.
+        if let url = controller.currentFile, isOpenAPISpec(url) {
+            openAPIParseStatus
+        } else if let error = controller.currentParseError {
             HStack(spacing: SolaroSpace.xs) {
                 Image(systemName: "xmark.octagon.fill")
                     .foregroundStyle(SolaroColor.stateError)
@@ -108,6 +127,33 @@ struct InspectorPaneView: View {
                 .font(SolaroFont.caption)
                 .foregroundStyle(SolaroColor.textTertiary)
         }
+    }
+
+    @ViewBuilder
+    private var openAPIParseStatus: some View {
+        if let document = controller.openAPIDocument {
+            let paths = (document.root["paths"] as? [String: Any])?.count ?? 0
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(SolaroColor.stateOK)
+                Text("OpenAPI · \(paths) path\(paths == 1 ? "" : "s")")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+            }
+        } else {
+            HStack(spacing: SolaroSpace.xs) {
+                Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(SolaroColor.stateError)
+                Text("YAML parse failed")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.stateError)
+            }
+        }
+    }
+
+    private func isOpenAPISpec(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return name == "openapi.yaml" || name == "openapi.yml"
     }
 
     // MARK: - Feature sets

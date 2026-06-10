@@ -396,24 +396,35 @@ struct WorkspaceView: View {
                 SidebarPaneView(controller: controller)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
             } detail: {
-                VStack(spacing: 0) {
-                    if !controller.openTabs.isEmpty {
-                        FileTabBar(controller: controller)
-                        Divider().background(SolaroColor.divider)
+                // Same anti-cycle defense applied at the Inspector
+                // and OpenAPI canvas: Color.clear is the layout-
+                // defining child (flexible ideal size), so the
+                // tab bar / breadcrumb / center-pane VStack can't
+                // propagate its ideal size up to the detail
+                // column's hosting view. That feedback was
+                // tripping `SplitViewChildController.hostingController_didUpdateMinSize_maxSize`
+                // on every file selection (same macOS 26 hard-
+                // assert documented at Workspace.swift:1146).
+                Color.clear.overlay {
+                    VStack(spacing: 0) {
+                        if !controller.openTabs.isEmpty {
+                            FileTabBar(controller: controller)
+                            Divider().background(SolaroColor.divider)
+                        }
+                        if controller.currentFile != nil {
+                            BreadcrumbView(controller: controller)
+                            Divider().background(SolaroColor.divider)
+                        }
+                        // Clip the center pane so canvas content
+                        // (nodes, edges, FS containers) can never
+                        // render outside its frame and bleed up into
+                        // the tab bar / breadcrumb above. Without
+                        // this a node dragged to negative y or a wide
+                        // FS container can spill into the header
+                        // strips and obscure the tab labels.
+                        CenterPaneView(controller: controller)
+                            .clipped()
                     }
-                    if controller.currentFile != nil {
-                        BreadcrumbView(controller: controller)
-                        Divider().background(SolaroColor.divider)
-                    }
-                    // Clip the center pane so canvas content
-                    // (nodes, edges, FS containers) can never
-                    // render outside its frame and bleed up into
-                    // the tab bar / breadcrumb above. Without
-                    // this a node dragged to negative y or a wide
-                    // FS container can spill into the header
-                    // strips and obscure the tab labels.
-                    CenterPaneView(controller: controller)
-                        .clipped()
                 }
                 .inspector(isPresented: $controller.inspectorShown) {
                     rightPane
@@ -1211,36 +1222,38 @@ struct WorkspaceView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        // Four logical clusters, each rendered as its own pill so
-        // the user sees them as distinct islands instead of one
-        // long row of icons. Hosted in a single `ToolbarItem` so
-        // we control the inter-pill spacing directly (SwiftUI's
-        // automatic spacing between `ToolbarItemGroup`s vanished
-        // on macOS 26 for adjacent `.primaryAction` items).
+        // Four logical clusters, each in its own `ToolbarItem` so
+        // AppKit's overflow algorithm can push them into the `>>`
+        // popover independently as the window shrinks (right-most
+        // pill collapses first). Earlier this lived in a single
+        // `ToolbarItem` with one big HStack — that grouped them as
+        // one unit and the *whole* row jumped into the overflow as
+        // soon as anything didn't fit. Each pill keeps its own
+        // `.fixedSize()` so the search pill's TextField can't drive
+        // an intrinsic-size cycle (the macOS-26 hazard the prior
+        // single-item layout originally side-stepped); the layout-
+        // cycle defenses we added for the SplitView crash also
+        // catch the residual paths.
         ToolbarItem(placement: .primaryAction) {
-            // 20pt gap between pills so each cluster reads as a
-            // distinct island. `fixedSize()` pins the HStack to
-            // its natural width — without it AppKit tries to
-            // compress the toolbar when the window is narrow, the
-            // embedded TextField in the search pill fights back
-            // through NSHostingView's intrinsic-size cycle, and
-            // the constraint loop trips `_postWindowNeedsUpdate
-            // Constraints`'s recursion guard (crash signature in
-            // the latest IPS).
-            HStack(spacing: 20) {
-                ToolbarPill { paneModePicker }
-                ToolbarPill { searchField }
-                ToolbarPill {
-                    playButton
-                    debugButton
-                    testButton
-                    statusPip
-                }
-                ToolbarPill {
-                    foldToggle
-                    minimapToggle
-                    inspectorToggle
-                }
+            ToolbarPill { paneModePicker }.fixedSize()
+        }
+        ToolbarItem(placement: .primaryAction) {
+            ToolbarPill { searchField }.fixedSize()
+        }
+        ToolbarItem(placement: .primaryAction) {
+            ToolbarPill {
+                playButton
+                debugButton
+                testButton
+                statusPip
+            }
+            .fixedSize()
+        }
+        ToolbarItem(placement: .primaryAction) {
+            ToolbarPill {
+                foldToggle
+                minimapToggle
+                inspectorToggle
             }
             .fixedSize()
         }
