@@ -1,0 +1,17 @@
+# RepoBackup is a SOLARO-canvas demo; the integration runner skips it
+# (see test.hint). The expected output is recorded here so manual
+# runs against a local Gitea/GitLab can be compared.
+Repo backup — nightly sweep.
+Cloning
+aro
+Done
+aro
+Cloning
+demo-1
+Done
+demo-1
+Cloning
+demo-2
+Done
+demo-2
+Backup sweep complete.

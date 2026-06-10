@@ -69,6 +69,10 @@ struct Book: Identifiable, Hashable {
               title: "ARO by Hallucination",
               blurb: "Pairing a local model with ARO's tool calling.",
               symbol: "sparkles"),
+        .init(id: "SolaroTheAroPlatform",
+              title: "SOLARO — The ARO Development Platform",
+              blurb: "Tour of SOLARO, the canvas, and three day-to-day automations you can ship.",
+              symbol: "macwindow.on.rectangle"),
     ]
 }
 

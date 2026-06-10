@@ -1,0 +1,75 @@
+(* UptimeMonitor — keep an eye on a handful of URLs.
+ *
+ * Persona: a freelancer running three side-services and a status
+ * page. Curl-in-cron works, but it doesn't tell you *which* check
+ * went red on which run, and Slack alerts arrive five minutes late
+ * when the cron host is paged itself. The ARO version records every
+ * probe in a repository so the canvas paints the history live, fires
+ * an event when a check fails consecutively, and posts an alert via
+ * a webhook. Twelve lines of glue, no daemon to babysit.
+ *)
+
+(Application-Start: Uptime Monitor) {
+    Log "Uptime monitor — probing endpoints." to the <console>.
+
+    (* Targets. A real deployment loads this from a YAML file
+       through `Read`; the inline list keeps the example
+       self-contained. *)
+    Create the <targets> with [
+        "http://127.0.0.1:18791/healthy",
+        "http://127.0.0.1:18791/flaky",
+        "http://127.0.0.1:18791/down"
+    ].
+
+    For each <target> in <targets> {
+        Request the <response> from <target>.
+        Extract the <status> from the <response: status>.
+
+        (* Record the probe — the repository row becomes a node on
+           the canvas and updates every time we run. Create then
+           Store is the canonical pattern (see Examples/OrderService
+           for the same shape). *)
+        Create the <probe> with { target: <target>, status: <status> }.
+        Store the <probe> into the <probe-repository>.
+
+        (* ARO's `when` clauses live at the *end* of a statement,
+           not as a block. The same two lines compile to two
+           conditional statements; the canvas paints whichever one
+           the runtime fired. *)
+        Log "DOWN " to the <console> when <status> >= 400.
+        Log <target> to the <console> when <status> >= 400.
+        Emit a <CheckFailed: event> with {
+            target: <target>,
+            status: <status>
+        } when <status> >= 400.
+
+        Log "OK  " to the <console> when <status> < 400.
+        Log <target> to the <console> when <status> < 400.
+    }
+
+    Log "Probe sweep complete." to the <console>.
+
+    Return an <OK: status> for the <sweep>.
+}
+
+(* Event handler — every CheckFailed turns into an alert. Splitting
+ * the handler out from the probe loop is the whole point: you can
+ * swap a Slack webhook for a PagerDuty one without touching the
+ * monitoring logic. *)
+(Send Alert: CheckFailed Handler) {
+    Extract the <target> from the <event: target>.
+    Extract the <status> from the <event: status>.
+
+    Create the <body> with {
+        text: "uptime monitor: check failed",
+        target: <target>,
+        status: <status>
+    }.
+
+    (* Real deployments POST to a webhook here. Logging keeps the
+       example dry but the canvas still shows the chain. *)
+    Log "ALERT issued for " to the <console>.
+    Log <target> to the <console>.
+
+    Return an <OK: status> for the <alert>.
+}

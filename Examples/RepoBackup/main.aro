@@ -1,0 +1,55 @@
+(* RepoBackup — nightly backup of a handful of repositories.
+ *
+ * Persona: an indie hacker self-hosting a handful of projects. Every
+ * night the script clones each repo, writes a copy to a dated folder,
+ * and records what it did. No cron daemon to wire up, no shell
+ * script that breaks the first time a path has a space in it; the
+ * canvas shows you exactly which clone is happening right now and
+ * which finished cleanly.
+ *)
+
+(Application-Start: Repo Backup) {
+    Log "Repo backup — nightly sweep." to the <console>.
+
+    (* In a real deployment the repository list comes from a YAML
+       file via `Read`; the inline list keeps the example
+       self-contained for the canvas demo. *)
+    Create the <repos> with [
+        { name: "aro",    url: "https://git.ausdertechnik.de/arolang/aro.git" },
+        { name: "demo-1", url: "https://git.ausdertechnik.de/arolang/aro.git" },
+        { name: "demo-2", url: "https://git.ausdertechnik.de/arolang/aro.git" }
+    ].
+
+    Compute the <today> from <now>.
+
+    For each <repo> in <repos> {
+        Extract the <name> from the <repo: name>.
+        Extract the <url>  from the <repo: url>.
+
+        (* Per-repo destination — the canvas paints a fresh node
+           every iteration so the user can see which one is in
+           flight. *)
+        Create the <destination> with "/tmp/backups/" + <today> + "/" + <name>.
+
+        Log "Cloning " to the <console>.
+        Log <name> to the <console>.
+
+        (* Clone via the native Git action (ARO-0080). *)
+        Clone the <result> from the <git> with {
+            url: <url>,
+            path: <destination>
+        }.
+
+        Store the <backup> into the <backup-repository> with {
+            name: <name>,
+            destination: <destination>
+        }.
+
+        Log "Done " to the <console>.
+        Log <name> to the <console>.
+    }
+
+    Log "Backup sweep complete." to the <console>.
+
+    Return an <OK: status> for the <sweep>.
+}

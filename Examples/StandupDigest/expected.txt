@@ -1,0 +1,23 @@
+Standup digest — assembling the morning brief.
+
+# Standup digest
+
+## Landed yesterday
+feat(auth): bcrypt password hashing
+Mira Chen
+fix(db): connection pool deadlock under load
+Petr Novak
+docs: clarify retry semantics in webhook handler
+Sam Rao
+
+## Open pull requests
+Replace ad-hoc cache with LRU
+Promote /v2/orders to GA
+
+## Assigned today
+Investigate 504s on /v1/search
+Mira
+Wire up plugin telemetry
+Petr
+
+Digest assembled.

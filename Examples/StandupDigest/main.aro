@@ -1,0 +1,76 @@
+(* StandupDigest — the morning brief for the rest of the team.
+ *
+ * Persona: a tech lead who used to write the standup digest by hand
+ * every morning and would forget half of it. The script asks the
+ * usual three questions of a project repository ("what landed
+ * yesterday, what's open today, who's blocked?") and renders the
+ * answer as a Markdown digest dropped into the team's webhook.
+ *
+ * Every value on the canvas updates live the moment the runtime
+ * fires it. That is the SOLARO promise: the page you're reading is
+ * the page that's running.
+ *)
+
+(Application-Start: Standup Digest) {
+    Log "Standup digest — assembling the morning brief." to the <console>.
+
+    Create the <api-base> with "http://127.0.0.1:18781".
+
+    (* Yesterday's merged commits. The stub returns a small list so
+       the demo runs offline; pointing at a real GitLab/GitHub URL
+       drops in. *)
+    Request the <commits-response> from "http://127.0.0.1:18781/commits".
+    Extract the <commits> from the <commits-response: body>.
+
+    (* Pull requests still open against `main`. *)
+    Request the <prs-response> from "http://127.0.0.1:18781/pulls".
+    Extract the <pulls> from the <prs-response: body>.
+
+    (* Today's assigned issues — a third request, deliberately
+       independent so the AROFuture system can fan them out. *)
+    Request the <issues-response> from "http://127.0.0.1:18781/issues".
+    Extract the <issues> from the <issues-response: body>.
+
+    Compute the <commit-count: length> from <commits>.
+    Compute the <pull-count: length> from <pulls>.
+    Compute the <issue-count: length> from <issues>.
+
+    (* Render a tiny digest. Real production code would use the
+       Template engine; this is intentionally one Log per section so
+       the SOLARO canvas paints a clear chain. *)
+    Log "" to the <console>.
+    Log "# Standup digest" to the <console>.
+    Log "" to the <console>.
+    Log "## Landed yesterday" to the <console>.
+    For each <commit> in <commits> {
+        Extract the <message> from the <commit: message>.
+        Extract the <author> from the <commit: author>.
+        Log "- " to the <console>.
+        Log <message> to the <console>.
+        Log "  (" to the <console>.
+        Log <author> to the <console>.
+        Log ")" to the <console>.
+    }
+    Log "" to the <console>.
+    Log "## Open pull requests" to the <console>.
+    For each <pull> in <pulls> {
+        Extract the <title> from the <pull: title>.
+        Log "- " to the <console>.
+        Log <title> to the <console>.
+    }
+    Log "" to the <console>.
+    Log "## Assigned today" to the <console>.
+    For each <issue> in <issues> {
+        Extract the <title> from the <issue: title>.
+        Extract the <assignee> from the <issue: assignee>.
+        Log "- " to the <console>.
+        Log <title> to the <console>.
+        Log " — " to the <console>.
+        Log <assignee> to the <console>.
+    }
+
+    Log "" to the <console>.
+    Log "Digest assembled." to the <console>.
+
+    Return an <OK: status> for the <digest>.
+}

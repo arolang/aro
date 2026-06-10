@@ -1,0 +1,5 @@
+# RepoBackup clones live remotes; that's not safe under CI. Keep the
+# test interpreter-only and skip on the integration runners until we
+# add a local Git stub for the harness.
+mode: interpreter
+skip: RepoBackup clones live remotes; canvas demo only, integration tests skipped.

@@ -1,0 +1,10 @@
+Uptime monitor — probing endpoints.
+OK
+http://127.0.0.1:18791/healthy
+OK
+http://127.0.0.1:18791/flaky
+DOWN
+http://127.0.0.1:18791/down
+ALERT issued for
+http://127.0.0.1:18791/down
+Probe sweep complete.

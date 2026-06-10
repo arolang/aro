@@ -1504,6 +1504,19 @@ jobs:
           path: Book/TheDebuggingGuide/output/ARO-Debugging-Guide.pdf
           retention-days: 30
 
+      - name: Build SOLARO Platform Book PDF
+        run: |
+          cd Book/SolaroTheAroPlatform
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload SOLARO Platform Book PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-solaro-platform
+          path: Book/SolaroTheAroPlatform/output/ARO-Solaro-Platform.pdf
+          retention-days: 30
+
   # ===========================================================================
   # Create Release (only on tags)
   # ===========================================================================
@@ -1568,7 +1581,8 @@ jobs:
             artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf \
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf \
             artifacts/aro-by-example/ARO-By-Example.pdf \
-            artifacts/aro-essential-primer/ARO-Essential-Primer.pdf; do
+            artifacts/aro-essential-primer/ARO-Essential-Primer.pdf \
+            artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf; do
             if [ -f "$f" ]; then
               FILES="${FILES}${f}\n"
             else
@@ -1614,6 +1628,7 @@ jobs:
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
             artifacts/aro-by-example/ARO-By-Example.pdf
             artifacts/aro-essential-primer/ARO-Essential-Primer.pdf
+            artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf
           fail_on_unmatched_files: false
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
@@ -1632,6 +1647,7 @@ jobs:
             | ARO Construction Studies | [ARO-Construction-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Construction-Studies.pdf) |
             | ARO By Example | [ARO-By-Example.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-By-Example.pdf) |
             | ARO Essential Primer | [ARO-Essential-Primer.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Essential-Primer.pdf) |
+            | SOLARO — The ARO Development Platform | [ARO-Solaro-Platform.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Solaro-Platform.pdf) |
 
             ### Installation
 
