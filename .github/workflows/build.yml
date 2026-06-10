@@ -943,7 +943,7 @@ jobs:
           for plugin_dir in \
             Examples/QualifierPlugin/Plugins/plugin-swift-collection \
             Examples/GreetingPlugin/Plugins/plugin-swift-hello \
-            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/CustomPlugin/Plugins/GreetingService \
             Examples/ExternalService/plugins/CounterPlugin \
             Examples/SQLiteExample/plugins/SQLitePlugin \
             Examples/ZipService/plugins/ZipPlugin; do
@@ -1202,7 +1202,7 @@ jobs:
           for plugin_dir in \
             Examples/QualifierPlugin/Plugins/plugin-swift-collection \
             Examples/GreetingPlugin/Plugins/plugin-swift-hello \
-            Examples/CustomPlugin/plugins/GreetingService \
+            Examples/CustomPlugin/Plugins/GreetingService \
             Examples/ExternalService/plugins/CounterPlugin \
             Examples/SQLiteExample/plugins/SQLitePlugin \
             Examples/ZipService/plugins/ZipPlugin; do
