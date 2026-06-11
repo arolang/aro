@@ -45,6 +45,14 @@ struct CanvasNode: Identifiable, Equatable {
     /// colored-container grouping in the multi-feature-set canvas.
     let featureSetName: String
 
+    /// Pre-computed display strings (#308). The canvas re-renders
+    /// dozens of nodes per frame; building these per-body via
+    /// interpolation / `trimmingCharacters` adds up. They depend
+    /// only on `verb`, `summary`, and `lineHint`, so they're
+    /// computed once at `make` time and stored.
+    let summaryDisplay: String
+    let lineLabel: String
+
     var x: Double
     var y: Double
 
@@ -55,21 +63,40 @@ struct CanvasNode: Identifiable, Equatable {
                      featureSetName: String,
                      x: Double = 0, y: Double = 0) -> CanvasNode {
         let refs = collectReferenced(statement)
+        let verb = statement.action.verb
+        let summary = statement.description
+        let line = statement.span.start.line
         return CanvasNode(
             id: "\(fileKey):\(statement.span.start.offset)",
-            verb: statement.action.verb,
-            summary: statement.description,
+            verb: verb,
+            summary: summary,
             resultName: statement.result.base,
             resultModifier: statement.result.typeAnnotation,
             objectPreposition: prepositionLabel(statement.object.preposition),
             objectName: statement.object.noun.base,
             objectModifier: statement.object.noun.typeAnnotation,
             referencedIdentifiers: refs,
-            lineHint: statement.span.start.line,
+            lineHint: line,
             featureSetName: featureSetName,
+            summaryDisplay: Self.makeSummaryDisplay(summary: summary, verb: verb),
+            lineLabel: ":\(line)",
             x: x,
             y: y
         )
+    }
+
+    /// Strip the leading verb prefix and trailing period from the
+    /// raw statement description so the card's secondary line
+    /// doesn't visually echo the bold verb above it. Cached on the
+    /// node so we don't rebuild it per render.
+    private static func makeSummaryDisplay(summary: String, verb: String) -> String {
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutDot = trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+        let prefix = verb + " "
+        if withoutDot.hasPrefix(prefix) {
+            return String(withoutDot.dropFirst(prefix.count))
+        }
+        return withoutDot
     }
 
     /// Walks the object slot + valueSource + range modifiers to

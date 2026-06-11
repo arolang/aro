@@ -73,12 +73,12 @@ struct CanvasNodeCard: View {
                             .foregroundStyle(SolaroColor.textPrimary)
                     }
                     Spacer(minLength: 0)
-                    Text(":\(node.lineHint)")
+                    Text(node.lineLabel)
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textTertiary)
                 }
                 if liveValues.isEmpty {
-                    Text(summaryDisplay)
+                    Text(node.summaryDisplay)
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textSecondary)
                         .lineLimit(2)
@@ -247,19 +247,6 @@ struct CanvasNodeCard: View {
         return picked
     }
 
-    /// Human-readable line shown under the verb. Falls back to the
-    /// statement's raw description, but trims the verb prefix +
-    /// terminal period so the card doesn't visually echo itself.
-    private var summaryDisplay: String {
-        let raw = node.summary
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let withoutDot = trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
-        let prefix = node.verb + " "
-        if withoutDot.hasPrefix(prefix) {
-            return String(withoutDot.dropFirst(prefix.count))
-        }
-        return withoutDot
-    }
 }
 
 /// Styled balloon popover for canvas nodes — mirrors the editor's
