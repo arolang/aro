@@ -41,45 +41,47 @@ final class ConsoleProcess {
         if case .serviceCrashed = state { return true }
         return false
     }
-    /// 1-indexed line of the most recent `⏸  paused (…) at file:LINE`
-    /// notice from the debugger. SwiftUI binds to this so the editor
-    /// caret can jump to the pause point automatically.
-    var pausedLine: Int?
+    /// Source-of-truth debugger snapshot owned by the session
+    /// (this ConsoleProcess). All the old flat properties
+    /// (pausedLine, pauseSymbols, lastExecutedAt, …) are
+    /// preserved as forwarding accessors so existing call sites
+    /// keep compiling, but the data physically lives here (#306).
+    var debuggerState = DebuggerState()
+
+    var pausedLine: Int? {
+        get { debuggerState.pausedLine }
+        set { debuggerState.pausedLine = newValue }
+    }
 
     /// `true` between a `⏸  paused` notice and the next command
     /// the user sends. Drives the debug-button bar's enablement.
     var isPaused: Bool = false
 
-    /// Symbols visible at the most recent pause. Cleared on
-    /// continue/step/next/finish. Used by the canvas + editor for
-    /// hover tooltips that show live variable values.
-    var pauseSymbols: [String: SymbolValue] = [:]
+    var pauseSymbols: [String: SymbolValue] {
+        get { debuggerState.pauseSymbols }
+        set { debuggerState.pauseSymbols = newValue }
+    }
 
-    /// Wall-clock time each source line was most recently executed
-    /// (per the JSONL event stream). Drives the canvas's "executing
-    /// now" pulse — node cards whose `lineHint` shows up here recent
-    /// enough light up a colored left border that fades out over
-    /// ~600 ms. Reset at the start of every new run.
-    var lastExecutedAt: [Int: Date] = [:]
-    /// Wall-clock time each feature set was most recently observed
-    /// to be running (any statement inside it fired). Drives the
-    /// container-level glow so concurrent feature sets are visually
-    /// distinct in the canvas. Reset at run start.
-    var lastExecutedAtPerFeatureSet: [String: Date] = [:]
-    /// Source line → runtime error message. Populated when an
-    /// embedded-mode `errorCheckpoint` fires for that line; drives
-    /// the red border + tooltip on the failing canvas node. Reset
-    /// at the start of every new run.
-    var errorLines: [Int: String] = [:]
-    /// PASS/FAIL outcome per test feature-set name, parsed from the
-    /// runner's stdout. Cleared at the start of each `aro test` run
-    /// and read by the canvas / inspector to badge containers.
-    var testResults: [String: TestNodeResult] = [:]
-    /// Monotonically increases each time `lastExecutedAt` is updated.
-    /// SwiftUI watches this so TimelineView-driven animations keep
-    /// scheduling refreshes even when the same line fires twice in
-    /// a row (and the dict value stays nominally equal).
-    var executionTick: UInt64 = 0
+    var lastExecutedAt: [Int: Date] {
+        get { debuggerState.lastExecutedAt }
+        set { debuggerState.lastExecutedAt = newValue }
+    }
+    var lastExecutedAtPerFeatureSet: [String: Date] {
+        get { debuggerState.lastExecutedAtPerFeatureSet }
+        set { debuggerState.lastExecutedAtPerFeatureSet = newValue }
+    }
+    var errorLines: [Int: String] {
+        get { debuggerState.errorLines }
+        set { debuggerState.errorLines = newValue }
+    }
+    var testResults: [String: TestNodeResult] {
+        get { debuggerState.testResults }
+        set { debuggerState.testResults = newValue }
+    }
+    var executionTick: UInt64 {
+        get { debuggerState.executionTick }
+        set { debuggerState.executionTick = newValue }
+    }
     /// Latest value the runtime wrote into / read from each
     /// repository, keyed by repository object name (`"user-repository"`,
     /// `"sessions-store"`, …). Surfaced by the canvas's repository
