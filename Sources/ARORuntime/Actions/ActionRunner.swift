@@ -52,7 +52,9 @@ public final class ActionRunner: @unchecked Sendable {
             SystemActionsModule.actions,
         ]
 
-        // Step 1: build the full verb→type dict in the same order as ActionRegistry
+        // Step 1: build the full verb→type dict in the same order as ActionRegistry.
+        // #316: lowercase once per verb. `verb` is the loop variable so the
+        // closure over `let lower = verb.lowercased()` is captured cleanly.
         var fullDict: [String: any ActionImplementation.Type] = [:]
         for moduleActions in allModuleActions {
             for actionType in moduleActions {
@@ -62,11 +64,15 @@ public final class ActionRunner: @unchecked Sendable {
             }
         }
 
-        // Step 2: retain only verbs whose winning type is a SynchronousAction
+        // Step 2: retain only verbs whose winning type is a SynchronousAction.
+        // The fullDict keys are already lowercased; pass them through the
+        // synonym mapping directly instead of having canonicalizeVerb lowercase
+        // a second time (#316). Most verbs have no synonym so the lookup is
+        // a single dictionary miss.
         var table: [String: any SynchronousAction.Type] = [:]
         for (verb, actionType) in fullDict {
             if let syncType = actionType as? any SynchronousAction.Type {
-                let canonical = canonicalizeVerb(verb)
+                let canonical = verbMappings[verb] ?? verb
                 table[canonical] = syncType
             }
         }

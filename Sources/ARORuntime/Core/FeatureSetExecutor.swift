@@ -475,17 +475,21 @@ public final class FeatureSetExecutor: Sendable {
                 // Check if the action needs to be executed (see VerbSets.swift for rationale per category)
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = actionRegistry.dynamicHandler(for: verb) != nil
-                let needsExecution = testVerbs.contains(verb.lowercased()) ||
-                    requestVerbs.contains(verb.lowercased()) ||
-                    mergeVerbs.contains(verb.lowercased()) ||
-                    responseVerbs.contains(verb.lowercased()) ||
-                    queryVerbs.contains(verb.lowercased()) ||
-                    serverVerbs.contains(verb.lowercased()) ||
+                // #316: lowercase the verb once instead of 11 times.
+                // `String.lowercased()` allocates a fresh String each
+                // call; this loop runs per statement at execution rate.
+                let lowerVerb = verb.lowercased()
+                let needsExecution = testVerbs.contains(lowerVerb) ||
+                    requestVerbs.contains(lowerVerb) ||
+                    mergeVerbs.contains(lowerVerb) ||
+                    responseVerbs.contains(lowerVerb) ||
+                    queryVerbs.contains(lowerVerb) ||
+                    serverVerbs.contains(lowerVerb) ||
                     hasDynamicHandler ||  // Dynamic plugin actions always need execution
-                    updateVerbs.contains(verb.lowercased()) ||  // Update always needs execution (handles rebind internally)
-                    (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
-                    (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
-                    (extractVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
+                    updateVerbs.contains(lowerVerb) ||  // Update always needs execution (handles rebind internally)
+                    (createVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
+                    (computeVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
+                    (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
@@ -622,8 +626,10 @@ public final class FeatureSetExecutor: Sendable {
                     "retrieve", "fetch", "load", "find", "extract", "parse", "get",
                     "request", "receive", "read"
                 ]
-                let allowRebind = rebindingVerbs.contains(verb.lowercased()) ||
-                                  requestVerbs.contains(verb.lowercased())
+                // #316: lowercase once, not twice.
+                let lowerVerb = verb.lowercased()
+                let allowRebind = rebindingVerbs.contains(lowerVerb) ||
+                                  requestVerbs.contains(lowerVerb)
 
                 // Only bind if variable doesn't exist LOCALLY or if this is a rebinding/request action.
                 // We check existsLocally (not exists) so event handlers can create local shadow
