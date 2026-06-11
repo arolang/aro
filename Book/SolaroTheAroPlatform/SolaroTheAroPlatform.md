@@ -116,6 +116,25 @@ TimelineView snapshots through hosted views tripped the layout-
 constraint cycle limit — a recurring theme in 0.10/0.11 (see the
 `refactoring-for-0.11` issue label).
 
+### 1.5 The right rail
+
+The right rail is a four-tab strip above the inspector. Each tab
+swaps the entire right pane for a focused tool:
+
+- **Inspector** (default) — the cards described above.
+- **Actions** — every action the runtime can dispatch, grouped by
+  semantic role (REQUEST, OWN, RESPONSE, EXPORT, SERVICE), with the
+  built-ins separated from each loaded plugin's contributions. Each
+  row is a drag source: drop it on a feature-set container in the
+  canvas and SOLARO inserts a placeholder ARO statement at the
+  cursor. The header counts what's loaded ("48 built-in · 12 from 3
+  plugins") and a tiny spinner blinks while `aro actions` is in
+  flight.
+- **Metrics** — see §6.
+- **Ask** — see §7.
+
+![Actions panel](screenshots/06-actions-panel.png){ width=85% }
+
 ---
 
 ## 2. Setup
@@ -463,7 +482,252 @@ sequence — same canvas, same shape, an extra two lines.
 
 ---
 
-## 6. Where to go from here
+## 6. Metrics — call counts and execution time
+
+Press the **Metrics** tab in the right-rail tab strip while a
+project is running and the panel switches to a Prometheus-style
+snapshot of the runtime's counters. Every feature set the runtime
+has dispatched in the current session shows up as one row.
+
+![Metrics panel](screenshots/07-metrics-panel.png){ width=85% }
+
+For each feature set the panel shows:
+
+- **Calls** — how many times the runtime has entered the FS in this
+  session. Incremented on every event the FS is registered for, on
+  every HTTP request that matched its operationId, on every
+  scheduled tick.
+- **Avg ms** — mean wall-clock time spent inside the FS, including
+  any awaited futures it forced. Sub-millisecond paths display as
+  `<1`; the metric is exact above 1 ms.
+- **p95 ms** — the 95th-percentile latency, computed over a sliding
+  window of the last 200 invocations. The window resets when you
+  hit Run again so a hot-fix iteration doesn't fight the previous
+  run's outliers.
+- **Last ms** — the most recent invocation's latency. Useful when
+  you're poking at a single FS via curl and want to see the number
+  change per request without averaging.
+
+The panel updates at 1 Hz from the runtime's `/metrics` socket; the
+counter rows themselves are pre-allocated NSTextFields, so the
+update path is a `stringValue =` assignment per cell and the
+SwiftUI host above never sees a size change. (Earlier the SwiftUI
+version of this panel had a habit of crashing the Inspector column
+on macOS 26 by tripping `_postWindowNeedsUpdateConstraints` mid-
+layout; the AppKit panel sidesteps it.)
+
+Application-Start and Application-End sit at the top so the
+totalised startup / shutdown numbers don't drift away as more
+handlers accumulate. The "Reset" button in the panel's header wipes
+all counters without restarting the runtime — useful when you've
+just finished warming caches and want a clean window for the next
+measurement.
+
+The same data is available externally: the runtime exposes a
+Prometheus-style scrape endpoint on a UNIX socket
+(`$XDG_RUNTIME_DIR/aro-metrics-<pid>.sock` by default) so any
+Grafana or VictoriaMetrics agent can pull from it. SOLARO uses the
+same socket; the Metrics tab is just a thin reader on top.
+
+---
+
+## 7. The Ask assistant
+
+Switch the right rail to **Ask** to get a local-first co-pilot
+backed by `aro ask`. The panel is a chat surface — your prompts
+on the right, the assistant's responses on the left — and a
+single-line input at the bottom.
+
+![Ask panel](screenshots/08-ask-panel.png){ width=85% }
+
+The first prompt in a session shows a disclaimer card describing
+where the model runs (locally via MLX on Apple Silicon, locally
+via llama-server elsewhere, or against an OpenAI-compatible URL
+if you've set `ARO_ASK_ENDPOINT` in Settings → Backends) and
+asking you to confirm. After that, prompts go straight through.
+
+What the assistant can see:
+
+- The currently-open ARO project's source files, via tool calls.
+- Any compiler diagnostics surfaced by the LSP.
+- The runtime's recent JSONL event stream (if a run is in flight).
+- Nothing else. There is no telemetry, no cloud upload of source,
+  no third-party MCP call unless you explicitly install one.
+
+What you can ask it for:
+
+- "Explain this feature set" / "What does `Compute the
+  <commit-count: length>` do?" — single-shot Q&A about ARO syntax
+  or the project.
+- "Add a CheckPassed event handler that logs to /tmp/passed.log"
+  — the assistant emits a diff against the current file and the
+  panel offers an Apply button.
+- "Run aro test" — tool calls. The assistant proposes the command,
+  asks for approval (per ADR-006 the gate is binary today; see
+  GitLab issue #370 for the proposed severity tiers), and pipes
+  the output back into the chat.
+
+Cancel a long answer with the stop button in the input row. The
+panel keeps the conversation in memory only — there's no on-disk
+transcript by design.
+
+---
+
+## 8. Tests and test results
+
+`aro test` discovers every feature set whose business activity
+ends in `Test` or `Tests`, runs them in isolation, and reports
+pass/fail per FS. SOLARO surfaces the results in three places at
+once.
+
+![Test results](screenshots/09-test-results.png){ width=85% }
+
+- **The canvas.** Test feature sets render a small pill on their
+  header line (a green `T`, a red `T`, or a pulsing one while
+  the runtime is inside them). Click the pill to jump to the
+  test's first failing statement.
+- **The editor gutter.** While a test FS is selected, every line
+  inside it gets a row-coloured marker matching the result —
+  green where the test passed, red where the runner pinned the
+  failure. Breakpoint dots take precedence.
+- **The inspector.** A `Test results` card lists every FS with
+  its outcome and last-run latency. Failures get the runner's
+  error message inline; passing FSes collapse to a single
+  green row so the list stays readable on a project with dozens
+  of tests.
+
+Hitting `Test` (or `Cmd+U`) re-runs the suite. Re-runs are
+incremental — only test FSes whose source file has changed since
+the last green run actually execute. To force a full sweep, use
+View → Tests → Re-run all.
+
+Test discovery is purely naming-based: any feature set whose
+business activity is `…Test` or `…Tests` is a test. The Given /
+When / Then split is just normal ARO statements; nothing about
+the runtime treats them specially. That means you can step into
+them with the debugger the same way you step into production
+code.
+
+---
+
+## 9. Business features (feature sets) at a glance
+
+ARO programs are organised as **feature sets** — named bundles of
+ARO statements tagged with a business activity. The activity is the
+"why" of the feature set: `Order Management`, `User API`,
+`Standup Digest`, `CheckFailed Handler`. SOLARO uses the activity
+as the primary navigation axis.
+
+The inspector's **Feature sets** card lists every FS in the open
+file with its business activity, role badge, and the count of
+statements inside. Click one to scroll the canvas to its
+container.
+
+![Feature sets card](screenshots/10-feature-sets.png){ width=85% }
+
+A few activity suffixes have special meanings that SOLARO
+visualises:
+
+- `Handler` — event handler. Edges from `Emit` statements that
+  produce its event animate when an event fires.
+- `Observer` — repository observer. The FS's container draws an
+  edge to the watched repository's node on the canvas.
+- `Test` / `Tests` — picked up by `aro test`. See §8.
+- `Action` — user-defined action (ARO-0081). Callable from
+  anywhere as `Application.<Name>`; SOLARO shows the call-site
+  edges in the same colour as plugin actions.
+
+Everything else is a regular business feature — the FS the user
+notice in production logs, the FS your team writes about in PR
+descriptions. SOLARO's status bar also reports the project's
+feature-set count and which ones changed since the last `git
+commit`, so a `git pull` followed by a glance at the canvas tells
+you exactly which slice of the business logic moved.
+
+---
+
+## 10. Settings
+
+Cmd+, opens Settings. The window is six tabs, each focused on one
+configurable surface; everything is stored under the `solaro.*`
+keyspace in standard `UserDefaults` so backing it up is `defaults
+export com.arolang.SOLARO`.
+
+![Settings — Editor tab](screenshots/11-settings-editor.png){ width=85% }
+
+### 10.1 Editor
+
+- **Theme** — Light, Dark, or System. Switches the entire app
+  including syntax colours; no restart needed.
+- **Font size** (10–22 pt) and **Line height** (1.00–2.00×) — apply
+  to the code editor only; the canvas and inspector follow the
+  system text size.
+- **Default pane mode** — which of Canvas / Text / Split / Map a
+  freshly-opened file lands in before its `.layout.json` overrides.
+- **Inspector visible by default** — whether the right rail starts
+  open. Independent from per-file persistence.
+- **Format on save** — strips trailing whitespace and tidies the
+  final newline on `Cmd+S`. Off by default because the runtime
+  doesn't care about either.
+- **Inline suggestions** — show LSP completions as ghost text
+  inside the editor; `Tab` accepts.
+- **Suggestion delay** — how long after a keystroke to fire the
+  completion request, 0.2–3.0 s.
+- **AI fallback** — once the completion popover has been open a
+  second, also call `aro ask` for a longer prediction. Off by
+  default; the assistant runs locally but it still takes seconds.
+
+### 10.2 Backends
+
+- **Runtime backend** — embedded (in-process via XPC, fastest for
+  short scripts), subprocess (one `aro` per Run, the conservative
+  default), or external (point at a remote runtime over the
+  control socket). The blurb beneath the picker reminds you which
+  is selected and what it implies.
+- **`SOLARO_ARO` override** — empty means autoresolve (repo build
+  → `/usr/local` → Homebrew → `$PATH`). Set to a path to pin a
+  specific binary; useful when you're hacking on the runtime and
+  the build artefact lives somewhere weird.
+- **`ARO_ASK_ENDPOINT`** — empty means let `aro ask` pick a
+  backend (MLX → llama-server → `mlx_lm.server`). Set to an
+  OpenAI-compatible URL to use a hosted model instead.
+- **Plugin marketplace** — optional GitHub PAT. Raises the
+  marketplace's `topic:aro topic:plugin` API rate limit from 60
+  to 5000 requests / hour. Stored in your local defaults; never
+  uploaded.
+
+### 10.3 Keybindings
+
+A two-column editor for every command SOLARO exposes. The left
+column is the command name and its current shortcut; the right
+column lets you capture a new one. The Reset button clears a
+binding back to the default. The full mapping is saved to
+`~/.config/solaro/keybindings.json` so it's portable.
+
+### 10.4 Books
+
+The catalogue of available books with status (cached, never
+downloaded, refresh available). The "Refresh now" button forces
+a redownload from the latest GitHub release. The library is what
+Help → Books reads.
+
+### 10.5 Privacy
+
+A summary of what SOLARO collects: nothing. Per ADR-007 and
+ADR-010 there's no telemetry; the panel surfaces buttons to
+reveal the local crash-report directory and to clear it.
+
+### 10.6 Plugins (in-window)
+
+Help → Plugins opens a separate window with the marketplace
+fetched from GitHub's topic search, your installed plugins, and a
+pane for the plugin you're currently inspecting. Installing a
+plugin from there is one click; under the hood it runs `aro add
+github:owner/repo` and reloads the runtime.
+
+---
+
+## 11. Where to go from here
 
 - **The Language Guide** is the long-form reference: every action,
   every qualifier, every scoping rule.
