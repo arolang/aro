@@ -87,6 +87,8 @@ the YAML / ARO parses cleanly; canvas-driven mutations (in
 `openapi.yaml`: add route, add schema, rename, delete) flow back to
 the editor immediately, no Save button needed.
 
+![Split mode](screenshots/05-split-mode.png){ width=85% }
+
 ### 1.3 The inspector
 
 The inspector is a stack of cards. The top card is the file header
