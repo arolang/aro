@@ -59,6 +59,51 @@ public struct ComputeAction: SynchronousAction {
 
     public init() {}
 
+    // MARK: - #326: table-driven computation dispatch
+    //
+    // Built-in computations were a 100-line switch keyed by the
+    // canonical operation name. Each new operation grew the switch and
+    // bumped the cyclomatic complexity of the same method. Move them
+    // into a name→closure registry so adding an op is one entry instead
+    // of one more branch in the giant switch, and so the operation set
+    // can be enumerated for documentation and tests.
+    //
+    // Each operation receives the resolved input plus the calling
+    // ExecutionContext (for `_with_`, `_to_`, `_expression_` and
+    // service lookups) and returns the computed value. Operations that
+    // need to surface a "use the async path" signal still throw
+    // `NeedsAsyncExecution`; everything else throws `ActionError`.
+
+    typealias ComputeOp = @Sendable (any Sendable, any ExecutionContext) throws -> any Sendable
+
+    /// Canonical computation name → implementation. `length` and
+    /// `count` share an entry (both resolve to `opLength`); the set
+    /// used for `knownComputations` is derived from this registry's
+    /// keys. The `@Sendable` on `ComputeOp` makes the dictionary
+    /// itself `Sendable`, so no `nonisolated(unsafe)` is needed.
+    private static let computations: [String: ComputeOp] = [
+        "hash":       Self.opHash,
+        "length":     Self.opLength,
+        "count":      Self.opLength,
+        "uppercase":  Self.opUppercase,
+        "lowercase":  Self.opLowercase,
+        "identity":   Self.opIdentity,
+        "clip":       Self.opClip,
+        "take":       Self.opTake,
+        "date":       Self.opDate,
+        "format":     Self.opFormat,
+        "distance":   Self.opDistance,
+        "intersect":  Self.opIntersect,
+        "difference": Self.opDifference,
+        "union":      Self.opUnion,
+        "markdown":   Self.opMarkdown,
+    ]
+
+    /// Names recognised by the fast-path resolver. Derived from the
+    /// registry plus the synonym for `count` (which `computations`
+    /// already covers via a duplicate entry).
+    private static let knownComputationNames: Set<String> = Set(computations.keys)
+
     // MARK: - Synchronous fast path (no Task.detached overhead in binary mode)
 
     public func executeSynchronously(
@@ -72,13 +117,16 @@ public struct ComputeAction: SynchronousAction {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        let knownComputations: Set<String> = [
-            "hash", "length", "count", "uppercase", "lowercase", "identity",
-            "clip", "take",
-            "date", "format", "distance",
-            "intersect", "difference", "union"
-        ]
-        let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
+        // #326: name set comes from the registry. Markdown is a
+        // built-in but explicitly *not* in `knownComputations` because
+        // it shouldn't be auto-resolved by qualifier inference — it's
+        // only reachable via an explicit `:markdown` qualifier or the
+        // result identifier.
+        let computationName = resolveOperationName(
+            from: result,
+            knownOperations: Self.knownComputationNames,
+            fallback: "identity"
+        )
 
         // Qualifier chain — e.g., "stats.sort|list.take" evaluated left-to-right
         if computationName.contains("|") {
@@ -101,114 +149,150 @@ public struct ComputeAction: SynchronousAction {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)
         }
 
-        // Built-in computations — all synchronous except "count" on streaming input
-        switch computationName.lowercased() {
-        case "hash":
-            let stringToHash: String
-            if let str = input as? String {
-                stringToHash = str
-            } else if JSONSerialization.isValidJSONObject(input),
-                      let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
-                      let json = String(data: data, encoding: .utf8) {
-                stringToHash = json
-            } else {
-                stringToHash = "\(input)"
-            }
-            guard let data = stringToHash.data(using: .utf8) else {
-                throw ActionError.ioError("Failed to encode string as UTF-8")
-            }
-            let hash = SHA256.hash(data: data)
-            return hash.compactMap { String(format: "%02x", $0) }.joined()
-
-        case "length", "count":
-            if let str = input as? String { return str.count }
-            if let arr = input as? [any Sendable] { return arr.count }
-            if let dict = input as? [String: any Sendable] { return dict.count }
-            // Streaming inputs need async — fall back to Task path
-            if input is AnyStreamingValue { throw NeedsAsyncExecution() }
-            return input
-
-        case "uppercase":
-            if let str = input as? String { return str.uppercased() }
-            return String(describing: input).uppercased()
-
-        case "lowercase":
-            if let str = input as? String { return str.lowercased() }
-            return String(describing: input).lowercased()
-
-        case "identity":
-            return input
-
-        case "clip":
-            let str = input as? String ?? String(describing: input)
-            var width = 80
-            if let w = context.resolveAny("_with_") as? Int { width = w }
-            else if let w = context.resolveAny("_with_") as? Double { width = Int(w) }
-            if str.count <= width { return str }
-            return String(str.prefix(width))
-
-        case "take":
-            var n = 0
-            if let w = context.resolveAny("_with_") as? Int { n = w }
-            else if let w = context.resolveAny("_with_") as? Double { n = Int(w) }
-            if let arr = input as? [any Sendable] { return Array(arr.prefix(n)) }
-            if let str = input as? String { return String(str.prefix(n)) }
-            return input
-
-        case "date":
-            if let str = input as? String { return try ARODate.parse(str) }
-            if let date = input as? ARODate { return date }
-            throw ActionError.typeMismatch(expected: "String (ISO 8601)", actual: String(describing: type(of: input)))
-
-        case "format":
-            guard let date = getARODate(from: input) else {
-                throw ActionError.typeMismatch(expected: "ARODate or ISO 8601 String", actual: String(describing: type(of: input)))
-            }
-            let pattern = context.resolveAny("_expression_") as? String ?? DateFormatPattern.fullDate
-            let dateService = context.service(DateService.self) ?? DefaultDateService()
-            return dateService.format(date, pattern: pattern)
-
-        case "distance":
-            guard let fromDate = getARODate(from: input) else {
-                throw ActionError.typeMismatch(expected: "ARODate", actual: String(describing: type(of: input)))
-            }
-            guard let toValue = context.resolveAny("_to_"),
-                  let toDate = getARODate(from: toValue) else {
-                throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Compute distance")
-            }
-            let dateService = context.service(DateService.self) ?? DefaultDateService()
-            return dateService.distance(from: fromDate, to: toDate)
-
-        case "intersect":
-            guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute intersect")
-            }
-            return try computeIntersect(input, with: secondOperand)
-
-        case "difference":
-            guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute difference")
-            }
-            return try computeDifference(input, minus: secondOperand)
-
-        case "union":
-            guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
-            }
-            return try computeUnion(input, with: secondOperand)
-
-        case "markdown":
-            // Built-in markdown → HTML so apps don't need a plugin for
-            // routine CMS-style content. Subset is intentionally small
-            // (ATX headings, paragraphs, fenced code, **bold**, *italic*,
-            // `code`, [text](url)); plug a richer renderer in via a Swift
-            // / Rust plugin if you outgrow it.
-            let md = input as? String ?? String(describing: input)
-            return MinimalMarkdown.toHTML(md)
-
-        default:
-            return input
+        // Built-in computations — all synchronous except "count" on
+        // streaming input, which throws NeedsAsyncExecution from the
+        // length op. Markdown is the one entry not in
+        // `knownComputationNames` so it stays explicit.
+        let canonical = computationName.lowercased()
+        if canonical == "markdown" {
+            return try Self.opMarkdown(input, context)
         }
+        if let op = Self.computations[canonical] {
+            return try op(input, context)
+        }
+        return input
+    }
+
+    // MARK: - #326: extracted computation implementations
+    //
+    // Each method is reachable from `computations` and from a fast
+    // path above (when the operation name needs explicit handling).
+    // Signatures are uniform so the registry's `ComputeOp` typealias
+    // can store all of them. Prefix is `op` to avoid shadowing the
+    // existing instance helpers (`computeIntersect`, `computeUnion`,
+    // …) that take their operands directly.
+
+    private static func opHash(_ input: any Sendable, _ context: any ExecutionContext) throws -> any Sendable {
+        let stringToHash: String
+        if let str = input as? String {
+            stringToHash = str
+        } else if JSONSerialization.isValidJSONObject(input),
+                  let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) {
+            stringToHash = json
+        } else {
+            stringToHash = "\(input)"
+        }
+        guard let data = stringToHash.data(using: .utf8) else {
+            throw ActionError.ioError("Failed to encode string as UTF-8")
+        }
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Implements both `length` and `count` (registry has two entries
+    /// pointing at this method).
+    private static func opLength(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if let str = input as? String { return str.count }
+        if let arr = input as? [any Sendable] { return arr.count }
+        if let dict = input as? [String: any Sendable] { return dict.count }
+        // Streaming inputs need async — fall back to Task path
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        return input
+    }
+
+    private static func opUppercase(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if let str = input as? String { return str.uppercased() }
+        return String(describing: input).uppercased()
+    }
+
+    private static func opLowercase(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if let str = input as? String { return str.lowercased() }
+        return String(describing: input).lowercased()
+    }
+
+    private static func opIdentity(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        input
+    }
+
+    private static func opClip(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let str = input as? String ?? String(describing: input)
+        var width = 80
+        if let w = context.resolveAny("_with_") as? Int { width = w }
+        else if let w = context.resolveAny("_with_") as? Double { width = Int(w) }
+        if str.count <= width { return str }
+        return String(str.prefix(width))
+    }
+
+    private static func opTake(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        var n = 0
+        if let w = context.resolveAny("_with_") as? Int { n = w }
+        else if let w = context.resolveAny("_with_") as? Double { n = Int(w) }
+        if let arr = input as? [any Sendable] { return Array(arr.prefix(n)) }
+        if let str = input as? String { return String(str.prefix(n)) }
+        return input
+    }
+
+    private static func opDate(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if let str = input as? String { return try ARODate.parse(str) }
+        if let date = input as? ARODate { return date }
+        throw ActionError.typeMismatch(expected: "String (ISO 8601)", actual: String(describing: type(of: input)))
+    }
+
+    private static func opFormat(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        // ComputeAction is a stateless `struct`, so a fresh instance
+        // is essentially free and lets the existing instance helpers
+        // (`getARODate`, `computeIntersect`, …) stay where they are.
+        guard let date = ComputeAction().getARODate(from: input) else {
+            throw ActionError.typeMismatch(expected: "ARODate or ISO 8601 String", actual: String(describing: type(of: input)))
+        }
+        let pattern = context.resolveAny("_expression_") as? String ?? DateFormatPattern.fullDate
+        let dateService = context.service(DateService.self) ?? DefaultDateService()
+        return dateService.format(date, pattern: pattern)
+    }
+
+    private static func opDistance(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let helper = ComputeAction()
+        guard let fromDate = helper.getARODate(from: input) else {
+            throw ActionError.typeMismatch(expected: "ARODate", actual: String(describing: type(of: input)))
+        }
+        guard let toValue = context.resolveAny("_to_"),
+              let toDate = helper.getARODate(from: toValue) else {
+            throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Compute distance")
+        }
+        let dateService = context.service(DateService.self) ?? DefaultDateService()
+        return dateService.distance(from: fromDate, to: toDate)
+    }
+
+    private static func opIntersect(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let secondOperand = context.resolveAny("_with_") else {
+            throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute intersect")
+        }
+        return try ComputeAction().computeIntersect(input, with: secondOperand)
+    }
+
+    private static func opDifference(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let secondOperand = context.resolveAny("_with_") else {
+            throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute difference")
+        }
+        return try ComputeAction().computeDifference(input, minus: secondOperand)
+    }
+
+    private static func opUnion(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let secondOperand = context.resolveAny("_with_") else {
+            throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
+        }
+        return try ComputeAction().computeUnion(input, with: secondOperand)
+    }
+
+    /// Built-in markdown → HTML so apps don't need a plugin for
+    /// routine CMS-style content. Subset is intentionally small
+    /// (ATX headings, paragraphs, fenced code, **bold**, *italic*,
+    /// `code`, [text](url)); plug a richer renderer in via a Swift
+    /// / Rust plugin if you outgrow it.
+    private static func opMarkdown(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let md = input as? String ?? String(describing: input)
+        return MinimalMarkdown.toHTML(md)
     }
 
     // MARK: - Async path (handles computeService plugins and streaming inputs)
