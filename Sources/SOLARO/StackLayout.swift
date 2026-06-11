@@ -30,36 +30,27 @@ enum StackLayout {
     /// own pair of horizontal columns (with `featureSetGap` between
     /// neighbouring feature sets) so the canvas can render colored
     /// containing boxes around each group.
-    /// Width and height assumed for statement-node cards during
-     /// auto-layout — kept in sync with `CanvasView.nodeWidth` /
-     /// `nodeHeight` so the overlap-resolve pass uses the same box
-     /// the renderer draws.
-    static let assumedNodeWidth: Double = 240
-    static let assumedNodeHeight: Double = 84
-    /// Padding the feature-set container draws around its child
-    /// nodes (see `FeatureSetContainersLayer.groupedFeatureSets`).
-    /// Mirrored here so overlap detection uses the same rect the
-    /// renderer paints, otherwise resolving "no node overlap" would
-    /// still leave visible container borders crossing through cards.
-    static let fsContainerInset: Double = 14
-    static let fsContainerHeaderExtra: Double = 28
+    /// Geometry constants surfaced as static properties so other
+    /// SOLARO code that needs to mirror them (overlap detection,
+    /// container-rect math, …) can read them at the call site
+    /// instead of constructing a `LayoutTuning`. Driven by
+    /// `LayoutTuning.default` so the values stay synchronised.
+    static let assumedNodeWidth: Double = LayoutTuning.default.assumedNodeWidth
+    static let assumedNodeHeight: Double = LayoutTuning.default.assumedNodeHeight
+    static let fsContainerInset: Double = LayoutTuning.default.fsContainerInset
+    static let fsContainerHeaderExtra: Double = LayoutTuning.default.fsContainerHeaderExtra
 
     static func place(
         _ graph: CanvasGraph,
-        rowPitch: Double = 104,   // assumedNodeHeight (84) + 20pt gap
-        columnPitch: Double = 320,
-        featureSetGap: Double = 80,
-        leftPadding: Double = 40,
-        // Big enough that the *feature-set container's* top edge
-        // (which sits `inset + headerExtra` = 42pt above the first
-        // node) lands well below the file-tab + breadcrumb strips
-        // the workspace stacks on top of the canvas. Previously 56,
-        // which put the container ~14pt from the canvas top and
-        // visually crowded the breadcrumb row.
-        topPadding: Double = 110,
-        repoColumnGap: Double = 120,
-        repoRowPitch: Double = 96
+        tuning: LayoutTuning = .default
     ) -> CanvasGraph {
+        let rowPitch = tuning.rowPitch
+        let columnPitch = tuning.columnPitch
+        let featureSetGap = tuning.featureSetGap
+        let leftPadding = tuning.leftPadding
+        let topPadding = tuning.topPadding
+        let repoColumnGap = tuning.repoColumnGap
+        let repoRowPitch = tuning.repoRowPitch
         var nodes = graph.nodes
         var repos = graph.repositories
         guard !nodes.isEmpty else { return graph }

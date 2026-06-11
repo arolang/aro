@@ -27,10 +27,15 @@ enum ForceDirectedLayout {
     /// explicitly; the layout just settles into something readable.
     static func place(
         _ graph: CanvasGraph,
-        iterations: Int = 60,
-        area: Double = 600 * 600
+        tuning: LayoutTuning = .default
     ) -> CanvasGraph {
         guard !graph.nodes.isEmpty else { return graph }
+
+        let area = tuning.forceDirectedArea
+        let iterations = tuning.forceDirectedIterations
+        let cooling = tuning.forceDirectedCooling
+        let epsilon = tuning.forceDirectedEpsilon
+        let margin = tuning.forceDirectedMargin
 
         var nodes = graph.nodes
         let k = (area / Double(nodes.count)).squareRoot()
@@ -59,7 +64,7 @@ enum ForceDirectedLayout {
                 for j in nodes.indices where j > i {
                     let dx = nodes[i].x - nodes[j].x
                     let dy = nodes[i].y - nodes[j].y
-                    let dist = max((dx * dx + dy * dy).squareRoot(), 0.01)
+                    let dist = max((dx * dx + dy * dy).squareRoot(), epsilon)
                     let force = (k * k) / dist
                     let fx = (dx / dist) * force
                     let fy = (dy / dist) * force
@@ -78,7 +83,7 @@ enum ForceDirectedLayout {
                 else { continue }
                 let dx = nodes[fromIdx].x - nodes[toIdx].x
                 let dy = nodes[fromIdx].y - nodes[toIdx].y
-                let dist = max((dx * dx + dy * dy).squareRoot(), 0.01)
+                let dist = max((dx * dx + dy * dy).squareRoot(), epsilon)
                 let force = (dist * dist) / k
                 let fx = (dx / dist) * force
                 let fy = (dy / dist) * force
@@ -91,17 +96,17 @@ enum ForceDirectedLayout {
             // Apply displacements, clamp to the temperature.
             for i in nodes.indices {
                 let d = displacements[i]!
-                let mag = max((d.dx * d.dx + d.dy * d.dy).squareRoot(), 0.01)
+                let mag = max((d.dx * d.dx + d.dy * d.dy).squareRoot(), epsilon)
                 let limited = min(mag, temp)
                 nodes[i].x += (d.dx / mag) * limited
                 nodes[i].y += (d.dy / mag) * limited
                 // Soft bounds — keep nodes on canvas.
-                nodes[i].x = min(max(nodes[i].x, 20), side - 20)
-                nodes[i].y = min(max(nodes[i].y, 20), side - 20)
+                nodes[i].x = min(max(nodes[i].x, margin), side - margin)
+                nodes[i].y = min(max(nodes[i].y, margin), side - margin)
             }
 
             // Cool down linearly.
-            temp *= 0.95
+            temp *= cooling
         }
 
         return CanvasGraph(nodes: nodes, edges: graph.edges)
