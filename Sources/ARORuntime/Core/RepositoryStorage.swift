@@ -546,19 +546,33 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     @discardableResult
     public func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
         let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
+        // #331: even the void-return convenience must publish the
+        // eviction event. Previously this path silently dropped the
+        // evicted row — observers (`<repo> Evicted Handler`) only saw
+        // evictions when the caller went through `storeWithChangeInfo`,
+        // which most ARO `Store the <x> into the <repo>` statements
+        // don't.
+        emitEvictionIfNeeded(result: result, repository: repository)
         return result.storedValue
     }
 
     public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
         let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
-        if let evicted = result.evictedItem {
-            EventBus.shared.publish(RepositoryEvictedEvent(
-                repositoryName: repository,
-                evictedItem: evicted,
-                reason: "maxSize"
-            ))
-        }
+        emitEvictionIfNeeded(result: result, repository: repository)
         return result
+    }
+
+    /// Publish a `RepositoryEvictedEvent` if the store call evicted a
+    /// row. Centralised here so every storage entry-point (#331) goes
+    /// through the same publisher.
+    private func emitEvictionIfNeeded(result: RepositoryStoreResult,
+                                       repository: String) {
+        guard let evicted = result.evictedItem else { return }
+        EventBus.shared.publish(RepositoryEvictedEvent(
+            repositoryName: repository,
+            evictedItem: evicted,
+            reason: "maxSize"
+        ))
     }
 
     /// Configure TTL and/or maxSize for a repository.
