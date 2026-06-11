@@ -62,11 +62,47 @@ final class GitStatusMonitor {
     @ObservationIgnored
     private nonisolated(unsafe) var refreshTask: Task<Void, Never>?
 
+    /// Issue #310 — debounce + cache so a rapid save burst doesn't
+    /// fan out to N `git status` shells, and back-to-back callers
+    /// reuse the most recent result for ~5s. UI consumers that
+    /// genuinely need fresh state after a mutation (commit, branch
+    /// switch) call `forceRefresh(for:)` instead.
+    @ObservationIgnored
+    private var debounceTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var lastFreshAt: Date?
+    private static let debounceWindow: Duration = .milliseconds(200)
+    private static let cacheWindow: TimeInterval = 5.0
+
     deinit {
         refreshTask?.cancel()
+        debounceTask?.cancel()
     }
 
+    /// Debounced + cached refresh. Coalesces rapid calls inside a
+    /// ~200ms window; serves the cached result when the last fresh
+    /// snapshot is < 5s old.
     func refresh(for project: Project) {
+        if let last = lastFreshAt,
+           Date().timeIntervalSince(last) < Self.cacheWindow {
+            return
+        }
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.debounceWindow)
+            if Task.isCancelled { return }
+            self?.runRefresh(for: project)
+        }
+    }
+
+    /// Bypass the debounce + cache. Use after a mutation we know
+    /// changed the working tree (commit, branch switch, restore).
+    func forceRefresh(for project: Project) {
+        debounceTask?.cancel()
+        runRefresh(for: project)
+    }
+
+    private func runRefresh(for project: Project) {
         refreshTask?.cancel()
         refreshTask = Task.detached(priority: .utility) {
             let result = await Self.run(project: project)
@@ -78,6 +114,7 @@ final class GitStatusMonitor {
                 self.status = result.status
                 self.lastError = result.error
                 self.branches = branches
+                self.lastFreshAt = Date()
             }
         }
     }
@@ -86,7 +123,7 @@ final class GitStatusMonitor {
     /// the trimmed stderr on failure so callers can show it.
     func checkout(branch: String, in project: Project) async -> String? {
         let err = await Self.runCheckout(branch: branch, project: project)
-        if err == nil { refresh(for: project) }
+        if err == nil { forceRefresh(for: project) }
         return err
     }
 
@@ -130,7 +167,7 @@ final class GitStatusMonitor {
              .ignored, .conflicted:
             err = await Self.runRestore(project: project, path: path)
         }
-        if err == nil { refresh(for: project) }
+        if err == nil { forceRefresh(for: project) }
         return err
     }
 
@@ -138,7 +175,7 @@ final class GitStatusMonitor {
     /// the result; throws via the returned error string on failure.
     func commit(message: String, in project: Project) async -> String? {
         let err = await Self.runCommit(message: message, project: project)
-        if err == nil { refresh(for: project) }
+        if err == nil { forceRefresh(for: project) }
         return err
     }
 
@@ -157,7 +194,7 @@ final class GitStatusMonitor {
         let err = await Self.runScopedCommit(
             message: message, paths: paths, project: project
         )
-        if err == nil { refresh(for: project) }
+        if err == nil { forceRefresh(for: project) }
         return err
     }
 
