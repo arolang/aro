@@ -31,7 +31,13 @@ final class WorkspaceController {
     /// tab is `currentFile`; if a tab is closed and was the active
     /// one, the workspace falls back to the previous tab.
     var openTabs: [URL] = []
-    var paneMode: PaneMode = .canvas
+    /// Active pane mode. `private(set)` so every mutation goes
+    /// through `setPaneMode(_:)`, which persists to disk. This
+    /// keeps in-memory state, the per-file `LayoutSidecar`, and
+    /// the view all reading from one direction (memory → disk on
+    /// mutation) — call sites that wrote here directly used to
+    /// drift the sidecar (#300).
+    private(set) var paneMode: PaneMode = .canvas
     var sidebarTab: SidebarTab = .files
     var sidebarShown: Bool = true
     var inspectorShown: Bool = true
