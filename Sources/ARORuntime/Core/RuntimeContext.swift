@@ -65,8 +65,40 @@ public actor RuntimeContext: ExecutionContext {
     /// spawning a new Task.detached per action call.
     public nonisolated let driverChannel: ActionDriverChannel?
 
-    /// Template output buffer (ARO-0050)
+    /// Template output buffer (ARO-0050).
+    ///
+    /// Capped per #317 to bound the worst-case memory growth — runaway
+    /// loops in template code (e.g. unbounded `For each` that appends
+    /// HTML on every tick) used to exhaust available RAM before the
+    /// process noticed anything was wrong. The cap is a soft ceiling:
+    /// once exceeded, further appends are silently dropped and
+    /// `templateBufferOverflowed` flips to true so callers can surface
+    /// the truncation in their output / error path.
     nonisolated(unsafe) private var _templateBuffer: String = ""
+
+    /// Upper bound on the template buffer (#317). 100 MB is large
+    /// enough that legitimate Mustache / HTML rendering never hits it
+    /// but small enough that a runaway loop won't OOM the process
+    /// before the runtime can recover. UTF-8 byte count.
+    public static let defaultTemplateBufferMaxBytes: Int = 100 * 1024 * 1024
+
+    /// Per-instance template buffer cap. Read at every
+    /// `appendToTemplateBuffer` so a future runtime-config knob can
+    /// dial it without recompiling. Defaults to
+    /// `defaultTemplateBufferMaxBytes`.
+    nonisolated(unsafe) public var templateBufferMaxBytes: Int = RuntimeContext.defaultTemplateBufferMaxBytes
+
+    /// True once an append was dropped because the buffer would have
+    /// exceeded `templateBufferMaxBytes`. Reset by
+    /// `flushTemplateBuffer`. Useful for diagnostics — a successful
+    /// render with `overflowed == true` means the output was
+    /// truncated.
+    nonisolated(unsafe) public private(set) var templateBufferOverflowed: Bool = false
+
+    /// Tracks whether we've already warned about the overflow on
+    /// stderr. We log once per buffer (per flush) instead of per
+    /// dropped append so a runaway loop doesn't drown the log.
+    nonisolated(unsafe) private var _templateBufferOverflowWarned: Bool = false
 
     /// Whether this is a template rendering context
     private nonisolated let _isTemplateContext: Bool
@@ -556,12 +588,30 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Template Buffer (ARO-0050)
 
     public nonisolated func appendToTemplateBuffer(_ value: String) {
+        // #317: soft cap. Check current size + incoming bytes before
+        // committing the append. UTF-8 byte counts are O(1) on Swift
+        // String (cached on the storage), so the guard is cheap.
+        let incoming = value.utf8.count
+        let current = _templateBuffer.utf8.count
+        guard current + incoming <= templateBufferMaxBytes else {
+            templateBufferOverflowed = true
+            if !_templateBufferOverflowWarned {
+                _templateBufferOverflowWarned = true
+                let cap = templateBufferMaxBytes
+                FileHandle.standardError.write(Data(
+                    "[ARO runtime] template buffer exceeded \(cap) bytes; subsequent appends dropped until flushTemplateBuffer()\n".utf8
+                ))
+            }
+            return
+        }
         _templateBuffer.append(value)
     }
 
     public nonisolated func flushTemplateBuffer() -> String {
         let result = _templateBuffer
         _templateBuffer = ""
+        templateBufferOverflowed = false
+        _templateBufferOverflowWarned = false
         return result
     }
 
