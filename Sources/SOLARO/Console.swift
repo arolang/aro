@@ -96,6 +96,11 @@ final class ConsoleProcess {
     /// alongside `repositoryValues` on every fresh start.
     var repositoryRecords: [String: [[String: String]]] = [:]
     private static let repositoryHistoryDepth = 5
+    /// Cap on `log` size. A long verbose run otherwise grows without
+    /// bound and the ForEach in `RunConsoleView` slows to a crawl.
+    /// On overflow we drop the oldest half so SwiftUI re-renders are
+    /// bounded and amortized cost stays O(1) per append.
+    private static let logCap = 10_000
 
     /// Shared metrics client read by `MetricsPanel`. Owned here so
     /// both transports — the push socket the subprocess opens, and
@@ -886,8 +891,15 @@ final class ConsoleProcess {
         }
     }
 
+    private func appendLog(_ entry: LogEntry) {
+        log.append(entry)
+        if log.count > Self.logCap {
+            log.removeFirst(log.count - Self.logCap / 2)
+        }
+    }
+
     private func appendLine(_ line: String, kind: LogEntry.Kind) {
-        log.append(LogEntry(kind: kind, text: line, timestamp: Date()))
+        appendLog(LogEntry(kind: kind, text: line, timestamp: Date()))
         detectPause(in: line)
         if let hit = TestResultParser.match(line) {
             testResults[hit.name] = hit.result
@@ -965,11 +977,11 @@ final class ConsoleProcess {
     private var didAutoContinueFirstPause = false
 
     private func appendInfo(_ line: String) {
-        log.append(LogEntry(kind: .info, text: line, timestamp: Date()))
+        appendLog(LogEntry(kind: .info, text: line, timestamp: Date()))
     }
 
     private func appendError(_ line: String) {
-        log.append(LogEntry(kind: .error, text: line, timestamp: Date()))
+        appendLog(LogEntry(kind: .error, text: line, timestamp: Date()))
     }
 
     /// Strip the most common ANSI CSI / SGR escape sequences. A
