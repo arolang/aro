@@ -10,6 +10,14 @@ import Foundation
 /// Request handler type for processing HTTP requests
 public typealias HTTPRequestHandler = @Sendable (HTTPRequest) async -> HTTPResponse
 
+/// Shared JSON coders for the HTTP types. JSONDecoder and JSONEncoder
+/// are thread-safe and reusable in modern Foundation; allocating one
+/// per request showed up in #315 as wasteful at request rate.
+enum HTTPJSON {
+    static let decoder = JSONDecoder()
+    static let encoder = JSONEncoder()
+}
+
 /// HTTP Request abstraction
 public struct HTTPRequest: Sendable {
     public let id: String
@@ -46,7 +54,7 @@ public struct HTTPRequest: Sendable {
         guard let data = body else {
             throw HTTPError.noBody
         }
-        return try JSONDecoder().decode(type, from: data)
+        return try HTTPJSON.decoder.decode(type, from: data)
     }
 
     /// Get body as string
@@ -73,7 +81,7 @@ public struct HTTPResponse: Sendable {
 
     /// Create JSON response
     public static func json<T: Encodable>(_ value: T, status: Int = 200) throws -> HTTPResponse {
-        let data = try JSONEncoder().encode(value)
+        let data = try HTTPJSON.encoder.encode(value)
         return HTTPResponse(
             statusCode: status,
             headers: ["Content-Type": "application/json"],

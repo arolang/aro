@@ -107,6 +107,16 @@ public final class MetricsSocketServer: @unchecked Sendable {
     public var pushInterval: TimeInterval = 0.5
 
     private let lock = NSLock()
+    /// Shared JSON encoder — JSONEncoder is thread-safe in modern
+    /// Foundation; allocating one per push tick was wasteful at the
+    /// 0.5s cadence above (#315). Configured once in init() with
+    /// `.withoutEscapingSlashes` so socket clients receive identical
+    /// bytes.
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.withoutEscapingSlashes]
+        return e
+    }()
     private var listenFD: Int32 = -1
     private var socketPath: String?
     private var clientFDs: Set<Int32> = []
@@ -306,8 +316,6 @@ public final class MetricsSocketServer: @unchecked Sendable {
         guard !clients.isEmpty else { return }
 
         let dto = MetricsSnapshotDTO(from: MetricsCollector.shared.snapshot())
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.withoutEscapingSlashes]
         guard var data = try? encoder.encode(dto) else { return }
         data.append(0x0A) // newline terminator
 

@@ -267,8 +267,15 @@ public struct HTTPOperationEvent: RuntimeEvent {
 
     public func parseBody<T: Decodable>(_ type: T.Type) throws -> T? {
         guard let data = body else { return nil }
-        return try JSONDecoder().decode(type, from: data)
+        return try OpenAPIHTTPJSON.decoder.decode(type, from: data)
     }
+}
+
+/// Shared decoder for OpenAPI request-body parsing — JSONDecoder is
+/// thread-safe in modern Foundation; allocating one per request
+/// (#315) was wasteful at request rate.
+private enum OpenAPIHTTPJSON {
+    static let decoder = JSONDecoder()
 }
 
 // Note: HTTPRequestReceivedEvent and HTTPResponseSentEvent are defined in Events/EventTypes.swift
