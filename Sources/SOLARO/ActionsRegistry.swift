@@ -22,42 +22,34 @@ struct ActionInfo: Identifiable, Equatable, Hashable {
     /// registry. Used to group rows in the UI.
     let isPlugin: Bool
 
-    enum Role: String, Equatable, Hashable {
+    enum Role: String, Equatable, Hashable, CaseIterable {
         case request, own, response, export, server, unknown
 
+        /// Single declaration table for `init(raw:)`, `sortKey`, `label`.
+        /// Order here is the canonical sort order (data-flow direction:
+        /// request → own → response → export → server → unknown). Adding
+        /// a role means appending one row, not editing three switches.
+        private static let table: [(role: Role, raw: String, label: String)] = [
+            (.request,  "request",  "REQUEST"),
+            (.own,      "own",      "OWN"),
+            (.response, "response", "RESPONSE"),
+            (.export,   "export",   "EXPORT"),
+            (.server,   "server",   "SERVER"),
+            (.unknown,  "unknown",  "OTHER"),
+        ]
+
         init(raw: String) {
-            switch raw.lowercased() {
-            case "request":  self = .request
-            case "own":      self = .own
-            case "response": self = .response
-            case "export":   self = .export
-            case "server":   self = .server
-            default:         self = .unknown
-            }
+            let key = raw.lowercased()
+            self = Self.table.first(where: { $0.raw == key })?.role ?? .unknown
         }
 
-        /// Sort order: request → own → response → export → server →
-        /// unknown. Mirrors data-flow direction.
+        /// Sort order matches `table` declaration order.
         var sortKey: Int {
-            switch self {
-            case .request:  return 0
-            case .own:      return 1
-            case .response: return 2
-            case .export:   return 3
-            case .server:   return 4
-            case .unknown:  return 5
-            }
+            Self.table.firstIndex(where: { $0.role == self }) ?? Self.table.count
         }
 
         var label: String {
-            switch self {
-            case .request:  return "REQUEST"
-            case .own:      return "OWN"
-            case .response: return "RESPONSE"
-            case .export:   return "EXPORT"
-            case .server:   return "SERVER"
-            case .unknown:  return "OTHER"
-            }
+            Self.table.first(where: { $0.role == self })?.label ?? "OTHER"
         }
     }
 
