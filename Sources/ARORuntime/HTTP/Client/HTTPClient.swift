@@ -232,6 +232,13 @@ public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
 // so that URLSessionHTTPClient can use them
 
 /// Response from HTTP client request
+/// Shared decoder for HTTPClientResponse.json(...) — JSONDecoder is
+/// thread-safe in modern Foundation; allocating one per HTTP response
+/// (#315) was wasteful at request rate.
+private enum HTTPClientJSON {
+    static let decoder = JSONDecoder()
+}
+
 public struct HTTPClientResponse: Sendable {
     public let statusCode: Int
     public let headers: [String: String]
@@ -258,7 +265,7 @@ public struct HTTPClientResponse: Sendable {
         guard let data = body else {
             throw HTTPError.noBody
         }
-        return try JSONDecoder().decode(type, from: data)
+        return try HTTPClientJSON.decoder.decode(type, from: data)
     }
 
     /// Parse body as JSON dictionary
