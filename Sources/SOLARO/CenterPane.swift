@@ -76,33 +76,48 @@ struct CenterPaneView: View {
     private var textMode: some View {
         if let url = controller.currentFile {
             if isDiffFile(url) {
-                DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                diffView(for: url)
             } else {
-                VStack(spacing: 0) {
-                    let conflicts = currentFileConflicts(url)
-                    if !conflicts.isEmpty {
-                        MergeConflictBanner(count: conflicts.count) {
-                            showConflictResolver = true
-                        }
-                    }
-                    editorWithGutters(for: url)
+                editorView(for: url)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func diffView(for url: URL) -> some View {
+        DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func editorView(for url: URL) -> some View {
+        VStack(spacing: 0) {
+            conflictBanner(for: url)
+            editorWithGutters(for: url)
+        }
+        .sheet(isPresented: $showConflictResolver) {
+            MergeConflictResolverSheet(
+                fileURL: url,
+                onComplete: { showConflictResolver = false }
+            )
+        }
+        .sheet(isPresented: $showCreateFeatureSetSheet) {
+            CreateFeatureSetSheet(
+                onCancel: { showCreateFeatureSetSheet = false },
+                onCreate: { draft in
+                    appendNewFeatureSet(draft, to: url)
+                    showCreateFeatureSetSheet = false
                 }
-                .sheet(isPresented: $showConflictResolver) {
-                    MergeConflictResolverSheet(
-                        fileURL: url,
-                        onComplete: { showConflictResolver = false }
-                    )
-                }
-                .sheet(isPresented: $showCreateFeatureSetSheet) {
-                    CreateFeatureSetSheet(
-                        onCancel: { showCreateFeatureSetSheet = false },
-                        onCreate: { draft in
-                            appendNewFeatureSet(draft, to: url)
-                            showCreateFeatureSetSheet = false
-                        }
-                    )
-                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func conflictBanner(for url: URL) -> some View {
+        let conflicts = currentFileConflicts(url)
+        if !conflicts.isEmpty {
+            MergeConflictBanner(count: conflicts.count) {
+                showConflictResolver = true
             }
         }
     }
