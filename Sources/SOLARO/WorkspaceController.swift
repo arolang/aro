@@ -239,7 +239,13 @@ final class WorkspaceController {
     /// switches projects (latter not reachable today; same window
     /// stays bound to one project), so an old slow parse can't
     /// land on top of a fresh one.
-    private var loadTask: Task<Void, Never>?
+    // `@ObservationIgnored` + `nonisolated` so the deinit (also
+    // non-isolated) can cancel the in-flight task without an actor
+    // hop. `Task` is already `Sendable`; the only other writer is
+    // the MainActor-isolated `load()`. @Observable's macro expansion
+    // would otherwise reject `nonisolated` on the tracked storage.
+    @ObservationIgnored
+    private nonisolated(unsafe) var loadTask: Task<Void, Never>?
 
     /// Parse-failure messages keyed by source-file URL. Empty when
     /// every file parsed cleanly. Surfaced by the Inspector's
@@ -295,6 +301,17 @@ final class WorkspaceController {
 
     init(project: Project) {
         self.project = project
+    }
+
+    deinit {
+        // Issue #311: cancel any in-flight load on workspace
+        // teardown so the detached parse task can't fire its
+        // MainActor.run completion handler after the controller
+        // (and the views that observe it) are gone.
+        // `Task.cancel()` is nonisolated and thread-safe to call
+        // from a non-isolated deinit; the parse closure checks
+        // `Task.isCancelled` between files and exits promptly.
+        loadTask?.cancel()
     }
 
     func load() {

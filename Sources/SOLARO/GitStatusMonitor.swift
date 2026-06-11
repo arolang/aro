@@ -47,10 +47,32 @@ final class GitStatusMonitor {
     /// flagging which one HEAD points at.
     private(set) var branches: [GitBranch] = []
 
+    /// Issue #311 — handle of the most recent in-flight refresh.
+    /// `refresh(for:)` cancels the previous one before starting a
+    /// new one so a rapid save burst doesn't fan out into dozens
+    /// of overlapping `git status` invocations. The deinit cancels
+    /// it on workspace teardown so a completed task can't fire
+    /// its `MainActor.run` continuation against a deallocated
+    /// observer.
+    /// `@ObservationIgnored` + `nonisolated` so the non-isolated
+    /// deinit can call `cancel()` directly. `Task` is already
+    /// `Sendable`; the only other writer is the MainActor-isolated
+    /// `refresh(for:)`. @Observable's macro otherwise rejects
+    /// `nonisolated` on tracked stored properties.
+    @ObservationIgnored
+    private nonisolated(unsafe) var refreshTask: Task<Void, Never>?
+
+    deinit {
+        refreshTask?.cancel()
+    }
+
     func refresh(for project: Project) {
-        Task.detached(priority: .utility) {
+        refreshTask?.cancel()
+        refreshTask = Task.detached(priority: .utility) {
             let result = await Self.run(project: project)
+            if Task.isCancelled { return }
             let branches = await Self.runBranches(project: project)
+            if Task.isCancelled { return }
             await MainActor.run {
                 self.isAvailable = result.available
                 self.status = result.status

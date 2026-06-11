@@ -92,13 +92,33 @@ final class ActionsRegistry {
     private(set) var lastError: String?
     private(set) var isLoading: Bool = false
 
+    /// Issue #311 — handle of the most recent in-flight `aro
+    /// actions` invocation. `reload(for:)` cancels the previous
+    /// before spawning a new one so a rapid project-switch storm
+    /// doesn't leave the latest result fighting earlier ones for
+    /// the registry. The deinit cancels on workspace teardown so a
+    /// late completion can't fire its MainActor.run against a
+    /// deallocated observer.
+    /// `@ObservationIgnored` + `nonisolated` so the non-isolated
+    /// deinit can read/write it without an actor hop and so the
+    /// @Observable macro doesn't try to generate tracking code on
+    /// the Task handle.
+    @ObservationIgnored
+    private nonisolated(unsafe) var reloadTask: Task<Void, Never>?
+
+    deinit {
+        reloadTask?.cancel()
+    }
+
     /// Run `aro actions` against the project, parse the result.
     /// Idempotent — call from openFile() etc.
     func reload(for project: Project) {
+        reloadTask?.cancel()
         isLoading = true
         lastError = nil
-        Task.detached(priority: .userInitiated) {
+        reloadTask = Task.detached(priority: .userInitiated) {
             let (list, error) = await Self.runAroActions(project: project)
+            if Task.isCancelled { return }
             await MainActor.run {
                 if let error {
                     self.lastError = error
