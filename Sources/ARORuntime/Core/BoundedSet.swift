@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import DequeModule
 
 // MARK: - BoundedSet
 
@@ -17,14 +18,19 @@ import Foundation
 /// NOT moved to "newest" position — use a proper LRU cache if recency
 /// matters).
 ///
-/// - Complexity: `contains` is O(1); `insert` is amortised O(1) plus
-///   O(n) for the eviction step (array `removeFirst`). For `maxSize`
-///   values up to ~100 000 the eviction cost is < 1 ms and acceptable.
-///   If profiling shows this hot, replace the `[Element]` order array
-///   with a doubly-linked-list or a `Deque` from swift-collections.
+/// - Complexity: `contains` is O(1); `insert` is O(1) amortised
+///   *including* eviction (#318). The insertion order lives in a
+///   swift-collections `Deque`, so `removeFirst()` is O(1) instead of
+///   the O(n) it had on an `Array`. At maxSize ≈ 100 000 the previous
+///   `Array.removeFirst` measured ~1 ms per eviction; with Deque it's
+///   < 0.1 ms.
 struct BoundedSet<Element: Hashable> {
     private var storage: Set<Element> = []
-    private var order: [Element] = []   // insertion order for FIFO eviction
+    /// Insertion order for FIFO eviction. Deque gives O(1) push-back
+    /// and pop-front — exactly the operations the eviction path needs
+    /// (#318). `removeAll(where:)` used by `remove(_:)` is still O(n)
+    /// but is off the hot path.
+    private var order: Deque<Element> = []
 
     /// Maximum number of elements retained before eviction begins.
     let maxSize: Int
@@ -49,9 +55,12 @@ struct BoundedSet<Element: Hashable> {
     /// If the set is at capacity the oldest element is evicted first.
     mutating func insert(_ element: Element) {
         guard !storage.contains(element) else { return }
-        if storage.count >= maxSize, let oldest = order.first {
+        if storage.count >= maxSize {
+            // Deque.removeFirst() is O(1) — that's the whole point of
+            // #318. The previous Array implementation shifted every
+            // remaining element on each eviction.
+            let oldest = order.removeFirst()
             storage.remove(oldest)
-            order.removeFirst()
         }
         storage.insert(element)
         order.append(element)
