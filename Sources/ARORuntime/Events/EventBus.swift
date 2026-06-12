@@ -5,8 +5,11 @@
 
 import Foundation
 
-/// Default timeout in seconds for waiting on event handlers to complete
-public let AROEventHandlerDefaultTimeout: TimeInterval = 10.0
+/// Default timeout in seconds for waiting on event handlers to
+/// complete. Kept here as a top-level alias for backwards source
+/// compatibility; the canonical value lives in
+/// `RuntimeDefaults.eventHandlerTimeout` (#328).
+public let AROEventHandlerDefaultTimeout: TimeInterval = RuntimeDefaults.eventHandlerTimeout
 
 /// Synchronously-mutable counter for fire-and-forget publishes that have
 /// been initiated but whose `publishInternal` Task has not yet incremented

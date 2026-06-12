@@ -40,7 +40,7 @@ public actor ExecutionEngine {
 
     /// Visited-URL store for CrawlPage deduplication (issue #154).
     /// Uses a bounded FIFO-evicting set so long-running crawlers cannot exhaust memory.
-    private let visitedUrls = VisitedURLStore(maxSize: 100_000)
+    private let visitedUrls = VisitedURLStore(maxSize: RuntimeDefaults.visitedURLStoreMaxSize)
 
     /// Track if the application entered wait state (Keepalive action)
     private var _enteredWaitState: Bool = false
