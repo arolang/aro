@@ -77,11 +77,13 @@ public final class EventLoopGroupManager: @unchecked Sendable {
 
     /// Shutdown all tracked event loop groups
     public func shutdownAll() {
-        lock.lock()
-        let groupsToShutdown = Array(groups.values)
-        groups.removeAll()
-        hasShutdown = true
-        lock.unlock()
+        let groupsToShutdown: [MultiThreadedEventLoopGroup] = {
+            lock.lock(); defer { lock.unlock() }
+            let snapshot = Array(groups.values)
+            groups.removeAll()
+            hasShutdown = true
+            return snapshot
+        }()
 
         // Shutdown all groups
         for group in groupsToShutdown {
