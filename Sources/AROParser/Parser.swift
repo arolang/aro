@@ -2,6 +2,31 @@
 // Parser.swift
 // ARO Parser - Recursive Descent Parser
 // ============================================================
+//
+// Error-handling contract (#340):
+//
+// - The parser **throws** on the first unrecoverable syntax
+//   error inside a feature set / import declaration, then
+//   `synchronize()` skips to the next plausible recovery point
+//   so the rest of the file can still produce diagnostics in
+//   one pass.
+// - Every error — thrown or recovered — is **appended to the
+//   shared `DiagnosticCollector`** the caller passed in.
+//   Callers inspect `diagnostics.errors` to decide whether to
+//   proceed (downstream passes are run only on the
+//   successfully-parsed prefix of the program).
+// - `SemanticAnalyzer.analyze` is `nonthrowing` — it always
+//   returns an `AnalyzedProgram` so the IDE / LSP path can show
+//   partial information. Failures are recorded in the same
+//   collector.
+// - `DataFlowAnalyzer` follows the same nonthrowing contract:
+//   missing dependencies become diagnostics, not exceptions.
+//
+// Net contract for the AROParser module:
+//   - `try parser.parse()` produces a best-effort AST and an
+//     error-collecting diagnostics bag.
+//   - Subsequent analyzers never throw; they refine the
+//     diagnostics in the same bag.
 
 import Foundation
 
