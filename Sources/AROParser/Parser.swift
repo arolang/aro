@@ -350,8 +350,61 @@ public final class Parser {
     }
 
     // MARK: - parseAROStatement Submethods
+    //
+    // Shared cursor contract (#341)
+    // -----------------------------
+    // Every helper below consumes a contiguous slice of the
+    // token stream starting at `current`. On success, `current`
+    // advances past the last token the helper consumed. On
+    // failure (throws), `current` is left at the token the
+    // helper expected to consume but didn't recognise — so the
+    // caller can choose to recover (via `synchronize()`) or
+    // re-raise.
+    //
+    // Pre/post-condition summary (each helper repeats its
+    // contract in its own doc comment):
+    //
+    //   parseActionVerb()        — pre: cursor on an action-shaped token
+    //                              (capitalised identifier, or one of the
+    //                              `when`/`then`/`assert`/`exists` keywords).
+    //                              Walks any `Namespace.Verb` chain too.
+    //                              post: cursor on the next token.
+    //
+    //   parseAROResult(action:)  — pre: cursor on either a sink expression
+    //                              (when `action` is a sink verb), or
+    //                              `[article] <result>`.
+    //                              post: cursor on the preposition that
+    //                              follows.
+    //
+    //   parsePreposition()       — pre: cursor on a preposition token.
+    //                              post: cursor on the next token.
+    //
+    //   parseAROObject(prep:)    — pre: cursor on an object position —
+    //                              `[article] <object>` or, for `to/from/
+    //                              with/for`, optionally an expression
+    //                              that isn't an object pattern.
+    //                              post: cursor on the next token (which
+    //                              is usually `.` or a clause keyword).
+    //
+    //   parseArticleIfPresent()  — pre: cursor anywhere; helper is a no-op
+    //                              if the current token is not `.article`.
+    //                              post: cursor after the article when one
+    //                              was present.
+    //
+    //   parseQueryModifiers()    — pre: cursor on `where`/`order`/`limit`
+    //                              or any other valid post-object clause.
+    //                              post: cursor immediately after the last
+    //                              consumed clause; no-op if none start.
 
     /// Parses the action verb (capitalized identifier, keyword, or Namespace.Verb syntax)
+    ///
+    /// Pre: cursor on a capitalised identifier or a `when`/`then`/
+    /// `assert`/`exists` keyword.
+    /// Post: cursor advanced past the verb and any `Namespace.Verb`
+    /// suffix.
+    /// Throws: `unexpectedToken` when the cursor isn't on a
+    /// verb-shaped token — `current` is left pointing at it so
+    /// the caller can recover.
     private func parseActionVerb() throws -> Action {
         switch peek().kind {
         case .when, .then, .assert, .exists:
