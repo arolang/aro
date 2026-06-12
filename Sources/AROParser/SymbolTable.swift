@@ -241,24 +241,33 @@ public final class SymbolTable: Sendable, CustomStringConvertible {
     public let scopeName: String
     private let parent: SymbolTable?
     private let _symbols: [String: Symbol]
-    
+    /// Pre-flattened lookup map: local symbols overlaid on the
+    /// parent's flat view. Avoids walking the scope chain on
+    /// every \`lookup\` / \`allSymbols\` call during data-flow
+    /// analysis (#344). The table is immutable — \`define\`
+    /// returns a new instance — so the cache is always
+    /// consistent with its scope.
+    private let _flat: [String: Symbol]
+
     // MARK: - Initialization
-    
+
     public init(scopeId: String, scopeName: String, parent: SymbolTable? = nil, symbols: [String: Symbol] = [:]) {
         self.scopeId = scopeId
         self.scopeName = scopeName
         self.parent = parent
         self._symbols = symbols
+        var flat = parent?._flat ?? [:]
+        for (name, symbol) in symbols {
+            flat[name] = symbol
+        }
+        self._flat = flat
     }
-    
+
     // MARK: - Lookup
-    
+
     /// Looks up a symbol by name in this scope and parent scopes
     public func lookup(_ name: String) -> Symbol? {
-        if let symbol = _symbols[name] {
-            return symbol
-        }
-        return parent?.lookup(name)
+        _flat[name]
     }
     
     /// Looks up a symbol by name, throwing with scope context on failure.
@@ -299,11 +308,7 @@ public final class SymbolTable: Sendable, CustomStringConvertible {
     
     /// Returns all symbols including parent scopes
     public var allSymbols: [String: Symbol] {
-        var result = parent?.allSymbols ?? [:]
-        for (name, symbol) in _symbols {
-            result[name] = symbol
-        }
-        return result
+        _flat
     }
     
     /// Returns all published symbols
