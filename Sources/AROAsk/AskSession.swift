@@ -71,17 +71,19 @@ public actor AskSession {
         await registry.register(ProjectTools.all(guard: pathGuard))
         await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
 
-        // 2. Vector store
-        try await vectorStore.load()
+        // 2. Vector store, MCP bridges, and model resolution run
+        // in parallel — they're independent and each is multi-
+        // second cold-start work (#368). The user previously
+        // waited for all three sequentially.
+        async let vectorReady: Void = vectorStore.load()
+        async let mcpReady: Void = (config.skipMCP ? () : startMCPBridges())
+        async let resolvedEntry = modelManager.entry(for: config.model)
+        async let resolvedDir = modelManager.modelDirectory(for: config.model)
 
-        // 3. MCP bridges
-        if !config.skipMCP {
-            await startMCPBridges()
-        }
-
-        // 4. Backend
-        let entry = try await modelManager.entry(for: config.model)
-        let dir = await modelManager.modelDirectory(for: config.model)
+        try await vectorReady
+        await mcpReady
+        let entry = try await resolvedEntry
+        let dir = await resolvedDir
         let modelFile = dir.appendingPathComponent(entry.primaryFile)
         let selected = try await BackendFactory.detect(
             modelIdentifier: config.model,
