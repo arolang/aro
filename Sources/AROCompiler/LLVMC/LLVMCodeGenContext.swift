@@ -4,6 +4,7 @@
 // ============================================================
 
 #if !os(Windows)
+import Foundation
 import SwiftyLLVM
 import AROParser
 
@@ -128,8 +129,16 @@ public final class LLVMCodeGenContext {
     /// Gets or creates a global string constant
     /// - Parameter value: The string value
     /// - Returns: A global variable containing the null-terminated string
+    ///
+    /// Dedup keys on a normalised form so two semantically
+    /// equivalent JSON literals share one IR global (#345). The
+    /// emitted bytes match the first variant seen; subsequent
+    /// callers receive a pointer to that global. The runtime
+    /// parses these strings as JSON, so equivalent-but-differently-
+    /// formatted variants are interchangeable at the byte level.
     public func stringConstant(_ value: String) -> GlobalVariable {
-        if let existing = stringConstants[value] {
+        let key = Self.normaliseStringKey(value)
+        if let existing = stringConstants[key] {
             return existing
         }
 
@@ -143,8 +152,28 @@ public final class LLVMCodeGenContext {
         module.setLinkage(.private, for: global)
         module.setGlobalConstant(true, for: global)
 
-        stringConstants[value] = global
+        stringConstants[key] = global
         return global
+    }
+
+    /// Canonicalise JSON-shaped values so semantically identical
+    /// literals collapse to one IR global. Non-JSON strings key on
+    /// their raw form — same dedupe behaviour as before this
+    /// change, only JSON shapes pick up the extra coverage (#345).
+    private static func normaliseStringKey(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first, first == "{" || first == "[",
+              let data = trimmed.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let canonical = try? JSONSerialization.data(
+                  withJSONObject: obj,
+                  options: [.sortedKeys, .withoutEscapingSlashes]
+              ),
+              let s = String(data: canonical, encoding: .utf8)
+        else {
+            return value
+        }
+        return s
     }
 
     // MARK: - Unique Names
