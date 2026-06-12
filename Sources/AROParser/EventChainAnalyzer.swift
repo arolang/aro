@@ -55,19 +55,27 @@ public final class EventChainAnalyzer: Sendable {
 
     // MARK: - Public Interface
 
-    /// Detects circular event chains in the given feature sets
-    /// - Parameter featureSets: The analyzed feature sets to check
-    /// - Returns: Array of detected cycles (empty if none found)
-    public func detectCycles(in featureSets: [AnalyzedFeatureSet]) -> [EventCycle] {
-        // Step 1: Extract handler information
+    /// Resolved event-flow graph plus the side-maps cycle
+    /// detection (and other analyses) need.
+    public struct EventGraph: Sendable {
+        public let graph: [String: Set<String>]
+        public let handlerLocations: [String: SourceLocation]
+        public let eventToHandler: [String: String]
+    }
+
+    /// Build the event-flow graph from a set of analyzed feature
+    /// sets. Exposed publicly so callers running multiple analyses
+    /// over the same input (cycle detection, fan-in inspection, …)
+    /// can pay the graph-construction cost once and reuse the
+    /// result (#346).
+    public func buildEventGraph(
+        in featureSets: [AnalyzedFeatureSet]
+    ) -> EventGraph {
         let handlers = extractHandlers(from: featureSets)
 
-        // Step 2: Build event flow graph
-        // Graph: eventType -> [eventTypes it can trigger]
-        // An edge from A to B means: some handler for A emits B
         var graph: [String: Set<String>] = [:]
         var handlerLocations: [String: SourceLocation] = [:]
-        var eventToHandler: [String: String] = [:]  // eventType -> handlerName
+        var eventToHandler: [String: String] = [:]
 
         for handler in handlers {
             let handled = handler.handledEventType
@@ -79,8 +87,28 @@ public final class EventChainAnalyzer: Sendable {
             }
         }
 
-        // Step 3: Detect cycles using DFS
-        return detectCyclesInGraph(graph, handlerLocations: handlerLocations, eventToHandler: eventToHandler)
+        return EventGraph(
+            graph: graph,
+            handlerLocations: handlerLocations,
+            eventToHandler: eventToHandler
+        )
+    }
+
+    /// Detects circular event chains in the given feature sets.
+    /// Convenience wrapper that builds the graph then runs DFS.
+    public func detectCycles(in featureSets: [AnalyzedFeatureSet]) -> [EventCycle] {
+        detectCycles(in: buildEventGraph(in: featureSets))
+    }
+
+    /// Detects circular event chains using a previously-built
+    /// graph. Use when running multiple analyses over the same
+    /// feature-set input.
+    public func detectCycles(in graph: EventGraph) -> [EventCycle] {
+        detectCyclesInGraph(
+            graph.graph,
+            handlerLocations: graph.handlerLocations,
+            eventToHandler: graph.eventToHandler
+        )
     }
 
     // MARK: - Handler Extraction
