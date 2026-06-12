@@ -31,9 +31,15 @@ public final class REPLShell: @unchecked Sendable {
     /// Whether we're running in interactive mode (TTY)
     private let isInteractive: Bool
 
-    public init() {
-        self.session = REPLSession()
-        self.commandRegistry = MetaCommandRegistry.shared
+    /// Construct a REPLShell. Defaults to the process-wide
+    /// singletons; tests can inject isolated stores so they
+    /// don't pollute each other (#363).
+    public init(
+        session: REPLSession? = nil,
+        commandRegistry: MetaCommandRegistry = .shared
+    ) {
+        self.session = session ?? REPLSession()
+        self.commandRegistry = commandRegistry
 
         // Check if we're in an interactive terminal
         self.isInteractive = isatty(STDIN_FILENO) != 0
