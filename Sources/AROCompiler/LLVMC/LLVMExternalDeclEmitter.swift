@@ -518,40 +518,10 @@ public final class LLVMExternalDeclEmitter {
 
     // MARK: - Action Functions
 
-    /// All action function names
-    private static let actionNames: [String] = [
-        // Request actions
-        "extract", "fetch", "retrieve", "parse", "parsehtml", "read", "request", "receive",
-        // Own actions
-        "compute", "validate", "compare", "transform", "create", "update", "accept",
-        // Response actions
-        "return", "throw", "emit", "send", "log", "store", "write", "publish",
-        // Server actions
-        "start", "listen", "route", "watch", "stop", "keepalive", "broadcast", "connect",
-        // External call
-        "call",
-        // Data pipeline (ARO-0018)
-        "filter", "reduce", "map", "group",
-        // Sort
-        "sort", "order", "arrange",
-        // System exec (ARO-0033)
-        "exec", "shell",
-        // Repository
-        "delete", "merge", "combine", "join", "concat", "close",
-        // String (ARO-0037)
-        "split",
-        // File operations (ARO-0036)
-        "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
-        "copy", "move", "rename", "append",
-        // Configuration
-        "configure",
-        // Notifications
-        "notify", "alert", "signal",
-        // SSE / WebSocket streaming
-        "stream", "subscribe",
-        // Terminal UI
-        "render", "clear", "show"
-    ]
+    /// All action function names. Source of truth is
+    /// `AROParser.ActionCatalog.allActionVerbs` so the codegen list
+    /// and the runtime dispatch table can't silently diverge (#336).
+    private static let actionNames: [String] = ActionCatalog.allActionVerbs
 
     private func declareAllActionFunctions() {
         let actionType = types.actionFunctionType
