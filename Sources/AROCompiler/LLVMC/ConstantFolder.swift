@@ -39,6 +39,27 @@ public struct ConstantFolder {
         }
     }
 
+    /// Fold a constant subexpression into a LiteralExpression
+    /// when possible. Non-constant expressions are returned
+    /// unchanged so downstream passes can use this as a drop-in
+    /// rewrite step without checking `isConstant` first.
+    ///
+    /// The codegen path still calls `evaluate` directly; passes
+    /// that walk the AST (linter, dataflow re-checks) can call
+    /// `fold` per expression to avoid re-walking foldable
+    /// subtrees. Full post-semantic AST rewrite is tracked
+    /// separately — the AST node structs are immutable so an
+    /// in-place rewrite needs a visitor that returns new
+    /// statements (#349 follow-up).
+    public static func fold(
+        _ expr: any AROParser.Expression
+    ) -> any AROParser.Expression {
+        guard isConstant(expr), let value = evaluate(expr) else {
+            return expr
+        }
+        return AROParser.LiteralExpression(value: value, span: expr.span)
+    }
+
     /// Evaluate a constant expression at compile time
     /// Returns nil if the expression is not constant or cannot be evaluated
     public static func evaluate(_ expr: any AROParser.Expression) -> AROParser.LiteralValue? {
