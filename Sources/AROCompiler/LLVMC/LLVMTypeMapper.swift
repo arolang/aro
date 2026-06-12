@@ -19,6 +19,16 @@ public final class LLVMTypeMapper {
     /// AROObjectDescriptor: { ptr base, i32 preposition, ptr specs_array, i32 spec_count }
     private var _objectDescriptorType: StructType?
 
+    /// Cached FunctionTypes for the four well-known signatures
+    /// and a generic signature dict for `functionType(parameters:returning:)`.
+    /// Repeated declarations with the same signature reuse the
+    /// stored instance instead of re-asking SwiftyLLVM (#347).
+    private var _actionFunctionType: FunctionType?
+    private var _featureSetFunctionType: FunctionType?
+    private var _mainFunctionType: FunctionType?
+    private var _loopBodyFunctionType: FunctionType?
+    private var _genericFunctionTypeCache: [String: FunctionType] = [:]
+
     // MARK: - Initialization
 
     public init(context: LLVMCodeGenContext) {
@@ -59,32 +69,63 @@ public final class LLVMTypeMapper {
 
     /// Function type for action functions: (ptr ctx, ptr result_desc, ptr object_desc) -> ptr
     public var actionFunctionType: FunctionType {
-        FunctionType(from: [ctx.ptrType, ctx.ptrType, ctx.ptrType], to: ctx.ptrType, in: &ctx.module)
+        if let cached = _actionFunctionType { return cached }
+        let type = FunctionType(from: [ctx.ptrType, ctx.ptrType, ctx.ptrType], to: ctx.ptrType, in: &ctx.module)
+        _actionFunctionType = type
+        return type
     }
 
     /// Function type for feature set functions: (ptr ctx) -> ptr
     public var featureSetFunctionType: FunctionType {
-        FunctionType(from: [ctx.ptrType], to: ctx.ptrType, in: &ctx.module)
+        if let cached = _featureSetFunctionType { return cached }
+        let type = FunctionType(from: [ctx.ptrType], to: ctx.ptrType, in: &ctx.module)
+        _featureSetFunctionType = type
+        return type
     }
 
     /// Function type for main: (i32 argc, ptr argv) -> i32
     public var mainFunctionType: FunctionType {
-        FunctionType(from: [ctx.i32Type, ctx.ptrType], to: ctx.i32Type, in: &ctx.module)
+        if let cached = _mainFunctionType { return cached }
+        let type = FunctionType(from: [ctx.i32Type, ctx.ptrType], to: ctx.i32Type, in: &ctx.module)
+        _mainFunctionType = type
+        return type
     }
 
     /// Function type for loop body: (ptr ctx, ptr item, i64 index) -> ptr
     public var loopBodyFunctionType: FunctionType {
-        FunctionType(from: [ctx.ptrType, ctx.ptrType, ctx.i64Type], to: ctx.ptrType, in: &ctx.module)
+        if let cached = _loopBodyFunctionType { return cached }
+        let type = FunctionType(from: [ctx.ptrType, ctx.ptrType, ctx.i64Type], to: ctx.ptrType, in: &ctx.module)
+        _loopBodyFunctionType = type
+        return type
     }
 
     /// Function type for void returning functions: (...) -> void
     public func voidFunctionType(parameters: [IRType]) -> FunctionType {
-        FunctionType(from: parameters, to: nil, in: &ctx.module)
+        let key = Self.signatureKey(parameters: parameters, returningName: "void")
+        if let cached = _genericFunctionTypeCache[key] { return cached }
+        let type = FunctionType(from: parameters, to: nil, in: &ctx.module)
+        _genericFunctionTypeCache[key] = type
+        return type
     }
 
     /// Function type with given return type
     public func functionType(parameters: [IRType], returning: IRType) -> FunctionType {
-        FunctionType(from: parameters, to: returning, in: &ctx.module)
+        let key = Self.signatureKey(parameters: parameters, returningName: "\(returning)")
+        if let cached = _genericFunctionTypeCache[key] { return cached }
+        let type = FunctionType(from: parameters, to: returning, in: &ctx.module)
+        _genericFunctionTypeCache[key] = type
+        return type
+    }
+
+    private static func signatureKey(parameters: [IRType], returningName: String) -> String {
+        var s = returningName
+        s.append("(")
+        for (i, p) in parameters.enumerated() {
+            if i > 0 { s.append(",") }
+            s.append("\(p)")
+        }
+        s.append(")")
+        return s
     }
 
     // MARK: - Type Validation
