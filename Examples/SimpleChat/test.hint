@@ -1,10 +1,5 @@
 # Test hints for SimpleChat
-# TODO: re-enable compiled mode once the integration-test port-allocation
-# race is fixed. Under `-j 4` on Linux CI the compiled binary regularly
-# gets a port that Net::EmptyPort handed to another concurrent worker,
-# so HTTP::Tiny ends up talking to the wrong process and surfaces 599.
-# Repros only under parallel CI — both modes pass locally and on macOS CI.
-mode: interpreter
+mode: both
 # HTTP endpoint test order may vary
 occurrence-check: true
 # Socket servers hang on Windows CI

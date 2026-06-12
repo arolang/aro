@@ -39,9 +39,19 @@ sub run_pool {
     my $completed = 0;
     my $index = $progress_offset;
 
+    # Worker-slot tracking so each forked child knows its own
+    # 0..jobs-1 lane. HTTP.pm uses ARO_TEST_WORKER_ID to allocate
+    # ports out of a worker-local non-overlapping range, which
+    # closes the empty_port() probe race that hit SimpleChat
+    # under -j > 1 (#297).
+    my @free_slots = (0 .. ($jobs - 1));
+    my %pid_to_slot;
+
     my $launch = sub {
         return unless @queue;
+        return unless @free_slots;
         my $name = shift @queue;
+        my $slot = shift @free_slots;
         my $file = File::Spec->catfile($tmpdir, "$name.result");
         my $pid = fork();
         die "fork failed: $!" unless defined $pid;
@@ -49,6 +59,7 @@ sub run_pool {
             # Child: reset signal handlers so we don't echo the parent's
             # cleanup banner if killed.
             $SIG{INT} = $SIG{TERM} = 'DEFAULT';
+            $ENV{ARO_TEST_WORKER_ID} = $slot;
             my $result = eval { $run_test->($name) } || {
                 name                 => $name,
                 type                 => 'UNKNOWN',
@@ -68,6 +79,7 @@ sub run_pool {
         }
         $pid_to_name{$pid} = $name;
         $pid_to_file{$pid} = $file;
+        $pid_to_slot{$pid} = $slot;
     };
 
     # Prime the pool — never launch more workers than examples.
@@ -78,6 +90,10 @@ sub run_pool {
         last if $pid <= 0;
         my $name = delete $pid_to_name{$pid};
         my $file = delete $pid_to_file{$pid};
+        my $slot = delete $pid_to_slot{$pid};
+        # Return the freed slot to the pool so the next launch
+        # picks it up; the port range it owns is now safe to reuse.
+        push @free_slots, $slot if defined $slot;
 
         my $result;
         if ($file && -e $file) {
