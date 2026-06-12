@@ -95,7 +95,22 @@ public enum LlamaServerProvisioner {
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let archivePath = tempDir.appendingPathComponent(asset.name)
-        FileManager.default.createFile(atPath: archivePath.path, contents: nil)
+
+        // Linux's swift-corelibs Foundation does not expose
+        // `URLSession.bytes(from:)`; fall back to the whole-data
+        // download there. On Darwin we stream so memory peaks
+        // around 64KB instead of 100MB, with carriage-returned
+        // percentage progress on stderr.
+        #if canImport(FoundationNetworking)
+        FileHandle.standardError.write(Data("  (streaming progress unavailable on this platform; downloading…)\n".utf8))
+        let (data, response) = try await URLSession.shared.data(from: asset.url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw LMBackendError.invalidResponse("Failed to download llama-server")
+        }
+        try data.write(to: archivePath)
+        FileHandle.standardError.write(Data("  Downloaded \(formatSize(Int64(data.count)))\n".utf8))
+        #else
+        _ = FileManager.default.createFile(atPath: archivePath.path, contents: nil)
         let outHandle = try FileHandle(forWritingTo: archivePath)
         defer { try? outHandle.close() }
 
@@ -130,6 +145,7 @@ public enum LlamaServerProvisioner {
             try outHandle.write(contentsOf: buffer)
         }
         FileHandle.standardError.write(Data("\r  100% (\(formatSize(downloaded)))\n".utf8))
+        #endif
 
         // Extract
         let binary: URL
