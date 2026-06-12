@@ -149,6 +149,18 @@ public actor AskSession {
 
         let tools = await registry.definitions()
 
+        // Per-tool failure tracking + session-wide failure ceiling.
+        // A flaky or broken tool would otherwise drive the model into
+        // a tight retry storm — same call, same error, every round
+        // — burning context and API quota. We stop dispatching a
+        // single tool once it has failed `perToolFailureLimit` times
+        // in a row, and surface a "tool persistently failing" message
+        // to the model so it can pick a different approach (#369).
+        var toolConsecutiveFailures: [String: Int] = [:]
+        var totalToolFailures = 0
+        let perToolFailureLimit = 3
+        let sessionFailureLimit = 20
+
         for round in 0..<config.maxToolCallRounds {
             let request = LMChatRequest(
                 model: config.model,
@@ -313,12 +325,39 @@ public actor AskSession {
 
             // Execute each tool call
             for call in toolCalls {
-                TerminalUI.printToolCall(name: call.function.name, args: call.function.arguments)
+                let name = call.function.name
+                TerminalUI.printToolCall(name: name, args: call.function.arguments)
+
+                // Short-circuit if this specific tool keeps failing
+                // — feed the model a clear "stop trying me" message
+                // instead of dispatching again. The model usually
+                // pivots to an alternative approach (#369).
+                if let consec = toolConsecutiveFailures[name],
+                   consec >= perToolFailureLimit {
+                    let msg = "Tool '\(name)' is persistently failing (skipped after \(consec) consecutive failures). Try a different approach."
+                    TerminalUI.printToolResult(name: name, output: msg)
+                    context.messages.append(AskMessage(
+                        role: "tool",
+                        content: msg,
+                        toolCallId: call.id
+                    ))
+                    try contextStore.save(context)
+                    continue
+                }
 
                 let output: String
+                var failed = false
                 do {
+                    // Exponential backoff before retrying a tool that
+                    // has already failed this session. 0 → 200ms →
+                    // 400ms → 800ms keeps the loop responsive on
+                    // first failure but bounds the retry storm.
+                    if let consec = toolConsecutiveFailures[name], consec > 0 {
+                        let delayMs = min(2000, 200 * (1 << min(consec - 1, 4)))
+                        try? await Task.sleep(for: .milliseconds(delayMs))
+                    }
                     output = try await registry.dispatch(
-                        name: call.function.name,
+                        name: name,
                         argumentsJSON: call.function.arguments,
                         approver: approver
                     )
@@ -326,9 +365,17 @@ public actor AskSession {
                     output = "Tool call denied by user."
                 } catch {
                     output = "error: \(error)"
+                    failed = true
                 }
 
-                TerminalUI.printToolResult(name: call.function.name, output: output)
+                if failed {
+                    toolConsecutiveFailures[name, default: 0] += 1
+                    totalToolFailures += 1
+                } else {
+                    toolConsecutiveFailures[name] = 0
+                }
+
+                TerminalUI.printToolResult(name: name, output: output)
 
                 context.messages.append(AskMessage(
                     role: "tool",
@@ -336,6 +383,12 @@ public actor AskSession {
                     toolCallId: call.id
                 ))
                 try contextStore.save(context)
+
+                if totalToolFailures >= sessionFailureLimit {
+                    let msg = "Aborting session: \(sessionFailureLimit) tool failures across this conversation. Re-issue your request after fixing the failing tools."
+                    TerminalUI.printStatus(msg)
+                    return msg
+                }
             }
 
             if round == config.maxToolCallRounds - 1 {
