@@ -1552,6 +1552,38 @@ public actor GlobalSymbolStorage {
                entry.businessActivity != forBusinessActivity
     }
 
+    /// One-pass dependency resolution: walks the dependency list,
+    /// applying access-control checks and value lookups in a
+    /// single actor turn. Eliminates the per-dependency triple of
+    /// actor hops (\`isAccessDenied\`, \`businessActivity\`,
+    /// \`resolveAny\`) that \`FeatureSetExecutor\` was making before
+    /// (#332).
+    public func resolveDependencies<S: Collection>(
+        _ names: S,
+        forBusinessActivity activity: String
+    ) -> [DependencyResolution] where S.Element == String {
+        var out: [DependencyResolution] = []
+        out.reserveCapacity(names.count)
+        for name in names {
+            guard let entry = symbols[name] else {
+                out.append(.notFound(name: name))
+                continue
+            }
+            let crossActivity = !entry.businessActivity.isEmpty
+                && !activity.isEmpty
+                && entry.businessActivity != activity
+            if crossActivity {
+                out.append(.denied(
+                    name: name,
+                    sourceActivity: entry.businessActivity
+                ))
+            } else {
+                out.append(.resolved(name: name, value: entry.value))
+            }
+        }
+        return out
+    }
+
     /// Get all published symbols (for eager binding in feature sets)
     public func allSymbols() -> [String: PublishedSymbol] {
         return symbols
@@ -1559,6 +1591,20 @@ public actor GlobalSymbolStorage {
 
     /// Total number of currently stored symbols. Useful for memory monitoring.
     public var count: Int { symbols.count }
+}
+
+/// Outcome of a single dependency lookup via
+/// \`GlobalSymbolStorage.resolveDependencies\`.
+public enum DependencyResolution: Sendable {
+    case resolved(name: String, value: any Sendable)
+    case denied(name: String, sourceActivity: String)
+    case notFound(name: String)
+
+    public var name: String {
+        switch self {
+        case .resolved(let n, _), .denied(let n, _), .notFound(let n): return n
+        }
+    }
 }
 
 // MARK: - Service Registry
