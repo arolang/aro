@@ -97,20 +97,27 @@ public final class FeatureSetExecutor: Sendable {
             executionId: context.executionId
         ))
 
-        // Bind external dependencies from global symbols (with business activity validation)
-        for dependency in analyzedFeatureSet.dependencies {
-            // Check if access would be denied due to business activity mismatch
-            if await globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
-                let sourceActivity = await globalSymbols.businessActivity(for: dependency) ?? "unknown"
+        // Bind external dependencies from global symbols in a
+        // single actor hop instead of three per dependency
+        // (`isAccessDenied`, `businessActivity`, `resolveAny`).
+        // For a feature set with N published-symbol dependencies
+        // this saves 2N actor turns of overhead (#332).
+        let resolutions = await globalSymbols.resolveDependencies(
+            analyzedFeatureSet.dependencies,
+            forBusinessActivity: context.businessActivity
+        )
+        for resolution in resolutions {
+            switch resolution {
+            case .resolved(let name, let value):
+                context.bind(name, value: value)
+            case .denied(let name, let sourceActivity):
                 throw ActionError.scopeViolation(
-                    variable: dependency,
+                    variable: name,
                     sourceActivity: sourceActivity,
                     accessedFrom: context.businessActivity
                 )
-            }
-
-            if let value = await globalSymbols.resolveAny(dependency, forBusinessActivity: context.businessActivity) {
-                context.bind(dependency, value: value)
+            case .notFound:
+                continue
             }
         }
 
