@@ -85,20 +85,51 @@ public enum LlamaServerProvisioner {
             "  Downloading \(asset.name) (\(formatSize(asset.size)))...\n".utf8
         ))
 
-        // Download the archive
-        let (data, response) = try await URLSession.shared.data(from: asset.url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw LMBackendError.invalidResponse("Failed to download llama-server")
-        }
-
-        // The asset is a .zip or .tar.gz containing the binary
+        // Stream the download to disk with a progress bar
+        // instead of slurping ~100MB into memory before writing
+        // (#367). On failure the partial file is removed so a
+        // retry starts clean rather than reusing corrupt bytes.
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-llama-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let archivePath = tempDir.appendingPathComponent(asset.name)
-        try data.write(to: archivePath)
+        FileManager.default.createFile(atPath: archivePath.path, contents: nil)
+        let outHandle = try FileHandle(forWritingTo: archivePath)
+        defer { try? outHandle.close() }
+
+        let (bytes, response) = try await URLSession.shared.bytes(from: asset.url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw LMBackendError.invalidResponse("Failed to download llama-server")
+        }
+
+        let total = response.expectedContentLength
+        var downloaded: Int64 = 0
+        var buffer = Data()
+        buffer.reserveCapacity(64 * 1024)
+        var lastReported: Int = -1
+        for try await byte in bytes {
+            buffer.append(byte)
+            if buffer.count >= 64 * 1024 {
+                try outHandle.write(contentsOf: buffer)
+                downloaded += Int64(buffer.count)
+                buffer.removeAll(keepingCapacity: true)
+                if total > 0 {
+                    let pct = Int(Double(downloaded) / Double(total) * 100)
+                    if pct != lastReported && pct % 5 == 0 {
+                        FileHandle.standardError.write(Data(
+                            "\r  \(pct)% (\(formatSize(downloaded)) / \(formatSize(total)))".utf8
+                        ))
+                        lastReported = pct
+                    }
+                }
+            }
+        }
+        if !buffer.isEmpty {
+            try outHandle.write(contentsOf: buffer)
+        }
+        FileHandle.standardError.write(Data("\r  100% (\(formatSize(downloaded)))\n".utf8))
 
         // Extract
         let binary: URL
