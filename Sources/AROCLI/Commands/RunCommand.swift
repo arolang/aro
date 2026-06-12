@@ -169,20 +169,12 @@ struct RunCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application with import resolution
-        let discovery = ApplicationDiscovery()
-        let appConfig: DiscoveredApplication
-
-        do {
-            appConfig = try await discovery.discoverWithImports(at: resolvedPath, entryPoint: entryPoint)
-        } catch {
-            if TTYDetector.stderrIsTTY {
-                print("\u{001B}[31mError:\u{001B}[0m \(error)")
-            } else {
-                print("Error: \(error)")
-            }
-            throw ExitCode.failure
-        }
+        // Discover application with import resolution (#361 — shared helper)
+        let appConfig = try await ApplicationResolver.resolve(
+            at: resolvedPath,
+            entryPoint: entryPoint,
+            colorizeOnTTY: true
+        )
 
         if verbose {
             print("Discovered application:")

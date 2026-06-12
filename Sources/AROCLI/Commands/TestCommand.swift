@@ -44,20 +44,13 @@ struct TestCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application with import resolution
-        let discovery = ApplicationDiscovery()
-        let appConfig: DiscoveredApplication
-
-        do {
-            // Use a dummy entry point since we're running tests, not the app
-            appConfig = try await discovery.discoverWithImports(
-                at: resolvedPath,
-                entryPoint: "Application-Start"
-            )
-        } catch {
-            print("Error discovering application: \(error)")
-            throw ExitCode.failure
-        }
+        // Discover application with import resolution (#361 — shared helper).
+        // Use a dummy entry point since we're running tests, not the app.
+        let appConfig = try await ApplicationResolver.resolve(
+            at: resolvedPath,
+            entryPoint: "Application-Start",
+            errorPrefix: "Error discovering application"
+        )
 
         if verbose {
             print("Discovered application:")

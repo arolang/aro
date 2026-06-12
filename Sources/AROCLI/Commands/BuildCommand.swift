@@ -78,17 +78,17 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application with import resolution
-        let discovery = ApplicationDiscovery()
+        // Discover application with import resolution (#361 — shared helper)
         let appConfig: DiscoveredApplication
-
         do {
-            appConfig = try await discovery.discoverWithImports(at: resolvedPath, includePlugins: true)
+            appConfig = try await ApplicationResolver.resolve(
+                at: resolvedPath,
+                includePlugins: true
+            )
             AROLogger.debug("Discovery completed, found \(appConfig.sourceFiles.count) files", subsystem: "build")
         } catch {
             AROLogger.error("Discovery failed: \(error)", subsystem: "build")
-            print("Error: \(error)")
-            throw ExitCode.failure
+            throw error
         }
 
         if verbose {

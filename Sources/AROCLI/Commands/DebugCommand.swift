@@ -185,15 +185,11 @@ struct DebugCommand: AsyncParsableCommand {
         }
         let resolvedPath = URL(fileURLWithPath: path)
 
-        // Discover application
-        let discovery = ApplicationDiscovery()
-        let appConfig: DiscoveredApplication
-        do {
-            appConfig = try await discovery.discoverWithImports(at: resolvedPath, entryPoint: entryPoint)
-        } catch {
-            print("Error: \(error)")
-            throw ExitCode.failure
-        }
+        // Discover application (#361 — shared helper)
+        let appConfig = try await ApplicationResolver.resolve(
+            at: resolvedPath,
+            entryPoint: entryPoint
+        )
 
         // Compile
         let compiler = Compiler()
