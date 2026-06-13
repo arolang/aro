@@ -67,24 +67,27 @@ public final class Parser {
     private func parseImportDeclaration() throws -> ImportDeclaration {
         let startToken = try expect(.import, message: "'import'")
 
-        // Parse the path - it's a sequence of identifiers, dots, and slashes
-        var path = ""
+        // Parse the path - it's a sequence of identifiers, dots, and slashes.
+        // Accumulate token-shaped fragments and join once at the end so a
+        // long path (e.g. `../../sources/foo/bar`) doesn't re-allocate
+        // the buffer per token (#343).
+        var fragments: [String] = []
 
         // Path starts with ./ or ../ or identifier
         while !isAtEnd && !check(.leftParen) && !check(.import) {
             let token = peek()
             switch token.kind {
             case .dot:
-                path += "."
+                fragments.append(".")
                 advance()
             case .slash:
-                path += "/"
+                fragments.append("/")
                 advance()
             case .identifier(let name):
-                path += name
+                fragments.append(name)
                 advance()
             case .hyphen:
-                path += "-"
+                fragments.append("-")
                 advance()
             default:
                 // End of path
@@ -102,6 +105,8 @@ public final class Parser {
             if case .hyphen = nextToken.kind { continue }
             break
         }
+
+        let path = fragments.joined()
 
         if path.isEmpty {
             throw ParserError.unexpectedToken(expected: "import path", got: peek())
