@@ -42,6 +42,13 @@ public final class DocumentManager: @unchecked Sendable {
 
     // MARK: - Document Operations
 
+    // All public mutation / query methods now go through `lock`
+    // (#356 unification). The previous "non-Sync" variants
+    // omitted the lock entirely — a real race when the LSP runs
+    // multi-threaded request dispatch. The "Sync" variants
+    // remain as thin forwarders so existing callers don't have
+    // to migrate in this MR.
+
     /// Open a document
     public func open(uri: DocumentUri, content: String, version: Int) -> DocumentState {
         let result = Compiler.compile(content)
@@ -51,6 +58,7 @@ public final class DocumentManager: @unchecked Sendable {
             version: version,
             compilationResult: result
         )
+        lock.lock(); defer { lock.unlock() }
         documents[uri] = state
         return state
     }
@@ -64,6 +72,7 @@ public final class DocumentManager: @unchecked Sendable {
             version: version,
             compilationResult: result
         )
+        lock.lock(); defer { lock.unlock() }
         documents[uri] = state
         return state
     }
@@ -74,9 +83,13 @@ public final class DocumentManager: @unchecked Sendable {
         changes: [TextDocumentContentChangeEvent],
         version: Int
     ) -> DocumentState? {
-        guard let state = documents[uri] else { return nil }
-
+        lock.lock()
+        guard let state = documents[uri] else {
+            lock.unlock()
+            return nil
+        }
         var content = state.content
+        lock.unlock()
 
         for change in changes {
             if let range = change.range {
@@ -102,106 +115,65 @@ public final class DocumentManager: @unchecked Sendable {
             version: version,
             compilationResult: result
         )
+        lock.lock(); defer { lock.unlock() }
         documents[uri] = newState
         return newState
     }
 
     /// Close a document
     public func close(uri: DocumentUri) {
+        lock.lock(); defer { lock.unlock() }
         documents.removeValue(forKey: uri)
     }
 
     /// Get document state
     public func get(uri: DocumentUri) -> DocumentState? {
-        documents[uri]
+        lock.lock(); defer { lock.unlock() }
+        return documents[uri]
     }
 
     /// Get all open documents
     public func all() -> [DocumentUri: DocumentState] {
-        documents
+        lock.lock(); defer { lock.unlock() }
+        return documents
     }
 
     /// Check if a document is open
     public func isOpen(uri: DocumentUri) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
+        lock.lock(); defer { lock.unlock() }
         return documents[uri] != nil
     }
 
-    // MARK: - Synchronous Operations
+    // MARK: - Legacy "Sync" Aliases (#356)
+    //
+    // Pre-unification the *Sync variants were the only
+    // thread-safe ones. The main methods above now take the
+    // lock too, so these are thin forwarders kept around for
+    // source compatibility. Migrate call sites to the plain
+    // names in follow-ups.
 
-    /// Open a document synchronously
     public func openSync(uri: DocumentUri, content: String, version: Int) -> DocumentState {
-        lock.lock()
-        defer { lock.unlock() }
-        let result = Compiler.compile(content)
-        let state = DocumentState(
-            uri: uri,
-            content: content,
-            version: version,
-            compilationResult: result
-        )
-        documents[uri] = state
-        return state
+        open(uri: uri, content: content, version: version)
     }
 
-    /// Apply changes synchronously
     public func applyChangesSync(
         uri: DocumentUri,
         changes: [TextDocumentContentChangeEvent],
         version: Int
     ) -> DocumentState? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let state = documents[uri] else { return nil }
-
-        var content = state.content
-
-        for change in changes {
-            if let range = change.range {
-                let lspRange = range
-                let startOffset = PositionConverter.calculateOffset(lspRange.start, in: content)
-                let endOffset = PositionConverter.calculateOffset(lspRange.end, in: content)
-
-                let startIndex = content.index(content.startIndex, offsetBy: startOffset)
-                let endIndex = content.index(content.startIndex, offsetBy: min(endOffset, content.count))
-
-                content.replaceSubrange(startIndex..<endIndex, with: change.text)
-            } else {
-                content = change.text
-            }
-        }
-
-        let result = Compiler.compile(content)
-        let newState = DocumentState(
-            uri: uri,
-            content: content,
-            version: version,
-            compilationResult: result
-        )
-        documents[uri] = newState
-        return newState
+        applyChanges(uri: uri, changes: changes, version: version)
     }
 
-    /// Close document synchronously
     public func closeSync(uri: DocumentUri) {
-        lock.lock()
-        defer { lock.unlock() }
-        documents.removeValue(forKey: uri)
+        close(uri: uri)
     }
 
-    /// Get document synchronously
     public func getSync(uri: DocumentUri) -> DocumentState? {
-        lock.lock()
-        defer { lock.unlock() }
-        return documents[uri]
+        get(uri: uri)
     }
 
-    /// Get all documents synchronously
     public func allSync() -> [DocumentUri: DocumentState] {
-        lock.lock()
-        defer { lock.unlock() }
-        return documents
+        all()
     }
 }
 
