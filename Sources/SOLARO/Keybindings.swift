@@ -292,11 +292,25 @@ final class KeybindingStore {
     }
 }
 
+/// SwiftUI @Environment plumbing (#307). Defaults to the shared
+/// singleton in production; tests can inject a fresh instance
+/// with `.environment(\.keybindingStore, mock)` so they don't
+/// pollute the user's real UserDefaults overrides.
+private struct KeybindingStoreEnvironmentKey: @preconcurrency EnvironmentKey {
+    @MainActor static let defaultValue: KeybindingStore = .shared
+}
+extension EnvironmentValues {
+    var keybindingStore: KeybindingStore {
+        get { self[KeybindingStoreEnvironmentKey.self] }
+        set { self[KeybindingStoreEnvironmentKey.self] = newValue }
+    }
+}
+
 /// Settings → Keybindings tab. Lists every command grouped by
 /// category with its shortcut on the trailing edge. Click a row
 /// to capture a new combination; "Reset" reverts to default.
 struct KeybindingsSettingsTab: View {
-    @Bindable private var store = KeybindingStore.shared
+    @Environment(\.keybindingStore) private var store
     @State private var capturingID: String?
 
     private var grouped: [(KeybindingCommand.Category, [KeybindingCommand])] {

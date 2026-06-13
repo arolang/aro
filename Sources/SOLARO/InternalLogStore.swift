@@ -15,6 +15,7 @@
 // to Ask" without flipping between windows.
 
 import Foundation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -65,5 +66,18 @@ final class InternalLogStore {
 
     func clear() {
         entries.removeAll()
+    }
+}
+
+/// SwiftUI @Environment plumbing (#307). Production uses the
+/// shared singleton; tests / preview can inject an empty store
+/// with `.environment(\.internalLogStore, fresh)`.
+private struct InternalLogStoreEnvironmentKey: @preconcurrency EnvironmentKey {
+    @MainActor static let defaultValue: InternalLogStore = .shared
+}
+extension EnvironmentValues {
+    var internalLogStore: InternalLogStore {
+        get { self[InternalLogStoreEnvironmentKey.self] }
+        set { self[InternalLogStoreEnvironmentKey.self] = newValue }
     }
 }
