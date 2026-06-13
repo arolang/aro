@@ -50,32 +50,39 @@ final class WorkspaceController {
     /// on this from either side is the single source of truth.
     var currentLine: Int?
 
-    /// 1-indexed source line where the debugger is currently
-    /// paused. Independent from `currentLine` (which follows the
-    /// user's caret); both views can paint them differently.
-    var pausedLine: Int?
+    /// SwiftUI-subscription mirror of the active console
+    /// session's debugger snapshot. The session
+    /// (`ConsoleProcess.debuggerState`) is the source of truth;
+    /// `WorkspaceView`'s onChange handlers copy it here so views
+    /// observing the controller still see updates without a
+    /// direct dependency on the session. Forwarding accessors
+    /// below preserve existing call sites (#306).
+    var debuggerState = DebuggerState()
 
-    /// Live symbol bag captured at the most recent pause. Keyed by
-    /// identifier name; populated from the `aro debug --record`
-    /// JSONL stream. Used for hover-over-variable tooltips.
-    var pauseSymbols: [String: ConsoleProcess.SymbolValue] = [:]
-
-    /// Wall-clock time each source line was last executed during the
-    /// currently-recording (or just-finished) run. Mirrored from
-    /// `ConsoleProcess.lastExecutedAt` so views that only depend on
-    /// the controller don't need to know about the console.
-    var lastExecutedAt: [Int: Date] = [:]
-    /// Same idea, but per feature-set name — drives the FS-container
-    /// glow that disambiguates concurrent runs.
-    var lastExecutedAtPerFeatureSet: [String: Date] = [:]
-    /// Source line → runtime error message; mirrored from
-    /// `ConsoleProcess.errorLines`. Painted as a red border on the
-    /// corresponding canvas node.
-    var errorLines: [Int: String] = [:]
-    /// Tick counter incremented every time `lastExecutedAt` updates
-    /// — TimelineView-based animations watch this to keep redrawing
-    /// even when the same line fires twice in a row.
-    var executionTick: UInt64 = 0
+    var pausedLine: Int? {
+        get { debuggerState.pausedLine }
+        set { debuggerState.pausedLine = newValue }
+    }
+    var pauseSymbols: [String: ConsoleProcess.SymbolValue] {
+        get { debuggerState.pauseSymbols }
+        set { debuggerState.pauseSymbols = newValue }
+    }
+    var lastExecutedAt: [Int: Date] {
+        get { debuggerState.lastExecutedAt }
+        set { debuggerState.lastExecutedAt = newValue }
+    }
+    var lastExecutedAtPerFeatureSet: [String: Date] {
+        get { debuggerState.lastExecutedAtPerFeatureSet }
+        set { debuggerState.lastExecutedAtPerFeatureSet = newValue }
+    }
+    var errorLines: [Int: String] {
+        get { debuggerState.errorLines }
+        set { debuggerState.errorLines = newValue }
+    }
+    var executionTick: UInt64 {
+        get { debuggerState.executionTick }
+        set { debuggerState.executionTick = newValue }
+    }
     /// Most recent value the runtime saw flowing into each
     /// repository, keyed by repository object name.
     var repositoryValues: [String: ConsoleProcess.SymbolValue] = [:]
@@ -97,12 +104,13 @@ final class WorkspaceController {
     var repositoryRecords: [String: [[String: String]]] = [:]
 
     /// Outcome of the most recent `aro test` run, keyed by test
-    /// feature-set name (e.g. `"length-of-hello"`). Drives the
-    /// pass/fail badge on the canvas FS container header and on the
-    /// Inspector's feature set list. Cleared whenever a new test
-    /// run starts; populated by parsing the runner's PASS/FAIL
-    /// stdout lines in `ConsoleProcess`.
-    var testResults: [String: TestNodeResult] = [:]
+    /// feature-set name (e.g. `"length-of-hello"`). Forwards to
+    /// the session-owned snapshot — same lifecycle as the other
+    /// debugger/execution state above (#306).
+    var testResults: [String: TestNodeResult] {
+        get { debuggerState.testResults }
+        set { debuggerState.testResults = newValue }
+    }
 
     /// Multi-node selection on the canvas (#266). Plain click sets
     /// a single ID, ⌘-click toggles membership, the rubber-band on
