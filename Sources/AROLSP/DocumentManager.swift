@@ -12,7 +12,18 @@ import LanguageServerProtocol
 public final class DocumentManager: @unchecked Sendable {
     private let lock = NSLock()
 
-    /// State of a single document
+    /// State of a single document.
+    ///
+    /// `compilationResult` is the **shared** parse + analyze
+    /// output for the current `content`. Handlers (completion,
+    /// references, hover, signature-help, …) must read from it
+    /// instead of re-parsing or re-running semantic analysis on
+    /// the raw \`content\` — doing so on every keystroke is what
+    /// the cache is for (#358). The state is replaced wholesale
+    /// on \`update\` / \`applyChanges\`; consumers that hold a
+    /// reference to a stale \`DocumentState\` are reading the
+    /// snapshot they were given and need to re-fetch from the
+    /// manager to see the latest.
     public struct DocumentState: Sendable {
         public let uri: DocumentUri
         public let content: String
