@@ -339,6 +339,14 @@ struct WorkspaceView: View {
     /// either `startRun` or `startDebug`. Single optional state so
     /// `.sheet(item:)` stays atomic — see `PendingParameterRequest`.
     @State private var pendingParameterRequest: PendingParameterRequest?
+    /// Coalesces debugger-state updates into a single per-frame
+    /// snapshot apply. `pausedLine` / `pauseSymbols` /
+    /// `executionTick` used to fire three independent onChange
+    /// handlers, each mutating multiple controller properties —
+    /// Canvas, Inspector, and StatusBar re-rendered N times per
+    /// debug event. One debounced task means one apply per burst
+    /// (#304).
+    @State private var debuggerSyncTask: Task<Void, Never>? = nil
     /// Probes `aro --version` once per workspace open and surfaces
     /// a banner when the version disagrees with SOLARO's build
     /// stamp (#287). Lives on the view so it's torn down with the
@@ -448,28 +456,14 @@ struct WorkspaceView: View {
             )
         }
         .animation(.easeInOut(duration: 0.25), value: showConsole)
-        .onChange(of: consoleProcess.pausedLine) { _, newLine in
-            // Debugger paused — jump the caret + canvas + paint
-            // the pause line.
-            controller.pausedLine = newLine
-            if let newLine, controller.currentLine != newLine {
-                controller.currentLine = newLine
-            }
+        .onChange(of: consoleProcess.pausedLine) { _, _ in
+            scheduleDebuggerSync()
         }
-        .onChange(of: consoleProcess.pauseSymbols) { _, newValue in
-            controller.pauseSymbols = newValue
+        .onChange(of: consoleProcess.pauseSymbols) { _, _ in
+            scheduleDebuggerSync()
         }
         .onChange(of: consoleProcess.executionTick) { _, _ in
-            controller.lastExecutedAt = consoleProcess.lastExecutedAt
-            controller.lastExecutedAtPerFeatureSet =
-                consoleProcess.lastExecutedAtPerFeatureSet
-            controller.errorLines = consoleProcess.errorLines
-            controller.testResults = consoleProcess.testResults
-            controller.repositoryValues = consoleProcess.repositoryValues
-            controller.repositoryHistory = consoleProcess.repositoryHistory
-            controller.repositoryRecords = consoleProcess.repositoryRecords
-            controller.pauseSymbols = consoleProcess.pauseSymbols
-            controller.executionTick &+= 1
+            scheduleDebuggerSync()
         }
         // When the canvas dispatches an Explain request, flip the
         // right pane to the Ask panel so the streaming response is
@@ -1490,6 +1484,41 @@ struct WorkspaceView: View {
     /// into `pauseSymbols`. Extracted from the body's `onChange`
     /// closure for the same type-checker-budget reason as
     /// `applyTimeTravelFrame`.
+    /// Coalesce debugger-event-driven mutations into one apply per
+    /// frame. Each onChange handler restarts the debounce timer;
+    /// the latest snapshot wins. ~16ms keeps the apply within a
+    /// single SwiftUI frame while still collapsing the typical
+    /// burst of pausedLine/pauseSymbols/executionTick that lands
+    /// together when the debugger pauses (#304).
+    private func scheduleDebuggerSync() {
+        debuggerSyncTask?.cancel()
+        debuggerSyncTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            if Task.isCancelled { return }
+            applyDebuggerSnapshot()
+        }
+    }
+
+    private func applyDebuggerSnapshot() {
+        let newPaused = consoleProcess.pausedLine
+        if controller.pausedLine != newPaused {
+            controller.pausedLine = newPaused
+        }
+        if let newLine = newPaused, controller.currentLine != newLine {
+            controller.currentLine = newLine
+        }
+        controller.pauseSymbols = consoleProcess.pauseSymbols
+        controller.lastExecutedAt = consoleProcess.lastExecutedAt
+        controller.lastExecutedAtPerFeatureSet =
+            consoleProcess.lastExecutedAtPerFeatureSet
+        controller.errorLines = consoleProcess.errorLines
+        controller.testResults = consoleProcess.testResults
+        controller.repositoryValues = consoleProcess.repositoryValues
+        controller.repositoryHistory = consoleProcess.repositoryHistory
+        controller.repositoryRecords = consoleProcess.repositoryRecords
+        controller.executionTick &+= 1
+    }
+
     private func handleConsoleStateChange(_ newState: ConsoleProcess.State) {
         guard case .exited = newState else { return }
         let live = LiveValueIndex.load(for: project)
