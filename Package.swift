@@ -248,6 +248,11 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
         // Swift Crypto for cryptographic operations (SHA256, etc.)
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
+        // swift-collections — Deque (#318) for O(1) FIFO eviction
+        // in BoundedSet. Already present transitively via swift-nio;
+        // declared here so ARORuntime can take an explicit `.product`
+        // dependency.
+        .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         // LineNoise for REPL line editing (arrow keys, history)
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
         // Swift Log for structured logging
@@ -288,6 +293,8 @@ let package = Package(
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "Logging", package: "swift-log"),
+                    // #318: Deque for O(1) BoundedSet eviction.
+                    .product(name: "DequeModule", package: "swift-collections"),
                 ] + runtimePlatformDependencies,
                 path: "Sources/ARORuntime"
             ),
