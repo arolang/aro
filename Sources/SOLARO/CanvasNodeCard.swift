@@ -68,7 +68,10 @@ struct CanvasNodeCard: View {
                         .font(SolaroFont.bodyBold)
                         .foregroundStyle(SolaroColor.roleColor(forVerb: node.verb))
                     if let r = node.resultName, !r.hasPrefix("_") {
-                        Text("<\(r)>")
+                        // Strip the `<>` brackets in the headline —
+                        // they're useful in raw source/the body
+                        // preview but visually noisy in a node title.
+                        Text(r)
                             .font(SolaroFont.mono)
                             .foregroundStyle(SolaroColor.textPrimary)
                     }
