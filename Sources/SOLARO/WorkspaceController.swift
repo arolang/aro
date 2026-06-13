@@ -85,23 +85,23 @@ final class WorkspaceController {
     }
     /// Most recent value the runtime saw flowing into each
     /// repository, keyed by repository object name.
-    var repositoryValues: [String: ConsoleProcess.SymbolValue] = [:]
-    /// User-dragged node and repository positions, keyed by node /
-    /// repo ID. Previously lived as `@State` on CanvasView, which
-    /// made undo impossible (a captured closure can't mutate a
-    /// view-struct's @State). Now owned here so the UndoManager
-    /// handler can restore an old position by writing to this
-    /// class property.
-    var liveNodes: [String: CGPoint] = [:]
-    /// Rolling history (newest first) of the last N payloads per
-    /// repository — driven by the same live event stream that fills
-    /// `repositoryValues`. Exposed via the repository card's hover
-    /// popover.
-    var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] = [:]
-    /// Current rows held by each repository (#284 step 3). Mirrored
-    /// from `ConsoleProcess.repositoryRecords` and consumed by
-    /// `RepoCard` to render the inline table.
-    var repositoryRecords: [String: [[String: String]]] = [:]
+    /// Repository payloads (values + rolling history + flattened
+    /// records) extracted from the controller in #299 step 1.
+    /// Old flat properties forward to this struct so existing
+    /// call sites compile unchanged.
+    var repositoryState = RepositoryState()
+    var repositoryValues: [String: ConsoleProcess.SymbolValue] {
+        get { repositoryState.values }
+        set { repositoryState.values = newValue }
+    }
+    var repositoryHistory: [String: [ConsoleProcess.SymbolValue]] {
+        get { repositoryState.history }
+        set { repositoryState.history = newValue }
+    }
+    var repositoryRecords: [String: [[String: String]]] {
+        get { repositoryState.records }
+        set { repositoryState.records = newValue }
+    }
 
     /// Outcome of the most recent `aro test` run, keyed by test
     /// feature-set name (e.g. `"length-of-hello"`). Forwards to
@@ -119,17 +119,25 @@ final class WorkspaceController {
     /// `selectedNode` mirror below stays in sync with the *most
     /// recently* added member so the Inspector form keeps showing
     /// one node at a time even when several are highlighted.
-    var selectedNodeIDs: Set<String> = []
-
-    /// Currently-selected canvas node. Populated on single-click in
-    /// the node editor so the Inspector can mirror the same fields
-    /// the double-click expansion shows (read-only summary). nil
-    /// when nothing is selected.
-    var selectedNode: CanvasNode? = nil
-    /// Raw source text spanned by `selectedNode`. Captured at click
-    /// time because the Inspector doesn't otherwise have access to
-    /// `rawSourceText` (lives on CanvasView).
-    var selectedNodeSource: String? = nil
+    /// Canvas selection + drag bundle (#299). Old flat fields
+    /// forward through.
+    var canvasSelection = CanvasSelectionState()
+    var selectedNodeIDs: Set<String> {
+        get { canvasSelection.selectedIDs }
+        set { canvasSelection.selectedIDs = newValue }
+    }
+    var selectedNode: CanvasNode? {
+        get { canvasSelection.selectedNode }
+        set { canvasSelection.selectedNode = newValue }
+    }
+    var selectedNodeSource: String? {
+        get { canvasSelection.selectedNodeSource }
+        set { canvasSelection.selectedNodeSource = newValue }
+    }
+    var liveNodes: [String: CGPoint] {
+        get { canvasSelection.liveNodes }
+        set { canvasSelection.liveNodes = newValue }
+    }
     /// CenterPane installs this so the Inspector's editable
     /// "Selected Statement" form can hit the same write-back path
     /// the canvas's double-click editor uses. Stored as a closure
@@ -166,24 +174,24 @@ final class WorkspaceController {
     /// the ⌘F shortcut and the bar's close button. Lives on the
     /// controller so the shortcut can flip it from outside the
     /// CenterPane subtree.
-    var editorFindActive: Bool = false
-
-    /// Live query typed into the find bar. The bar binds to this
-    /// directly; the workspace recomputes match ranges on change.
-    var editorFindQuery: String = ""
-
-    /// Match selection the editor should apply on the next
-    /// `updateNSView` pass — UTF-16 offsets into the editor's
-    /// document. Cleared after the editor consumes it (the
-    /// editor watches `editorFindSelectionTick` to know when to
-    /// re-apply).
-    var editorFindSelection: NSRange?
-
-    /// Bumped each time a new selection is pushed. The editor
-    /// stores the last tick it consumed and only applies when
-    /// the tick advances; that way re-entering the same range
-    /// (e.g. wrapping around to match 0) still works.
-    var editorFindSelectionTick: UInt64 = 0
+    /// Find-in-file (⌘F) state bundle (#299).
+    var editorFind = EditorFindState()
+    var editorFindActive: Bool {
+        get { editorFind.active }
+        set { editorFind.active = newValue }
+    }
+    var editorFindQuery: String {
+        get { editorFind.query }
+        set { editorFind.query = newValue }
+    }
+    var editorFindSelection: NSRange? {
+        get { editorFind.selection }
+        set { editorFind.selection = newValue }
+    }
+    var editorFindSelectionTick: UInt64 {
+        get { editorFind.selectionTick }
+        set { editorFind.selectionTick = newValue }
+    }
 
     func requestEditorFindSelection(_ range: NSRange) {
         editorFindSelection = range
@@ -198,17 +206,20 @@ final class WorkspaceController {
     /// a popover — SwiftUI popovers anchored to a toolbar item
     /// don't reliably display on macOS, which is why the panel
     /// has to live outside the toolbar tree).
-    var globalSearchHits: [GlobalSearchHit] = []
-
-    /// 0-indexed position of the keyboard-/hover-highlighted
-    /// row in `globalSearchHits`. Up / Down move it; Return
-    /// opens the hit at this index; hover sets it.
-    var globalSearchSelectedIndex: Int = 0
-
-    /// True when the results panel should be visible — set to
-    /// true when search text becomes non-empty, false on Esc,
-    /// on focus loss, or after a hit is opened.
-    var globalSearchPanelVisible: Bool = false
+    /// Toolbar global-search results-panel state (#299).
+    var globalSearch = GlobalSearchPanelState()
+    var globalSearchHits: [GlobalSearchHit] {
+        get { globalSearch.hits }
+        set { globalSearch.hits = newValue }
+    }
+    var globalSearchSelectedIndex: Int {
+        get { globalSearch.selectedIndex }
+        set { globalSearch.selectedIndex = newValue }
+    }
+    var globalSearchPanelVisible: Bool {
+        get { globalSearch.panelVisible }
+        set { globalSearch.panelVisible = newValue }
+    }
 
     /// Drives the Extract-as-Action sheet. The sheet's binding
     /// pulls from this state; setting it from a context-menu
