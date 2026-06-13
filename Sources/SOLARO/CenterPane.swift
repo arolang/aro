@@ -757,7 +757,7 @@ struct CenterPaneView: View {
         // canvas-only mode flips to text so the user actually sees
         // the jump land somewhere.
         if controller.paneMode == .canvas {
-            controller.paneMode = .text
+            controller.setPaneMode(.text)
         }
         controller.currentLine = line
     }
