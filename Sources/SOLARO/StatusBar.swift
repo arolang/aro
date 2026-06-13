@@ -314,7 +314,7 @@ struct StatusBarView: View {
                 } else {
                     creatingBranch = false
                     newBranchName = ""
-                    controller.gitMonitor.refresh(for: project)
+                    controller.gitMonitor.forceRefresh(for: project)
                 }
             }
         }
@@ -332,7 +332,7 @@ struct StatusBarView: View {
             task.waitUntilExit()
             await MainActor.run {
                 gitCommandRunning = false
-                controller.gitMonitor.refresh(for: project)
+                controller.gitMonitor.forceRefresh(for: project)
             }
         }
     }
