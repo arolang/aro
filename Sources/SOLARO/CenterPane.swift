@@ -59,6 +59,12 @@ struct CenterPaneView: View {
 
     @State private var showConflictResolver: Bool = false
     @State private var showCreateFeatureSetSheet: Bool = false
+    /// Debounce handle for openapi.yaml parse. The editor's
+    /// binding setter fires on every keystroke; running
+    /// `Yams.load` synchronously on the main thread per keystroke
+    /// blocks interactivity for large specs. Coalesce ~200ms of
+    /// edits into a single parse on a background task (#302).
+    @State private var yamlParseTask: Task<Void, Never>? = nil
 
     /// Left-pane width in split mode. We hand-roll the splitter
     /// instead of using `HSplitView` because the legacy split-view
@@ -319,6 +325,40 @@ struct CenterPaneView: View {
         return joined
     }
 
+    /// Coalesce rapid keystrokes into a single YAML parse run off
+    /// the main thread. Each call cancels the in-flight task and
+    /// arms a fresh ~200ms timer; the parse + the OpenAPIDocument
+    /// update only happen if the user stops typing for that window.
+    /// Transient invalid YAML is silently ignored, exactly like the
+    /// previous inline path.
+    private func scheduleOpenAPIParse(for url: URL, yaml: String) {
+        yamlParseTask?.cancel()
+        yamlParseTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            if Task.isCancelled { return }
+            let box = await Task.detached(priority: .utility) {
+                YAMLDictBox(value: try? Yams.load(yaml: yaml) as? [String: Any])
+            }.value
+            if Task.isCancelled { return }
+            guard let parsed = box.value,
+                  let doc = controller.openAPIDocument,
+                  doc.url == url
+            else { return }
+            doc.root = parsed
+            doc.markDirty()
+        }
+    }
+
+    /// Sendable carrier for the YAML parse result. `[String: Any]`
+    /// isn't Sendable (Yams returns NSString/NSNumber/etc.), but
+    /// the dict is built fresh inside the detached task and read
+    /// once on the MainActor — there's no concurrent access in
+    /// practice. `@unchecked` is the smallest concession that
+    /// keeps the parse off the main thread.
+    private struct YAMLDictBox: @unchecked Sendable {
+        let value: [String: Any]?
+    }
+
     private func editableBinding(for url: URL) -> Binding<String> {
         // Read directly from / write directly to disk. We used to
         // route `openapi.yaml` through `OpenAPIDocument.root`'s
@@ -360,13 +400,7 @@ struct CenterPaneView: View {
                 // `Parser.parse` are still skipped because they're
                 // heavy and irrelevant to a YAML file.
                 if isOpenAPIFile(url) {
-                    if let doc = controller.openAPIDocument,
-                       doc.url == url,
-                       let parsed = try? Yams.load(yaml: newValue) as? [String: Any]
-                    {
-                        doc.root = parsed
-                        doc.markDirty()
-                    }
+                    scheduleOpenAPIParse(for: url, yaml: newValue)
                     return
                 }
 
