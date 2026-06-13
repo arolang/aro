@@ -1290,6 +1290,12 @@ struct AROCodeEditor: NSViewRepresentable {
         /// Tick from the parent at the time we last applied pulses.
         var lastSeenExecutionTick: UInt64 = 0
 
+        /// Coalesces rapid keystrokes so we re-highlight at most
+        /// once per ~40ms instead of per character. On a large
+        /// file each pass tokenises the full source; bursts of
+        /// typing kept blocking the main thread (#274).
+        var highlightDebounceTask: Task<Void, Never>?
+
         init(parent: AROCodeEditor) {
             self.parent = parent
         }
@@ -1299,6 +1305,24 @@ struct AROCodeEditor: NSViewRepresentable {
         // in makeNSView. We keep the Coordinator's role limited
         // to text + selection tracking.
 
+        /// Restart the highlight debounce timer. We re-paint only
+        /// after the user stops typing for ~40ms; rapid keystrokes
+        /// collapse to a single tokenisation pass. Skip while the
+        /// IME is composing — the marked range will resolve into
+        /// real text in a moment and we don't want a half-painted
+        /// transient (#274).
+        @MainActor
+        func scheduleHighlight(_ textView: STTextView) {
+            if textView.hasMarkedText() { return }
+            highlightDebounceTask?.cancel()
+            highlightDebounceTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(40))
+                if Task.isCancelled { return }
+                guard let self else { return }
+                self.parent.applyHighlight(textView)
+            }
+        }
+
         nonisolated func textViewDidChangeText(_ notification: Notification) {
             let textView = notification.object as? STTextView
             DispatchQueue.main.async { [weak self] in
@@ -1307,7 +1331,7 @@ struct AROCodeEditor: NSViewRepresentable {
                     let newText = textView.text ?? ""
                     self.lastUserText = newText
                     self.parent.text = newText
-                    self.parent.applyHighlight(textView)
+                    self.scheduleHighlight(textView)
                     // #272: any text change dismisses the live ghost
                     // and re-arms the debounce; the next pause fires
                     // a fresh LSP completion.
