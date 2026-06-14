@@ -71,8 +71,9 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Qualifier registrations from this plugin
     public var qualifierRegistrations: [QualifierRegistration] = []
 
-    /// Subprocess timeout in seconds
-    private static let defaultTimeout: TimeInterval = 30
+    /// Subprocess timeout in seconds. Default centralised at
+    /// `RuntimeDefaults.pythonPluginTimeout` (#328).
+    private static let defaultTimeout: TimeInterval = RuntimeDefaults.pythonPluginTimeout
 
     /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
