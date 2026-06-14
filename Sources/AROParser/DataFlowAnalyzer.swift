@@ -2,6 +2,16 @@
 // DataFlowAnalyzer.swift
 // ARO Parser - Data Flow Analysis and Statement Analysis
 // ============================================================
+//
+// Error-handling contract (#340): nonthrowing, exactly like
+// SemanticAnalyzer (see Parser.swift for the module summary).
+// Missing dependencies, unresolved identifiers, and shadowed
+// publishes become diagnostics in the shared collector instead
+// of exceptions. The empty-result fallback that some helpers
+// return on missing inputs is the analyzer's way of letting
+// downstream passes still observe partial structure — the real
+// signal of failure is on the diagnostics bag, not the return
+// value.
 
 import Foundation
 

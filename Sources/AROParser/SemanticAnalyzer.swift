@@ -7,6 +7,14 @@
 //   - EventAnalyzer:         Circular chains, orphaned emissions
 //   - CodeQualityValidator:  Empty sets, unreachable code, missing returns
 //   - TypeInferencer:        Expression and statement type inference
+//
+// Error-handling contract (#340): see Parser.swift for the
+// module-level summary. SemanticAnalyzer never throws — it always
+// returns an `AnalyzedProgram` so the LSP / IDE path can show
+// partial information. Every error is appended to the shared
+// `DiagnosticCollector` the caller passed in; callers inspect
+// `diagnostics.errors` after analyze() to decide whether to
+// proceed to codegen / runtime registration.
 // ============================================================
 
 import Foundation
