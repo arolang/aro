@@ -23,17 +23,16 @@ fileprivate final class EventBusPendingPublishCounter: @unchecked Sendable {
     private var count: Int = 0
 
     func increment() {
-        lock.lock(); count += 1; lock.unlock()
+        lock.lock(); defer { lock.unlock() }
+        count += 1
     }
 
     /// Decrement; return true iff the counter reached zero.
     @discardableResult
     func decrement() -> Bool {
-        lock.lock()
+        lock.lock(); defer { lock.unlock() }
         count -= 1
-        let zero = (count == 0)
-        lock.unlock()
-        return zero
+        return count == 0
     }
 
     var isZero: Bool {
