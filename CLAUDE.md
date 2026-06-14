@@ -474,8 +474,9 @@ Push the <result> to the <git>.
 Checkout the <branch> from the <git> with "feature/new".
 Tag the <release> for the <git> with "v1.0.0".
 
-(* Clone *)
+(* Clone — optional `branch:` checks out that ref at clone time *)
 Clone the <repo> from the <git> with { url: "https://github.com/user/repo.git", path: "./cloned" }.
+Clone the <repo> from the <git> with { url: "...", path: "./cloned", branch: "develop" }.
 ```
 
 | Action | Verb | Role | Prepositions |

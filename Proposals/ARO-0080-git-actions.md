@@ -88,6 +88,17 @@ Clone the <repo> from the <git> with {
 }.
 ```
 
+The optional `branch:` key checks out a specific branch at clone time
+instead of the remote's default. Equivalent to `git clone --branch <name>`:
+
+```aro
+Clone the <repo> from the <git> with {
+    url: "https://github.com/user/repo.git",
+    path: "./cloned",
+    branch: "develop"
+}.
+```
+
 ### Checkout / Tag
 
 ```aro

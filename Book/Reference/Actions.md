@@ -19,7 +19,7 @@ Complete reference of all 70 ARO actions organized by category.
 | **Call**      | Control           | OWN               | Invokes a function or service.<br>`Call the <result> via <API: POST /users> with <data>.` |
 | **Checkout**  | Git               | OWN               | Switches Git branches via `<git>`. Emits `git.checkout`.<br>`Checkout the <branch> from the <git> with "feature/x".` |
 | **Clear**     | Terminal          | OWN               | Clears the terminal screen.<br>`Clear the <screen> for the <terminal>.` |
-| **Clone**     | Git               | REQUEST           | Clones a remote repository via `<git>`. Emits `git.clone`.<br>`Clone the <repo> from the <git> with { url: "...", path: "./out" }.` |
+| **Clone**     | Git               | REQUEST           | Clones a remote repository via `<git>`. Optional `branch:` checks out that ref at clone time. Emits `git.clone`.<br>`Clone the <repo> from the <git> with { url: "...", path: "./out", branch: "main" }.` |
 | **Close**     | Server            | SERVER            | Terminates a connection or handle.<br>`Close the <database-connections> for the <application>.` |
 | **Commit**    | Git               | EXPORT            | Creates a Git commit on `<git>`. Emits `git.commit`.<br>`Commit the <result> to the <git> with "feat: add feature".` |
 | **Compare**   | Evaluation        | OWN               | Compares two values or structures.<br>`Compare the <hash> against the <stored-hash>.` |
