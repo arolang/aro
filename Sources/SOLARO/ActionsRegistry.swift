@@ -84,6 +84,41 @@ final class ActionsRegistry {
     private(set) var lastError: String?
     private(set) var isLoading: Bool = false
 
+    // MARK: - Shared role lookup (syntax highlighter etc.)
+    //
+    // The Actions inspector on the left pane sources its rows
+    // from `aro actions` — that's the authoritative role map.
+    // The syntax highlighter needs the same map so its verb tint
+    // can't drift (issue #?). Mirror every successful reload into
+    // a process-wide store so non-isolated callers (`Theme.role
+    // Color(forVerb:)`, called from STTextView delegate methods)
+    // can read it without an actor hop.
+
+    private nonisolated static let sharedLock = NSLock()
+    private nonisolated(unsafe) static var sharedRoleByVerb: [String: ActionInfo.Role] = [:]
+
+    /// Look up the role for a verb across every workspace. Returns
+    /// nil before the first `aro actions` run finishes and for
+    /// verbs the runtime doesn't know about (typos, prose words
+    /// happening to start a line). Case-insensitive.
+    nonisolated static func sharedRole(forVerb verb: String) -> ActionInfo.Role? {
+        sharedLock.lock(); defer { sharedLock.unlock() }
+        return sharedRoleByVerb[verb.lowercased()]
+    }
+
+    /// Replace the shared map with the latest reload. Called from
+    /// `reload(for:)`'s completion on the main actor; readers are
+    /// thread-safe via the lock.
+    nonisolated static func publishSharedRoles(from list: [ActionInfo]) {
+        var map: [String: ActionInfo.Role] = [:]
+        for info in list {
+            map[info.verb.lowercased()] = info.role
+        }
+        sharedLock.lock()
+        sharedRoleByVerb = map
+        sharedLock.unlock()
+    }
+
     /// Issue #311 — handle of the most recent in-flight `aro
     /// actions` invocation. `reload(for:)` cancels the previous
     /// before spawning a new one so a rapid project-switch storm
@@ -116,6 +151,7 @@ final class ActionsRegistry {
                     self.lastError = error
                 } else {
                     self.actions = list
+                    Self.publishSharedRoles(from: list)
                 }
                 self.isLoading = false
             }

@@ -111,14 +111,35 @@ enum SolaroColor {
     /// effects on the outside world.
     static let roleExport    = Color(red: 0.96, green: 0.65, blue: 0.25)
 
-    /// Lookup helper for verbs. Falls back to `textSecondary` when
-    /// the verb's role is unknown.
+    /// Lookup helper for verbs. Primary source is the live
+    /// `aro actions` registry (same data the left-pane Actions
+    /// inspector renders), so the editor tint and the inspector
+    /// stay in sync as the runtime grows verbs (#?). The static
+    /// table below is a bootstrap fallback used in the brief
+    /// window before the first `aro actions` invocation
+    /// finishes — and as a safety net for tests / previews that
+    /// don't run a workspace.
     static func roleColor(forVerb verb: String) -> Color {
+        if let role = ActionsRegistry.sharedRole(forVerb: verb) {
+            switch role {
+            case .request:  return roleRequest
+            case .own:      return roleOwn
+            case .response: return roleResponse
+            case .export:   return roleExport
+            // Server-role actions (Start/Stop/etc.) read as
+            // effects on the outside world — paint them with the
+            // export tint so the canvas hot-spots are
+            // visually consistent.
+            case .server:   return roleExport
+            case .unknown:  return textSecondary
+            }
+        }
         switch verb.lowercased() {
         case "extract", "parse", "retrieve", "fetch", "pull", "clone", "request":
             return roleRequest
         case "compute", "validate", "compare", "create", "transform", "stage",
-             "checkout", "accept", "group", "match", "filter", "sort", "merge":
+             "checkout", "accept", "group", "match", "filter", "sort", "merge",
+             "make", "copy", "move", "exists", "stat":
             return roleOwn
         case "return", "throw":
             return roleResponse
