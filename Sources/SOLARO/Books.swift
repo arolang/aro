@@ -1117,12 +1117,14 @@ private struct BookMarkdownBlockView: View {
         let columnCount = max(headers.count, rows.map(\.count).max() ?? 0)
         ScrollView(.horizontal, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                tableRow(cells: pad(headers, to: columnCount),
-                         isHeader: true)
+                BookTableRowView(
+                    cells: pad(headers, to: columnCount),
+                    isHeader: true)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Divider().background(SolaroColor.divider.opacity(0.5))
-                    tableRow(cells: pad(row, to: columnCount),
-                             isHeader: false)
+                    BookTableRowView(
+                        cells: pad(row, to: columnCount),
+                        isHeader: false)
                 }
             }
             .frame(minWidth: 480, alignment: .leading)
@@ -1136,37 +1138,6 @@ private struct BookMarkdownBlockView: View {
         }
     }
 
-    @ViewBuilder
-    private func tableRow(cells: [String], isHeader: Bool) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(cells.enumerated()), id: \.offset) { idx, cell in
-                if idx > 0 {
-                    Rectangle()
-                        .fill(SolaroColor.divider.opacity(0.4))
-                        .frame(width: 1)
-                }
-                Group {
-                    if isHeader {
-                        inlineText(cell)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(SolaroColor.textPrimary)
-                    } else {
-                        inlineText(cell)
-                            .font(.system(size: 13))
-                            .foregroundStyle(SolaroColor.textPrimary)
-                    }
-                }
-                .textSelection(.enabled)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .background(isHeader
-                    ? SolaroColor.surfaceRaised.opacity(0.55)
-                    : Color.clear)
-    }
-
     /// Right-pad a short row so the column count matches the
     /// widest row in the table. Markdown lets writers omit
     /// trailing empty cells; rendering with fewer cells in one row
@@ -1175,6 +1146,191 @@ private struct BookMarkdownBlockView: View {
         if cells.count >= count { return cells }
         return cells + Array(repeating: "", count: count - cells.count)
     }
+}
+
+// MARK: - Table row with click-to-show-example
+
+/// One table row. Pulled out into its own view so the popover
+/// state (`@State showExample`) survives recomposition of the
+/// surrounding chapter and so each row's popover is independent.
+///
+/// The Action Reference (`Book/Reference/Actions.md`) writes
+/// description cells as `prose<br>\`example\``. Default rendering
+/// would either drop the `<br>` tag or leave it as visible text,
+/// neither of which reads well. Instead we extract the example,
+/// render only the prose in the cell, and let the user tap the
+/// row to pop the example open. Same shape works for any table
+/// that adopts the `prose<br>\`code\`` convention.
+private struct BookTableRowView: View {
+    let cells: [String]
+    let isHeader: Bool
+
+    @State private var showExample = false
+
+    var body: some View {
+        let split = cells.map(splitExample(from:))
+        let exampleCells = split.compactMap { $0.example }
+        let hasExample = !isHeader && !exampleCells.isEmpty
+        let actionName = split.first?.prose ?? cells.first ?? ""
+
+        rowContent(splitCells: split, hasExample: hasExample)
+            .background(isHeader
+                        ? SolaroColor.surfaceRaised.opacity(0.55)
+                        : Color.clear)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if hasExample { showExample = true }
+            }
+            .popover(isPresented: $showExample, arrowEdge: .top) {
+                ExamplePopover(
+                    title: plainText(actionName),
+                    examples: exampleCells
+                )
+            }
+            .help(hasExample ? "Click for example" : "")
+    }
+
+    @ViewBuilder
+    private func rowContent(
+        splitCells: [(prose: String, example: String?)],
+        hasExample: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(splitCells.enumerated()), id: \.offset) { idx, pair in
+                if idx > 0 {
+                    Rectangle()
+                        .fill(SolaroColor.divider.opacity(0.4))
+                        .frame(width: 1)
+                }
+                cellLabel(pair.prose)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // Trailing affordance: a tiny "›" chevron on rows that
+            // have an example, so the click-to-show interaction is
+            // discoverable without dumping the example into the row.
+            if hasExample {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(SolaroColor.accent.opacity(0.7))
+                    .padding(.horizontal, 8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cellLabel(_ text: String) -> some View {
+        if isHeader {
+            inlineMarkdownText(text)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SolaroColor.textPrimary)
+        } else {
+            inlineMarkdownText(text)
+                .font(.system(size: 13))
+                .foregroundStyle(SolaroColor.textPrimary)
+        }
+    }
+
+    /// Inline markdown the same way `BookMarkdownBlockView` does,
+    /// without going back through the block view's private helper.
+    private func inlineMarkdownText(_ source: String) -> Text {
+        var options = AttributedString.MarkdownParsingOptions()
+        options.allowsExtendedAttributes = true
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+        options.failurePolicy = .returnPartiallyParsedIfPossible
+        if let attr = try? AttributedString(
+            markdown: source, options: options
+        ) {
+            return Text(attr)
+        }
+        return Text(source)
+    }
+
+    /// Strip markdown markers (`**`, `` ` ``, `<…>` tags) for the
+    /// popover header so the title reads as plain "Accept" instead
+    /// of `**Accept**`.
+    private func plainText(_ source: String) -> String {
+        var s = source
+        // Drop the most common decorators.
+        while s.contains("**") {
+            if let r = s.range(of: "**") { s.removeSubrange(r) } else { break }
+        }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Popover shown when the user taps a row that has an example.
+/// Examples render in the monospace family and inherit the
+/// surface colours so they read as code chips, not body text.
+private struct ExamplePopover: View {
+    let title: String
+    let examples: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: "curlybraces")
+                    .foregroundStyle(SolaroColor.accent)
+                    .font(.system(size: 11))
+                Text(title.isEmpty ? "Example" : "\(title) — example")
+                    .font(SolaroFont.bodyBold)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                Spacer(minLength: 0)
+            }
+            ForEach(Array(examples.enumerated()), id: \.offset) { _, ex in
+                Text(ex)
+                    .font(SolaroFont.mono)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SolaroColor.backdrop)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(SolaroColor.divider.opacity(0.5),
+                                    lineWidth: 1)
+                    )
+            }
+        }
+        .padding(SolaroSpace.m)
+        .frame(minWidth: 320, maxWidth: 560, alignment: .leading)
+    }
+}
+
+/// Split a description cell of the form `prose<br>\`example\`` into
+/// its prose and example halves. Recognises `<br>`, `<br/>` and
+/// `<br />`. Falls back to `(cell, nil)` when no `<br>` is found,
+/// so plain-text cells round-trip unchanged.
+private func splitExample(from cell: String) -> (prose: String, example: String?) {
+    let separators = ["<br>", "<br/>", "<br />"]
+    for sep in separators {
+        if let r = cell.range(of: sep, options: .caseInsensitive) {
+            let prose = String(cell[..<r.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let after = String(cell[r.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // Strip surrounding backticks if the example is the
+            // typical `` `Accept the <order: placed>.` `` shape.
+            let example: String
+            if after.hasPrefix("`") && after.hasSuffix("`") &&
+                after.count >= 2 {
+                example = String(after.dropFirst().dropLast())
+            } else {
+                example = after
+            }
+            return (prose, example.isEmpty ? nil : example)
+        }
+    }
+    return (cell, nil)
+}
+
+private extension BookMarkdownBlockView {
 
     /// Heading typography mirrors a Tower-like document view:
     /// H1 ~ 28pt semibold, H2 ~ 22pt semibold, H3 ~ 18pt medium,
