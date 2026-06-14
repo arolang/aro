@@ -268,13 +268,29 @@ struct EmitEditing: NodeEditingSchema {
     }
 }
 
-/// `<verb> the <result> with { key1: value1, … }.` — the kind of
-/// statement that takes a record literal. Used for any verb whose
-/// "with" clause is an object expression.
+/// `<verb> the <result> [<prep> the <object>] with { key1: value1, … }.`
+/// — the kind of statement that takes a record literal. Used for any
+/// verb whose "with" clause is an object expression. The optional
+/// object slot (e.g. `from <git>` for Clone, `to <user-repository>`
+/// for Store) was being dropped by an earlier version of this
+/// schema; it's now captured as metadata at infer time and
+/// re-emitted on apply so the object phrase round-trips.
+///
+/// Multi-line `with { … }` bodies: anything with two or more
+/// non-empty entries renders one entry per line at +4 columns of
+/// indent. Matches how the language guide formats record literals
+/// and what the user typed by hand before they opened the editor.
 struct WithClauseEditing: NodeEditingSchema {
     var title: String { "Edit \(verb) statement" }
     var subtitle: String? { "Each row becomes one entry in the `with { … }` record." }
     let verb: String
+    /// Captured object slot (`prep` + object identifier) lifted off
+    /// the source AST. nil when the original statement had no
+    /// object — Log "msg" to the <console> style verbs always have
+    /// one, but a bare `Render the <out>` does not.
+    let objectPreposition: String?
+    let objectName: String?
+    let objectModifier: String?
     var fields: [EditableField]
 
     func render() -> String? {
@@ -284,10 +300,45 @@ struct WithClauseEditing: NodeEditingSchema {
         let pairs = rows
             .filter { !$0.key.isEmpty && !$0.value.isEmpty }
             .map { "\($0.key): \($0.value)" }
-        let body = pairs.isEmpty
-            ? "{}"
-            : "{ \(pairs.joined(separator: ", ")) }"
-        return "\(verb) the <\(result)> with \(body)."
+        let body: String
+        if pairs.isEmpty {
+            body = "{}"
+        } else if pairs.count == 1 {
+            body = "{ \(pairs[0]) }"
+        } else {
+            // Multi-line: one entry per row at +4 cols, closing
+            // brace lined up with the verb. Indent uses 4 spaces
+            // to match `AROFormatter.indentWidth`; the formatter
+            // will rebalance afterwards if the surrounding context
+            // is deeper.
+            let joined = pairs.joined(separator: ",\n        ")
+            body = "{\n        \(joined)\n    }"
+        }
+        let objectPhrase = renderObjectPhrase()
+        return "\(verb) the <\(result)>\(objectPhrase) with \(body)."
+    }
+
+    /// Re-emit the `prep the <object[: modifier]>` slot, with a
+    /// leading space. Object name comes from the editable
+    /// identifier field (so the user can pick a different binding
+    /// from the suggestions dropdown); preposition + modifier
+    /// stay captured metadata so the round-trip is faithful when
+    /// the user only changes the object name.
+    private func renderObjectPhrase() -> String {
+        guard let prep = objectPreposition?
+                .trimmingCharacters(in: .whitespaces),
+              !prep.isEmpty
+        else { return "" }
+        let name = (fields.firstIdentifier("object")
+                    ?? objectName ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return "" }
+        let modifier = objectModifier?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let tagged = modifier.isEmpty
+            ? "<\(name)>"
+            : "<\(name): \(modifier)>"
+        return " \(prep) the \(tagged)"
     }
 }
 
@@ -481,14 +532,37 @@ enum NodeEditingSchemaFactory {
             // raw-source editor.
             if statementSource.contains("with") &&
                statementSource.contains("{") {
+                // Object slot becomes an editable identifier with
+                // a suggestions menu so the user can swap which
+                // binding the statement targets (e.g. flip a
+                // Store from `<user-repository>` to a backup repo)
+                // without rewriting the source. Only added when the
+                // original statement actually had an object — verbs
+                // without one stay quiet.
+                var f: [EditableField] = [
+                    .identifier(id: "result", label: "Result name",
+                                value: result, suggestions: []),
+                ]
+                if let objName = node.objectName, !objName.isEmpty,
+                   let prep = node.objectPreposition, !prep.isEmpty {
+                    f.append(.identifier(
+                        id: "object",
+                        label: "\(prep.capitalized) the …",
+                        value: objName,
+                        suggestions: availableIdentifiers
+                    ))
+                }
+                f.append(.record(
+                    id: "entries",
+                    label: "Fields",
+                    rows: extractRecordEntries(from: statementSource)
+                ))
                 return WithClauseEditing(
                     verb: verb,
-                    fields: [
-                        .identifier(id: "result", label: "Result name",
-                                    value: result, suggestions: []),
-                        .record(id: "entries", label: "Fields",
-                                rows: extractRecordEntries(from: statementSource)),
-                    ]
+                    objectPreposition: node.objectPreposition,
+                    objectName: node.objectName,
+                    objectModifier: node.objectModifier,
+                    fields: f
                 )
             }
             return GenericEditing(fields: [

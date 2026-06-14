@@ -80,6 +80,29 @@ struct CanvasNodeCard: View {
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.textTertiary)
                 }
+                // Object pill on its own line — preposition tinted
+                // with the existing wire colour, object name in the
+                // same mono font as the result so the two sides of
+                // the statement read with the same visual weight.
+                // Sits flush-left under the headline; indented by
+                // the verb's visual depth is intentional — keeps
+                // the eye following the data flow downward (#?).
+                if let obj = node.objectName, !obj.hasPrefix("_") {
+                    HStack(spacing: 4) {
+                        if let prep = node.objectPreposition,
+                           !prep.isEmpty {
+                            Text(prep)
+                                .font(SolaroFont.monoCaption)
+                                .foregroundStyle(
+                                    SolaroColor.wireColor(
+                                        forPreposition: prep))
+                        }
+                        Text(obj)
+                            .font(SolaroFont.mono)
+                            .foregroundStyle(SolaroColor.textPrimary)
+                        Spacer(minLength: 0)
+                    }
+                }
                 if liveValues.isEmpty {
                     Text(node.summaryDisplay)
                         .font(SolaroFont.monoCaption)

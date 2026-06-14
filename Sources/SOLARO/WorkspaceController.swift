@@ -195,6 +195,14 @@ final class WorkspaceController {
     /// form that lets them edit route / schema fields directly.
     var openAPISelectedNodeID: String?
 
+    /// Whichever item in the Files panel sidebar is highlighted —
+    /// file OR directory. Distinct from `currentFile`, which only
+    /// updates when the user opens an editable file. Without this
+    /// the Move-to-Trash / Reveal / Copy-Path commands defaulted
+    /// to `currentFile` and silently acted on the last-opened file
+    /// instead of the folder the user had just clicked on (#?).
+    var treeFocus: URL?
+
     /// 0-indexed caret column tracked by the code editor. Surfaced
     /// so LSP-backed features (go-to-definition, hover) can ship
     /// the actual user position instead of a heuristic guess.

@@ -147,7 +147,7 @@ public struct ReduceAction: ActionImplementation {
 
         // Get aggregation function from context binding (ARO-0018) or fall back to specifiers
         let aggregateFunc: String
-        let field: String?
+        var field: String?
 
         if let aggType = context.resolveAny("_aggregation_type_") as? String {
             // New ARO-0018 syntax: with sum(<field>)
@@ -157,6 +157,17 @@ public struct ReduceAction: ActionImplementation {
             // Legacy syntax: specifiers
             aggregateFunc = result.specifiers.first?.lowercased() ?? "count"
             field = result.specifiers.count > 1 ? result.specifiers[1] : nil
+        }
+        // Honour the object's colon qualifier as the projection
+        // field when the caller didn't pass `with sum(<field>)`:
+        // `Reduce ... from <content: value> with sum().` should
+        // be read as "sum the value field of content". Without
+        // this fallback the qualifier was silently dropped, the
+        // reducer saw an array of dicts, asDouble returned nil
+        // for each, and the sum came back as 0 (#?).
+        if field == nil, let qualifier = object.specifiers.first,
+           !qualifier.isEmpty {
+            field = qualifier
         }
 
         // ARO-0051: Streaming support - only use streaming for lazy values

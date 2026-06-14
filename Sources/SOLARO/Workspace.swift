@@ -1142,7 +1142,9 @@ struct WorkspaceView: View {
             case .inspector:
                 InspectorPaneView(controller: controller)
             case .actions:
-                ActionsListView(registry: controller.actionsRegistry)
+                ActionsListView(
+                    registry: controller.actionsRegistry,
+                    controller: controller)
             case .metrics:
                 // Raw AppKit panel — the SwiftUI version crashes on
                 // macOS 26 because each snapshot re-renders the
@@ -1590,7 +1592,12 @@ struct WorkspaceView: View {
                 renameCurrentFile(at: url)
             }
         case .fileMoveToTrash:
-            if let url = controller.currentFile {
+            // Prefer whatever's highlighted in the Files panel —
+            // if the user picked a folder there, that's what they
+            // mean to delete, not the file they happen to have
+            // open in the editor (#?).
+            if let url = controller.treeFocus
+                ?? controller.currentFile {
                 pendingDeleteFile = url
             }
         case .fileCloseTab:

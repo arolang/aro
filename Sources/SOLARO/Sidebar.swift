@@ -189,7 +189,8 @@ struct SidebarPaneView: View {
                     gitStatus: controller.gitMonitor.status,
                     project: model.root,
                     monitor: controller.gitMonitor,
-                    onRename: { url, newName in renameFile(url, to: newName) }
+                    onRename: { url, newName in renameFile(url, to: newName) },
+                    onFocusChanged: { controller.treeFocus = $0 }
                 )
             }
         } else {
@@ -485,6 +486,12 @@ private struct FileTreeList: View {
     let project: Project
     let monitor: GitStatusMonitor
     let onRename: (URL, String) -> Void
+    /// Bubbled out so the workspace's menu-bar handlers (delete,
+    /// reveal, copy path) can act on the tree's actual selection
+    /// instead of falling back to `controller.currentFile`. Set
+    /// every time the user clicks a row, regardless of whether
+    /// it's a file or a directory.
+    let onFocusChanged: (URL?) -> Void
     @State private var renameTarget: URL?
     @State private var renameDraft: String = ""
 
@@ -573,6 +580,7 @@ private struct FileTreeList: View {
                 guard let newPath else {
                     selection = nil
                     directorySelection = nil
+                    onFocusChanged(nil)
                     return
                 }
                 let url = URL(fileURLWithPath: newPath)
@@ -590,6 +598,7 @@ private struct FileTreeList: View {
                     directorySelection = nil
                     selection = url
                 }
+                onFocusChanged(url)
             }
         )
     }
