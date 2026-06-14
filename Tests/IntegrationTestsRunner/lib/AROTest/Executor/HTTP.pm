@@ -134,16 +134,26 @@ sub run_http_example_internal {
     # Use a free port so parallel runs and occupied ports don't conflict.
     # ARO_HTTP_PORT env var overrides the openapi.yaml port inside the server.
     #
-    # When -j > 1, two harnesses both scanning from $spec_port can race and
-    # return the same port (because Net::EmptyPort just probes — it doesn't
-    # hold). Use random allocation from the ephemeral range so concurrent
-    # workers almost never collide. Serial runs keep $spec_port for stable
-    # observable output.
-    my $port = $has_net_emptyport
-        ? ($options{jobs} > 1
-            ? Net::EmptyPort::empty_port()
-            : Net::EmptyPort::empty_port($spec_port))
-        : $spec_port;
+    # Under -j > 1 the runner now assigns each forked worker an
+    # ARO_TEST_WORKER_ID 0..jobs-1 (see Pool.pm). We allocate
+    # ports out of a worker-local non-overlapping range so two
+    # concurrent workers can never collide on the same port
+    # (#297). Within a range Net::EmptyPort still probes for a
+    # free slot — only same-worker races could remain, but a
+    # single worker runs one example at a time, so they can't.
+    # Serial runs keep $spec_port for stable observable output.
+    my $port;
+    if ($has_net_emptyport) {
+        if ($options{jobs} > 1) {
+            my $slot = $ENV{ARO_TEST_WORKER_ID} // 0;
+            my $base = 30000 + ($slot * 1000);
+            $port = Net::EmptyPort::empty_port($base);
+        } else {
+            $port = Net::EmptyPort::empty_port($spec_port);
+        }
+    } else {
+        $port = $spec_port;
+    }
 
     # Determine command based on mode
     my @cmd;
