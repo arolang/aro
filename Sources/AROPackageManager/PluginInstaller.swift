@@ -12,19 +12,27 @@ public final class PluginInstaller: Sendable {
     /// The plugins directory
     private let pluginsDirectory: URL
 
-    /// Git client
-    private let git = GitClient.shared
+    /// Git client. Injected so tests can hand in a stub instead
+    /// of really cloning over the network (#359). Production
+    /// defaults to the process-wide singleton.
+    private let git: GitClient
 
     /// Initialize with a plugins directory
-    /// - Parameter directory: Path to the Plugins/ directory
-    public init(directory: URL) {
+    /// - Parameters:
+    ///   - directory: Path to the Plugins/ directory
+    ///   - git: GitClient to use; defaults to the shared singleton
+    public init(directory: URL, git: GitClient = .shared) {
         self.pluginsDirectory = directory
+        self.git = git
     }
 
     /// Initialize with an application directory
-    /// - Parameter applicationDirectory: Path to the application directory
-    public init(applicationDirectory: URL) {
+    /// - Parameters:
+    ///   - applicationDirectory: Path to the application directory
+    ///   - git: GitClient to use; defaults to the shared singleton
+    public init(applicationDirectory: URL, git: GitClient = .shared) {
         self.pluginsDirectory = applicationDirectory.appendingPathComponent("Plugins")
+        self.git = git
     }
 
     // MARK: - Installation
