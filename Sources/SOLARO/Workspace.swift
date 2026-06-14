@@ -531,11 +531,7 @@ struct WorkspaceView: View {
         .overlay(alignment: .topTrailing) {
             if controller.globalSearchPanelVisible {
                 GlobalSearchPanel(controller: controller) { hit in
-                    controller.openFile(hit.url)
-                    if let line = hit.line {
-                        controller.currentLine = line
-                        controller.setPaneMode(.text)
-                    }
+                    openHit(hit)
                 }
                 .padding(.top, SolaroSpace.s)
                 .padding(.trailing, 240)
@@ -1274,11 +1270,25 @@ struct WorkspaceView: View {
 
     private var searchField: some View {
         GlobalSearchField(controller: controller) { hit in
-            controller.openFile(hit.url)
-            if let line = hit.line {
-                controller.currentLine = line
-                controller.setPaneMode(.text)
-            }
+            openHit(hit)
+        }
+    }
+
+    /// Shared open path for both the toolbar field and the body
+    /// overlay panel. File / feature-set / content hits land in
+    /// the editor; book hits open the BookWindow and jump to the
+    /// matched chapter.
+    private func openHit(_ hit: GlobalSearchHit) {
+        if let ctx = hit.bookContext,
+           let book = Book.all.first(where: { $0.id == ctx.bookID })
+        {
+            BookWindow.show(book, jumpTo: ctx.chapterID)
+            return
+        }
+        controller.openFile(hit.url)
+        if let line = hit.line {
+            controller.currentLine = line
+            controller.setPaneMode(.text)
         }
     }
 

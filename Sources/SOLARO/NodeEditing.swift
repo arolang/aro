@@ -53,6 +53,13 @@ enum EditableField: Identifiable, Equatable {
     /// colon suffix.
     case combo(id: String, label: String, value: String,
                placeholder: String, options: [QualifierOption])
+    /// A vertical list of expressions — the items of a `[ … ]`
+    /// array literal. Each row is one element (string literal,
+    /// number, identifier, …) kept as raw source so quotes and
+    /// brackets round-trip verbatim. Apply emits the items joined
+    /// by `,\n    ` inside `[ … ]`.
+    case list(id: String, label: String, items: [ListItem],
+              placeholder: String)
 
     var id: String {
         switch self {
@@ -61,9 +68,23 @@ enum EditableField: Identifiable, Equatable {
              .expression(let id, _, _, _),
              .picker(let id, _, _, _),
              .record(let id, _, _),
-             .combo(let id, _, _, _, _):
+             .combo(let id, _, _, _, _),
+             .list(let id, _, _, _):
             return id
         }
+    }
+}
+
+/// One row in a `.list` field — a single element of a `[ … ]`
+/// array literal. The value is the raw source text (e.g. with
+/// quotes), so an item like `"http://…"` is stored verbatim.
+struct ListItem: Identifiable, Equatable {
+    let id: UUID
+    var value: String
+
+    init(value: String) {
+        self.id = UUID()
+        self.value = value
     }
 }
 
@@ -140,7 +161,10 @@ private func renderTaggedIdentifier(name: String, modifier: String?) -> String? 
     return m.isEmpty ? "<\(n)>" : "<\(n): \(m)>"
 }
 
-/// `Create the <result> with <expression>.`
+/// `Create the <result> with <expression>.` — handles two shapes:
+/// a plain expression (Compute-style) and a list literal (the
+/// `with [ a, b, c ]` shape). The factory picks which field
+/// flavor to install; `render()` reads whichever is present.
 struct CreateEditing: NodeEditingSchema {
     var title: String { "Edit Create statement" }
     var subtitle: String? { "Name of the new binding, an optional modifier, and its value expression." }
@@ -148,16 +172,37 @@ struct CreateEditing: NodeEditingSchema {
 
     func render() -> String? {
         guard let result = fields.firstIdentifier("result"),
-              let expr = fields.firstExpression("expression"),
-              !result.isEmpty,
-              !expr.isEmpty else { return nil }
+              !result.isEmpty else { return nil }
         let modifier = fields.firstCombo("modifier")
         guard let tagged = renderTaggedIdentifier(name: result,
                                                   modifier: modifier)
         else { return nil }
         let when = appendWhen(fields)
+        // List flavor wins when present — the factory only adds it
+        // when the original statement was `with [ … ]`, so picking
+        // it back here is unambiguous.
+        if let items = fields.firstList("expression") {
+            let body = renderListItems(items)
+            return "Create the \(tagged) with \(body)\(when)."
+        }
+        guard let expr = fields.firstExpression("expression"),
+              !expr.isEmpty else { return nil }
         return "Create the \(tagged) with \(expr)\(when)."
     }
+}
+
+/// Render `[ item1, item2, … ]` with one item per line — matches
+/// the convention used in the canonical examples (see
+/// `Examples/UptimeMonitor/main.aro`). Empty / whitespace-only
+/// rows are dropped so the user can leave an unfinished blank
+/// row in the editor without it polluting the output.
+private func renderListItems(_ items: [ListItem]) -> String {
+    let cleaned = items
+        .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    if cleaned.isEmpty { return "[]" }
+    let joined = cleaned.joined(separator: ",\n        ")
+    return "[\n        \(joined)\n    ]"
 }
 
 /// `Compute the <result: qualifier> from <expression>.` —
@@ -315,6 +360,15 @@ private extension Array where Element == EditableField {
         }
         return nil
     }
+
+    func firstList(_ id: String) -> [ListItem]? {
+        for f in self {
+            if case let .list(fid, _, items, _) = f, fid == id {
+                return items
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Inference
@@ -361,6 +415,22 @@ enum NodeEditingSchemaFactory {
                 whenField,
             ])
         case "create":
+            // `Create the <r> with [ … ]` gets the list-row editor
+            // so each element is its own input. Falls back to the
+            // generic expression field for `{ … }`, primitives, and
+            // bindings.
+            let valueField: EditableField
+            if let items = extractListItems(from: head) {
+                valueField = .list(id: "expression",
+                                   label: "Items",
+                                   items: items,
+                                   placeholder: "\"value\" or <binding>")
+            } else {
+                valueField = .expression(id: "expression",
+                                         label: "Value expression",
+                                         value: extractWithExpression(from: head),
+                                         placeholder: "{ … }")
+            }
             return CreateEditing(fields: [
                 .identifier(id: "result", label: "Result name",
                             value: result, suggestions: []),
@@ -368,9 +438,7 @@ enum NodeEditingSchemaFactory {
                        value: node.resultModifier ?? "",
                        placeholder: "uppercase, collections.reverse, …",
                        options: QualifierCatalog.snapshot()),
-                .expression(id: "expression", label: "Value expression",
-                            value: extractWithExpression(from: head),
-                            placeholder: "{ … }"),
+                valueField,
                 whenField,
             ])
         case "compute":
@@ -533,6 +601,56 @@ private func extractRecordEntries(from source: String) -> [RecordRow] {
     return rows
 }
 
+/// Pull the elements of the first top-level `[ … ]` literal in
+/// `source`. Returns `nil` when there's no list literal in the
+/// statement — the caller falls back to the generic expression
+/// field. Element splitting tracks `[`/`{`/`(` depth and respects
+/// double-quoted string content so commas inside a string don't
+/// fracture an item.
+private func extractListItems(from source: String) -> [ListItem]? {
+    guard let openIdx = source.firstIndex(of: "[") else { return nil }
+    var depth = 0
+    var endIdx: String.Index? = nil
+    var inString = false
+    for idx in source[openIdx...].indices {
+        let ch = source[idx]
+        if ch == "\"" { inString.toggle(); continue }
+        if inString { continue }
+        if ch == "[" { depth += 1 }
+        if ch == "]" {
+            depth -= 1
+            if depth == 0 { endIdx = idx; break }
+        }
+    }
+    guard let close = endIdx else { return nil }
+    let inner = String(source[source.index(after: openIdx)..<close])
+    var items: [ListItem] = []
+    var current = ""
+    var depthLocal = 0
+    var inLocalString = false
+    for ch in inner {
+        if ch == "\"" {
+            inLocalString.toggle()
+            current.append(ch)
+            continue
+        }
+        if !inLocalString {
+            if ch == "{" || ch == "[" || ch == "(" { depthLocal += 1 }
+            if ch == "}" || ch == "]" || ch == ")" { depthLocal -= 1 }
+            if ch == "," && depthLocal == 0 {
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { items.append(ListItem(value: trimmed)) }
+                current = ""
+                continue
+            }
+        }
+        current.append(ch)
+    }
+    let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !tail.isEmpty { items.append(ListItem(value: tail)) }
+    return items
+}
+
 private func parseRecordPair(_ raw: String) -> RecordRow? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty,
@@ -691,6 +809,12 @@ struct NodeEditorView: View {
                 recordTable(id: id, rows: rows)
             }
 
+        case let .list(id, label, items, placeholder):
+            VStack(alignment: .leading, spacing: 4) {
+                fieldLabel(label)
+                listTable(id: id, items: items, placeholder: placeholder)
+            }
+
         case let .combo(id, label, value, placeholder, options):
             inlineRow(label) {
                 HStack(spacing: 4) {
@@ -741,6 +865,38 @@ struct NodeEditorView: View {
             .font(SolaroFont.sectionTitle)
             .tracking(1)
             .foregroundStyle(SolaroColor.textTertiary)
+    }
+
+    @ViewBuilder
+    private func listTable(
+        id: String,
+        items: [ListItem],
+        placeholder: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { idx, _ in
+                HStack(spacing: 4) {
+                    TextField(placeholder,
+                              text: bindListItem(fieldID: id, rowIdx: idx))
+                        .textFieldStyle(.roundedBorder)
+                        .font(SolaroFont.mono)
+                        .controlSize(.small)
+                    Button {
+                        removeListItem(fieldID: id, at: idx)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove this item")
+                }
+            }
+            Button {
+                appendListItem(fieldID: id)
+            } label: {
+                Label("Add item", systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+        }
     }
 
     @ViewBuilder
@@ -905,6 +1061,41 @@ struct NodeEditorView: View {
         }
         return nil
     }
+    private func bindListItem(fieldID: String, rowIdx: Int) -> Binding<String> {
+        Binding(
+            get: { rawList(fieldID)?[rowIdx].value ?? "" },
+            set: { newVal in updateList(fieldID: fieldID) { items in
+                guard items.indices.contains(rowIdx) else { return }
+                items[rowIdx].value = newVal
+            } }
+        )
+    }
+    private func appendListItem(fieldID: String) {
+        updateList(fieldID: fieldID) { $0.append(ListItem(value: "")) }
+    }
+    private func removeListItem(fieldID: String, at idx: Int) {
+        updateList(fieldID: fieldID) { items in
+            guard items.indices.contains(idx) else { return }
+            items.remove(at: idx)
+        }
+    }
+    private func rawList(_ id: String) -> [ListItem]? {
+        for f in schema.fields {
+            if case let .list(fid, _, items, _) = f, fid == id { return items }
+        }
+        return nil
+    }
+    private func updateList(fieldID: String, _ mutate: (inout [ListItem]) -> Void) {
+        schema.fields = schema.fields.map { f in
+            if case let .list(fid, label, items, placeholder) = f, fid == fieldID {
+                var copy = items
+                mutate(&copy)
+                return .list(id: fid, label: label, items: copy, placeholder: placeholder)
+            }
+            return f
+        }
+    }
+
     private func rawRecord(_ id: String) -> [RecordRow]? {
         for f in schema.fields {
             if case let .record(fid, _, rows) = f, fid == id { return rows }

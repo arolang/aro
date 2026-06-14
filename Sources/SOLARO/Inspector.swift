@@ -46,6 +46,7 @@ struct InspectorPaneView: View {
                     fileHeader
                     openAPIEditorSection
                     SelectedStatementSection(controller: controller)
+                    SelectedRepositorySection(controller: controller)
                     variablesSection
                     WatchesSection(controller: controller, store: controller.watches)
                     lspDiagnosticsSection

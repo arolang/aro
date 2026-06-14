@@ -51,6 +51,11 @@ struct CanvasSelectionState {
     /// click time because the Inspector doesn't otherwise have
     /// access to it.
     var selectedNodeSource: String? = nil
+    /// Selected repository entity (the blue capsules on the
+    /// canvas). Mutually exclusive with `selectedNode` — clicking
+    /// either side clears the other so the inspector only ever
+    /// renders one form at a time.
+    var selectedRepository: RepositoryNode? = nil
     /// User-dragged node and repository positions, keyed by node
     /// / repo ID. Lives here (not as @State on CanvasView) so the
     /// UndoManager handler can restore an old position by writing

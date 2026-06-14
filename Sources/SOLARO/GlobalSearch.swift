@@ -53,16 +53,38 @@ struct GlobalSearchHit: Identifiable, Hashable {
     /// Breadcrumb under the headline: `file.aro:42 · FeatureSet`.
     let breadcrumb: String
 
+    /// Set when this hit points into a book chapter instead of a
+    /// project source file. The dispatch site checks this first
+    /// and opens the BookWindow + jumps to the chapter when it's
+    /// non-nil; otherwise it falls back to the normal file-open
+    /// path.
+    let bookContext: BookContext?
+
+    /// Identifies which book + chapter (and the matched line in
+    /// that chapter) a `Kind.book` hit refers to.
+    struct BookContext: Hashable {
+        let bookID: String
+        let chapterID: String
+        /// 1-indexed line number inside the chapter's markdown.
+        /// Best-effort; the viewer doesn't currently scroll to
+        /// it, but the field is recorded so a later viewer with
+        /// in-chapter highlighting can use it without a search
+        /// rebuild.
+        let chapterLine: Int?
+    }
+
     enum Kind: String, CaseIterable {
         case file = "Files"
         case featureSet = "Feature sets"
         case content = "Content"
+        case book = "Books"
 
         var symbol: String {
             switch self {
             case .file:       return "doc.text"
             case .featureSet: return "square.grid.2x2"
             case .content:    return "text.magnifyingglass"
+            case .book:       return "book"
             }
         }
     }
@@ -106,7 +128,8 @@ enum GlobalSearchEngine {
                     line: nil,
                     headline: name,
                     highlightRange: mappedRange,
-                    breadcrumb: relativePath(url, root: rootPath)
+                    breadcrumb: relativePath(url, root: rootPath),
+                    bookContext: nil
                 ))
             }
         }
@@ -132,7 +155,8 @@ enum GlobalSearchEngine {
                     headline: fs.name,
                     highlightRange: mapped,
                     breadcrumb: "\(fs.businessActivity)  ·  "
-                        + "\(url.lastPathComponent):\(fs.span.start.line)"
+                        + "\(url.lastPathComponent):\(fs.span.start.line)",
+                    bookContext: nil
                 ))
             }
         }
@@ -172,7 +196,8 @@ enum GlobalSearchEngine {
                     line: lineNumber,
                     headline: snippet,
                     highlightRange: snippetRange,
-                    breadcrumb: breadcrumb
+                    breadcrumb: breadcrumb,
+                    bookContext: nil
                 ))
                 perFile += 1
                 contentHits += 1
@@ -182,6 +207,88 @@ enum GlobalSearchEngine {
             }
         }
 
+        // Books — walk every known book's cached chapters. We
+        // only see books the user has already downloaded; an
+        // un-downloaded book has no `chapters`, so it
+        // self-skips. Capped per-book + total the same way file
+        // content hits are capped.
+        out.append(contentsOf: searchBooks(needle: needle))
+
+        return out
+    }
+
+    /// Per-book chapter-line cap. Mirrors `maxContentHitsPerFile`
+    /// so a query like "the" doesn't drown the panel in a single
+    /// long appendix.
+    static let maxBookHitsPerChapter = 6
+    static let maxTotalBookHits = 60
+
+    static func searchBooks(needle: String) -> [GlobalSearchHit] {
+        var out: [GlobalSearchHit] = []
+        var total = 0
+        bookLoop: for book in Book.all {
+            let store = BookStoreRegistry.store(for: book)
+            for chapter in store.chapters {
+                if total >= maxTotalBookHits { break bookLoop }
+                // Cheap title match first — surfaces "Appendix
+                // A" when the user types "appendix" without
+                // dragging the whole body through the matcher.
+                if let titleRange = chapter.title
+                    .lowercased().range(of: needle)
+                {
+                    let mapped = mapRange(
+                        titleRange,
+                        from: chapter.title.lowercased(),
+                        into: chapter.title)
+                    out.append(GlobalSearchHit(
+                        id: "book:\(book.id):\(chapter.id):title",
+                        kind: .book,
+                        url: URL(fileURLWithPath: "/"),
+                        line: nil,
+                        headline: chapter.title,
+                        highlightRange: mapped,
+                        breadcrumb: book.title,
+                        bookContext: GlobalSearchHit.BookContext(
+                            bookID: book.id,
+                            chapterID: chapter.id,
+                            chapterLine: nil)
+                    ))
+                    total += 1
+                    if total >= maxTotalBookHits { break bookLoop }
+                }
+                // Body lines.
+                let lines = chapter.markdown.split(
+                    separator: "\n",
+                    omittingEmptySubsequences: false)
+                var perChapter = 0
+                for (idx, rawLine) in lines.enumerated() {
+                    if perChapter >= maxBookHitsPerChapter { break }
+                    let line = String(rawLine)
+                    let lower = line.lowercased()
+                    guard let range = lower.range(of: needle)
+                    else { continue }
+                    let (snippet, snippetRange) =
+                        snippet(line: line, lowerLine: lower, around: range)
+                    let lineNumber = idx + 1
+                    out.append(GlobalSearchHit(
+                        id: "book:\(book.id):\(chapter.id):\(lineNumber)",
+                        kind: .book,
+                        url: URL(fileURLWithPath: "/"),
+                        line: lineNumber,
+                        headline: snippet,
+                        highlightRange: snippetRange,
+                        breadcrumb: "\(book.title)  ·  \(chapter.title)",
+                        bookContext: GlobalSearchHit.BookContext(
+                            bookID: book.id,
+                            chapterID: chapter.id,
+                            chapterLine: lineNumber)
+                    ))
+                    perChapter += 1
+                    total += 1
+                    if total >= maxTotalBookHits { break bookLoop }
+                }
+            }
+        }
         return out
     }
 

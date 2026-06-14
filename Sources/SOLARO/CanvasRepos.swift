@@ -33,6 +33,14 @@ struct RepoNodesLayer: View {
     let onDragEnd: (String, CGPoint) -> Void
     /// Snapshot point — same role as `NodesLayer.onDragStart`.
     let onDragStart: (String) -> Void
+    /// Click on the body of a repository card → push it into the
+    /// controller's selection so the inspector renders its editor.
+    let onSelect: (RepositoryNode) -> Void
+    /// Trash-icon tap → ask the controller to drop every record
+    /// the UI is holding for this repo.
+    let onClear: (RepositoryNode) -> Void
+    /// The currently-selected repo name, for accent-stroke styling.
+    let selectedRepositoryName: String?
 
     @State private var dragOrigins: [String: CGPoint] = [:]
 
@@ -47,7 +55,10 @@ struct RepoNodesLayer: View {
                     collapsedHeight: repoHeight,
                     liveValue: repositoryValues[repo.name],
                     history: repositoryHistory[repo.name] ?? [],
-                    records: repositoryRecords[repo.name]
+                    records: repositoryRecords[repo.name],
+                    isSelected: selectedRepositoryName == repo.name,
+                    onSelect: { onSelect(repo) },
+                    onClear: { onClear(repo) }
                 )
                     // Place by top-left so the card grows downward
                     // when it has records. The wires layer always
@@ -103,6 +114,14 @@ struct RepoCard: View {
     /// capsule). An empty array means "the repo is currently empty"
     /// and we render a single "(no entries)" hint.
     let records: [[String: String]]?
+    /// True when this card matches `controller.selectedRepository`
+    /// — the overlay stroke thickens + tints accent so the user
+    /// has a visual handle on the inspector ↔ canvas link.
+    let isSelected: Bool
+    /// Header / body tap → select this repo in the inspector.
+    let onSelect: () -> Void
+    /// Trash icon → drop every observed record for this repo.
+    let onClear: () -> Void
 
     @State private var hovering = false
     @State private var showHistory = false
@@ -149,15 +168,26 @@ struct RepoCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m, style: .continuous)
-                .stroke(SolaroColor.accent.opacity(0.55), lineWidth: 1)
+                .stroke(
+                    SolaroColor.accent
+                        .opacity(isSelected ? 1.0 : 0.55),
+                    lineWidth: isSelected ? 2 : 1
+                )
         )
         .onHover { isHovering in
             hovering = isHovering
-            showHistory = isHovering && !history.isEmpty
+            showHistory = isHovering && !history.isEmpty && !isSelected
         }
         .popover(isPresented: $showHistory, arrowEdge: .top) {
             RepoHistoryPopover(repo: repo, history: history)
         }
+        // Plain tap to select; long-press drag handled by the
+        // outer DragGesture on RepoNodesLayer. SwiftUI gives the
+        // tap priority when both fire on the same press, so the
+        // user can still click-and-drag without selecting
+        // accidentally — the drag wins as soon as a translation is
+        // reported.
+        .onTapGesture(perform: onSelect)
         .help(helpText)
     }
 
@@ -188,6 +218,21 @@ struct RepoCard: View {
                 }
             }
             Spacer(minLength: 0)
+            // Trash icon clears every observed record for this
+            // repo. Hidden until the user hovers / has selected
+            // the card so the canvas reads quiet at rest. Empty
+            // repos hide it entirely — there's nothing to clear.
+            if (hovering || isSelected),
+               let records, !records.isEmpty
+            {
+                Button(action: onClear) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(SolaroColor.textTertiary)
+                }
+                .buttonStyle(.borderless)
+                .help("Clear every entry in this repository (UI only — next run repopulates)")
+            }
         }
         .padding(.horizontal, SolaroSpace.m)
     }

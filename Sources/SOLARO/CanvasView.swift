@@ -313,7 +313,21 @@ struct CanvasView: View {
                                 .map { CGPoint(x: $0.x, y: $0.y) }
                             ?? .zero
                     }
-                }
+                },
+                onSelect: { repo in
+                    // Repository selection is mutually exclusive
+                    // with statement selection — clear both before
+                    // setting the one the user picked so the
+                    // inspector swaps cleanly.
+                    controller.selectedNode = nil
+                    controller.selectedNodeSource = nil
+                    controller.selectedNodeIDs = []
+                    controller.selectedRepository = repo
+                },
+                onClear: { repo in
+                    controller.clearRepositoryEntries(named: repo.name)
+                },
+                selectedRepositoryName: controller.selectedRepository?.name
             )
             .frame(width: contentSize.width, height: contentSize.height,
                    alignment: .topLeading)
@@ -358,6 +372,7 @@ struct CanvasView: View {
                     // Mirror the node into the controller so the
                     // Inspector can render the same fields the
                     // double-click expansion shows.
+                    controller.selectedRepository = nil
                     controller.selectedNode = node
                     controller.selectedNodeSource = rawSourceText(for: node)
                     // Multi-select (#266): ⌘-click toggles

@@ -134,6 +134,51 @@ final class WorkspaceController {
         get { canvasSelection.selectedNodeSource }
         set { canvasSelection.selectedNodeSource = newValue }
     }
+    /// Mirror for the repository-entity selection. Mutually
+    /// exclusive with `selectedNode` — set one to nil before
+    /// pushing the other so the inspector only ever paints one
+    /// editor form at a time.
+    var selectedRepository: RepositoryNode? {
+        get { canvasSelection.selectedRepository }
+        set { canvasSelection.selectedRepository = newValue }
+    }
+
+    /// Wipe the rendered records + the most-recent value + the
+    /// rolling history for one repository. Used by the trash
+    /// icon on `RepoCard` and the "Clear all" button in the
+    /// inspector. Purely UI-local: the next runtime run will
+    /// repopulate from observed events / `.store` seeds.
+    func clearRepositoryEntries(named name: String) {
+        repositoryRecords[name] = []
+        repositoryValues.removeValue(forKey: name)
+        repositoryHistory.removeValue(forKey: name)
+    }
+
+    /// Remove a single row from a repository's in-memory record
+    /// list. Same caveat as `clearRepositoryEntries` — the next
+    /// run rebuilds the table from observed events.
+    func removeRepositoryEntry(repository name: String, at index: Int) {
+        guard var rows = repositoryRecords[name],
+              rows.indices.contains(index) else { return }
+        rows.remove(at: index)
+        repositoryRecords[name] = rows
+    }
+
+    /// Replace one field in a repository row. The record table is
+    /// flat `[field: rendered]`, so editing replaces the rendered
+    /// string verbatim — no type coercion. Outside callers should
+    /// trim whitespace before passing the value through.
+    func updateRepositoryEntry(
+        repository name: String,
+        at index: Int,
+        field: String,
+        value: String
+    ) {
+        guard var rows = repositoryRecords[name],
+              rows.indices.contains(index) else { return }
+        rows[index][field] = value
+        repositoryRecords[name] = rows
+    }
     var liveNodes: [String: CGPoint] {
         get { canvasSelection.liveNodes }
         set { canvasSelection.liveNodes = newValue }

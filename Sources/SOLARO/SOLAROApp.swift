@@ -600,11 +600,17 @@ func postSolaroMenuAction(_ action: SolaroMenuAction) {
 /// Top-level routing between the welcome screen (no project open)
 /// and the full workspace (project open).
 ///
-/// Welcome is only shown when **no other window already has a project
-/// open** — the canvas IDE is the meaningful entry point once you have
-/// one running, and a second welcome window over it just gets in the
-/// way. Per-window state still drives the actual switch; we only use
-/// the global count to close redundant welcome windows.
+/// Every window has its own `WorkspaceState`, so opening a new
+/// window via File → New Window (⌘N) always lands on a fresh
+/// welcome screen — picking a different project there opens it in
+/// the new window without disturbing any other open workspace.
+/// Earlier builds auto-closed a new welcome window whenever any
+/// other workspace was already open (issue #?), which made
+/// multi-window work impossible: the new window flashed on screen
+/// for half a frame and then vanished before the user could
+/// click anything. Per the user request that triggered this fix,
+/// the auto-close has been removed wholesale — windows are
+/// independent and isolated.
 struct ContentView: View {
     @Binding var workspace: WorkspaceState
     let runtimeVersion: String
@@ -615,48 +621,12 @@ struct ContentView: View {
             WelcomeView(runtimeVersion: runtimeVersion) { project in
                 workspace = .open(project)
             }
-            .onAppear { closeIfRedundantWelcome() }
         case .open(let project):
             WorkspaceView(project: project) {
                 workspace = .welcome
             }
-            .onAppear { OpenWorkspaceTracker.shared.increment() }
-            .onDisappear { OpenWorkspaceTracker.shared.decrement() }
         }
     }
-
-    /// If at least one other window already has a project workspace
-    /// open, this window's welcome screen is a duplicate. Close it
-    /// on next runloop tick so the user lands back on the live IDE
-    /// rather than on the static welcome.
-    private func closeIfRedundantWelcome() {
-        guard OpenWorkspaceTracker.shared.count > 0 else { return }
-        DispatchQueue.main.async {
-            // Walk every window owned by the app and close the one
-            // hosting *this* SwiftUI view. We can't grab `self`'s
-            // hosting NSWindow directly from a struct View, but the
-            // welcome screen is always the front-most window when it
-            // just appeared.
-            if let win = NSApp.windows.first(where: { $0.isVisible && $0.title == "Solaro" }) {
-                win.close()
-            } else {
-                NSApp.keyWindow?.close()
-            }
-        }
-    }
-}
-
-/// Process-wide count of windows whose `workspace` is `.open(...)`.
-/// `ContentView` increments/decrements as project workspaces appear
-/// and disappear; the welcome-screen routing checks this to decide
-/// whether to render or auto-close.
-@MainActor
-final class OpenWorkspaceTracker {
-    static let shared = OpenWorkspaceTracker()
-    private init() {}
-    private(set) var count: Int = 0
-    func increment() { count += 1 }
-    func decrement() { count = max(0, count - 1) }
 }
 
 // Per-window minimum size is enforced by `WorkspaceWindowSizer` in

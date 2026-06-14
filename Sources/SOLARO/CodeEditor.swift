@@ -67,6 +67,12 @@ final class AROHoverTextView: STTextView {
     /// Toggled by the SwiftUI wrapper from `@AppStorage`.
     var ghostTextEnabled: Bool = false
 
+    /// Fired by the "Reformat Code" context-menu item (right-click
+    /// or Option+Click on the editor). The SwiftUI wrapper wires
+    /// this to `AROFormatter.format(…)` + the editor's save path so
+    /// the buffer, the binding, and disk all see the same text.
+    var requestReformat: (() -> Void)?
+
     private lazy var ghostPopover: NSPopover = {
         let p = NSPopover()
         // `.applicationDefined`: we own the lifecycle. `.transient`
@@ -610,6 +616,45 @@ final class AROHoverTextView: STTextView {
         }
     }
 
+    // MARK: - Context menu (right-click / Option+Click)
+
+    /// Returning a menu here makes AppKit show it on right-click and
+    /// Control+Click for free; the Option+Click path is wired
+    /// separately in `mouseDown(with:)` below. The standard editing
+    /// items still need to be present so the menu doesn't read as a
+    /// regression — we copy them off the inherited menu and append
+    /// our own at the bottom.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        menu.addItem(NSMenuItem.separator())
+        let reformat = NSMenuItem(
+            title: "Reformat Code",
+            action: #selector(reformatCodeAction(_:)),
+            keyEquivalent: "")
+        reformat.target = self
+        reformat.toolTip = "Re-indent and clean up the current file."
+        menu.addItem(reformat)
+        return menu
+    }
+
+    @objc private func reformatCodeAction(_ sender: Any?) {
+        requestReformat?()
+    }
+
+    /// Option+Click should open the same context menu the right-
+    /// click path uses. Plain left-clicks fall through to the
+    /// inherited handler so caret placement, drag-selection, etc.
+    /// still work normally.
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.option) {
+            if let menu = menu(for: event) {
+                NSMenu.popUpContextMenu(menu, with: event, for: self)
+                return
+            }
+        }
+        super.mouseDown(with: event)
+    }
+
     /// Find the `<…>` identifier (if any) at `point`. Treats angle
     /// brackets and a colon as terminators so `<name: type>` yields
     /// just `name`.
@@ -788,6 +833,11 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.requestGhost = requestGhost
         textView.requestAI = requestAI
         textView.acceptGhost = acceptGhost
+        textView.requestReformat = { [weak coordinator = context.coordinator,
+                                      weak textView] in
+            guard let textView else { return }
+            coordinator?.parent.reformat(textView: textView)
+        }
         // STTextView's `text` setter resets typing attributes and
         // selection; do it once on initial frame.
         textView.text = text
@@ -855,6 +905,11 @@ struct AROCodeEditor: NSViewRepresentable {
             hover.requestGhost = requestGhost
             hover.requestAI = requestAI
             hover.acceptGhost = acceptGhost
+            hover.requestReformat = { [weak coordinator = context.coordinator,
+                                       weak hover] in
+                guard let hover else { return }
+                coordinator?.parent.reformat(textView: hover)
+            }
         }
 
         // Push text back into the view only when the external
@@ -1162,6 +1217,27 @@ struct AROCodeEditor: NSViewRepresentable {
     /// monitor so clicks on existing markers go through (a plain
     /// NSClickGestureRecognizer was being swallowed by STGutterView's
     /// own marker mouseDown handling).
+    /// Run the source through `AROFormatter` and write the result
+    /// back through the editor's normal save path. Only fires for
+    /// `.aro` files — formatting YAML / plain files here would
+    /// confuse the brace-depth heuristic (YAML has none) and the
+    /// "Format on save" path already strips trailing whitespace
+    /// from those.
+    fileprivate func reformat(textView: STTextView) {
+        guard language == .aro else { return }
+        let current = textView.text ?? ""
+        let formatted = AROFormatter.format(current)
+        if formatted == current { return }
+        // Drive the buffer first so the user sees the change land
+        // immediately, then push it through the same save path
+        // that the keystroke binding uses — that keeps LSP and the
+        // cached AST in sync without a bespoke pipeline.
+        textView.text = formatted
+        applyHighlight(textView)
+        text = formatted
+        onSave(formatted)
+    }
+
     fileprivate func toggleBreakpoint(_ line: Int, in textView: STTextView) {
         var updated = breakpoints
         if updated.contains(line) {

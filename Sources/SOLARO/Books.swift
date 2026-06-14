@@ -110,6 +110,12 @@ final class BookStore {
     /// Wall-clock time the cache was last written. `nil` when no
     /// cache exists yet (first-run state).
     private(set) var lastRefreshed: Date?
+    /// Cross-component request channel: set by the global search
+    /// dispatch when it wants the viewer to open at a specific
+    /// chapter. `BookView` reads-and-clears it on appear and on
+    /// each chapters change so a freshly-downloaded book honors
+    /// the request after the network finishes.
+    var pendingChapterID: String?
 
     init(book: Book) {
         self.book = book
@@ -303,15 +309,22 @@ enum BookStoreRegistry {
 final class BookWindow {
     private static var windows: [String: NSWindow] = [:]
 
-    static func show(_ book: Book) {
+    static func show(_ book: Book, jumpTo chapterID: String? = nil) {
+        let store = BookStoreRegistry.store(for: book)
+        // `pendingChapterID` is read on BookView's onAppear and
+        // each time the chapters list refreshes — that's how the
+        // global-search dispatch can ask for a specific chapter
+        // even if the book's cache is still downloading.
+        if let chapterID {
+            store.pendingChapterID = chapterID
+        }
         if let existing = windows[book.id] {
             existing.makeKeyAndOrderFront(nil)
             return
         }
-        let store = BookStoreRegistry.store(for: book)
         let host = NSHostingController(rootView: BookView(store: store))
         let w = NSWindow(contentViewController: host)
-        w.setContentSize(NSSize(width: 920, height: 640))
+        w.setContentSize(NSSize(width: 1100, height: 700))
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.title = book.title
         w.center()
@@ -336,6 +349,11 @@ final class BookWindow {
 private struct BookView: View {
     @Bindable var store: BookStore
     @State private var selection: String?
+    /// User-typed search query. Empty when the user hasn't asked
+    /// for anything yet. Filters both the sidebar (show only
+    /// chapters whose title or body matches) and the detail
+    /// (highlight matches in the open chapter).
+    @State private var searchQuery: String = ""
 
     var body: some View {
         NavigationSplitView {
@@ -344,10 +362,42 @@ private struct BookView: View {
             detail
         }
         .navigationTitle(store.book.title)
-        .onAppear {
-            if selection == nil {
-                selection = store.chapters.first?.id
-            }
+        .onAppear { honorPendingSelection() }
+        .onChange(of: store.chapters) { _, _ in
+            // Late-arriving cache (e.g. first-open download)
+            // gets the same pending-chapter routing as a warm
+            // open.
+            honorPendingSelection()
+        }
+    }
+
+    /// Pull the pending chapter request off the store; fall back
+    /// to the first chapter when nothing was requested. Clears
+    /// the pending field so a later focus event doesn't replay
+    /// a stale jump.
+    private func honorPendingSelection() {
+        if let pending = store.pendingChapterID,
+           store.chapters.contains(where: { $0.id == pending })
+        {
+            selection = pending
+            store.pendingChapterID = nil
+            return
+        }
+        if selection == nil {
+            selection = store.chapters.first?.id
+        }
+    }
+
+    /// Chapters that match the current search query, by title or
+    /// body. Case-insensitive. When the query is empty, returns
+    /// every chapter unchanged so the sidebar reads as before.
+    private var filteredChapters: [BookChapter] {
+        let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return store.chapters }
+        let needle = q.lowercased()
+        return store.chapters.filter { chapter in
+            chapter.title.lowercased().contains(needle)
+                || chapter.markdown.lowercased().contains(needle)
         }
     }
 
@@ -355,7 +405,10 @@ private struct BookView: View {
         VStack(alignment: .leading, spacing: 0) {
             toolbar
             Divider()
+            searchField
+            Divider()
             List(selection: $selection) {
+                let visible = filteredChapters
                 if store.chapters.isEmpty {
                     Text(store.isRefreshing
                          ? "Downloading…"
@@ -363,19 +416,80 @@ private struct BookView: View {
                         .font(SolaroFont.caption)
                         .foregroundStyle(.secondary)
                         .padding()
+                } else if visible.isEmpty {
+                    Text("No chapter matches \"\(searchQuery)\".")
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(.secondary)
+                        .padding()
                 } else {
-                    ForEach(store.chapters) { chapter in
+                    ForEach(visible) { chapter in
                         NavigationLink(value: chapter.id) {
-                            Text(chapter.title)
-                                .font(SolaroFont.body)
-                                .lineLimit(2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(chapter.title)
+                                    .font(SolaroFont.body)
+                                    .lineLimit(2)
+                                if let snippet = matchSnippet(in: chapter) {
+                                    Text(snippet)
+                                        .font(SolaroFont.monoCaption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
                         }
                     }
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280)
+            // 200% of the previous (min 240, ideal 280) — bumps
+            // chapter titles like "Appendix A: Action Reference"
+            // off the wrap line, and gives the search-result
+            // snippets room to breathe (#?).
+            .navigationSplitViewColumnWidth(min: 480, ideal: 560)
         }
+    }
+
+    /// Tiny match-context shown under each filtered chapter row:
+    /// the line in the body that contains the needle, trimmed.
+    /// Returns nil when the title alone matched (no body excerpt
+    /// is useful) or when the query is empty.
+    private func matchSnippet(in chapter: BookChapter) -> String? {
+        let q = searchQuery
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !q.isEmpty,
+              !chapter.title.lowercased().contains(q)
+        else { return nil }
+        for line in chapter.markdown.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.lowercased().contains(q) {
+                return String(trimmed.prefix(140))
+            }
+        }
+        return nil
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SolaroColor.textTertiary)
+                .font(.system(size: 11))
+            TextField("Search this book", text: $searchQuery)
+                .textFieldStyle(.plain)
+                .font(SolaroFont.body)
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+                .help("Clear search")
+            }
+        }
+        .padding(.horizontal, SolaroSpace.s)
+        .padding(.vertical, 6)
     }
 
     private var toolbar: some View {
@@ -601,6 +715,11 @@ enum BookMarkdownBlock {
     case blockquote(String)
     case codeBlock(language: String?, body: String)
     case horizontalRule
+    /// GFM pipe table — header row + N body rows. Each cell holds
+    /// raw inline markdown (`**bold**`, `` `code` ``, …) so the
+    /// renderer runs them through `AttributedString` the same way
+    /// paragraph cells do.
+    case table(headers: [String], rows: [[String]])
     /// Raw block-level HTML — `<details>`, `<table>`, `<img>`, etc.
     /// Rendered via `NSAttributedString`'s HTML importer so tables,
     /// breaks, sub/super-scripts, images and the rest come through
@@ -729,6 +848,29 @@ private enum BookMarkdownParser {
                 continue
             }
 
+            // GFM pipe table. Two requirements: the first line
+            // starts with `|`, and the *next* line is a separator
+            // row of `---` / `:---:` cells. Without the separator
+            // the line is just text that happens to contain pipes.
+            if trimmed.hasPrefix("|"),
+               i + 1 < lines.count,
+               isTableSeparator(String(lines[i + 1])
+                                .trimmingCharacters(in: .whitespaces))
+            {
+                let headers = splitTableRow(trimmed)
+                i += 2 // skip the header + separator
+                var rows: [[String]] = []
+                while i < lines.count {
+                    let inner = String(lines[i])
+                        .trimmingCharacters(in: .whitespaces)
+                    if !inner.hasPrefix("|") { break }
+                    rows.append(splitTableRow(inner))
+                    i += 1
+                }
+                blocks.append(.table(headers: headers, rows: rows))
+                continue
+            }
+
             // Ordered list — `<digits>. text`.
             if isOrderedListLine(trimmed) {
                 var items: [String] = []
@@ -761,6 +903,10 @@ private enum BookMarkdownParser {
                 if innerTrim.hasPrefix("- ") || innerTrim.hasPrefix("* ") { break }
                 if isOrderedListLine(innerTrim) { break }
                 if innerTrim == "---" || innerTrim == "***" || innerTrim == "___" { break }
+                // Tables: stop paragraph absorption when a `|` row
+                // appears — otherwise a table embedded in flowing
+                // prose dumps every cell into the paragraph text.
+                if innerTrim.hasPrefix("|") { break }
                 paragraph.append(innerTrim)
                 i += 1
             }
@@ -810,6 +956,35 @@ private enum BookMarkdownParser {
             i = s.index(after: i)
         }
         return false
+    }
+
+    /// A GFM separator row: pipes around cells whose interior is
+    /// `---` with optional `:` alignment markers. `| --- | :---: |`
+    /// is a separator; `| word |` is not. Accept loose forms — at
+    /// least one `-` after stripping `|`, `:`, and whitespace.
+    private static func isTableSeparator(_ line: String) -> Bool {
+        guard line.hasPrefix("|") else { return false }
+        var sawDash = false
+        for ch in line {
+            switch ch {
+            case "|", ":", " ", "\t": continue
+            case "-": sawDash = true
+            default: return false
+            }
+        }
+        return sawDash
+    }
+
+    /// Split one table row into trimmed cells. Strips the leading
+    /// `|` and the trailing `|` if present, then splits on `|`.
+    /// Does not handle escaped `\|` — none of the books in the
+    /// upstream repo currently need it; revisit when one does.
+    private static func splitTableRow(_ line: String) -> [String] {
+        var s = line
+        if s.hasPrefix("|") { s.removeFirst() }
+        if s.hasSuffix("|") { s.removeLast() }
+        return s.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     private static func isOrderedListLine(_ line: String) -> Bool {
@@ -922,10 +1097,83 @@ private struct BookMarkdownBlockView: View {
                 .fill(SolaroColor.divider)
                 .frame(height: 1)
                 .padding(.vertical, 4)
+        case .table(let headers, let rows):
+            tableView(headers: headers, rows: rows)
         case .htmlBlock(let html):
             HTMLBlockView(html: html)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Render a GFM table as a horizontally-scrollable grid. Each
+    /// cell runs through the same inline-markdown pass paragraphs
+    /// use, so `` `code` `` and **bold** survive. Column widths
+    /// are equal-share — the reference tables in the language
+    /// guide have predictable cell sizes, so a fancier
+    /// auto-sizer would be over-engineering until someone hits a
+    /// real lopsided table.
+    @ViewBuilder
+    private func tableView(headers: [String], rows: [[String]]) -> some View {
+        let columnCount = max(headers.count, rows.map(\.count).max() ?? 0)
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                tableRow(cells: pad(headers, to: columnCount),
+                         isHeader: true)
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    Divider().background(SolaroColor.divider.opacity(0.5))
+                    tableRow(cells: pad(row, to: columnCount),
+                             isHeader: false)
+                }
+            }
+            .frame(minWidth: 480, alignment: .leading)
+            .background(SolaroColor.surfaceRaised.opacity(0.25))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(SolaroColor.divider.opacity(0.5),
+                            lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+    }
+
+    @ViewBuilder
+    private func tableRow(cells: [String], isHeader: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(cells.enumerated()), id: \.offset) { idx, cell in
+                if idx > 0 {
+                    Rectangle()
+                        .fill(SolaroColor.divider.opacity(0.4))
+                        .frame(width: 1)
+                }
+                Group {
+                    if isHeader {
+                        inlineText(cell)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(SolaroColor.textPrimary)
+                    } else {
+                        inlineText(cell)
+                            .font(.system(size: 13))
+                            .foregroundStyle(SolaroColor.textPrimary)
+                    }
+                }
+                .textSelection(.enabled)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(isHeader
+                    ? SolaroColor.surfaceRaised.opacity(0.55)
+                    : Color.clear)
+    }
+
+    /// Right-pad a short row so the column count matches the
+    /// widest row in the table. Markdown lets writers omit
+    /// trailing empty cells; rendering with fewer cells in one row
+    /// would look like a column went missing.
+    private func pad(_ cells: [String], to count: Int) -> [String] {
+        if cells.count >= count { return cells }
+        return cells + Array(repeating: "", count: count - cells.count)
     }
 
     /// Heading typography mirrors a Tower-like document view:
