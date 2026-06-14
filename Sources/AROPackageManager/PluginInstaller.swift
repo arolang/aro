@@ -126,6 +126,46 @@ public final class PluginInstaller: Sendable {
         )
     }
 
+    /// Step the installer is currently on. Sent to the progress
+    /// callback so a UI can render a step label + percentage
+    /// without parsing free-text logs (#353).
+    public enum InstallStep: Sendable, Equatable {
+        case resolving
+        case cloning
+        case validating
+        case writingManifest
+        case moving
+        case building
+    }
+
+    /// async overload that runs the synchronous installer on a
+    /// detached utility-priority task and forwards step events
+    /// to a progress callback. UI/CLI callers get an awaitable
+    /// API + a hook for progress lines without having to
+    /// re-implement the install pipeline (#353).
+    public func install(
+        from url: String,
+        ref: String? = nil,
+        currentAROVersion: String? = nil,
+        progress: (@Sendable (InstallStep) -> Void)? = nil
+    ) async throws -> InstallResult {
+        progress?(.resolving)
+        return try await Task.detached(priority: .utility) { [self] in
+            // Steps fire from the sync path before the work item.
+            // We can't easily instrument the existing code mid-
+            // function from out here without a refactor, so the
+            // callback receives a coarse two-event sequence
+            // (resolving → cloning) and then the result. A
+            // finer-grained callback path is a follow-up.
+            progress?(.cloning)
+            return try self.install(
+                from: url,
+                ref: ref,
+                currentAROVersion: currentAROVersion
+            )
+        }.value
+    }
+
     /// Install a plugin from a local directory
     /// - Parameter source: Path to the plugin source directory
     /// - Returns: Installation result
