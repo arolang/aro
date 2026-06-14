@@ -100,7 +100,14 @@ public final class REPLSession: @unchecked Sendable {
     /// formatting behavior.
     private let suppressLogPrefix: Bool
 
-    public init(suppressLogPrefix: Bool = false) {
+    /// Construct a REPL session. The action registry defaults to
+    /// the process-wide singleton; tests can pass an isolated
+    /// instance so concurrent sessions don't see each other's
+    /// dynamic registrations (#363).
+    public init(
+        suppressLogPrefix: Bool = false,
+        actionRegistry: ActionRegistry = .shared
+    ) {
         self.suppressLogPrefix = suppressLogPrefix
         self.eventBus = EventBus()
         self.globalSymbols = GlobalSymbolStorage()
@@ -129,7 +136,7 @@ public final class REPLSession: @unchecked Sendable {
         #endif
 
         self.executor = FeatureSetExecutor(
-            actionRegistry: ActionRegistry.shared,
+            actionRegistry: actionRegistry,
             eventBus: eventBus,
             globalSymbols: globalSymbols
         )
