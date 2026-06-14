@@ -344,6 +344,33 @@ public final class AROLanguageServer: Sendable {
         if !unique.isEmpty {
             log("Workspace roots: \(unique.map { $0.path })")
         }
+        // Quick structural sanity check (#371). Warn — but don't
+        // refuse — when the workspace doesn't look like an ARO
+        // application. The most common wrong-folder mistakes are
+        // (a) opening the project's parent directory, or (b)
+        // opening a docs / Examples directory; both produce
+        // confusing diagnostics downstream.
+        for root in unique {
+            validateWorkspaceStructure(root)
+        }
+    }
+
+    private func validateWorkspaceStructure(_ root: URL) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil
+        ) else {
+            log("warning: workspace root '\(root.path)' is not readable")
+            return
+        }
+        let names = entries.map { $0.lastPathComponent.lowercased() }
+        let hasAro = names.contains { $0.hasSuffix(".aro") }
+        let hasOpenAPI = names.contains("openapi.yaml") || names.contains("openapi.yml")
+        let hasSources = names.contains("sources")
+        if !hasAro && !hasOpenAPI && !hasSources {
+            log("warning: workspace root '\(root.path)' contains no .aro files, openapi.yaml, or sources/ subdirectory — diagnostics will be empty until a recognised ARO project layout is present")
+        }
     }
 
     /// Decode an LSP `file://` URI to a `URL`, accepting both the canonical
