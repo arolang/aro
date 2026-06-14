@@ -218,13 +218,29 @@ private actor RepositoryStorageActor {
 
     // MARK: - Index helpers
 
-    /// Type-tagged canonical key for field index lookups
+    /// Type-tagged canonical key for field index lookups.
+    ///
+    /// Fields are stored as `any Sendable`, but the index keys
+    /// are strings; without a type tag, the String value `"1"`
+    /// and the Int value `1` would collide. The fast-path tags
+    /// (s/i/d/b) keep the common cases small and human-readable.
+    /// Custom Hashable types fall through to the
+    /// reflected-type-name fallback, which keeps types in
+    /// distinct namespaces — two different custom types
+    /// producing the same `String(describing:)` value can no
+    /// longer collide (#330).
     private func indexKey(for value: any Sendable) -> String {
         if let s = value as? String  { return "s:\(s)" }
         if let i = value as? Int     { return "i:\(i)" }
         if let d = value as? Double  { return "d:\(d)" }
         if let b = value as? Bool    { return "b:\(b)" }
-        return "x:\(String(describing: value))"
+        // Reflected type name namespaces the fallback so a custom
+        // `Foo` and a custom `Bar` whose descriptions both render
+        // as `"42"` don't share an index bucket. `String(reflecting:)`
+        // includes the module prefix and is stable for the
+        // process lifetime.
+        let typeTag = String(reflecting: type(of: value))
+        return "x:\(typeTag):\(String(describing: value))"
     }
 
     /// Add all field entries for a row to the field index
