@@ -181,3 +181,6 @@ Train/script/output/
 *.aro.layout.json
 *.yaml.layout.json
 .solaro/
+.layout.json
+/Train/script/events.jsonl
+/Train/script/demo-output

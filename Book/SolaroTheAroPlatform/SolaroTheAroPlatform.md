@@ -21,10 +21,10 @@ exists. The page you are reading is the page that is running.
 
 This book is a tour of that idea. It walks through the user
 interface, the day-to-day workflow of writing and running ARO,
-the debug and test experience, and three stories — a tech lead's
-morning standup digest, a freelancer's uptime monitor, and an indie
-hacker's nightly repository backup — each of which is twelve to forty
-lines of ARO that you can actually deploy. By the end you should know
+the debug and test experience, and two stories — a freelancer's
+uptime monitor and an indie hacker's nightly repository backup —
+each of which is twelve to forty lines of ARO that you can actually
+deploy. By the end you should know
 what SOLARO is for, when to reach for it, and how to ship something
 useful with it before lunch.
 
@@ -74,15 +74,14 @@ a `git pull`.
 
 ### 1.2 The code editor
 
-The text pane is a real TextKit-2 editor (gutter, line numbers,
-multi-cursor, the works). Syntax highlighting comes from the same
+Syntax highlighting comes from the same
 lexer the runtime uses, so a token coloured as a verb in the editor
 is a verb to the parser. Breakpoints toggle with a single click in
 the gutter. The find bar slides in from the top right with Cmd+F.
 
 The split mode (toolbar's pane picker → `Split`) shows canvas and
-code side by side; the divider is draggable from 200 to 1200 pt of
-canvas width. Edits in the code panel flow to the canvas as soon as
+code side by side; drag the divider to give either side more room.
+Edits in the code panel flow to the canvas as soon as
 the YAML / ARO parses cleanly; canvas-driven mutations (in
 `openapi.yaml`: add route, add schema, rename, delete) flow back to
 the editor immediately, no Save button needed.
@@ -110,11 +109,7 @@ writes back into the YAML on every change.
 The console is at the bottom. Three tabs: **Output** (stdout +
 stderr from the running app), **Events** (the runtime's JSONL event
 stream, one line per statement fired), and **Metrics** (a Prometheus-
-style snapshot of the runtime's counters). The metrics tab is a raw
-AppKit panel rather than SwiftUI because on macOS 26 SwiftUI
-TimelineView snapshots through hosted views tripped the layout-
-constraint cycle limit — a recurring theme in 0.10/0.11 (see the
-`refactoring-for-0.11` issue label).
+style snapshot of the runtime's counters).
 
 ### 1.5 The right rail
 
@@ -201,11 +196,11 @@ set, then each statement node lights up briefly as the runtime fires
 it. Values produced by an action (the `<result>` slot) appear under
 the node and stay there until the next run.
 
-This is the demo moment. Open `Examples/StandupDigest`, hit Run, and
-watch the three `Request` nodes fan out, the three `Extract`s pull
-the bodies, and the digest assembly walk down through the loops. No
-print-tracing, no `console.log` archaeology — the program is the
-trace.
+This is the demo moment. Open `Examples/UptimeMonitor`, hit Run, and
+watch each `Request` node fire as the loop walks the URL list, the
+`CheckFailed` handler light up the instant a probe fails, and the
+alert message land in the console. No print-tracing, no `console.log`
+archaeology — the program is the trace.
 
 ### 3.2 Debug
 
@@ -235,11 +230,11 @@ offending statement so you can click straight to it.
 Everything SOLARO does, the CLI does too:
 
 ```bash
-aro run    ./Examples/StandupDigest
-aro debug  ./Examples/StandupDigest
-aro test   ./Examples/StandupDigest
-aro check  ./Examples/StandupDigest        # syntax / semantic check
-aro build  ./Examples/StandupDigest        # compile to a native binary
+aro run    ./Examples/UptimeMonitor
+aro debug  ./Examples/UptimeMonitor
+aro test   ./Examples/UptimeMonitor
+aro check  ./Examples/UptimeMonitor        # syntax / semantic check
+aro build  ./Examples/UptimeMonitor        # compile to a native binary
 ```
 
 The CLI's output is the input that drives SOLARO's canvas. SOLARO is
@@ -282,79 +277,9 @@ The map of values flowing through the program is the program.
 
 ---
 
-## 5. Three stories
+## 5. Two stories
 
-### 5.1 A tech lead's standup digest
-
-> *Persona: someone who's been writing the standup digest by hand
-> every morning for two years and would like ten minutes of their
-> life back.*
-
-The example lives at `Examples/StandupDigest`. Three GET requests,
-three loops, a Markdown render, done. The whole feature set is
-forty-two lines including comments:
-
-```aro
-(Application-Start: Standup Digest) {
-    Log "Standup digest — assembling the morning brief." to the <console>.
-
-    Request the <commits-response> from "http://127.0.0.1:18781/commits".
-    Extract the <commits> from the <commits-response: body>.
-
-    Request the <prs-response> from "http://127.0.0.1:18781/pulls".
-    Extract the <pulls> from the <prs-response: body>.
-
-    Request the <issues-response> from "http://127.0.0.1:18781/issues".
-    Extract the <issues> from the <issues-response: body>.
-
-    Compute the <commit-count: length> from <commits>.
-    Compute the <pull-count: length> from <pulls>.
-    Compute the <issue-count: length> from <issues>.
-
-    Log "# Standup digest" to the <console>.
-    Log "## Landed yesterday" to the <console>.
-    For each <commit> in <commits> {
-        Extract the <message> from the <commit: message>.
-        Extract the <author>  from the <commit: author>.
-        Log "- " to the <console>. Log <message> to the <console>.
-        Log " (" to the <console>. Log <author>  to the <console>. Log ")" to the <console>.
-    }
-    (* …same shape for pulls and issues… *)
-
-    Return an <OK: status> for the <digest>.
-}
-```
-
-#### Why this is more useful than a shell script
-
-The three `Request` calls are independent. ARO's lazy execution
-model (every action returns a future, forced on first read) fans
-them out automatically — they run in parallel, and the canvas shows
-all three nodes pulsing at the same instant. The shell version of
-this script would walk them in sequence and take three times longer
-for no good reason.
-
-The `Compute … length` calls show how the canvas shines on simple
-programs. Each one's result appears under the node as soon as the
-loop completes; when you tweak the stub data and re-run, the new
-counts appear in place. Static-image documentation lies; this
-doesn't.
-
-#### Running it
-
-```bash
-# In one terminal, start the stub.
-python3 Examples/StandupDigest/stub.py 18781
-
-# In SOLARO, File → Open → Examples/StandupDigest → Run.
-```
-
-The digest assembles in milliseconds. Swap the stub URLs for your
-real GitLab/GitHub endpoints (set `GITLAB_TOKEN` in the environment
-and add the auth header in a `Request` config object) and you have
-a real cron-able job.
-
-### 5.2 A freelancer's uptime monitor
+### 5.1 A freelancer's uptime monitor
 
 > *Persona: someone running three side-services who's tired of
 > learning about outages from customers.*
@@ -421,7 +346,7 @@ done; the script knows how to exit cleanly. Add a `Keepalive` and
 wrap the body in a `Schedule … every 60 seconds` and the script
 becomes a service.
 
-### 5.3 An indie hacker's nightly repo backup
+### 5.2 An indie hacker's nightly repo backup
 
 > *Persona: someone self-hosting a handful of projects who already
 > set up a backup once and watched it silently fail for three
@@ -463,7 +388,7 @@ The whole script is one feature set:
 
 #### What you watch on the canvas
 
-Each repo's `Clone` node lights up as libgit2 does the work; the
+Each repo's `Clone` node lights up while the clone runs; the
 node next to it shows the path it wrote to. The `backup-repository`
 accumulates a row per repo per night; if a clone fails, the node
 goes red and the chain stops — you see the failure on the canvas
@@ -508,13 +433,8 @@ For each feature set the panel shows:
   you're poking at a single FS via curl and want to see the number
   change per request without averaging.
 
-The panel updates at 1 Hz from the runtime's `/metrics` socket; the
-counter rows themselves are pre-allocated NSTextFields, so the
-update path is a `stringValue =` assignment per cell and the
-SwiftUI host above never sees a size change. (Earlier the SwiftUI
-version of this panel had a habit of crashing the Inspector column
-on macOS 26 by tripping `_postWindowNeedsUpdateConstraints` mid-
-layout; the AppKit panel sidesteps it.)
+The panel updates once a second from the runtime's `/metrics`
+socket, so the numbers tick live while your app runs.
 
 Application-Start and Application-End sit at the top so the
 totalised startup / shutdown numbers don't drift away as more
@@ -615,7 +535,7 @@ code.
 ARO programs are organised as **feature sets** — named bundles of
 ARO statements tagged with a business activity. The activity is the
 "why" of the feature set: `Order Management`, `User API`,
-`Standup Digest`, `CheckFailed Handler`. SOLARO uses the activity
+`Uptime Monitor`, `CheckFailed Handler`. SOLARO uses the activity
 as the primary navigation axis.
 
 The inspector's **Feature sets** card lists every FS in the open

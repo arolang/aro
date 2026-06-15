@@ -4,7 +4,7 @@
     Log "Starting HTTP Server..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
-    Start the <http-server> with {}.
+    Start the <http-server> with { }.
     Log "Server ready on port 8080" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
