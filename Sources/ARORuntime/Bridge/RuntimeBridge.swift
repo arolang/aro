@@ -671,6 +671,16 @@ private func buildCompiledUserActionInput(
     if let withDict = resolveLocal("_with_") as? [String: any Sendable] {
         return withDict
     }
+    // `with { ... }` in a compiled binary: the LLVM call site routes the
+    // evaluated object literal through `_expression_` (there is no `_with_`
+    // transient in compiled mode) but preserves the preposition on the
+    // object descriptor. A with-clause dict is the input object itself —
+    // without this, a `takes <field>` action would wrap the whole dict as
+    // `{ field: dict }`, mangling `Application.X the <r> with { field: v }`.
+    if object.preposition == .with,
+       let dict = (resolveLocal("_expression_") ?? resolveLocal("_literal_")) as? [String: any Sendable] {
+        return dict
+    }
     if let takesField = takesField {
         if let expr = resolveLocal("_expression_") { return [takesField: expr] }
         if let lit  = resolveLocal("_literal_")    { return [takesField: lit] }

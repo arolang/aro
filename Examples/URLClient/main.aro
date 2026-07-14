@@ -10,6 +10,12 @@
      Write the <data> to the <url: "https://...">.
 
    Both support the `with` clause for headers, timeout, etc.
+
+   The endpoints mirror jsonplaceholder.typicode.com and
+   httpbin.org but are served by the local stub.py (port 18767)
+   so the example works offline and tests don't flake on live
+   third-party services. Swap the URLs for the real hosts to see
+   it against the public APIs.
    ============================================================ *)
 
 (Application-Start: URL Client Demo) {
@@ -18,7 +24,7 @@
 
     (* Simple GET request - fetch JSON data *)
     Log "1. Fetching TODO from JSONPlaceholder API..." to the <console>.
-    Read the <todo> from the <url: "https://jsonplaceholder.typicode.com/todos/1">.
+    Read the <todo> from the <url: "http://127.0.0.1:18767/todos/1">.
 
     (* Response is automatically parsed as JSON *)
     Extract the <title> from the <todo: title>.
@@ -29,7 +35,7 @@
 
     (* GET request with custom headers *)
     Log "2. Fetching with custom headers..." to the <console>.
-    Read the <headers-test> from the <url: "https://httpbin.org/headers"> with {
+    Read the <headers-test> from the <url: "http://127.0.0.1:18767/headers"> with {
         headers: {
             X-Custom-Header: "ARO-URL-Client",
             Accept: "application/json"
@@ -46,13 +52,13 @@
         body: "This post was created using ARO's unified URL I/O!",
         userId: 1
     }.
-    Write the <new-post> to the <url: "https://jsonplaceholder.typicode.com/posts">.
+    Write the <new-post> to the <url: "http://127.0.0.1:18767/posts">.
     Log "   Post created successfully!" to the <console>.
     Log "" to the <console>.
 
     (* Fetch single user *)
     Log "4. Fetching a user..." to the <console>.
-    Read the <userdata> from the <url: "https://jsonplaceholder.typicode.com/users/1">.
+    Read the <userdata> from the <url: "http://127.0.0.1:18767/users/1">.
     Extract the <username> from the <userdata: name>.
     Extract the <useremail> from the <userdata: email>.
     Log "   User: ${username} (${useremail})" to the <console>.
