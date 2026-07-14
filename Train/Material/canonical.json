@@ -1,5 +1,9 @@
 {
   "_doc": "Hand-written expected answers per prompt. Used by run_prompts.py to compose training pairs. A prompt without an entry here gets `expected: null` in the saved JSON — fill in manually before running the trainer.",
+  "_version": "1.0.0",
+  "_source_commit": "9b6599dea6a84e97e84e3fabb3c80cadae08b33d",
+  "_stamped_at": "2026-05-24",
+  "_meta_doc": "_version/_source_commit stamp the corpus state these expected answers were verified against. NB23 warns when the corpus has moved past _source_commit or the file exceeds its age threshold. Bump _version and re-point _source_commit after re-verifying the answers.",
   "ARO hello world, please.": "```aro\n(Application-Start: Hello World) {\n    Log \"Hello, World!\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
   "ARO snippet for a Mustache-style template render.": "```aro\n(Render: Example) {\n    Create the <template> with \"Hello, {{name}}!\".\n    Create the <data> with { name: \"Ada\" }.\n    Render the <html> from the <template> with <data>.\n    Return an <OK: status> with <html>.\n}\n```",
   "ARO snippet that demonstrates lazy / streaming evaluation.": "Every action is lazy by default — chained Compute/Reduce fuse automatically.\n\n```aro\n(StreamingPipeline: Example) {\n    Create the <numbers> with [1, 2, 3, 4, 5].\n    Compute the <sorted: sort> from <numbers>.\n    Reduce the <total: Integer> from the <sorted> with sum().\n    Return an <OK: status> with <total>.\n}\n```",
