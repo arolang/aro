@@ -1903,3 +1903,321 @@ def derive_source_quality_from_validation(validated_samples, min_count=20):
         if s.get('valid') is True:
             passed[prefix] += 1
     return {p: passed[p] / totals[p] for p in totals if totals[p] >= min_count}
+
+
+# ── Generation-failure feedback loop (issue #396) ─────────────────────────────
+# When NB07/NB10 generation fails `aro check` / `aro run`, the failure is no
+# longer thrown away: each one is categorized and appended to
+# GENERATION_FAILURES_FILE. On the next pipeline run, NB06 reads this file and
+# turns the most common *novel* error classes (classes not already covered by
+# its static ERROR_PATTERNS) into wrong-code → fixed-code correction pairs.
+
+GENERATION_FAILURES_FILE = DATA_ROOT / 'generation_failures.jsonl'
+
+# (category, substring-or-regex patterns). First match wins. Categories that
+# overlap the static NB06 ERROR_PATTERNS carry static_covered=True so the
+# feedback loop can focus on genuinely novel error classes.
+_ERROR_CATEGORY_PATTERNS = [
+    ('string_concat_plus',       [r"Expected '?'?>'?, but got \+", r'\+\+ .*concat', r"got '\+'"], True),
+    ('rebind_variable',          [r'Cannot rebind variable', r'rebind'], True),
+    ('reserved_prefix',          [r"Reserved prefix", r"reserved prefix"], True),
+    ('wrong_preposition',        [r'Expected preposition'], True),
+    ('expr_in_angle_brackets',   [r"Expected '>', but got"], True),
+    ('dot_in_angle_brackets',    [r"Expected '>'.*got \."], True),
+    ('double_equals',            [r"got =="], True),
+    ('where_misuse',             [r'Expected identifier, but got where', r"'where'"], True),
+    ('invalid_verb',             [r'Expected action verb', r'Unknown action', r'unknown verb'], True),
+    ('missing_application_start', [r'Entry point not found', r'Application-Start'], True),
+    ('multiple_application_start', [r'[Mm]ultiple Application-Start'], False),
+    ('missing_period',           [r"Expected '\.'"], False),
+    ('unexpected_token',         [r'[Uu]nexpected token'], False),
+    ('unknown_qualifier',        [r'[Uu]nknown qualifier', r'qualifier'], False),
+    ('symbol_not_found',         [r'Symbol .* not found', r'SymbolLookupError', r'[Uu]ndefined symbol'], False),
+    ('runtime_crash',            [r'Fatal error', r'[Cc]rashed', r'non-zero exit'], False),
+    ('timeout',                  [r'^timeout$', r'TIMEOUT'], False),
+    ('no_aro_block',             [r'No ```aro``` block'], False),
+    ('comment_heavy',            [r'comment lines'], False),
+    ('semantic_misalignment',    [r'does not address the original', r'semantic'], False),
+]
+
+
+def categorize_aro_error(error_text: str) -> str:
+    """Map an `aro check`/`aro run` stderr string to a stable error category."""
+    text = (error_text or '').strip()
+    if not text:
+        return 'empty_error'
+    for category, patterns, _static in _ERROR_CATEGORY_PATTERNS:
+        for pat in patterns:
+            if _re.search(pat, text):
+                return category
+    return 'uncategorized'
+
+
+def error_category_is_static(category: str) -> bool:
+    """True when the category is already covered by NB06's static ERROR_PATTERNS."""
+    for cat, _patterns, static in _ERROR_CATEGORY_PATTERNS:
+        if cat == category:
+            return static
+    return False
+
+
+def record_generation_failure(notebook_tag: str, task_type: str,
+                              instruction: str, code: str, error: str,
+                              phase: str = 'check') -> str:
+    """Append one failed generation to GENERATION_FAILURES_FILE.
+
+    `phase` is 'check' (aro check failed) or 'run' (aro run failed).
+    Returns the assigned error category. Best-effort: any I/O problem is
+    swallowed so a broken failure log can never break generation itself.
+    """
+    category = categorize_aro_error(error)
+    rec = {
+        'notebook':    notebook_tag,
+        'task_type':   task_type,
+        'phase':       phase,
+        'category':    category,
+        'instruction': (instruction or '')[:1500],
+        'code':        (code or '')[:3000],
+        'error':       (error or '')[:600],
+    }
+    try:
+        GENERATION_FAILURES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(GENERATION_FAILURES_FILE, 'a') as f:
+            f.write(json.dumps(rec) + '\n')
+    except Exception as e:  # pragma: no cover - diagnostics only
+        sys.stderr.write(f'[config] Warning: could not record generation failure: {e}\n')
+    return category
+
+
+def load_generation_failures() -> list[dict]:
+    """Load all recorded generation failures (may be empty)."""
+    failures = []
+    if not GENERATION_FAILURES_FILE.exists():
+        return failures
+    with open(GENERATION_FAILURES_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                failures.append(json.loads(line))
+            except Exception:
+                pass
+    return failures
+
+
+def summarize_generation_failures(failures=None, top_n: int = 15) -> list[dict]:
+    """Aggregate failures by category. Returns a list of
+    {category, count, novel, example} dicts sorted by count desc.
+    `example` is one representative failure (code + error) per category."""
+    from collections import Counter as _C
+    failures = failures if failures is not None else load_generation_failures()
+    counts = _C(f.get('category', 'uncategorized') for f in failures)
+    summary = []
+    for category, count in counts.most_common(top_n):
+        example = next(
+            (f for f in failures
+             if f.get('category') == category and f.get('code') and f.get('error')),
+            None,
+        )
+        summary.append({
+            'category': category,
+            'count':    count,
+            'novel':    not error_category_is_static(category),
+            'example':  example,
+        })
+    return summary
+
+
+# ── `aro ask` tool inventory extraction (issue #397) ──────────────────────────
+# NB11 trains function calling against the REAL `aro ask` toolset. The source
+# of truth is the Swift sources under Sources/AROAsk/ — every tool is declared
+# as an AskToolDescriptor(name:, description:, parameters:) where parameters
+# is a JSON-schema literal built from JSONValue .object/.array/.string nodes.
+# This extractor parses those literals at pipeline runtime so the training
+# data can never drift from the shipped tool inventory.
+
+_ASK_TOOL_SOURCE_DIRS = ('Sources/AROAsk/Tools', 'Sources/AROAsk/Retrieval')
+
+
+def _swift_balanced_block(text: str, open_idx: int) -> str:
+    """Return the text of a balanced [...] block starting at text[open_idx]=='['.
+    String-literal aware (Swift double-quoted strings with backslash escapes)."""
+    assert text[open_idx] == '['
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(open_idx, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth -= 1
+            if depth == 0:
+                return text[open_idx:i + 1]
+    raise ValueError('unbalanced bracket block in Swift source')
+
+
+def _swift_top_level_keys(block: str) -> list[tuple[str, int]]:
+    """Given a `[ "key": value, ... ]` block, return [(key, position)] for keys
+    at depth 1 only (nested object keys are ignored)."""
+    keys = []
+    depth = 0
+    in_string = False
+    escape = False
+    string_start = None
+    i = 0
+    while i < len(block):
+        ch = block[i]
+        if escape:
+            escape = False
+        elif ch == '\\' and in_string:
+            escape = True
+        elif ch == '"':
+            if in_string:
+                # closing quote — is this a key at depth 1?
+                if depth == 1:
+                    j = i + 1
+                    while j < len(block) and block[j] in ' \t\n':
+                        j += 1
+                    if j < len(block) and block[j] == ':':
+                        keys.append((block[string_start + 1:i], string_start))
+                in_string = False
+            else:
+                in_string = True
+                string_start = i
+        elif not in_string:
+            if ch == '[':
+                depth += 1
+            elif ch == ']':
+                depth -= 1
+        i += 1
+    return keys
+
+
+def _swift_value_after_key(block: str, key_pos: int) -> str:
+    """Return the raw value text following the `"key":` at key_pos in block."""
+    colon = block.index(':', key_pos + 1)
+    rest = block[colon + 1:]
+    open_rel = rest.find('[')
+    if open_rel == -1:
+        # scalar value — up to next comma at this level (best effort)
+        return rest.split(',', 1)[0].strip()
+    inner = _swift_balanced_block(rest, open_rel)
+    return rest[:open_rel] + inner
+
+
+def _parse_parameters_block(params_block: str) -> tuple[list[str], list[str]]:
+    """Parse a JSONValue `.object([ ... ])` parameters literal.
+    Returns (property_names, required_names) at the TOP level of the schema."""
+    props: list[str] = []
+    required: list[str] = []
+    for key, pos in _swift_top_level_keys(params_block):
+        if key == 'properties':
+            value = _swift_value_after_key(params_block, pos)
+            open_idx = value.find('[')
+            if open_idx != -1:
+                inner = _swift_balanced_block(value, open_idx)
+                props = [k for k, _ in _swift_top_level_keys(inner)]
+        elif key == 'required':
+            value = _swift_value_after_key(params_block, pos)
+            required = _re.findall(r'\.string\("([^"]+)"\)', value)
+    return props, required
+
+
+def extract_ask_tools(aro_root=None) -> list[dict]:
+    """Extract the real `aro ask` tool inventory from the Swift sources.
+
+    Returns a list of dicts:
+        {'name': str, 'description': str, 'params': [str],
+         'required': [str], 'source_file': str}
+    where `params` uses the NB11 convention of a trailing '?' for optional
+    parameters (e.g. ['path', 'offset?', 'limit?']).
+
+    Raises RuntimeError if no tool descriptors can be found — the training
+    notebook must fail loudly rather than silently train on a stale copy.
+    """
+    root = Path(aro_root) if aro_root else ARO_ROOT
+    swift_files = []
+    for rel in _ASK_TOOL_SOURCE_DIRS:
+        d = root / rel
+        if d.is_dir():
+            swift_files.extend(sorted(d.glob('*.swift')))
+    if not swift_files:
+        raise RuntimeError(
+            f'aro ask tool sources not found under {root} '
+            f'(looked in {", ".join(_ASK_TOOL_SOURCE_DIRS)})'
+        )
+
+    tools: list[dict] = []
+    for path in swift_files:
+        text = path.read_text(errors='replace')
+
+        # Positions of named JSONValue parameter declarations, e.g.
+        #   let params: JSONValue = .object([ ... ])
+        decl_positions: list[tuple[int, str, int]] = []  # (pos, name, block_open_idx)
+        for m in _re.finditer(r'let\s+(\w+)\s*:\s*JSONValue\s*=\s*\.object\(\s*\[', text):
+            decl_positions.append((m.start(), m.group(1), m.end() - 1))
+
+        descriptor_positions = [m.start() for m in _re.finditer(r'AskToolDescriptor\(', text)]
+        for idx, pos in enumerate(descriptor_positions):
+            end = descriptor_positions[idx + 1] if idx + 1 < len(descriptor_positions) else len(text)
+            chunk = text[pos:end]
+
+            name_m = _re.search(r'name:\s*"([^"]+)"', chunk)
+            if not name_m:
+                continue
+            name = name_m.group(1)
+            desc_m = _re.search(r'description:\s*"((?:[^"\\]|\\.)*)"', chunk)
+            description = desc_m.group(1).replace('\\"', '"') if desc_m else ''
+
+            props: list[str] = []
+            required: list[str] = []
+            inline_m = _re.search(r'parameters:\s*\.object\(\s*\[', chunk)
+            if inline_m:
+                block = _swift_balanced_block(chunk, inline_m.end() - 1)
+                props, required = _parse_parameters_block(block)
+            else:
+                ref_m = _re.search(r'parameters:\s*(\w+)', chunk)
+                if ref_m:
+                    ref = ref_m.group(1)
+                    candidates = [d for d in decl_positions if d[1] == ref and d[0] < pos]
+                    if candidates:
+                        _dpos, _dname, open_idx = candidates[-1]
+                        block = _swift_balanced_block(text, open_idx)
+                        props, required = _parse_parameters_block(block)
+
+            params = [p if p in required else f'{p}?' for p in props]
+            # required-first, then optional, preserving declaration order within each
+            params.sort(key=lambda p: p.endswith('?'))
+            tools.append({
+                'name':        name,
+                'description': description,
+                'params':      params,
+                'required':    required,
+                'source_file': str(path.relative_to(root)),
+            })
+
+    if not tools:
+        raise RuntimeError(
+            f'No AskToolDescriptor definitions found in {len(swift_files)} Swift '
+            f'files under {root} — the `aro ask` tool inventory could not be '
+            f'extracted. Refusing to fall back silently.'
+        )
+
+    # Deduplicate by name (keep first occurrence) and sort for stable output.
+    seen: dict[str, dict] = {}
+    for t in tools:
+        seen.setdefault(t['name'], t)
+    return sorted(seen.values(), key=lambda t: t['name'])
