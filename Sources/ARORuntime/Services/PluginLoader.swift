@@ -1327,7 +1327,13 @@ public final class PluginLoader: @unchecked Sendable {
     ///
     /// Each plugin in `Plugins/` is compiled independently, so all builds run in parallel.
     /// Directory setup and file copies happen inside each task (they target separate output dirs).
-    public func compileManagedPluginsParallel(from sourceDirectory: URL, to outputDirectory: URL) async throws {
+    /// - Returns: Per-plugin compile failures keyed by plugin directory name.
+    ///   Failures are also logged as warnings; callers that need a hard error
+    ///   (e.g. `aro build` static linking) inspect the returned map so the
+    ///   real compiler error surfaces instead of a downstream symptom like
+    ///   "No object files found".
+    @discardableResult
+    public func compileManagedPluginsParallel(from sourceDirectory: URL, to outputDirectory: URL) async throws -> [String: String] {
         #if os(Windows)
         let libraryExtension = "dll"
         #elseif os(Linux)
@@ -1336,7 +1342,7 @@ public final class PluginLoader: @unchecked Sendable {
         let libraryExtension = "dylib"
         #endif
 
-        guard FileManager.default.fileExists(atPath: sourceDirectory.path) else { return }
+        guard FileManager.default.fileExists(atPath: sourceDirectory.path) else { return [:] }
 
         let contents = try FileManager.default.contentsOfDirectory(
             at: sourceDirectory,
@@ -1354,14 +1360,19 @@ public final class PluginLoader: @unchecked Sendable {
             )
         }
 
-        guard !pluginDirs.isEmpty else { return }
+        guard !pluginDirs.isEmpty else { return [:] }
 
         // Run all plugin compilations concurrently
-        await withTaskGroup(of: String?.self) { group in
+        var failures: [String: String] = [:]
+        await withTaskGroup(of: (name: String, error: String)?.self) { group in
             for item in pluginDirs {
                 let libExt = libraryExtension
                 let outDir = outputDirectory
                 group.addTask {
+                    let outputPluginDir = outDir.appendingPathComponent(item.lastPathComponent)
+                    // Captured before compiling: compileSingleManagedPlugin creates
+                    // the output dir and copies plugin.yaml as its first step.
+                    let outputExistedBefore = FileManager.default.fileExists(atPath: outputPluginDir.path)
                     do {
                         try self.compileSingleManagedPlugin(
                             item: item,
@@ -1370,14 +1381,32 @@ public final class PluginLoader: @unchecked Sendable {
                         )
                         return nil
                     } catch {
-                        return "[PluginLoader] Warning: Failed to compile managed plugin \(item.lastPathComponent): \(error)"
+                        // Remove the half-created output dir (plugin.yaml + empty
+                        // Sources/) so it can't shadow the source plugin. On
+                        // case-sensitive filesystems a manifest-only `Plugins/Foo`
+                        // next to a real `plugins/Foo` makes the managed loader
+                        // report "Native library not found" without ever seeing
+                        // the plugin's sources. Only remove what this run created:
+                        // on case-insensitive filesystems the output dir IS the
+                        // source dir and must never be deleted.
+                        if !outputExistedBefore {
+                            try? FileManager.default.removeItem(at: outputPluginDir)
+                        }
+                        return (name: item.lastPathComponent, error: String(describing: error))
                     }
                 }
             }
-            for await warning in group {
-                if let warning { AROLogger.warning(warning, subsystem: "plugins") }
+            for await failure in group {
+                if let failure {
+                    AROLogger.warning(
+                        "[PluginLoader] Warning: Failed to compile managed plugin \(failure.name): \(failure.error)",
+                        subsystem: "plugins"
+                    )
+                    failures[failure.name] = failure.error
+                }
             }
         }
+        return failures
     }
 
     /// Compile a single managed plugin (extracted from the sequential loop body).

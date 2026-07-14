@@ -237,9 +237,13 @@ integration:linux:
   # ExternalService) compile their plugins via `swift build` on first run.
   # The constrained Kubernetes pod can't service that combined CPU+RAM
   # load — pipeline 17785 retry 80454 was killed with OOM (exit 137).
-  # Same examples pass locally and on GitHub. Until the runner is sized
-  # larger or plugin compiles are pre-warmed, this job is best-effort.
+  # SPM plugin builds are therefore pre-warmed sequentially below, before
+  # run-tests.pl, so the tests only load pre-built libraries. Kept
+  # best-effort until a few pipelines confirm the pod copes.
   allow_failure: true
+  # Pre-warming the plugin builds adds serial compile time on top of the
+  # ~60 min the suite already needs on this pod.
+  timeout: 2h
   needs:
     - job: build:linux
       artifacts: true
@@ -315,6 +319,27 @@ integration:linux:
     - for i in $(seq 1 50); do python3 -c 'import socket; s=socket.socket(); s.settimeout(0.2); exit(0 if s.connect_ex(("127.0.0.1",18765))==0 else 1)' && python3 -c 'import socket; s=socket.socket(); s.settimeout(0.2); exit(0 if s.connect_ex(("127.0.0.1",18766))==0 else 1)' && break; sleep 0.2; done
     - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18765/v1/forecast").read()[:120])'
     - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18766/v1/forecast").read()[:120])'
+
+    # Pre-warm SPM plugin builds sequentially. First-run plugin compiles
+    # inside the tests OOM / blow the 300s per-test timeout on this pod
+    # (CustomPlugin, SQLiteExample), and `aro build` needs the .build
+    # trees to harvest static-link objects (ExternalService, ZipService).
+    # Building into the default .build scratch path satisfies every
+    # consumer: NativePluginHost (interpreter), compilePackagePlugin
+    # (managed compile), and BuildCommand's static-link object hunt.
+    # A pre-warm failure fails the job here, where the real compiler
+    # error is visible, instead of as a confusing downstream test error.
+    # The Swift toolchain must come first in PATH here: with llvm-20 first,
+    # SPM can pick up clang-20 as the link driver, which rejects Swift
+    # metadata relocations when linking the plugin .so (PREL32/PC32
+    # "recompile with -fPIC" errors).
+    - |
+      for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
+        [ -f "$pkg" ] || continue
+        dir="$(dirname "$pkg")"
+        echo "=== Pre-warming plugin build: $dir"
+        (cd "$dir" && PATH="/usr/share/swift/usr/bin:$PATH" swift build -c release) || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
+      done
 
     - chmod +x Tests/IntegrationTestsRunner/run-tests.pl
     # K8s runner pod is small (~1–2 vCPUs); -j 2 gets a real speedup

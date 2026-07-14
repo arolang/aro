@@ -245,7 +245,13 @@ struct BuildCommand: AsyncParsableCommand {
                    FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
                     try FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
                 }
-                try await PluginLoader.shared.compileManagedPluginsParallel(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
+                let pluginCompileFailures = try await PluginLoader.shared.compileManagedPluginsParallel(
+                    from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly
+                )
+                for (failedPlugin, compileError) in pluginCompileFailures.sorted(by: { $0.key < $1.key }) {
+                    print("Warning: plugin '\(failedPlugin)' failed to compile:")
+                    print("  \(compileError)")
+                }
 
                 #if os(Windows)
                 let libExt = "dll"
@@ -503,10 +509,15 @@ struct BuildCommand: AsyncParsableCommand {
 
                     if objectFiles.isEmpty {
                         print("Error: No object files found for plugin '\(pluginName)' — cannot statically link.")
-                        print("  Static linking requires .o files:")
-                        print("    • Rust:  cargo must be installed and the crate must build (`cargo rustc --crate-type=staticlib` is invoked automatically)")
-                        print("    • Swift: use a Package.swift so SPM produces .o files")
-                        print("    • C:     place .c files in the plugin's src/ or root directory")
+                        if let compileError = pluginCompileFailures[pluginName] {
+                            print("  Root cause — the plugin failed to compile:")
+                            print("  \(compileError)")
+                        } else {
+                            print("  Static linking requires .o files:")
+                            print("    • Rust:  cargo must be installed and the crate must build (`cargo rustc --crate-type=staticlib` is invoked automatically)")
+                            print("    • Swift: use a Package.swift so SPM produces .o files")
+                            print("    • C:     place .c files in the plugin's src/ or root directory")
+                        }
                         throw ExitCode.failure
                     }
 
