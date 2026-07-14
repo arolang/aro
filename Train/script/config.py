@@ -20,6 +20,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections import Counter as _Counter
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1129,14 +1130,20 @@ def save_notebook_pair(notebook_tag: str, pair: dict,
     """
     Append a single training pair to PAIRS_FILE with the notebook tag.
     The pair dict should contain at minimum `instruction`+`output` or `messages`.
-    Every pair is stamped with provenance metadata (issue #408) and the
-    session's run config is recorded under data/runs/. Returns True if written.
+    Returns True if written; False when the FIXTRAIN lint gate dropped the
+    pair (its output ARO contains a known-bad pattern — see
+    check_fixtrain_issues / issue #410). Written pairs are stamped with
+    provenance metadata (issue #408) and the session's run config is
+    recorded under data/runs/.
     """
     pair['notebook'] = notebook_tag
     pair = _normalize_pair(pair)
+    if not _fixtrain_gate_pair(pair, notebook_tag):
+        return False
     pair = stamp_provenance(pair, notebook_tag, generation_strategy, lineage)
     _ensure_run_recorded()
     _ensure_pairs_header()
+    PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(PAIRS_FILE, 'a') as f:
         f.write(json.dumps(pair) + '\n')
     return True
@@ -1146,17 +1153,753 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
                         generation_strategy=None) -> int:
     """
     Append multiple training pairs to PAIRS_FILE, all tagged with notebook_tag
-    and stamped with provenance metadata (issue #408).
-    Returns the number of pairs written.
+    and stamped with provenance metadata (issue #408). Pairs that fail the
+    FIXTRAIN lint gate (issue #410) are dropped and reported. Returns the
+    number of pairs actually written.
     """
     if not pairs:
         return 0
+    PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _ensure_run_recorded()
     _ensure_pairs_header()
+    written = 0
+    gate_dropped = 0
     with open(PAIRS_FILE, 'a') as f:
         for pair in pairs:
             pair['notebook'] = notebook_tag
             pair = _normalize_pair(pair)
+            if not _fixtrain_gate_pair(pair, notebook_tag):
+                gate_dropped += 1
+                continue
             pair = stamp_provenance(pair, notebook_tag, generation_strategy)
             f.write(json.dumps(pair) + '\n')
-    return len(pairs)
+            written += 1
+    if gate_dropped:
+        print(f'[{notebook_tag}] fixtrain-gate dropped {gate_dropped} pairs '
+              f'(run fixtrain_report() for the per-rule breakdown)')
+    return written
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Shared data-quality helpers (train::data-quality issues #377–#410)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── Syntax-reference guard (issue #377) ──────────────────────────────────────
+# The CLAUDE.md-derived `aro_syntax` reference is the foundation of every
+# system prompt in the pipeline. A previous pipeline version silently stored a
+# CLI error string as the reference; this guard turns any regression into a
+# hard error instead of a poisoned training run.
+
+SYNTAX_REFERENCE_REQUIRED_SECTIONS = (
+    'Core Syntax',
+    'Key Rules',
+    'Action Semantic Roles',
+)
+SYNTAX_REFERENCE_MIN_CHARS = 1500
+
+
+def validate_syntax_reference(text,
+                              min_chars=SYNTAX_REFERENCE_MIN_CHARS,
+                              required_sections=SYNTAX_REFERENCE_REQUIRED_SECTIONS):
+    """Assert the extracted `aro_syntax` reference looks like the real thing.
+
+    Raises ValueError listing every problem found; returns True when valid.
+    Called by NB01 right after extraction and by NB02 before the knowledge
+    base is written, so a reorganised CLAUDE.md can never silently produce
+    an empty or truncated syntax reference again.
+    """
+    text = text or ''
+    problems = []
+    if len(text) < min_chars:
+        problems.append(f'too short: {len(text)} chars (minimum {min_chars})')
+    for section in required_sections:
+        if section.lower() not in text.lower():
+            problems.append(f'missing required section: {section!r}')
+    # The historic failure mode: a CLI error string stored as the reference.
+    for marker in ('command not found', 'unknown subcommand', 'traceback (most recent call last)'):
+        if marker in text[:400].lower():
+            problems.append(f'looks like an error message (contains {marker!r})')
+    if problems:
+        raise ValueError(
+            'aro_syntax reference failed validation:\n  - ' + '\n  - '.join(problems)
+        )
+    return True
+
+
+# ── Canonical ARO snippet helpers ────────────────────────────────────────────
+
+def extract_aro_blocks(text):
+    """Public alias for the ```aro fence extractor used across notebooks."""
+    return _extract_aro_blocks(text)
+
+
+def aro_check_snippet(code, timeout=10, extra_files=None):
+    """Run `aro check` on a code string in a temp dir.
+
+    Returns (passed: bool | None, error: str). None means the aro binary is
+    not available (caller decides whether that is fatal).
+    """
+    import tempfile
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'main.aro').write_text(code)
+            if extra_files:
+                for name, content in extra_files.items():
+                    (Path(tmp) / name).write_text(content)
+            r = subprocess.run(['aro', 'check', tmp],
+                               capture_output=True, text=True, timeout=timeout)
+            return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
+    except FileNotFoundError:
+        return None, 'aro_not_found'
+    except subprocess.TimeoutExpired:
+        return False, 'timeout'
+
+
+def auto_wrap_aro(code):
+    """Wrap bare ARO statements in a feature set if they don't already have one.
+
+    Canonical version of the helper previously duplicated in NB04/NB06.
+    Returns (wrapped_code, was_wrapped) or (None, False) if the block is
+    template/meta-syntax/negative-example content that should be skipped.
+    """
+    stripped = code.strip()
+
+    # Already has a feature set wrapper — use as-is
+    if stripped.startswith('(') and '{' in stripped.split('\n')[0]:
+        return code, False
+    # Template placeholders
+    if '<statements>' in stripped or '<statement' in stripped.lower():
+        return None, False
+    # Annotation/diagram markers
+    if '^^^^' in stripped or '───' in stripped:
+        return None, False
+    # Negative examples showing deliberate errors
+    if '❌' in stripped:
+        return None, False
+    # C-style comments instead of ARO comments
+    if '//' in stripped and '(*' not in stripped:
+        return None, False
+    # Check any line looks like a real ARO statement (angle-bracket variables)
+    has_aro_stmt = any(_re.search(r'<[a-z][-a-z0-9]*', line)
+                       for line in stripped.split('\n')
+                       if not line.strip().startswith('(*'))
+    if not has_aro_stmt:
+        return None, False
+
+    has_return = any(_re.match(r'\s*(Return|Throw)\b', line)
+                     for line in stripped.split('\n'))
+    indented = '\n'.join(f'    {line}' for line in stripped.split('\n'))
+    if has_return:
+        wrapped = f'(Application-Start: Example) {{\n{indented}\n}}'
+    else:
+        wrapped = (f'(Application-Start: Example) {{\n{indented}\n'
+                   f'    Return an <OK: status> for the <result>.\n}}')
+    return wrapped, True
+
+
+# ── Canonical verb validation (issue #386) ───────────────────────────────────
+# Hallucinated action verbs are one of the most damaging error classes
+# (FIXTRAIN.md catalogues Subscribe/Set/Build/while among others). Every
+# generating notebook should verify verbs against this shared set instead of
+# maintaining its own list.
+
+_ARO_COMMENT_RE = _re.compile(r'\(\*.*?\*\)', _re.DOTALL)
+
+# Core verbs that knowledge.json extraction sometimes misses (documented in
+# CLAUDE.md action roles and the language proposals).
+VERB_SUPPLEMENT = frozenset({
+    'return', 'compute', 'throw',            # RESPONSE / OWN roles
+    'publish',                                # EXPORT role
+    'split',                                  # ARO-0037 regex split
+    'configure',                              # ARO-0035 configurable runtime
+    'parameters',                             # ARO-0047 CLI parameters
+    'intersect', 'difference', 'union',       # ARO-0042 set operations
+    'tee',                                    # ARO-0051 streaming
+})
+
+# Control-flow keywords that can start a statement-like line.
+CONTROL_FLOW_WORDS = frozenset({'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'})
+
+
+def canonical_verb_set(kb=None):
+    """All valid ARO action verbs (lowercased) from knowledge.json plus the
+    documented supplement and control-flow keywords."""
+    try:
+        verbs = valid_action_verbs(kb)
+    except Exception:
+        # knowledge.json not built yet — fall back to the static supplement
+        verbs = set()
+    return set(verbs) | set(VERB_SUPPLEMENT) | set(CONTROL_FLOW_WORDS)
+
+
+_STATEMENT_VERB_RE = _re.compile(r'^\s*([A-Z][a-z]+(?:[A-Z][a-z]+)*)\s+', _re.MULTILINE)
+
+
+def hallucinated_verbs_in_code(code, valid_verbs=None):
+    """Return the set of statement-leading verbs in `code` that are not in
+    `valid_verbs` (defaults to canonical_verb_set()). Comments are stripped
+    first so English prose inside (* ... *) is not misidentified."""
+    valid = valid_verbs if valid_verbs is not None else canonical_verb_set()
+    valid = {v.lower() for v in valid}
+    stripped = _ARO_COMMENT_RE.sub('', code or '')
+    used = set()
+    for m in _STATEMENT_VERB_RE.finditer(stripped):
+        verb = m.group(1)
+        if verb.lower() not in valid:
+            used.add(verb)
+    return used
+
+
+# ── Verb + preposition signature validation (issue #402) ─────────────────────
+# `aro check` validates syntax, not action signatures. These helpers validate
+# extracted verb+preposition combinations against the metadata mined from
+# Swift source in knowledge.json (e.g. `Log … to`, never `Log … for`).
+
+ARO_PREPOSITIONS = frozenset({
+    'from', 'to', 'with', 'for', 'on', 'into', 'at', 'by',
+    'where', 'against', 'via', 'using', 'in', 'as',
+})
+# Always allowed regardless of the action: `when` guards and `where` queries.
+_ALWAYS_ALLOWED_PREPS = frozenset({'when', 'where'})
+
+_VP_STMT_RE = _re.compile(r'^\s*([A-Z][A-Za-z]+)\s+(?:the\s+|an?\s+)?<[^>]*>\s+([a-z]+)\b')
+
+
+def build_verb_preposition_map(kb=None):
+    """Return {verb(lower): set(prepositions)} from knowledge.json actions."""
+    kb = kb or load_knowledge()
+    vp = {}
+    for a in kb.get('actions', []):
+        preps = {p.lower() for p in a.get('prepositions', [])}
+        for v in a.get('verbs', []):
+            vp.setdefault(v.lower(), set()).update(preps)
+    return vp
+
+
+def check_verb_prepositions(code, vp_map):
+    """Return a list of human-readable violations where a statement uses a
+    preposition that is not documented for its verb. Verbs without documented
+    prepositions are skipped (no data — no verdict)."""
+    violations = []
+    stripped = _ARO_COMMENT_RE.sub('', code or '')
+    for line in stripped.splitlines():
+        m = _VP_STMT_RE.match(line)
+        if not m:
+            continue
+        verb, word = m.group(1).lower(), m.group(2).lower()
+        if word not in ARO_PREPOSITIONS:
+            continue
+        allowed = vp_map.get(verb)
+        if not allowed:
+            continue
+        if word in allowed or word in _ALWAYS_ALLOWED_PREPS:
+            continue
+        violations.append(
+            f'`{m.group(1)} … {word}` — documented prepositions: '
+            f'{", ".join(sorted(allowed))}'
+        )
+    return violations
+
+
+# ── OpenAPI contract cross-check (issue #402) ────────────────────────────────
+
+_OPENAPI_OPID_RE = _re.compile(r'operationId:\s*([\w.-]+)')
+_OPENAPI_PATH_RE = _re.compile(r'^\s{0,6}(/[^\s:]*):\s*$', _re.MULTILINE)
+_PATH_PARAM_RE = _re.compile(r'\{([\w-]+)\}')
+_FEATURESET_NAME_RE = _re.compile(r'\(\s*([^:()\n]+?)\s*:\s*[^)]*\)\s*\{')
+_PATHPARAM_EXTRACT_RE = _re.compile(r'<pathParameters:\s*([\w-]+)\s*>')
+
+
+def check_openapi_contract(aro_code, openapi_yaml):
+    """Cross-check ARO feature sets against an OpenAPI contract.
+
+    Flags operationIds without a matching feature-set name and
+    `<pathParameters: x>` extractions for parameters never declared in any
+    path template. Returns a list of violation strings (empty = OK).
+    """
+    violations = []
+    yaml_text = openapi_yaml or ''
+    code = aro_code or ''
+    op_ids = _OPENAPI_OPID_RE.findall(yaml_text)
+    feature_names = {n.strip() for n in _FEATURESET_NAME_RE.findall(code)}
+    for op in op_ids:
+        if op not in feature_names:
+            violations.append(f'operationId `{op}` has no matching feature set')
+    declared_params = set()
+    for path in _OPENAPI_PATH_RE.findall(yaml_text):
+        declared_params.update(_PATH_PARAM_RE.findall(path))
+    for param in _PATHPARAM_EXTRACT_RE.findall(code):
+        if declared_params and param not in declared_params:
+            violations.append(
+                f'`pathParameters: {param}` is not declared in any openapi path'
+            )
+    return violations
+
+
+# ── Paraphrase consistency judge (issue #401) ────────────────────────────────
+# Replaces NB14's word-overlap heuristic: the LLM judges whether a reworded
+# instruction still asks for what the source comment describes. Same
+# conservative YES-on-uncertainty policy as semantic_alignment_check.
+
+_PARAPHRASE_JUDGE_SYSTEM_PROMPT = (
+    'You are a strict data-quality judge. Compare a SOURCE description '
+    '(a code comment) with a REWRITTEN instruction. Decide whether the '
+    'rewritten instruction asks for the same behaviour the source describes. '
+    'Be lenient on style and phrasing; strict on meaning — the instruction '
+    'must not add, drop, or change the described operation. Respond on a '
+    'single line in the form `YES: <reason>` or `NO: <reason>`. '
+    'If genuinely unsure, answer YES.'
+)
+
+
+def word_overlap_ratio(source, candidate, min_word_len=5):
+    """Cheap lexical pre-filter: fraction of long source words present in the
+    candidate. 1.0 when the source has no long words (nothing to test)."""
+    s_words = {w.lower() for w in (source or '').split() if len(w) >= min_word_len}
+    if not s_words:
+        return 1.0
+    c_words = {w.lower() for w in (candidate or '').split()}
+    return len(s_words & c_words) / len(s_words)
+
+
+def paraphrase_consistency_check(source_text, instruction, chat_fn, max_tokens=120):
+    """Ask the local model whether `instruction` preserves the meaning of
+    `source_text`. Returns (consistent: bool, judge_reason: str)."""
+    msgs = [
+        {'role': 'system', 'content': _PARAPHRASE_JUDGE_SYSTEM_PROMPT},
+        {'role': 'user', 'content':
+            f'Source comment:\n{source_text}\n\n'
+            f'Rewritten instruction:\n{instruction}\n\n'
+            'Does the rewritten instruction ask for the same thing the '
+            'source comment describes?'},
+    ]
+    try:
+        response = chat_fn(msgs, max_tokens=max_tokens, temp=0.0)
+    except TypeError:
+        # Older chat_fn signatures don't accept `temp=`; fall back.
+        response = chat_fn(msgs, max_tokens=max_tokens)
+    head = (response or '').strip().lstrip('`').split('\n', 1)[0].strip().lower()
+    return (not head.startswith('no')), (response or '').strip()[:240]
+
+
+# ── FIXTRAIN lint gate (issue #410) ──────────────────────────────────────────
+# FIXTRAIN.md catalogues 83 concrete bad-data patterns found in
+# knowledge_pairs.jsonl; fix_training_data.py hardcodes the wrong→right pairs.
+# These rules encode the 13 issue *classes* as permanent guardrails so the
+# same bad patterns cannot re-enter the dataset on the next run. Rule names
+# reference the FIXTRAIN ISSUE ids they cover.
+#
+# The gate runs inside save_notebook_pair()/save_notebook_pairs(), i.e. on
+# every pair any notebook emits. Only assistant/output ARO blocks are linted —
+# instructions legitimately quote wrong code ("Fix this: …"), and blocks that
+# an answer explicitly labels as wrong/negative examples are skipped.
+
+FIXTRAIN_RULES = [
+    {
+        'name': 'string-concat-plus', 'severity': 'error',
+        'message': 'string concatenation must use `++`, not `+` '
+                   '(FIXTRAIN ISSUE-003/014/026/037)',
+        'pattern': _re.compile(r'"[^"\n]*"\s*\+(?!\+)|(?<!\+)\+\s*"'),
+    },
+    {
+        'name': 'emit-with-destination', 'severity': 'error',
+        'message': 'Emit takes no destination — use `Emit a <Name: event> with <data>.` '
+                   '(FIXTRAIN ISSUE-001/011/029/041)',
+        'pattern': _re.compile(r'\bemit\b[^.\n]*\bto\s+the\b', _re.IGNORECASE),
+    },
+    {
+        'name': 'emit-missing-event-qualifier', 'severity': 'error',
+        'message': 'Emit result needs a lowercase `: event` qualifier '
+                   '(FIXTRAIN ISSUE-021/029/041)',
+        'pattern': _re.compile(r'\bEmit\s+(?:the\s+|an?\s+)?<(?![^>]*:\s*event\b)[^>]*>'),
+    },
+    {
+        'name': 'log-for-console', 'severity': 'error',
+        'message': 'Log uses `to the <console>`, never `for` (FIXTRAIN ISSUE-002)',
+        'pattern': _re.compile(r'\bLog\b[^.\n]*\bfor\s+the\s+<console>'),
+    },
+    {
+        'name': 'log-extra-clauses', 'severity': 'error',
+        'message': 'Log accepts no clauses after `to the <console>` (FIXTRAIN ISSUE-010)',
+        'pattern': _re.compile(r'to\s+the\s+<console>\s+(?:for|with)\b'),
+    },
+    {
+        'name': 'publish-not-as-form', 'severity': 'error',
+        'message': 'Publish syntax is `Publish as <alias> <variable>.` '
+                   '(FIXTRAIN ISSUE-012/030)',
+        'pattern': _re.compile(r'^\s*Publish\s+(?!as\b)', _re.MULTILINE),
+    },
+    {
+        'name': 'when-block', 'severity': 'error',
+        'message': '`when <cond> { … }` blocks do not exist — `when` is a '
+                   'per-statement suffix guard (FIXTRAIN ISSUE-013/033)',
+        'pattern': _re.compile(r'^\s*when\b[^.{}\n]*\{\s*$', _re.MULTILINE),
+    },
+    {
+        'name': 'else-block', 'severity': 'error',
+        'message': '`else { … }` does not exist in ARO (FIXTRAIN ISSUE-013)',
+        'pattern': _re.compile(r'^\s*\}?\s*else\s*\{', _re.MULTILINE),
+    },
+    {
+        'name': 'while-loop', 'severity': 'error',
+        'message': '`while` loops do not exist — use For-each (FIXTRAIN ISSUE-005)',
+        'pattern': _re.compile(r'^\s*while\b[^.\n]*\{', _re.MULTILINE),
+    },
+    {
+        'name': 'hallucinated-subscribe', 'severity': 'error',
+        'message': '`Subscribe` is not an ARO action — handlers register by '
+                   'naming convention (FIXTRAIN ISSUE-022)',
+        'pattern': _re.compile(r'^\s*Subscribe\b', _re.MULTILINE),
+    },
+    {
+        'name': 'hallucinated-set', 'severity': 'error',
+        'message': '`Set` is not an ARO action — variables are immutable '
+                   '(FIXTRAIN ISSUE-023)',
+        'pattern': _re.compile(r'^\s*Set\s+the\s+<', _re.MULTILINE),
+    },
+    {
+        'name': 'hallucinated-build', 'severity': 'error',
+        'message': '`Build` is not an ARO action (FIXTRAIN ISSUE-012)',
+        'pattern': _re.compile(r'^\s*Build\s+(?:the\s+)?<', _re.MULTILINE),
+    },
+    {
+        'name': 'missing-angle-brackets', 'severity': 'error',
+        'message': 'variables must be wrapped in angle brackets (FIXTRAIN ISSUE-007)',
+        'pattern': _re.compile(
+            r'^\s*(?:Extract|Retrieve|Transform|Filter|Compute|Create|Store'
+            r'|Delete|Update|Send)\s+the\s+[a-z][\w-]*\s+'
+            r'(?:from|to|into|with|for)\s+the\s+[a-z]', _re.MULTILINE),
+    },
+    {
+        'name': 'feature-set-missing-activity', 'severity': 'error',
+        'message': 'feature set headers need `(Name: Business Activity)` — the '
+                   'colon and activity are mandatory (FIXTRAIN ISSUE-019/020/025/032)',
+        'pattern': _re.compile(r'^\s*\((?!\*)[^:()\n]*\)\s*\{', _re.MULTILINE),
+    },
+    {
+        'name': 'feature-set-keyword-header', 'severity': 'error',
+        'message': '`Application X {` / `Feature set X {` are not valid feature '
+                   'set declarations (FIXTRAIN ISSUE-006)',
+        'pattern': _re.compile(
+            r'^\s*(?:Application\s+[A-Z][\w ]*|Feature\s+[Ss]et:?\s+[^\n{]*)\{',
+            _re.MULTILINE),
+    },
+    {
+        'name': 'compute-from-with-arithmetic', 'severity': 'error',
+        'message': '`Compute … from X with Y` is only for set operations with a '
+                   'qualifier; arithmetic goes entirely after `from` '
+                   '(FIXTRAIN ISSUE-004/016/018)',
+        'pattern': _re.compile(
+            r'\bCompute\s+the\s+<[^>:]*>\s+from\s+(?:the\s+)?<[^>]*>\s+with\b'),
+    },
+    {
+        'name': 'throw-wrong-preposition', 'severity': 'error',
+        'message': 'Throw accepts only `for` (FIXTRAIN ISSUE-009/035)',
+        'pattern': _re.compile(r'^\s*Throw\b[^.\n]*\b(?:with|to)\b', _re.MULTILINE),
+    },
+    {
+        'name': 'transform-using', 'severity': 'error',
+        'message': '`using` is not an ARO preposition — put the qualifier on the '
+                   'result variable (FIXTRAIN ISSUE-027)',
+        'pattern': _re.compile(r'^\s*Transform\b[^.\n]*\busing\b', _re.MULTILINE),
+    },
+    {
+        'name': 'delete-with-dict', 'severity': 'error',
+        'message': 'Delete uses `from … where`, not a `with { }` dictionary '
+                   '(FIXTRAIN ISSUE-036)',
+        'pattern': _re.compile(r'^\s*Delete\b[^.\n]*\bwith\s*\{', _re.MULTILINE),
+    },
+    {
+        'name': 'execute-from', 'severity': 'error',
+        'message': 'Execute identifies the command with `for`, not `from` '
+                   '(FIXTRAIN ISSUE-008)',
+        'pattern': _re.compile(r'^\s*Execute\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+    },
+    {
+        'name': 'listen-from', 'severity': 'error',
+        'message': 'Listen syntax is `Listen the <keyboard> to the <stdin>.` '
+                   '(FIXTRAIN ISSUE-043)',
+        'pattern': _re.compile(r'^\s*Listen\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+    },
+    {
+        'name': 'return-from', 'severity': 'error',
+        'message': 'Return uses `with`/`for`, never `from` (FIXTRAIN ISSUE-044)',
+        'pattern': _re.compile(r'^\s*Return\b[^.\n]*\bfrom\b', _re.MULTILINE),
+    },
+    {
+        'name': 'accept-wrong-preposition', 'severity': 'error',
+        'message': 'Accept transitions state — `Accept the <entity: new-state>.`; '
+                   'no `from`/`with` clauses (FIXTRAIN ISSUE-024/034)',
+        'pattern': _re.compile(r'^\s*Accept\b[^.\n]*\b(?:from|with)\b', _re.MULTILINE),
+    },
+    {
+        'name': 'arrow-assignment', 'severity': 'error',
+        'message': '`<-` arrow assignment / type-annotated assignment is not ARO '
+                   '(FIXTRAIN ISSUE-038/041)',
+        'pattern': _re.compile(r'(?:\s|\))<-'),
+    },
+    # ── warn-severity: reported but not dropped ─────────────────────────────
+    {
+        'name': 'render-from', 'severity': 'warn',
+        'message': 'Render normally targets `to the <console>` — check `from` '
+                   'usage (FIXTRAIN ISSUE-040)',
+        'pattern': _re.compile(r'^\s*Render\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+    },
+    {
+        'name': 'store-in-preposition', 'severity': 'warn',
+        'message': 'canonical Store preposition is `into` (the runtime accepts '
+                   '`in`, docs use `into`) (FIXTRAIN ISSUE-028)',
+        'pattern': _re.compile(r'\bStore\s+(?:the\s+)?<[^>]+>\s+in\s+the\b'),
+    },
+]
+
+
+def check_fixtrain_issues(code, include_warnings=False):
+    """Lint ARO source against the FIXTRAIN.md catalogue of known-bad patterns.
+
+    Returns a list of violation dicts {rule, severity, message, match}.
+    ARO comments are stripped first so prose never triggers rules.
+    """
+    violations = []
+    stripped = _ARO_COMMENT_RE.sub('', code or '')
+    if not stripped.strip():
+        return violations
+    for rule in FIXTRAIN_RULES:
+        if rule['severity'] == 'warn' and not include_warnings:
+            continue
+        m = rule['pattern'].search(stripped)
+        if m:
+            violations.append({
+                'rule':     rule['name'],
+                'severity': rule['severity'],
+                'message':  rule['message'],
+                'match':    stripped[m.start():m.end()][:80].strip(),
+            })
+    return violations
+
+
+# Gate state — per-run report of everything the lint caught.
+FIXTRAIN_GATE_ENABLED = True
+FIXTRAIN_VIOLATION_COUNTS = _Counter()
+_FIXTRAIN_DROP_LOG_LIMIT = 10
+_fixtrain_drops_logged = {'count': 0}
+
+# Blocks preceded by these markers are quoted as deliberate negative examples
+# ("WRONG:", "Fix this…", "❌ …") and must not be linted as if they were
+# training targets.
+_NEGATIVE_CONTEXT_MARKERS = (
+    'wrong', 'incorrect', 'invalid', 'not valid', 'instead', "don't", 'do not',
+    'avoid', '❌', 'bad', 'error', 'fails', 'broken', 'bug',
+)
+
+
+def _pair_assistant_text(pair):
+    """Assistant/output text of a training pair in either format."""
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in reversed(msgs):
+            if isinstance(msg, dict) and msg.get('role') == 'assistant':
+                return msg.get('content') or ''
+    return pair.get('output') or pair.get('response') or ''
+
+
+def lint_pair_output(pair):
+    """Run the FIXTRAIN lint over a pair's assistant/output ARO blocks.
+
+    Returns the list of error-severity violations (empty = pair is clean).
+    Warn-severity findings are counted in FIXTRAIN_VIOLATION_COUNTS but do
+    not appear in the returned list. Blocks explicitly framed as negative
+    examples are skipped.
+    """
+    text = _pair_assistant_text(pair)
+    if '```aro' not in (text or ''):
+        return []
+    errors = []
+    for m in _re.finditer(r'```aro\n(.*?)```', text, _re.DOTALL):
+        preceding = text[max(0, m.start() - 200):m.start()].lower()
+        if any(k in preceding for k in _NEGATIVE_CONTEXT_MARKERS):
+            continue
+        for v in check_fixtrain_issues(m.group(1), include_warnings=True):
+            FIXTRAIN_VIOLATION_COUNTS[v['rule']] += 1
+            if v['severity'] == 'error':
+                errors.append(v)
+    return errors
+
+
+def fixtrain_report(reset=False):
+    """Print the per-run FIXTRAIN violation report. Optionally reset counts."""
+    if not FIXTRAIN_VIOLATION_COUNTS:
+        print('fixtrain-gate: no violations recorded this run')
+    else:
+        print('fixtrain-gate violation report:')
+        for rule, n in FIXTRAIN_VIOLATION_COUNTS.most_common():
+            print(f'  {n:5d}x  {rule}')
+    counts = dict(FIXTRAIN_VIOLATION_COUNTS)
+    if reset:
+        FIXTRAIN_VIOLATION_COUNTS.clear()
+        _fixtrain_drops_logged['count'] = 0
+    return counts
+
+
+def _fixtrain_gate_pair(pair, notebook_tag=''):
+    """True when the pair passes the gate; logs and counts drops."""
+    if not FIXTRAIN_GATE_ENABLED:
+        return True
+    violations = lint_pair_output(pair)
+    if not violations:
+        return True
+    _fixtrain_drops_logged['count'] += 1
+    if _fixtrain_drops_logged['count'] <= _FIXTRAIN_DROP_LOG_LIMIT:
+        v = violations[0]
+        tag = f'[{notebook_tag}] ' if notebook_tag else ''
+        print(f'  {tag}fixtrain-gate drop: {v["rule"]} — {v["match"][:60]!r}',
+              flush=True)
+    return False
+
+
+# ── Semantic near-duplicate detection (issue #404) ───────────────────────────
+
+def _dup_token_set(text):
+    return set(_re.findall(r'[a-z0-9]+', (text or '').lower()))
+
+
+def near_duplicate_filter(samples, get_text, get_score=None, threshold=0.92,
+                          jaccard_threshold=0.65, use_embeddings=True, label=''):
+    """Drop semantic near-duplicates, keeping the highest-scored representative
+    per cluster.
+
+    Prefers all-MiniLM sentence embeddings (cosine >= `threshold` = duplicate);
+    falls back to token-set Jaccard (>= `jaccard_threshold`) when
+    sentence-transformers is unavailable. Greedy: samples are visited in
+    score-descending order and kept only if not too similar to anything
+    already kept — so the best sample of each cluster survives.
+
+    Returns (kept_samples, n_dropped). Original relative order is preserved.
+    """
+    n = len(samples)
+    if n <= 1:
+        return list(samples), 0
+    texts = [get_text(s) or '' for s in samples]
+    scores = [(get_score(s) if get_score else 1.0) for s in samples]
+    order = sorted(range(n), key=lambda i: (-scores[i], i))
+
+    emb = None
+    if use_embeddings:
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            _st_model = SentenceTransformer('all-MiniLM-L6-v2')
+            emb = np.asarray(_st_model.encode(
+                texts, normalize_embeddings=True, show_progress_bar=False))
+        except Exception as e:
+            print(f'  near-dup: embeddings unavailable ({type(e).__name__}) — '
+                  f'token-overlap fallback', flush=True)
+            emb = None
+
+    kept_flags = [False] * n
+    dropped = 0
+
+    if emb is not None:
+        import numpy as np
+        kept_matrix = np.empty((n, emb.shape[1]), dtype=emb.dtype)
+        k = 0
+        for i in order:
+            v = emb[i]
+            if k and float(np.max(kept_matrix[:k] @ v)) >= threshold:
+                dropped += 1
+                continue
+            kept_matrix[k] = v
+            k += 1
+            kept_flags[i] = True
+    else:
+        token_sets = [_dup_token_set(t) for t in texts]
+        index = {}  # token -> list of kept indices
+        for i in order:
+            toks = token_sets[i]
+            if not toks:
+                kept_flags[i] = True
+                continue
+            cand = _Counter()
+            for t in toks:
+                for j in index.get(t, ()):
+                    cand[j] += 1
+            is_dup = False
+            for j, shared in cand.most_common(20):
+                union = len(toks | token_sets[j])
+                if union and shared / union >= jaccard_threshold:
+                    is_dup = True
+                    break
+            if is_dup:
+                dropped += 1
+                continue
+            kept_flags[i] = True
+            for t in toks:
+                index.setdefault(t, []).append(i)
+
+    kept = [s for s, keep in zip(samples, kept_flags) if keep]
+    if label:
+        print(f'  near-dup [{label}]: {n} → {len(kept)} (dropped {dropped})',
+              flush=True)
+    return kept, dropped
+
+
+# ── Per-source quality scores and soft weighting (issue #407) ────────────────
+# Curated sources score 1.0; mined/noisy sources score lower. NB16 uses these
+# for soft down-weighting instead of hard caps, and can blend in pass rates
+# derived from NB15 validation results.
+
+SOURCE_QUALITY_SCORES = {
+    # curated, deterministic, or hand-verified
+    'example':                1.0,
+    'actions_usage':          1.0,
+    'actions_explain':        1.0,
+    'actions_which':          1.0,
+    'actions_context_static': 1.0,
+    'error_pattern':          1.0,
+    'proposal':               0.95,
+    'comment':                0.95,
+    # book-grounded / validated LLM generations
+    'book':                   0.9,
+    'aro_by_example':         0.9,
+    'actions_alias':          0.9,
+    'actions_context':        0.85,
+    'repair':                 0.85,
+    'book_qa':                0.8,
+    'wiki':                   0.8,
+    'synthetic':              0.8,
+    # mined / mutated — noisiest sources
+    'mutation':               0.75,
+    'recombination':          0.75,
+    'readme':                 0.7,
+    'external_repo':          0.7,
+    'readme_to_code':         0.7,
+}
+DEFAULT_SOURCE_QUALITY = 0.8
+
+# Assembly-time policy knobs (used by NB16)
+AUTO_WRAP_MAX_SHARE   = 0.35   # max share of code_generation pairs that may be auto-wrapped (issue #380)
+SOURCE_SOFT_CAP_SHARE = 0.30   # sources above this share get soft down-weighted
+SOURCE_SHARE_FLAG     = 0.40   # flag any source above this share of the train set
+
+
+def source_quality_score(source, notebook=None):
+    """Quality score in (0, 1] for a pair's `source` tag."""
+    src = (source or '').strip()
+    # NB14 comment pairs carry a file path as source — real hand-written code.
+    if src.startswith('/') or src.endswith('.aro'):
+        return 0.95
+    prefix = src.split(':')[0].strip().lower()
+    return SOURCE_QUALITY_SCORES.get(prefix, DEFAULT_SOURCE_QUALITY)
+
+
+def derive_source_quality_from_validation(validated_samples, min_count=20):
+    """Auto-derive per-source-prefix pass rates from NB15's all_samples.jsonl
+    records. Returns {source_prefix: pass_rate} for prefixes with at least
+    `min_count` samples (fewer = too noisy to trust)."""
+    totals, passed = _Counter(), _Counter()
+    for s in validated_samples:
+        prefix = (s.get('source') or 'unknown').split(':')[0].strip().lower()
+        totals[prefix] += 1
+        if s.get('valid') is True:
+            passed[prefix] += 1
+    return {p: passed[p] / totals[p] for p in totals if totals[p] >= min_count}
