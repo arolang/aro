@@ -98,6 +98,24 @@ public extension ActionImplementation {
         verbs.contains(verb.lowercased())
     }
 
+    /// Resolve the `with { … }` configuration dict for the current statement.
+    ///
+    /// One accessor covers every binding path the two runtimes use:
+    /// - `_expression_`: compiled call sites (and the interpreter for
+    ///   non-constant object literals) bind the evaluated with-clause here
+    /// - `_with_`: compiled range-modifier with-clauses
+    /// - `_literal_`: the interpreter's binding for constant object literals
+    ///
+    /// Actions that read only `_literal_` silently lose their configuration
+    /// in compiled binaries — e.g. `Read … from <url:> with { headers: … }`
+    /// dropped the custom headers there.
+    func resolveWithConfig(_ context: ExecutionContext) -> [String: any Sendable] {
+        if let config = context.resolveAny("_expression_") as? [String: any Sendable] { return config }
+        if let config = context.resolveAny("_with_") as? [String: any Sendable] { return config }
+        if let config = context.resolveAny("_literal_") as? [String: any Sendable] { return config }
+        return [:]
+    }
+
     // MARK: - Type-Safe Value Extraction
 
     /// Resolve a typed value from context

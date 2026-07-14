@@ -766,8 +766,9 @@ public struct WriteAction: ActionImplementation {
         // Get format options from "with" clause (ARO-0040)
         // Options can include: delimiter, header, quote, encoding
         var formatOptions: [String: any Sendable] = [:]
-        if let configDict = context.resolveAny("_literal_") as? [String: any Sendable] {
-            // Check for format options in the literal
+        let configDict = resolveWithConfig(context)
+        if !configDict.isEmpty {
+            // Check for format options in the with-clause
             if let delimiter = configDict["delimiter"] as? String {
                 formatOptions["delimiter"] = delimiter
             }
@@ -834,7 +835,8 @@ public struct WriteAction: ActionImplementation {
         var timeout: TimeInterval? = nil
         var contentType: String? = nil
 
-        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
+        let config = resolveWithConfig(context)
+        if !config.isEmpty {
             // Extract headers
             if let headersValue = config["headers"] {
                 if let headersDict = headersValue as? [String: String] {

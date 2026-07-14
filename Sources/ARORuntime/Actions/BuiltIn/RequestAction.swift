@@ -166,16 +166,9 @@ public struct RequestAction: ActionImplementation {
 
     /// Extract config object from context (_expression_ or _literal_)
     private func getConfig(context: ExecutionContext) -> [String: any Sendable] {
-        if let config = context.resolveAny("_expression_") as? [String: any Sendable] {
-            return config
-        }
-        if let config = context.resolveAny("_with_") as? [String: any Sendable] {
-            return config
-        }
-        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
-            return config
-        }
-        return [:]
+        // Shared tri-transient lookup (_expression_/_with_/_literal_) — see
+        // ActionImplementation.resolveWithConfig.
+        resolveWithConfig(context)
     }
 
     /// Extract headers from config, handling nested maps

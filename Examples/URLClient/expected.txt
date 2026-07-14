@@ -9,7 +9,7 @@ Title: delectus aut autem
 Completed: false
 
 2. Fetching with custom headers...
-Server received our custom header
+Server received our custom header: ARO-URL-Client
 
 3. Creating a new post via POST...
 Post created successfully!

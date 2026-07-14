@@ -42,7 +42,8 @@
         }
     }.
     Extract the <received-headers> from the <headers-test: headers>.
-    Log "   Server received our custom header" to the <console>.
+    Extract the <customheader> from the <received-headers: X-Custom-Header>.
+    Log "   Server received our custom header: ${customheader}" to the <console>.
     Log "" to the <console>.
 
     (* POST request - submit data *)
