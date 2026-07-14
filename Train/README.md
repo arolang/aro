@@ -17,21 +17,25 @@ Train/
 │   ├── 00_META_PIPELINE.ipynb
 │   ├── 00_action_reference.ipynb
 │   ├── 00_init.ipynb
-│   ├── 01_corpus_collection.ipynb … 24_package.ipynb
+│   ├── 01_corpus_collection.ipynb … 23_material_finetune.ipynb
+│   ├── 24_chat_teacher.ipynb # Manual chat with the teacher before distilling
 │   ├── 25_chat.ipynb        # Manual REPL test against the packaged student
 │   ├── config.py            # Shared paths, model IDs, helpers
+│   ├── tests/               # Unit tests for the pure-python config helpers
 │   └── run/outputs/         # Executed notebook copies + per-notebook logs
 ├── data/                    # All generated training artifacts
 │   ├── 02_knowledge/        # knowledge.json + knowledge_pairs.jsonl
 │   ├── 03_raw_generated/    # LLM-generated drafts
 │   ├── 04_validated/        # aro check-validated samples
-│   ├── 05_dataset/          # Assembled SFT dataset
+│   ├── 05_dataset/          # Assembled SFT dataset + stats.json + dataset_report.md
 │   ├── 06_distill/          # Teacher → student distillation pairs
 │   ├── 07_eval/             # Evaluation prompts / results
 │   ├── 11_function_calling/ # Tool-calling traces
 │   ├── adapters/            # LoRA adapters (warm_start, …)
+│   ├── backups/             # Timestamped knowledge_pairs.jsonl backups (last 10)
 │   ├── dpo/                 # Preference data
 │   ├── rounds/              # Iterative-loop round artifacts
+│   ├── runs/                # Per-session run config snapshots (provenance)
 │   └── wiki/, examples_repo/, external_repos/  # Mined corpora
 ├── models/
 │   ├── finetune/round_0/    # SFT teacher
@@ -59,53 +63,53 @@ before writing new ones, so reruns replace rather than duplicate.
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 01 | `01_corpus_collection` | Mine `.aro` source, `Book/`, `Examples/`, and the wiki into a raw corpus. |
+| 01 | `01_corpus_collection` | Mine `.aro` source, `Book/`, `Examples/`, and the wiki into a raw corpus (`data/02_knowledge/manifest.json`). Runs `corpus_preflight()` first. |
 | 02 | `02_knowledge_extraction` | Build `knowledge.json` — the canonical action/syntax reference used by every system prompt. |
-| 03 | `03_llm_knowledge_extraction` | LLM-assisted gap-filling on top of the deterministic extraction. |
+| 03 | `03_material_seeding` | Seed the hand-curated `Train/Material/` pairs into `knowledge_pairs.jsonl`. |
+| 04 | `04_llm_knowledge_extraction` | LLM-assisted gap-filling on top of the deterministic extraction. |
 
 ### Training-data generation
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 04 | `04_warmstart_finetune` | LoRA warm-start on the action/syntax reference so later generation steps already know the DSL. Writes `data/adapters/warm_start/`. |
-| 05 | `05_actions_training` | Action-by-action usage examples. |
-| 06 | `06_repl_execution_training` | REPL execution traces (input → expected output). |
-| 07 | `07_book_qa_pairs` | Q&A pairs derived from the Book. |
-| 08 | `08_wiki_training` | Pairs derived from the wiki. |
-| 09 | `09_git_training` | Commit-mined transformation pairs (bad → good code). |
+| 05 | `05_warmstart_finetune` | LoRA warm-start on the action/syntax reference so later generation steps already know the DSL. Writes `data/adapters/warm_start/`. |
+| 06 | `06_actions_training` | Action-by-action usage examples. |
+| 07 | `07_repl_execution_training` | Execution-grounded pairs — generated code must pass `aro run`, not just `aro check`. |
+| 08 | `08_book_qa_pairs` | Q&A pairs derived from the Book. |
+| 09 | `09_wiki_training` | Pairs derived from the wiki. **Skipped by default** (see `ARO_TRAIN_SKIP`). |
 | 10 | `10_synthetic_data_generation` | Bulk synthetic generation using the warm-started model. |
 | 11 | `11_function_calling` | Tool-calling traces for the 18 `aro ask` tools. |
-| 12 | `12_application_prompts` | Application-level prompt paraphrases. |
-| 13 | `13_examples_repo_training` | Pairs derived from `Examples/`. |
-| 14 | `14_external_repo_training` | Pairs from real-world ARO applications cloned into `data/external_repos/`. |
-| 15 | `15_comment_extraction` | Pairs derived from comment ↔ code alignment. |
+| 12 | `12_examples_repo_training` | Pairs derived from `Examples/`. **Skipped by default** (see `ARO_TRAIN_SKIP`). |
+| 13 | `13_external_repo_training` | Pairs from real-world ARO applications cloned into `data/external_repos/`. |
+| 14 | `14_comment_extraction` | Pairs derived from comment ↔ code alignment. |
 
 ### Validation & assembly
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 16 | `16_validation` | Run `aro check` (and other gates) over every emitted sample; drop fragments that fail `is_complete_program`. |
-| 17 | `17_dataset_assembly` | Merge all sources into the final SFT dataset under `data/05_dataset/`. |
+| 15 | `15_validation` | Run `aro check` (and other gates) over every emitted sample; drop fragments that fail `is_complete_program`. |
+| 16 | `16_dataset_assembly` | Merge all sources into the final SFT dataset under `data/05_dataset/`; write `stats.json`, `dataset_report.md` (retention funnel + drop reasons), and `drop_reasons.csv`. |
 
 ### Training & evaluation
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 18 | `18_finetune` | Full SFT on the 30B MoE teacher. Writes `models/finetune/round_0/`. |
-| 19 | `19_preference_sft` | Preference-filtered SFT pass on top. |
-| 20 | `20_evaluation` | Score the teacher against held-out prompts; emits `models/loop_metrics.json`. |
-| 21 | `21_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
+| 17 | `17_finetune` | Full SFT on the 30B MoE teacher. Writes `models/finetune/round_0/`. |
+| 18 | `18_preference_sft` | Preference-filtered SFT pass on top. |
+| 19 | `19_evaluation` | Score the teacher against held-out prompts; emits `models/loop_metrics.json`. |
+| 20 | `20_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
 
 ### Distillation & packaging
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 22 | `22_chat_teacher` | **Manual.** Interactive chat against the teacher before distilling — sanity check, not run by the meta pipeline. |
-| 23 | `23_distillation` | Distill the 30B teacher into an 8B Qwen3 student. Writes `models/distill/student/`. |
-| 24 | `24_package` | Quantize, copy tokenizer, write `model_manifest.json`, populate `release/aro-coder-4bit/`. |
+| 21 | `21_distillation` | Distill the 30B teacher into an 8B Qwen3 student. Writes `models/distill/student/`. |
+| 22 | `22_package` | Quantize, copy tokenizer, write `model_manifest.json`, populate `release/aro-coder-4bit/`. |
+| 23 | `23_material_finetune` | Targeted booster fine-tune on the curated `Train/Material/` set. |
+| 24 | `24_chat_teacher` | **Manual.** Interactive chat against the teacher before distilling — sanity check, not run by the meta pipeline. |
 | 25 | `25_chat` | **Manual.** REPL test of the packaged student via `aro ask`. |
 
-`22` and `25` are excluded from automated runs because both need stdin.
+`24` and `25` are excluded from automated runs because both need stdin.
 
 ## Running the pipeline
 
@@ -113,15 +117,16 @@ before writing new ones, so reruns replace rather than duplicate.
 
 Open `script/00_META_PIPELINE.ipynb` and run all cells. The meta notebook:
 
-- executes notebooks 01 → 24 in order, each in its own kernel (so state
-  never leaks between stages);
+- executes notebooks 01 → 23 in order (09 and 12 are skipped by default via
+  `ARO_TRAIN_SKIP`), each in its own kernel (so state never leaks between
+  stages);
 - writes executed copies to `script/run/outputs/<name>.ipynb`;
 - writes per-stage logs to `script/run/outputs/<name>.log`;
 - renders a live status table with elapsed time and the last error line on
   failure.
 
 Per-stage timeouts live in `TIMEOUT_OVERRIDES` inside the meta notebook
-(`0` means "no timeout"). Long-running stages (10, 18, 21, 23) default to
+(`0` means "no timeout"). Long-running stages (10, 17, 20, 21) default to
 no timeout.
 
 ### Single stage
@@ -141,10 +146,31 @@ to change between runs:
 | `TEACHER_MODEL_ID` | Previously-published teacher on HF, used for iterative improvement. |
 | `PREFERRED_MODEL_ID` | Published student consumed by `aro ask`. |
 | `TRAIN_ON_BASE` | `True` → always start from `BASE_MODEL_ID` (fresh run). `False` → resume from the published teacher on HF if it exists. Flip to `False` after the first complete run for iterative improvement. |
-| `CLEAN_ON_RESTART` | When `True`, each notebook removes its previously-emitted rows from `knowledge_pairs.jsonl` on startup. |
+| `CLEAN_ON_RESTART` | When `True`, each notebook removes its previously-emitted rows from `knowledge_pairs.jsonl` on startup. A timestamped backup is written to `data/backups/` first; `rollback_notebook_pairs('NBxx')` restores a tag's rows. |
+| `TYPE_CAPS` / `TYPE_CAPS_VERSION` | Task-type caps applied by `16_dataset_assembly` (versioned with a changelog; the active caps are recorded in `stats.json`). |
 
 `resolve_model_id()` runs at import time and prints which model was chosen,
 so every notebook logs the resolved base.
+
+### Environment variables
+
+| Variable | Meaning |
+|----------|---------|
+| `ARO_APPLICATION_PATH` | Path to the ARO-Application corpus. Falls back to `../ARO-Application` next to the checkout. `corpus_preflight()` (run by `01_corpus_collection`) fails loudly when a corpus root is missing. |
+| `ARO_APPLICATION_OPTIONAL` | Set to `1` to knowingly continue without ARO-Application (incomplete corpus). |
+| `ARO_TRAIN_SESSION` | Pin a single provenance session ID across all notebooks of one pipeline run. Defaults to a fresh ID per notebook execution. |
+| `ARO_TRAIN_SKIP` | Comma-separated notebook numbers the meta pipeline skips (default `09,12`). |
+
+### Provenance
+
+Every pair saved through `save_notebook_pair(s)` is stamped with a
+`provenance` object (`session_id`, `run_timestamp`, `model_version`,
+`notebook`, `generation_strategy`, optional `lineage`), and the session's
+config snapshot is written to `data/runs/<session_id>.json`. Corpus
+artifacts (`manifest.json`, `knowledge.json`, `stats.json`) carry a
+`_metadata` block with the generation timestamp and the git commits of
+ARO-Lang and ARO-Application; `knowledge_pairs.jsonl` carries the same
+block as a flagged first line (`{"_metadata": …}`).
 
 ## Outputs
 
