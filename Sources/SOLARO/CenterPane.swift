@@ -53,6 +53,32 @@ struct CenterPaneView: View {
         ) { _ in
             resetLayoutSidecar()
         }
+        .task(id: controller.currentFile) {
+            loadCurrentFileIntoCache()
+        }
+    }
+
+    /// Read the current file from disk into `fileText` once when
+    /// the active file changes. Subsequent reads in the view body
+    /// hit `fileText` instead of round-tripping through Foundation.
+    private func loadCurrentFileIntoCache() {
+        guard let url = controller.currentFile else {
+            fileText = ""
+            fileTextURL = nil
+            return
+        }
+        fileTextURL = url
+        fileText = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
+    /// Return the cached content for `url` when it matches the
+    /// active file, falling back to a one-off disk read otherwise
+    /// (e.g. when a closure outside the current-file flow asks
+    /// for arbitrary file text — saveAndReparse's pre-write diff,
+    /// the find-bar's per-file scan, …).
+    private func cachedText(for url: URL) -> String {
+        if fileTextURL == url { return fileText }
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
     // MARK: - Text
@@ -65,6 +91,16 @@ struct CenterPaneView: View {
     /// blocks interactivity for large specs. Coalesce ~200ms of
     /// edits into a single parse on a background task (#302).
     @State private var yamlParseTask: Task<Void, Never>? = nil
+
+    /// Cached contents of `controller.currentFile`. The conflict
+    /// banner, diff renderer, editor minimap, and the editable
+    /// binding all used to read the file from disk inside the
+    /// view body — multiple reads per render cycle, on every
+    /// keystroke. The cache is refreshed via `.task(id:)` when the
+    /// active file changes and updated inline when the binding
+    /// setter / saveAndReparse mutates the file (#298).
+    @State private var fileText: String = ""
+    @State private var fileTextURL: URL? = nil
 
     /// Left-pane width in split mode. We hand-roll the splitter
     /// instead of using `HSplitView` because the legacy split-view
@@ -91,7 +127,7 @@ struct CenterPaneView: View {
 
     @ViewBuilder
     private func diffView(for url: URL) -> some View {
-        DiffRendererView(source: (try? String(contentsOf: url, encoding: .utf8)) ?? "")
+        DiffRendererView(source: cachedText(for: url))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -156,8 +192,7 @@ struct CenterPaneView: View {
     /// SwiftUI's render frequency and we read straight from disk
     /// once per render (small cost, no caching needed for the MVP).
     private func currentFileConflicts(_ url: URL) -> [MergeConflict] {
-        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        return MergeConflictScanner.scan(text)
+        MergeConflictScanner.scan(cachedText(for: url))
     }
 
     @AppStorage(SolaroPrefs.editorFolded.rawValue)
@@ -172,7 +207,7 @@ struct CenterPaneView: View {
     /// view body wouldn't pick up changes.
     @ViewBuilder
     private func editorWithGutters(for url: URL) -> some View {
-        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let text = cachedText(for: url)
         HStack(spacing: 0) {
             if folded, let program = controller.programs[url] {
                 FoldedSourceView(
@@ -370,7 +405,7 @@ struct CenterPaneView: View {
         // text snapped back), and `Yams.dump` re-formatted valid
         // edits (sorted keys, changed quoting).
         return Binding(
-            get: { (try? String(contentsOf: url, encoding: .utf8)) ?? "" },
+            get: { cachedText(for: url) },
             set: { newValue in
                 // NB: do *not* run formatIfEnabled here — this
                 // setter fires on every keystroke, and the trailing-
@@ -380,6 +415,7 @@ struct CenterPaneView: View {
                 // explicit save (saveAndReparse) where the user
                 // actually meant to clean up the file.
                 try? newValue.write(to: url, atomically: true, encoding: .utf8)
+                if fileTextURL == url { fileText = newValue }
 
                 // openapi.yaml: keep the canvas in sync with the
                 // text editor by pushing the parsed YAML into
@@ -440,9 +476,10 @@ struct CenterPaneView: View {
     }
 
     private func saveAndReparse(text: String, url: URL) {
-        let oldText = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let oldText = cachedText(for: url)
         let formatted = formatIfEnabled(text, for: url)
         try? formatted.write(to: url, atomically: true, encoding: .utf8)
+        if fileTextURL == url { fileText = formatted }
         // Keep the LSP server's view of the document in sync so
         // diagnostics + go-to-definition pick up edits without
         // requiring a restart.
