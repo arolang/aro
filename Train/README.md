@@ -193,8 +193,13 @@ HuggingFace and applies the shipped system prompt.
 The intended cadence after the first complete run:
 
 1. Set `TRAIN_ON_BASE = False` in `config.py`.
-2. Delete the old `ARO-Lang/aro-coder-4bit` on HuggingFace (or bump the
-   manifest version) before re-uploading.
+2. Just re-run — do **not** delete the old `ARO-Lang/aro-coder-4bit` repo.
+   NB22 versions each release automatically: it derives a semantic version
+   from `release/model_manifest.json`, tags the Hub commit `v<version>`,
+   regenerates the model card from the manifest + promotion-gate metrics,
+   verifies the push, and records the release in
+   `release/version_history.json`. Old versions stay downloadable via
+   `revision="v<version>"` for rollback.
 3. Re-run the meta pipeline. Each round starts from the previously-published
    teacher, evaluates against the same held-out prompts in NB20, and writes a
    new entry to `models/loop_metrics.json` so regressions are visible.
