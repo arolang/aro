@@ -1846,9 +1846,27 @@ extension Parser {
         // Bare identifier (e.g., in string interpolation ${name})
         case .identifier(let name):
             advance()
+            var base = name
+            var span = token.span
+            // Join immediately-adjacent `-identifier` pairs into a compound
+            // identifier, matching every other ARO context (nouns, object
+            // keys, feature names): `${custom-header}` resolves the
+            // hyphenated variable. Whitespace keeps subtraction: `${a - b}`.
+            // Adjacency is byte-exact — a token's span ends where the next
+            // one starts only when nothing separates them.
+            while case .hyphen = peek().kind,
+                  current + 1 < tokens.count,
+                  case .identifier(let nextName) = tokens[current + 1].kind,
+                  span.end.byteOffset == peek().span.start.byteOffset,
+                  peek().span.end.byteOffset == tokens[current + 1].span.start.byteOffset {
+                advance() // hyphen
+                let nextToken = advance()
+                base += "-" + nextName
+                span = span.merged(with: nextToken.span)
+            }
             // Create a QualifiedNoun for the identifier
-            let noun = QualifiedNoun(base: name, typeAnnotation: nil, span: token.span)
-            return VariableRefExpression(noun: noun, span: token.span)
+            let noun = QualifiedNoun(base: base, typeAnnotation: nil, span: span)
+            return VariableRefExpression(noun: noun, span: span)
 
         default:
             throw ParserError.unexpectedToken(expected: "expression", got: token)
