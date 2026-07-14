@@ -30,7 +30,6 @@ workflow:
 default:
   interruptible: true
   tags:
-    - spencer
     - adt
 
 # =============================================================================
@@ -38,7 +37,7 @@ default:
 # =============================================================================
 test:
   stage: test
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/swift:6.2-jammy
+  image: swift:6.2-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -104,7 +103,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/swift:6.2-jammy
+  image: swift:6.2-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -228,7 +227,7 @@ build:linux:
 # =============================================================================
 integration:linux:
   stage: integration
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
+  image: ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -332,7 +331,7 @@ integration:linux:
 
 integration:repl:
   stage: integration
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
+  image: ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -369,7 +368,7 @@ integration:repl:
 # =============================================================================
 documentation:
   stage: documentation
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/ubuntu:22.04
+  image: ubuntu:22.04
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -611,7 +610,7 @@ docker:runtime:
 # =============================================================================
 post:mastodon:
   stage: mastodon
-  image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/node:20-bookworm
+  image: node:20-bookworm
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   before_script:
