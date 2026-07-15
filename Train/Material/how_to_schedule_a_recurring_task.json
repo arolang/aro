@@ -1,7 +1,7 @@
 {
   "prompt": "How to schedule a recurring task?",
   "actual": "The session is ending. If you need any further assistance, feel free to ask!",
-  "expected": "Use the `Schedule` action.\n\n```aro\n(Tick: Example) {\n    Schedule the <tick> for the <events> with \"every 5 minutes\".\n    Return an <OK: status> for the <schedule>.\n}\n```",
+  "expected": "Use the `Schedule` action — it fires a domain event every N seconds (time units like `minutes` work too), and any feature set named `<event> Handler` runs on each tick. Add `Keepalive` so the application stays alive to receive the events.\n\n```aro\n(Application-Start: Recurring Task Demo) {\n    Schedule the <task-tick> with 5 minutes.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Run Task: task-tick Handler) {\n    Log \"running scheduled task\" to the <console>.\n    Return an <OK: status> for the <task>.\n}\n```",
   "aro_check_passed": null,
   "judge": "no_code",
   "judge_reason": "no ```aro``` block in final output",

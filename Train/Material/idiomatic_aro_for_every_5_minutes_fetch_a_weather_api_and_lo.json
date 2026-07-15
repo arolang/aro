@@ -1,7 +1,7 @@
 {
   "prompt": "Idiomatic ARO for: \"every 5 minutes, fetch a weather API and log the temperature\".",
   "actual": "```aro\n(Application-Start: WeatherLogger) {\n    Start the <weather-logger> with <interval: 5m>.\n    Return an<OK: status> for the <startup>.\n}\n```",
-  "expected": "```aro\n(Application-Start: Weather Poller) {\n    Schedule the <tick> for the <events> with \"every 5 minutes\".\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Poll Weather: tick Handler) {\n    Create the <url> with \"https://api.example.com/weather\".\n    Request the <weather> from the <http-client> at <url>.\n    Extract the <temp> from the <weather: temperature>.\n    Log <temp> to the <console>.\n    Return an <OK: status> with <temp>.\n}\n```",
+  "expected": "```aro\n(Application-Start: Weather Poller) {\n    Schedule the <tick> with 5 minutes.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Poll Weather: tick Handler) {\n    Create the <api-url> with \"https://api.example.com/weather\".\n    Request the <weather> from the <api-url>.\n    Extract the <temp> from the <weather: temperature>.\n    Log <temp> to the <console>.\n    Return an <OK: status> with <temp>.\n}\n```",
   "aro_check_passed": false,
   "judge": "fails_aro_check",
   "judge_reason": "extracted code does not pass `aro check`",

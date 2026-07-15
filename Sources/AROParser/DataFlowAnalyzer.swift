@@ -194,6 +194,25 @@ public struct DataFlowAnalyzer {
         let resultName = statement.result.base
         let objectName = statement.object.noun.base
 
+        // `with 2 seconds.` / `with 1 minute.` stores the time unit as the
+        // object base (the runtime reads it as an interval multiplier — see
+        // ScheduleAction). The unit word is not a variable reference:
+        // without this guard the analyzer reports "Variable 'seconds' used
+        // before definition" and records a phantom external dependency for
+        // every `Schedule … with N <unit>` statement.
+        let objectIsTimeUnit: Bool = {
+            guard ["second", "seconds", "minute", "minutes", "hour", "hours"]
+                .contains(objectName) else { return false }
+            switch statement.valueSource {
+            case .literal(.integer), .literal(.float):
+                return true
+            case .expression:
+                return true
+            default:
+                return false
+            }
+        }()
+
         // Track object qualifier as input if it looks like a variable reference
         if let objectQualifier = statement.object.noun.typeAnnotation,
            looksLikeVariable(objectQualifier) {
@@ -247,10 +266,10 @@ public struct DataFlowAnalyzer {
         // Determine data flow based on action semantic role
         switch statement.action.semanticRole {
         case .request:
-            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) {
+            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) && !objectIsTimeUnit {
                 dependencies.insert(objectName)
             }
-            inputs.insert(objectName)
+            if !objectIsTimeUnit { inputs.insert(objectName) }
             outputs.insert(resultName)
 
             let dataType = TypeInferencer.inferResultType(statement)
@@ -271,13 +290,14 @@ public struct DataFlowAnalyzer {
             definedSymbols.insert(resultName)
 
         case .own:
-            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) && !dependencies.contains(objectName) {
+            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName)
+                && !dependencies.contains(objectName) && !objectIsTimeUnit {
                 diagnostics.warning(
                     "Variable '\(objectName)' used before definition",
                     at: statement.object.noun.span.start
                 )
             }
-            inputs.insert(objectName)
+            if !objectIsTimeUnit { inputs.insert(objectName) }
             outputs.insert(resultName)
 
             let dataType = TypeInferencer.inferResultType(statement)
@@ -313,12 +333,13 @@ public struct DataFlowAnalyzer {
             break
 
         case .server:
-            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) && !dependencies.contains(objectName) {
+            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName)
+                && !dependencies.contains(objectName) && !objectIsTimeUnit {
                 if !isServiceObject(objectName) {
                     dependencies.insert(objectName)
                 }
             }
-            inputs.insert(objectName)
+            if !objectIsTimeUnit { inputs.insert(objectName) }
             outputs.insert(resultName)
 
             let dataType = TypeInferencer.inferResultType(statement)

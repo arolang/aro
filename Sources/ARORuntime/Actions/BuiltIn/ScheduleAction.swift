@@ -48,6 +48,13 @@ public struct ScheduleAction: ActionImplementation {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
+        // `Schedule the <tick> for the <events> with 60.` used to run silently
+        // with `for` — reject it so the documented form (`with` only) is the
+        // one that works everywhere, including training-data validation.
+        // The time-unit form ("with 2 seconds") parses the unit into
+        // object.base with preposition .with, so this stays permissive there.
+        try validatePreposition(object.preposition)
+
         // Resolve the numeric interval value.
         // When a time-unit suffix is present ("with 2 seconds."), the parser sets
         // object.base = "seconds" instead of "_expression_", which means the
@@ -66,7 +73,16 @@ public struct ScheduleAction: ActionImplementation {
         } else if let v = context.resolveAny("_literal_") as? Double {
             rawValue = v
         } else {
-            rawValue = 1.0
+            // A non-numeric interval (e.g. `with "every 5 minutes"`) used to
+            // silently default to firing every second. Fail with the correct
+            // usage instead — silent misbehavior here poisoned training data.
+            throw ActionError.runtimeError(
+                """
+                Schedule needs a numeric interval in seconds (optionally with a \
+                time unit): `Schedule the <\(result.base)> with 60.` or \
+                `Schedule the <\(result.base)> with 1 minute.`
+                """
+            )
         }
 
         // Apply time-unit multiplier set by the parser for "with N unit" syntax
