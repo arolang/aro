@@ -47,12 +47,17 @@ public actor ToolRegistry {
             throw AskToolError.invalidArguments(error.localizedDescription)
         }
 
-        // Require user approval for dangerous tools
+        // Require user approval for dangerous tools. Approvers
+        // get the risk tier so they can policy-route per level
+        // (auto-approve readonly, prompt for modify, always
+        // prompt for execute) instead of treating every
+        // \`requiresApproval == true\` tool identically (#370).
         if tool.requiresApproval {
             let approved = await approver.approve(
                 toolName: name,
                 description: tool.description,
-                arguments: argumentsJSON
+                arguments: argumentsJSON,
+                riskLevel: tool.riskLevel
             )
             guard approved else {
                 throw AskToolError.userDenied("tool: \(name)")
@@ -65,15 +70,48 @@ public actor ToolRegistry {
 
 /// Approval policy for tools that modify files or run commands.
 public protocol ToolApprover: Sendable {
-    func approve(toolName: String, description: String, arguments: String) async -> Bool
+    func approve(
+        toolName: String,
+        description: String,
+        arguments: String,
+        riskLevel: AskToolRiskLevel
+    ) async -> Bool
+}
+
+/// Legacy default — pre-#370 callers implement the bool-only
+/// shape. Routes through the new signature so existing approvers
+/// keep compiling.
+public extension ToolApprover {
+    func approve(
+        toolName: String,
+        description: String,
+        arguments: String
+    ) async -> Bool {
+        await approve(
+            toolName: toolName,
+            description: description,
+            arguments: arguments,
+            riskLevel: .modify
+        )
+    }
 }
 
 public struct AutoApproveAll: ToolApprover {
     public init() {}
-    public func approve(toolName: String, description: String, arguments: String) async -> Bool { true }
+    public func approve(
+        toolName: String,
+        description: String,
+        arguments: String,
+        riskLevel: AskToolRiskLevel
+    ) async -> Bool { true }
 }
 
 public struct DenyAllApprover: ToolApprover {
     public init() {}
-    public func approve(toolName: String, description: String, arguments: String) async -> Bool { false }
+    public func approve(
+        toolName: String,
+        description: String,
+        arguments: String,
+        riskLevel: AskToolRiskLevel
+    ) async -> Bool { false }
 }
