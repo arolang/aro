@@ -12,6 +12,12 @@ public final class TestWatchdog: @unchecked Sendable {
 
     private let isTestEnvironment: Bool
 
+    /// Held strongly while armed so the timer source survives the
+    /// init return. `DispatchSourceTimer` releases its background
+    /// thread until the deadline fires — no \`Thread.sleep\`
+    /// pinning a thread for 35 seconds (#333).
+    private var timer: DispatchSourceTimer?
+
     private init() {
         // Only activate watchdog in actual XCTest environments
         // Don't trigger on paths that happen to contain "test"
@@ -24,24 +30,27 @@ public final class TestWatchdog: @unchecked Sendable {
         }
     }
 
-    /// Start the watchdog on a background thread
+    /// Arm the watchdog via a DispatchSourceTimer on a background
+    /// queue. The timer fires once at the 35-second deadline,
+    /// runs the emergency-shutdown handler, and then forces
+    /// process exit.
     private func startWatchdog() {
-        DispatchQueue.global(qos: .background).async {
-            // Wait for tests to complete
-            Thread.sleep(forTimeInterval: 35.0)
-
+        let queue = DispatchQueue.global(qos: .background)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 35.0, leeway: .milliseconds(500))
+        timer.setEventHandler { [weak self] in
             print("\n[TestWatchdog] 35-second timeout reached")
             print("[TestWatchdog] Performing emergency shutdown of event loops and resources...")
-
-            // Shutdown all resources
-            self.performEmergencyShutdown()
-
-            // Give shutdown a brief moment
-            Thread.sleep(forTimeInterval: 0.5)
-
-            print("[TestWatchdog] Forcing process exit")
-            exit(0)
+            self?.performEmergencyShutdown()
+            // Brief grace window before exit so the shutdown
+            // handlers' stdout makes it to the test log.
+            queue.asyncAfter(deadline: .now() + 0.5) {
+                print("[TestWatchdog] Forcing process exit")
+                exit(0)
+            }
         }
+        self.timer = timer
+        timer.resume()
     }
 
     /// Perform emergency shutdown of all resources
