@@ -49,17 +49,6 @@ enum AICompletionFallback {
         \(prefix)|CURSOR|
         """
 
-        let aro = ConsoleProcess.resolveAroBinary(near: project)
-        let task = Process()
-        if aro == "/usr/bin/env" {
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            task.arguments = ["aro", "ask", "--yes", "--no-think", prompt]
-        } else {
-            task.executableURL = URL(fileURLWithPath: aro)
-            task.arguments = ["ask", "--yes", "--no-think", prompt]
-        }
-        task.currentDirectoryURL = project.rootPath
-
         // Record the outbound prompt in the Internal Logs window.
         Task { @MainActor in
             InternalLogStore.shared.record(
@@ -69,80 +58,31 @@ enum AICompletionFallback {
             )
         }
 
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        task.standardOutput = outPipe
-        task.standardError = errPipe
-
-        // Arm a watchdog so a hung backend doesn't keep the pipe
-        // open forever. terminate() releases the file handle.
-        let watchdog = DispatchWorkItem { [weak task] in
-            guard let task, task.isRunning else { return }
-            task.terminate()
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(
-            deadline: .now() + timeout, execute: watchdog
-        )
-
-        task.terminationHandler = { proc in
-            // Drain both pipes — `aro ask`'s native MLX backend
-            // emits the actual completion to stdout but interleaves
-            // backend-loading chatter (and sometimes the answer
-            // itself, depending on the model) on stderr. If we only
-            // looked at stdout we'd miss those cases entirely.
-            let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let rawOut = String(data: outData, encoding: .utf8) ?? ""
-            let rawErr = String(data: errData, encoding: .utf8) ?? ""
-            let cleanedOut = ConsoleProcess.stripANSI(rawOut)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let cleanedErr = ConsoleProcess.stripANSI(rawErr)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            // Prefer stdout, fall back to stderr if stdout was empty.
-            let source = cleanedOut.isEmpty ? cleanedErr : cleanedOut
-            let first = source
-                .components(separatedBy: "\n")
-                .first ?? ""
+        // In-process via the shared, warm AskSession (no subprocess
+        // cold start). The service applies its own soft timeout.
+        #if canImport(AROAsk)
+        Task {
+            let raw = await SolaroAskService.shared.complete(prompt, timeout: timeout)
+            let source = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let first = source.components(separatedBy: "\n").first ?? ""
             let stripped = first
                 .replacingOccurrences(of: "|CURSOR|", with: "")
                 .trimmingCharacters(in: .whitespaces)
             let trimmed = String(stripped.prefix(80))
-            let exitCode = proc.terminationStatus
-            DispatchQueue.main.async {
-                // Log stdout as an .inbound (or .error on non-zero
-                // exit). Always log stderr as a separate .info entry
-                // when non-empty so the user can see what the model
-                // backend was complaining about.
-                let stdoutSummary: String
-                if exitCode == 0 {
-                    stdoutSummary = cleanedOut.isEmpty
-                        ? "← ask predictNext (empty stdout — see stderr)"
-                        : "← ask predictNext result"
-                } else {
-                    stdoutSummary = "← ask predictNext exited \(exitCode)"
-                }
+            await MainActor.run {
                 InternalLogStore.shared.record(
                     category: .ask,
-                    direction: exitCode == 0 ? .inbound : .error,
-                    summary: stdoutSummary,
-                    body: cleanedOut.isEmpty ? "(empty stdout)" : cleanedOut
+                    direction: trimmed.isEmpty ? .error : .inbound,
+                    summary: trimmed.isEmpty
+                        ? "← ask predictNext (no suggestion / unavailable)"
+                        : "← ask predictNext result",
+                    body: trimmed.isEmpty ? "(empty)" : trimmed
                 )
-                if !cleanedErr.isEmpty {
-                    InternalLogStore.shared.record(
-                        category: .ask,
-                        direction: .info,
-                        summary: "← ask predictNext stderr (\(cleanedErr.count) chars)",
-                        body: cleanedErr
-                    )
-                }
                 completion(trimmed.isEmpty ? nil : trimmed)
             }
         }
-
-        do {
-            try task.run()
-        } catch {
-            completion(nil)
-        }
+        #else
+        completion(nil)
+        #endif
     }
 }

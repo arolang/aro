@@ -101,6 +101,12 @@ solaroTargets = [
             "AROVersion",
             "AROParser",
             "ARORuntime",
+            // In-process `aro ask` for the editor's inline suggestion
+            // surfaces (ActionSuggester, AICompletionFallback). Links the
+            // LLM stack (MLX/llama) into the app so one shared, warm
+            // AskSession answers hover/autocomplete prompts instead of
+            // cold-starting an `aro ask` subprocess per call.
+            "AROAsk",
             "AROXPCProtocol",
             .product(name: "Logging", package: "swift-log"),
             .product(name: "Yams", package: "Yams"),

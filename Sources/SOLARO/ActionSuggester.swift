@@ -62,62 +62,30 @@ enum ActionSuggester {
         inFlight.insert(key)
 
         let prompt = buildPrompt(verb: verb, template: template, source: text)
-        let aro = ConsoleProcess.resolveAroBinary(near: project)
-        let task = Process()
-        if aro == "/usr/bin/env" {
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            task.arguments = ["aro", "ask", "--yes", "--no-think", prompt]
-        } else {
-            task.executableURL = URL(fileURLWithPath: aro)
-            task.arguments = ["ask", "--yes", "--no-think", prompt]
-        }
-        task.currentDirectoryURL = project.rootPath
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        task.standardOutput = outPipe
-        task.standardError = errPipe
 
-        // 12s watchdog — long enough for the cold start of the
-        // local model on a fast machine, short enough that the
-        // tooltip doesn't sit empty forever on a hung backend.
-        let timeout: TimeInterval = 12.0
-        let watchdog = DispatchWorkItem { [weak task] in
-            guard let task, task.isRunning else { return }
-            task.terminate()
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(
-            deadline: .now() + timeout, execute: watchdog
-        )
-
-        task.terminationHandler = { proc in
-            let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let rawOut = String(data: outData, encoding: .utf8) ?? ""
-            let rawErr = String(data: errData, encoding: .utf8) ?? ""
-            let cleanedOut = ConsoleProcess.stripANSI(rawOut)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let cleanedErr = ConsoleProcess.stripANSI(rawErr)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let source = cleanedOut.isEmpty ? cleanedErr : cleanedOut
-            // Take the first non-empty line; that's the statement.
+        // In-process via the shared, warm AskSession — no subprocess
+        // cold start. `finish` runs on the main actor with the first
+        // non-empty line of the model's reply (or nil).
+        @MainActor func finish(_ raw: String?) {
+            let source = raw ?? ""
             let first = source
                 .components(separatedBy: "\n")
                 .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
                 ?? ""
             let suggestion = sanitize(first)
-            DispatchQueue.main.async {
-                inFlight.remove(key)
-                cache[key] = suggestion
-                completion(suggestion.isEmpty ? nil : suggestion)
-            }
+            inFlight.remove(key)
+            cache[key] = suggestion
+            completion(suggestion.isEmpty ? nil : suggestion)
         }
 
-        do {
-            try task.run()
-        } catch {
-            inFlight.remove(key)
-            completion(nil)
+        #if canImport(AROAsk)
+        Task {
+            let raw = await SolaroAskService.shared.complete(prompt)
+            finish(raw)
         }
+        #else
+        finish(nil)
+        #endif
     }
 
     /// Trim wrapper backticks / code fences the model sometimes
