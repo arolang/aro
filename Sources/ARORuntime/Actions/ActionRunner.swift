@@ -23,15 +23,29 @@ public final class ActionRunner: @unchecked Sendable {
     /// The action registry to use
     private let registry: ActionRegistry
 
-    /// Synchronous-action lookup table (verb → type), built at startup.
-    /// Keyed by canonical verb.  Safe to access from any thread because it
-    /// is populated once in `init` and never mutated afterward.
-    private let syncActions: [String: any SynchronousAction.Type]
+    /// Synchronous-action lookup table (verb → type). Populated
+    /// at startup from the built-in modules and rebuilt when
+    /// \`ActionRegistry.register(_:)\` adds a new SynchronousAction
+    /// (e.g. a plugin-supplied one) so dynamically registered
+    /// actions can still enter the fast sync path (#327).
+    private var syncActions: [String: any SynchronousAction.Type]
+    private let syncActionsLock = NSLock()
 
     /// Private initializer
     private init() {
         self.registry = ActionRegistry.shared
         self.syncActions = Self.buildSyncActionsTable()
+    }
+
+    /// Re-populate the sync-action cache from the current state
+    /// of the registry. Invoked by \`ActionRegistry.register(_:)\`
+    /// after a static SynchronousAction registration so the new
+    /// verb routes through \`executeSynchronouslyIfSupported\`
+    /// without falling back to the async path.
+    public func rebuildSyncCache() {
+        let fresh = Self.buildSyncActionsTable()
+        syncActionsLock.lock(); defer { syncActionsLock.unlock() }
+        self.syncActions = fresh
     }
 
     /// Build a flat verb → SynchronousAction.Type table that mirrors ActionRegistry's
@@ -64,6 +78,16 @@ public final class ActionRunner: @unchecked Sendable {
             }
         }
 
+        // Step 1b: overlay anything registered dynamically with
+        // \`ActionRegistry.register(_:)\` (plugins or apps that
+        // ship their own SynchronousAction conformances). The
+        // built-in modules already produced via Step 1 still win
+        // when both register the same verb because the registry
+        // iteration happens after.
+        for (verb, type) in ActionRegistry.shared.allRegisteredActionTypes() {
+            fullDict[verb] = type
+        }
+
         // Step 2: retain only verbs whose winning type is a SynchronousAction.
         // The fullDict keys are already lowercased; pass them through the
         // synonym mapping directly instead of having canonicalizeVerb lowercase
@@ -87,7 +111,10 @@ public final class ActionRunner: @unchecked Sendable {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> ActionRunnerResult? {
-        guard let syncType = syncActions[canonicalVerb] else { return nil }
+        syncActionsLock.lock()
+        let syncType = syncActions[canonicalVerb]
+        syncActionsLock.unlock()
+        guard let syncType else { return nil }
         let action = syncType.init()
         do {
             let value = try action.executeSynchronously(result: result, object: object, context: context)
