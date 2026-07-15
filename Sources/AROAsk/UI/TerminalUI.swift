@@ -35,11 +35,25 @@ public enum Style {
 public struct InteractiveApprover: ToolApprover {
     public init() {}
 
-    public func approve(toolName: String, description: String, arguments: String) async -> Bool {
+    public func approve(
+        toolName: String,
+        description: String,
+        arguments: String,
+        riskLevel: AskToolRiskLevel
+    ) async -> Bool {
         let stderr = FileHandle.standardError
 
         stderr.write(Data("\n".utf8))
-        stderr.write(Data("\(Style.bgYellow)\(Style.bold) APPROVE \(Style.reset) ".utf8))
+        // Surface the risk tier in the prompt so the user sees
+        // at a glance that they're being asked about a shell
+        // execute vs. a file write (#370).
+        let tierLabel: String
+        switch riskLevel {
+        case .readonly: tierLabel = "READ"
+        case .modify:   tierLabel = "MODIFY"
+        case .execute:  tierLabel = "EXEC"
+        }
+        stderr.write(Data("\(Style.bgYellow)\(Style.bold) APPROVE [\(tierLabel)] \(Style.reset) ".utf8))
         stderr.write(Data("\(Style.yellow)\(toolName)\(Style.reset)\n".utf8))
 
         // Pretty-print the arguments
