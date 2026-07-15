@@ -1746,3 +1746,84 @@ jobs:
             git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/arolang/homebrew-aro.git main
           fi
 
+      # ========================================================================
+      # Update Homebrew Cask (SOLARO)
+      # ========================================================================
+      # The solaro cask was published pointing at a release that predates
+      # the solaro-macos job, so `brew install solaro` 404'd until the
+      # first tag built after that job landed. This step keeps the cask
+      # pinned to the newest release that actually ships the DMG, with a
+      # real sha256 instead of the interim `:no_check`.
+
+      - name: Update Homebrew Cask (Solaro)
+        continue-on-error: true
+        run: |
+          DMG="artifacts/solaro-macos-arm64/solaro-macos-arm64.dmg"
+          if [ ! -f "$DMG" ]; then
+            echo "No solaro DMG in this release — leaving the cask untouched."
+            exit 0
+          fi
+          SHA256=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ github.ref_name }}"
+
+          echo "Version: $VERSION"
+          echo "SHA256: $SHA256"
+
+          # Fresh clone so we sit on top of the formula update pushed by
+          # the previous step (reusing its working copy would race it).
+          rm -rf homebrew-aro-cask
+          git clone https://github.com/arolang/homebrew-aro.git homebrew-aro-cask
+          cd homebrew-aro-cask
+
+          cat > Casks/solaro.rb << CASK
+          cask "solaro" do
+            # Managed by the release workflow in arolang/aro
+            # (.github/workflows/build.yml, "Update Homebrew Cask"). Edit
+            # there, not here — this file is overwritten on every release
+            # that ships solaro-macos-arm64.dmg.
+            version "$VERSION"
+            sha256 "$SHA256"
+
+            url "https://github.com/arolang/aro/releases/download/$TAG/solaro-macos-arm64.dmg"
+            name "Solaro"
+            desc "Canvas-first IDE for the ARO language"
+            homepage "https://github.com/arolang/aro"
+
+            depends_on macos: :sequoia
+            depends_on arch: :arm64
+
+            app "Solaro.app"
+
+            # Clean up app-side state when the user runs \`brew uninstall
+            # --zap solaro\`. CFBundleIdentifier is intentionally still
+            # \`com.arolang.SOLARO\` (the rename to "Solaro" is cosmetic — we
+            # keep the bundle ID stable so existing users' defaults survive),
+            # which is also what the crash logger directory uses.
+            zap trash: [
+              "~/Library/Application Support/SOLARO",
+              "~/Library/Caches/com.arolang.SOLARO",
+              "~/Library/Logs/DiagnosticReports/SOLARO-*.ips",
+              "~/Library/Preferences/com.arolang.SOLARO.plist",
+            ]
+          end
+          CASK
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Casks/solaro.rb
+          if git diff --staged --quiet; then
+            echo "No changes to cask"
+          else
+            git commit -m "chore: update solaro cask to version $VERSION
+
+          Auto-update from release workflow
+
+          - Version: $VERSION
+          - SHA256: $SHA256
+          - Release: https://github.com/arolang/aro/releases/tag/$TAG"
+
+            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/arolang/homebrew-aro.git main
+          fi
+
