@@ -378,10 +378,25 @@ public final class LLVMCodeGenerator {
     /// us a single place to register new statement types (issue #170).
     typealias StatementHandler = (LLVMCodeGenerator) -> (Statement, Int, BasicBlock) -> Void
 
-    // The handler table itself is immutable after initialization. The closures
-    // capture no shared mutable state (they only forward to instance methods
-    // on the `LLVMCodeGenerator` argument), so marking the stored table as
-    // `nonisolated(unsafe)` is sound under Swift 6 strict concurrency.
+    // Invariant — held by inspection, not by the compiler (#351):
+    //   1. The dictionary is initialised once in this `let`
+    //      declaration and never mutated afterwards.
+    //   2. The closure values capture *no* state. Each one only
+    //      forwards to an instance method on the
+    //      `LLVMCodeGenerator` argument passed in at dispatch
+    //      time — there is no shared `self`, no `gen` reference
+    //      stored in the outer closure beyond the curry, and no
+    //      static mutable storage they reach into.
+    //
+    // With that, concurrent reads from any thread are race-free
+    // and `nonisolated(unsafe)` is sound under Swift 6 strict
+    // concurrency. (We can't drop the annotation: the closure
+    // type can't be `@Sendable` because `LLVMCodeGenerator` is a
+    // mutable class.)
+    //
+    // If a future change wants per-instance handler tables or
+    // mutable registration, restructure this into an instance
+    // member and remove `nonisolated(unsafe)`.
     nonisolated(unsafe) private static let statementHandlers: [ObjectIdentifier: StatementHandler] = [
         ObjectIdentifier(AROStatement.self): { gen in
             { stmt, index, errorBlock in
