@@ -91,17 +91,39 @@ public final class Parser {
     /// Path can be: ../folder, ./folder, ../../path/to/app
     private func parseImportDeclaration() throws -> ImportDeclaration {
         let startToken = try expect(.import, message: "'import'")
+        let path = parseImportPath()
 
-        // Parse the path - it's a sequence of identifiers, dots, and slashes.
-        // Accumulate token-shaped fragments and join once at the end so a
-        // long path (e.g. `../../sources/foo/bar`) doesn't re-allocate
-        // the buffer per token (#343).
+        if path.isEmpty {
+            throw ParserError.unexpectedToken(expected: "import path", got: peek())
+        }
+
+        return ImportDeclaration(
+            path: path,
+            span: startToken.span.merged(with: previous().span)
+        )
+    }
+
+    /// Grammar:
+    ///   importPath := pathSegment ('/' pathSegment | '.' | '-')*
+    ///   pathSegment := identifier | '.' | '..'
+    ///
+    /// Stitches lexer tokens (\`.\`, \`/\`, \`-\`, identifiers) into a
+    /// single dotted/slashed path string. Stops at the first
+    /// non-path token; returns "" when the cursor isn't on a
+    /// path-shaped token at all (caller treats that as a parse
+    /// error). Documented separately from the rest of the parser
+    /// so the path-stitching contract is explicit (#342).
+    ///
+    /// Lifting the whole `../../foo/bar` form into a dedicated
+    /// lexer token is a follow-up — that would let the lexer
+    /// hand the parser one `.importPath(text:)` token instead of
+    /// this peek-and-rebuild loop, but means teaching the lexer
+    /// when an identifier-shaped token is actually part of a
+    /// path (only after the `import` keyword).
+    private func parseImportPath() -> String {
         var fragments: [String] = []
-
-        // Path starts with ./ or ../ or identifier
         while !isAtEnd && !check(.leftParen) && !check(.import) {
-            let token = peek()
-            switch token.kind {
+            switch peek().kind {
             case .dot:
                 fragments.append(".")
                 advance()
@@ -115,32 +137,10 @@ public final class Parser {
                 fragments.append("-")
                 advance()
             default:
-                // End of path
-                break
+                return fragments.joined()
             }
-            // Break if we hit something that's not part of a path
-            if case .leftParen = peek().kind { break }
-            if case .import = peek().kind { break }
-            if case .eof = peek().kind { break }
-            // Check if we've stopped making progress (no more path chars)
-            let nextToken = peek()
-            if case .dot = nextToken.kind { continue }
-            if case .slash = nextToken.kind { continue }
-            if case .identifier = nextToken.kind { continue }
-            if case .hyphen = nextToken.kind { continue }
-            break
         }
-
-        let path = fragments.joined()
-
-        if path.isEmpty {
-            throw ParserError.unexpectedToken(expected: "import path", got: peek())
-        }
-
-        return ImportDeclaration(
-            path: path,
-            span: startToken.span.merged(with: previous().span)
-        )
+        return fragments.joined()
     }
     
     // MARK: - Feature Set Parsing
