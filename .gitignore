@@ -184,3 +184,6 @@ Train/script/output/
 .layout.json
 /Train/script/events.jsonl
 /Train/script/demo-output
+/Examples/ObjectUpdate/ObjectUpdate
+/Examples/StandupDigest/StandupDigest
+/Examples/UptimeMonitor/UptimeMonitor
