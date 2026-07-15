@@ -585,8 +585,13 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE_BASE64" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-            echo "Apple signing secrets not configured — leaving Solaro.app unsigned."
+          # Only the certificate itself is required. The signing identity is
+          # derived from it below when the (optional) APPLE_SIGNING_IDENTITY
+          # secret is empty — an empty identity secret used to skip signing
+          # entirely, which shipped an unsigned app and then broke
+          # notarization (Invalid → stapler error 65 → failed job).
+          if [ -z "$APPLE_CERTIFICATE_BASE64" ]; then
+            echo "APPLE_CERTIFICATE_BASE64 not set — leaving Solaro.app unsigned."
             exit 0
           fi
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -599,6 +604,21 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           rm certificate.p12
+
+          # Derive the signing identity from the imported certificate when the
+          # secret is not explicitly set. The certificate already carries its
+          # identity name, so requiring a separate secret was a redundant
+          # single point of failure. Prefer an explicit secret if provided.
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+              | awk -F'"' '/[0-9A-F]{40}/ { print $2; exit }')
+          fi
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "::warning::No code-signing identity in the imported certificate — leaving Solaro.app unsigned."
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+            exit 0
+          fi
+          echo "Signing Solaro.app with identity: $APPLE_SIGNING_IDENTITY"
 
           # Same library-loading entitlement the aro CLI uses
           # (#268). SOLARO dlopen's plugin binaries from a project's
@@ -641,23 +661,45 @@ jobs:
             solaro-dist/Solaro.app
           codesign --verify --deep --strict solaro-dist/Solaro.app
 
+          # Signal the notarize step that a signed bundle exists. Submitting
+          # an unsigned app to the notary returns Invalid, after which
+          # `stapler staple` fails the whole job with error 65.
+          echo "SOLARO_SIGNED=1" >> "$GITHUB_ENV"
+
       - name: Notarize Solaro.app (tags only)
-        if: github.ref_type == 'tag'
+        # Only notarize a bundle that was actually signed above.
+        if: github.ref_type == 'tag' && env.SOLARO_SIGNED == '1'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           if [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_PASSWORD" ]; then
-            echo "Notarization secrets missing — skipping."
+            echo "Notarization secrets missing — skipping (shipping a signed but un-notarized app)."
             exit 0
           fi
           ditto -c -k --keepParent solaro-dist/Solaro.app solaro-dist/Solaro.app.zip
-          xcrun notarytool submit solaro-dist/Solaro.app.zip \
+          # Capture the result so a rejection prints the notary log and ships a
+          # signed-but-un-notarized DMG instead of crashing the release job.
+          SUBMIT_OUT=$(xcrun notarytool submit solaro-dist/Solaro.app.zip \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
-            --wait
+            --wait 2>&1) || true
+          echo "$SUBMIT_OUT"
+          STATUS=$(echo "$SUBMIT_OUT" | awk -F': ' '/status:/ { s=$2 } END { print s }')
+          SUBMIT_ID=$(echo "$SUBMIT_OUT" | awk -F': ' '/id:/ { print $2; exit }')
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::warning::Notarization did not succeed (status: ${STATUS:-unknown}). Shipping a signed but un-notarized DMG."
+            echo "Common cause: the signing certificate must be a 'Developer ID Application' cert — Apple Development / Apple Distribution certs cannot notarize."
+            if [ -n "$SUBMIT_ID" ]; then
+              echo "--- notary log ($SUBMIT_ID) ---"
+              xcrun notarytool log "$SUBMIT_ID" \
+                --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" || true
+            fi
+            rm -f solaro-dist/Solaro.app.zip
+            exit 0
+          fi
           xcrun stapler staple solaro-dist/Solaro.app
           rm -f solaro-dist/Solaro.app.zip
 
