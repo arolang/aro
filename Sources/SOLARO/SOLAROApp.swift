@@ -15,6 +15,7 @@
 import AppKit
 import SwiftUI
 import AROVersion
+import STTextView
 
 @main
 struct SOLAROApp: App {
@@ -672,20 +673,21 @@ struct SolaroRedoCommand: View {
     }
 }
 
-/// Walks the front window's responder chain looking for an
-/// `NSText` (the AppKit base for every text input — STTextView's
-/// underlying view conforms). Returns its UndoManager so the Edit
-/// menu can route ⌘Z to character-level undo while the editor has
-/// focus. Returns nil when the focus is on the canvas or any other
-/// non-text view, in which case the workspace UndoManager handles
-/// it.
+/// Walks the front window's responder chain looking for a text
+/// editor. STTextView is a TextKit-2 reimplementation and is NOT
+/// an NSText subclass, so the earlier `r is NSText` check missed
+/// the SOLARO code editor entirely and ⌘Z fell through to the
+/// workspace UndoManager — which has no record of keystrokes.
+/// Match both NSText (NSTextField etc.) and STTextView so the
+/// Edit menu routes ⌘Z to character-level undo while either kind
+/// of editor has focus.
 @MainActor
 private func activeTextResponderUndoManager() -> UndoManager? {
     guard let window = NSApp.keyWindow,
           let first = window.firstResponder else { return nil }
     var responder: NSResponder? = first
     while let r = responder {
-        if r is NSText {
+        if r is NSText || r is STTextView {
             return r.undoManager
         }
         responder = r.nextResponder

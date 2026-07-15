@@ -922,6 +922,15 @@ struct AROCodeEditor: NSViewRepresentable {
            text != context.coordinator.lastUserText {
             textView.text = text
             applyHighlight(textView)
+            // External swap (tab switch, sidecar reload, LSP edit,
+            // canvas-side mutation): clear the undo stack so ⌘Z
+            // can't snap back to content from before the swap —
+            // which would otherwise restore the *previous file* on
+            // top of the new one. STTextView's text setter calls
+            // disableUndoRegistration internally, so the swap
+            // itself never lands in the stack; we just have to
+            // sweep whatever was there before.
+            textView.undoManager?.removeAllActions()
         }
         if let target = currentLine,
            target != lineForCurrentSelection(in: textView),
@@ -1228,11 +1237,15 @@ struct AROCodeEditor: NSViewRepresentable {
         let current = textView.text ?? ""
         let formatted = AROFormatter.format(current)
         if formatted == current { return }
-        // Drive the buffer first so the user sees the change land
-        // immediately, then push it through the same save path
-        // that the keystroke binding uses — that keeps LSP and the
-        // cached AST in sync without a bespoke pipeline.
-        textView.text = formatted
+        // Use replaceCharacters (not `text = …`) so STTextView's
+        // CoalescingUndoManager registers the rewrite. The setter
+        // path calls disableUndoRegistration internally and would
+        // make the pre-format text unrecoverable — exactly the
+        // case the issue's acceptance criteria call out.
+        let nsText = (textView.text ?? "") as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        textView.undoManager?.setActionName("Reformat Code")
+        textView.replaceCharacters(in: fullRange, with: formatted)
         applyHighlight(textView)
         text = formatted
         onSave(formatted)
