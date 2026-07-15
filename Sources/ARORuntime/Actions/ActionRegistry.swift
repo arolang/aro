@@ -92,10 +92,24 @@ public final class ActionRegistry: @unchecked Sendable {
 
     /// Register a custom action
     public func register<A: ActionImplementation>(_ action: A.Type) {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
         for verb in A.verbs {
             actions[verb.lowercased()] = action
         }
+        lock.unlock()
+        // Plugin- or app-registered actions need to flow into the
+        // ActionRunner's sync cache so SynchronousAction
+        // conformances can still skip the async path (#327).
+        ActionRunner.shared.rebuildSyncCache()
+    }
+
+    /// Snapshot of every registered action type keyed by
+    /// lowercased verb. Used by ActionRunner to overlay
+    /// dynamically registered SynchronousAction conformances on
+    /// top of the built-in module set (#327).
+    public func allRegisteredActionTypes() -> [String: any ActionImplementation.Type] {
+        lock.lock(); defer { lock.unlock() }
+        return actions
     }
 
     /// Unregister an action by verb
