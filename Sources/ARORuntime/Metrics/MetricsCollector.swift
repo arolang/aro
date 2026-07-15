@@ -127,8 +127,41 @@ public struct ProcessMetrics: Sendable {
         self.processStartTime = processStartTime
     }
 
-    /// Collect current process metrics using system APIs
+    /// Collect current process metrics using system APIs.
+    ///
+    /// Memoises for `collectInterval` so back-to-back snapshot reads
+    /// (Prometheus scrape + UI panel + event handler) don't re-read
+    /// /proc or call task_info per request — those are the hot
+    /// paths the issue calls out (#320).
     public static func collect() -> ProcessMetrics {
+        let now = Date()
+        Self.collectCacheLock.lock()
+        if let cached = Self.collectCacheValue,
+           let cachedAt = Self.collectCacheAt,
+           now.timeIntervalSince(cachedAt) < Self.collectInterval {
+            Self.collectCacheLock.unlock()
+            return cached
+        }
+        Self.collectCacheLock.unlock()
+
+        let fresh = collectFresh()
+
+        Self.collectCacheLock.lock()
+        Self.collectCacheValue = fresh
+        Self.collectCacheAt = now
+        Self.collectCacheLock.unlock()
+        return fresh
+    }
+
+    /// Cache window. The reported numbers don't change usefully
+    /// faster than one second on the hot paths (rusage, /proc), so
+    /// staleness inside this window is acceptable.
+    private static let collectInterval: TimeInterval = 1.0
+    private static let collectCacheLock = NSLock()
+    nonisolated(unsafe) private static var collectCacheValue: ProcessMetrics?
+    nonisolated(unsafe) private static var collectCacheAt: Date?
+
+    private static func collectFresh() -> ProcessMetrics {
         #if os(macOS)
         return collectDarwin()
         #elseif os(Linux)
