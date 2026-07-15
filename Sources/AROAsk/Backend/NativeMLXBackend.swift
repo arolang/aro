@@ -412,39 +412,86 @@ public actor NativeMLXBackend: LMBackend {
 
     // MARK: - Metal shader library setup
 
-    /// Verify the Metal shader library is somewhere MLX can find it.
+    /// Make sure the Metal shader library is somewhere MLX will actually
+    /// load it from.
+    ///
+    /// MLX's own search (mlx/backend/metal/device.cpp, load_default_library)
+    /// only looks *relative to the running binary*: `mlx.metallib`,
+    /// `Resources/mlx.metallib`, a `mlx-swift_Cmlx.bundle/default.metallib`
+    /// SwiftPM bundle, and a compile-time METAL_PATH. It knows nothing about
+    /// ARO's Homebrew share directory or user cache — so merely *finding*
+    /// the file there is not enough; MLX would still abort with its raw
+    /// "Failed to load the default metallib" C++ error. For those ARO-only
+    /// locations we bridge: symlink (or copy) the metallib to
+    /// `<binaryDir>/mlx.metallib`, the first place MLX looks.
     ///
     /// Lookup order:
-    ///  1. `mlx.metallib` colocated with the binary
+    ///  1. `mlx.metallib` colocated with the binary — MLX-visible
     ///     (dev builds, scp installs, and the Homebrew install path —
     ///     the formula symlinks `bin/mlx.metallib` to `share/aro/mlx.metallib`)
-    ///  2. `mlx-swift_Cmlx.bundle/default.metallib` next to the binary
-    ///     (SwiftPM bundle layout from a local `swift build`)
-    ///  3. `../share/aro/mlx.metallib` relative to the binary
+    ///  2. `mlx-swift_Cmlx.bundle/default.metallib` next to the binary —
+    ///     MLX-visible (SwiftPM bundle layout, built by tools/build-metallib.sh)
+    ///  3. `../share/aro/mlx.metallib` relative to the binary — bridged
     ///     (Homebrew layout directly, in case the `bin/` symlink is absent)
-    ///  4. `~/.cache/aro/mlx/mlx.metallib` (user-populated fallback)
+    ///  4. `~/.cache/aro/mlx/mlx.metallib` — bridged (user-populated fallback)
     ///
-    /// Throws a clean error if none are present.
+    /// Throws a clean error if none are present, or if bridging fails
+    /// because the binary's directory is not writable.
     private static func ensureMetalLib() throws {
         let fm = FileManager.default
         let binaryDir = currentExecutableURL().deletingLastPathComponent()
-        let candidates = [
+
+        // Locations MLX searches on its own — nothing to do if one exists.
+        let mlxVisible = [
             binaryDir.appendingPathComponent("mlx.metallib"),
             binaryDir
                 .appendingPathComponent("mlx-swift_Cmlx.bundle")
                 .appendingPathComponent("default.metallib"),
+            binaryDir
+                .appendingPathComponent("Resources/mlx.metallib"),
+        ]
+        if mlxVisible.contains(where: { fm.fileExists(atPath: $0.path) }) {
+            return
+        }
+
+        // ARO-only fallback locations — MLX never checks these, so bridge
+        // the first one that exists to `<binaryDir>/mlx.metallib`.
+        let fallbacks = [
             binaryDir
                 .deletingLastPathComponent()
                 .appendingPathComponent("share/aro/mlx.metallib"),
             fm.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/aro/mlx/mlx.metallib"),
         ]
-
-        if candidates.contains(where: { fm.fileExists(atPath: $0.path) }) {
-            return
+        if let source = fallbacks.first(where: { fm.fileExists(atPath: $0.path) }) {
+            let target = binaryDir.appendingPathComponent("mlx.metallib")
+            do {
+                // Symlink first (cheap, stays current if the source is
+                // updated); fall back to a copy for filesystems or
+                // sandboxes where symlinks fail.
+                try? fm.removeItem(at: target)  // clear a stale broken link
+                do {
+                    try fm.createSymbolicLink(at: target, withDestinationURL: source)
+                } catch {
+                    try fm.copyItem(at: source, to: target)
+                }
+                return
+            } catch {
+                throw LMBackendError.invalidResponse(
+                    """
+                    Found the MLX Metal shader library at
+                      \(source.path)
+                    but could not link it next to the binary at
+                      \(target.path)
+                    (\(error.localizedDescription)) — MLX only loads the
+                    metallib from next to the binary. Copy it there manually:
+                      cp "\(source.path)" "\(target.path)"
+                    """
+                )
+            }
         }
 
-        let searched = candidates.map { "  " + $0.path }.joined(separator: "\n")
+        let searched = (mlxVisible + fallbacks).map { "  " + $0.path }.joined(separator: "\n")
         throw LMBackendError.invalidResponse(
             """
             MLX Metal shader library not found. Looked in:
