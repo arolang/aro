@@ -518,6 +518,32 @@ final class WorkspaceController {
         return model.sourceFiles.compactMap { programs[$0] }
     }
 
+    /// Bumped whenever an external actor (the AI co-pilot's file
+    /// tools) changes a file on disk. The center pane's text cache
+    /// keys its load task on this so the editor reloads even though
+    /// `currentFile` didn't change.
+    var fileReloadTick: Int = 0
+
+    /// A file was modified on disk behind the editor's back (AI
+    /// co-pilot tool call): reparse it, resync the LSP, refresh git
+    /// status, and force the text cache to reload when it's showing.
+    func noteExternalFileChange(_ url: URL) {
+        let std = url.standardizedFileURL
+        if let text = try? String(contentsOf: std, encoding: .utf8) {
+            do {
+                programs[std] = try Parser.parse(text)
+                parseErrors.removeValue(forKey: std)
+            } catch {
+                parseErrors[std] = "\(error)"
+            }
+            lsp.didChange(url: std, text: text)
+        }
+        gitMonitor.refresh(for: project)
+        if currentFile?.standardizedFileURL == std {
+            fileReloadTick += 1
+        }
+    }
+
     func openFile(_ url: URL) {
         currentFile = url
         if !openTabs.contains(url) {

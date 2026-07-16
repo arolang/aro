@@ -10,11 +10,7 @@ public enum AROTools {
     // MARK: - Binary resolution
 
     private static func aroBinary() -> String {
-        let args = CommandLine.arguments
-        if let first = args.first, first.hasSuffix("/aro") || first == "aro" {
-            return first.hasPrefix("/") ? first : (ProcessRunner.which("aro") ?? first)
-        }
-        return ProcessRunner.which("aro") ?? "aro"
+        AROBinary.resolve()
     }
 
     // MARK: - aro_check

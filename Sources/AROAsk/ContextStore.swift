@@ -245,9 +245,19 @@ public struct AskContext: Codable, Sendable {
     ```
 
     RESPONSE BEHAVIOUR:
-    - When asked to WRITE, CREATE, or BUILD something: produce a complete
-      feature set inside ```aro fences. Then use your tools (via the JSON
-      tool-call protocol) to write files and validate.
+    - When asked to WRITE, CREATE, or BUILD something in a project: write
+      the code into the actual source file. Use the write_file tool for a
+      new file, or the edit_file tool to change an existing one — do NOT
+      just print the code in the chat. After writing, validate with the
+      aro_check tool and fix any errors it reports. Finish with a short
+      summary: which file you wrote and what it does. Only reply with a
+      bare ```aro block when the user explicitly asks you to "show" code
+      or there is no file to write into.
+    - OPEN FILE: when the context contains an "OPEN FILE" block, that is
+      the file the user has open in their editor right now. It is the
+      default target — "this file", "this code", or an unnamed change
+      request all refer to it. Its content is already in the block (no
+      read_file needed); modify it with edit_file using the block's path.
     - When asked a QUESTION about ARO: answer in plain prose. ARO snippets
       in answers are illustrative — they don't need to be runnable, but
       always show the feature-set wrapper around any non-trivial example.

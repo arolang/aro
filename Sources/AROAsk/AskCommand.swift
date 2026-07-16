@@ -61,6 +61,9 @@ public struct AskCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Disable Qwen3 thinking mode for this turn (prepends /no_think). Useful when a simple prompt exhausts the token budget thinking.")
     public var noThink: Bool = false
 
+    @Option(name: .long, help: "File to focus on: its current content is injected into every request so the model treats it as \"the open file\". In the REPL, change it with /file <path>.")
+    public var file: String?
+
     public func run() async throws {
         // Backends read ARO_ASK_VERBOSE from the environment to decide
         // whether to surface model-load and runner output. The flag is
@@ -373,6 +376,31 @@ public struct AskCommand: AsyncParsableCommand {
                 }
                 continue
             }
+            if trimmed == "/file" {
+                if let path = await session.focusFilePath() {
+                    print("focus file: \(Style.cyan)\(path)\(Style.reset)  (\(Style.dim)/file off\(Style.reset) to clear)")
+                } else {
+                    print("No focus file. Set one with \(Style.cyan)/file <path>\(Style.reset)")
+                }
+                continue
+            }
+            if trimmed.hasPrefix("/file ") {
+                let arg = String(trimmed.dropFirst("/file ".count))
+                    .trimmingCharacters(in: .whitespaces)
+                if arg == "off" || arg == "none" || arg == "clear" {
+                    await session.setFocusFile(nil)
+                    print("Focus file cleared")
+                } else {
+                    let url = URL(fileURLWithPath: arg, relativeTo: cwd).standardizedFileURL
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        await session.setFocusFile(url)
+                        print("Focus file: \(Style.cyan)\(arg)\(Style.reset) — injected into every request")
+                    } else {
+                        TerminalUI.printError("No such file: \(arg)")
+                    }
+                }
+                continue
+            }
             if trimmed == "/show" {
                 if let context = try await session.currentContext() {
                     print("\(Style.bold)messages:\(Style.reset) \(context.messages.count)")
@@ -438,7 +466,10 @@ public struct AskCommand: AsyncParsableCommand {
             model: model,
             autoApproveAll: yes,
             temperature: temperature,
-            skipMCP: noMcp
+            skipMCP: noMcp,
+            focusFile: file.map {
+                URL(fileURLWithPath: $0, relativeTo: cwd).standardizedFileURL
+            }
         )
     }
 

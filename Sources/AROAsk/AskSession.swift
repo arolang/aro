@@ -13,6 +13,13 @@ public struct AskSessionConfig: Sendable {
     public var maxToolCallRounds: Int
     public var temperature: Double
     public var skipMCP: Bool
+    /// File the user currently has open (editor focus). Its fresh content
+    /// is injected into every request as a transient context block — never
+    /// persisted to `.context`. Change at runtime via `setFocusFile(_:)`.
+    public var focusFile: URL?
+    /// Suppress TerminalUI output. Set by embedders (SOLARO) that render
+    /// progress through the event sink instead of stdout/stderr.
+    public var quiet: Bool
 
     public init(
         workingDirectory: URL,
@@ -20,7 +27,9 @@ public struct AskSessionConfig: Sendable {
         autoApproveAll: Bool = false,
         maxToolCallRounds: Int = 25,
         temperature: Double = 0.2,
-        skipMCP: Bool = false
+        skipMCP: Bool = false,
+        focusFile: URL? = nil,
+        quiet: Bool = false
     ) {
         self.workingDirectory = workingDirectory
         self.model = model
@@ -28,7 +37,21 @@ public struct AskSessionConfig: Sendable {
         self.maxToolCallRounds = maxToolCallRounds
         self.temperature = temperature
         self.skipMCP = skipMCP
+        self.focusFile = focusFile
+        self.quiet = quiet
     }
+}
+
+/// Progress events emitted while `ask()` runs — status lines and tool
+/// activity. Lets embedders (SOLARO's co-pilot) show what the model is
+/// doing and react to file modifications without scraping stdout.
+public enum AskEvent: Sendable {
+    case status(String)
+    case toolCallStarted(name: String, arguments: String)
+    /// `modifiedPath` is the workspace-relative path a mutating tool
+    /// (write_file, edit_file, write_openapi, generate_docs) touched,
+    /// nil for read-only tools or failures.
+    case toolCallFinished(name: String, output: String, failed: Bool, modifiedPath: String?)
 }
 
 /// Coordinates a single `aro ask` session: backend, tool registry, context
@@ -45,9 +68,15 @@ public actor AskSession {
     private var backend: (any LMBackend)?
     private var mcpBridges: [MCPClientBridge] = []
     private var contextLength: Int = 8192
+    private var focusFile: URL?
+    private var eventSink: (@Sendable (AskEvent) -> Void)?
 
-    public init(config: AskSessionConfig) {
+    /// - Parameter approver: custom approval policy. Embedders (SOLARO)
+    ///   pass one to route approvals through their own UI instead of the
+    ///   terminal; nil falls back to `autoApproveAll` / interactive.
+    public init(config: AskSessionConfig, approver: (any ToolApprover)? = nil) {
         self.config = config
+        self.focusFile = config.focusFile
         self.contextStore = ContextStore(workingDirectory: config.workingDirectory)
         self.registry = ToolRegistry()
         let indexURL = config.workingDirectory
@@ -56,7 +85,8 @@ public actor AskSession {
         self.vectorStore = VectorStore(storeURL: indexURL)
         self.embedder = HashingEmbedder()
         self.pathGuard = PathGuard(root: config.workingDirectory)
-        self.approver = config.autoApproveAll ? AutoApproveAll() : InteractiveApprover()
+        self.approver = approver
+            ?? (config.autoApproveAll ? AutoApproveAll() : InteractiveApprover())
     }
 
     // MARK: - Lifecycle
@@ -114,8 +144,8 @@ public actor AskSession {
             servers = configured
         }
         let hasAroMcp = servers.contains { $0.command.hasSuffix("aro") && $0.args.contains("mcp") }
-        if !hasAroMcp, let aroBin = ProcessRunner.which("aro") ?? CommandLine.arguments.first {
-            servers.append(MCPServerConfig(command: aroBin, args: ["mcp"]))
+        if !hasAroMcp {
+            servers.append(MCPServerConfig(command: AROBinary.resolve(), args: ["mcp"]))
         }
         for server in servers {
             let bridge = MCPClientBridge(command: server.command, args: server.args)
@@ -133,6 +163,117 @@ public actor AskSession {
     public func shutdown() async {
         if let b = backend { await b.stop() }
         for bridge in mcpBridges { await bridge.stop() }
+    }
+
+    // MARK: - Embedder hooks (focus file + progress events)
+
+    /// Point the session at the file the user currently has open. Its
+    /// fresh content is injected into every subsequent request; pass nil
+    /// to stop injecting.
+    public func setFocusFile(_ url: URL?) {
+        focusFile = url
+    }
+
+    /// Workspace-relative display path of the current focus file, or nil.
+    public func focusFilePath() -> String? {
+        focusFile.map { displayPath(for: $0) }
+    }
+
+    /// Receive status + tool-activity events while `ask()` runs. Used by
+    /// SOLARO to show progress and reload files the model modified.
+    public func setEventSink(_ sink: (@Sendable (AskEvent) -> Void)?) {
+        eventSink = sink
+    }
+
+    private func emitStatus(_ message: String) {
+        if !config.quiet { TerminalUI.printStatus(message) }
+        eventSink?(.status(message))
+    }
+
+    private func emitToolCall(name: String, arguments: String) {
+        if !config.quiet { TerminalUI.printToolCall(name: name, args: arguments) }
+        eventSink?(.toolCallStarted(name: name, arguments: arguments))
+    }
+
+    private func emitToolResult(name: String, arguments: String, output: String, failed: Bool) {
+        if !config.quiet { TerminalUI.printToolResult(name: name, output: output) }
+        let modified = failed ? nil : Self.modifiedPath(tool: name, argumentsJSON: arguments)
+        eventSink?(.toolCallFinished(name: name, output: output, failed: failed, modifiedPath: modified))
+    }
+
+    /// Tools that mutate the workspace, mapped to the argument key that
+    /// carries the destination path. Lets event consumers know which file
+    /// to reload without parsing tool output strings.
+    private static let mutatingToolPathKeys: [String: [String]] = [
+        "write_file": ["path"],
+        "edit_file": ["path"],
+        "write_openapi": ["output_path"],
+        "generate_docs": ["output"],
+    ]
+
+    static func modifiedPath(tool: String, argumentsJSON: String) -> String? {
+        guard let keys = mutatingToolPathKeys[tool] else { return nil }
+        guard let data = argumentsJSON.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        for key in keys {
+            if let value = obj[key] as? String, !value.isEmpty { return value }
+        }
+        // write_openapi defaults to openapi.yaml when output_path is omitted
+        return tool == "write_openapi" ? "openapi.yaml" : nil
+    }
+
+    /// Path shown to the model / user: workspace-relative when inside the
+    /// working directory, absolute otherwise.
+    private func displayPath(for url: URL) -> String {
+        let root = config.workingDirectory.standardizedFileURL.path
+        let abs = url.standardizedFileURL.path
+        if abs.hasPrefix(root + "/") {
+            return String(abs.dropFirst(root.count + 1))
+        }
+        return abs
+    }
+
+    /// Cap for the injected focus-file block (~1.5k tokens of the 8k
+    /// window) so a huge open file can't crowd out the conversation.
+    private static let focusFileMaxChars = 6000
+
+    /// Transient "OPEN FILE" context block: re-read on every request so
+    /// the model always sees the file as it is on disk right now. Never
+    /// persisted to `.context` — persisting would snapshot stale content
+    /// and double it on every turn.
+    private func focusFileMessage() -> LMChatRequest.Message? {
+        guard let url = focusFile,
+              let content = try? String(contentsOf: url, encoding: .utf8)
+        else { return nil }
+        let display = displayPath(for: url)
+        var body = content
+        var note = ""
+        if body.count > Self.focusFileMaxChars {
+            body = String(body.prefix(Self.focusFileMaxChars))
+            note = "\n(file truncated here — use the read_file tool with an offset to see the rest)"
+        }
+        return LMChatRequest.Message(role: "system", content: """
+        OPEN FILE: \(display)
+        This is the file the user has open in the editor right now. It is \
+        the default target: when the user says "this file", "this code", or \
+        asks for a change without naming a file, they mean this one. Its \
+        current content is below — you do not need read_file for it. Apply \
+        modifications with edit_file or write_file using the path "\(display)".
+        ```
+        \(body)
+        ```\(note)
+        """)
+    }
+
+    /// Convert stored messages to request messages, inserting the
+    /// transient focus-file block right after the system prompt.
+    private func requestMessages(from messages: [AskMessage]) -> [LMChatRequest.Message] {
+        var out = messages.map { $0.toRequestMessage() }
+        if let focus = focusFileMessage() {
+            out.insert(focus, at: out.isEmpty ? 0 : 1)
+        }
+        return out
     }
 
     // MARK: - Chat loop (post-inference tool-calling middleware)
@@ -166,7 +307,7 @@ public actor AskSession {
         for round in 0..<config.maxToolCallRounds {
             let request = LMChatRequest(
                 model: config.model,
-                messages: context.messages.map { $0.toRequestMessage() },
+                messages: requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: config.temperature,
                 stream: false
@@ -199,9 +340,7 @@ public actor AskSession {
             if stripped.truncatedDuringThinking
                 && Self.thinkingTail(reply.content ?? "") == nil
                 && !prompt.hasPrefix("/no_think") {
-                TerminalUI.printStatus(
-                    "model stalled while thinking — retrying with /no_think…"
-                )
+                emitStatus("model stalled while thinking — retrying with /no_think…")
                 var retryMessages = context.messages
                 if let lastUser = retryMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = retryMessages[lastUser].content ?? ""
@@ -214,7 +353,7 @@ public actor AskSession {
                 }
                 let retryRequest = LMChatRequest(
                     model: config.model,
-                    messages: retryMessages.map { $0.toRequestMessage() },
+                    messages: requestMessages(from: retryMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
                     stream: false
@@ -244,9 +383,7 @@ public actor AskSession {
             if stripped.text.isEmpty
                 && (reply.toolCalls ?? []).isEmpty
                 && !prompt.contains(directivePrefix) {
-                TerminalUI.printStatus(
-                    "model returned no content — retrying with code-only directive…"
-                )
+                emitStatus("model returned no content — retrying with code-only directive…")
                 var directiveMessages = context.messages
                 if let lastUser = directiveMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = directiveMessages[lastUser].content ?? ""
@@ -260,7 +397,7 @@ public actor AskSession {
                 }
                 let directiveRequest = LMChatRequest(
                     model: config.model,
-                    messages: directiveMessages.map { $0.toRequestMessage() },
+                    messages: requestMessages(from: directiveMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
                     stream: false
@@ -286,13 +423,13 @@ public actor AskSession {
                 // a bare "I ran out of tokens" warning.
                 let fallback = Self.thinkingTail(reply.content ?? "")
                 if let fallback, !fallback.isEmpty {
-                    TerminalUI.printStatus(
+                    emitStatus(
                         "model didn't finalise an answer — showing its reasoning instead. " +
                         "Use `aro ask --no-think \"<prompt>\"` for a direct reply."
                     )
                     stripped = StrippedReply(text: fallback, truncatedDuringThinking: false)
                 } else {
-                    TerminalUI.printStatus(
+                    emitStatus(
                         "model spent its token budget thinking and produced no answer — " +
                         "try `aro ask --no-think \"<prompt>\"` to skip the reasoning step, " +
                         "or `aro ask -v` to see what it was thinking about"
@@ -321,14 +458,14 @@ public actor AskSession {
                 // Make sure the cursor and ANSI state are clean before
                 // returning to the user. The model's stream can leave the
                 // terminal in a dimmed/hidden-cursor state.
-                TerminalUI.resetTerminal()
+                if !config.quiet { TerminalUI.resetTerminal() }
                 return validated
             }
 
             // Execute each tool call
             for call in toolCalls {
                 let name = call.function.name
-                TerminalUI.printToolCall(name: name, args: call.function.arguments)
+                emitToolCall(name: name, arguments: call.function.arguments)
 
                 // Short-circuit if this specific tool keeps failing
                 // — feed the model a clear "stop trying me" message
@@ -337,7 +474,7 @@ public actor AskSession {
                 if let consec = toolConsecutiveFailures[name],
                    consec >= perToolFailureLimit {
                     let msg = "Tool '\(name)' is persistently failing (skipped after \(consec) consecutive failures). Try a different approach."
-                    TerminalUI.printToolResult(name: name, output: msg)
+                    emitToolResult(name: name, arguments: call.function.arguments, output: msg, failed: true)
                     context.messages.append(AskMessage(
                         role: "tool",
                         content: msg,
@@ -377,7 +514,7 @@ public actor AskSession {
                     toolConsecutiveFailures[name] = 0
                 }
 
-                TerminalUI.printToolResult(name: name, output: output)
+                emitToolResult(name: name, arguments: call.function.arguments, output: output, failed: failed)
 
                 context.messages.append(AskMessage(
                     role: "tool",
@@ -388,7 +525,7 @@ public actor AskSession {
 
                 if totalToolFailures >= sessionFailureLimit {
                     let msg = "Aborting session: \(sessionFailureLimit) tool failures across this conversation. Re-issue your request after fixing the failing tools."
-                    TerminalUI.printStatus(msg)
+                    emitStatus(msg)
                     return msg
                 }
             }
@@ -507,7 +644,7 @@ public actor AskSession {
         do {
             try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
             try code.write(to: tmp.appendingPathComponent("main.aro"), atomically: true, encoding: .utf8)
-            let aroBin = ProcessRunner.which("aro") ?? CommandLine.arguments.first ?? "aro"
+            let aroBin = AROBinary.resolve()
             let result = try ProcessRunner.runAndCapture(
                 executable: aroBin,
                 arguments: ["check", tmp.path],
@@ -558,7 +695,7 @@ public actor AskSession {
 
         // Skip + hint if the model inlined a tool name as ARO text.
         if blocks.contains(where: { looksLikeInlinedToolCall($0) }) {
-            TerminalUI.printStatus(
+            emitStatus(
                 "ignored ```aro``` block containing inlined tool-call syntax — " +
                 "use the JSON tool-call protocol, not function-call text in code blocks"
             )
@@ -579,35 +716,33 @@ public actor AskSession {
             // Empty code can vacuously "pass" aro check — guard against
             // claiming success when the model produced nothing.
             guard !aroCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                TerminalUI.printStatus(
-                    "repair loop saw no ARO code to validate — returning prior text"
-                )
+                emitStatus("repair loop saw no ARO code to validate — returning prior text")
                 break
             }
             let (ok, error) = runAroCheck(aroCode)
 
             if ok {
-                TerminalUI.printStatus("aro check passed (after \(attempt - 1) repair\(attempt == 2 ? "" : "s"))")
+                emitStatus("aro check passed (after \(attempt - 1) repair\(attempt == 2 ? "" : "s"))")
                 break
             }
 
-            TerminalUI.printStatus("aro check failed (attempt \(attempt)/\(totalAttempts)): \(error.prefix(160))")
+            emitStatus("aro check failed (attempt \(attempt)/\(totalAttempts)): \(error.prefix(160))")
             // Show the model's actual proposed code so the user can see
             // what's being retried — previously this was silent and the
             // user had no insight into why repair was failing.
             if !aroCode.isEmpty {
-                TerminalUI.printStatus("proposed fix:\n\(previewCode(aroCode))")
+                emitStatus("proposed fix:\n\(previewCode(aroCode))")
             }
 
             if Date() >= deadline {
-                TerminalUI.printStatus(
+                emitStatus(
                     "repair budget of \(Int(Self.repairWallClockBudget))s exceeded — returning last output"
                 )
                 break
             }
 
             if attempt == totalAttempts {
-                TerminalUI.printStatus("giving up after \(totalAttempts) repair attempts — returning last output")
+                emitStatus("giving up after \(totalAttempts) repair attempts — returning last output")
                 break
             }
 
@@ -645,7 +780,7 @@ public actor AskSession {
 
             let request = LMChatRequest(
                 model: config.model,
-                messages: context.messages.map { $0.toRequestMessage() },
+                messages: requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: temp,
                 stream: false
@@ -659,9 +794,7 @@ public actor AskSession {
             if !repairStripped.isEmpty {
                 currentText = repairStripped
             } else {
-                TerminalUI.printStatus(
-                    "repair attempt \(attempt) produced empty content — keeping prior text"
-                )
+                emitStatus("repair attempt \(attempt) produced empty content — keeping prior text")
             }
 
             let encodedToolCalls = try encodeToolCalls(reply.toolCalls)
@@ -789,7 +922,7 @@ public actor AskSession {
         let summaryReply = try await backend.chat(request: summaryRequest)
         let summary = summaryReply.content ?? "(summary unavailable)"
 
-        TerminalUI.printStatus("Context compacted: \(toSummarize.count) messages → summary")
+        emitStatus("Context compacted: \(toSummarize.count) messages → summary")
 
         // Rebuild messages: system + summary + recent
         context.messages = [context.messages[0]]  // system prompt
@@ -891,7 +1024,7 @@ public actor AskSession {
         }
 
         // Step 1: Run aro check
-        let aroBin = ProcessRunner.which("aro") ?? CommandLine.arguments.first ?? "aro"
+        let aroBin = AROBinary.resolve()
         let checkResult = try ProcessRunner.runAndCapture(
             executable: aroBin,
             arguments: ["check", appDir.path],
@@ -904,7 +1037,7 @@ public actor AskSession {
 
         let error = (checkResult.stderr.isEmpty ? checkResult.stdout : checkResult.stderr)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        TerminalUI.printStatus("aro check found errors:\n\(String(error.prefix(300)))")
+        emitStatus("aro check found errors:\n\(String(error.prefix(300)))")
 
         // Step 2: Build the fix prompt with full source + error
         var sourceBlock = ""
@@ -917,7 +1050,7 @@ public actor AskSession {
         var lastError = String(error.prefix(500))
 
         for attempt in 1...maxAttempts {
-            TerminalUI.printStatus("Fix attempt \(attempt)/\(maxAttempts)...")
+            emitStatus("Fix attempt \(attempt)/\(maxAttempts)...")
 
             let fixPrompt = """
             The following ARO code has errors:
@@ -954,7 +1087,7 @@ public actor AskSession {
             // Parse fixed files from output
             let blocks = extractAroBlocks(output)
             guard !blocks.isEmpty else {
-                TerminalUI.printStatus("  No ```aro``` blocks in response — retrying")
+                emitStatus("  No ```aro``` blocks in response — retrying")
                 continue
             }
 
@@ -1021,7 +1154,7 @@ public actor AskSession {
                 ])
 
                 let fixed = fixedFiles.keys.sorted().joined(separator: ", ")
-                TerminalUI.printStatus("aro check passed after \(attempt) attempt(s)")
+                emitStatus("aro check passed after \(attempt) attempt(s)")
                 return "Fixed \(fixed) in \(attempt) attempt(s)"
             }
 
@@ -1036,7 +1169,7 @@ public actor AskSession {
                 currentSource += "## \(name)\n```aro\n\(code)\n```\n\n"
             }
 
-            TerminalUI.printStatus("  Still has errors: \(String(lastError.prefix(100)))")
+            emitStatus("  Still has errors: \(String(lastError.prefix(100)))")
         }
 
         return "Could not fix after \(maxAttempts) attempts. Last error:\n\(lastError)"

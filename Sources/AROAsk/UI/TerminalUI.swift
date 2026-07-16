@@ -101,6 +101,7 @@ public enum TerminalUI {
 
         \(Style.bold)SESSION\(Style.reset)
           \(Style.cyan)/clean\(Style.reset)            Delete .context (start fresh)
+          \(Style.cyan)/file\(Style.reset) \(Style.dim)<path>\(Style.reset)     Focus a file: injected into every request (/file off to clear)
           \(Style.cyan)/show\(Style.reset)             Print current conversation context
           \(Style.cyan)/tools\(Style.reset)            List all available tools
           \(Style.cyan)/model\(Style.reset)            Show backend and model info

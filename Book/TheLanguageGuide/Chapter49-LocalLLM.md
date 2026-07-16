@@ -73,6 +73,7 @@ Slash commands work the same way in one-shot and REPL mode. In one-shot mode the
 | `/plugin <name>`     | Scaffold a new plugin interactively.                               |
 | `/openapi`           | Generate an `openapi.yaml` from a description.                     |
 | `/clean`             | Delete `.context` in the current directory. Start fresh.           |
+| `/file <path>`       | Set the focus file — its live content is injected into every request. `/file` shows it, `/file off` clears it. |
 | `/show`              | Print a short summary of the current conversation.                 |
 | `/tools`             | List every tool the model can call, including MCP-bridged ones.    |
 | `/model`             | Print the active model, its path, the selected backend, and whether an update is available. |
@@ -108,6 +109,20 @@ Slash commands that don't talk to the model (`/clean`, `/tools`, `/model`, `/mcp
 | `list_proposals`     | List proposals in the `Proposals/` directory               |
 | `read_proposal`      | Read a proposal by number (e.g. `0001`, `0052`)            |
 | `search_project`     | Semantic search over the project index                     |
+
+### Writing code into files
+
+When you ask `aro ask` to write, create, or fix something in a project, the code goes into the actual source file — the model calls `write_file` (new file) or `edit_file` (existing file), validates the result with `aro_check`, and answers with a short summary of what changed and where. It only prints a bare ```` ```aro ```` block when you explicitly ask it to *show* code, or when there is no project to write into.
+
+### The focus file
+
+`aro ask --file ./users.aro "add a delete endpoint"` (or `/file ./users.aro` in the REPL) marks a file as the *focus file*. Its current on-disk content is injected fresh into every request as an `OPEN FILE` context block, so:
+
+- "this file", "this code", and unnamed change requests target it;
+- the model doesn't need a `read_file` round-trip to see it;
+- edits land in it by default.
+
+In SOLARO the co-pilot sets the focus file automatically to whatever is open in the editor — "fix this" just works. Files the assistant modifies are reloaded into the editor as each write lands, and every tool call is shown in the chat as a `TOOLS` activity row.
 
 ### Sandboxing
 

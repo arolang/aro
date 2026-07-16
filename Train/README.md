@@ -78,7 +78,7 @@ before writing new ones, so reruns replace rather than duplicate.
 | 08 | `08_book_qa_pairs` | Q&A pairs derived from the Book. |
 | 09 | `09_wiki_training` | Pairs derived from the wiki. **Skipped by default** (see `ARO_TRAIN_SKIP`). |
 | 10 | `10_synthetic_data_generation` | Bulk synthetic generation using the warm-started model. |
-| 11 | `11_function_calling` | Tool-calling traces for the 18 `aro ask` tools. |
+| 11 | `11_function_calling` | Tool-calling traces for the 18 `aro ask` tools: direct calls, fix chains, tool-failure recovery, OPEN FILE (editor-focus) traces, and write-into-file workflows (`write_file`/`edit_file` → `aro_check` → short summary). |
 | 12 | `12_examples_repo_training` | Pairs derived from `Examples/`. **Skipped by default** (see `ARO_TRAIN_SKIP`). |
 | 13 | `13_external_repo_training` | Pairs from real-world ARO applications cloned into `data/external_repos/`. |
 | 14 | `14_comment_extraction` | Pairs derived from comment ↔ code alignment. |

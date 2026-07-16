@@ -1162,6 +1162,15 @@ struct WorkspaceView: View {
                     currentFile: controller.currentFile,
                     onClose: { controller.rightPaneMode = .inspector }
                 )
+                .onAppear {
+                    // Files the assistant writes flow straight back
+                    // into the workspace: reparse + editor reload.
+                    controller.aiCoPilot.onFilesModified = { [weak controller] urls in
+                        for url in urls {
+                            controller?.noteExternalFileChange(url)
+                        }
+                    }
+                }
             }
         }
         // Same frosted-glass treatment as the left sidebar so both

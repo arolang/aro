@@ -3,17 +3,84 @@
 // SOLARO — `aro ask` co-pilot panel (#233 §4)
 // ============================================================
 //
-// Local-first co-pilot per ADR-006. Spawns `aro ask` as a
-// subprocess, streams its output, and surfaces the conversation
-// as a chat-style right-rail panel.
+// Local-first co-pilot per ADR-006. Runs `aro ask` IN-PROCESS
+// through a warm AskSession rooted at the project directory —
+// the model loads once and stays resident, every prompt gets the
+// full tool registry (read/write/edit files, grep, aro
+// check/run/build/test, plugin scaffolding, ...), tool activity
+// streams into the chat, and files the model modifies are pushed
+// back into the open editor via `onFilesModified`.
+//
+// The currently open editor file rides along as the session's
+// focus file, so "fix this" / "add an endpoint here" target the
+// file the user is looking at without any path typing.
+//
+// A subprocess fallback (`aro ask --yes --no-think <prompt>`)
+// remains for the case where the in-process backend cannot
+// prepare in the app (e.g. missing Metal shader library) but the
+// CLI works.
 //
 // No auto-download of models, no auto-configuration of remote
-// endpoints — `aro ask` handles backend selection (ARO_ASK_ENDPOINT
-// → llama-server → mlx_lm.server). The panel shows a first-use
-// disclaimer card so the user knows what's about to run.
+// endpoints. The panel shows a first-use disclaimer card so the
+// user knows what's about to run.
 
 import SwiftUI
 import Foundation
+#if canImport(AROAsk)
+import AROAsk
+
+/// Approval policy for the in-process co-pilot. File reads and
+/// project-scoped writes flow without prompting — they're confined to
+/// the project by PathGuard and every call is shown in the chat. Shell
+/// commands (`run_shell`, risk tier .execute) are the exception: they
+/// escape the sandbox, so each one stops for explicit confirmation,
+/// with an opt-in "always allow" that lasts for this session only.
+actor CoPilotToolApprover: ToolApprover {
+    private var alwaysAllowShell = false
+
+    func approve(toolName: String, description: String,
+                 arguments: String, riskLevel: AskToolRiskLevel) async -> Bool {
+        guard riskLevel == .execute else { return true }
+        if alwaysAllowShell { return true }
+        let command = Self.extractCommand(from: arguments) ?? arguments
+        let verdict = await Self.promptOnMain(toolName: toolName, command: command)
+        if verdict == .always { alwaysAllowShell = true }
+        return verdict != .deny
+    }
+
+    private enum Verdict { case allow, always, deny }
+
+    private static func extractCommand(from json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return obj["command"] as? String
+    }
+
+    @MainActor
+    private static func promptOnMain(toolName: String, command: String) -> Verdict {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Run this shell command?"
+        alert.informativeText =
+            "The AI co-pilot (\(toolName)) wants to execute:\n\n\(command)"
+        let run = alert.addButton(withTitle: "Run")
+        let deny = alert.addButton(withTitle: "Deny")
+        let always = alert.addButton(withTitle: "Always Allow This Session")
+        // No Return-key default: the dialog can appear while the user is
+        // typing in the chat field, and a stolen Return must not execute
+        // a shell command. Esc denies.
+        run.keyEquivalent = ""
+        deny.keyEquivalent = "\u{1b}"
+        always.keyEquivalent = ""
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .allow
+        case .alertThirdButtonReturn: return .always
+        default: return .deny
+        }
+    }
+}
+#endif
 
 @MainActor
 @Observable
@@ -24,31 +91,328 @@ final class AICoPilotProcess {
         var text: String
         let timestamp: Date
 
-        enum Role { case user, assistant, system, error }
+        enum Role { case user, assistant, system, tool, error }
     }
 
     var turns: [Turn] = []
     private(set) var isThinking: Bool = false
     private(set) var lastError: String?
 
+    /// Called on the main actor with resolved URLs of files the
+    /// assistant modified via its tools, as each write lands. The
+    /// workspace reloads open editors and reparses through this.
+    var onFilesModified: (([URL]) -> Void)?
+
+    // Subprocess plumbing — fallback path only.
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var stdinPipe: Pipe?
     private var currentAssistantTurnIndex: Int?
 
-    /// Send a prompt to `aro ask` running in the project's
-    /// directory. Each prompt is its own subprocess invocation
-    /// (one-shot) so we don't have to manage a long-lived REPL.
-    func send(prompt: String, in project: Project) {
+#if canImport(AROAsk)
+    /// Warm in-process session: one model load per project, full tool
+    /// registry rooted at the project directory.
+    private var askSession: AskSession?
+    private var askSessionRoot: URL?
+    private var askTask: Task<Void, Never>?
+    /// Set after an in-process backend failure so later prompts go
+    /// straight to the subprocess fallback instead of re-failing.
+    private var inProcessUnavailable = false
+
+    /// Raised when the co-pilot cannot start at all (as opposed to a
+    /// transient backend error worth retrying via the subprocess).
+    private struct CoPilotSetupError: Error { let message: String }
+#endif
+
+    /// Send a prompt to `aro ask` in the project's directory.
+    /// `focusFile` is the file currently open in the editor — it is
+    /// injected into the model's context as the "OPEN FILE" so
+    /// unnamed requests ("fix this", "add logging here") target it.
+    func send(prompt: String, in project: Project, focusFile: URL? = nil) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         cancel()
         turns.append(Turn(role: .user, text: trimmed, timestamp: Date()))
-        turns.append(Turn(role: .assistant, text: "", timestamp: Date()))
-        currentAssistantTurnIndex = turns.count - 1
         isThinking = true
         lastError = nil
+
+        // Log the outgoing prompt in the Internal Logs window so
+        // the user can see exactly what we sent to `aro ask`.
+        InternalLogStore.shared.record(
+            category: .ask, direction: .outbound,
+            summary: "→ ask chat  ·  \(trimmed.prefix(60))",
+            body: trimmed
+        )
+
+        // Detect a `/clean` prompt so we can clear the chat output
+        // after `.context` is wiped. Matches whether the user typed
+        // exactly `/clean` or `/clean some args`.
+        let isCleanCommand = trimmed
+            .split(separator: " ", maxSplits: 1)
+            .first
+            .map { String($0).lowercased() == "/clean" } ?? false
+
+#if canImport(AROAsk)
+        if !inProcessUnavailable {
+            sendInProcess(trimmed, project: project, focusFile: focusFile,
+                          isCleanCommand: isCleanCommand)
+            return
+        }
+#endif
+        sendViaSubprocess(trimmed, project: project, isCleanCommand: isCleanCommand)
+    }
+
+    // MARK: - In-process path
+
+#if canImport(AROAsk)
+    private func sendInProcess(_ prompt: String, project: Project,
+                               focusFile: URL?, isCleanCommand: Bool) {
+        askTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let session = try await self.ensureSession(project: project)
+                await session.setFocusFile(focusFile)
+                let answer: String
+                if let slash = try await self.runSlashCommand(prompt, session: session) {
+                    answer = slash
+                } else {
+                    answer = try await session.ask(prompt)
+                }
+                guard !Task.isCancelled else { return }
+                self.finishAssistantTurn(answer)
+                if isCleanCommand {
+                    // `.context` is gone on disk; wipe the chat so the
+                    // panel matches the fresh conversation.
+                    self.turns.removeAll()
+                    self.currentAssistantTurnIndex = nil
+                }
+            } catch is CancellationError {
+                self.isThinking = false
+            } catch let setup as CoPilotSetupError {
+                // Don't route to the subprocess — it would hit the same
+                // wall and hang on its interactive download prompt.
+                self.failWith(setup.message)
+            } catch {
+                // In-process backend broke — remember, and fall back to
+                // the subprocess path for this and future prompts.
+                self.inProcessUnavailable = true
+                self.appendSystemNote(
+                    "in-process ask failed (\(error.localizedDescription)) — falling back to the `aro ask` subprocess"
+                )
+                self.sendViaSubprocess(prompt, project: project,
+                                       isCleanCommand: isCleanCommand)
+            }
+        }
+    }
+
+    /// Get (or build) the warm session for this project. The session is
+    /// recreated when the user switches projects; the model container
+    /// itself is cached by the backend, so a rebuild is cheap.
+    private func ensureSession(project: Project) async throws -> AskSession {
+        let root = project.rootPath.standardizedFileURL
+        if let session = askSession, askSessionRoot == root { return session }
+        if let old = askSession {
+            askSession = nil
+            await old.shutdown()
+        }
+
+        // The in-process tools (aro_check, aro_run, the MCP bridge)
+        // spawn the `aro` CLI. Inside the app bundle CommandLine
+        // .arguments.first is SOLARO itself, so hand AROAsk the same
+        // binary the console panel uses via $ARO_BIN.
+        let aroBin = ConsoleProcess.resolveAroBinary(near: project)
+        if aroBin != "/usr/bin/env" {
+            setenv("ARO_BIN", aroBin, 1)
+        }
+
+        let model = "ARO-Lang/aro-coder-4bit"
+        let manager = try ModelManager()
+        let env = ProcessInfo.processInfo.environment
+        var available = !((env["ARO_ASK_ENDPOINT"] ?? env["ARO_LM_ENDPOINT"]) ?? "").isEmpty
+        if !available {
+            available = await manager.isInstalled(model)
+        }
+        guard available else {
+            throw CoPilotSetupError(message:
+                "The local model \(model) is not installed. Run `aro ask` once in a " +
+                "terminal to download it (a few GB), or set ARO_ASK_ENDPOINT to an " +
+                "OpenAI-compatible server."
+            )
+        }
+
+        appendSystemNote("loading \(model) — the first prompt takes a moment…")
+        let config = AskSessionConfig(
+            workingDirectory: root,
+            model: model,
+            temperature: 0.2,
+            quiet: true             // progress flows through the event sink, not stdout
+        )
+        // CoPilotToolApprover: sandboxed file tools run freely (every
+        // call is shown in the chat); shell commands prompt first.
+        let session = AskSession(config: config, approver: CoPilotToolApprover())
+        try await session.prepare(modelManager: manager)
+        await session.setEventSink { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handleAskEvent(event, root: root)
+            }
+        }
+        askSession = session
+        askSessionRoot = root
+        return session
+    }
+
+    /// Mirror `aro ask`'s status lines and tool activity into the chat,
+    /// and push modified files back into the workspace as they land.
+    private func handleAskEvent(_ event: AskEvent, root: URL) {
+        switch event {
+        case .status(let message):
+            appendSystemNote(message)
+        case .toolCallStarted(let name, let arguments):
+            appendToolNote("▶ \(name)  \(Self.compactArgs(arguments))")
+        case .toolCallFinished(let name, _, let failed, let modifiedPath):
+            if failed {
+                appendToolNote("✖ \(name) failed")
+            } else if let path = modifiedPath {
+                appendToolNote("✔ \(name) — wrote \(path)")
+                let url = URL(fileURLWithPath: path, relativeTo: root).standardizedFileURL
+                onFilesModified?([url])
+            }
+            // Successful read-only calls stay quiet — the ▶ line
+            // already shows what ran; dumping every result would
+            // swamp the chat.
+        }
+    }
+
+    /// One-line argument preview: long values (file contents, edit
+    /// strings) collapse to their character count.
+    private static func compactArgs(_ json: String) -> String {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return String(json.prefix(80)) }
+        let parts = obj.keys.sorted().compactMap { key -> String? in
+            guard let value = obj[key] else { return nil }
+            if let s = value as? String {
+                return s.count > 48 ? "\(key): (\(s.count) chars)" : "\(key): \(s)"
+            }
+            return "\(key): \(value)"
+        }
+        return String(parts.joined(separator: ", ").prefix(120))
+    }
+
+    /// In-process equivalents of the CLI's inline slash commands, so
+    /// the picker's commands work identically without a subprocess.
+    /// Returns nil when `text` is not a slash command (regular prompt).
+    private func runSlashCommand(_ text: String, session: AskSession) async throws -> String? {
+        guard text.hasPrefix("/") else { return nil }
+        let parts = text.split(separator: " ", maxSplits: 1).map(String.init)
+        let cmd = parts[0].lowercased()
+        let arg = parts.count > 1
+            ? parts[1].trimmingCharacters(in: .whitespaces)
+            : ""
+
+        switch cmd {
+        case "/help":
+            return AskSlashCommand.all
+                .map { "`\($0.id)\($0.displayUsage)` — \($0.description)" }
+                .joined(separator: "\n")
+        case "/clean":
+            _ = try? await session.clear()
+            return "Deleted .context — the conversation starts fresh."
+        case "/tools":
+            let names = await session.toolNames().sorted()
+            return names.isEmpty ? "No tools registered." : names.joined(separator: "\n")
+        case "/model":
+            let info = await session.backendInfo()
+            return "backend: \(info.name)\nmodel: \(info.model)"
+        case "/mcp":
+            let labels = await session.mcpServerLabels()
+            return labels.isEmpty ? "No MCP servers bridged." : labels.joined(separator: "\n")
+        case "/index":
+            let count = try await session.rebuildIndex()
+            return "Indexed \(count) chunks."
+        case "/search":
+            guard !arg.isEmpty else { return "Usage: /search <query>" }
+            let results = try await session.search(query: arg, k: 5)
+            guard !results.isEmpty else { return "No results — run /index first." }
+            return results
+                .map { "\($0.chunk.path):\($0.chunk.startLine)-\($0.chunk.endLine)  (\(String(format: "%.3f", $0.score)))" }
+                .joined(separator: "\n")
+        case "/show":
+            guard let context = try await session.currentContext() else {
+                return "No .context yet."
+            }
+            return context.messages
+                .map { "[\($0.role)] \(($0.content ?? "(tool call)").prefix(120))" }
+                .joined(separator: "\n")
+        case "/fix":
+            guard !arg.isEmpty else { return "Usage: /fix <path>" }
+            return try await session.fix(path: arg)
+        case "/explain":
+            guard !arg.isEmpty else { return "Usage: /explain <path>" }
+            return try await session.ask(
+                "Use the read_file tool to read \(arg), then explain what each feature set does."
+            )
+        case "/docs":
+            guard !arg.isEmpty else { return "Usage: /docs <path>" }
+            return try await session.ask(
+                "Read all .aro files in \(arg), then use generate_docs to create a README.md."
+            )
+        case "/plugin":
+            guard !arg.isEmpty else { return "Usage: /plugin <name>" }
+            return try await session.ask(
+                "Create a new ARO plugin named '\(arg)' using create_plugin. Pick an appropriate language. Then explain how to use it."
+            )
+        case "/openapi":
+            if arg.isEmpty {
+                return try await session.ask(
+                    "Look at the .aro files in this directory and generate an openapi.yaml using write_openapi."
+                )
+            }
+            return try await session.ask(
+                "Generate an openapi.yaml for: \(arg). Use write_openapi."
+            )
+        case "/quit", "/exit":
+            return "Nothing to quit — close the panel with its header controls."
+        default:
+            return "Unknown command: \(cmd). Type /help for the list."
+        }
+    }
+
+    private func finishAssistantTurn(_ answer: String) {
+        let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        turns.append(Turn(role: .assistant,
+                          text: text.isEmpty ? "(no reply)" : text,
+                          timestamp: Date()))
+        isThinking = false
+        InternalLogStore.shared.record(
+            category: .ask, direction: .inbound,
+            summary: "← ask chat reply",
+            body: text.isEmpty ? "(empty reply)" : text
+        )
+    }
+
+    private func failWith(_ message: String) {
+        lastError = message
+        isThinking = false
+        turns.append(Turn(role: .error, text: message, timestamp: Date()))
+        InternalLogStore.shared.record(
+            category: .ask, direction: .error,
+            summary: "← ask chat error",
+            body: message
+        )
+    }
+#endif
+
+    // MARK: - Subprocess fallback
+
+    /// One-shot `aro ask --yes --no-think <prompt>` invocation. Kept as
+    /// the fallback when the in-process backend cannot prepare inside
+    /// the app but the CLI works.
+    private func sendViaSubprocess(_ trimmed: String, project: Project,
+                                   isCleanCommand: Bool) {
+        turns.append(Turn(role: .assistant, text: "", timestamp: Date()))
+        currentAssistantTurnIndex = turns.count - 1
 
         let task = Process()
         let aro = ConsoleProcess.resolveAroBinary(near: project)
@@ -62,14 +426,6 @@ final class AICoPilotProcess {
         }
         task.arguments = args
         task.currentDirectoryURL = project.rootPath
-
-        // Log the outgoing prompt in the Internal Logs window so
-        // the user can see exactly what we sent to `aro ask`.
-        InternalLogStore.shared.record(
-            category: .ask, direction: .outbound,
-            summary: "→ ask chat  ·  \(trimmed.prefix(60))",
-            body: trimmed
-        )
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -93,16 +449,6 @@ final class AICoPilotProcess {
                 self?.appendSystemNote(chunk)
             }
         }
-
-        // Detect a `/clean` prompt so we can clear the chat output
-        // after the subprocess wipes `.context`. Matches whether the
-        // user typed exactly `/clean` or `/clean some args` — either
-        // way the conversation history is gone and the panel
-        // shouldn't keep showing stale turns.
-        let isCleanCommand = trimmed
-            .split(separator: " ", maxSplits: 1)
-            .first
-            .map { String($0).lowercased() == "/clean" } ?? false
 
         task.terminationHandler = { [weak self] proc in
             let exit = proc.terminationStatus
@@ -147,24 +493,34 @@ final class AICoPilotProcess {
         }
     }
 
-    /// Cancel any in-flight subprocess. Called on send() so a
-    /// rapid second prompt replaces the first.
+    /// Cancel any in-flight prompt. Called on send() so a rapid
+    /// second prompt replaces the first.
     func cancel() {
+#if canImport(AROAsk)
+        askTask?.cancel()
+        askTask = nil
+#endif
         guard let process, process.isRunning else { return }
         process.terminate()
     }
 
     /// Discard the conversation *and* wipe `aro ask`'s on-disk
     /// `.context` so the next prompt starts truly fresh (matches
-    /// what the user expects from a Reset button). The `/clean`
-    /// subprocess runs in the background; we wipe the UI state
-    /// up-front so the panel reacts immediately.
+    /// what the user expects from a Reset button). The cleanup runs
+    /// in the background; we wipe the UI state up-front so the
+    /// panel reacts immediately.
     func reset(in project: Project? = nil) {
         cancel()
         turns.removeAll()
         currentAssistantTurnIndex = nil
         isThinking = false
         lastError = nil
+#if canImport(AROAsk)
+        if let session = askSession {
+            Task { _ = try? await session.clear() }
+            return
+        }
+#endif
         if let project { Self.runClean(in: project) }
     }
 
@@ -221,6 +577,16 @@ final class AICoPilotProcess {
             turns[turns.count - 1].text += "\n" + cleaned
         } else {
             turns.append(Turn(role: .system, text: cleaned, timestamp: Date()))
+        }
+    }
+
+    /// Tool-activity lines (▶ call / ✔ result). Coalesced like system
+    /// notes so one multi-tool turn reads as a single activity card.
+    private func appendToolNote(_ line: String) {
+        if let last = turns.last, last.role == .tool {
+            turns[turns.count - 1].text += "\n" + line
+        } else {
+            turns.append(Turn(role: .tool, text: line, timestamp: Date()))
         }
     }
 }
@@ -344,16 +710,20 @@ struct AICoPilotPanel: View {
             Text("First-time setup")
                 .font(SolaroFont.bodyBold)
                 .foregroundStyle(SolaroColor.textPrimary)
-            Text("`aro ask` runs locally. Backends are picked in order:")
+            Text("`aro ask` runs locally, in-process. Backends are picked in order:")
                 .font(SolaroFont.caption)
                 .foregroundStyle(SolaroColor.textSecondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text("1.  $ARO_ASK_ENDPOINT  (OpenAI-compatible URL)")
-                Text("2.  llama-server (GGUF via llama.cpp)")
-                Text("3.  mlx_lm.server (Apple Silicon via mlx-lm)")
+                Text("2.  native MLX (in-process, Apple Silicon)")
+                Text("3.  llama-server (GGUF via llama.cpp)")
+                Text("4.  mlx_lm.server (Python mlx-lm)")
             }
             .font(SolaroFont.monoCaption)
             .foregroundStyle(SolaroColor.textTertiary)
+            Text("The assistant can read and write files in this project, run `aro check`, and apply fixes directly. Every tool call is shown in the chat, the open editor file is always in its context, and shell commands ask for your confirmation before they run.")
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textSecondary)
             Text("No model is auto-downloaded. Per ADR-006 SOLARO won't reach out without your say-so. Configure one of the above, then continue.")
                 .font(SolaroFont.caption)
                 .foregroundStyle(SolaroColor.textSecondary)
@@ -574,7 +944,9 @@ struct AICoPilotPanel: View {
     private func send() {
         let prompt = promptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
-        process.send(prompt: prompt, in: project)
+        // The open editor file rides along as the model's focus file,
+        // so "fix this" / "add an endpoint" target it without a path.
+        process.send(prompt: prompt, in: project, focusFile: currentFile)
         promptDraft = ""
     }
 }
@@ -636,7 +1008,7 @@ private struct AICoPilotTurnRow: View {
     /// look like their rendered form instead of raw source.
     @ViewBuilder
     private var turnBody: some View {
-        if turn.role == .system || turn.role == .error {
+        if turn.role == .system || turn.role == .error || turn.role == .tool {
             Text(turn.text)
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(turn.role == .error
@@ -661,6 +1033,7 @@ private struct AICoPilotTurnRow: View {
         case .user:      return "person.fill"
         case .assistant: return "sparkles"
         case .system:    return "gear"
+        case .tool:      return "wrench.and.screwdriver.fill"
         case .error:     return "exclamationmark.octagon.fill"
         }
     }
@@ -670,6 +1043,7 @@ private struct AICoPilotTurnRow: View {
         case .user:      return SolaroColor.accent
         case .assistant: return SolaroColor.roleOwn
         case .system:    return SolaroColor.textTertiary
+        case .tool:      return SolaroColor.textTertiary
         case .error:     return SolaroColor.stateError
         }
     }
@@ -679,6 +1053,7 @@ private struct AICoPilotTurnRow: View {
         case .user:      return "YOU"
         case .assistant: return "ARO · ASK"
         case .system:    return "BACKEND"
+        case .tool:      return "TOOLS"
         case .error:     return "ERROR"
         }
     }

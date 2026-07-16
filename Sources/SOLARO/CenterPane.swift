@@ -53,9 +53,18 @@ struct CenterPaneView: View {
         ) { _ in
             resetLayoutSidecar()
         }
-        .task(id: controller.currentFile) {
+        .task(id: FileLoadKey(url: controller.currentFile,
+                              tick: controller.fileReloadTick)) {
             loadCurrentFileIntoCache()
         }
+    }
+
+    /// Composite id for the text-cache load task: reload when the
+    /// active file changes OR when the AI co-pilot rewrote the same
+    /// file on disk (fileReloadTick bump).
+    private struct FileLoadKey: Equatable {
+        let url: URL?
+        let tick: Int
     }
 
     /// Read the current file from disk into `fileText` once when
