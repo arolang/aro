@@ -26,6 +26,16 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
       chmod +x /sbin/ldconfig; \
     fi
 
+# Make apt tolerate the flaky arm64 package mirror. The arm64 build fetches
+# from ports.ubuntu.com through QEMU emulation, which intermittently drops
+# connections; without retries `apt-get update` only WARNS on a failed index
+# fetch, returns 0, and the following install dies with the misleading
+# "Package X has no installation candidate" against an empty cache. Retries +
+# per-connection timeouts turn a transient blip into a retried download, and
+# the config file also covers the apt calls that llvm.sh runs internally.
+RUN printf 'Acquire::Retries "8";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+      > /etc/apt/apt.conf.d/99-aro-retries
+
 # Install build dependencies including LLVM 20
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
