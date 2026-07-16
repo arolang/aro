@@ -136,7 +136,9 @@ struct LayoutSidecarPositionTests {
         let reGraph = graph.withPositions(from: reloaded)
         #expect(reGraph.nodes[0].x == 42)
         #expect(reGraph.nodes[0].y == 99)
-        try? FileManager.default.removeItem(at: LayoutSidecar.sidecarURL(for: url))
+        // Positions are persisted in the consolidated project store now,
+        // not a per-file sidecar — clean that up.
+        try? FileManager.default.removeItem(at: ProjectLayoutStore.storeURL(for: url))
     }
 }
 
@@ -155,7 +157,9 @@ struct ForceDirectedLayoutTests {
         let fs = try #require(program.featureSets.first)
         let graph = CanvasGraph.build(featureSet: fs, fileKey: "t.aro")
 
-        let placed = ForceDirectedLayout.place(graph, iterations: 30)
+        var tuning = LayoutTuning.default
+        tuning.forceDirectedIterations = 30
+        let placed = ForceDirectedLayout.place(graph, tuning: tuning)
         for node in placed.nodes {
             #expect(!(node.x == 0 && node.y == 0))
         }
@@ -174,7 +178,9 @@ struct ForceDirectedLayoutTests {
         graph.nodes[0].x = 500
         graph.nodes[0].y = 500
 
-        let placed = ForceDirectedLayout.place(graph, iterations: 1)
+        var tuning = LayoutTuning.default
+        tuning.forceDirectedIterations = 1
+        let placed = ForceDirectedLayout.place(graph, tuning: tuning)
         #expect(placed.nodes[0].x != 0)
         #expect(placed.nodes[0].y != 0)
     }

@@ -113,8 +113,11 @@ struct LayoutSidecarTests {
     }
 
     @Test func filenameConventionIsDoubleExtension() {
+        // Per-file sidecars are the legacy format (superseded by the
+        // project-level layout store); the naming convention still
+        // matters because load() migrates them.
         let source = URL(fileURLWithPath: "/tmp/MyApp/users.aro")
-        let sidecar = LayoutSidecar.sidecarURL(for: source)
+        let sidecar = LayoutSidecar.legacySidecarURL(for: source)
         #expect(sidecar.lastPathComponent == "users.aro.layout.json")
         #expect(sidecar.deletingLastPathComponent().path == "/tmp/MyApp")
     }

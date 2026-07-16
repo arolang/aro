@@ -19,7 +19,9 @@ struct StackLayoutTests {
             objectPreposition: "to",
             objectName: "console", objectModifier: nil,
             referencedIdentifiers: [],
-            lineHint: 1, featureSetName: featureSetName, x: x, y: y
+            lineHint: 1, featureSetName: featureSetName,
+            summaryDisplay: "Log to console", lineLabel: "L1",
+            x: x, y: y
         )
     }
 
@@ -28,11 +30,11 @@ struct StackLayoutTests {
         let graph = CanvasGraph(nodes: nodes, edges: [])
         let placed = StackLayout.place(graph)
 
-        // topPadding is 56 (room for the feature-set header)
-        // and rowPitch is 78.
-        #expect(placed.nodes[0].y == 56)
-        #expect(placed.nodes[1].y == 56 + 78)
-        #expect(placed.nodes[2].y == 56 + 156)
+        // Rows follow LayoutTuning defaults: topPadding + n * rowPitch.
+        let tuning = LayoutTuning.default
+        #expect(placed.nodes[0].y == tuning.topPadding)
+        #expect(placed.nodes[1].y == tuning.topPadding + tuning.rowPitch)
+        #expect(placed.nodes[2].y == tuning.topPadding + 2 * tuning.rowPitch)
         // All in column 0 → same x.
         let xs = placed.nodes.map(\.x)
         #expect(Set(xs).count == 1)
