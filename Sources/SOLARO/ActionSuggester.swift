@@ -79,7 +79,13 @@ enum ActionSuggester {
         }
 
         #if canImport(AROAsk)
-        Task {
+        // `@MainActor in` pins the whole task body to the main actor, so the
+        // continuation after the SolaroAskService actor hop resumes on main
+        // before touching `finish` / the @MainActor cache. Without it the
+        // resume can land on a background executor and macOS 26's strict
+        // executor check aborts (dispatch_assert_queue) the moment a
+        // @MainActor member is touched.
+        Task { @MainActor in
             let raw = await SolaroAskService.shared.complete(prompt)
             finish(raw)
         }
