@@ -19,13 +19,60 @@ struct ActionsListView: View {
     /// file's bindings. Optional because the right pane can render
     /// before a workspace is fully loaded.
     var controller: WorkspaceController?
+    @State private var searchQuery = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().background(SolaroColor.divider)
+            if registry.lastError == nil && !registry.actions.isEmpty {
+                searchField
+                Divider().background(SolaroColor.divider)
+            }
             content
         }
+    }
+
+    /// Actions matching the search query by verb or by the catalog
+    /// description shown in the row tooltip. Empty query passes
+    /// everything through untouched.
+    private var filteredActions: [ActionInfo] {
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return registry.actions }
+        return registry.actions.filter { action in
+            if action.verb.localizedCaseInsensitiveContains(query) {
+                return true
+            }
+            if let desc = AROCatalogDescriptions.action(named: action.verb),
+               desc.localizedCaseInsensitiveContains(query) {
+                return true
+            }
+            return false
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SolaroColor.textTertiary)
+                .font(.system(size: 11))
+            TextField("Filter by name or description", text: $searchQuery)
+                .textFieldStyle(.plain)
+                .font(SolaroFont.body)
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+                .help("Clear filter")
+            }
+        }
+        .padding(.horizontal, SolaroSpace.m)
+        .padding(.vertical, 6)
     }
 
     private var header: some View {
@@ -68,10 +115,17 @@ struct ActionsListView: View {
                     .foregroundStyle(SolaroColor.textTertiary)
             }
             .padding(SolaroSpace.m)
+        } else if filteredActions.isEmpty {
+            VStack(alignment: .leading, spacing: SolaroSpace.xs) {
+                Text("No actions match \u{201C}\(searchQuery)\u{201D}.")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            .padding(SolaroSpace.m)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: SolaroSpace.s, pinnedViews: [.sectionHeaders]) {
-                    let grouped = Dictionary(grouping: registry.actions, by: { $0.role })
+                    let grouped = Dictionary(grouping: filteredActions, by: { $0.role })
                     let roleOrder = grouped.keys.sorted { $0.sortKey < $1.sortKey }
                     ForEach(roleOrder, id: \.self) { role in
                         Section(header: roleHeader(role)) {
