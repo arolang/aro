@@ -54,7 +54,7 @@ enum PluginLanguage: String, ExpressibleByArgument, CaseIterable {
 // MARK: - NewPluginCommand
 
 /// Scaffold a new plugin in the given language
-struct NewPluginCommand: ParsableCommand {
+struct NewPluginCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "plugin",
         abstract: "Scaffold a new ARO plugin",
@@ -109,7 +109,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Run
 
-    func run() throws {
+    func run() async throws {
         // Resolve the plugin name from positional or --name
         guard let pluginName = positionalName ?? name, !pluginName.isEmpty else {
             print("Error: A plugin name is required (use --name or provide it as an argument).")
@@ -167,7 +167,11 @@ struct NewPluginCommand: ParsableCommand {
         print("")
 
         do {
-            let files = try generateScaffold(options: options, pluginDir: pluginDir)
+            // Run the scaffold (directory creation, file writes, SDK header
+            // downloads) on a background task so the terminal stays responsive.
+            let files = try await FileOps.background {
+                try Self.generateScaffold(options: options, pluginDir: pluginDir)
+            }
 
             for file in files {
                 print("  + \(file)")
@@ -199,7 +203,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Scaffold Generation
 
-    private func generateScaffold(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func generateScaffold(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var createdFiles: [String] = []
 
         // Create plugin directory
@@ -225,13 +229,13 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Write Helper
 
-    private func write(content: String, to url: URL) throws {
+    private static func write(content: String, to url: URL) throws {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func relativePath(_ url: URL, to base: URL) -> String {
+    private static func relativePath(_ url: URL, to base: URL) -> String {
         // Return the path relative to the Plugins/ parent
         let pluginsDirPath = base.deletingLastPathComponent().path
         let fullPath = url.path
@@ -243,7 +247,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Swift Scaffold
 
-    private func scaffoldSwift(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldSwift(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
         let handle = options.handle
 
@@ -273,7 +277,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func swiftPluginYaml(options: ScaffoldOptions) -> String {
+    private static func swiftPluginYaml(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
         var provides = """
@@ -302,7 +306,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func swiftPackageSwift(options: ScaffoldOptions) -> String {
+    private static func swiftPackageSwift(options: ScaffoldOptions) -> String {
         let handle = options.handle
         return """
         // swift-tools-version: 6.2
@@ -341,7 +345,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func swiftPluginSource(options: ScaffoldOptions) -> String {
+    private static func swiftPluginSource(options: ScaffoldOptions) -> String {
         let handle = options.handle
         let name   = options.pluginName
 
@@ -478,7 +482,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func buildSwiftExecuteBody(options: ScaffoldOptions) -> String {
+    private static func buildSwiftExecuteBody(options: ScaffoldOptions) -> String {
         var cases: [String] = []
         if options.includeActions {
             cases.append("""
@@ -510,7 +514,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Rust Scaffold
 
-    private func scaffoldRust(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldRust(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
 
         // plugin.yaml
@@ -537,7 +541,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func rustPluginYaml(options: ScaffoldOptions) -> String {
+    private static func rustPluginYaml(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
         let crateName = name.replacingOccurrences(of: "-", with: "_")
@@ -564,7 +568,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func rustCargoToml(options: ScaffoldOptions) -> String {
+    private static func rustCargoToml(options: ScaffoldOptions) -> String {
         let name      = options.pluginName
         let crateName = name.replacingOccurrences(of: "-", with: "_")
         return """
@@ -590,7 +594,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func rustLibRs(options: ScaffoldOptions) -> String {
+    private static func rustLibRs(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
 
@@ -696,7 +700,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - C Scaffold
 
-    private func scaffoldC(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldC(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
 
         let yamlURL = pluginDir.appendingPathComponent("plugin.yaml")
@@ -731,7 +735,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func cPluginYaml(options: ScaffoldOptions, language: PluginLanguage) -> String {
+    private static func cPluginYaml(options: ScaffoldOptions, language: PluginLanguage) -> String {
         let name   = options.pluginName
         let handle = options.handle
         let libName = name.replacingOccurrences(of: "-", with: "_")
@@ -761,7 +765,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func cMakefile(options: ScaffoldOptions, cpp: Bool) -> String {
+    private static func cMakefile(options: ScaffoldOptions, cpp: Bool) -> String {
         let name    = options.pluginName
         let libName = name.replacingOccurrences(of: "-", with: "_")
         let compiler = cpp ? "CXX = clang++" : "CC = clang"
@@ -807,7 +811,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func cPluginSource(options: ScaffoldOptions, cpp: Bool) -> String {
+    private static func cPluginSource(options: ScaffoldOptions, cpp: Bool) -> String {
         let name   = options.pluginName
         let handle = options.handle
 
@@ -903,7 +907,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - C++ Scaffold
 
-    private func scaffoldCpp(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldCpp(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
 
         let yamlURL = pluginDir.appendingPathComponent("plugin.yaml")
@@ -940,7 +944,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func cppPluginYaml(options: ScaffoldOptions) -> String {
+    private static func cppPluginYaml(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
         let libName = name.replacingOccurrences(of: "-", with: "_")
@@ -971,7 +975,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - Python Scaffold
 
-    private func scaffoldPython(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldPython(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
 
         let yamlURL = pluginDir.appendingPathComponent("plugin.yaml")
@@ -995,7 +999,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func pythonPluginYaml(options: ScaffoldOptions) -> String {
+    private static func pythonPluginYaml(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
         var provides = """
@@ -1022,7 +1026,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func pythonPluginSource(options: ScaffoldOptions) -> String {
+    private static func pythonPluginSource(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
 
@@ -1133,7 +1137,7 @@ struct NewPluginCommand: ParsableCommand {
 
     // MARK: - ARO (pure) Scaffold
 
-    private func scaffoldARO(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
+    private static func scaffoldARO(options: ScaffoldOptions, pluginDir: URL) throws -> [String] {
         var created: [String] = []
 
         let yamlURL = pluginDir.appendingPathComponent("plugin.yaml")
@@ -1153,7 +1157,7 @@ struct NewPluginCommand: ParsableCommand {
         return created
     }
 
-    private func aroPluginYaml(options: ScaffoldOptions) -> String {
+    private static func aroPluginYaml(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         var provides = "- type: aro-files\n  path: features/"
         if options.includeTemplates {
@@ -1171,7 +1175,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func aroFeaturesExample(options: ScaffoldOptions) -> String {
+    private static func aroFeaturesExample(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
         var featureSets = ""
@@ -1209,7 +1213,7 @@ struct NewPluginCommand: ParsableCommand {
         """
     }
 
-    private func aroTemplateExample(options: ScaffoldOptions) -> String {
+    private static func aroTemplateExample(options: ScaffoldOptions) -> String {
         let name = options.pluginName
         return """
         {{! example.mustache — Template provided by \(name) }}
