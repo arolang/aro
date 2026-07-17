@@ -5,7 +5,7 @@
 //
 // Owns the C-ABI bridge for the native BSD socket server (NativeSocketServer,
 // broadcast helpers) plus the legacy socket-handle API, and the Windows stubs.
-// Also owns the shared BSD system-call shims (systemClose/systemSend/SOCK_STREAM),
+// Also owns the shared BSD system-call shims (systemClose/systemSend/aroSockStreamType),
 // which were widened from `private` to internal so the native HTTP server in
 // ServiceBridge.swift can share them.
 // Extracted from ServiceBridge.swift (issue #313) — pure move, no behaviour change.
@@ -30,6 +30,15 @@ func systemClose(_ fd: Int32) -> Int32 {
 func systemSend(_ fd: Int32, _ buf: UnsafeRawPointer!, _ len: Int, _ flags: Int32) -> Int {
     Darwin.send(fd, buf, len, flags)
 }
+
+// #313: the SOCK_STREAM value as an Int32 for socket() calls, shared with
+// NativeHTTPServer in ServiceBridge.swift. On Darwin the C symbol is already
+// Int32. Deliberately NOT named `SOCK_STREAM`: a module-scope (internal)
+// constant with that name shadows the C `SOCK_STREAM` across the whole
+// ARORuntime module, which on Linux breaks `SOCK_STREAM.rawValue` in
+// SocketServer / DAPTCPListener / MetricsSocketServer (the C symbol there is
+// the `__socket_type` enum, not an Int32).
+let aroSockStreamType: Int32 = SOCK_STREAM
 #elseif canImport(Glibc)
 import Glibc
 
@@ -44,8 +53,9 @@ func systemSend(_ fd: Int32, _ buf: UnsafeRawPointer!, _ len: Int, _ flags: Int3
     Glibc.send(fd, buf, len, flags)
 }
 
-// #313: widened from `private` to internal — shared with NativeHTTPServer in ServiceBridge.swift.
-let SOCK_STREAM = Int32(Glibc.SOCK_STREAM.rawValue)
+// #313: on Glibc SOCK_STREAM is the `__socket_type` enum; normalise to Int32.
+// See the Darwin branch above for why this must NOT be named `SOCK_STREAM`.
+let aroSockStreamType: Int32 = Int32(SOCK_STREAM.rawValue)
 #endif
 
 /// Native TCP Socket Server using BSD sockets
@@ -87,7 +97,7 @@ public final class NativeSocketServer: @unchecked Sendable {
     /// Start the server
     public func start() -> Bool {
         // Create socket
-        serverFd = socket(AF_INET, SOCK_STREAM, 0)
+        serverFd = socket(AF_INET, aroSockStreamType, 0)
         guard serverFd >= 0 else {
             print("[NativeSocketServer] Failed to create socket")
             return false

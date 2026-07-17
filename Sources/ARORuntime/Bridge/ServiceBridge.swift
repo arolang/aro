@@ -11,7 +11,7 @@
 // (HTTPClientBridge / HTTPServerBridge / FileSystemBridge / FileWatcherBridge /
 // SocketBridge). Pure move, no behaviour change.
 //
-// The BSD system-call shims (systemClose/systemSend/SOCK_STREAM) live in
+// The BSD system-call shims (systemClose/systemSend/aroSockStreamType) live in
 // SocketBridge.swift and are shared across files at internal scope.
 
 import Foundation
@@ -122,7 +122,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
     /// Start the server
     public func start() -> Bool {
         // Create socket
-        serverFd = socket(AF_INET, SOCK_STREAM, 0)
+        serverFd = socket(AF_INET, aroSockStreamType, 0)
         guard serverFd >= 0 else {
             print("[NativeHTTPServer] Failed to create socket")
             return false
