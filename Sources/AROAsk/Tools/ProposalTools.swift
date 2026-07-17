@@ -16,10 +16,7 @@ public enum ProposalTools {
         AskToolDescriptor(
             name: "list_proposals",
             description: "List all ARO language proposals with their number and title.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([:])
-            ])
+            schema: .empty
         ) { _ in
             let proposalsDir = cwd.appendingPathComponent("Proposals")
             let fm = FileManager.default
@@ -57,20 +54,11 @@ public enum ProposalTools {
         AskToolDescriptor(
             name: "read_proposal",
             description: "Read the full text of a specific ARO language proposal by number (e.g. \"0001\" or \"ARO-0001\").",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "number": .object([
-                        "type": .string("string"),
-                        "description": .string("Proposal number, e.g. \"0001\" or \"ARO-0001\"")
-                    ])
-                ]),
-                "required": .array([.string("number")])
+            schema: ToolParameterSchema([
+                .required("number", .string, "Proposal number, e.g. \"0001\" or \"ARO-0001\""),
             ])
         ) { args in
-            guard let number = args["number"]?.stringValue else {
-                throw AskToolError.invalidArguments("'number' (string) is required")
-            }
+            let number = try args.requireString("number")
 
             // Normalize: strip "ARO-" prefix if present
             let digits: String

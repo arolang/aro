@@ -55,6 +55,27 @@ public struct AskToolDescriptor: Sendable {
         self.execute = execute
     }
 
+    /// Preferred initialiser (#357): the tool declares its parameters
+    /// once as a `ToolParameterSchema`; the LLM-facing JSON schema is
+    /// derived from it and the execute closure receives already
+    /// validated `ToolArguments` decoded against the same declaration.
+    public init(
+        name: String,
+        description: String,
+        schema: ToolParameterSchema,
+        riskLevel: AskToolRiskLevel = .readonly,
+        execute: @escaping @Sendable (ToolArguments) async throws -> String
+    ) {
+        self.init(
+            name: name,
+            description: description,
+            parameters: schema.jsonSchema,
+            riskLevel: riskLevel
+        ) { raw in
+            try await execute(ToolArguments(raw: raw, schema: schema))
+        }
+    }
+
     /// Legacy initialiser preserving the original bool flag.
     /// \`true\` → \`.modify\` (the closest match to "needs approval");
     /// \`false\` → \`.readonly\`. Callers should migrate to the

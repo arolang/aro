@@ -16,24 +16,14 @@ public enum AROTools {
     // MARK: - aro_check
 
     public static func aroCheck(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to a .aro file or application directory to check")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "aro_check",
             description: "Run `aro check` on a file or directory to validate ARO syntax without executing.",
-            parameters: params
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to a .aro file or application directory to check"),
+            ])
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
+            let path = try args.requireString("path")
             let resolved = try pathGuard.resolve(path)
             let binary = aroBinary()
             let result = try ProcessRunner.runAndCapture(
@@ -54,32 +44,18 @@ public enum AROTools {
     // MARK: - aro_run
 
     public static func aroRun(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to the ARO application directory to run")
-                ]),
-                "args": .object([
-                    "type": .string("array"),
-                    "items": .object(["type": .string("string")]),
-                    "description": .string("Additional arguments to pass to aro run (optional)")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "aro_run",
             description: "Run an ARO application with `aro run`. Returns stdout/stderr. Times out after 30 seconds.",
-            parameters: params,
-            requiresApproval: true
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to the ARO application directory to run"),
+                .optional("args", .array(of: .string), "Additional arguments to pass to aro run (optional)"),
+            ]),
+            riskLevel: .modify
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
+            let path = try args.requireString("path")
             let resolved = try pathGuard.resolve(path)
-            let extraArgs = args["args"]?.arrayValue?.compactMap(\.stringValue) ?? []
+            let extraArgs = args.stringArray("args") ?? []
             let binary = aroBinary()
             var arguments = ["run", resolved.path]
             arguments.append(contentsOf: extraArgs)
@@ -104,24 +80,14 @@ public enum AROTools {
     // MARK: - aro_test
 
     public static func aroTest(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to the ARO application directory to test")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "aro_test",
             description: "Run `aro test` on an ARO application directory and return test results.",
-            parameters: params
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to the ARO application directory to test"),
+            ])
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
+            let path = try args.requireString("path")
             let resolved = try pathGuard.resolve(path)
             let binary = aroBinary()
             let result = try ProcessRunner.runAndCapture(
@@ -145,25 +111,15 @@ public enum AROTools {
     // MARK: - aro_build
 
     public static func aroBuild(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to the ARO application directory to compile to a native binary")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "aro_build",
             description: "Compile an ARO application to a native binary with `aro build`. Returns compiler output.",
-            parameters: params,
-            requiresApproval: true
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to the ARO application directory to compile to a native binary"),
+            ]),
+            riskLevel: .modify
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
+            let path = try args.requireString("path")
             let resolved = try pathGuard.resolve(path)
             let binary = aroBinary()
             let result = try ProcessRunner.runAndCapture(
@@ -187,24 +143,14 @@ public enum AROTools {
     // MARK: - parse_aro
 
     public static func parseARO(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to a .aro file to parse and return the AST for")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "parse_aro",
             description: "Parse a .aro file and return the AST as structured text. Useful for inspecting syntax without running.",
-            parameters: params
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to a .aro file to parse and return the AST for"),
+            ])
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
+            let path = try args.requireString("path")
             let resolved = try pathGuard.resolve(path)
             let source = try String(contentsOf: resolved, encoding: .utf8)
 
@@ -245,14 +191,10 @@ public enum AROTools {
     // MARK: - list_actions
 
     public static func listActions() -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([:])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "list_actions",
             description: "List all available ARO actions with their verbs, roles, and valid prepositions.",
-            parameters: params
+            schema: .empty
         ) { _ in
             let registry = ActionRegistry.shared
             let byRole = registry.actionsByRole
