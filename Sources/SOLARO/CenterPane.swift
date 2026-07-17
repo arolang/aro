@@ -722,6 +722,10 @@ struct CenterPaneView: View {
                 applyNodeEdit: { nodeID, newStatementText in
                     applyNodeEdit(nodeID: nodeID,
                                   newStatementText: newStatementText)
+                },
+                onReorderStatement: { source, target, half in
+                    moveStatement(source: source, target: target,
+                                  before: half == .above)
                 }
             )
             .onAppear {
@@ -1095,26 +1099,10 @@ struct CenterPaneView: View {
         nodeID: CanvasNode.ID,
         newStatementText: String
     ) {
-        guard let url = controller.currentFile else { return }
-        // The node ID's last `:offset` segment is the statement's
-        // span.start.offset. We find the statement that matches it
-        // by walking the parsed program; that gives us start + end
-        // and the full source span we need to replace.
-        let parts = nodeID.split(separator: ":")
-        guard let lastSlice = parts.last,
-              let startOffset = Int(String(lastSlice)) else { return }
-        guard let program = controller.programs[url] else { return }
-        var span: SourceSpan? = nil
-        for fs in program.featureSets {
-            if let found = locateStatement(
-                inStatements: fs.statements,
-                matching: startOffset
-            ) {
-                span = found
-                break
-            }
-        }
-        guard let span else { return }
+        guard let url = controller.currentFile,
+              let program = controller.programs[url],
+              let span = span(forNodeID: nodeID, in: program)
+        else { return }
         guard let source = try? String(contentsOf: url, encoding: .utf8)
         else { return }
         let newSource = replacingStatement(
@@ -1132,6 +1120,55 @@ struct CenterPaneView: View {
         WorkspaceUndoRegistry.shared.noteUndoChange()
     }
 
+    /// Resolve a canvas node ID (`"<file>:<offset>"`) to the AST
+    /// statement span starting at that offset. Shared by the inline
+    /// editor's apply path and the drag-reorder drop path.
+    private func span(forNodeID nodeID: CanvasNode.ID,
+                      in program: Program) -> SourceSpan? {
+        let parts = nodeID.split(separator: ":")
+        guard let lastSlice = parts.last,
+              let startOffset = Int(String(lastSlice)) else { return nil }
+        for fs in program.featureSets {
+            if let found = locateStatement(
+                inStatements: fs.statements,
+                matching: startOffset
+            ) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    /// Drag-reorder drop (#376): move `source`'s statement so its
+    /// lines sit immediately before / after `target`'s statement.
+    /// The canvas already filters drops to same-FS siblings, but
+    /// re-validate here so a stray call can't teleport a statement
+    /// across feature sets. The whole rewrite lands as one undo
+    /// step named "Move Action".
+    private func moveStatement(source: CanvasNode,
+                               target: CanvasNode,
+                               before: Bool) {
+        guard source.id != target.id,
+              source.featureSetName == target.featureSetName,
+              let url = controller.currentFile,
+              let program = controller.programs[url],
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              let sourceSpan = span(forNodeID: source.id, in: program),
+              let targetSpan = span(forNodeID: target.id, in: program)
+        else { return }
+        guard let updated = StatementReorder.movingStatement(
+            in: text,
+            source: sourceSpan.start.offset ..< sourceSpan.end.offset,
+            target: targetSpan.start.offset ..< targetSpan.end.offset,
+            insertBefore: before
+        ), updated != text else { return }
+        // saveAndReparse registers the undo with its generic
+        // "Edit <file>" name — override it so the Edit menu reads
+        // "Undo Move Action" (same trick as applyNodeEdit).
+        saveAndReparse(text: updated, url: url)
+        undoManager?.setActionName("Move Action")
+        WorkspaceUndoRegistry.shared.noteUndoChange()
+    }
 
     /// Depth-first search for the statement whose `span.start.offset`
     /// matches. Handles AROStatement directly, plus recurses into
@@ -1301,6 +1338,10 @@ struct CenterPaneView: View {
                 applyNodeEdit: { nodeID, newStatementText in
                     applyNodeEdit(nodeID: nodeID,
                                   newStatementText: newStatementText)
+                },
+                onReorderStatement: { source, target, half in
+                    moveStatement(source: source, target: target,
+                                  before: half == .above)
                 }
             )
             .onAppear {

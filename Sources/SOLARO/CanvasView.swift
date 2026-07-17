@@ -103,6 +103,13 @@ struct CanvasView: View {
     /// span, and writes the result. Optional so non-source-backed
     /// canvases (OpenAPI graph, Project Map) can omit it.
     let applyNodeEdit: ((CanvasNode.ID, String) -> Void)?
+    /// Reorder gesture (#376): dropping a statement card on a
+    /// sibling card in the same feature set moves the dragged
+    /// statement before (`.above`) or after (`.below`) the target
+    /// in the source file. The caller (CenterPane) rewrites the
+    /// file and reparses. Optional so non-source-backed canvases
+    /// can omit it.
+    let onReorderStatement: ((CanvasNode, CanvasNode, ReorderDropHalf) -> Void)?
 
     @State private var pan: CGSize = .zero
     @State private var zoom: Double = 1.0
@@ -393,7 +400,21 @@ struct CanvasView: View {
                     applyNodeEdit?(id, newText)
                     editingNodeID = nil
                 },
-                onCancelEdit: { editingNodeID = nil }
+                onCancelEdit: { editingNodeID = nil },
+                onReorder: onReorderStatement == nil ? nil
+                    : { source, target, half in
+                        // The reorder rewrites the source file, so
+                        // the dragged node's offset-based ID dies
+                        // with the reparse. Drop its live-drag
+                        // bookkeeping now: on success the graph
+                        // re-flows with fresh IDs, on a no-op the
+                        // card snaps back to its laid-out spot
+                        // instead of lingering where it was
+                        // dropped.
+                        dragStartPositions.removeValue(forKey: source.id)
+                        controller.liveNodes.removeValue(forKey: source.id)
+                        onReorderStatement?(source, target, half)
+                    }
             )
             .frame(width: contentSize.width, height: contentSize.height,
                    alignment: .topLeading)
@@ -1083,6 +1104,11 @@ struct NodesLayer: View {
     let onDoubleTap: (CanvasNode.ID) -> Void
     let onApplyEdit: (CanvasNode.ID, String) -> Void
     let onCancelEdit: () -> Void
+    /// Statement reorder (#376). Fired on drop when the drag ended
+    /// over a same-feature-set sibling card: (dragged node, target
+    /// node, half). nil disables the reorder gesture entirely —
+    /// drags then only reposition, as before.
+    let onReorder: ((CanvasNode, CanvasNode, ReorderDropHalf) -> Void)?
 
     /// Position of each node at the moment its drag began. Captured
     /// once on the first `onChanged` event, cleared on `onEnded`.
@@ -1090,6 +1116,21 @@ struct NodesLayer: View {
     /// to the *just-updated* live position, so the node sprints away
     /// at 2× mouse speed (the user-reported regression).
     @State private var dragOrigins: [CanvasNode.ID: CGPoint] = [:]
+
+    /// Reorder drop candidate under the cursor while an existing
+    /// card is being dragged (#376). Drives the half-highlight on
+    /// the target card; consumed (then cleared) on drag end.
+    private struct ReorderDrop: Equatable {
+        let targetID: CanvasNode.ID
+        let half: ReorderDropHalf
+    }
+    @State private var reorderDrop: ReorderDrop? = nil
+
+    /// Coordinate space the drag gesture reports `location` in —
+    /// the layer's own top-leading space, matching the `positions`
+    /// dictionary, so cursor-over-card hit tests are a plain rect
+    /// containment check.
+    private static let layerSpace = "solaro-nodes-layer"
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -1123,7 +1164,10 @@ struct NodesLayer: View {
                             hasBreakpoint: breakpointLines.contains(node.lineHint),
                             symbols: relevantSymbols(for: node),
                             lastExecutedAt: lastExecutedAt[node.lineHint],
-                            errorMessage: errorLines[node.lineHint]
+                            errorMessage: errorLines[node.lineHint],
+                            reorderDropHalf: reorderDrop.flatMap {
+                                $0.targetID == node.id ? $0.half : nil
+                            }
                         )
                     }
                 }
@@ -1133,8 +1177,12 @@ struct NodesLayer: View {
                 // card. Without an explicit z-index, ForEach uses
                 // source order, so cards positioned later (further
                 // down the canvas) end up drawn on top of the
-                // editor when its rect overlaps theirs.
-                .zIndex(editingNodeID == node.id ? 1000 : 0)
+                // editor when its rect overlaps theirs. A card
+                // that's mid-drag floats too (below the editor) so
+                // the reorder gesture reads as "card in hand" over
+                // its siblings (#376).
+                .zIndex(editingNodeID == node.id ? 1000
+                        : dragOrigins[node.id] != nil ? 900 : 0)
                 .onTapGesture(count: 2) { onDoubleTap(node.id) }
                 .onTapGesture {
                     onSelect(node.lineHint)
@@ -1196,6 +1244,7 @@ struct NodesLayer: View {
                 }
             }
         }
+        .coordinateSpace(name: Self.layerSpace)
     }
 
     /// Filter the global symbol bag down to identifiers this node
@@ -1234,7 +1283,8 @@ struct NodesLayer: View {
 
     private func dragGesture(id: CanvasNode.ID,
                              livePosition: CGPoint) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1,
+                    coordinateSpace: .named(Self.layerSpace))
             .onChanged { value in
                 // Capture the origin once at the start of the drag —
                 // not on every onChanged. Subsequent events use the
@@ -1248,6 +1298,7 @@ struct NodesLayer: View {
                 onDrag(id,
                        CGPoint(x: origin.x + value.translation.width,
                                y: origin.y + value.translation.height))
+                updateReorderTarget(draggedID: id, cursor: value.location)
             }
             .onEnded { value in
                 let origin = dragOrigins[id] ?? livePosition
@@ -1255,9 +1306,53 @@ struct NodesLayer: View {
                     x: origin.x + value.translation.width,
                     y: origin.y + value.translation.height
                 )
-                onDragEnd(id, final)
+                // Drop on a same-FS sibling card → reorder instead
+                // of reposition (#376). The reposition path (with
+                // its position persistence + "Move Node" undo) is
+                // skipped so the move registers exactly one undo
+                // step — the source rewrite.
+                if let drop = reorderDrop,
+                   let onReorder,
+                   let source = graph.nodes.first(where: { $0.id == id }),
+                   let target = graph.nodes.first(where: {
+                       $0.id == drop.targetID
+                   })
+                {
+                    onReorder(source, target, drop.half)
+                } else {
+                    onDragEnd(id, final)
+                }
+                reorderDrop = nil
                 dragOrigins.removeValue(forKey: id)
             }
+    }
+
+    /// Recompute the reorder drop candidate for the card under the
+    /// cursor (#376). Only same-feature-set sibling cards arm — a
+    /// cursor over a different FS's card, over the dragged card's
+    /// own slot, or over empty canvas clears the highlight so those
+    /// drops read (and act) as plain repositioning.
+    private func updateReorderTarget(draggedID: CanvasNode.ID,
+                                     cursor: CGPoint) {
+        guard onReorder != nil,
+              let dragged = graph.nodes.first(where: { $0.id == draggedID })
+        else { return }
+        var next: ReorderDrop? = nil
+        for node in graph.nodes where node.id != draggedID {
+            let p = positions[node.id] ?? CGPoint(x: node.x, y: node.y)
+            let rect = CGRect(x: p.x, y: p.y,
+                              width: nodeWidth, height: nodeHeight)
+            guard rect.contains(cursor) else { continue }
+            guard node.featureSetName == dragged.featureSetName else {
+                break
+            }
+            next = ReorderDrop(
+                targetID: node.id,
+                half: cursor.y < rect.midY ? .above : .below
+            )
+            break
+        }
+        if reorderDrop != next { reorderDrop = next }
     }
 }
 
