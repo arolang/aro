@@ -90,6 +90,8 @@ public func aro_http_server_stop(_ serverPtr: UnsafeMutableRawPointer?) {
     let handle = Unmanaged<HTTPServerHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     Task {
+        // try? is acceptable: best-effort shutdown — the server is being torn
+        // down regardless, and there is no caller to report a stop error to.
         try? await handle.server?.stop()
         handle.isRunning = false
     }
@@ -507,6 +509,10 @@ public func aro_file_stat(
             json["permissions"] = permissions
         }
 
+        // try? is acceptable: the dictionary is built above from JSON-safe
+        // primitives (strings/numbers), so serialization cannot realistically
+        // fail; on failure we fall through to the nil return, which callers
+        // already treat as "stat unavailable".
         if let jsonData = try? JSONSerialization.data(withJSONObject: json),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
             outLength?.pointee = jsonStr.utf8.count
@@ -569,6 +575,10 @@ public func aro_directory_list_extended(
             }
         }
 
+        // try? is acceptable: entries are dictionaries of JSON-safe primitives
+        // built by fileEntryDict, so serialization cannot realistically fail;
+        // on failure we fall through to the nil return, which callers already
+        // treat as "listing unavailable".
         if let jsonData = try? JSONSerialization.data(withJSONObject: entries),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
             outLength?.pointee = jsonStr.utf8.count
@@ -689,6 +699,8 @@ public func aro_file_append(
     do {
         if fm.fileExists(atPath: pathStr) {
             let handle = try FileHandle(forWritingTo: url)
+            // try? is acceptable: best-effort cleanup — a close failure after a
+            // successful write has nothing actionable for the caller.
             defer { try? handle.close() }
             handle.seekToEndOfFile()
             if let data = contentStr.data(using: .utf8) {
@@ -728,15 +740,27 @@ private func matchesGlobPattern(_ name: String, pattern: String?) -> Bool {
     }
     regex += "$"
 
-    return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
-        in: name,
-        options: [],
-        range: NSRange(name.startIndex..., in: name)
-    ) != nil
+    // The pattern is machine-built from the glob above, so compilation should
+    // never fail — but if it does, every file would silently stop matching.
+    // Log the broken pattern instead of hiding it.
+    do {
+        let compiled = try RegexCache.shared.regex(regex, options: .caseInsensitive)
+        return compiled.firstMatch(
+            in: name,
+            options: [],
+            range: NSRange(name.startIndex..., in: name)
+        ) != nil
+    } catch {
+        FileHandle.standardError.write(Data("[ServiceBridge] Warning: glob pattern '\(pattern)' produced invalid regex '\(regex)', treating as no-match: \(error)\n".utf8))
+        return false
+    }
 }
 
 /// Helper: Create file entry dictionary for JSON serialization
 private func fileEntryDict(for url: URL, dateFormatter: ISO8601DateFormatter) -> [String: Any]? {
+    // try? is acceptable: a file can legitimately vanish between directory
+    // enumeration and this stat (TOCTOU race); skipping the entry by returning
+    // nil is the intended behavior for concurrent file-system churn.
     guard let resourceValues = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]) else {
         return nil
     }
@@ -1199,14 +1223,21 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
 
     print("[FileMonitor] Watching: \(handle.path) (polling mode)")
 
-    // Start polling thread
+    // Start polling thread.
+    // Note on try? in this polling loop: the watched directory and its files
+    // can appear/vanish/change permissions at any moment (that churn is the
+    // very thing being monitored), so listing or stat'ing may fail transiently.
+    // Skipping the file or retrying on the next 1 s tick is the intended
+    // recovery — these failures are expected, not data loss.
     DispatchQueue.global(qos: .utility).async {
-        // Get initial file list
+        // Get initial file list (try?: directory may not exist yet; the poll
+        // loop below picks it up once it appears)
         var knownFiles: Set<String> = []
         if let contents = try? FileManager.default.contentsOfDirectory(atPath: handle.path) {
             knownFiles = Set(contents)
             for file in contents {
                 let fullPath = handle.path + "/" + file
+                // try?: file may vanish between listing and stat (TOCTOU race)
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath),
                    let modDate = attrs[.modificationDate] as? Date {
                     handle.lastModified[file] = modDate
@@ -1219,6 +1250,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             if handle.stopSemaphore.wait(timeout: .now() + 1.0) == .success { break }
             guard handle.isWatching else { break }
 
+            // try?: directory may be temporarily unreadable; retry next tick
             guard let contents = try? FileManager.default.contentsOfDirectory(atPath: handle.path) else {
                 continue
             }
@@ -1229,6 +1261,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             for file in currentFiles.subtracting(knownFiles) {
                 let fullPath = handle.path + "/" + file
                 print("[FileMonitor] Created: \(fullPath)")
+                // try?: file may vanish between listing and stat (TOCTOU race)
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath),
                    let modDate = attrs[.modificationDate] as? Date {
                     handle.lastModified[file] = modDate
@@ -1245,6 +1278,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             // Check for modified files
             for file in currentFiles.intersection(knownFiles) {
                 let fullPath = handle.path + "/" + file
+                // try?: file may vanish between listing and stat (TOCTOU race)
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath),
                    let modDate = attrs[.modificationDate] as? Date {
                     if let lastMod = handle.lastModified[file], modDate > lastMod {
@@ -2256,7 +2290,10 @@ private let httpServerLock = NSLock()
 private func unwrapAnySendableForJSON(_ anySendable: AnySendable) -> Any {
     // Try each concrete type using the public get<T>() method
     if let str: String = anySendable.get() {
-        // Check if the string is JSON - if so, parse it
+        // Check if the string is JSON - if so, parse it.
+        // try? is acceptable: this is a probe — a string that merely starts
+        // with "{"/"[" need not be JSON, and the raw string is returned
+        // unchanged when parsing fails, so nothing is lost.
         if str.hasPrefix("{") || str.hasPrefix("[") {
             if let jsonData = str.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: jsonData) {
@@ -2406,9 +2443,12 @@ public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
     guard let ptr = jsonPtr else { return }
     let jsonString = String(cString: ptr)
 
-    // Parse the JSON dictionary
+    // Parse the JSON dictionary. The JSON is generated at compile time, so a
+    // parse failure means the embedded template table is corrupt: returning
+    // silently would make every Render fail later with no clue why — log it.
     guard let data = jsonString.data(using: .utf8),
           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
+        FileHandle.standardError.write(Data("[ServiceBridge] Warning: unparseable embedded templates JSON, templates unavailable\n".utf8))
         return
     }
     embeddedTemplates = dict
@@ -2679,6 +2719,10 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
 
                             // Detect CSS content
                             if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
+                                // try? is acceptable: the pattern is a hardcoded
+                                // literal that always compiles; a nil here only
+                                // skips the CSS content-type sniff and the body
+                                // falls through to JSON handling below.
                                 let cssPattern = try? NSRegularExpression(
                                     pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
                                     options: []
@@ -2702,9 +2746,15 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                         jsonDict["status"] = response.status
                     }
 
+                    // Serialize the response body. A failure here means the
+                    // handler produced a value JSONSerialization can't encode
+                    // (e.g. a non-JSON object slipped into response.data) — the
+                    // client would get a bare {"status":"ok"} with the real data
+                    // silently dropped, so surface it.
                     if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)
                     }
+                    FileHandle.standardError.write(Data("[ServiceBridge] Warning: response data not JSON-serializable, returning status-only body: keys=\(Array(jsonDict.keys))\n".utf8))
                 }
                 return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
             }
@@ -2717,7 +2767,10 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 // Bind request as a dictionary with body, headers, etc.
                 var requestDict: [String: any Sendable] = [:]
 
-                // Parse body as JSON if possible, otherwise as string
+                // Parse body as JSON if possible, otherwise as string.
+                // try? is acceptable: request bodies are legitimately either JSON
+                // or plain text/form data, so a parse failure is expected content
+                // negotiation — the body is bound as a raw string instead, no loss.
                 if let bodyData = body {
                     if let json = try? JSONSerialization.jsonObject(with: bodyData),
                        let dict = json as? [String: Any] {
@@ -2835,7 +2888,17 @@ public func aro_native_http_server_start_with_openapi(_ port: Int32, _ contextPt
         let executablePath = CommandLine.arguments[0]
         let binaryDir = (executablePath as NSString).deletingLastPathComponent
         let openapiPath = binaryDir + "/openapi.yaml"
-        openapiContent = try? String(contentsOfFile: openapiPath, encoding: .utf8)
+        do {
+            openapiContent = try String(contentsOfFile: openapiPath, encoding: .utf8)
+        } catch {
+            // A missing openapi.yaml is normal (no contract = no routes), but a
+            // file that exists yet cannot be read means the server starts with no
+            // routes for a non-obvious reason — surface that specific case.
+            if FileManager.default.fileExists(atPath: openapiPath) {
+                FileHandle.standardError.write(Data("[ServiceBridge] Warning: failed to read \(openapiPath), HTTP routes unavailable: \(error)\n".utf8))
+            }
+            openapiContent = nil
+        }
     }
 
     // Parse routes and extract port from the spec
@@ -2895,6 +2958,10 @@ private let openAPIJSONDecoder = JSONDecoder()
 
 /// Extract port from OpenAPI JSON spec's server URL
 private func extractPortFromOpenAPIJSON(_ json: String) -> Int {
+    // try? is acceptable: 0 signals "no explicit port", and the caller falls
+    // back to the default 8080. A decode failure here does not lose data —
+    // parseOpenAPIRoutesJSON separately parses (and logs) the same spec for
+    // route registration.
     guard let data = json.data(using: .utf8),
           let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data),
           let servers = spec.servers,
@@ -2964,8 +3031,12 @@ private func parseOpenAPIRoutes(_ content: String) {
 
 /// Parse routes from OpenAPI JSON spec
 private func parseOpenAPIRoutesJSON(_ json: String) {
+    // The content was already detected as JSON (starts with "{"), so a decode
+    // failure means the OpenAPI contract is malformed: returning silently would
+    // register zero routes and every request would 404 with no explanation.
     guard let data = json.data(using: .utf8),
           let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data) else {
+        FileHandle.standardError.write(Data("[ServiceBridge] Warning: failed to decode OpenAPI JSON spec, no HTTP routes registered\n".utf8))
         return
     }
 
