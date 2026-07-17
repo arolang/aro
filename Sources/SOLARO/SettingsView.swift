@@ -41,6 +41,8 @@ struct SettingsView: View {
     private var githubPAT: String = ""
     @AppStorage(SolaroPrefs.theme.rawValue)
     private var theme: String = SolaroTheme.dark.rawValue
+    @AppStorage(SolaroPrefs.metricsHistoryDepth.rawValue)
+    private var metricsHistoryDepth: Int = MetricsRunHistory.defaultDepth
 
     var body: some View {
         TabView {
@@ -186,6 +188,23 @@ struct SettingsView: View {
             } header: {
                 Text("Plugin marketplace")
             }
+            Section {
+                Stepper(value: $metricsHistoryDepth, in: 1...100) {
+                    HStack {
+                        Text("Run history depth")
+                        Spacer()
+                        Text("\(metricsHistoryDepth) runs")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text("How many past runs the Metrics panel keeps for ◂ ▸ navigation. Older runs fall off the back. Applies from the next Run.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Metrics")
+            }
         }
         .formStyle(.grouped)
     }
@@ -253,6 +272,7 @@ enum SolaroPrefs: String {
     case editorAIFallback = "solaro.editor.aiFallback"
     case runtimeBackend   = "solaro.runtimeBackend"
     case filesTabMode     = "solaro.filesTabMode"
+    case metricsHistoryDepth = "solaro.metrics.historyDepth"
 }
 
 /// Which runtime drives the green Play button. The embedded path

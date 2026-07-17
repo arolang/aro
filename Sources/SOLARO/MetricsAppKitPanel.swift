@@ -57,6 +57,23 @@ final class MetricsContentView: NSView {
     private let stateLabel = MetricsContentView.makeCaption("idle — press Run")
     private let heartbeat = MetricsContentView.makeHeartbeat()
 
+    // Run-history navigation (#375) — chevrons step through past
+    // runs, the pill jumps back to the live one, the caption shows
+    // "run #N of M".
+    private let runPositionLabel = MetricsContentView.makeMonoCaption("")
+    private let backButton = MetricsContentView.makeNavButton(
+        symbol: "chevron.left", accessibility: "Previous run")
+    private let forwardButton = MetricsContentView.makeNavButton(
+        symbol: "chevron.right", accessibility: "Next run")
+    private let latestButton: NSButton = {
+        let b = NSButton(title: "Latest", target: nil, action: nil)
+        b.bezelStyle = .accessoryBarAction
+        b.controlSize = .small
+        b.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        b.setContentHuggingPriority(.required, for: .horizontal)
+        return b
+    }()
+
     // Summary card
     private let uptimeValue = MetricsContentView.makeMono("—")
     private let executionsValue = MetricsContentView.makeMono("—")
@@ -103,13 +120,9 @@ final class MetricsContentView: NSView {
     private let barsHost = NSHostingController(
         rootView: FeatureSetBars(bars: []))
 
-    // History — last ~60 samples (60s at 1 Hz). Older are dropped.
-    private var history: [MetricsHistoryPoint] = []
-    private var lastSampleStartUptime: Double?
-    private var lastSampleExecutions: Int = 0
-    private var lastSampleCPUTotal: Double = 0
-    private var lastSampleAtUptime: Double = 0
-    private let maxHistorySamples = 60
+    // Chart history lives in `process.metricsRunHistory` (#375) —
+    // one bucket per run so a fresh Run starts from an empty graph
+    // and older runs stay reachable via ◂ ▸.
 
     // Observation — `nonisolated(unsafe)` so deinit can invalidate
     // the timer without an actor hop. Both fields are only mutated
@@ -126,6 +139,12 @@ final class MetricsContentView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor(SolaroColor.surface).cgColor
         buildLayout()
+        backButton.target = self
+        backButton.action = #selector(navigateBack)
+        forwardButton.target = self
+        forwardButton.action = #selector(navigateForward)
+        latestButton.target = self
+        latestButton.action = #selector(navigateToLatest)
         observeProcessState()
         startRefreshTimer()
         applyConnectionState()
@@ -168,9 +187,13 @@ final class MetricsContentView: NSView {
 
         // Header
         let titleLabel = MetricsContentView.makeSectionTitle("METRICS")
-        let headerRow = NSStackView(views: [titleLabel, NSView(), heartbeat])
+        let headerRow = NSStackView(views: [
+            titleLabel, runPositionLabel, NSView(),
+            backButton, forwardButton, latestButton, heartbeat
+        ])
         headerRow.orientation = .horizontal
         headerRow.spacing = SolaroSpace.s
+        headerRow.setCustomSpacing(SolaroSpace.xs, after: backButton)
         let header = NSStackView(views: [headerRow, stateLabel])
         header.orientation = .vertical
         header.alignment = .leading
@@ -440,9 +463,81 @@ final class MetricsContentView: NSView {
         // anything, so the in-process accumulator is the only path
         // that has real numbers. Falls back to `client.latest` for
         // normal (subprocess) Runs.
+        //
+        // Snapshots always feed the *live* bucket; what the panel
+        // paints is whichever run the user navigated to (#375).
         if let snap = process.embeddedMetricsSnapshot ?? client.latest {
-            applySnapshot(snap)
+            process.metricsRunHistory.ingest(snap)
         }
+        renderDisplayedRun()
+    }
+
+    /// Paint whichever run `metricsRunHistory` selects — the live
+    /// one by default, an older bucket after ◂ navigation — and
+    /// sync the header's navigation chrome.
+    private func renderDisplayedRun() {
+        let store = process.metricsRunHistory
+        updateNavigationChrome(store)
+        if let run = store.displayedRun, let snap = run.lastSnapshot {
+            applySnapshot(snap, samples: run.samples)
+        } else {
+            resetDisplay()
+        }
+    }
+
+    private func updateNavigationChrome(_ store: MetricsRunHistory) {
+        if let pos = store.displayedPosition {
+            runPositionLabel.stringValue = "run #\(pos.index) of \(pos.total)"
+        } else {
+            runPositionLabel.stringValue = ""
+        }
+        backButton.isEnabled = store.canGoBack
+        forwardButton.isEnabled = store.canGoForward
+        latestButton.isEnabled = !store.isAtLatest
+        // Hide the whole affordance until there's something to
+        // navigate — a single (or zeroth) run needs no chrome.
+        let hidden = store.runs.count < 2
+        backButton.isHidden = hidden
+        forwardButton.isHidden = hidden
+        latestButton.isHidden = hidden
+    }
+
+    @objc private func navigateBack() {
+        process.metricsRunHistory.goBack()
+        renderDisplayedRun()
+    }
+
+    @objc private func navigateForward() {
+        process.metricsRunHistory.goForward()
+        renderDisplayedRun()
+    }
+
+    @objc private func navigateToLatest() {
+        process.metricsRunHistory.jumpToLatest()
+        renderDisplayedRun()
+    }
+
+    /// Blank every card — shown when the displayed run has no
+    /// snapshot yet (a run that just started paints an empty graph
+    /// instead of the previous run's numbers).
+    private func resetDisplay() {
+        uptimeValue.stringValue = "—"
+        executionsValue.stringValue = "—"
+        successValue.stringValue = "—"
+        failureBanner.isHidden = true
+        featureSetsCount.stringValue = "0"
+        featureSetsEmpty.isHidden = false
+        for row in featureSetRows { row.isHidden = true }
+        processScopeNote.isHidden = true
+        cpuUserValue.stringValue = "—"
+        cpuSystemValue.stringValue = "—"
+        residentValue.stringValue = "—"
+        virtualValue.stringValue = "—"
+        openFDsValue.stringValue = "—"
+        throughputHost.rootView = ThroughputSparkline(samples: [])
+        cpuHost.rootView = CPUSparkline(samples: [])
+        memoryHost.rootView = MemorySparkline(samples: [])
+        barsHost.rootView = FeatureSetBars(bars: [])
     }
 
     private func syncConnectionToProcessState() {
@@ -484,7 +579,8 @@ final class MetricsContentView: NSView {
         heartbeat.layer?.backgroundColor = dotColor.cgColor
     }
 
-    private func applySnapshot(_ snap: MetricsSnapshot) {
+    private func applySnapshot(_ snap: MetricsSnapshot,
+                               samples: [MetricsHistoryPoint]) {
         uptimeValue.stringValue = formatUptime(snap.uptimeSec)
         executionsValue.stringValue = "\(snap.totalExecutions)"
         successValue.stringValue = snap.totalExecutions == 0
@@ -523,46 +619,7 @@ final class MetricsContentView: NSView {
         virtualValue.stringValue = formatMB(snap.process.virtualMB)
         openFDsValue.stringValue = "\(snap.process.openFDs)"
 
-        appendHistory(from: snap)
-        updateCharts(snap: snap, sortedFeatureSets: sortedSets)
-    }
-
-    /// Append a derived sample to the rolling history. Throughput
-    /// (calls/s) and CPU% are deltas between consecutive snapshots
-    /// so we always have a fresh per-second rate even when uptime
-    /// is hours.
-    private func appendHistory(from snap: MetricsSnapshot) {
-        let now = snap.uptimeSec
-        if lastSampleStartUptime == nil {
-            lastSampleStartUptime = now
-            lastSampleExecutions = snap.totalExecutions
-            lastSampleCPUTotal = snap.process.cpuTotalSec
-            lastSampleAtUptime = now
-            return
-        }
-        let dt = max(0.001, now - lastSampleAtUptime)
-        let dExec = snap.totalExecutions - lastSampleExecutions
-        let dCPU = snap.process.cpuTotalSec - lastSampleCPUTotal
-        let callsPerSec = Double(dExec) / dt
-        // CPU% across all cores: ratio of CPU-seconds consumed to
-        // wall-clock-seconds elapsed. >100% means multi-core load.
-        let cpuPct = (dCPU / dt) * 100.0
-
-        let nextID = (history.last?.id ?? -1) + 1
-        history.append(MetricsHistoryPoint(
-            id: nextID,
-            timeOffsetSec: now,
-            callsPerSec: max(0, callsPerSec),
-            cpuPercent: max(0, cpuPct),
-            residentMB: snap.process.residentMB
-        ))
-        if history.count > maxHistorySamples {
-            history.removeFirst(history.count - maxHistorySamples)
-        }
-
-        lastSampleExecutions = snap.totalExecutions
-        lastSampleCPUTotal = snap.process.cpuTotalSec
-        lastSampleAtUptime = now
+        updateCharts(samples: samples, sortedFeatureSets: sortedSets)
     }
 
     /// Push fresh data into each chart's rootView. SwiftUI
@@ -570,12 +627,12 @@ final class MetricsContentView: NSView {
     /// pinned by widthAnchor/heightAnchor + `sizingOptions = []`,
     /// so no size invalidation propagates upward.
     private func updateCharts(
-        snap: MetricsSnapshot,
+        samples: [MetricsHistoryPoint],
         sortedFeatureSets: [FeatureSetMetric]
     ) {
-        throughputHost.rootView = ThroughputSparkline(samples: history)
-        cpuHost.rootView = CPUSparkline(samples: history)
-        memoryHost.rootView = MemorySparkline(samples: history)
+        throughputHost.rootView = ThroughputSparkline(samples: samples)
+        cpuHost.rootView = CPUSparkline(samples: samples)
+        memoryHost.rootView = MemorySparkline(samples: samples)
         let topBars = sortedFeatureSets.prefix(5).map {
             FeatureSetBars.Bar(id: $0.name, count: $0.count)
         }
@@ -649,6 +706,21 @@ final class MetricsContentView: NSView {
             f.widthAnchor.constraint(equalToConstant: width).isActive = true
         }
         return f
+    }
+
+    private static func makeNavButton(symbol: String,
+                                      accessibility: String) -> NSButton {
+        let image = NSImage(systemSymbolName: symbol,
+                            accessibilityDescription: accessibility)
+            ?? NSImage()
+        let b = NSButton(image: image, target: nil, action: nil)
+        b.isBordered = false
+        b.bezelStyle = .accessoryBarAction
+        b.imageScaling = .scaleProportionallyDown
+        b.contentTintColor = NSColor(SolaroColor.textSecondary)
+        b.setContentHuggingPriority(.required, for: .horizontal)
+        b.toolTip = accessibility
+        return b
     }
 
     private static func makeHeartbeat() -> NSView {
