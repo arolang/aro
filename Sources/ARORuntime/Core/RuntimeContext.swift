@@ -110,6 +110,17 @@ public actor RuntimeContext: ExecutionContext {
     /// When > 0, all bind calls automatically allow rebinding
     nonisolated(unsafe) private var mutableScopeDepth: Int = 0
 
+    #if DEBUG
+    /// DEBUG-only single-driver enforcement (issue #323). Every mutating
+    /// entry point wraps its body in `withExclusiveMutation { … }`, which
+    /// traps via `assertionFailure` if a second flow of control mutates
+    /// *this* instance while the first is still inside its critical section.
+    /// See the `ExclusivityChecker` definition at the bottom of this file
+    /// for the (deliberately narrow) guarantee it provides. Compiled out in
+    /// release builds — zero cost.
+    fileprivate nonisolated let exclusivity = ExclusivityChecker()
+    #endif
+
     // MARK: - Metadata
 
     public nonisolated let featureSetName: String
@@ -374,27 +385,33 @@ public actor RuntimeContext: ExecutionContext {
                 """)
         }
 
-        variables[name] = value
+        withExclusiveMutation {
+            variables[name] = value
 
-        // Mark user variables as immutable (framework variables stay mutable)
-        if !isFrameworkVariable {
-            immutableVariables.insert(name)
+            // Mark user variables as immutable (framework variables stay mutable)
+            if !isFrameworkVariable {
+                immutableVariables.insert(name)
+            }
         }
     }
 
     public nonisolated func unbind(_ name: String) {
-        variables.removeValue(forKey: name)
-        immutableVariables.remove(name)
+        withExclusiveMutation {
+            variables.removeValue(forKey: name)
+            immutableVariables.remove(name)
+        }
     }
 
     /// Enter a mutable scope (e.g., while loop body). Variables can be rebound within this scope.
     public nonisolated func enterMutableScope() {
-        mutableScopeDepth += 1
+        withExclusiveMutation { mutableScopeDepth += 1 }
     }
 
     /// Exit a mutable scope. Restores immutability enforcement when depth reaches zero.
     public nonisolated func exitMutableScope() {
-        if mutableScopeDepth > 0 { mutableScopeDepth -= 1 }
+        withExclusiveMutation {
+            if mutableScopeDepth > 0 { mutableScopeDepth -= 1 }
+        }
     }
 
     public nonisolated func exists(_ name: String) -> Bool {
@@ -427,12 +444,12 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func register<S: Sendable>(_ service: S) {
-        services[ObjectIdentifier(S.self)] = service
+        withExclusiveMutation { services[ObjectIdentifier(S.self)] = service }
     }
 
     /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
     public nonisolated func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable) {
-        services[typeId] = service
+        withExclusiveMutation { services[typeId] = service }
     }
 
     // MARK: - Repository Access
@@ -446,13 +463,13 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func registerRepository<T: Sendable>(name: String, repository: any Repository<T>) {
-        repositories[name] = repository
+        withExclusiveMutation { repositories[name] = repository }
     }
 
     // MARK: - Response Management
 
     public nonisolated func setResponse(_ response: Response) {
-        _response = response
+        withExclusiveMutation { _response = response }
     }
 
     public nonisolated func getResponse() -> Response? {
@@ -463,8 +480,10 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Set an execution error (e.g., from action failures)
     public nonisolated func setExecutionError(_ error: Error) {
-        if _executionError == nil {
-            _executionError = error
+        withExclusiveMutation {
+            if _executionError == nil {
+                _executionError = error
+            }
         }
     }
 
@@ -543,7 +562,7 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Wait State Management
 
     public nonisolated func enterWaitState() {
-        _isWaiting = true
+        withExclusiveMutation { _isWaiting = true }
     }
 
     public nonisolated func waitForShutdown() async throws {
@@ -588,31 +607,35 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Template Buffer (ARO-0050)
 
     public nonisolated func appendToTemplateBuffer(_ value: String) {
-        // #317: soft cap. Check current size + incoming bytes before
-        // committing the append. UTF-8 byte counts are O(1) on Swift
-        // String (cached on the storage), so the guard is cheap.
-        let incoming = value.utf8.count
-        let current = _templateBuffer.utf8.count
-        guard current + incoming <= templateBufferMaxBytes else {
-            templateBufferOverflowed = true
-            if !_templateBufferOverflowWarned {
-                _templateBufferOverflowWarned = true
-                let cap = templateBufferMaxBytes
-                FileHandle.standardError.write(Data(
-                    "[ARO runtime] template buffer exceeded \(cap) bytes; subsequent appends dropped until flushTemplateBuffer()\n".utf8
-                ))
+        withExclusiveMutation {
+            // #317: soft cap. Check current size + incoming bytes before
+            // committing the append. UTF-8 byte counts are O(1) on Swift
+            // String (cached on the storage), so the guard is cheap.
+            let incoming = value.utf8.count
+            let current = _templateBuffer.utf8.count
+            guard current + incoming <= templateBufferMaxBytes else {
+                templateBufferOverflowed = true
+                if !_templateBufferOverflowWarned {
+                    _templateBufferOverflowWarned = true
+                    let cap = templateBufferMaxBytes
+                    FileHandle.standardError.write(Data(
+                        "[ARO runtime] template buffer exceeded \(cap) bytes; subsequent appends dropped until flushTemplateBuffer()\n".utf8
+                    ))
+                }
+                return
             }
-            return
+            _templateBuffer.append(value)
         }
-        _templateBuffer.append(value)
     }
 
     public nonisolated func flushTemplateBuffer() -> String {
-        let result = _templateBuffer
-        _templateBuffer = ""
-        templateBufferOverflowed = false
-        _templateBufferOverflowWarned = false
-        return result
+        return withExclusiveMutation {
+            let result = _templateBuffer
+            _templateBuffer = ""
+            templateBufferOverflowed = false
+            _templateBufferOverflowWarned = false
+            return result
+        }
     }
 
     public nonisolated var isTemplateContext: Bool {
@@ -634,7 +657,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Set the schema registry (called during application startup)
     /// - Parameter registry: The schema registry to use
     public nonisolated func setSchemaRegistry(_ registry: SchemaRegistry) {
-        _schemaRegistry = registry
+        withExclusiveMutation { _schemaRegistry = registry }
     }
 
     // MARK: - Streaming Support (ARO-0051)
@@ -808,3 +831,121 @@ extension RuntimeContext {
         return context
     }
 }
+
+// MARK: - Single-Driver Exclusivity Enforcement (issue #323)
+
+extension RuntimeContext {
+    /// Run a mutating critical section under the single-driver check.
+    ///
+    /// In `#if DEBUG` this arms `ExclusivityChecker` for the duration of
+    /// `body`, trapping if a *different* flow of control is already mutating
+    /// this same instance. In release it inlines straight through to `body`
+    /// with zero overhead — no lock, no branch beyond the call itself.
+    ///
+    /// Same-thread reentrancy is allowed on purpose: `bind` → `bindTyped`,
+    /// and any other nested mutation on one synchronous call chain, run on a
+    /// single OS thread with no `await` between them, so the checker treats
+    /// re-entry from the owning thread as legitimate. Only a *concurrent*
+    /// entry from another thread — the actual data race the contract forbids
+    /// — trips the assertion.
+    @inline(__always)
+    fileprivate nonisolated func withExclusiveMutation<T>(_ body: () throws -> T) rethrows -> T {
+        #if DEBUG
+        exclusivity.enter(featureSetName: featureSetName, executionId: executionId)
+        defer { exclusivity.leave() }
+        return try body()
+        #else
+        return try body()
+        #endif
+    }
+}
+
+#if DEBUG
+/// DEBUG-only detector for concurrent mutation of a single `RuntimeContext`
+/// (issue #323). Not a lock: it does not serialize anything and it does not
+/// make unsafe code safe. It exists purely to convert a violation of the
+/// single-driver invariant — two flows of control mutating the *same*
+/// instance at overlapping times — from silent undefined behavior into an
+/// immediate, loud `assertionFailure` during test runs.
+///
+/// ## Design: concurrency detection, not identity pinning
+///
+/// The obvious implementation ("record the driving thread on first mutation,
+/// trap on any other thread") is *wrong* for this runtime and would fire
+/// constantly. A single feature set's execution legitimately hops OS threads:
+/// action work runs on `ActionTaskExecutor` (GCD pool) and every `await`
+/// resumes on an arbitrary cooperative-pool thread, so serial mutations of
+/// one context routinely happen on different threads over time. Pinning to
+/// one thread identity would misread those legitimate hops as violations.
+///
+/// Instead the checker detects *temporal overlap*. Under a small lock it
+/// records whether a mutation section is currently open and which OS thread
+/// opened it. `enter()`:
+///   - If no section is open: record this thread as owner, open the section.
+///   - If a section is open and owned by *this* thread: it's reentrancy
+///     (e.g. `bind` → `bindTyped`) — bump a depth counter, allow it.
+///   - If a section is open owned by a *different* thread: two flows are
+///     mutating concurrently — `assertionFailure`.
+///
+/// Because `withExclusiveMutation`'s critical section is fully synchronous
+/// (no `await` inside it), the owning thread is stable for the whole
+/// section, so cross-thread overlap can only mean a genuine concurrent
+/// driver — never a legitimate cooperative-pool thread hop.
+final class ExclusivityChecker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var owner: pthread_t?
+    private var depth: Int = 0
+
+    init() {}
+
+    func enter(featureSetName: String, executionId: String) {
+        let me = pthread_self()
+        lock.lock()
+        defer { lock.unlock() }
+        if depth == 0 {
+            owner = me
+            depth = 1
+            return
+        }
+        // A section is already open on this instance.
+        if let current = owner, pthread_equal(current, me) != 0 {
+            // Same-thread reentrancy (bind -> bindTyped, nested mutators).
+            depth += 1
+            return
+        }
+        // A different thread is mid-mutation on this same instance: the
+        // single-driver invariant (see RuntimeContext type doc) is broken.
+        assertionFailure("""
+            RuntimeContext single-driver invariant violated (issue #323).
+            Two flows of control are mutating the SAME RuntimeContext \
+            instance concurrently.
+            Feature set: \(featureSetName)
+            Execution id: \(executionId)
+
+            A RuntimeContext instance must be mutated by exactly one flow of \
+            control at a time. Concurrent regions (parallel for-each, \
+            template rendering) must operate on their OWN child context via \
+            createChild(...) / createTemplateContext(), mutating only that \
+            child and reading the parent read-only. Mutating a shared \
+            instance from two tasks is undefined behavior on the underlying \
+            Swift Dictionary / Set / String storage.
+            """)
+    }
+
+    func leave() {
+        let me = pthread_self()
+        lock.lock()
+        defer { lock.unlock() }
+        // Only the owning thread's nesting decrements the depth; a
+        // foreign leave (following a mis-asserted foreign enter) is ignored
+        // so the owner's bookkeeping stays intact.
+        if let current = owner, pthread_equal(current, me) != 0 {
+            depth -= 1
+            if depth <= 0 {
+                depth = 0
+                owner = nil
+            }
+        }
+    }
+}
+#endif
