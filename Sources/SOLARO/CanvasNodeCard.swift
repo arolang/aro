@@ -10,6 +10,14 @@
 
 import SwiftUI
 
+/// Which half of a statement card is armed as the reorder drop
+/// target while another card from the same feature set hovers over
+/// it (#376). `.above` inserts the dragged statement before this
+/// card's statement, `.below` after.
+enum ReorderDropHalf {
+    case above, below
+}
+
 struct CanvasNodeCard: View {
     let node: CanvasNode
     let width: CGFloat
@@ -26,6 +34,11 @@ struct CanvasNodeCard: View {
     /// or nil if the statement ran cleanly. Drives the red border
     /// + tooltip + error icon.
     let errorMessage: String?
+    /// Non-nil while a same-feature-set sibling card is dragged
+    /// over this card (#376). The named half brightens and shows
+    /// an accent insertion edge so the user sees which side will
+    /// catch the drop.
+    let reorderDropHalf: ReorderDropHalf?
 
     @State private var hovering = false
     @State private var showPopover = false
@@ -166,6 +179,33 @@ struct CanvasNodeCard: View {
                     lineWidth: (errorMessage != nil || isPaused || isSelected) ? 2 : 1
                 )
         )
+        // Reorder drop zones (#376) — the hovered half brightens
+        // and a 2 pt accent line marks the insertion edge (top for
+        // "before", bottom for "after"). Swaps sides as the cursor
+        // crosses the card's midline. Hit-testing stays off so the
+        // overlay never eats the drag events it visualizes.
+        .overlay {
+            if let half = reorderDropHalf {
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .fill(half == .above
+                              ? SolaroColor.accent.opacity(0.20)
+                              : Color.clear)
+                    Rectangle()
+                        .fill(half == .below
+                              ? SolaroColor.accent.opacity(0.20)
+                              : Color.clear)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m,
+                                            style: .continuous))
+                .overlay(alignment: half == .above ? .top : .bottom) {
+                    Rectangle()
+                        .fill(SolaroColor.accent)
+                        .frame(height: 2)
+                }
+                .allowsHitTesting(false)
+            }
+        }
         .shadow(
             color: Color.black.opacity(
                 isPaused ? 0.55 :
