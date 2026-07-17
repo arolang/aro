@@ -135,7 +135,8 @@ enum SolaroColor {
             }
         }
         switch verb.lowercased() {
-        case "extract", "parse", "retrieve", "fetch", "pull", "clone", "request":
+        case "extract", "parse", "retrieve", "fetch", "pull", "clone", "request",
+             "probe":
             return roleRequest
         case "compute", "validate", "compare", "create", "transform", "stage",
              "checkout", "accept", "group", "match", "filter", "sort", "merge",

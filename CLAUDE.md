@@ -210,7 +210,7 @@ Do not use it for production code, it is terribly insecure.
 ### Action Semantic Roles
 
 Actions are classified by data flow direction:
-- **REQUEST** (Extract, Parse, Retrieve, Fetch, Pull, Clone): External → Internal
+- **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
 - **RESPONSE** (Return, Throw): Internal → External
 - **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data

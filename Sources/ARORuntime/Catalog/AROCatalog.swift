@@ -336,6 +336,7 @@ public enum AROCatalogDescriptions {
         "accept": "Accept input or accept a state transition",
         "read": "Read content from a file",
         "request": "Make an HTTP request (GET, POST, PUT, DELETE)",
+        "probe": "Check whether a target is reachable — never halts on DNS/connect failure",
         "list": "List directory contents",
         "stat": "Get file metadata (size, dates, permissions)",
         "exists": "Check if a path exists",

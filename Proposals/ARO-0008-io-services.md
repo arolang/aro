@@ -525,6 +525,66 @@ Extract the <users> from the <response>.
 }
 ```
 
+### 3.7 Reachability Probes
+
+`<Request>` has two very different failure modes: a reachable target
+that answers with any HTTP status populates the response (happy
+path), while an unreachable target (DNS failure, connection refused,
+TLS error, timeout) halts the program per the error philosophy
+(ARO-0006). That is correct for code that depends on the target —
+but it makes "check whether this target is reachable at all" (uptime
+monitors, health-checks before fail-over) impossible to express
+without losing happy-path semantics elsewhere.
+
+The `<Probe>` action carries that intent in the verb: its stated job
+is to check reachability, so the unreachable answer IS the success
+answer. `Probe` never throws on connect failure.
+
+```aro
+Probe the <reachability> from <target>.
+Extract the <reachable> from the <reachability: reachable>.
+Extract the <status> from the <reachability: status>.   (* absent if unreachable *)
+Extract the <latency> from the <reachability: latency>. (* absent if unreachable *)
+```
+
+**Result Envelope:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `target` | String | The probed URL |
+| `reachable` | Boolean | `true` if the target answered — any HTTP status counts |
+| `status` | Number | HTTP status code; absent when unreachable |
+| `latency` | Number | Round-trip time in milliseconds; absent when unreachable |
+| `reason` | String | Failure description; absent when reachable |
+
+**Timeout:** probes default to an aggressive 2-second timeout — the
+use cases are health-checks and monitors, not data fetches. Override
+via the config object:
+
+```aro
+Probe the <reachability> from <target> with { timeout: 5 }.
+```
+
+A malformed URL (no `http://` / `https://` prefix) still halts —
+that is a programming error, not an unreachable target.
+
+**Division of labour:**
+
+- `Request` means "I depend on this target — halt if it's gone."
+- `Probe` means "reachability is the question — never halt."
+
+A reviewer scanning for code that doesn't halt on an unreachable
+host greps for `Probe` and is done.
+
+```aro
+(Check Upstream: Health Monitor) {
+    Probe the <reachability> from "https://api.example.com/health".
+    Extract the <reachable> from the <reachability: reachable>.
+    When <reachable> is false: Emit an <UpstreamDown: event> with <reachability>.
+    Return an <OK: status> with <reachability>.
+}
+```
+
 ---
 
 ## 4. File System
