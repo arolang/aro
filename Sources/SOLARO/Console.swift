@@ -111,6 +111,12 @@ final class ConsoleProcess {
     /// process; runs reset it via `connect()` or
     /// `publishSynthetic()`.
     let metricsClient = MetricsClient()
+    /// Per-run metrics buckets + ◂ ▸ navigation state (#375).
+    /// Owned here — not by the panel — so history survives the
+    /// inspector being collapsed/reopened, and so every run path
+    /// (embedded, XPC, subprocess) can signal "run started" the
+    /// moment it begins.
+    let metricsRunHistory = MetricsRunHistory()
     /// Synthetic snapshot produced by the embedded runtime path.
     /// Held directly on ConsoleProcess (an `@Observable` class) so
     /// SwiftUI re-renders MetricsPanel deterministically on every
@@ -305,6 +311,7 @@ final class ConsoleProcess {
         )
         embeddedMetricsSnapshot = nil
         metricsClient.resetIdle()
+        metricsRunHistory.beginRun()
         embeddedMetricsTimer?.invalidate()
         embeddedMetricsTimer = Timer.scheduledTimer(
             withTimeInterval: 1.0, repeats: true
@@ -388,6 +395,7 @@ final class ConsoleProcess {
         )
         embeddedMetricsSnapshot = nil
         metricsClient.resetIdle()
+        metricsRunHistory.beginRun()
         embeddedMetricsTimer?.invalidate()
         embeddedMetricsTimer = Timer.scheduledTimer(
             withTimeInterval: 1.0, repeats: true
@@ -446,6 +454,11 @@ final class ConsoleProcess {
         lastProject = project
         breakpointLines = Set(breakpointsByFile.values.flatMap { $0 })
         didAutoContinueFirstPause = false
+        // A stale embedded snapshot from a previous in-process run
+        // would otherwise shadow the subprocess socket stream in
+        // the metrics panel (it's preferred when non-nil).
+        embeddedMetricsSnapshot = nil
+        metricsRunHistory.beginRun()
 
         let lines = breakpointsByFile.values.flatMap { $0 }.sorted()
         let useDebugger: Bool
