@@ -146,35 +146,103 @@ public struct DataFlowAnalyzer {
         inMutableScope: Bool = false
     ) -> (DataFlowInfo, Set<String>) {
 
-        if let aro = statement as? AROStatement {
-            return analyzeAROStatement(aro, builder: builder, definedSymbols: &definedSymbols, inMutableScope: inMutableScope)
+        // #338: dispatch on the concrete node type via the visitor instead of
+        // an `as?` cast chain. The visitor threads the same mutable analysis
+        // state (`builder`, `definedSymbols`, `inMutableScope`) that the old
+        // chain passed by hand, then writes any newly-defined symbols back
+        // into the caller's `inout` set — reproducing the `inout` semantics of
+        // the previous helper calls exactly.
+        let visitor = StatementDataFlowVisitor(
+            analyzer: self,
+            builder: builder,
+            definedSymbols: definedSymbols,
+            inMutableScope: inMutableScope
+        )
+        let result = statement.accept(visitor)
+        definedSymbols = visitor.definedSymbols
+        return result
+    }
+
+    // MARK: - Statement Data-Flow Visitor (#338)
+
+    /// Dispatches each `Statement` node to the analyzer's per-node routine.
+    ///
+    /// Holds the mutable analysis state as instance properties because
+    /// `StatementVisitor.visit` takes no extra parameters. `definedSymbols`
+    /// starts as a copy of the caller's set; nodes that define symbols mutate
+    /// it in place (matching the old `inout` calls), and `analyzeStatement`
+    /// copies it back out afterwards.
+    ///
+    /// Every `Statement` node has an explicit `visit`. `RangeLoop`,
+    /// `PipelineStatement` and `ErrorStatement` — which the old `as?`-chain
+    /// never matched and so fell through to its trailing `return
+    /// (DataFlowInfo(), [])` — return that same empty result here, preserving
+    /// the fallback semantics precisely. `BreakStatement` did the same in the
+    /// old chain and continues to.
+    private final class StatementDataFlowVisitor: StatementVisitor {
+        typealias Result = (DataFlowInfo, Set<String>)
+
+        let analyzer: DataFlowAnalyzer
+        let builder: SymbolTableBuilder
+        var definedSymbols: Set<String>
+        let inMutableScope: Bool
+
+        init(
+            analyzer: DataFlowAnalyzer,
+            builder: SymbolTableBuilder,
+            definedSymbols: Set<String>,
+            inMutableScope: Bool
+        ) {
+            self.analyzer = analyzer
+            self.builder = builder
+            self.definedSymbols = definedSymbols
+            self.inMutableScope = inMutableScope
         }
 
-        if let publish = statement as? PublishStatement {
-            return analyzePublishStatement(publish, builder: builder, definedSymbols: definedSymbols)
+        func visit(_ node: AROStatement) -> Result {
+            analyzer.analyzeAROStatement(
+                node, builder: builder,
+                definedSymbols: &definedSymbols, inMutableScope: inMutableScope
+            )
         }
 
-        if let require = statement as? RequireStatement {
-            return analyzeRequireStatement(require, builder: builder)
+        func visit(_ node: PublishStatement) -> Result {
+            analyzer.analyzePublishStatement(
+                node, builder: builder, definedSymbols: definedSymbols
+            )
         }
 
-        if let match = statement as? MatchStatement {
-            return analyzeMatchStatement(match, builder: builder, definedSymbols: &definedSymbols)
+        func visit(_ node: RequireStatement) -> Result {
+            analyzer.analyzeRequireStatement(node, builder: builder)
         }
 
-        if let forEach = statement as? ForEachLoop {
-            return analyzeForEachLoop(forEach, builder: builder, definedSymbols: &definedSymbols)
+        func visit(_ node: MatchStatement) -> Result {
+            analyzer.analyzeMatchStatement(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
         }
 
-        if let whileLoop = statement as? WhileLoop {
-            return analyzeWhileLoop(whileLoop, builder: builder, definedSymbols: &definedSymbols)
+        func visit(_ node: ForEachLoop) -> Result {
+            analyzer.analyzeForEachLoop(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
         }
 
-        if statement is BreakStatement {
-            return (DataFlowInfo(), [])
+        func visit(_ node: WhileLoop) -> Result {
+            analyzer.analyzeWhileLoop(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
         }
 
-        return (DataFlowInfo(), [])
+        func visit(_ node: BreakStatement) -> Result {
+            (DataFlowInfo(), [])
+        }
+
+        // Fallback nodes — the old `as?`-chain matched none of these and so
+        // returned the empty default. Keep that behaviour explicit.
+        func visit(_ node: RangeLoop) -> Result { (DataFlowInfo(), []) }
+        func visit(_ node: PipelineStatement) -> Result { (DataFlowInfo(), []) }
+        func visit(_ node: ErrorStatement) -> Result { (DataFlowInfo(), []) }
     }
 
     // MARK: - ARO Statement
@@ -774,58 +842,78 @@ public struct DataFlowAnalyzer {
 
     /// Extracts variable names referenced in an expression
     private func extractVariables(from expression: any Expression) -> Set<String> {
-        var variables: Set<String> = []
-        collectVariables(expression, into: &variables)
-        return variables
+        // #338: dispatch on the concrete node type via `ExpressionVisitor`
+        // instead of an `as?` cast chain. `VariableCollector` reproduces the
+        // old switch exactly — including that `ExistenceExpression` and
+        // `TypeCheckExpression` recurse into their inner expression, and that
+        // any node without a variable contribution yields the empty set (the
+        // old `default: break`).
+        expression.accept(VariableCollector())
     }
 
-    private func collectVariables(_ expr: any Expression, into variables: inout Set<String>) {
-        switch expr {
-        case let varRef as VariableRefExpression:
-            variables.insert(varRef.noun.base)
+    /// Collects the variable base-names referenced anywhere in an expression
+    /// tree. Behaviour matches the previous `collectVariables` switch 1:1.
+    private struct VariableCollector: ExpressionVisitor {
+        typealias Result = Set<String>
 
-        case let binary as BinaryExpression:
-            collectVariables(binary.left, into: &variables)
-            collectVariables(binary.right, into: &variables)
+        func visit(_ node: LiteralExpression) -> Set<String> { [] }
 
-        case let unary as UnaryExpression:
-            collectVariables(unary.operand, into: &variables)
+        func visit(_ node: VariableRefExpression) -> Set<String> {
+            [node.noun.base]
+        }
 
-        case let member as MemberAccessExpression:
-            collectVariables(member.base, into: &variables)
+        func visit(_ node: BinaryExpression) -> Set<String> {
+            node.left.accept(self).union(node.right.accept(self))
+        }
 
-        case let subscript_ as SubscriptExpression:
-            collectVariables(subscript_.base, into: &variables)
-            collectVariables(subscript_.index, into: &variables)
+        func visit(_ node: UnaryExpression) -> Set<String> {
+            node.operand.accept(self)
+        }
 
-        case let grouped as GroupedExpression:
-            collectVariables(grouped.expression, into: &variables)
+        func visit(_ node: MemberAccessExpression) -> Set<String> {
+            node.base.accept(self)
+        }
 
-        case let existence as ExistenceExpression:
-            collectVariables(existence.expression, into: &variables)
+        func visit(_ node: SubscriptExpression) -> Set<String> {
+            node.base.accept(self).union(node.index.accept(self))
+        }
 
-        case let typeCheck as TypeCheckExpression:
-            collectVariables(typeCheck.expression, into: &variables)
+        func visit(_ node: GroupedExpression) -> Set<String> {
+            node.expression.accept(self)
+        }
 
-        case let array as ArrayLiteralExpression:
-            for element in array.elements {
-                collectVariables(element, into: &variables)
+        func visit(_ node: ExistenceExpression) -> Set<String> {
+            node.expression.accept(self)
+        }
+
+        func visit(_ node: TypeCheckExpression) -> Set<String> {
+            node.expression.accept(self)
+        }
+
+        func visit(_ node: ArrayLiteralExpression) -> Set<String> {
+            var vars: Set<String> = []
+            for element in node.elements {
+                vars.formUnion(element.accept(self))
             }
+            return vars
+        }
 
-        case let map as MapLiteralExpression:
-            for entry in map.entries {
-                collectVariables(entry.value, into: &variables)
+        func visit(_ node: MapLiteralExpression) -> Set<String> {
+            var vars: Set<String> = []
+            for entry in node.entries {
+                vars.formUnion(entry.value.accept(self))
             }
+            return vars
+        }
 
-        case let interp as InterpolatedStringExpression:
-            for part in interp.parts {
+        func visit(_ node: InterpolatedStringExpression) -> Set<String> {
+            var vars: Set<String> = []
+            for part in node.parts {
                 if case .interpolation(let expr) = part {
-                    collectVariables(expr, into: &variables)
+                    vars.formUnion(expr.accept(self))
                 }
             }
-
-        default:
-            break
+            return vars
         }
     }
 
