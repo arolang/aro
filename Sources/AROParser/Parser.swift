@@ -272,7 +272,7 @@ public final class Parser {
         // Check for break statement (exits innermost while loop)
         if check(.break) {
             let tok = try expect(.break, message: "'break'")
-            try expect(.dot, message: "'.'")
+            try expectStatementTerminator()
             return BreakStatement(span: tok.span)
         }
 
@@ -296,7 +296,7 @@ public final class Parser {
         }
 
         // Not a pipeline, expect the terminating dot
-        _ = try expect(.dot, message: "'.'")
+        try expectStatementTerminator()
 
         return statement
     }
@@ -318,7 +318,7 @@ public final class Parser {
         }
 
         // Expect dot after all pipeline stages
-        let endToken = try expect(.dot, message: "'.'")
+        let endToken = try expectStatementTerminator()
 
         return PipelineStatement(
             stages: stages,
@@ -352,7 +352,7 @@ public final class Parser {
         // 6. Terminating dot
         let endToken: Token
         if expectDot {
-            endToken = try expect(.dot, message: "'.'")
+            endToken = try expectStatementTerminator()
         } else {
             endToken = previous()
         }
@@ -989,7 +989,7 @@ public final class Parser {
         let internalVariable = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
         
-        let endToken = try expect(.dot, message: "'.'")
+        let endToken = try expectStatementTerminator()
         
         return PublishStatement(
             externalName: externalName,
@@ -1023,7 +1023,7 @@ public final class Parser {
         let sourceName = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
 
-        let endToken = try expect(.dot, message: "'.'")
+        let endToken = try expectStatementTerminator()
 
         // Determine source type
         let source: RequireSource
@@ -1629,13 +1629,32 @@ public final class Parser {
     }
     
     // MARK: - Expectations
-    
+
     @discardableResult
     private func expect(_ kind: TokenKind, message: String) throws -> Token {
         if check(kind) {
             return advance()
         }
         throw ParserError.unexpectedToken(expected: message, got: peek())
+    }
+
+    /// Consumes the statement-terminating dot, tolerating a run of
+    /// extra dots (`..`, `...`) — typically a double-tapped `.`
+    /// keystroke (#372). The intent is unambiguous (one terminator,
+    /// stray keys), so no diagnostic surfaces; the SOLARO
+    /// reformatter normalises the source on the next Reformat Code
+    /// (`AROFormatter.collapseTrailingDots`). Returns the last dot
+    /// token, so callers that fold the terminator into their span
+    /// (Publish, Require, pipelines) absorb the whole run. Nothing
+    /// else in the grammar begins a statement with `.`, so the
+    /// greedy consume can't swallow a meaningful token.
+    @discardableResult
+    private func expectStatementTerminator() throws -> Token {
+        var endToken = try expect(.dot, message: "'.'")
+        while check(.dot) {
+            endToken = advance()
+        }
+        return endToken
     }
     
     private func expectIdentifier(message: String) throws -> Token {
