@@ -63,13 +63,25 @@ public final class AROLanguageServer: Sendable {
 
     public init(debug: Bool = false) {
         self.debugMode = debug
-        self.documentManager = DocumentManager()
+        // The document manager debounces didChange recompiles (#352):
+        // it updates stored text immediately but defers the compile,
+        // then calls this closure once the debounced compile lands so
+        // we can publish fresh diagnostics. `open` still compiles
+        // synchronously and is published inline (see handleDidOpen).
+        let diagnostics = DiagnosticsHandler()
+        self.diagnosticsHandler = diagnostics
+        self.documentManager = DocumentManager { state in
+            AROLanguageServer.publishDiagnostics(
+                for: state.uri,
+                state: state,
+                diagnosticsHandler: diagnostics
+            )
+        }
         self.hoverHandler = HoverHandler()
         self.definitionHandler = DefinitionHandler()
         self.completionHandler = CompletionHandler()
         self.referencesHandler = ReferencesHandler()
         self.documentSymbolHandler = DocumentSymbolHandler()
-        self.diagnosticsHandler = DiagnosticsHandler()
         self.renameHandler = RenameHandler()
         self.workspaceSymbolHandler = WorkspaceSymbolHandler()
         self.formattingHandler = FormattingHandler()
@@ -1026,9 +1038,13 @@ public final class AROLanguageServer: Sendable {
             }
         }
 
-        if let state = documentManager.applyChanges(uri: uri, changes: changes, version: version) {
-            publishDiagnostics(for: uri, state: state)
-        }
+        // #352: applyChanges updates the stored text immediately but
+        // *debounces* the compile. Fresh diagnostics are published by
+        // the DocumentManager's onCompile callback once the debounced
+        // compile lands — publishing the returned interim state here
+        // would just re-emit the previous (stale) diagnostics on every
+        // keystroke, so we intentionally don't.
+        _ = documentManager.applyChanges(uri: uri, changes: changes, version: version)
     }
 
     private func handleDidClose(params: Any?) async {
@@ -1359,6 +1375,27 @@ public final class AROLanguageServer: Sendable {
     // MARK: - Diagnostics Publishing
 
     private func publishDiagnostics(for uri: String, state: DocumentManager.DocumentState) {
+        AROLanguageServer.publishDiagnostics(
+            for: uri,
+            state: state,
+            diagnosticsHandler: diagnosticsHandler
+        )
+    }
+
+    private func publishDiagnostics(for uri: String, diagnostics: [[String: Any]]) {
+        AROLanguageServer.publishDiagnostics(for: uri, diagnostics: diagnostics)
+    }
+
+    /// Convert a document's compilation result to LSP diagnostics and
+    /// publish them. Declared `static` so the debounced-compile
+    /// callback (#352) can publish without capturing `self`, since the
+    /// closure is installed on `DocumentManager` during `init` before
+    /// `self` is fully formed.
+    private static func publishDiagnostics(
+        for uri: String,
+        state: DocumentManager.DocumentState,
+        diagnosticsHandler: DiagnosticsHandler
+    ) {
         guard let result = state.compilationResult else {
             publishDiagnostics(for: uri, diagnostics: [])
             return
@@ -1368,7 +1405,7 @@ public final class AROLanguageServer: Sendable {
         publishDiagnostics(for: uri, diagnostics: lspDiagnostics)
     }
 
-    private func publishDiagnostics(for uri: String, diagnostics: [[String: Any]]) {
+    private static func publishDiagnostics(for uri: String, diagnostics: [[String: Any]]) {
         let notification: [String: Any] = [
             "jsonrpc": "2.0",
             "method": "textDocument/publishDiagnostics",
@@ -1379,7 +1416,12 @@ public final class AROLanguageServer: Sendable {
         ]
 
         if let data = try? JSONSerialization.data(withJSONObject: notification) {
-            try? sendMessage(data, to: FileHandle.standardOutput)
+            let header = "Content-Length: \(data.count)\r\n\r\n"
+            if let headerData = header.data(using: .utf8) {
+                let output = FileHandle.standardOutput
+                output.write(headerData)
+                output.write(data)
+            }
         }
     }
 
