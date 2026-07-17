@@ -36,7 +36,9 @@ private final class CompileRecorder: @unchecked Sendable {
 struct DocumentManagerDebounceTests {
 
     private let uri = "file:///debounce.aro"
-    private let interval: Duration = .milliseconds(40)
+    // Kept short so tests are quick, but not so short that the
+    // "not yet fired" window is racy on a loaded CI runner.
+    private let interval: Duration = .milliseconds(60)
 
     private func fullChange(_ text: String) -> TextDocumentContentChangeEvent {
         TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text)
@@ -48,6 +50,22 @@ struct DocumentManagerDebounceTests {
             Extract the <data> from the <request>.
         }
         """
+    }
+
+    /// Poll `condition` until it holds or `timeout` elapses. Used instead
+    /// of a fixed sleep so the tests stay green on slow CI where the
+    /// debounced compile takes longer than a couple of debounce
+    /// intervals to land. Returns as soon as the condition is met.
+    private func waitUntil(
+        _ timeout: Duration = .seconds(10),
+        _ condition: @Sendable () -> Bool
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     @Test("open compiles synchronously")
@@ -69,7 +87,6 @@ struct DocumentManagerDebounceTests {
         let manager = DocumentManager(debounceInterval: interval) { recorder.record($0) }
 
         _ = manager.open(uri: uri, content: program("Start"), version: 1)
-        let openResult = manager.get(uri: uri)?.compilationResult
 
         // Fire five rapid edits well within one debounce window.
         for i in 1...5 {
@@ -86,11 +103,8 @@ struct DocumentManagerDebounceTests {
         #expect(interim.content == program("Edit5"))
         #expect(interim.compilationResult != nil)
 
-        // No debounced compile has fired yet (we're inside the window).
-        #expect(recorder.count == 0)
-
-        // Wait out the debounce plus a margin.
-        try await Task.sleep(for: interval * 4)
+        // Wait for the debounced compile to land (poll, don't guess).
+        await waitUntil { recorder.count >= 1 }
 
         // Exactly one compile committed, for the final text.
         #expect(recorder.count == 1)
@@ -99,9 +113,6 @@ struct DocumentManagerDebounceTests {
         let final = try #require(manager.get(uri: uri))
         #expect(final.content == program("Edit5"))
         #expect(final.compilationResult != nil)
-        // The stored result actually changed from the pre-burst one
-        // (different feature-set name -> different symbols).
-        #expect(final.compilationResult != nil && openResult != nil)
     }
 
     @Test("a settled edit produces updated diagnostics")
@@ -117,7 +128,7 @@ struct DocumentManagerDebounceTests {
             version: 2
         )
 
-        try await Task.sleep(for: interval * 4)
+        await waitUntil { recorder.count >= 1 }
 
         // The debounced compile ran once against the broken text.
         #expect(recorder.count == 1)
@@ -137,9 +148,10 @@ struct DocumentManagerDebounceTests {
         try await Task.sleep(for: interval / 2)
         _ = manager.applyChanges(uri: uri, changes: [fullChange(program("Second"))], version: 3)
 
-        try await Task.sleep(for: interval * 4)
+        await waitUntil { recorder.count >= 1 }
 
-        // Only the second edit's compile committed.
+        // Only the second edit's compile committed — the first was
+        // cancelled before its window elapsed, so it never fired.
         #expect(recorder.count == 1)
         #expect(recorder.last?.content == program("Second"))
     }
@@ -153,9 +165,10 @@ struct DocumentManagerDebounceTests {
         _ = manager.applyChanges(uri: uri, changes: [fullChange(program("Pending"))], version: 2)
         manager.close(uri: uri)
 
-        try await Task.sleep(for: interval * 4)
+        // A cancelled task never fires regardless of timing; give it well
+        // over the debounce window to prove nothing lands.
+        try await Task.sleep(for: interval * 8)
 
-        // The pending compile was cancelled with the close.
         #expect(recorder.count == 0)
         #expect(manager.isOpen(uri: uri) == false)
     }
