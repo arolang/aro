@@ -115,13 +115,18 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin info
     private var pluginInfo: NativePluginInfo?
 
-    /// Registered actions
-    private var actions: [String: NativeActionDescriptor] = [:]
-    /// Action name → declared verbs (from `aro_plugin_info`).
-    /// Used by `execute` to pick the right Rust function name
-    /// when the SDK's dispatch table doesn't recognise a verb —
-    /// see the snake_case fallback below.
-    private var actionVerbs: [String: [String]] = [:]
+    /// Shared action/verb/metadata/qualifier storage (#324).
+    ///
+    /// Replaces the former bespoke `actions` (descriptor dict), `actionVerbs`
+    /// (name→verbs dict), and `qualifierRegistrations` (array). Populated via
+    /// `registry.registerAction` (Native keeps a name→verbs map). The `execute`
+    /// snake_case fallback reads `registry.verbsByName`.
+    private var registry = PluginActionRegistry()
+
+    /// Descriptors carry the plugin schema (input/output) alongside the metadata
+    /// the registry tracks. Keyed by canonical action name, one per
+    /// `registry.actionNames` entry.
+    private var actionDescriptors: [String: NativeActionDescriptor] = [:]
 
     // MARK: - Function Types (using raw pointers for C ABI compatibility)
 
@@ -157,8 +162,15 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Invoke callback: set by the runtime so plugins can call ARO feature sets
     private nonisolated(unsafe) static var invokeCallback: ((_ featureSet: String, _ inputJSON: String) -> String)?
 
-    /// Qualifier registrations from this plugin
-    public var qualifierRegistrations: [QualifierRegistration] = []
+    /// Qualifier registrations from this plugin.
+    ///
+    /// Required by `PluginHostProtocol`; backed by the shared registry so the
+    /// default `registerQualifiers`/`unloadFromRegistries` implementations
+    /// mutate the same storage as the rest of the action metadata.
+    public var qualifierRegistrations: [QualifierRegistration] {
+        get { registry.qualifierRegistrations }
+        set { registry.qualifierRegistrations = newValue }
+    }
 
     /// Reused encoder/decoder — safe because NativePluginHost is @unchecked Sendable
     /// and qualifier calls are serialised through the plugin host.
@@ -992,17 +1004,22 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
                     since: $0.since
                 )
             }
-            actions[actionName] = NativeActionDescriptor(
+            actionDescriptors[actionName] = NativeActionDescriptor(
                 name: actionName,
                 inputSchema: nil,
                 outputSchema: nil,
                 metadata: meta
             )
-            // Keep the verb list so `execute` can pick the right
-            // Rust function name when the SDK dispatch goes via
-            // function names instead of declared verbs.
-            actionVerbs[actionName] = verbsMap[actionName]
-                ?? [actionName.lowercased()]
+            // Register with the shared registry (#324). Keep the verb list so
+            // `execute` can pick the right Rust function name when the SDK
+            // dispatch goes via function names instead of declared verbs — the
+            // historical fallback is the lowercased action name, not the name.
+            let verbsForAction = verbsMap[actionName] ?? [actionName.lowercased()]
+            registry.registerAction(
+                name: actionName,
+                verbs: verbsForAction,
+                metadata: meta
+            )
         }
 
         // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
@@ -1120,7 +1137,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     private func snakeCaseCandidates(for verb: String) -> [String] {
         var out: [String] = []
         let lowered = verb.lowercased()
-        for (name, verbs) in actionVerbs {
+        for (name, verbs) in registry.verbsByName {
             if name.lowercased() == lowered
                 || verbs.contains(where: { $0.lowercased() == lowered }) {
                 out.append(toSnakeCase(name))
@@ -1173,8 +1190,12 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
         )] = []
 
-        for (name, descriptor) in actions {
-            // Get verbs for this action (or use the action name itself as a fallback)
+        for (name, descriptor) in actionDescriptors {
+            // Get verbs for this action (or use the action name itself as a fallback).
+            // NOTE: `registerActions` deliberately falls back to `[name]` (not the
+            // lowercased name that `registry.verbsByName` stores for the execute
+            // dispatch fallback), so read the manifest verbsMap directly here to
+            // preserve the exact registered-verb set.
             let verbs: [String]
             if let mappedVerbs = pluginInfo?.verbsMap[name], !mappedVerbs.isEmpty {
                 verbs = mappedVerbs
@@ -1245,7 +1266,8 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         objectListFunc = nil
         eventSubscriptions.removeAll()
         systemObjects.removeAll()
-        actions.removeAll()
+        actionDescriptors.removeAll()
+        registry.removeAll()
     }
 
     // MARK: - Event Delivery (ARO-0073)
