@@ -12,6 +12,7 @@ public enum RequestActionsModule: ActionModule {
             RetrieveAction.self,
             ReceiveAction.self,
             RequestAction.self,
+            ProbeAction.self,
             ReadAction.self,
             StreamAction.self,
         ]

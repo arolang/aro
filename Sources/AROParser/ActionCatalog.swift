@@ -32,7 +32,7 @@ public enum ActionCatalog {
     public static let allActionVerbs: [String] = [
         // Request actions
         "extract", "fetch", "retrieve", "parse", "parsehtml", "read",
-        "request", "receive",
+        "request", "probe", "receive",
         // Own actions
         "compute", "validate", "compare", "transform", "create", "update",
         "accept",

@@ -631,7 +631,7 @@ public final class FeatureSetExecutor: Sendable {
                 ]
                 let requestVerbs: Set<String> = [
                     "retrieve", "fetch", "load", "find", "extract", "parse", "get",
-                    "request", "receive", "read"
+                    "request", "probe", "receive", "read"
                 ]
                 // #316: lowercase once, not twice.
                 let lowerVerb = verb.lowercased()
