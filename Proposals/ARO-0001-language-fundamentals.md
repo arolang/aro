@@ -576,9 +576,27 @@ contains_check = expression , "contains" , expression ;
 matches_check  = expression , "matches" , pattern ;
 ```
 
+The `contains` operator (`<a> contains <b>`) dispatches on the runtime type of
+the **left-hand operand** `a`:
+
+| `a` (left)        | `b` (right) | Meaning                                        |
+|-------------------|-------------|------------------------------------------------|
+| list / collection | any         | element membership (`b` is an element of `a`)  |
+| string            | string      | substring match (`b` occurs inside `a`)        |
+| map / object      | string      | key membership (`a` has key `b`)               |
+| any other type    | any         | `false`                                        |
+
+This means `<clean-url> contains <base-domain>`, where both operands are
+strings, performs a **substring** test — the natural reading — while
+`<roles> contains "admin"` on a list still tests element membership. The
+comparison is chosen by the left operand's runtime type; the lexer and parser
+treat `contains` as a single operator regardless of operand types.
+
 **Examples:**
 ```
-<roles> contains "admin"
+<roles> contains "admin"              (* list membership  -> true if "admin" is an element of roles *)
+<clean-url> contains <base-domain>    (* substring match  -> true if base-domain occurs in clean-url *)
+<config> contains "timeout"           (* map key check    -> true if config has key "timeout"       *)
 <email> matches ".*@company\\.com"
 ```
 
