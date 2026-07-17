@@ -23,6 +23,13 @@ final class AROXPCRuntimeProxy {
     var onLog: ((String) -> Void)?
 
     private(set) var isRunning: Bool = false
+    /// PID of the spawned AROXPCService child, while one exists.
+    /// The metrics pipeline samples it via `proc_pidinfo` so the
+    /// Process card shows the service's own footprint instead of
+    /// nothing (the service has no push socket like external
+    /// `aro run` does). Stays set after termination — sampling a
+    /// dead PID just fails and the caller falls back.
+    var servicePID: Int32? { process?.processIdentifier }
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?

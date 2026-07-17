@@ -283,6 +283,14 @@ struct MetricsPanel: View {
             Text("Process")
                 .font(SolaroFont.bodyBold)
                 .foregroundStyle(SolaroColor.textPrimary)
+            if snap.kind == "embedded" {
+                // Embedded runs share SOLARO's process; the snapshot
+                // carries deltas against a pre-run baseline, not the
+                // absolute footprint of the IDE.
+                Text("Application only — measured since run start")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
             HStack(alignment: .top, spacing: SolaroSpace.m) {
                 metricCell(label: "CPU user",
                            value: formatSec(snap.process.cpuUserSec))

@@ -127,6 +127,15 @@ final class ConsoleProcess {
     /// run finishes inside a single SwiftUI frame.
     private struct EmbeddedAccumulator {
         var startedAt: Date
+        /// SOLARO's own footprint sampled just before the run starts.
+        /// Embedded runs share the IDE's address space, so absolute
+        /// mach/rusage numbers would include SOLARO itself — the
+        /// panel shows the delta against this baseline instead, i.e.
+        /// what the ARO application consumed. `nil` for XPC runs:
+        /// there the app lives in the AROXPCService child, whose
+        /// absolute footprint is sampled per-PID and is already
+        /// app-only.
+        var baseline: ProcessMetricsView?
         var perFS: [String: (count: Int, firstAt: Date, lastAt: Date)] = [:]
         var totalEvents: Int = 0
     }
@@ -256,6 +265,12 @@ final class ConsoleProcess {
         }
         proxy.onEnded = { [weak self] error in
             guard let self else { return }
+            // Final snapshot before tearing down — mirrors the
+            // embedded path; short-lived programs finish before
+            // the 1 s timer ever fires.
+            self.publishEmbeddedMetricsSnapshot()
+            self.embeddedMetricsTimer?.invalidate()
+            self.embeddedMetricsTimer = nil
             if let error {
                 let ns = error as NSError
                 self.appendError("[xpc] \(error.localizedDescription)")
@@ -281,6 +296,21 @@ final class ConsoleProcess {
         xpcProxy = proxy
         appendInfo("$ xpc-service \(project.rootPath.lastPathComponent)")
         state = .running(pid: -1)
+        // Same synthetic-metrics pipeline as the embedded path —
+        // the service has no push socket to connect to. No baseline:
+        // process usage is sampled from the service child's PID, so
+        // the numbers are already app-only.
+        embeddedAccumulator = EmbeddedAccumulator(
+            startedAt: Date(), baseline: nil
+        )
+        embeddedMetricsSnapshot = nil
+        metricsClient.resetIdle()
+        embeddedMetricsTimer?.invalidate()
+        embeddedMetricsTimer = Timer.scheduledTimer(
+            withTimeInterval: 1.0, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor in self?.publishEmbeddedMetricsSnapshot() }
+        }
         proxy.start(project: project)
     }
 
@@ -352,7 +382,10 @@ final class ConsoleProcess {
         // cadence + once at completion. Short-lived programs
         // (HelloWorld, ConstantFolding) finish before the cadence
         // ticks, so the completion publish is what they rely on.
-        embeddedAccumulator = EmbeddedAccumulator(startedAt: Date())
+        embeddedAccumulator = EmbeddedAccumulator(
+            startedAt: Date(),
+            baseline: Self.currentProcessMetrics()
+        )
         embeddedMetricsSnapshot = nil
         metricsClient.resetIdle()
         embeddedMetricsTimer?.invalidate()
@@ -695,10 +728,13 @@ final class ConsoleProcess {
     /// Quit the debugger session.
     func quit() { sendInput("q") }
 
-    /// Build a `MetricsSnapshot` from the embedded run's accumulator
-    /// (per-FS counts/timing) and the current process resource usage
-    /// (CPU + memory via mach), then hand it to the shared
-    /// `MetricsClient` for the panel to render.
+    /// Build a `MetricsSnapshot` from the current run's accumulator
+    /// (per-FS counts/timing) plus app-only process resource usage,
+    /// then hand it to the shared `MetricsClient` for the panel to
+    /// render. Serves both socket-less backends: embedded runs
+    /// report the delta against a pre-run baseline (SOLARO's own
+    /// footprint excluded), XPC runs sample the service child's PID
+    /// directly.
     fileprivate func publishEmbeddedMetricsSnapshot() {
         guard let acc = embeddedAccumulator else { return }
         let now = Date()
@@ -721,9 +757,40 @@ final class ConsoleProcess {
                 )
             }
             .sorted { $0.name < $1.name }
-        let process = Self.currentProcessMetrics()
+        let process: ProcessMetricsView
+        let kind: String
+        if let baseline = acc.baseline {
+            // Embedded run: the app shares SOLARO's address space,
+            // so absolute numbers would be IDE + app combined.
+            // Report the delta against the pre-run baseline instead.
+            // Clamped at 0 — memory SOLARO frees mid-run
+            // (autorelease pools, purged caches) can push the raw
+            // delta negative.
+            kind = "embedded"
+            let current = Self.currentProcessMetrics()
+            process = ProcessMetricsView(
+                cpuUserSec: max(0, current.cpuUserSec - baseline.cpuUserSec),
+                cpuSystemSec: max(0, current.cpuSystemSec - baseline.cpuSystemSec),
+                virtualMB: max(0, current.virtualMB - baseline.virtualMB),
+                residentMB: max(0, current.residentMB - baseline.residentMB),
+                openFDs: max(0, current.openFDs - baseline.openFDs)
+            )
+        } else {
+            // XPC run: sample the AROXPCService child by PID —
+            // absolute numbers are already app-only. If the service
+            // is gone (final publish after a fast exit can race its
+            // teardown), keep the last sampled values rather than
+            // flashing zeros.
+            kind = "xpc"
+            process = xpcProxy?.servicePID
+                .flatMap(Self.processMetrics(forPID:))
+                ?? embeddedMetricsSnapshot?.process
+                ?? ProcessMetricsView(cpuUserSec: 0, cpuSystemSec: 0,
+                                      virtualMB: 0, residentMB: 0,
+                                      openFDs: 0)
+        }
         let snap = MetricsSnapshot(
-            kind: "embedded",
+            kind: kind,
             collectedAt: ISO8601DateFormatter().string(from: now),
             uptimeSec: uptime,
             totalExecutions: acc.totalEvents,
@@ -734,6 +801,40 @@ final class ConsoleProcess {
         )
         metricsClient.publishSynthetic(snap)
         embeddedMetricsSnapshot = snap
+    }
+
+    /// Sample another process's CPU + memory by PID via
+    /// `proc_pidinfo(PROC_PIDTASKINFO)` — used for the XPC service
+    /// child, which has no push socket of its own. Returns nil when
+    /// the PID is gone (service exited); callers fall back to the
+    /// last good sample. CPU totals arrive in Mach absolute time
+    /// units and are converted through `mach_timebase_info`.
+    private static func processMetrics(forPID pid: Int32) -> ProcessMetricsView? {
+        var info = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.stride)
+        let got = withUnsafeMutablePointer(to: &info) {
+            proc_pidinfo(pid, PROC_PIDTASKINFO, 0, $0, size)
+        }
+        guard got == size else { return nil }
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        func seconds(_ machUnits: UInt64) -> Double {
+            Double(machUnits) * Double(timebase.numer)
+                / Double(timebase.denom) / 1_000_000_000
+        }
+        // FD count via the list-FDs buffer size probe; best-effort —
+        // a failed probe just reports 0.
+        let fdBytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        let fdCount = fdBytes > 0
+            ? Int(fdBytes) / MemoryLayout<proc_fdinfo>.stride
+            : 0
+        return ProcessMetricsView(
+            cpuUserSec: seconds(info.pti_total_user),
+            cpuSystemSec: seconds(info.pti_total_system),
+            virtualMB: Double(info.pti_virtual_size) / 1024 / 1024,
+            residentMB: Double(info.pti_resident_size) / 1024 / 1024,
+            openFDs: fdCount
+        )
     }
 
     /// Snapshot the host process's CPU + memory. Reads

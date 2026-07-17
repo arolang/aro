@@ -80,6 +80,11 @@ final class MetricsContentView: NSView {
     private static let okColumnWidth: CGFloat = 44
 
     // Process card
+    // Embedded runs share SOLARO's process; their snapshots carry
+    // deltas against a pre-run baseline. Shown only for
+    // kind == "embedded" so subprocess runs keep the plain card.
+    private let processScopeNote = MetricsContentView.makeCaption(
+        "Application only — measured since run start")
     private let cpuUserValue = MetricsContentView.makeMono("—")
     private let cpuSystemValue = MetricsContentView.makeMono("—")
     private let residentValue = MetricsContentView.makeMono("—")
@@ -325,6 +330,8 @@ final class MetricsContentView: NSView {
     private func buildProcessCard() -> NSView {
         let card = CardContainer()
         let title = MetricsContentView.makeBold("Process")
+        processScopeNote.textColor = NSColor(SolaroColor.textTertiary)
+        processScopeNote.isHidden = true
 
         let cpuRow = NSStackView(views: [
             labeledCell("CPU USER", value: cpuUserValue),
@@ -352,7 +359,7 @@ final class MetricsContentView: NSView {
         let memChart = embedChart(memoryHost, width: 300, height: 36)
 
         let stack = NSStackView(views: [
-            title, cpuRow, cpuChartLabel, cpuChart,
+            title, processScopeNote, cpuRow, cpuChartLabel, cpuChart,
             memRow, memChartLabel, memChart
         ])
         stack.orientation = .vertical
@@ -507,6 +514,7 @@ final class MetricsContentView: NSView {
             }
         }
 
+        processScopeNote.isHidden = snap.kind != "embedded"
         cpuUserValue.stringValue = String(format: "%.2fs",
                                           snap.process.cpuUserSec)
         cpuSystemValue.stringValue = String(format: "%.2fs",
