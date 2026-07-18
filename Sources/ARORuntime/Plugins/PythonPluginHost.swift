@@ -58,18 +58,22 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin info
     private var pluginInfo: PythonPluginInfo?
 
-    /// Registered actions
-    private var actions: Set<String> = []
+    /// Shared action/verb/metadata/qualifier storage (#324).
+    ///
+    /// Replaces the former bespoke `actions` (Set), `verbToActionName` (dict),
+    /// `actionMetadataByName` (dict), and `qualifierRegistrations` (array).
+    /// Populated via `registry.registerFlattenedVerbs` (Python flattens verbs).
+    private var registry = PluginActionRegistry()
 
-    /// Maps verb → canonical action name for structured action descriptors (SDK format)
-    private var verbToActionName: [String: String] = [:]
-
-    /// Action metadata parsed from `aro_plugin_info()` (SDK format only).
-    /// Keyed by canonical action name; surfaced to ActionRegistry for catalog hover.
-    private var actionMetadataByName: [String: ActionRegistry.PluginActionMetadata] = [:]
-
-    /// Qualifier registrations from this plugin
-    public var qualifierRegistrations: [QualifierRegistration] = []
+    /// Qualifier registrations from this plugin.
+    ///
+    /// Required by `PluginHostProtocol`; backed by the shared registry so the
+    /// default `registerQualifiers`/`unloadFromRegistries` implementations
+    /// mutate the same storage as the rest of the action metadata.
+    public var qualifierRegistrations: [QualifierRegistration] {
+        get { registry.qualifierRegistrations }
+        set { registry.qualifierRegistrations = newValue }
+    }
 
     /// Subprocess timeout in seconds. Default centralised at
     /// `RuntimeDefaults.pythonPluginTimeout` (#328).
@@ -150,33 +154,35 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
         // Parse actions: supports both flat [String] (legacy) and structured [[String: Any]] (SDK)
         // Python uses a flattened verb list with verb→action mapping for SDK format.
         // Also captures per-action metadata so the catalog can serve completion/hover.
-        var parsedActions: [String] = []
+        // The shared PluginActionRegistry (#324) owns the flattened verb set,
+        // the verb→name reverse map, and the per-name metadata.
         let parsedActionList = PluginInfoParser.parseActionListWithMetadata(from: json)
         if !parsedActionList.verbsMap.isEmpty {
             // SDK format: flatten verbs and build reverse mapping
             for name in parsedActionList.names {
-                if let verbs = parsedActionList.verbsMap[name], !verbs.isEmpty {
-                    parsedActions.append(contentsOf: verbs)
-                    for verb in verbs {
-                        verbToActionName[verb] = name
-                    }
-                } else {
-                    parsedActions.append(name)
-                }
+                registry.registerFlattenedVerbs(
+                    name: name,
+                    verbs: parsedActionList.verbsMap[name] ?? [],
+                    metadata: parsedActionList.metadataMap[name]
+                )
             }
         } else {
-            parsedActions = parsedActionList.names
+            // Legacy flat format: each name is its own verb.
+            for name in parsedActionList.names {
+                registry.registerFlattenedVerbs(
+                    name: name,
+                    verbs: [],
+                    metadata: parsedActionList.metadataMap[name]
+                )
+            }
         }
-        actionMetadataByName = parsedActionList.metadataMap
 
         pluginInfo = PythonPluginInfo(
             name: json["name"] as? String ?? pluginName,
             version: json["version"] as? String ?? "1.0.0",
-            actions: parsedActions,
+            actions: registry.actionNames,
             qualifiers: qualifierDescriptors
         )
-
-        actions = Set(pluginInfo?.actions ?? [])
 
         // Register qualifiers using shared helper
         registerQualifiers(qualifierDescriptors)
@@ -193,7 +199,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
         let base64Input = inputData.base64EncodedString()
 
         // Resolve verb → canonical action name (SDK format), then convert to snake_case
-        let resolvedAction = verbToActionName[action] ?? action
+        let resolvedAction = registry.canonicalName(forVerb: action) ?? action
         let pythonFuncName = toSnakeCase(resolvedAction)
 
         // Create execution script
@@ -244,7 +250,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
             handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable
         )] = []
 
-        for action in actions {
+        for action in registry.verbs {
             // When a handler namespace is set, register only as "handler.verb".
             // Without a handler, register only the plain verb.
             let registeredVerb: String
@@ -254,10 +260,11 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
                 registeredVerb = action
             }
 
-            // Resolve metadata via verbToActionName (since `actions` is a flattened
-            // verb set). Fill in the namespace handle from qualifierNamespace.
-            let canonicalName = verbToActionName[action] ?? action
-            let baseMeta = actionMetadataByName[canonicalName]
+            // Resolve metadata via the registry's verb→name map (since Python
+            // tracks a flattened verb set). Fill in the namespace handle from
+            // qualifierNamespace.
+            let canonicalName = registry.canonicalName(forVerb: action) ?? action
+            let baseMeta = registry.metadata(forName: canonicalName)
             let metadata = baseMeta.map {
                 ActionRegistry.PluginActionMetadata(
                     role: $0.role,
@@ -291,7 +298,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
         // Unregister from ActionRegistry and QualifierRegistry (shared logic)
         unloadFromRegistries()
 
-        actions.removeAll()
+        registry.removeAll()
         pluginInfo = nil
     }
 
