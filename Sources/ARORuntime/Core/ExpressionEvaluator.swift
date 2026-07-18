@@ -494,7 +494,11 @@ public struct ExpressionEvaluator: Sendable {
             return array.contains { areEqual($0, element) }
         }
         if let str = container as? String, let substr = element as? String {
-            return str.contains(substr)
+            // Substring match (issue #296). Swift's `String.contains("")`
+            // returns false, but every string conceptually contains the
+            // empty string — special-case it so the operator matches the
+            // mathematical reading callers expect.
+            return substr.isEmpty || str.contains(substr)
         }
         if let dict = container as? [String: any Sendable], let key = element as? String {
             return dict[key] != nil

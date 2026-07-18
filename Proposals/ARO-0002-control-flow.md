@@ -112,8 +112,14 @@ type_check       = expression , "is" , [ "a" | "an" ] , type_name ;
 | `<=` | Less than or equal | `<count> <= 10` |
 | `>=` | Greater than or equal | `<score> >= 80` |
 | `equals` | Deep equality | `<obj-a> equals <obj-b>` |
-| `contains` | Substring/element check | `<text> contains "error"` |
+| `contains` | Membership / substring (dispatches on left operand) | `<roles> contains "admin"`, `<text> contains "error"` |
 | `matches` | Regex match | `<email> matches /.*@.*\.com/` |
+
+The `contains` operator picks its comparison from the **runtime type of the
+left operand**: a list/collection tests element membership, a string tests
+substring containment (right operand must also be a string), and a map/object
+tests key membership. All other left-operand types evaluate to `false`. See
+ARO-0001 (Pattern Matching) for the full dispatch table.
 
 ### 2.3 Existence Checks
 
