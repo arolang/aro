@@ -23,15 +23,8 @@ public struct OpenAPIRouteRegistry: Sendable {
     private static func buildRoutes(from spec: OpenAPISpec) -> [Route] {
         var routes: [Route] = []
 
-        // Combine paths and webhooks (OpenAPI 3.1) into a single iterable
-        var allPathItems = spec.paths
-        for (name, item) in spec.webhooks ?? [:] {
-            // Use the webhook name as a path template (may not start with "/")
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-
-        for (pathTemplate, pathItem) in allPathItems {
+        // Regular paths: keyed by their URL template, dispatched by operationId.
+        for (pathTemplate, pathItem) in spec.paths {
             let pattern = PathPattern(template: pathTemplate)
             let resolvedPathParams = pathItem.parameters?
                 .compactMap { $0.resolved(using: spec.components) }
@@ -44,7 +37,32 @@ public struct OpenAPIRouteRegistry: Sendable {
                     pattern: pattern,
                     operationId: operationId,
                     operation: operation,
-                    pathParameters: resolvedPathParams
+                    pathParameters: resolvedPathParams,
+                    isWebhook: false
+                ))
+            }
+        }
+
+        // Top-level webhooks (OpenAPI 3.1). The webhook map key is the natural
+        // identifier: it becomes the request path and — when the operation
+        // omits `operationId` — the feature-set name (webhook naming
+        // convention, ARO-0187). An explicit `operationId` still wins so
+        // authors can decouple the handler name from the webhook name.
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            let pattern = PathPattern(template: key)
+            let resolvedPathParams = item.parameters?
+                .compactMap { $0.resolved(using: spec.components) }
+
+            for (method, operation) in item.allOperations {
+                let handlerName = operation.operationId ?? name
+                routes.append(Route(
+                    method: method.uppercased(),
+                    pattern: pattern,
+                    operationId: handlerName,
+                    operation: operation,
+                    pathParameters: resolvedPathParams,
+                    isWebhook: true
                 ))
             }
         }
@@ -73,7 +91,8 @@ public struct OpenAPIRouteRegistry: Sendable {
                     pathParameters: params,
                     operation: route.operation,
                     pathTemplate: route.pattern.template,
-                    pathLevelParameters: route.pathParameters
+                    pathLevelParameters: route.pathParameters,
+                    isWebhook: route.isWebhook
                 )
             }
         }
@@ -108,6 +127,9 @@ struct Route: Sendable {
     let operationId: String
     let operation: Operation
     let pathParameters: [Parameter]?
+    /// True when this route originates from a top-level `webhooks` entry
+    /// (OpenAPI 3.1) rather than from `paths`.
+    let isWebhook: Bool
 }
 
 // MARK: - Route Match
@@ -128,6 +150,26 @@ public struct RouteMatch: Sendable {
 
     /// Parameters defined at the path item level (apply to all operations on the path)
     public let pathLevelParameters: [Parameter]?
+
+    /// True when the matched route came from a top-level `webhooks` entry
+    /// (OpenAPI 3.1 incoming webhook) rather than from `paths`.
+    public let isWebhook: Bool
+
+    public init(
+        operationId: String,
+        pathParameters: [String: String],
+        operation: Operation,
+        pathTemplate: String,
+        pathLevelParameters: [Parameter]?,
+        isWebhook: Bool = false
+    ) {
+        self.operationId = operationId
+        self.pathParameters = pathParameters
+        self.operation = operation
+        self.pathTemplate = pathTemplate
+        self.pathLevelParameters = pathLevelParameters
+        self.isWebhook = isWebhook
+    }
 
     /// Effective parameters: path-level parameters merged with operation-level parameters.
     /// Operation-level parameters override path-level parameters with the same name+in combination.

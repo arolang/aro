@@ -404,6 +404,95 @@ Error: Missing ARO feature set handlers for the following operations:
 Create feature sets with names matching the operationIds in your OpenAPI contract.
 ```
 
+### 2.8 Webhooks and Callbacks (ARO-0187)
+
+ARO parses OpenAPI's webhook and callback constructs and routes **incoming
+webhooks** to feature sets.
+
+#### Incoming webhooks (OpenAPI 3.1 `webhooks`)
+
+The top-level `webhooks` map declares endpoints that *external systems* call
+into your application (e.g. a payment provider notifying you of an event). Each
+entry is a Path Item, keyed by a webhook name:
+
+```yaml
+openapi: 3.1.0
+webhooks:
+  newOrder:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: acknowledged }
+```
+
+**Webhook naming convention:** the webhook map key is both the request path and
+the feature-set name. `newOrder` above routes `POST /newOrder` to the feature
+set named `newOrder`. When the operation carries an explicit `operationId`,
+that name is used instead (letting you decouple the handler name from the
+webhook name) — mirroring the `operationId` convention used for `paths`.
+
+```aro
+(* Feature set name = webhook name (or its operationId, if present) *)
+(newOrder: Order Webhooks) {
+    Extract the <order> from the <body>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> for the <webhook>.
+}
+```
+
+Unlike `paths`, webhook operations **do not require** an `operationId`; the
+webhook name supplies the handler name.
+
+#### Outgoing callbacks (OpenAPI 3.0+ `Operation.callbacks`)
+
+An `Operation.callbacks` map declares out-of-band requests the server makes
+*back to the caller* after handling a request. Callback Objects are keyed by a
+**runtime expression** that computes the target URL:
+
+```yaml
+paths:
+  /subscribe:
+    post:
+      operationId: subscribe
+      callbacks:
+        onEvent:
+          '{$request.body#/callbackUrl}':
+            post:
+              requestBody:
+                content:
+                  application/json:
+                    schema: { type: object }
+              responses:
+                '200': { description: ack }
+```
+
+ARO **parses** callback definitions into the OpenAPI model. Firing the outbound
+request is currently left to explicit, event-driven ARO code (emit an event and
+have a handler use the HTTP client — see §3), which fits ARO's model better than
+implicit side effects. Automatic callback triggering is a documented follow-up.
+
+**Supported runtime-expression subset.** ARO does not implement the full
+OpenAPI runtime-expression grammar. The evaluator resolves this common subset,
+used to build a callback URL from the triggering request:
+
+| Expression                    | Resolves to                                 |
+|-------------------------------|---------------------------------------------|
+| `$url`                        | the request URL (path + query)              |
+| `$method`                     | the request HTTP method                     |
+| `$request.query.<name>`       | a query parameter value                     |
+| `$request.header.<name>`      | a request header value (case-insensitive)   |
+| `$request.path.<name>`        | a path parameter value                      |
+| `$request.body#/<json-ptr>`   | a JSON-pointer (RFC 6901) lookup into body  |
+| `$request.body`               | the whole request body                      |
+
+Expressions may be embedded in a template with literal text, e.g.
+`https://{$request.header.host}/cb`. Anything outside this table (for example
+`$response.*` or `$statusCode`) is reported as unsupported rather than silently
+producing an empty value.
+
 ---
 
 ## 3. HTTP Client

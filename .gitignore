@@ -64,6 +64,7 @@ homebrew-aro/
 /Examples/ExternalService/plugins/CounterPlugin/.build
 **/.build/
 **/.build-aro/
+/.build-*
 /data
 /Examples/HelloWorld/expected.binary.diff
 expected.binary.diff

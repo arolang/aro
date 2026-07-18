@@ -1,0 +1,14 @@
+(* Webhook Receiver Example - Incoming OpenAPI 3.1 webhooks (ARO-0187) *)
+
+(Application-Start: Webhook Receiver) {
+    Log "Starting Webhook Receiver..." to the <console>.
+
+    (* HTTP server starts automatically from openapi.yaml *)
+    Start the <http-server> with { }.
+    Log "Server ready on port 8080" to the <console>.
+
+    (* Keep the application running to receive webhooks *)
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
