@@ -123,7 +123,13 @@ public struct FeatureSet: ASTNode {
 // MARK: - Statements
 
 /// Protocol for all statement types
-public protocol Statement: ASTNode {}
+public protocol Statement: ASTNode {
+    /// Accepts a `StatementVisitor` for polymorphic dispatch (#338).
+    /// Declared as a protocol requirement (not just an extension) so the
+    /// concrete node's implementation is dynamically dispatched even when
+    /// the value is typed as `Statement`.
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result
+}
 
 /// A pipeline statement chains actions with |> operator (ARO-0067)
 public struct PipelineStatement: Statement {
@@ -1088,7 +1094,12 @@ public struct ObjectClause: Sendable, Equatable, CustomStringConvertible {
 // MARK: - Expressions (ARO-0002)
 
 /// Base protocol for all expression nodes
-public protocol Expression: ASTNode {}
+public protocol Expression: ASTNode {
+    /// Accepts an `ExpressionVisitor` for polymorphic dispatch (#338).
+    /// A protocol requirement so the concrete node's implementation is
+    /// dynamically dispatched even through an `any Expression` value.
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result
+}
 
 // MARK: - Literal Expressions
 
@@ -1427,6 +1438,128 @@ public struct InterpolatedStringExpression: Expression {
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
         try visitor.visit(self)
     }
+}
+
+// MARK: - Statement Visitor Protocol
+
+/// Visitor for polymorphic dispatch over `Statement` nodes (#338).
+///
+/// Analyzers that previously walked a chain of `if let x = stmt as? Type`
+/// casts can instead conform to `StatementVisitor` and let each statement
+/// node dispatch itself via `accept(_:)`. Adding a new statement node type
+/// then surfaces as a missing protocol requirement (a compile-time error at
+/// the visitor) rather than a silently-skipped branch in every analyzer.
+///
+/// There is a `visit` requirement for **every** concrete `Statement` node,
+/// so a conforming visitor must decide what each node means — including the
+/// nodes that legacy `as?`-chains handled only via a trailing `else`
+/// fallback. To preserve that fallback behaviour, a conformer can provide a
+/// single catch-all through the `Result`-specific default implementations it
+/// writes; this protocol itself has no defaults, keeping dispatch explicit.
+public protocol StatementVisitor {
+    associatedtype Result
+
+    func visit(_ node: AROStatement) -> Result
+    func visit(_ node: PublishStatement) -> Result
+    func visit(_ node: RequireStatement) -> Result
+    func visit(_ node: MatchStatement) -> Result
+    func visit(_ node: ForEachLoop) -> Result
+    func visit(_ node: WhileLoop) -> Result
+    func visit(_ node: BreakStatement) -> Result
+    func visit(_ node: RangeLoop) -> Result
+    func visit(_ node: PipelineStatement) -> Result
+    func visit(_ node: ErrorStatement) -> Result
+}
+
+public extension AROStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension PublishStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension RequireStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension MatchStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension ForEachLoop {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension WhileLoop {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension BreakStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension RangeLoop {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension PipelineStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension ErrorStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+
+// MARK: - Expression Visitor Protocol
+
+/// Visitor for polymorphic dispatch over `Expression` nodes (#338).
+///
+/// Mirrors `StatementVisitor` for the expression side so that variable
+/// collection and similar walks can dispatch instead of type-testing.
+public protocol ExpressionVisitor {
+    associatedtype Result
+
+    func visit(_ node: LiteralExpression) -> Result
+    func visit(_ node: ArrayLiteralExpression) -> Result
+    func visit(_ node: MapLiteralExpression) -> Result
+    func visit(_ node: VariableRefExpression) -> Result
+    func visit(_ node: BinaryExpression) -> Result
+    func visit(_ node: UnaryExpression) -> Result
+    func visit(_ node: MemberAccessExpression) -> Result
+    func visit(_ node: SubscriptExpression) -> Result
+    func visit(_ node: GroupedExpression) -> Result
+    func visit(_ node: ExistenceExpression) -> Result
+    func visit(_ node: TypeCheckExpression) -> Result
+    func visit(_ node: InterpolatedStringExpression) -> Result
+}
+
+public extension LiteralExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension ArrayLiteralExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension MapLiteralExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension VariableRefExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension BinaryExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension UnaryExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension MemberAccessExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension SubscriptExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension GroupedExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension ExistenceExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension TypeCheckExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension InterpolatedStringExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 
 // MARK: - AST Visitor Protocol
