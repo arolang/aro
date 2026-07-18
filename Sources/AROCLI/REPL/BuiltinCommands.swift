@@ -545,7 +545,7 @@ public struct PluginCommand: MetaCommand {
         case "list", "ls":
             return handleList()
         case "remove", "rm":
-            return handleRemove(args: Array(args.dropFirst()))
+            return await handleRemove(args: Array(args.dropFirst()))
         default:
             return .error("Unknown subcommand '\(subcommand)'. Use: add, update, list, remove")
         }
@@ -706,7 +706,7 @@ public struct PluginCommand: MetaCommand {
 
     // MARK: - Remove
 
-    private func handleRemove(args: [String]) -> MetaCommandResult {
+    private func handleRemove(args: [String]) async -> MetaCommandResult {
         guard let name = args.first else {
             return .error("Usage: :plugin remove <plugin-name>")
         }
@@ -714,13 +714,15 @@ public struct PluginCommand: MetaCommand {
         // Unload from runtime
         let removed = UnifiedPluginLoader.shared.unload(pluginName: name)
 
-        // Remove from disk so :plugin add works again in future sessions
+        // Remove from disk so :plugin add works again in future sessions.
+        // Deleting a built plugin tree (.build artifacts etc.) can be slow,
+        // so run it off the REPL thread (issue #365).
         let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".aro/repl-plugins/Plugins")
         let pluginDir = replPluginsDir.appendingPathComponent(name)
         let removedFromDisk = FileManager.default.fileExists(atPath: pluginDir.path)
         if removedFromDisk {
-            try? FileManager.default.removeItem(at: pluginDir)
+            await FileOps.removeItemIfPresent(at: pluginDir)
         }
 
         if removed || removedFromDisk {
