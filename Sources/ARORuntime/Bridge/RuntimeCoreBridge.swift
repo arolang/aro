@@ -29,12 +29,21 @@ import NIO
 
 // MARK: - Runtime Errors
 
-/// Runtime errors for compiled code execution
-enum RuntimeError: Error {
+/// Runtime errors for compiled code execution.
+///
+/// `public` on purpose (#313): the bridge split moved this type here while
+/// `RuntimeExecutionBridge.swift` still references it, so an internal type's
+/// metadata accessor got emitted in two object files and the static link of
+/// `libARORuntime.a` failed on Linux with a duplicate-symbol error
+/// (`multiple definition of ...RuntimeErrorOMa`). Public linkage emits the
+/// metadata once with external visibility, so cross-file references resolve
+/// to a single definition. (On `main` this type lived in — and was only used
+/// from — one file, so the collision never surfaced.)
+public enum RuntimeError: Error {
     case contextCreationFailed(String)
     case invalidFunctionPointer(String)
 
-    init(_ message: String) {
+    public init(_ message: String) {
         self = .contextCreationFailed(message)
     }
 }
