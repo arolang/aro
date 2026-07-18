@@ -7,29 +7,16 @@ import Foundation
 
 public enum SearchTool {
     public static func searchProject(store: VectorStore, embedder: any Embedder) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "query": .object([
-                    "type": .string("string"),
-                    "description": .string("Search query")
-                ]),
-                "k": .object([
-                    "type": .string("integer"),
-                    "description": .string("Number of results (default 5)")
-                ])
-            ]),
-            "required": .array([.string("query")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "search_project",
             description: "Semantic search over the indexed project files. Run /index first.",
-            parameters: params
+            schema: ToolParameterSchema([
+                .required("query", .string, "Search query"),
+                .optional("k", .integer, "Number of results (default 5)"),
+            ])
         ) { args in
-            guard let query = args["query"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'query'")
-            }
-            let k = args["k"]?.intValue ?? 5
+            let query = try args.requireString("query")
+            let k = args.int("k") ?? 5
             let vec = try await embedder.embed(query)
             let results = await store.search(query: vec, k: k)
             if results.isEmpty {

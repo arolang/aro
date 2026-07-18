@@ -10,28 +10,13 @@ public enum FileTools {
         AskToolDescriptor(
             name: "read_file",
             description: "Read a file and return its contents with line numbers. Supports optional offset and limit to read a specific range of lines.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "path": .object([
-                        "type": .string("string"),
-                        "description": .string("File path (relative to working directory or absolute)")
-                    ]),
-                    "offset": .object([
-                        "type": .string("integer"),
-                        "description": .string("Line number to start reading from (1-based). Defaults to 1.")
-                    ]),
-                    "limit": .object([
-                        "type": .string("integer"),
-                        "description": .string("Maximum number of lines to return. Defaults to all remaining lines.")
-                    ])
-                ]),
-                "required": .array([.string("path")])
+            schema: ToolParameterSchema([
+                .required("path", .string, "File path (relative to working directory or absolute)"),
+                .optional("offset", .integer, "Line number to start reading from (1-based). Defaults to 1."),
+                .optional("limit", .integer, "Maximum number of lines to return. Defaults to all remaining lines."),
             ])
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("'path' is required")
-            }
+            let path = try args.requireString("path")
             let url = try pg.resolve(path)
             let filePath = url.path
 
@@ -45,7 +30,7 @@ public enum FileTools {
             let content = try String(contentsOfFile: filePath, encoding: .utf8)
             let allLines = content.components(separatedBy: "\n")
 
-            let offset = max((args["offset"]?.intValue ?? 1), 1)
+            let offset = max((args.int("offset") ?? 1), 1)
             let startIndex = offset - 1 // convert to 0-based
 
             guard startIndex < allLines.count else {
@@ -54,7 +39,7 @@ public enum FileTools {
 
             let remaining = allLines[startIndex...]
             let lines: ArraySlice<String>
-            if let limit = args["limit"]?.intValue, limit > 0 {
+            if let limit = args.int("limit"), limit > 0 {
                 lines = remaining.prefix(limit)
             } else {
                 lines = remaining[remaining.startIndex...]
@@ -75,28 +60,14 @@ public enum FileTools {
         AskToolDescriptor(
             name: "write_file",
             description: "Create or overwrite a file with the given content.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "path": .object([
-                        "type": .string("string"),
-                        "description": .string("File path (relative to working directory or absolute)")
-                    ]),
-                    "content": .object([
-                        "type": .string("string"),
-                        "description": .string("The content to write to the file")
-                    ])
-                ]),
-                "required": .array([.string("path"), .string("content")])
+            schema: ToolParameterSchema([
+                .required("path", .string, "File path (relative to working directory or absolute)"),
+                .required("content", .string, "The content to write to the file"),
             ]),
-            requiresApproval: true
+            riskLevel: .modify
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("'path' is required")
-            }
-            guard let content = args["content"]?.stringValue else {
-                throw AskToolError.invalidArguments("'content' is required")
-            }
+            let path = try args.requireString("path")
+            let content = try args.requireString("content")
             let url = try pg.resolve(path)
 
             // Create parent directories if needed
@@ -115,35 +86,16 @@ public enum FileTools {
         AskToolDescriptor(
             name: "edit_file",
             description: "Perform an exact string replacement in a file. The old_string must appear exactly once in the file; the call fails if it is not found or appears more than once.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "path": .object([
-                        "type": .string("string"),
-                        "description": .string("File path (relative to working directory or absolute)")
-                    ]),
-                    "old_string": .object([
-                        "type": .string("string"),
-                        "description": .string("The exact text to find and replace (must be unique in the file)")
-                    ]),
-                    "new_string": .object([
-                        "type": .string("string"),
-                        "description": .string("The replacement text")
-                    ])
-                ]),
-                "required": .array([.string("path"), .string("old_string"), .string("new_string")])
+            schema: ToolParameterSchema([
+                .required("path", .string, "File path (relative to working directory or absolute)"),
+                .required("old_string", .string, "The exact text to find and replace (must be unique in the file)"),
+                .required("new_string", .string, "The replacement text"),
             ]),
-            requiresApproval: true
+            riskLevel: .modify
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("'path' is required")
-            }
-            guard let oldString = args["old_string"]?.stringValue else {
-                throw AskToolError.invalidArguments("'old_string' is required")
-            }
-            guard let newString = args["new_string"]?.stringValue else {
-                throw AskToolError.invalidArguments("'new_string' is required")
-            }
+            let path = try args.requireString("path")
+            let oldString = try args.requireString("old_string")
+            let newString = try args.requireString("new_string")
             let url = try pg.resolve(path)
             let filePath = url.path
 
@@ -175,18 +127,11 @@ public enum FileTools {
         AskToolDescriptor(
             name: "list_dir",
             description: "List the contents of a directory. Directories are marked with a trailing /.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "path": .object([
-                        "type": .string("string"),
-                        "description": .string("Directory path (relative to working directory or absolute). Defaults to '.'")
-                    ])
-                ]),
-                "required": .array([])
+            schema: ToolParameterSchema([
+                .optional("path", .string, "Directory path (relative to working directory or absolute). Defaults to '.'"),
             ])
         ) { args in
-            let path = args["path"]?.stringValue ?? "."
+            let path = args.string("path") ?? "."
             let url = try pg.resolve(path)
             let dirPath = url.path
 
@@ -220,30 +165,15 @@ public enum FileTools {
         AskToolDescriptor(
             name: "grep",
             description: "Search for a regex pattern across files in a directory. Returns matching lines with file paths and line numbers, capped at 200 matches.",
-            parameters: .object([
-                "type": .string("object"),
-                "properties": .object([
-                    "pattern": .object([
-                        "type": .string("string"),
-                        "description": .string("Regular expression pattern to search for")
-                    ]),
-                    "path": .object([
-                        "type": .string("string"),
-                        "description": .string("File or directory to search in (relative to working directory or absolute). Defaults to '.'")
-                    ]),
-                    "glob": .object([
-                        "type": .string("string"),
-                        "description": .string("Glob pattern to filter files (e.g. '*.swift', '*.aro')")
-                    ])
-                ]),
-                "required": .array([.string("pattern")])
+            schema: ToolParameterSchema([
+                .required("pattern", .string, "Regular expression pattern to search for"),
+                .optional("path", .string, "File or directory to search in (relative to working directory or absolute). Defaults to '.'"),
+                .optional("glob", .string, "Glob pattern to filter files (e.g. '*.swift', '*.aro')"),
             ])
         ) { args in
-            guard let pattern = args["pattern"]?.stringValue else {
-                throw AskToolError.invalidArguments("'pattern' is required")
-            }
-            let path = args["path"]?.stringValue ?? "."
-            let globFilter = args["glob"]?.stringValue
+            let pattern = try args.requireString("pattern")
+            let path = args.string("path") ?? "."
+            let globFilter = args.string("glob")
             let url = try pg.resolve(path)
 
             let regex: NSRegularExpression

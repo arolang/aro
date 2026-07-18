@@ -12,48 +12,23 @@ public enum ProjectTools {
     // MARK: - create_plugin
 
     public static func createPlugin(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "name": .object([
-                    "type": .string("string"),
-                    "description": .string("Plugin name (kebab-case, e.g. 'my-plugin')")
-                ]),
-                "language": .object([
-                    "type": .string("string"),
-                    "enum": .array([.string("swift"), .string("c"), .string("rust"), .string("python")]),
-                    "description": .string("Plugin implementation language")
-                ]),
-                "handle": .object([
-                    "type": .string("string"),
-                    "description": .string("PascalCase namespace handle (e.g. 'MyPlugin')")
-                ]),
-                "actions": .object([
-                    "type": .string("array"),
-                    "items": .object(["type": .string("string")]),
-                    "description": .string("Action names the plugin provides")
-                ]),
-                "qualifiers": .object([
-                    "type": .string("array"),
-                    "items": .object(["type": .string("string")]),
-                    "description": .string("Qualifier names the plugin provides (optional)")
-                ])
-            ]),
-            "required": .array([.string("name"), .string("language"), .string("handle")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "create_plugin",
             description: "Scaffold a new ARO plugin directory with plugin.yaml and source template.",
-            parameters: params,
-            requiresApproval: true
+            schema: ToolParameterSchema([
+                .required("name", .string, "Plugin name (kebab-case, e.g. 'my-plugin')"),
+                .required("language", .enumeration(["swift", "c", "rust", "python"]), "Plugin implementation language"),
+                .required("handle", .string, "PascalCase namespace handle (e.g. 'MyPlugin')"),
+                .optional("actions", .array(of: .string), "Action names the plugin provides"),
+                .optional("qualifiers", .array(of: .string), "Qualifier names the plugin provides (optional)"),
+            ]),
+            riskLevel: .modify
         ) { args in
-            guard let name = args["name"]?.stringValue,
-                  let language = args["language"]?.stringValue,
-                  let handle = args["handle"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing name/language/handle")
-            }
-            let actions = args["actions"]?.arrayValue?.compactMap(\.stringValue) ?? []
-            let qualifiers = args["qualifiers"]?.arrayValue?.compactMap(\.stringValue) ?? []
+            let name = try args.requireString("name")
+            let language = try args.requireString("language")
+            let handle = try args.requireString("handle")
+            let actions = args.stringArray("actions") ?? []
+            let qualifiers = args.stringArray("qualifiers") ?? []
 
             let pluginDir = try pathGuard.resolve("Plugins/\(name)")
             let srcDir = pluginDir.appendingPathComponent("src")
@@ -107,43 +82,26 @@ public enum ProjectTools {
     // MARK: - write_openapi
 
     public static func writeOpenAPI(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "title": .object(["type": .string("string"), "description": .string("API title")]),
-                "version": .object(["type": .string("string"), "description": .string("API version (default: 1.0.0)")]),
-                "paths": .object([
-                    "type": .string("array"),
-                    "items": .object([
-                        "type": .string("object"),
-                        "properties": .object([
-                            "path": .object(["type": .string("string")]),
-                            "method": .object(["type": .string("string")]),
-                            "operationId": .object(["type": .string("string")]),
-                            "summary": .object(["type": .string("string")])
-                        ])
-                    ]),
-                    "description": .string("Array of route definitions")
-                ]),
-                "output_path": .object([
-                    "type": .string("string"),
-                    "description": .string("Output file path (default: openapi.yaml)")
-                ])
-            ]),
-            "required": .array([.string("title"), .string("paths")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "write_openapi",
             description: "Generate an openapi.yaml contract file for an ARO HTTP application.",
-            parameters: params,
-            requiresApproval: true
+            schema: ToolParameterSchema([
+                .required("title", .string, "API title"),
+                .optional("version", .string, "API version (default: 1.0.0)"),
+                .required("paths", .array(of: .object([
+                    .optional("path", .string),
+                    .optional("method", .string),
+                    .optional("operationId", .string),
+                    .optional("summary", .string),
+                ])), "Array of route definitions"),
+                .optional("output_path", .string, "Output file path (default: openapi.yaml)"),
+            ]),
+            riskLevel: .modify
         ) { args in
-            guard let title = args["title"]?.stringValue,
-                  let paths = args["paths"]?.arrayValue else {
-                throw AskToolError.invalidArguments("missing title/paths")
-            }
-            let version = args["version"]?.stringValue ?? "1.0.0"
-            let outputPath = args["output_path"]?.stringValue ?? "openapi.yaml"
+            let title = try args.requireString("title")
+            let paths = try args.requireArray("paths")
+            let version = args.string("version") ?? "1.0.0"
+            let outputPath = args.string("output_path") ?? "openapi.yaml"
 
             var yaml = """
             openapi: 3.0.3
@@ -187,30 +145,17 @@ public enum ProjectTools {
     // MARK: - generate_docs
 
     public static func generateDocs(guard pathGuard: PathGuard) -> AskToolDescriptor {
-        let params: JSONValue = .object([
-            "type": .string("object"),
-            "properties": .object([
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Path to the .aro file or application directory to document")
-                ]),
-                "output_path": .object([
-                    "type": .string("string"),
-                    "description": .string("Output markdown file path (default: README.md)")
-                ])
-            ]),
-            "required": .array([.string("path")])
-        ])
-        return AskToolDescriptor(
+        AskToolDescriptor(
             name: "generate_docs",
             description: "Generate markdown documentation for an ARO application by reading its source files.",
-            parameters: params,
-            requiresApproval: true
+            schema: ToolParameterSchema([
+                .required("path", .string, "Path to the .aro file or application directory to document"),
+                .optional("output_path", .string, "Output markdown file path (default: README.md)"),
+            ]),
+            riskLevel: .modify
         ) { args in
-            guard let path = args["path"]?.stringValue else {
-                throw AskToolError.invalidArguments("missing 'path'")
-            }
-            let outputPath = args["output_path"]?.stringValue ?? "README.md"
+            let path = try args.requireString("path")
+            let outputPath = args.string("output_path") ?? "README.md"
             let url = try pathGuard.resolve(path)
             let fm = FileManager.default
 

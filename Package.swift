@@ -432,6 +432,13 @@ let package = Package(
                 ] + askMLXTargetDependencies,
                 path: "Sources/AROAsk"
             ),
+            // AROAsk tests — tool schema generation and argument
+            // decoding (#357).
+            .testTarget(
+                name: "AROAskTests",
+                dependencies: ["AROAsk"],
+                path: "Tests/AROAskTests"
+            ),
         ])
         #endif
 
