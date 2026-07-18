@@ -762,6 +762,40 @@ private func fileEntryDict(for url: URL, dateFormatter: ISO8601DateFormatter) ->
 
 // MARK: - File Watcher Bridge (Platform-specific)
 
+/// Registry of live file-watcher handles, shared by all platform backends.
+///
+/// Exactly one platform-specific `FileWatcherHandle` class is compiled per
+/// build (FSEvents on macOS, inotify on Linux, polling elsewhere; Windows
+/// compiles stateless stubs). Historically each backend declared its own
+/// `fileWatcherHandles` dictionary guarded by its own `NSLock` — three
+/// identical lock+dictionary pairs that could never coexist in one binary.
+/// This registry consolidates them into a single lock-protected owner
+/// (issue #321).
+///
+/// Concurrency invariant: `@unchecked Sendable` is sound because `lock`
+/// guards all access to `handles`, the only mutable state. Any state added
+/// to this type must likewise only be touched while holding `lock`.
+final class FileWatcherRegistry: @unchecked Sendable {
+    static let shared = FileWatcherRegistry()
+
+    private let lock = NSLock()
+    private var handles: [UnsafeMutableRawPointer: FileWatcherHandle] = [:]
+
+    private init() {}
+
+    /// Track a live handle under its opaque pointer (`aro_file_watcher_create`).
+    func register(_ handle: FileWatcherHandle, for pointer: UnsafeMutableRawPointer) {
+        lock.lock(); defer { lock.unlock() }
+        handles[pointer] = handle
+    }
+
+    /// Stop tracking the handle for `pointer` (`aro_file_watcher_destroy`).
+    func unregister(_ pointer: UnsafeMutableRawPointer) {
+        lock.lock(); defer { lock.unlock() }
+        handles.removeValue(forKey: pointer)
+    }
+}
+
 #if os(macOS)
 // ============================================================
 // macOS Implementation using FSEvents
@@ -792,9 +826,6 @@ final class FileWatcherHandle: @unchecked Sendable {
         isWatching = false
     }
 }
-
-nonisolated(unsafe) private var fileWatcherHandles: [UnsafeMutableRawPointer: FileWatcherHandle] = [:]
-private let watcherLock = NSLock()
 
 /// FSEvents callback - called when file changes occur
 private func fsEventsCallback(
@@ -880,9 +911,7 @@ public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMuta
     let handle = FileWatcherHandle(path: resolvedPath)
     let pointer = Unmanaged.passRetained(handle).toOpaque()
 
-    watcherLock.lock()
-    fileWatcherHandles[pointer] = handle
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.register(handle, for: pointer)
 
     return UnsafeMutableRawPointer(pointer)
 }
@@ -953,9 +982,7 @@ public func aro_file_watcher_stop(_ watcherPtr: UnsafeMutableRawPointer?) {
 public func aro_file_watcher_destroy(_ watcherPtr: UnsafeMutableRawPointer?) {
     guard let ptr = watcherPtr else { return }
 
-    watcherLock.lock()
-    fileWatcherHandles.removeValue(forKey: ptr)
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.unregister(ptr)
 
     let handle = Unmanaged<FileWatcherHandle>.fromOpaque(ptr).takeUnretainedValue()
     handle.stop()
@@ -1000,9 +1027,6 @@ final class FileWatcherHandle: @unchecked Sendable {
     }
 }
 
-nonisolated(unsafe) private var fileWatcherHandles: [UnsafeMutableRawPointer: FileWatcherHandle] = [:]
-private let watcherLock = NSLock()
-
 /// Create a file watcher
 @_cdecl("aro_file_watcher_create")
 public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
@@ -1027,9 +1051,7 @@ public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMuta
     let handle = FileWatcherHandle(path: resolvedPath)
     let pointer = Unmanaged.passRetained(handle).toOpaque()
 
-    watcherLock.lock()
-    fileWatcherHandles[pointer] = handle
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.register(handle, for: pointer)
 
     return UnsafeMutableRawPointer(pointer)
 }
@@ -1124,9 +1146,7 @@ public func aro_file_watcher_stop(_ watcherPtr: UnsafeMutableRawPointer?) {
 public func aro_file_watcher_destroy(_ watcherPtr: UnsafeMutableRawPointer?) {
     guard let ptr = watcherPtr else { return }
 
-    watcherLock.lock()
-    fileWatcherHandles.removeValue(forKey: ptr)
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.unregister(ptr)
 
     let handle = Unmanaged<FileWatcherHandle>.fromOpaque(ptr).takeUnretainedValue()
     handle.stop()
@@ -1155,9 +1175,6 @@ final class FileWatcherHandle: @unchecked Sendable {
     }
 }
 
-nonisolated(unsafe) private var fileWatcherHandles: [UnsafeMutableRawPointer: FileWatcherHandle] = [:]
-private let watcherLock = NSLock()
-
 /// Create a file watcher
 @_cdecl("aro_file_watcher_create")
 public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
@@ -1180,9 +1197,7 @@ public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMuta
     let handle = FileWatcherHandle(path: resolvedPath)
     let pointer = Unmanaged.passRetained(handle).toOpaque()
 
-    watcherLock.lock()
-    fileWatcherHandles[pointer] = handle
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.register(handle, for: pointer)
 
     return UnsafeMutableRawPointer(pointer)
 }
@@ -1275,9 +1290,7 @@ public func aro_file_watcher_stop(_ watcherPtr: UnsafeMutableRawPointer?) {
 public func aro_file_watcher_destroy(_ watcherPtr: UnsafeMutableRawPointer?) {
     guard let ptr = watcherPtr else { return }
 
-    watcherLock.lock()
-    fileWatcherHandles.removeValue(forKey: ptr)
-    watcherLock.unlock()
+    FileWatcherRegistry.shared.unregister(ptr)
 
     let handle = Unmanaged<FileWatcherHandle>.fromOpaque(ptr).takeUnretainedValue()
     handle.stop()
