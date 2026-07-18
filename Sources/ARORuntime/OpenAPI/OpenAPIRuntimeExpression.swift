@@ -235,14 +235,20 @@ public enum OpenAPIRuntimeExpression {
         switch value {
         case let s as String: return s
         case let n as NSNumber:
-            // JSON booleans bridge to NSNumber backed by CFBoolean. Detect them
-            // explicitly so integer 1/0 are not misread as true/false (the
-            // classic `NSNumber(1) as? Bool == true` Swift pitfall).
-            if CFGetTypeID(n) == CFBooleanGetTypeID() {
+            // JSONSerialization encodes JSON leaves as NSNumber on both Darwin
+            // and swift-corelibs-foundation. Inspect the Objective-C type
+            // encoding to tell booleans and floating-point values apart from
+            // integers — this is portable, whereas the CoreFoundation
+            // CFBoolean/CFNumber APIs used previously don't exist on Linux and
+            // broke the CI build. A JSON boolean is bridged as a char-backed
+            // NSNumber ("c"); JSON numbers with a fractional part report "d"/"f".
+            // This still avoids the classic `NSNumber(1) as? Bool == true`
+            // pitfall because integers report an integer encoding, not "c".
+            let objCType = String(cString: n.objCType)
+            if objCType == "c" {
                 return n.boolValue ? "true" : "false"
             }
-            // Distinguish integers from doubles for clean URLs.
-            if CFNumberIsFloatType(n) {
+            if objCType == "d" || objCType == "f" {
                 return "\(n.doubleValue)"
             }
             return "\(n.intValue)"
