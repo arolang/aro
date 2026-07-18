@@ -221,7 +221,13 @@ public final class AROLanguageServer: Sendable {
         }
     }
 
-    /// Handle message synchronously without any async/await
+    /// Handle message synchronously without any async/await.
+    ///
+    /// Dispatch is table-driven (see ``syncRequestHandlers`` and
+    /// ``syncNotificationHandlers``): the method name is looked up in the
+    /// appropriate table and the stored closure is invoked. A handful of
+    /// lifecycle methods (`initialize`, `initialized`, `shutdown`, `exit`)
+    /// carry special return/side-effect semantics and are handled inline.
     private func handleMessageSync(_ data: Data) -> Data? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let method = json["method"] as? String else {
@@ -233,88 +239,86 @@ public final class AROLanguageServer: Sendable {
 
         log("Handling method: \(method)")
 
-        let result: Any?
-
+        // Lifecycle methods with bespoke semantics.
         switch method {
-        case "initialize":
-            result = handleInitializeSync(params: params)
-
         case "initialized":
             // Client is ready; load workspace plugins now so subsequent
             // completion/hover sees plugin-provided actions and qualifiers.
             loadWorkspacePluginsAsync()
             return nil
-
-        case "textDocument/didOpen", "textDocument/didChange",
-             "textDocument/didClose", "textDocument/didSave", "$/cancelRequest":
-            // Notifications - handle but don't respond
-            handleNotificationSync(method: method, params: params)
-            return nil
-
-        case "shutdown":
-            result = nil
-
         case "exit":
             exit(0)
-
-        case "textDocument/hover":
-            result = handleHoverSync(params: params)
-
-        case "textDocument/definition":
-            result = handleDefinitionSync(params: params)
-
-        case "textDocument/documentHighlight":
-            result = handleDocumentHighlightSync(params: params)
-
-        case "textDocument/completion":
-            result = handleCompletionSync(params: params)
-
-        case "textDocument/references":
-            result = handleReferencesSync(params: params)
-
-        case "textDocument/documentSymbol":
-            result = handleDocumentSymbolSync(params: params)
-
-        case "workspace/symbol":
-            result = handleWorkspaceSymbolSync(params: params)
-
-        case "textDocument/formatting":
-            result = handleFormattingSync(params: params)
-
-        case "textDocument/prepareRename":
-            result = handlePrepareRenameSync(params: params)
-
-        case "textDocument/rename":
-            result = handleRenameSync(params: params)
-
-        case "textDocument/foldingRange":
-            result = handleFoldingRangeSync(params: params)
-
-        case "textDocument/semanticTokens/full":
-            result = handleSemanticTokensSync(params: params)
-
-        case "textDocument/signatureHelp":
-            result = handleSignatureHelpSync(params: params)
-
-        case "textDocument/codeAction":
-            result = handleCodeActionSync(params: params)
-
-        case "textDocument/inlayHint":
-            result = handleInlayHintSync(params: params)
-
+        case "shutdown":
+            // A request that always resolves to a null result.
+            return id.map { createSuccessResponse(id: $0, result: nil) } ?? nil
         default:
-            log("Unknown method: \(method)")
-            if id != nil {
-                return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
+            break
+        }
+
+        // Notifications: handled for side effects, never answered.
+        if let handler = syncNotificationHandlers[method] {
+            handler(params)
+            return nil
+        }
+
+        // Requests: produce a result that is wrapped in a success response
+        // when the message carries an id.
+        if let handler = syncRequestHandlers[method] {
+            let result = handler(params)
+            if let id = id {
+                return createSuccessResponse(id: id, result: result)
             }
             return nil
         }
 
-        if let id = id {
-            return createSuccessResponse(id: id, result: result)
+        log("Unknown method: \(method)")
+        if id != nil {
+            return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
         }
-
         return nil
+    }
+
+    // MARK: - Sync Dispatch Tables
+
+    /// Request methods routed on the synchronous transport. Each closure maps
+    /// the raw `params` to a JSON-serialisable result (or `nil`). The result
+    /// is wrapped in a JSON-RPC success response by ``handleMessageSync``.
+    private var syncRequestHandlers: [String: @Sendable (Any?) -> Any?] {
+        [
+            "initialize": { [self] in handleInitializeSync(params: $0) },
+            "textDocument/hover": { [self] in handleHoverSync(params: $0) },
+            "textDocument/definition": { [self] in handleDefinitionSync(params: $0) },
+            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) },
+            "textDocument/completion": { [self] in handleCompletionSync(params: $0) },
+            "textDocument/references": { [self] in handleReferencesSync(params: $0) },
+            "textDocument/documentSymbol": { [self] in handleDocumentSymbolSync(params: $0) },
+            "workspace/symbol": { [self] in handleWorkspaceSymbolSync(params: $0) },
+            "textDocument/formatting": { [self] in handleFormattingSync(params: $0) },
+            "textDocument/prepareRename": { [self] in handlePrepareRenameSync(params: $0) },
+            "textDocument/rename": { [self] in handleRenameSync(params: $0) },
+            "textDocument/foldingRange": { [self] in handleFoldingRangeSync(params: $0) },
+            "textDocument/semanticTokens/full": { [self] in handleSemanticTokensSync(params: $0) },
+            "textDocument/signatureHelp": { [self] in handleSignatureHelpSync(params: $0) },
+            "textDocument/codeAction": { [self] in handleCodeActionSync(params: $0) },
+            "textDocument/inlayHint": { [self] in handleInlayHintSync(params: $0) }
+        ]
+    }
+
+    /// Notification methods routed on the synchronous transport. Handled for
+    /// their side effects; no response is ever produced.
+    ///
+    /// `textDocument/didSave` and `$/cancelRequest` are registered as no-ops:
+    /// on the previous synchronous path they matched the notification group but
+    /// fell through the inner switch's `default`, so they were silently
+    /// acknowledged without touching the document manager.
+    private var syncNotificationHandlers: [String: @Sendable (Any?) -> Void] {
+        [
+            "textDocument/didOpen": { [self] in handleDidOpenSync(params: $0) },
+            "textDocument/didChange": { [self] in handleDidChangeSync(params: $0) },
+            "textDocument/didClose": { [self] in handleDidCloseSync(params: $0) },
+            "textDocument/didSave": { _ in },
+            "$/cancelRequest": { _ in }
+        ]
     }
 
     // MARK: - Synchronous Handlers
@@ -415,55 +419,51 @@ public final class AROLanguageServer: Sendable {
         }
     }
 
-    private func handleNotificationSync(method: String, params: Any?) {
-        switch method {
-        case "textDocument/didOpen":
-            guard let dict = params as? [String: Any],
-                  let textDocument = dict["textDocument"] as? [String: Any],
-                  let uri = textDocument["uri"] as? String,
-                  let text = textDocument["text"] as? String,
-                  let version = textDocument["version"] as? Int else { return }
-            log("Document opened: \(uri)")
-            _ = documentManager.openSync(uri: uri, content: text, version: version)
+    private func handleDidOpenSync(params: Any?) {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let text = textDocument["text"] as? String,
+              let version = textDocument["version"] as? Int else { return }
+        log("Document opened: \(uri)")
+        _ = documentManager.openSync(uri: uri, content: text, version: version)
+    }
 
-        case "textDocument/didChange":
-            guard let dict = params as? [String: Any],
-                  let textDocument = dict["textDocument"] as? [String: Any],
-                  let uri = textDocument["uri"] as? String,
-                  let version = textDocument["version"] as? Int,
-                  let contentChanges = dict["contentChanges"] as? [[String: Any]] else { return }
-            log("Document changed: \(uri)")
-            var changes: [TextDocumentContentChangeEvent] = []
-            for change in contentChanges {
-                let text = change["text"] as? String ?? ""
-                if let rangeDict = change["range"] as? [String: Any],
-                   let startDict = rangeDict["start"] as? [String: Any],
-                   let endDict = rangeDict["end"] as? [String: Any],
-                   let startLine = startDict["line"] as? Int,
-                   let startChar = startDict["character"] as? Int,
-                   let endLine = endDict["line"] as? Int,
-                   let endChar = endDict["character"] as? Int {
-                    let range = LSPRange(
-                        start: Position(line: startLine, character: startChar),
-                        end: Position(line: endLine, character: endChar)
-                    )
-                    changes.append(TextDocumentContentChangeEvent(range: range, rangeLength: nil, text: text))
-                } else {
-                    changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
-                }
+    private func handleDidChangeSync(params: Any?) {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let version = textDocument["version"] as? Int,
+              let contentChanges = dict["contentChanges"] as? [[String: Any]] else { return }
+        log("Document changed: \(uri)")
+        var changes: [TextDocumentContentChangeEvent] = []
+        for change in contentChanges {
+            let text = change["text"] as? String ?? ""
+            if let rangeDict = change["range"] as? [String: Any],
+               let startDict = rangeDict["start"] as? [String: Any],
+               let endDict = rangeDict["end"] as? [String: Any],
+               let startLine = startDict["line"] as? Int,
+               let startChar = startDict["character"] as? Int,
+               let endLine = endDict["line"] as? Int,
+               let endChar = endDict["character"] as? Int {
+                let range = LSPRange(
+                    start: Position(line: startLine, character: startChar),
+                    end: Position(line: endLine, character: endChar)
+                )
+                changes.append(TextDocumentContentChangeEvent(range: range, rangeLength: nil, text: text))
+            } else {
+                changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
             }
-            _ = documentManager.applyChangesSync(uri: uri, changes: changes, version: version)
-
-        case "textDocument/didClose":
-            guard let dict = params as? [String: Any],
-                  let textDocument = dict["textDocument"] as? [String: Any],
-                  let uri = textDocument["uri"] as? String else { return }
-            log("Document closed: \(uri)")
-            documentManager.closeSync(uri: uri)
-
-        default:
-            break
         }
+        _ = documentManager.applyChangesSync(uri: uri, changes: changes, version: version)
+    }
+
+    private func handleDidCloseSync(params: Any?) {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String else { return }
+        log("Document closed: \(uri)")
+        documentManager.closeSync(uri: uri)
     }
 
     private func handleHoverSync(params: Any?) -> [String: Any]? {
@@ -860,7 +860,12 @@ public final class AROLanguageServer: Sendable {
         output.write(data)
     }
 
-    /// Handle an incoming JSON-RPC message
+    /// Handle an incoming JSON-RPC message.
+    ///
+    /// Dispatch is table-driven (see ``asyncRequestHandlers`` and
+    /// ``asyncNotificationHandlers``). Lifecycle methods with bespoke
+    /// return/side-effect semantics (`initialize`, `initialized`, `shutdown`,
+    /// `exit`, `$/cancelRequest`) are handled inline before the table lookup.
     private func handleMessage(_ data: Data) async -> Data? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let method = json["method"] as? String else {
@@ -872,105 +877,87 @@ public final class AROLanguageServer: Sendable {
 
         log("Handling method: \(method)")
 
-        // Handle the message based on method
-        let result: Any?
-
+        // Lifecycle methods with bespoke semantics.
         switch method {
-        case "initialize":
-            result = await handleInitialize(params: params)
-
         case "initialized":
             // Client is ready; load workspace plugins now so subsequent
             // completion/hover sees plugin-provided actions and qualifiers.
             loadWorkspacePluginsAsync()
             return nil
-
-        case "shutdown":
-            result = nil
-
         case "exit":
             exit(0)
-
-        case "textDocument/didOpen":
-            await handleDidOpen(params: params)
-            return nil
-
-        case "textDocument/didChange":
-            await handleDidChange(params: params)
-            return nil
-
-        case "textDocument/didClose":
-            await handleDidClose(params: params)
-            return nil
-
-        case "textDocument/didSave":
-            await handleDidSave(params: params)
-            return nil
-
-        case "textDocument/hover":
-            result = await handleHover(params: params)
-
-        case "textDocument/definition":
-            result = await handleDefinition(params: params)
-
-        case "textDocument/completion":
-            result = await handleCompletion(params: params)
-
-        case "textDocument/references":
-            result = await handleReferences(params: params)
-
-        case "textDocument/documentSymbol":
-            result = await handleDocumentSymbol(params: params)
-
-        case "workspace/symbol":
-            result = await handleWorkspaceSymbol(params: params)
-
-        case "textDocument/formatting":
-            result = await handleFormatting(params: params)
-
-        case "textDocument/prepareRename":
-            result = await handlePrepareRename(params: params)
-
-        case "textDocument/rename":
-            result = await handleRename(params: params)
-
-        case "textDocument/foldingRange":
-            result = await handleFoldingRange(params: params)
-
-        case "textDocument/semanticTokens/full":
-            result = await handleSemanticTokens(params: params)
-
-        case "textDocument/signatureHelp":
-            result = await handleSignatureHelp(params: params)
-
-        case "textDocument/codeAction":
-            result = await handleCodeAction(params: params)
-
-        case "textDocument/inlayHint":
-            result = await handleInlayHint(params: params)
-
-        case "textDocument/documentHighlight":
-            result = handleDocumentHighlightSync(params: params)
-
         case "$/cancelRequest":
-            // Cancellation not fully supported yet, just acknowledge
+            // Cancellation not fully supported yet, just acknowledge.
             return nil
-
+        case "shutdown":
+            // A request that always resolves to a null result.
+            return id.map { createSuccessResponse(id: $0, result: nil) } ?? nil
         default:
-            // Unknown method
-            log("Unknown method: \(method)")
-            if id != nil {
-                return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
+            break
+        }
+
+        // Notifications: handled for side effects, never answered.
+        if let handler = asyncNotificationHandlers[method] {
+            await handler(params)
+            return nil
+        }
+
+        // Requests: produce a result that is wrapped in a success response
+        // when the message carries an id.
+        if let handler = asyncRequestHandlers[method] {
+            let result = await handler(params)
+            if let id = id {
+                return createSuccessResponse(id: id, result: result)
             }
             return nil
         }
 
-        // Create response if this was a request (has id)
-        if let id = id {
-            return createSuccessResponse(id: id, result: result)
+        log("Unknown method: \(method)")
+        if id != nil {
+            return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
         }
-
         return nil
+    }
+
+    // MARK: - Async Dispatch Tables
+
+    /// Request methods routed on the async transport. Each closure maps the
+    /// raw `params` to a JSON-serialisable result (or `nil`), which is wrapped
+    /// in a JSON-RPC success response by ``handleMessage``.
+    ///
+    /// `textDocument/documentHighlight` intentionally forwards to the
+    /// synchronous handler (there is no async variant), matching the previous
+    /// behaviour.
+    private var asyncRequestHandlers: [String: @Sendable (Any?) async -> Any?] {
+        [
+            "initialize": { [self] in await handleInitialize(params: $0) },
+            "textDocument/hover": { [self] in await handleHover(params: $0) },
+            "textDocument/definition": { [self] in await handleDefinition(params: $0) },
+            "textDocument/completion": { [self] in await handleCompletion(params: $0) },
+            "textDocument/references": { [self] in await handleReferences(params: $0) },
+            "textDocument/documentSymbol": { [self] in await handleDocumentSymbol(params: $0) },
+            "workspace/symbol": { [self] in await handleWorkspaceSymbol(params: $0) },
+            "textDocument/formatting": { [self] in await handleFormatting(params: $0) },
+            "textDocument/prepareRename": { [self] in await handlePrepareRename(params: $0) },
+            "textDocument/rename": { [self] in await handleRename(params: $0) },
+            "textDocument/foldingRange": { [self] in await handleFoldingRange(params: $0) },
+            "textDocument/semanticTokens/full": { [self] in await handleSemanticTokens(params: $0) },
+            "textDocument/signatureHelp": { [self] in await handleSignatureHelp(params: $0) },
+            "textDocument/codeAction": { [self] in await handleCodeAction(params: $0) },
+            "textDocument/inlayHint": { [self] in await handleInlayHint(params: $0) },
+            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) }
+        ]
+    }
+
+    /// Notification methods routed on the async transport. Handled for their
+    /// side effects; no response is ever produced.
+    private var asyncNotificationHandlers: [String: @Sendable (Any?) async -> Void] {
+        [
+            "textDocument/didOpen": { [self] in await handleDidOpen(params: $0) },
+            "textDocument/didChange": { [self] in await handleDidChange(params: $0) },
+            "textDocument/didClose": { [self] in await handleDidClose(params: $0) },
+            "textDocument/didSave": { [self] in await handleDidSave(params: $0) }
+        ]
     }
 
     // MARK: - Initialize
