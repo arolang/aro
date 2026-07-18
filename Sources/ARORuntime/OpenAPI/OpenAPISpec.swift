@@ -141,6 +141,73 @@ public struct Operation: Sendable, Codable {
     public let responses: [String: OpenAPIResponse]
     public let deprecated: Bool?
     public let security: [[String: [String]]]?
+    /// OpenAPI `Operation.callbacks` — map of callback name → Callback Object.
+    ///
+    /// Each Callback Object is itself a map from an OpenAPI *runtime expression*
+    /// (e.g. `{$request.body#/callbackUrl}`) to a Path Item describing the
+    /// out-of-band request the server makes back to the caller (ARO-0187).
+    public let callbacks: [String: Callback]?
+
+    public init(
+        operationId: String? = nil,
+        summary: String? = nil,
+        description: String? = nil,
+        tags: [String]? = nil,
+        parameters: [Parameter]? = nil,
+        requestBody: RequestBody? = nil,
+        responses: [String: OpenAPIResponse] = [:],
+        deprecated: Bool? = nil,
+        security: [[String: [String]]]? = nil,
+        callbacks: [String: Callback]? = nil
+    ) {
+        self.operationId = operationId
+        self.summary = summary
+        self.description = description
+        self.tags = tags
+        self.parameters = parameters
+        self.requestBody = requestBody
+        self.responses = responses
+        self.deprecated = deprecated
+        self.security = security
+        self.callbacks = callbacks
+    }
+}
+
+// MARK: - Callback
+
+/// OpenAPI Callback Object (ARO-0187).
+///
+/// A Callback Object maps a *runtime expression* — used to build the target
+/// URL for an out-of-band request — to a `PathItem` describing that request.
+///
+/// ```yaml
+/// callbacks:
+///   onData:
+///     '{$request.body#/callbackUrl}':
+///       post:
+///         requestBody: { ... }
+///         responses: { '200': { description: ok } }
+/// ```
+///
+/// The runtime-expression keys are preserved verbatim; see
+/// ``OpenAPIRuntimeExpression`` for the subset of expressions ARO evaluates.
+public struct Callback: Sendable, Codable {
+    /// Map of runtime-expression string → Path Item.
+    public let expressions: [String: PathItem]
+
+    public init(expressions: [String: PathItem]) {
+        self.expressions = expressions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.expressions = try container.decode([String: PathItem].self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(expressions)
+    }
 }
 
 // MARK: - Parameter

@@ -146,14 +146,10 @@ extension OpenAPISpec {
             throw OpenAPILoadError.invalidVersion(openapi)
         }
 
-        // Combine paths and webhooks for validation
-        var allPathItems = paths
-        for (name, item) in webhooks ?? [:] {
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-
-        for (path, pathItem) in allPathItems {
+        // `paths` operations must carry an operationId (it is the feature-set
+        // name). Top-level `webhooks` (OpenAPI 3.1) may omit it: the webhook
+        // map key becomes the handler name (ARO-0187), so they are exempt.
+        for (path, pathItem) in paths {
             for (method, operation) in pathItem.allOperations {
                 if operation.operationId == nil || operation.operationId?.isEmpty == true {
                     throw OpenAPIValidationError.missingOperationId(path: path, method: method)
@@ -164,33 +160,38 @@ extension OpenAPISpec {
 
     public var allOperationIds: [String] {
         var ids: [String] = []
-        // Include both paths and webhooks
-        var allPathItems = paths
-        for (name, item) in webhooks ?? [:] {
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-        for (_, pathItem) in allPathItems {
+        for (_, pathItem) in paths {
             for (_, operation) in pathItem.allOperations {
                 if let opId = operation.operationId {
                     ids.append(opId)
                 }
             }
         }
+        // Webhooks: the operationId when present, otherwise the webhook name
+        // (the feature-set handler name — see the webhook naming convention).
+        for (name, item) in webhooks ?? [:] {
+            for (_, operation) in item.allOperations {
+                ids.append(operation.operationId ?? name)
+            }
+        }
         return ids
     }
 
     public func operation(byId operationId: String) -> (path: String, method: String, operation: Operation)? {
-        // Search paths first, then webhooks
-        var allPathItems = paths
-        for (name, item) in webhooks ?? [:] {
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-        for (path, pathItem) in allPathItems {
+        // Search paths first (matched by operationId)...
+        for (path, pathItem) in paths {
             for (method, operation) in pathItem.allOperations {
                 if operation.operationId == operationId {
                     return (path, method, operation)
+                }
+            }
+        }
+        // ...then webhooks (matched by operationId or webhook name).
+        for (name, item) in webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            for (method, operation) in item.allOperations {
+                if (operation.operationId ?? name) == operationId {
+                    return (key, method, operation)
                 }
             }
         }

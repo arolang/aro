@@ -1,0 +1,23 @@
+(* Webhook handlers - feature sets named after the webhook (or its operationId) *)
+
+(* GET /health - a regular path, for contrast *)
+(checkHealth: Webhook API) {
+    Create the <status> with "healthy".
+    Return an <OK: status> with { status: <status> }.
+}
+
+(* POST /newOrder - webhook "newOrder" has no operationId, so the feature set
+   is named after the webhook itself. *)
+(newOrder: Webhook API) {
+    Extract the <order> from the <request: body>.
+    Log "Received newOrder webhook" to the <console>.
+    Return an <OK: status> with { received: "newOrder" }.
+}
+
+(* POST /paymentReceived - webhook "paymentReceived" declares
+   operationId: handlePayment, so the handler is named after the operationId. *)
+(handlePayment: Webhook API) {
+    Extract the <payment> from the <request: body>.
+    Log "Received paymentReceived webhook" to the <console>.
+    Return an <OK: status> with { received: "paymentReceived" }.
+}

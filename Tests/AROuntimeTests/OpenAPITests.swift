@@ -585,6 +585,55 @@ struct ContractValidationTests {
         try ContractValidator.validate(spec: try spec, featureSets: featureSets)
     }
 
+    /// A 3.1 spec with a webhook that has no operationId (ARO-0187).
+    private static let webhookSpecJSON = """
+    {
+        "openapi": "3.1.0",
+        "info": { "title": "Webhook API", "version": "1.0.0" },
+        "paths": {},
+        "webhooks": {
+            "newOrder": {
+                "post": { "responses": { "200": { "description": "OK" } } }
+            }
+        }
+    }
+    """
+
+    @Test("validate matches webhook by its name when no operationId")
+    func testWebhookHandlerMatchedByName() throws {
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: Self.webhookSpecJSON.data(using: .utf8)!)
+        let source = """
+        (newOrder: Order Webhooks) {
+            Return an <OK: status> for the <webhook>.
+        }
+        """
+        let featureSets = Compiler().compile(source).analyzedProgram.featureSets
+        // Must not throw: the feature set named after the webhook satisfies it.
+        try ContractValidator.validate(spec: spec, featureSets: featureSets)
+        try ContractValidator.validateSpec(spec)
+    }
+
+    @Test("validate reports a missing webhook handler by webhook name")
+    func testWebhookHandlerMissing() throws {
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: Self.webhookSpecJSON.data(using: .utf8)!)
+        let source = """
+        (Application-Start: Test App) {
+            Return an <OK: status> for the <startup>.
+        }
+        """
+        let featureSets = Compiler().compile(source).analyzedProgram.featureSets
+        do {
+            try ContractValidator.validate(spec: spec, featureSets: featureSets)
+            Issue.record("Expected missing handler for webhook")
+        } catch let error as ContractValidationError {
+            guard case .missingHandlers(let handlers) = error else {
+                Issue.record("Expected .missingHandlers, got \(error)")
+                return
+            }
+            #expect(handlers.contains { $0.operationId == "newOrder" })
+        }
+    }
+
     @Test("validate passes when feature sets are a superset of operationIds")
     func testExtraFeatureSetsAreAllowed() throws {
         let source = """
@@ -3417,6 +3466,253 @@ struct OpenAPI31Tests {
         let ids = spec.allOperationIds
         #expect(ids.contains("listUsers"))
         #expect(ids.contains("handleNewOrder"))
+    }
+
+    // MARK: - webhooks & callbacks (ARO-0187)
+
+    @Test("Webhook without operationId routes to feature set named after the webhook")
+    func testWebhookNameConvention() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "POST", path: "/newOrder")
+        #expect(match?.operationId == "newOrder")
+        #expect(match?.isWebhook == true)
+        // Handler name is discoverable for contract validation.
+        #expect(spec.allOperationIds.contains("newOrder"))
+        #expect(spec.operation(byId: "newOrder") != nil)
+    }
+
+    @Test("Webhook operationId overrides the webhook name")
+    func testWebhookOperationIdWins() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "POST", path: "/newOrder")
+        #expect(match?.operationId == "handleNewOrder")
+        #expect(match?.isWebhook == true)
+    }
+
+    @Test("Webhook operation without operationId passes validation")
+    func testWebhookValidationExemption() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": { "responses": { "200": { "description": "OK" } } }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        // Must not throw even though the webhook op lacks an operationId.
+        try spec.validate()
+    }
+
+    @Test("paths operation without operationId still fails validation")
+    func testPathOperationIdStillRequired() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users": { "get": { "responses": { "200": { "description": "OK" } } } }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        #expect(throws: OpenAPIValidationError.self) {
+            try spec.validate()
+        }
+    }
+
+    @Test("Operation.callbacks parses into the model")
+    func testCallbacksParse() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/subscribe": {
+                    "post": {
+                        "operationId": "subscribe",
+                        "responses": { "201": { "description": "Created" } },
+                        "callbacks": {
+                            "onEvent": {
+                                "{$request.body#/callbackUrl}": {
+                                    "post": {
+                                        "responses": { "200": { "description": "ack" } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        let op = spec.paths["/subscribe"]?.post
+        let callback = op?.callbacks?["onEvent"]
+        #expect(callback != nil)
+        let expr = "{$request.body#/callbackUrl}"
+        #expect(callback?.expressions[expr]?.post != nil)
+    }
+
+    @Test("Spec with neither webhooks nor callbacks is unaffected")
+    func testNoWebhooksOrCallbacks() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "listUsers",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        #expect(spec.webhooks == nil)
+        #expect(spec.paths["/users"]?.get?.callbacks == nil)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "GET", path: "/users")
+        #expect(match?.operationId == "listUsers")
+        #expect(match?.isWebhook == false)
+        try spec.validate()
+    }
+}
+
+// MARK: - OpenAPI Runtime Expression Tests (ARO-0187)
+
+@Suite("OpenAPI Runtime Expression Tests")
+struct OpenAPIRuntimeExpressionTests {
+    typealias Expr = OpenAPIRuntimeExpression
+    typealias Ctx = OpenAPIRuntimeExpression.Context
+
+    private func makeContext(body: String? = nil) -> Ctx {
+        Ctx(
+            method: "POST",
+            url: "/subscribe?token=abc",
+            headers: ["Host": "example.com", "X-Api-Key": "secret"],
+            queryParameters: ["token": "abc"],
+            pathParameters: ["id": "42"],
+            body: body?.data(using: .utf8)
+        )
+    }
+
+    @Test("$url resolves to the request URL")
+    func testUrl() throws {
+        #expect(try Expr.evaluate("$url", context: makeContext()) == "/subscribe?token=abc")
+    }
+
+    @Test("$method resolves to the HTTP method")
+    func testMethod() throws {
+        #expect(try Expr.evaluate("$method", context: makeContext()) == "POST")
+    }
+
+    @Test("$request.query.<name> resolves a query parameter")
+    func testQuery() throws {
+        #expect(try Expr.evaluate("$request.query.token", context: makeContext()) == "abc")
+    }
+
+    @Test("$request.header.<name> is case-insensitive")
+    func testHeaderCaseInsensitive() throws {
+        #expect(try Expr.evaluate("$request.header.host", context: makeContext()) == "example.com")
+        #expect(try Expr.evaluate("$request.header.X-Api-Key", context: makeContext()) == "secret")
+    }
+
+    @Test("$request.path.<name> resolves a path parameter")
+    func testPath() throws {
+        #expect(try Expr.evaluate("$request.path.id", context: makeContext()) == "42")
+    }
+
+    @Test("$request.body#/field resolves a JSON pointer")
+    func testBodyPointer() throws {
+        let ctx = makeContext(body: #"{"callbackUrl":"https://client.example/cb","count":7}"#)
+        #expect(try Expr.evaluate("$request.body#/callbackUrl", context: ctx) == "https://client.example/cb")
+        #expect(try Expr.evaluate("$request.body#/count", context: ctx) == "7")
+    }
+
+    @Test("$request.body#/ resolves nested and array pointers")
+    func testBodyPointerNested() throws {
+        let ctx = makeContext(body: #"{"data":{"urls":["a","b"]}}"#)
+        #expect(try Expr.evaluate("$request.body#/data/urls/1", context: ctx) == "b")
+    }
+
+    @Test("Template with literal text and one expression")
+    func testTemplateResolution() throws {
+        let ctx = makeContext(body: #"{"callbackUrl":"cb.example"}"#)
+        let resolved = try Expr.resolveTemplate("https://{$request.body#/callbackUrl}/hook", context: ctx)
+        #expect(resolved == "https://cb.example/hook")
+    }
+
+    @Test("Bare-expression template (typical Callback key) resolves to the value")
+    func testBareTemplate() throws {
+        let ctx = makeContext(body: #"{"callbackUrl":"https://client/cb"}"#)
+        let resolved = try Expr.resolveTemplate("{$request.body#/callbackUrl}", context: ctx)
+        #expect(resolved == "https://client/cb")
+    }
+
+    @Test("Template with no braces is returned unchanged")
+    func testTemplateNoBraces() throws {
+        #expect(try Expr.resolveTemplate("https://static.example/cb", context: makeContext()) == "https://static.example/cb")
+    }
+
+    @Test("Unsupported expression is reported")
+    func testUnsupported() throws {
+        #expect(throws: OpenAPIRuntimeExpression.EvaluationError.self) {
+            _ = try Expr.evaluate("$response.body#/id", context: makeContext())
+        }
+    }
+
+    @Test("Missing value is reported as notFound")
+    func testNotFound() throws {
+        #expect {
+            _ = try Expr.evaluate("$request.query.missing", context: makeContext())
+        } throws: { error in
+            error as? OpenAPIRuntimeExpression.EvaluationError == .notFound("$request.query.missing")
+        }
+    }
+
+    @Test("Unbalanced brace in template is malformed")
+    func testUnbalancedBrace() throws {
+        #expect(throws: OpenAPIRuntimeExpression.EvaluationError.self) {
+            _ = try Expr.resolveTemplate("https://{$url/cb", context: makeContext())
+        }
     }
 }
 

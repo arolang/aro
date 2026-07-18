@@ -2983,6 +2983,22 @@ private func parseOpenAPIRoutesJSON(_ json: String) {
             }
         }
     }
+
+    // Top-level webhooks (OpenAPI 3.1): route POST /<name> to the feature set
+    // named after the webhook (or its operationId, when present) — ARO-0187.
+    for (name, item) in spec.webhooks ?? [:] {
+        let path = name.hasPrefix("/") ? name : "/\(name)"
+        for (method, operation) in item.allOperations {
+            let handlerName = operation.operationId ?? name
+            httpRoutes.append((method: method.uppercased(), path: path, operationId: handlerName))
+
+            if let response = operation.responses["200"] ?? operation.responses["201"],
+               let content = response.content,
+               let firstContentType = content.keys.first {
+                httpResponseContentTypes[handlerName] = firstContentType
+            }
+        }
+    }
 }
 
 /// Parse routes from OpenAPI YAML spec

@@ -23,15 +23,8 @@ public struct ContractValidator {
         // Track missing handlers
         var missingHandlers: [(operationId: String, path: String, method: String)] = []
 
-        // Combine paths and webhooks (OpenAPI 3.1) for validation
-        var allPathItems = spec.paths
-        for (name, item) in spec.webhooks ?? [:] {
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-
-        // Check each operation has a matching feature set
-        for (path, pathItem) in allPathItems {
+        // Check each `paths` operation has a matching feature set (by operationId).
+        for (path, pathItem) in spec.paths {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -49,6 +42,19 @@ public struct ContractValidator {
             }
         }
 
+        // Webhooks (OpenAPI 3.1): handler name is the operationId when present,
+        // otherwise the webhook name (ARO-0187) — operationId is not required.
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            for (method, operation) in item.allOperations {
+                let handlerName = operation.operationId ?? name
+                let isWebSocketUpgrade = operation.responses.keys.contains("101")
+                if !featureSetNames.contains(handlerName) && !isWebSocketUpgrade {
+                    missingHandlers.append((handlerName, key, method))
+                }
+            }
+        }
+
         // Report all missing handlers at once
         if !missingHandlers.isEmpty {
             throw ContractValidationError.missingHandlers(missingHandlers)
@@ -62,14 +68,8 @@ public struct ContractValidator {
         // Check for duplicate operation IDs
         var seenIds: [String: (path: String, method: String)] = [:]
 
-        // Combine paths and webhooks
-        var allPathItems = spec.paths
-        for (name, item) in spec.webhooks ?? [:] {
-            let key = name.hasPrefix("/") ? name : "/\(name)"
-            allPathItems[key] = item
-        }
-
-        for (path, pathItem) in allPathItems {
+        // `paths` operations require an operationId.
+        for (path, pathItem) in spec.paths {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -87,6 +87,23 @@ public struct ContractValidator {
                 }
 
                 seenIds[operationId] = (path, method)
+            }
+        }
+
+        // Webhooks contribute their handler name (operationId or webhook name)
+        // to the duplicate check, but do not require an explicit operationId.
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            for (method, operation) in item.allOperations {
+                let handlerName = operation.operationId ?? name
+                if let existing = seenIds[handlerName] {
+                    throw ContractValidationError.duplicateOperationId(
+                        operationId: handlerName,
+                        first: (existing.path, existing.method),
+                        second: (key, method)
+                    )
+                }
+                seenIds[handlerName] = (key, method)
             }
         }
 

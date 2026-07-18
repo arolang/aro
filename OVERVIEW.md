@@ -270,6 +270,12 @@ paths:
 }
 ```
 
+**Incoming webhooks (OpenAPI 3.1)** declared under the top-level `webhooks`
+object are routed the same way: the webhook name becomes the request path and
+the feature-set name (or its `operationId`, when present). Outgoing
+`Operation.callbacks` are parsed; firing them is left to explicit event-driven
+ARO code. See `Proposals/ARO-0008-io-services.md` §2.8.
+
 ### Testing
 
 Tests are feature sets whose business activity ends in `Test`:

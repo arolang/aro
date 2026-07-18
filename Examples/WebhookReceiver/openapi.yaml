@@ -1,0 +1,56 @@
+# ============================================================
+# OpenAPI Contract for the Webhook Receiver Example (ARO-0187)
+# ============================================================
+# Demonstrates OpenAPI 3.1 top-level `webhooks`. Each webhook entry is
+# routed as POST /<webhookName>, and dispatched to the feature set named
+# after the webhook (or its operationId, when present).
+# ============================================================
+
+openapi: 3.1.0
+info:
+  title: Webhook Receiver Example
+  description: Receives incoming webhooks declared via OpenAPI 3.1 `webhooks`.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+# A regular path, for contrast with the webhooks below.
+paths:
+  /health:
+    get:
+      operationId: checkHealth
+      summary: Health check
+      responses:
+        '200':
+          description: Server is healthy
+
+# Incoming webhooks (OpenAPI 3.1). The map key is both the request path
+# (POST /newOrder, POST /paymentReceived) and the feature-set name.
+webhooks:
+  newOrder:
+    post:
+      summary: An external system notifies us of a new order.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Order acknowledged
+
+  paymentReceived:
+    post:
+      # An explicit operationId decouples the handler name from the webhook name.
+      operationId: handlePayment
+      summary: A payment provider notifies us that a payment settled.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Payment acknowledged
