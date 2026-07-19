@@ -30,8 +30,16 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # try? audit expands beyond the bridge layer (issue #322).
 # ---------------------------------------------------------------------------
 AUDITED_FILES=(
-  "Sources/ARORuntime/Bridge/RuntimeBridge.swift"
+  "Sources/ARORuntime/Bridge/RuntimeCoreBridge.swift"
+  "Sources/ARORuntime/Bridge/RuntimeEventRecordingBridge.swift"
+  "Sources/ARORuntime/Bridge/RuntimeExecutionBridge.swift"
+  "Sources/ARORuntime/Bridge/RuntimeResponseFormatting.swift"
   "Sources/ARORuntime/Bridge/ServiceBridge.swift"
+  "Sources/ARORuntime/Bridge/HTTPServerBridge.swift"
+  "Sources/ARORuntime/Bridge/HTTPClientBridge.swift"
+  "Sources/ARORuntime/Bridge/FileSystemBridge.swift"
+  "Sources/ARORuntime/Bridge/FileWatcherBridge.swift"
+  "Sources/ARORuntime/Bridge/SocketBridge.swift"
 )
 
 violations=0
