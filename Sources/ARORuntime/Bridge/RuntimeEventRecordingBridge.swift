@@ -284,10 +284,13 @@ public func aro_register_repository_observer_with_guard(
 
         // If there's a when condition, evaluate it first
         if let condition = whenCondition, !condition.isEmpty {
-            // Parse the when condition JSON
+            // Parse the when condition JSON. The JSON is compiler-generated, so a
+            // parse failure is a codegen bug: skipping silently would make the
+            // observer never fire with no trace — log before skipping.
             guard let conditionData = condition.data(using: .utf8),
                   let parsed = try? JSONSerialization.jsonObject(with: conditionData, options: []) as? [String: Any] else {
-                return // Skip if can't parse condition
+                FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable when-condition for \(repositoryName) Observer, event skipped: \(condition)\n".utf8))
+                return
             }
 
             // Create a temporary context to evaluate the condition
@@ -531,11 +534,14 @@ public func aro_runtime_register_notification_handler(
         eventType: "NotificationSent",
         handlerName: "NotificationSent Handler"
     ) { @Sendable event in
-        // Evaluate when condition if present
+        // Evaluate when condition if present. The condition JSON is
+        // compiler-generated, so a parse failure is a codegen bug: skipping
+        // silently would drop the event with no trace — log before skipping.
         if let condition = whenCondition, !condition.isEmpty {
             guard let conditionData = condition.data(using: .utf8),
                   let parsed = try? JSONSerialization.jsonObject(with: conditionData, options: []) as? [String: Any] else {
-                return // Skip if condition can't be parsed
+                FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable when-condition for NotificationSent Handler, event skipped: \(condition)\n".utf8))
+                return
             }
 
             // Bind payload fields directly so `when <age> >= 16` resolves `age` from the target object

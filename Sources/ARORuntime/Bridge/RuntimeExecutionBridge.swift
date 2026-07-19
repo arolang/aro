@@ -341,7 +341,10 @@ public func aro_variable_bind_dict(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse JSON to dictionary
+    // Parse JSON to dictionary.
+    // try? is acceptable: generated code also routes plain (non-JSON) string
+    // payloads through this entry point, so a parse failure is an expected
+    // signal to fall back to binding the raw string — no data is lost.
     guard let data = jsonStr.data(using: .utf8),
           let parsed = try? JSONSerialization.jsonObject(with: data, options: []),
           let dict = parsed as? [String: Any] else {
@@ -424,7 +427,9 @@ public func aro_variable_bind_array(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse JSON to array
+    // Parse JSON to array.
+    // try? is acceptable: a payload that is not valid JSON is bound as the raw
+    // string instead, so the value still reaches the context — no data is lost.
     guard let data = jsonStr.data(using: .utf8),
           let parsed = try? JSONSerialization.jsonObject(with: data, options: []),
           let array = parsed as? [Any] else {
@@ -550,9 +555,12 @@ public func aro_evaluate_expression(
     // This prevents SIGBUS from JSONSerialization's recursive JSON parser consuming
     // the remaining stack space in compiled handler threads.
     withStackGuard {
-        // Parse the JSON
+        // Parse the JSON. The expression JSON is compiler-generated, so a parse
+        // failure is a codegen bug: returning silently would leave _expression_
+        // unbound with no trace — log before bailing out.
         guard let data = jsonStr.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable expression JSON, _expression_ left unbound: \(jsonStr)\n".utf8))
             return
         }
 
@@ -601,9 +609,12 @@ public func aro_evaluate_and_bind(
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     withStackGuard {
-        // Parse the JSON
+        // Parse the JSON. The expression JSON is compiler-generated, so a parse
+        // failure is a codegen bug: returning silently would leave the variable
+        // unbound with no trace — log before bailing out.
         guard let data = jsonStr.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable expression JSON, <\(nameStr)> left unbound: \(jsonStr)\n".utf8))
             return
         }
 
@@ -696,13 +707,18 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         // Try namespaced qualifier form first (e.g., <list: collections.reverse>)
         if specs.count > 1 {
             let joined = specs.joined(separator: ".")
+            // try? is acceptable: this is a probe — most specifiers are not
+            // namespaced qualifiers, and failure falls through to the
+            // per-specifier resolution below.
             if let transformed = try? QualifierRegistry.shared.resolve(joined, value: value) {
                 return transformed
             }
         }
 
         for spec in specs {
-            // First, try plugin qualifier (e.g., <list: pick-random>)
+            // First, try plugin qualifier (e.g., <list: pick-random>).
+            // try? is acceptable: a specifier that is not a registered qualifier
+            // is expected — resolution falls through to property access below.
             if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
                 value = transformed
             } else if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
@@ -1058,6 +1074,8 @@ private func parseARODate(_ value: any Sendable) -> ARODate? {
         return date
     }
     if let str = value as? String {
+        // try? is acceptable: this helper deliberately returns Optional —
+        // "not a parseable date" is an expected answer the caller handles.
         return try? ARODate.parse(str)
     }
     return nil
@@ -1269,9 +1287,12 @@ public func aro_evaluate_when_guard(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse the guard expression
+    // Parse the guard expression. The JSON is compiler-generated, so a parse
+    // failure is a codegen bug: silently returning false would skip the guarded
+    // block with no trace — log before failing the guard.
     guard let data = jsonStr.data(using: .utf8),
           let parsed = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable when-guard JSON, guard evaluates false: \(jsonStr)\n".utf8))
         return 0
     }
 
@@ -1313,11 +1334,14 @@ public func aro_match_pattern(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse subject name and pattern JSON
+    // Parse subject name and pattern JSON. Both are compiler-generated, so a
+    // parse failure is a codegen bug: silently returning "no match" would skip
+    // the case with no trace — log before failing the match.
     guard let subjectData = subjectStr.data(using: .utf8),
           let patternData = patternStr.data(using: .utf8),
           let subjectInfo = try? JSONSerialization.jsonObject(with: subjectData, options: []) as? [String: Any],
           let patternInfo = try? JSONSerialization.jsonObject(with: patternData, options: []) as? [String: Any] else {
+        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable match-pattern JSON, case treated as no-match: subject=\(subjectStr) pattern=\(patternStr)\n".utf8))
         return 0
     }
 
@@ -1724,7 +1748,10 @@ public func aro_dict_get(
 
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    // First, try plugin qualifier (e.g., <list: pick-random>)
+    // First, try plugin qualifier (e.g., <list: pick-random>).
+    // try? is acceptable: this is a probe — a specifier that is not a
+    // registered qualifier is expected, and resolution falls through to
+    // dictionary property access below.
     if let transformed = try? QualifierRegistry.shared.resolve(specStr, value: boxed.value) {
         let boxedValue = AROCValue(value: transformed)
         return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
@@ -1922,9 +1949,12 @@ public func aro_evaluate_filter(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse and evaluate the expression
+    // Parse and evaluate the expression. The filter JSON is compiler-generated,
+    // so a parse failure is a codegen bug: silently returning false would drop
+    // every element from the filtered collection with no trace — log first.
     guard let data = jsonStr.data(using: .utf8),
           let parsed = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unparseable filter JSON, filter evaluates false: \(jsonStr)\n".utf8))
         return 0
     }
 

@@ -81,6 +81,8 @@ public func aro_http_server_stop(_ serverPtr: UnsafeMutableRawPointer?) {
     let handle = Unmanaged<HTTPServerHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     Task {
+        // try? is acceptable: best-effort shutdown — the server is being torn
+        // down regardless, and there is no caller to report a stop error to.
         try? await handle.server?.stop()
         handle.isRunning = false
     }

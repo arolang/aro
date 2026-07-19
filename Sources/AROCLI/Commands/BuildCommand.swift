@@ -211,11 +211,8 @@ struct BuildCommand: AsyncParsableCommand {
         AROLogger.debug("Binary path: \(binaryPath.path)", subsystem: "build")
 
         // Create build directory and binary parent dir (needed when --output points outside rootPath)
-        try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(
-            at: binaryPath.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        await FileOps.createDirectoryIfNeeded(at: buildDir)
+        await FileOps.createDirectoryIfNeeded(at: binaryPath.deletingLastPathComponent())
 
         // Pre-compile managed plugins for inclusion in the binary.
         // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
@@ -562,7 +559,7 @@ struct BuildCommand: AsyncParsableCommand {
             let outputResolved = outputManagedPluginsDirEarly.standardizedFileURL.path
             if sourceResolved != outputResolved,
                FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
-                try? FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
+                await FileOps.removeItemIfPresent(at: outputManagedPluginsDirEarly)
                 if verbose {
                     print("  Cleaned next-to-binary Plugins/ (all plugins baked into binary)")
                 }

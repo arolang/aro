@@ -191,6 +191,10 @@ public func aro_file_stat(
             json["permissions"] = permissions
         }
 
+        // try? is acceptable: the dictionary is built above from JSON-safe
+        // primitives (strings/numbers), so serialization cannot realistically
+        // fail; on failure we fall through to the nil return, which callers
+        // already treat as "stat unavailable".
         if let jsonData = try? JSONSerialization.data(withJSONObject: json),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
             outLength?.pointee = jsonStr.utf8.count
@@ -253,6 +257,10 @@ public func aro_directory_list_extended(
             }
         }
 
+        // try? is acceptable: entries are dictionaries of JSON-safe primitives
+        // built by fileEntryDict, so serialization cannot realistically fail;
+        // on failure we fall through to the nil return, which callers already
+        // treat as "listing unavailable".
         if let jsonData = try? JSONSerialization.data(withJSONObject: entries),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
             outLength?.pointee = jsonStr.utf8.count
@@ -373,6 +381,8 @@ public func aro_file_append(
     do {
         if fm.fileExists(atPath: pathStr) {
             let handle = try FileHandle(forWritingTo: url)
+            // try? is acceptable: best-effort cleanup — a close failure after a
+            // successful write has nothing actionable for the caller.
             defer { try? handle.close() }
             handle.seekToEndOfFile()
             if let data = contentStr.data(using: .utf8) {
@@ -412,15 +422,27 @@ private func matchesGlobPattern(_ name: String, pattern: String?) -> Bool {
     }
     regex += "$"
 
-    return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
-        in: name,
-        options: [],
-        range: NSRange(name.startIndex..., in: name)
-    ) != nil
+    // The pattern is machine-built from the glob above, so compilation should
+    // never fail — but if it does, every file would silently stop matching.
+    // Log the broken pattern instead of hiding it.
+    do {
+        let compiled = try RegexCache.shared.regex(regex, options: .caseInsensitive)
+        return compiled.firstMatch(
+            in: name,
+            options: [],
+            range: NSRange(name.startIndex..., in: name)
+        ) != nil
+    } catch {
+        FileHandle.standardError.write(Data("[ServiceBridge] Warning: glob pattern '\(pattern)' produced invalid regex '\(regex)', treating as no-match: \(error)\n".utf8))
+        return false
+    }
 }
 
 /// Helper: Create file entry dictionary for JSON serialization
 private func fileEntryDict(for url: URL, dateFormatter: ISO8601DateFormatter) -> [String: Any]? {
+    // try? is acceptable: a file can legitimately vanish between directory
+    // enumeration and this stat (TOCTOU race); skipping the entry by returning
+    // nil is the intended behavior for concurrent file-system churn.
     guard let resourceValues = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]) else {
         return nil
     }

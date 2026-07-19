@@ -238,7 +238,14 @@ class AROCContextHandle: @unchecked Sendable {
         // This is set by aro_set_embedded_openapi() called from generated main()
         if let embeddedJSON = embeddedOpenAPISpec {
             if let data = embeddedJSON.data(using: .utf8) {
-                spec = try? openAPIDecoder.decode(OpenAPISpec.self, from: data)
+                do {
+                    spec = try openAPIDecoder.decode(OpenAPISpec.self, from: data)
+                } catch {
+                    // A corrupt embedded spec must not crash startup, but silently
+                    // dropping it would disable typed event extraction (ARO-0046)
+                    // with no trace — surface the decode failure.
+                    FileHandle.standardError.write(Data("[RuntimeBridge] Warning: failed to decode embedded OpenAPI spec, typed event extraction disabled: \(error)\n".utf8))
+                }
             }
         }
 
@@ -249,7 +256,14 @@ class AROCContextHandle: @unchecked Sendable {
             let openapiPath = URL(fileURLWithPath: binaryDir).appendingPathComponent("openapi.yaml").path
 
             if FileManager.default.fileExists(atPath: openapiPath) {
-                spec = try? OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
+                do {
+                    spec = try OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
+                } catch {
+                    // The file exists but cannot be parsed — that is a broken
+                    // contract, not a missing one. Keep running without schemas,
+                    // but tell the user why typed extraction is unavailable.
+                    FileHandle.standardError.write(Data("[RuntimeBridge] Warning: failed to load \(openapiPath), typed event extraction disabled: \(error)\n".utf8))
+                }
             }
         }
 
@@ -317,9 +331,17 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
         let execPath = CommandLine.arguments[0]
         let binDir = ToolResolver.resolveExecutableDirectory(execPath)
         let storeLoader = StoreFileLoader()
-        if let storeFiles = try? storeLoader.discover(in: URL(fileURLWithPath: binDir)) {
+        var discoveredStoreFiles: [StoreFileDescriptor] = []
+        do {
+            discoveredStoreFiles = try storeLoader.discover(in: URL(fileURLWithPath: binDir))
+        } catch {
+            // A failed discovery means repositories start empty instead of
+            // seeded — that is data loss, so it must be visible (ARO-0073).
+            FileHandle.standardError.write(Data("[RuntimeBridge] Warning: failed to discover .store files in \(binDir), repositories start unseeded: \(error)\n".utf8))
+        }
+        if !discoveredStoreFiles.isEmpty {
             let repoStorage = InMemoryRepositoryStorage.shared
-            for descriptor in storeFiles {
+            for descriptor in discoveredStoreFiles {
                 for entry in descriptor.entries {
                     await repoStorage.store(
                         value: entry as [String: any Sendable],
@@ -509,7 +531,15 @@ final class AROCValue: @unchecked Sendable {
     var materializedValue: any Sendable {
         let v = value
         if let future = v as? AROFuture {
-            return (try? future.force()) ?? ""
+            do {
+                return try future.force()
+            } catch {
+                // Keep the "" fallback (resolveAny semantics: C ABI accessors
+                // cannot throw), but a failed force means the producing action
+                // errored — surface it instead of silently yielding "".
+                FileHandle.standardError.write(Data("[RuntimeBridge] Warning: forcing lazy value failed, substituting empty string: \(error)\n".utf8))
+                return ""
+            }
         }
         return v
     }
