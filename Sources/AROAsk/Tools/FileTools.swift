@@ -56,7 +56,7 @@ public enum FileTools {
 
     // MARK: - write_file
 
-    public static func writeFile(guard pg: PathGuard) -> AskToolDescriptor {
+    public static func writeFile(guard pg: PathGuard, hooks: AskEditorHooks? = nil) -> AskToolDescriptor {
         AskToolDescriptor(
             name: "write_file",
             description: "Create or overwrite a file with the given content.",
@@ -70,6 +70,13 @@ public enum FileTools {
             let content = try args.requireString("content")
             let url = try pg.resolve(path)
 
+            // Route into the live editor buffer when this file is open in the
+            // host (SOLARO): the write lands in the document the user is
+            // watching, undoably, instead of a disk write + reload.
+            if let hooks, await hooks.applyWrite(url.path, content) {
+                return "Wrote \(content.utf8.count) bytes to \(path) (live in editor)"
+            }
+
             // Create parent directories if needed
             let parent = url.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
@@ -82,7 +89,7 @@ public enum FileTools {
 
     // MARK: - edit_file
 
-    public static func editFile(guard pg: PathGuard) -> AskToolDescriptor {
+    public static func editFile(guard pg: PathGuard, hooks: AskEditorHooks? = nil) -> AskToolDescriptor {
         AskToolDescriptor(
             name: "edit_file",
             description: "Perform an exact string replacement in a file. The old_string must appear exactly once in the file; the call fails if it is not found or appears more than once.",
@@ -98,6 +105,15 @@ public enum FileTools {
             let newString = try args.requireString("new_string")
             let url = try pg.resolve(path)
             let filePath = url.path
+
+            // Route into the live editor buffer when this file is open in the
+            // host (SOLARO). The host applies the same exact-unique-match
+            // replacement undoably in the open document; it returns false
+            // (and we fall through to the disk path) when the file isn't open
+            // or the match isn't unique there.
+            if let hooks, await hooks.applyEdit(url.path, oldString, newString) {
+                return "Applied edit to \(path) (live in editor)"
+            }
 
             guard FileManager.default.fileExists(atPath: filePath) else {
                 throw AskToolError.executionFailed("File not found: \(path)")
@@ -223,11 +239,11 @@ public enum FileTools {
 
     // MARK: - all(guard:)
 
-    public static func all(guard pg: PathGuard) -> [AskToolDescriptor] {
+    public static func all(guard pg: PathGuard, hooks: AskEditorHooks? = nil) -> [AskToolDescriptor] {
         [
             readFile(guard: pg),
-            writeFile(guard: pg),
-            editFile(guard: pg),
+            writeFile(guard: pg, hooks: hooks),
+            editFile(guard: pg, hooks: hooks),
             listDir(guard: pg),
             grep(guard: pg),
         ]

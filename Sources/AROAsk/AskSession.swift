@@ -20,6 +20,11 @@ public struct AskSessionConfig: Sendable {
     /// Suppress TerminalUI output. Set by embedders (SOLARO) that render
     /// progress through the event sink instead of stdout/stderr.
     public var quiet: Bool
+    /// Inject a transient "OPEN PROJECT" block (the project's source-file
+    /// list) into every request so the model knows the layout without a
+    /// `list_dir` round-trip. Off by default — enabled by editor embedders
+    /// (SOLARO); the plain CLI keeps its existing prompt shape.
+    public var injectProjectContext: Bool
 
     public init(
         workingDirectory: URL,
@@ -29,7 +34,8 @@ public struct AskSessionConfig: Sendable {
         temperature: Double = 0.2,
         skipMCP: Bool = false,
         focusFile: URL? = nil,
-        quiet: Bool = false
+        quiet: Bool = false,
+        injectProjectContext: Bool = false
     ) {
         self.workingDirectory = workingDirectory
         self.model = model
@@ -39,6 +45,7 @@ public struct AskSessionConfig: Sendable {
         self.skipMCP = skipMCP
         self.focusFile = focusFile
         self.quiet = quiet
+        self.injectProjectContext = injectProjectContext
     }
 }
 
@@ -52,6 +59,32 @@ public enum AskEvent: Sendable {
     /// (write_file, edit_file, write_openapi, generate_docs) touched,
     /// nil for read-only tools or failures.
     case toolCallFinished(name: String, output: String, failed: Bool, modifiedPath: String?)
+}
+
+/// Optional host hooks that let an embedder (SOLARO) route file writes for
+/// the OPEN editor document into the live editor buffer — so the co-pilot's
+/// edits land in the document the user is looking at (undoable, on the fly)
+/// instead of a disk write + reload — and expose the editor's current text
+/// so the model sees unsaved changes.
+///
+/// All closures take ABSOLUTE paths and may hop to the host's UI actor
+/// internally. `applyEdit` / `applyWrite` return `true` when the host handled
+/// the change (the file is the open editor buffer); `false` lets the file
+/// tool fall back to a normal disk write.
+public struct AskEditorHooks: Sendable {
+    public var liveText: @Sendable (_ absolutePath: String) async -> String?
+    public var applyEdit: @Sendable (_ absolutePath: String, _ oldString: String, _ newString: String) async -> Bool
+    public var applyWrite: @Sendable (_ absolutePath: String, _ content: String) async -> Bool
+
+    public init(
+        liveText: @escaping @Sendable (String) async -> String?,
+        applyEdit: @escaping @Sendable (String, String, String) async -> Bool,
+        applyWrite: @escaping @Sendable (String, String) async -> Bool
+    ) {
+        self.liveText = liveText
+        self.applyEdit = applyEdit
+        self.applyWrite = applyWrite
+    }
 }
 
 /// Coordinates a single `aro ask` session: backend, tool registry, context
@@ -70,6 +103,7 @@ public actor AskSession {
     private var contextLength: Int = 8192
     private var focusFile: URL?
     private var eventSink: (@Sendable (AskEvent) -> Void)?
+    private var editorHooks: AskEditorHooks?
 
     /// - Parameter approver: custom approval policy. Embedders (SOLARO)
     ///   pass one to route approvals through their own UI instead of the
@@ -94,7 +128,7 @@ public actor AskSession {
     /// Prepare the session: register tools, load vector store, start MCP, select backend.
     public func prepare(modelManager: ModelManager) async throws {
         // 1. Built-in tools
-        await registry.register(FileTools.all(guard: pathGuard))
+        await registry.register(FileTools.all(guard: pathGuard, hooks: editorHooks))
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
@@ -126,7 +160,7 @@ public actor AskSession {
 
     /// Register tools + MCP but skip backend startup (for slash commands).
     public func prepareRegistryOnly() async throws {
-        await registry.register(FileTools.all(guard: pathGuard))
+        await registry.register(FileTools.all(guard: pathGuard, hooks: editorHooks))
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
@@ -183,6 +217,13 @@ public actor AskSession {
     /// SOLARO to show progress and reload files the model modified.
     public func setEventSink(_ sink: (@Sendable (AskEvent) -> Void)?) {
         eventSink = sink
+    }
+
+    /// Install host editor hooks (SOLARO). Set BEFORE `prepare()` /
+    /// `prepareRegistryOnly()` so the file tools capture them at
+    /// registration; passing nil restores plain disk writes.
+    public func setEditorHooks(_ hooks: AskEditorHooks?) {
+        editorHooks = hooks
     }
 
     private func emitStatus(_ message: String) {
@@ -242,9 +283,13 @@ public actor AskSession {
     /// the model always sees the file as it is on disk right now. Never
     /// persisted to `.context` — persisting would snapshot stale content
     /// and double it on every turn.
-    private func focusFileMessage() -> LMChatRequest.Message? {
-        guard let url = focusFile,
-              let content = try? String(contentsOf: url, encoding: .utf8)
+    private func focusFileMessage() async -> LMChatRequest.Message? {
+        guard let url = focusFile else { return nil }
+        // Prefer the host's LIVE editor buffer (unsaved edits included) over
+        // disk, so "write a function here" sees exactly what the user is
+        // looking at. Falls back to disk when no editor host is attached.
+        let live = await editorHooks?.liveText(url.path)
+        guard let content = live ?? (try? String(contentsOf: url, encoding: .utf8))
         else { return nil }
         let display = displayPath(for: url)
         var body = content
@@ -266,12 +311,61 @@ public actor AskSession {
         """)
     }
 
-    /// Convert stored messages to request messages, inserting the
-    /// transient focus-file block right after the system prompt.
-    private func requestMessages(from messages: [AskMessage]) -> [LMChatRequest.Message] {
+    /// Cap on the number of project files listed in the OPEN PROJECT block —
+    /// enough to orient the model without crowding the context window.
+    private static let projectContextMaxFiles = 80
+
+    /// Transient "OPEN PROJECT" context block: the list of ARO source files
+    /// (plus openapi/plugin/store manifests) in the working directory, so the
+    /// model knows the project layout without a `list_dir` round-trip and
+    /// prefers editing existing files. Re-scanned each request; never
+    /// persisted to `.context`.
+    private func projectContextMessage() -> LMChatRequest.Message? {
+        let root = config.workingDirectory
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return nil }
+
+        var files: [String] = []
+        for case let item as URL in enumerator {
+            let name = item.lastPathComponent
+            let ext = item.pathExtension.lowercased()
+            let keep = ext == "aro" || ext == "store"
+                || name == "openapi.yaml" || name == "openapi.yml"
+                || name == "plugin.yaml"
+            guard keep else { continue }
+            let rel = displayPath(for: item)
+            // Skip anything under a hidden/build/index/.context directory.
+            if rel.hasPrefix(".") || rel.contains("/.") { continue }
+            files.append(rel)
+            if files.count >= Self.projectContextMaxFiles { break }
+        }
+        guard !files.isEmpty else { return nil }
+
+        let list = files.sorted().map { "- \($0)" }.joined(separator: "\n")
+        return LMChatRequest.Message(role: "system", content: """
+        OPEN PROJECT: \(root.lastPathComponent)
+        The user is working in this ARO project; its source files are listed \
+        below (\(files.count) shown). Prefer editing existing files over \
+        creating new ones, and use read_file / grep / search_project to \
+        inspect any of them before changing them.
+        \(list)
+        """)
+    }
+
+    /// Convert stored messages to request messages, inserting the transient
+    /// OPEN PROJECT and OPEN FILE context blocks right after the system prompt.
+    private func requestMessages(from messages: [AskMessage]) async -> [LMChatRequest.Message] {
         var out = messages.map { $0.toRequestMessage() }
-        if let focus = focusFileMessage() {
-            out.insert(focus, at: out.isEmpty ? 0 : 1)
+        var context: [LMChatRequest.Message] = []
+        if config.injectProjectContext, let project = projectContextMessage() {
+            context.append(project)
+        }
+        if let focus = await focusFileMessage() { context.append(focus) }
+        if !context.isEmpty {
+            out.insert(contentsOf: context, at: out.isEmpty ? 0 : 1)
         }
         return out
     }
@@ -307,7 +401,7 @@ public actor AskSession {
         for round in 0..<config.maxToolCallRounds {
             let request = LMChatRequest(
                 model: config.model,
-                messages: requestMessages(from: context.messages),
+                messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: config.temperature,
                 stream: false
@@ -353,7 +447,7 @@ public actor AskSession {
                 }
                 let retryRequest = LMChatRequest(
                     model: config.model,
-                    messages: requestMessages(from: retryMessages),
+                    messages: await requestMessages(from: retryMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
                     stream: false
@@ -397,7 +491,7 @@ public actor AskSession {
                 }
                 let directiveRequest = LMChatRequest(
                     model: config.model,
-                    messages: requestMessages(from: directiveMessages),
+                    messages: await requestMessages(from: directiveMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
                     stream: false
@@ -780,7 +874,7 @@ public actor AskSession {
 
             let request = LMChatRequest(
                 model: config.model,
-                messages: requestMessages(from: context.messages),
+                messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: temp,
                 stream: false

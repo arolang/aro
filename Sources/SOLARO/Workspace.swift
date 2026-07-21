@@ -1163,8 +1163,13 @@ struct WorkspaceView: View {
                     onClose: { controller.rightPaneMode = .inspector }
                 )
                 .onAppear {
+                    // Route the co-pilot's writes into the LIVE editor buffer
+                    // (undoable, on the fly) and feed the open document +
+                    // project into its context.
+                    controller.aiCoPilot.editorHost = controller
                     // Files the assistant writes flow straight back
-                    // into the workspace: reparse + editor reload.
+                    // into the workspace: reparse + editor reload (used for
+                    // files that aren't the active editor buffer).
                     controller.aiCoPilot.onFilesModified = { [weak controller] urls in
                         for url in urls {
                             controller?.noteExternalFileChange(url)

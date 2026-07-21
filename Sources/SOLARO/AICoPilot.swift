@@ -103,6 +103,12 @@ final class AICoPilotProcess {
     /// workspace reloads open editors and reparses through this.
     var onFilesModified: (([URL]) -> Void)?
 
+    /// The workspace controller, used to route the co-pilot's file writes
+    /// into the LIVE editor buffer (undoable, on the fly) and to feed the
+    /// open document's current text into the model's context. Weak: the
+    /// controller owns this process, so a strong ref would cycle.
+    weak var editorHost: WorkspaceController?
+
     // Subprocess plumbing — fallback path only.
     private var process: Process?
     private var stdoutPipe: Pipe?
@@ -160,7 +166,8 @@ final class AICoPilotProcess {
             return
         }
 #endif
-        sendViaSubprocess(trimmed, project: project, isCleanCommand: isCleanCommand)
+        sendViaSubprocess(trimmed, project: project, focusFile: focusFile,
+                          isCleanCommand: isCleanCommand)
     }
 
     // MARK: - In-process path
@@ -200,7 +207,7 @@ final class AICoPilotProcess {
                 self.appendSystemNote(
                     "in-process ask failed (\(error.localizedDescription)) — falling back to the `aro ask` subprocess"
                 )
-                self.sendViaSubprocess(prompt, project: project,
+                self.sendViaSubprocess(prompt, project: project, focusFile: focusFile,
                                        isCleanCommand: isCleanCommand)
             }
         }
@@ -246,11 +253,18 @@ final class AICoPilotProcess {
             workingDirectory: root,
             model: model,
             temperature: 0.2,
-            quiet: true             // progress flows through the event sink, not stdout
+            quiet: true,            // progress flows through the event sink, not stdout
+            injectProjectContext: true  // the co-pilot always knows the open project
         )
         // CoPilotToolApprover: sandboxed file tools run freely (every
         // call is shown in the chat); shell commands prompt first.
         let session = AskSession(config: config, approver: CoPilotToolApprover())
+        // Route file writes to the OPEN document into the live editor buffer,
+        // and feed the editor's current text into the model's context. Must be
+        // set BEFORE prepare() so the file tools capture the hooks.
+        if let hooks = makeEditorHooks() {
+            await session.setEditorHooks(hooks)
+        }
         try await session.prepare(modelManager: manager)
         await session.setEventSink { [weak self] event in
             Task { @MainActor [weak self] in
@@ -260,6 +274,35 @@ final class AICoPilotProcess {
         askSession = session
         askSessionRoot = root
         return session
+    }
+
+    /// Build the editor hooks the AskSession uses to route writes to the open
+    /// document into the live editor buffer and to read its current text.
+    /// Weakly captures the host so the session ↔ controller graph doesn't
+    /// cycle; returns nil when no editor host is attached (plain disk writes).
+    private func makeEditorHooks() -> AskEditorHooks? {
+        guard editorHost != nil else { return nil }
+        return AskEditorHooks(
+            liveText: { [weak editorHost] path in
+                await MainActor.run {
+                    editorHost?.liveText(for: URL(fileURLWithPath: path))
+                }
+            },
+            applyEdit: { [weak editorHost] path, oldString, newString in
+                await MainActor.run {
+                    editorHost?.applyAIEditToOpenBuffer(
+                        url: URL(fileURLWithPath: path),
+                        oldString: oldString, newString: newString) ?? false
+                }
+            },
+            applyWrite: { [weak editorHost] path, content in
+                await MainActor.run {
+                    editorHost?.applyAIEditToOpenBuffer(
+                        url: URL(fileURLWithPath: path),
+                        oldString: "", newString: content) ?? false
+                }
+            }
+        )
     }
 
     /// Mirror `aro ask`'s status lines and tool activity into the chat,
@@ -410,19 +453,26 @@ final class AICoPilotProcess {
     /// the fallback when the in-process backend cannot prepare inside
     /// the app but the CLI works.
     private func sendViaSubprocess(_ trimmed: String, project: Project,
+                                   focusFile: URL? = nil,
                                    isCleanCommand: Bool) {
         turns.append(Turn(role: .assistant, text: "", timestamp: Date()))
         currentAssistantTurnIndex = turns.count - 1
 
         let task = Process()
         let aro = ConsoleProcess.resolveAroBinary(near: project)
+        // The open editor file rides along via `--file` so the fallback path
+        // has the same open-document context as the in-process path (though it
+        // can't apply edits into the live buffer — that needs the in-process
+        // hooks). Options precede the trailing prompt (a `.remaining` arg).
+        var focusArgs: [String] = []
+        if let focusFile { focusArgs = ["--file", focusFile.path] }
         var args: [String]
         if aro == "/usr/bin/env" {
             task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            args = ["aro", "ask", "--yes", "--no-think", trimmed]
+            args = ["aro", "ask", "--yes", "--no-think"] + focusArgs + [trimmed]
         } else {
             task.executableURL = URL(fileURLWithPath: aro)
-            args = ["ask", "--yes", "--no-think", trimmed]
+            args = ["ask", "--yes", "--no-think"] + focusArgs + [trimmed]
         }
         task.arguments = args
         task.currentDirectoryURL = project.rootPath

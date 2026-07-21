@@ -799,6 +799,12 @@ struct AROCodeEditor: NSViewRepresentable {
     /// failed test, plus the FS header line itself.
     var testMarkers: [Int: TestNodeResult] = [:]
 
+    /// A pending AI co-pilot edit for THIS file (nil otherwise). Applied
+    /// undoably via `STTextView.replaceCharacters` when its `id` advances,
+    /// so the co-pilot's writes land live in the open document instead of a
+    /// destructive whole-file reload. `oldString` empty ⇒ whole-file replace.
+    var aiEdit: WorkspaceController.AIEditCommand? = nil
+
     enum Language { case aro, yaml, plain }
 
     @AppStorage(SolaroPrefs.editorGhostText.rawValue)
@@ -932,6 +938,16 @@ struct AROCodeEditor: NSViewRepresentable {
             // sweep whatever was there before.
             textView.undoManager?.removeAllActions()
         }
+
+        // Apply a pending AI co-pilot edit into the live buffer (undoable,
+        // on the fly). Runs after the text-sync block so it edits the current
+        // content; the delegate (textViewDidChangeText) then propagates the
+        // change to the binding → disk → reparse, exactly like a user edit.
+        if let cmd = aiEdit, cmd.id != context.coordinator.lastAIEditID {
+            context.coordinator.lastAIEditID = cmd.id
+            applyAIEdit(cmd, to: textView, coordinator: context.coordinator)
+        }
+
         if let target = currentLine,
            target != lineForCurrentSelection(in: textView),
            target != context.coordinator.lastUserLine {
@@ -1251,6 +1267,48 @@ struct AROCodeEditor: NSViewRepresentable {
         onSave(formatted)
     }
 
+    /// Apply an AI co-pilot edit into the STTextView. Uses
+    /// `replaceCharacters` (not the `text` setter) so the co-pilot's change
+    /// registers on the CoalescingUndoManager — ⌘Z reverts it — and so the
+    /// delegate propagates it to disk/LSP like a normal edit. `oldString`
+    /// empty ⇒ replace the whole document (write_file). No-ops when the
+    /// target text isn't found (the tool falls back to a disk write upstream).
+    fileprivate func applyAIEdit(_ cmd: WorkspaceController.AIEditCommand,
+                                 to textView: STTextView,
+                                 coordinator: Coordinator) {
+        let nsText = (textView.text ?? "") as NSString
+        let range: NSRange
+        if cmd.oldString.isEmpty {
+            range = NSRange(location: 0, length: nsText.length)
+        } else {
+            let found = nsText.range(of: cmd.oldString)
+            guard found.location != NSNotFound else { return }
+            range = found
+        }
+        textView.undoManager?.setActionName("AI Edit")
+        textView.replaceCharacters(in: range, with: cmd.newString)
+        applyHighlight(textView)
+        // Scroll the freshly written region into view so the user watches it land.
+        let newLength = (cmd.newString as NSString).length
+        textView.scrollRangeToVisible(NSRange(location: range.location, length: newLength))
+
+        // Propagate to the binding → disk/LSP/reparse on the NEXT runloop tick
+        // (never during this updateNSView pass) — mirrors how
+        // textViewDidChangeText defers `parent.text`. Setting `lastUserText`
+        // keeps the update-guard from re-swapping and wiping the undo we just
+        // registered. Setting `parent.text` flows through the editable binding,
+        // which writes disk, updates the controller's live-buffer mirror (so
+        // noteExternalFileChange skips the destructive reload), and reparses.
+        let updated = textView.text ?? ""
+        DispatchQueue.main.async { [weak coordinator] in
+            MainActor.assumeIsolated {
+                guard let coordinator else { return }
+                coordinator.lastUserText = updated
+                coordinator.parent.text = updated
+            }
+        }
+    }
+
     fileprivate func toggleBreakpoint(_ line: Int, in textView: STTextView) {
         var updated = breakpoints
         if updated.contains(line) {
@@ -1356,6 +1414,9 @@ struct AROCodeEditor: NSViewRepresentable {
         /// triggered by an external change (do sync — e.g. another
         /// view modified the buffer, or the file reloaded).
         var lastUserText: String?
+        /// Id of the last AI co-pilot edit applied, so `updateNSView` applies
+        /// each `aiEdit` exactly once even though it re-runs for many reasons.
+        var lastAIEditID: UInt64 = 0
         /// Same idea for the caret line — tracks what we last
         /// wrote back from the textView's selection, so we don't
         /// jump the caret back to col 0 on every keystroke.

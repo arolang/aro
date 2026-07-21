@@ -77,7 +77,11 @@ struct CenterPaneView: View {
             return
         }
         fileTextURL = url
-        fileText = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let loaded = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        fileText = loaded
+        // Mirror into the controller so the AI co-pilot's context reads the
+        // live buffer for this file (see WorkspaceController.liveText).
+        controller.liveEditorText[url.standardizedFileURL] = loaded
     }
 
     /// Return the cached content for `url` when it matches the
@@ -246,7 +250,10 @@ struct CenterPaneView: View {
                     findSelectionTick: controller.editorFindSelectionTick,
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
-                    testMarkers: testGutterMarkers(for: url)
+                    testMarkers: testGutterMarkers(for: url),
+                    aiEdit: controller.pendingAIEdit.flatMap {
+                        $0.url == url.standardizedFileURL ? $0 : nil
+                    }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .topTrailing) {
@@ -425,6 +432,10 @@ struct CenterPaneView: View {
                 // actually meant to clean up the file.
                 try? newValue.write(to: url, atomically: true, encoding: .utf8)
                 if fileTextURL == url { fileText = newValue }
+                // Keep the controller's live-buffer mirror current so the AI
+                // co-pilot sees unsaved edits and so a co-pilot write that
+                // matches the buffer skips the destructive reload.
+                controller.liveEditorText[url.standardizedFileURL] = newValue
 
                 // openapi.yaml: keep the canvas in sync with the
                 // text editor by pushing the parsed YAML into
@@ -1240,7 +1251,10 @@ struct CenterPaneView: View {
                     findSelectionTick: controller.editorFindSelectionTick,
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
-                    testMarkers: testGutterMarkers(for: url)
+                    testMarkers: testGutterMarkers(for: url),
+                    aiEdit: controller.pendingAIEdit.flatMap {
+                        $0.url == url.standardizedFileURL ? $0 : nil
+                    }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .topTrailing) {

@@ -524,6 +524,53 @@ final class WorkspaceController {
     /// `currentFile` didn't change.
     var fileReloadTick: Int = 0
 
+    // MARK: - AI co-pilot live editing (#…)
+
+    /// A single co-pilot edit to apply into the OPEN editor's STTextView,
+    /// undoably and on the fly — instead of the destructive disk-reload path
+    /// that wipes the undo stack. `oldString` empty ⇒ replace the whole file.
+    struct AIEditCommand: Equatable {
+        let id: UInt64
+        let url: URL
+        let oldString: String
+        let newString: String
+    }
+
+    /// The pending live edit for the active editor. `AROCodeEditor` observes
+    /// it (keyed on `id`) and applies it via `STTextView.replaceCharacters`.
+    var pendingAIEdit: AIEditCommand?
+    private var aiEditSeq: UInt64 = 0
+
+    /// Live editor text per open file, mirrored from the editor's binding so
+    /// the co-pilot's context sees the user's current (even mid-edit) buffer
+    /// rather than depending on the keystroke-autosave side effect. Seeded on
+    /// file load, updated on every keystroke.
+    var liveEditorText: [URL: String] = [:]
+
+    /// Current live text for `url`: the editor buffer when known, else disk.
+    func liveText(for url: URL) -> String? {
+        let std = url.standardizedFileURL
+        return liveEditorText[std] ?? (try? String(contentsOf: std, encoding: .utf8))
+    }
+
+    /// Route a co-pilot edit into the OPEN editor buffer. Returns true when
+    /// this file is the active editor and the edit can be placed (so the file
+    /// tool skips its disk write); false to fall back to a disk write + reload.
+    /// Mirrors `edit_file`'s exact-unique-match rule against the live buffer.
+    func applyAIEditToOpenBuffer(url: URL, oldString: String, newString: String) -> Bool {
+        let std = url.standardizedFileURL
+        guard currentFile?.standardizedFileURL == std else { return false }
+        let buffer = liveEditorText[std] ?? (try? String(contentsOf: std, encoding: .utf8)) ?? ""
+        if !oldString.isEmpty {
+            // Exactly one occurrence, matching the disk-path semantics.
+            guard buffer.components(separatedBy: oldString).count == 2 else { return false }
+        }
+        aiEditSeq &+= 1
+        pendingAIEdit = AIEditCommand(id: aiEditSeq, url: std,
+                                      oldString: oldString, newString: newString)
+        return true
+    }
+
     /// A file was modified on disk behind the editor's back (AI
     /// co-pilot tool call): reparse it, resync the LSP, refresh git
     /// status, and force the text cache to reload when it's showing.
@@ -537,11 +584,15 @@ final class WorkspaceController {
                 parseErrors[std] = "\(error)"
             }
             lsp.didChange(url: std, text: text)
+            // Skip the destructive whole-file reload when the open buffer
+            // already matches disk — i.e. the co-pilot applied this edit LIVE
+            // into the editor (which preserves undo and the caret). Only a
+            // genuine behind-the-back write (buffer ≠ disk) forces a reload.
+            if currentFile?.standardizedFileURL == std, liveEditorText[std] != text {
+                fileReloadTick += 1
+            }
         }
         gitMonitor.refresh(for: project)
-        if currentFile?.standardizedFileURL == std {
-            fileReloadTick += 1
-        }
     }
 
     func openFile(_ url: URL) {
