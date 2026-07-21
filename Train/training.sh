@@ -7,21 +7,29 @@
 #
 # Usage:
 #   Train/training.sh                  # run the full pipeline
+#   Train/training.sh --from 17        # resume: run notebook 17 onward, skip
+#                                        every notebook numbered below it.
+#                                        Accepts "17" or "17_finetune".
 #   Train/training.sh --skip 03,07     # skip specific notebooks (forwarded
 #                                        as SKIP env var read by the meta
-#                                        notebook)
+#                                        notebook). Combine with --from.
 #   Train/training.sh --no-stop        # keep going past failing notebooks
 #                                        (default: STOP_ON_FAILURE=True)
-#   Train/training.sh --no-execute     # render the meta notebook unchanged
-#                                        (smoke test the wiring without
+#   Train/training.sh --no-execute     # generate the meta script but don't
+#                                        run it (smoke test the wiring without
 #                                        burning GPU time)
-#   Train/training.sh -- --help        # forward arbitrary nbconvert flags
+#
+# The meta notebook is converted to a plain script and run with `python -u`
+# so per-notebook progress streams live to your terminal (▶ / ✅ done / a
+# running done/failed/skipped tally after each notebook) instead of being
+# buffered inside nbconvert until the whole run ends.
 #
 # Outputs:
-#   Train/script/run/outputs/00_META_PIPELINE.executed.ipynb   executed copy
-#   Train/script/run/outputs/<NN>_*.executed.ipynb              per-step
-#                                                                outputs
-#   stdout/stderr of every notebook stream live to your terminal.
+#   Train/script/run/outputs/00_META_PIPELINE.gen.py           generated script
+#   Train/script/run/outputs/<NN>_*.ipynb                       per-step executed
+#                                                                notebooks
+#   Train/script/run/outputs/<NN>_*.log                         per-step full logs
+#   Per-notebook progress streams live to your terminal.
 
 set -euo pipefail
 
@@ -40,12 +48,19 @@ mkdir -p "${OUT_DIR}"
 # Parse our own flags before handing the remainder to nbconvert.
 EXECUTE=1
 SKIP=""
+FROM=""
 STOP_ON_FAILURE=""
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip)
       SKIP="$2"
+      shift 2
+      ;;
+    --from)
+      # Start at notebook N: skip every notebook numbered below it. Accepts
+      # "17" or "17_finetune" — only the leading number is used.
+      FROM="${2%%_*}"
       shift 2
       ;;
     --no-stop)
@@ -62,7 +77,7 @@ while [[ $# -gt 0 ]]; do
       break
       ;;
     -h|--help)
-      sed -n '2,30p' "$0"
+      sed -n '2,32p' "$0"
       exit 0
       ;;
     *)
@@ -114,6 +129,7 @@ fi
 # meta notebook reads them at runtime (the cell sets defaults only when
 # the var is unset), so this is the seam for the CLI options above.
 [[ -n "${SKIP}" ]] && export ARO_TRAIN_SKIP="${SKIP}"
+[[ -n "${FROM}" ]] && export ARO_TRAIN_FROM="${FROM}"
 [[ -n "${STOP_ON_FAILURE}" ]] && export ARO_TRAIN_STOP_ON_FAILURE="${STOP_ON_FAILURE}"
 
 # Default to the venv kernel we just registered so notebook cells run
@@ -122,30 +138,39 @@ fi
 # via `jupyter nbconvert --execute`) inherit the same choice.
 export KERNEL_NAME="${KERNEL_NAME:-aro-train}"
 
-EXEC_FLAGS=(
-  --to notebook
-  --ExecutePreprocessor.timeout=-1
-  --ExecutePreprocessor.kernel_name="${KERNEL_NAME}"
-  --output-dir="${OUT_DIR}"
-  --output "00_META_PIPELINE.executed.ipynb"
-)
-if [[ "${EXECUTE}" -eq 1 ]]; then
-  EXEC_FLAGS+=(--execute)
-fi
+# Run the orchestrator as a plain, UNBUFFERED Python script instead of via
+# `jupyter nbconvert --execute`. nbconvert captures every cell's stdout into
+# the output .ipynb and never echoes it to the terminal, so the per-notebook
+# progress (the run loop's ▶ / ✅ done / running done/failed/skipped tally)
+# was invisible until the entire run finished — which looked like the pipeline
+# "just stopping". Converting the meta notebook to a script and running it with
+# `python -u` streams each line live. The CHILD notebooks are still executed
+# via nbconvert from inside the orchestrator; their full output lands in
+# ${OUT_DIR}/<NN>_*.log and their executed copies in ${OUT_DIR}.
+META_PY="${OUT_DIR}/00_META_PIPELINE.gen.py"
+"${PYTHON}" -m jupyter nbconvert --to script --stdout "${META_NB}" > "${META_PY}"
 
-echo "==> Running META_PIPELINE"
+echo "==> Running META_PIPELINE (live)"
 echo "    notebook:  ${META_NB}"
-echo "    output:    ${OUT_DIR}/00_META_PIPELINE.executed.ipynb"
+echo "    script:    ${META_PY}"
+echo "    logs:      ${OUT_DIR}/<NN>_*.log  (per child notebook)"
+echo "    from:      ${ARO_TRAIN_FROM:-(start)}"
 echo "    skip:      ${ARO_TRAIN_SKIP:-(none)}"
 echo "    stop-on-failure: ${ARO_TRAIN_STOP_ON_FAILURE:-True (default)}"
 echo "    kernel:    ${KERNEL_NAME}"
 echo
 
-cd "${SCRIPT_DIR}"
-# `set -u` blows up on `"${EXTRA_ARGS[@]}"` when the array is empty.
-# `${EXTRA_ARGS[@]+...}` only expands when the variable is set, which
-# both keeps strict mode and preserves correct quoting per argument.
-exec "${PYTHON}" -m jupyter nbconvert \
-    "${EXEC_FLAGS[@]}" \
-    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-    "${META_NB}"
+if [[ "${EXECUTE}" -eq 0 ]]; then
+  echo "--no-execute: generated ${META_PY} without running it."
+  exit 0
+fi
+
+# Run from the notebook directory (Train/script), NOT training.sh's own dir.
+# The meta notebook derives SCRIPT_DIR/OUTPUT_DIR and the child-notebook paths
+# from `Path('.')`, i.e. the process cwd. `nbconvert --execute` used to set the
+# kernel cwd to the notebook's directory for us; running as a script we must cd
+# there ourselves, or it looks for 01_corpus_collection.ipynb in the wrong place.
+cd "${NB_DIR}"
+# -u: unbuffered stdout/stderr so progress streams line-by-line. `exec` so the
+# script's exit status becomes the script's, and Ctrl-C reaches it directly.
+exec "${PYTHON}" -u "${META_PY}"

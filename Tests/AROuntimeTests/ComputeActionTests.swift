@@ -122,6 +122,18 @@ struct ComputeActionTests {
         #expect(value as? String == "hello")
     }
 
+    @Test("Compute trim of string")
+    func testComputeTrim() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("text", value: "  hello world \n")
+
+        let (result, object) = createDescriptors(resultBase: "trimmed", resultSpecifiers: ["trim"], objectBase: "text")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "hello world")
+    }
+
     @Test("Compute identity returns input")
     func testComputeIdentity() async throws {
         let action = ComputeAction()

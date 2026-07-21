@@ -345,7 +345,7 @@ public enum AROCatalogDescriptions {
 
         // OWN
         "create": "Create new objects or collections",
-        "compute": "Calculate values (arithmetic, length, uppercase, lowercase, hash, …)",
+        "compute": "Calculate values (arithmetic, length, uppercase, lowercase, trim, hash, …)",
         "validate": "Validate data against rules or schemas",
         "compare": "Compare two values; result is a boolean",
         "transform": "Convert data between types (int/float/string/bool)",

@@ -151,6 +151,7 @@ public final class QualifierRegistry: @unchecked Sendable {
             ("count", [.string, .list, .object], false, "Count elements or characters"),
             ("uppercase", [.string], false, "Convert to UPPERCASE"),
             ("lowercase", [.string], false, "Convert to lowercase"),
+            ("trim", [.string], false, "Strip leading and trailing whitespace"),
             ("identity", Set(QualifierInputType.allCases), false, "Pass-through (no-op)"),
             ("clip", [.string], true, "Truncate string to width"),
             ("take", [.string, .list], true, "First N elements"),

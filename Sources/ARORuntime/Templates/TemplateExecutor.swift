@@ -392,6 +392,8 @@ public final class TemplateExecutor: @unchecked Sendable {
                 result = result.uppercased()
             case "lowercase":
                 result = result.lowercased()
+            case "trim":
+                result = result.trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Markdown -> HTML via the shared MinimalMarkdown helper. The
             // same subset is also exposed as the `markdown` Compute

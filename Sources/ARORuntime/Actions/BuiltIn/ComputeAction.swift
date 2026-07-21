@@ -87,6 +87,7 @@ public struct ComputeAction: SynchronousAction {
         "count":      Self.opLength,
         "uppercase":  Self.opUppercase,
         "lowercase":  Self.opLowercase,
+        "trim":       Self.opTrim,
         "identity":   Self.opIdentity,
         "clip":       Self.opClip,
         "take":       Self.opTake,
@@ -209,6 +210,11 @@ public struct ComputeAction: SynchronousAction {
     private static func opLowercase(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
         if let str = input as? String { return str.lowercased() }
         return String(describing: input).lowercased()
+    }
+
+    private static func opTrim(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let str = input as? String ?? String(describing: input)
+        return str.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func opIdentity(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {

@@ -200,6 +200,53 @@ def resolve_model_id() -> tuple[str, bool]:
 # Resolved once at import time — used by all notebooks via `MODEL_ID`.
 MODEL_ID, _MODEL_IS_FINETUNED = resolve_model_id()
 
+
+def local_model_path(model_id):
+    """Resolve a HF repo id to its local cached snapshot directory, WITHOUT the
+    strict completeness check that `snapshot_download(local_files_only=True)` runs.
+
+    Why this exists: `mlx_lm fuse --model <repo-id>` fails at its SAVE step with
+
+        IncompleteSnapshotError: ... 1 file(s) are missing (.gitattributes).
+        Outgoing traffic is disabled ('local_files_only=True').
+
+    when the cached snapshot lacks a trivial NON-weight file, even though every
+    weight is present and training + loading already succeeded (the original
+    download simply filtered `.gitattributes` out). mlx_lm.utils.save() only runs
+    that snapshot check when the `--model` arg is NOT an existing local path, so
+    handing it the resolved snapshot directory sidesteps the check entirely — and
+    needs no network. Pass every `mlx_lm fuse --model` value through this.
+
+    Returns `model_id` unchanged when it is already a local path or is not found
+    in the HF cache, so callers keep their existing behaviour (incl. an online
+    fuse that downloads the model fresh).
+    """
+    from pathlib import Path as _P
+    if _P(str(model_id)).exists():
+        return str(model_id)                     # already a local directory
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+    except Exception:
+        return str(model_id)
+    repo_dir = _P(HF_HUB_CACHE) / ('models--' + str(model_id).replace('/', '--'))
+    snaps = repo_dir / 'snapshots'
+    candidates = []
+    ref_main = repo_dir / 'refs' / 'main'
+    if ref_main.exists():
+        try:
+            candidates.append(snaps / ref_main.read_text().strip())
+        except OSError:
+            pass
+    if snaps.is_dir():
+        candidates += sorted(
+            (d for d in snaps.iterdir() if d.is_dir()),
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        )
+    for c in candidates:
+        if (c / 'config.json').exists():
+            return str(c)                        # cached snapshot dir
+    return str(model_id)                         # not cached — let the caller fetch
+
 # ── Remote URLs ───────────────────────────────────────────────────────────────
 
 GITLAB_WIKI  = 'git@git.ausdertechnik.de:arolang/aro.wiki.git'
