@@ -17,7 +17,8 @@ struct MCPCommand: AsyncParsableCommand {
             and interact with ARO.
 
             The server exposes:
-            - Tools: aro_check, aro_run, aro_actions, aro_parse, aro_syntax
+            - Tools: aro_check, aro_run, aro_compile, aro_examples,
+                     aro_actions, aro_qualifiers, aro_parse, aro_syntax
             - Resources: proposals, examples, books, syntax reference
             - Prompts: guided workflows for creating features, APIs, etc.
 

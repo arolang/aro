@@ -128,6 +128,12 @@ public actor MCPResourceProvider {
     public func readResource(uri: String) async -> MCPResourceReadResult? {
         guard uri.hasPrefix("aro://") else { return nil }
         let path = String(uri.dropFirst(6))
+
+        // Reject path traversal in the client-supplied URI tail before it ever
+        // reaches a filesystem or remote join (defence in depth alongside the
+        // within-base check in fetchContent/listDirectory).
+        guard !path.split(separator: "/").contains("..") else { return nil }
+
         let components = path.split(separator: "/", maxSplits: 1).map(String.init)
 
         guard !components.isEmpty else { return nil }
@@ -181,8 +187,7 @@ public actor MCPResourceProvider {
         }
 
         // Try local first (for development)
-        if let base = localBasePath {
-            let localPath = (base as NSString).appendingPathComponent(path)
+        if let localPath = localPath(for: path) {
             if let content = try? String(contentsOfFile: localPath, encoding: .utf8) {
                 cache[cacheKey] = CacheEntry(content: content, timestamp: Date())
                 return content
@@ -210,11 +215,24 @@ public actor MCPResourceProvider {
         return nil
     }
 
+    /// Resolve a repo-relative path against `localBasePath`, returning it only
+    /// when the standardized result stays inside the base directory. Guards
+    /// against traversal (`..`, absolute paths, symlink escapes via `//`).
+    private func localPath(for relative: String) -> String? {
+        guard let base = localBasePath else { return nil }
+        let baseURL = URL(fileURLWithPath: base).standardizedFileURL
+        let candidate = baseURL.appendingPathComponent(relative).standardizedFileURL
+        let baseDir = baseURL.path.hasSuffix("/") ? baseURL.path : baseURL.path + "/"
+        guard candidate.path == baseURL.path || candidate.path.hasPrefix(baseDir) else {
+            return nil
+        }
+        return candidate.path
+    }
+
     /// List files in a directory from GitHub or local
     private func listDirectory(_ path: String) async -> [String]? {
         // Try local first
-        if let base = localBasePath {
-            let localPath = (base as NSString).appendingPathComponent(path)
+        if let localPath = localPath(for: path) {
             if let files = try? FileManager.default.contentsOfDirectory(atPath: localPath) {
                 return files.sorted()
             }

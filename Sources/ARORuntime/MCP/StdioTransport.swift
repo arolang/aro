@@ -53,15 +53,14 @@ public actor StdioTransport: MCPTransport {
     public func receive() async throws -> String? {
         guard isRunning else { return nil }
 
-        // Read line from stdin
+        // Read line from stdin. Only a nil from `readLine` means real EOF
+        // (stdin closed); a blank line is returned as "" so the caller's loop
+        // can skip it instead of mistaking it for end-of-stream and shutting
+        // the whole server down.
         return await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
                 if let line = readLine(strippingNewline: true) {
-                    if !line.isEmpty {
-                        continuation.resume(returning: line)
-                    } else {
-                        continuation.resume(returning: nil)
-                    }
+                    continuation.resume(returning: line)
                 } else {
                     continuation.resume(returning: nil)
                 }

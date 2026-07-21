@@ -9,6 +9,19 @@ import Foundation
 
 public enum MCPProtocol {
     public static let version = "2025-06-18"
+
+    /// Protocol revisions this server can speak. During `initialize` the server
+    /// echoes the client's requested version when it appears here, otherwise it
+    /// falls back to `version` (the MCP lifecycle negotiation rule).
+    public static let supportedVersions: Set<String> = [
+        "2025-06-18",
+        "2025-03-26",
+        "2024-11-05",
+    ]
+
+    public static func supports(_ requested: String) -> Bool {
+        supportedVersions.contains(requested)
+    }
 }
 
 // MARK: - Server Info

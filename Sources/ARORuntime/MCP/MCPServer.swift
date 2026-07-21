@@ -89,24 +89,33 @@ public actor MCPServer {
     // MARK: - Message Handling
 
     private func handleMessage(_ message: String) async -> String? {
+        // Parse first so a valid request's id is preserved on any later error.
+        let request: JSONRPCRequest
         do {
-            let request = try jsonRpc.parseRequest(message)
-
-            // Notifications don't get responses
-            if request.isNotification {
-                await handleNotification(request)
-                return nil
-            }
-
-            // Handle the request
-            let result = await handleRequest(request)
-            let response = jsonRpc.successResponse(id: request.id, result: result)
-            return try jsonRpc.encodeResponse(response)
+            request = try jsonRpc.parseRequest(message)
         } catch let error as JSONRPCError {
             let response = jsonRpc.errorResponse(id: nil, error: error)
             return try? jsonRpc.encodeResponse(response)
         } catch {
-            let response = jsonRpc.errorResponse(id: nil, error: .internalError)
+            let response = jsonRpc.errorResponse(id: nil, error: .parseError)
+            return try? jsonRpc.encodeResponse(response)
+        }
+
+        // Notifications don't get responses
+        if request.isNotification {
+            await handleNotification(request)
+            return nil
+        }
+
+        do {
+            let result = try await handleRequest(request)
+            let response = jsonRpc.successResponse(id: request.id, result: result)
+            return try jsonRpc.encodeResponse(response)
+        } catch let error as JSONRPCError {
+            let response = jsonRpc.errorResponse(id: request.id, error: error)
+            return try? jsonRpc.encodeResponse(response)
+        } catch {
+            let response = jsonRpc.errorResponse(id: request.id, error: .internalError)
             return try? jsonRpc.encodeResponse(response)
         }
     }
@@ -132,7 +141,7 @@ public actor MCPServer {
         }
     }
 
-    private func handleRequest(_ request: JSONRPCRequest) async -> JSONValue {
+    private func handleRequest(_ request: JSONRPCRequest) async throws -> JSONValue {
         switch request.method {
         // Lifecycle
         case "initialize":
@@ -150,25 +159,24 @@ public actor MCPServer {
             return await handleResourcesList()
 
         case "resources/read":
-            return await handleResourcesRead(request.params)
+            return try await handleResourcesRead(request.params)
 
         // Prompts
         case "prompts/list":
             return handlePromptsList()
 
         case "prompts/get":
-            return handlePromptsGet(request.params)
+            return try handlePromptsGet(request.params)
 
         // Ping (for health check)
         case "ping":
             return .object([:])
 
         default:
-            // Method not found - return error as result
-            // (Real implementation would return JSON-RPC error)
-            return .object([
-                "error": .string("Method not found: \(request.method)")
-            ])
+            throw JSONRPCError(
+                code: JSONRPCError.methodNotFound.code,
+                message: "Method not found: \(request.method)"
+            )
         }
     }
 
@@ -177,8 +185,16 @@ public actor MCPServer {
     private func handleInitialize(_ params: JSONValue?) -> JSONValue {
         isInitialized = true
 
+        // Negotiate the protocol version: echo the client's requested version
+        // when we support it, otherwise fall back to our own so the client can
+        // decide whether to proceed (MCP lifecycle negotiation).
+        let requested = params?.objectValue?["protocolVersion"]?.stringValue
+        let negotiated = requested.map(MCPProtocol.supports) == true
+            ? requested!
+            : MCPProtocol.version
+
         let result = MCPInitializeResult(
-            protocolVersion: MCPProtocol.version,
+            protocolVersion: negotiated,
             serverInfo: MCPServerInfo(
                 name: "aro",
                 version: version
@@ -221,25 +237,15 @@ public actor MCPServer {
         return result.toJSONValue()
     }
 
-    private func handleResourcesRead(_ params: JSONValue?) async -> JSONValue {
+    private func handleResourcesRead(_ params: JSONValue?) async throws -> JSONValue {
         guard let params = params?.objectValue,
               let uri = params["uri"]?.stringValue else {
-            return .object([
-                "error": .object([
-                    "code": .number(-32602),
-                    "message": .string("Missing uri parameter")
-                ])
-            ])
+            throw JSONRPCError(code: JSONRPCError.invalidParams.code,
+                               message: "Missing uri parameter")
         }
 
         guard let result = await resourceProvider.readResource(uri: uri) else {
-            return .object([
-                "error": .object([
-                    "code": .number(-32002),
-                    "message": .string("Resource not found"),
-                    "data": .object(["uri": .string(uri)])
-                ])
-            ])
+            throw JSONRPCError.resourceNotFound(uri)
         }
 
         return result.toJSONValue()
@@ -252,15 +258,11 @@ public actor MCPServer {
         return result.toJSONValue()
     }
 
-    private func handlePromptsGet(_ params: JSONValue?) -> JSONValue {
+    private func handlePromptsGet(_ params: JSONValue?) throws -> JSONValue {
         guard let params = params?.objectValue,
               let name = params["name"]?.stringValue else {
-            return .object([
-                "error": .object([
-                    "code": .number(-32602),
-                    "message": .string("Missing name parameter")
-                ])
-            ])
+            throw JSONRPCError(code: JSONRPCError.invalidParams.code,
+                               message: "Missing name parameter")
         }
 
         // Extract arguments if present
@@ -275,12 +277,8 @@ public actor MCPServer {
         }
 
         guard let result = promptProvider.getPrompt(name: name, arguments: arguments) else {
-            return .object([
-                "error": .object([
-                    "code": .number(-32602),
-                    "message": .string("Unknown prompt: \(name)")
-                ])
-            ])
+            throw JSONRPCError(code: JSONRPCError.invalidParams.code,
+                               message: "Unknown prompt: \(name)")
         }
 
         return result.toJSONValue()

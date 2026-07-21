@@ -4,12 +4,183 @@
 // ============================================================
 
 import Foundation
+import Dispatch
 import AROParser
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Provides MCP tools for ARO operations
 public struct MCPToolProvider: Sendable {
 
     public init() {}
+
+    // MARK: - Process Execution
+
+    /// Largest stdout/stderr payload (bytes) returned to the client per stream.
+    /// Beyond this the output is truncated so a chatty application can't blow
+    /// up the model's context window.
+    private static let maxOutputBytes = 64 * 1024
+
+    /// Upper bound on any tool-supplied timeout (seconds). Also guards against a
+    /// negative value, which would otherwise trap when converted to `UInt64`.
+    private static func clampTimeout(_ seconds: Int) -> Int {
+        min(max(seconds, 1), 600)
+    }
+
+    /// Outcome of a spawned `aro` subprocess. `Sendable` so it can cross the
+    /// continuation boundary out of the background execution queue.
+    private struct ProcessOutcome: Sendable {
+        var stdout: String
+        var stderr: String
+        var exitCode: Int32
+        var timedOut: Bool
+        var launchFailed: Bool
+    }
+
+    /// Thread-safe boolean/data holders shared between the timeout watchdog,
+    /// the pipe-drain threads, and the waiter — all of which run concurrently.
+    private final class LockedBool: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+        func set() { lock.lock(); value = true; lock.unlock() }
+        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+    }
+    private final class DataBox: @unchecked Sendable {
+        var data = Data()
+    }
+
+    /// Resolve how to invoke `aro`. Prefer the executable currently running this
+    /// MCP server (robust under minimal-PATH launchers like Claude Desktop,
+    /// where a bare `aro` is not resolvable); fall back to a PATH lookup via
+    /// `/usr/bin/env` only when the running executable can't be determined.
+    private func aroInvocation() -> (executable: URL, prefixArgs: [String]) {
+        if let exe = Bundle.main.executablePath,
+           FileManager.default.isExecutableFile(atPath: exe) {
+            return (URL(fileURLWithPath: exe), [])
+        }
+        return (URL(fileURLWithPath: "/usr/bin/env"), ["aro"])
+    }
+
+    /// Spawn `aro <subcommand>` and capture its output, off the Swift-concurrency
+    /// cooperative pool so the blocking process wait never starves it.
+    private func runAro(_ subcommand: [String], timeoutSeconds: Int) async -> ProcessOutcome {
+        let clamped = Self.clampTimeout(timeoutSeconds)
+        let invocation = aroInvocation()
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let outcome = Self.runAroSync(subcommand, timeout: clamped, invocation: invocation)
+                continuation.resume(returning: outcome)
+            }
+        }
+    }
+
+    /// Fully synchronous process runner (already on a background thread). Drains
+    /// stdout/stderr on dedicated threads *before* waiting so a child that emits
+    /// more than the OS pipe buffer (~64KB) can't deadlock against our wait.
+    private static func runAroSync(
+        _ subcommand: [String],
+        timeout: Int,
+        invocation: (executable: URL, prefixArgs: [String])
+    ) -> ProcessOutcome {
+        let process = Process()
+        process.executableURL = invocation.executable
+        process.arguments = invocation.prefixArgs + subcommand
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        do {
+            try process.run()
+        } catch {
+            return ProcessOutcome(stdout: "", stderr: error.localizedDescription,
+                                  exitCode: -1, timedOut: false, launchFailed: true)
+        }
+
+        // Concurrent, non-blocking drains started immediately after launch.
+        let outBox = DataBox(), errBox = DataBox()
+        let drains = DispatchGroup()
+        let ioQueue = DispatchQueue(label: "aro.mcp.pipe-drain", attributes: .concurrent)
+        drains.enter()
+        ioQueue.async {
+            outBox.data = outPipe.fileHandleForReading.readDataToEndOfFile()
+            drains.leave()
+        }
+        drains.enter()
+        ioQueue.async {
+            errBox.data = errPipe.fileHandleForReading.readDataToEndOfFile()
+            drains.leave()
+        }
+
+        // Watchdog: SIGTERM on timeout, escalate to SIGKILL if it lingers.
+        let timedOut = LockedBool()
+        let watchdog = DispatchWorkItem {
+            guard process.isRunning else { return }
+            timedOut.set()
+            process.terminate()
+            let deadline = DispatchTime.now() + 2.0
+            while process.isRunning && DispatchTime.now() < deadline { usleep(50_000) }
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + Double(timeout), execute: watchdog)
+
+        process.waitUntilExit()
+        watchdog.cancel()
+        drains.wait()   // both reads hit EOF once the child's fds closed
+
+        return ProcessOutcome(
+            stdout: truncate(String(data: outBox.data, encoding: .utf8) ?? ""),
+            stderr: truncate(String(data: errBox.data, encoding: .utf8) ?? ""),
+            exitCode: process.terminationStatus,
+            timedOut: timedOut.isSet,
+            launchFailed: false
+        )
+    }
+
+    /// Cap a captured stream at `maxOutputBytes`, appending a truncation notice.
+    private static func truncate(_ text: String) -> String {
+        let bytes = Array(text.utf8)
+        guard bytes.count > maxOutputBytes else { return text }
+        let head = String(decoding: bytes.prefix(maxOutputBytes), as: UTF8.self)
+        return head + "\n… [output truncated — \(bytes.count - maxOutputBytes) more bytes]"
+    }
+
+    /// Render a process outcome as a tool result, distinguishing a timeout from
+    /// an ordinary non-zero exit and surfacing whatever partial output exists.
+    private func formatOutcome(
+        _ o: ProcessOutcome,
+        successEmpty: String,
+        failVerb: String,
+        timeoutLabel: String,
+        timeoutSeconds: Int
+    ) -> MCPToolCallResult {
+        if o.launchFailed {
+            return MCPToolCallResult(
+                content: [.text("Failed to launch aro: \(o.stderr)")],
+                isError: true
+            )
+        }
+        if o.timedOut {
+            let partial = [o.stdout, o.stderr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let tail = partial.isEmpty ? "" : "\n\nPartial output:\n\(partial)"
+            return MCPToolCallResult(
+                content: [.text("\(timeoutLabel) after \(timeoutSeconds)s and was terminated.\(tail)")],
+                isError: true
+            )
+        }
+        if o.exitCode == 0 {
+            return MCPToolCallResult(content: [.text(o.stdout.isEmpty ? successEmpty : o.stdout)])
+        }
+        let message = o.stderr.isEmpty ? o.stdout : o.stderr
+        return MCPToolCallResult(
+            content: [.text("\(failVerb) (exit code \(o.exitCode)):\n\(message)")],
+            isError: true
+        )
+    }
 
     /// List all available tools
     public func listTools() -> MCPToolsListResult {
@@ -333,61 +504,23 @@ public struct MCPToolProvider: Sendable {
             )
         }
 
-        let timeout = args["timeout"]?.intValue ?? 30
+        let requestedTimeout = args["timeout"]?.intValue ?? 30
+        let timeout = Self.clampTimeout(requestedTimeout)
 
-        // Build argument list: aro run <directory> [args...]
-        var processArgs = ["aro", "run", directory]
+        // Build subcommand: run <directory> [args...]
+        var subcommand = ["run", directory]
         if let extraArgs = args["args"]?.arrayValue {
-            processArgs += extraArgs.compactMap { $0.stringValue }
+            subcommand += extraArgs.compactMap { $0.stringValue }
         }
 
-        // Execute aro run command
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = processArgs
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        do {
-            try process.run()
-
-            // Wait with timeout
-            let timeoutTask = Task {
-                try await Task.sleep(nanoseconds: UInt64(timeout) * 1_000_000_000)
-                if process.isRunning {
-                    process.terminate()
-                }
-            }
-
-            process.waitUntilExit()
-            timeoutTask.cancel()
-
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-
-            if process.terminationStatus == 0 {
-                return MCPToolCallResult(
-                    content: [.text(output.isEmpty ? "Application completed successfully" : output)]
-                )
-            } else {
-                let message = errorOutput.isEmpty ? output : errorOutput
-                return MCPToolCallResult(
-                    content: [.text("Application failed (exit code \(process.terminationStatus)):\n\(message)")],
-                    isError: true
-                )
-            }
-        } catch {
-            return MCPToolCallResult(
-                content: [.text("Failed to run application: \(error.localizedDescription)")],
-                isError: true
-            )
-        }
+        let outcome = await runAro(subcommand, timeoutSeconds: timeout)
+        return formatOutcome(
+            outcome,
+            successEmpty: "Application completed successfully",
+            failVerb: "Application failed",
+            timeoutLabel: "Application timed out",
+            timeoutSeconds: timeout
+        )
     }
 
     /// Compile an ARO application to a native binary
@@ -402,55 +535,20 @@ public struct MCPToolProvider: Sendable {
 
         let optimize = args["optimize"]?.boolValue ?? false
 
-        var processArgs = ["aro", "build", directory]
+        var subcommand = ["build", directory]
         if optimize {
-            processArgs.append("--optimize")
+            subcommand.append("--optimize")
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = processArgs
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        do {
-            try process.run()
-
-            let timeoutTask = Task {
-                try await Task.sleep(nanoseconds: 120 * 1_000_000_000)
-                if process.isRunning {
-                    process.terminate()
-                }
-            }
-
-            process.waitUntilExit()
-            timeoutTask.cancel()
-
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-
-            if process.terminationStatus == 0 {
-                let message = output.isEmpty ? "Compilation successful" : output
-                return MCPToolCallResult(content: [.text(message)])
-            } else {
-                let message = errorOutput.isEmpty ? output : errorOutput
-                return MCPToolCallResult(
-                    content: [.text("Compilation failed (exit code \(process.terminationStatus)):\n\(message)")],
-                    isError: true
-                )
-            }
-        } catch {
-            return MCPToolCallResult(
-                content: [.text("Failed to compile: \(error.localizedDescription)")],
-                isError: true
-            )
-        }
+        let compileTimeout = 120
+        let outcome = await runAro(subcommand, timeoutSeconds: compileTimeout)
+        return formatOutcome(
+            outcome,
+            successEmpty: "Compilation successful",
+            failVerb: "Compilation failed",
+            timeoutLabel: "Compilation timed out",
+            timeoutSeconds: compileTimeout
+        )
     }
 
     /// List available example applications
