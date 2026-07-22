@@ -512,7 +512,7 @@ All built-in actions are exposed as C-callable functions:
 |------------|---------|--------------|
 | LLVM | Compile IR to object code | `brew install llvm` (macOS) |
 | Clang | Link object files | Included with Xcode / LLVM |
-| Swift | Build AROCRuntime | Swift 6.2+ toolchain |
+| Swift | Build AROCRuntime | Swift 6.3+ toolchain |
 
 ### Target Triple Examples
 

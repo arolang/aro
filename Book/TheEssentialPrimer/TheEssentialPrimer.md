@@ -175,7 +175,7 @@ Compiler ──── Orchestrates the three stages above. Produces validated
     └── LLVMCodeGenerator ── Emits LLVM IR; compiled to native binary
 ```
 
-All core types (`Token`, AST nodes, `SymbolTable`) are `Sendable` and immutable, satisfying Swift 6.2's strict concurrency model. The parser produces a data structure, not executable state. The semantic analyser operates on that data structure without modifying it. The result is a pipeline that can be parallelised at the file level without locking.
+All core types (`Token`, AST nodes, `SymbolTable`) are `Sendable` and immutable, satisfying Swift 6.3's strict concurrency model. The parser produces a data structure, not executable state. The semantic analyser operates on that data structure without modifying it. The result is a pipeline that can be parallelised at the file level without locking.
 
 ### 4.2 The Execution Engine
 

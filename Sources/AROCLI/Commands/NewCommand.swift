@@ -299,7 +299,7 @@ struct NewPluginCommand: AsyncParsableCommand {
         \(provides)
         build:
           swift:
-            minimum-version: '6.2'
+            minimum-version: '6.3'
             targets:
             - name: \(handle)Plugin
               path: Sources/
@@ -309,7 +309,7 @@ struct NewPluginCommand: AsyncParsableCommand {
     private static func swiftPackageSwift(options: ScaffoldOptions) -> String {
         let handle = options.handle
         return """
-        // swift-tools-version: 6.2
+        // swift-tools-version: 6.3
         // Package.swift — \(handle)Plugin
         //
         // Built as a dynamic library so the ARO runtime can dlopen() it.

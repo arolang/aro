@@ -55,7 +55,7 @@ final class PluginManifestTests: XCTestCase {
 
         build:
           swift:
-            minimum-version: "6.2"
+            minimum-version: "6.3"
             targets:
               - name: MyPlugin
                 path: Sources/
@@ -88,7 +88,7 @@ final class PluginManifestTests: XCTestCase {
 
         // Build
         XCTAssertNotNil(manifest.build?.swift)
-        XCTAssertEqual(manifest.build?.swift?.minimumVersion, "6.2")
+        XCTAssertEqual(manifest.build?.swift?.minimumVersion, "6.3")
     }
 
     func testParseRustPlugin() throws {

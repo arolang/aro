@@ -11,7 +11,7 @@ provides:
   handler: collections
 build:
   swift:
-    minimum-version: '6.2'
+    minimum-version: '6.3'
     targets:
     - name: CollectionPlugin
       path: Sources/

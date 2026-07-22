@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # test-examples-in-docker.sh
-# Runs Tests/IntegrationTestsRunner in a Swift 6.2 Docker container with
+# Runs Tests/IntegrationTestsRunner in a Swift 6.3 Docker container with
 # all dependencies installed.
 # =============================================================================
 
@@ -9,10 +9,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-echo "=== Running ARO tests in Swift 6.2 Docker container ==="
+echo "=== Running ARO tests in Swift 6.3 Docker container ==="
 echo ""
 
-docker run --rm -v "$SCRIPT_DIR:/workspace" -w /workspace swift:6.2-jammy bash -c '
+docker run --rm -v "$SCRIPT_DIR:/workspace" -w /workspace swift:6.3-jammy bash -c '
 set -e
 
 # Copy the workspace from the (slow, inotify-broken) host bind-mount to a

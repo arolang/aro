@@ -1,7 +1,7 @@
 # =============================================================================
 # ARO Programming Language - GitLab CI/CD Pipeline (Linux Only)
 # =============================================================================
-# Builds, tests, and releases ARO on Linux using Swift 6.2
+# Builds, tests, and releases ARO on Linux using Swift 6.3
 # =============================================================================
 
 stages:
@@ -13,7 +13,7 @@ stages:
   - mastodon
 
 variables:
-  SWIFT_VERSION: '6.2.3'
+  SWIFT_VERSION: '6.3.2'
 
 # Only run pipelines for main, release branches, tags, merge requests, and schedules
 workflow:
@@ -37,7 +37,7 @@ default:
 # =============================================================================
 test:
   stage: test
-  image: swift:6.2-jammy
+  image: swift:6.3-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -103,7 +103,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: swift:6.2-jammy
+  image: swift:6.3-jammy
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -277,9 +277,9 @@ integration:linux:
     - rustc --version
 
     # Install Swift for native compilation tests
-    - wget -q https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
-    - tar xzf swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
-    - mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
+    - wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
+    - tar xzf swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
+    - mv swift-6.3.2-RELEASE-ubuntu22.04 /usr/share/swift
     - export PATH="/usr/share/swift/usr/bin:$PATH"
 
     # Install Perl modules

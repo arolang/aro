@@ -23,7 +23,7 @@ aro run ./Examples/HelloWorld   # Try an example
 1. Fork the repository and create a branch
 2. Keep your changes focused and atomic
 3. Run `swift test` before submitting
-4. All types should be `Sendable` for Swift 6.2 concurrency
+4. All types should be `Sendable` for Swift 6.3 concurrency
 
 ## Pull Requests
 

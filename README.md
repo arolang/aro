@@ -294,7 +294,7 @@ See the [Building from Source](#building-from-source) section below for detailed
 
 ## Building from Source
 
-ARO is written in Swift 6.2 and uses Swift Package Manager.
+ARO is written in Swift 6.3 and uses Swift Package Manager.
 
 ### Dependencies
 
@@ -302,7 +302,7 @@ Building ARO from source requires:
 
 | Dependency | Version | Required For |
 |------------|---------|--------------|
-| Swift | 6.2+ | Core compiler and runtime |
+| Swift | 6.3+ | Core compiler and runtime |
 | LLVM | 20 | Native compilation (`aro build`) |
 | Clang | 20 | Linking compiled binaries |
 
@@ -310,7 +310,7 @@ Building ARO from source requires:
 
 ### macOS
 
-Xcode 16.3 or later includes Swift 6.2. Install LLVM 20 via Homebrew:
+Xcode 26.4.1 or later includes Swift 6.3. Install LLVM 20 via Homebrew:
 
 ```bash
 brew install llvm@20
@@ -335,7 +335,7 @@ export LLVM_PATH=/usr/local/opt/llvm@20     # Intel Mac default
 
 ### Linux
 
-Install Swift 6.2 from [swift.org](https://swift.org/download/). Install LLVM 20:
+Install Swift 6.3 from [swift.org](https://swift.org/download/). Install LLVM 20:
 
 ```bash
 # Ubuntu/Debian
@@ -357,7 +357,7 @@ The binary is at `.build/release/aro`.
 
 ### Windows
 
-Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
+Install Swift 6.3 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
 ```powershell
 git clone https://github.com/arolang/aro.git

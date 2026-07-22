@@ -465,7 +465,7 @@ Plugins/
 ### Package.swift
 
 ```swift
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 import PackageDescription
 
 let package = Package(
@@ -506,7 +506,7 @@ provides:
 
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
     targets:
       - name: UUIDPlugin
         path: Sources/

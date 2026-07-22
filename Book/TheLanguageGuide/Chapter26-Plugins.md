@@ -468,7 +468,7 @@ provides:
 
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
 ```
 
 **GeocodeAction.swift:**
