@@ -2219,6 +2219,68 @@ def _parse_parameters_block(params_block: str) -> tuple[list[str], list[str]]:
     return props, required
 
 
+def _parse_tool_parameter_schema(block: str) -> tuple[list[str], list[str]]:
+    """Parse a `ToolParameterSchema([ .required(...), .optional(...), ... ])`
+    array literal (the text of the `[...]` block, brackets included).
+
+    Returns (property_names, required_names) for the TOP-LEVEL parameters
+    only. Parameters nested inside `.object([...])` / `.array(of:)` /
+    `.enumeration([...])` values are ignored — they belong to a compound
+    type, not the tool's argument list.
+    """
+    props: list[str] = []
+    required: list[str] = []
+    depth = 0            # nesting depth of `[` brackets within the block
+    in_string = False
+    escape = False
+    i, n = 0, len(block)
+    while i < n:
+        ch = block[i]
+        if escape:
+            escape = False
+            i += 1
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            i += 1
+            continue
+        if ch == '"':
+            in_string = not in_string
+            i += 1
+            continue
+        if in_string:
+            i += 1
+            continue
+        if ch == '[':
+            depth += 1
+            i += 1
+            continue
+        if ch == ']':
+            depth -= 1
+            i += 1
+            continue
+        # Only `.required(` / `.optional(` at the outer array level (depth 1)
+        # are the tool's own parameters; nested ones sit at depth >= 2.
+        if depth == 1 and ch == '.':
+            matched = False
+            for kind, is_req in (('required', True), ('optional', False)):
+                token = '.' + kind + '('
+                if block.startswith(token, i):
+                    m = _re.search(r'\s*"((?:[^"\\]|\\.)*)"', block[i + len(token):])
+                    if m:
+                        name = m.group(1)
+                        props.append(name)
+                        if is_req:
+                            required.append(name)
+                    i += len(token)
+                    matched = True
+                    break
+            if matched:
+                continue
+        i += 1
+    return props, required
+
+
 def extract_ask_tools(aro_root=None) -> list[dict]:
     """Extract the real `aro ask` tool inventory from the Swift sources.
 
@@ -2267,8 +2329,17 @@ def extract_ask_tools(aro_root=None) -> list[dict]:
 
             props: list[str] = []
             required: list[str] = []
+            # Current form (#357): `schema: ToolParameterSchema([ .required(…) ])`
+            # or `schema: .empty` for zero-argument tools.
+            schema_m = _re.search(r'schema:\s*ToolParameterSchema\(\s*\[', chunk)
             inline_m = _re.search(r'parameters:\s*\.object\(\s*\[', chunk)
-            if inline_m:
+            if schema_m:
+                block = _swift_balanced_block(chunk, schema_m.end() - 1)
+                props, required = _parse_tool_parameter_schema(block)
+            elif _re.search(r'schema:\s*\.empty\b', chunk):
+                props, required = [], []
+            # Legacy form: `parameters: .object([ … ])` JSON literal.
+            elif inline_m:
                 block = _swift_balanced_block(chunk, inline_m.end() - 1)
                 props, required = _parse_parameters_block(block)
             else:
