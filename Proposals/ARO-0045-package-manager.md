@@ -169,7 +169,7 @@ dependencies:
 # Build configuration (optional)
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
     targets:
       - name: AdditionalTools
         path: Sources/

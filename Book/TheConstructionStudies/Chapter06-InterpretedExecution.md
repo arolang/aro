@@ -73,7 +73,7 @@ ARO's runtime uses Swift actors for thread-safe shared state. `ExecutionEngine` 
 
 ### Why Actors?
 
-Swift 6.2 made data races compile errors. Actors are the answer: the compiler enforces that mutable state is only touched by one task at a time. No manual locking, no `DispatchQueue` gymnastics — the type system does it.
+Swift 6.3 made data races compile errors. Actors are the answer: the compiler enforces that mutable state is only touched by one task at a time. No manual locking, no `DispatchQueue` gymnastics — the type system does it.
 
 ### Actor Isolation in Practice
 

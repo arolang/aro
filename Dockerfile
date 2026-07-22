@@ -10,7 +10,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build Environment
 # -----------------------------------------------------------------------------
-FROM swift:6.2-jammy AS builder
+FROM swift:6.3-jammy AS builder
 
 # Build arguments for version info
 ARG VERSION=dev
@@ -82,7 +82,7 @@ RUN if [ "$SKIP_TESTS" != "true" ]; then swift test --parallel --num-workers 2; 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime Environment
 # -----------------------------------------------------------------------------
-FROM swift:6.2-jammy AS runtime
+FROM swift:6.3-jammy AS runtime
 
 # Labels for container metadata
 LABEL org.opencontainers.image.title="ARO Programming Language"
@@ -141,7 +141,7 @@ CMD ["--help"]
 # -----------------------------------------------------------------------------
 # Stage 3: Development Environment (optional)
 # -----------------------------------------------------------------------------
-FROM swift:6.2-jammy AS dev
+FROM swift:6.3-jammy AS dev
 
 # Install development tools including LLVM 20 and Rust (for plugins)
 RUN apt-get update && apt-get install -y --no-install-recommends \

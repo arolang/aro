@@ -192,7 +192,7 @@ facts:
     week: 9
     day: 3
     category: "DevOps"
-    headline: "Multi-platform CI/CD with Swift 6.2"
+    headline: "Multi-platform CI/CD with Swift 6.3"
     explanation: "Build, test, sign, and release on Linux, macOS, Windows automatically. Code signing and Homebrew updates in one workflow. Ship with confidence."
 
   # ===== WEEK 10: HTTP Server =====

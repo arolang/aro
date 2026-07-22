@@ -54,7 +54,7 @@ aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
 
 ## Architecture
 
-This is a Swift 6.2 parser/compiler/runtime for ARO (Action Result Object), a DSL for expressing business features as Action-Result-Object statements.
+This is a Swift 6.3 parser/compiler/runtime for ARO (Action Result Object), a DSL for expressing business features as Action-Result-Object statements.
 
 ### Application Structure
 
@@ -725,7 +725,7 @@ The `Proposals/` directory contains language specifications:
 
 ## Concurrency
 
-All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.2 concurrency safety.
+All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.3 concurrency safety.
 
 ## Error Handling
 

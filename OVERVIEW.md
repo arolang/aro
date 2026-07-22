@@ -76,7 +76,7 @@ see the [Wiki](https://github.com/arolang/aro/wiki) and the
 
 ```
 ARO-Lang/
-├── Package.swift           # Swift package manifest (Swift 6.2)
+├── Package.swift           # Swift package manifest (Swift 6.3)
 ├── README.md               # Project overview & install
 ├── OVERVIEW.md             # This file — implementation reference
 ├── CLAUDE.md               # Codebase guidance for AI assistants
@@ -478,7 +478,7 @@ direction:
 
 1. **Protocol-Oriented**: Extensible via protocols at every layer
 2. **Immutable Data**: Symbol tables and AST nodes are Sendable value types
-3. **Swift 6.2 Concurrency**: All core types are `Sendable`
+3. **Swift 6.3 Concurrency**: All core types are `Sendable`
 4. **Visitor Pattern**: AST traversal is decoupled from node types
 5. **Error Recovery**: The parser continues after errors and reports diagnostics
 6. **Event-Driven**: Loose coupling via the event bus

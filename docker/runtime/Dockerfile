@@ -57,7 +57,7 @@ RUN if [ -f /sbin/ldconfig.real-bak ]; then \
 
 # Copy Swift runtime libraries from the Swift image
 # We use a multi-stage approach to keep the image minimal
-COPY --from=swift:6.2-jammy /usr/lib/swift/linux/*.so /usr/lib/swift/linux/
+COPY --from=swift:6.3-jammy /usr/lib/swift/linux/*.so /usr/lib/swift/linux/
 
 # Configure the dynamic linker to find Swift libraries.
 # Use ENV rather than running ldconfig to avoid QEMU arm64 emulation issues

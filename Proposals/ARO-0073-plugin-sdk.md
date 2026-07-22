@@ -549,7 +549,7 @@ Distributed as a Swift package. Plugin authors add it as a dependency.
 
 **Package.swift for a plugin:**
 ```swift
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 import PackageDescription
 
 let package = Package(

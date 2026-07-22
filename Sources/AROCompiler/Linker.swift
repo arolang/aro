@@ -1050,11 +1050,11 @@ public final class CCompiler {
         FileHandle.standardError.write(Data("[LINKER-WIN] Checking common paths...\n".utf8))
         let commonPaths = [
             // SDK paths (where import libs actually live)
-            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.2.1\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows\\x86_64",
-            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.2.1\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.3.2\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows\\x86_64",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.3.2\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows",
             // Toolchain paths (fallback)
-            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64",
-            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.3.2+Asserts\\usr\\lib\\swift\\windows\\x86_64",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.3.2+Asserts\\usr\\lib\\swift\\windows",
             "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\lib\\swift\\windows\\x86_64",
             "C:\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\lib\\swift\\windows\\x86_64"
         ]
@@ -1222,7 +1222,7 @@ public final class CCompiler {
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
         debugLog("[LINKER-MAC] Checking Xcode: \(xcodeLib) exists=\(FileManager.default.fileExists(atPath: xcodeLib))")
         if FileManager.default.fileExists(atPath: xcodeLib) {
-            debugLog("[LINKER-MAC] WARNING: Using Xcode toolchain - may have ABI mismatch with Swift 6.2!")
+            debugLog("[LINKER-MAC] WARNING: Using Xcode toolchain - may have ABI mismatch with Swift 6.3!")
             return xcodeLib
         }
 
@@ -1364,13 +1364,13 @@ public final class CCompiler {
         }
 
         // Also check the toolchain path if swiftLibPath is the SDK
-        // Toolchain: C:\...\Toolchains\6.2.1+Asserts\usr\lib\swift\windows\x86_64\swiftrt.obj
+        // Toolchain: C:\...\Toolchains\6.3.2+Asserts\usr\lib\swift\windows\x86_64\swiftrt.obj
         if let sdkRoot = ProcessInfo.processInfo.environment["SDKROOT"],
            let toolchainRoot = sdkRoot.range(of: "Platforms") {
             let basePath = String(sdkRoot[..<toolchainRoot.lowerBound])
             let toolchainPaths = [
-                "\(basePath)Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj",
-                "\(basePath)Toolchains\\6.2.1-RELEASE\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj"
+                "\(basePath)Toolchains\\6.3.2+Asserts\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj",
+                "\(basePath)Toolchains\\6.3.2-RELEASE\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj"
             ]
             for path in toolchainPaths {
                 let cleanPath = path.replacingOccurrences(of: "\\\\", with: "\\")

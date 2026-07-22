@@ -73,7 +73,7 @@ dependencies:
 # Build configuration
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
     targets:
       - name: ExamplePlugin
         path: Sources/
@@ -277,7 +277,7 @@ provides:
 
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
     targets:
       - name: HelloPlugin
         path: Sources/
@@ -410,7 +410,7 @@ The top-level `build` section provides additional build configuration:
 ```yaml
 build:
   swift:
-    minimum-version: "6.2"
+    minimum-version: "6.3"
     targets:
       - name: MyPlugin
         path: Sources/
@@ -525,7 +525,7 @@ provides:
     path: features/
 build:
   swift:
-    minimum-version: '6.2'
+    minimum-version: '6.3'
     targets:
       - name: HelloPlugin
         path: Sources/

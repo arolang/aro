@@ -2,14 +2,14 @@
 # ARO Build System Docker Image
 # =============================================================================
 # Full build environment for compiling ARO code into native binaries.
-# Includes Swift 6.2, LLVM 20, and the ARO CLI.
+# Includes Swift 6.3, LLVM 20, and the ARO CLI.
 #
 # Usage:
 #   docker run -v $(pwd):/app ghcr.io/arolang/aro-buildsystem:latest check .
 #   docker run -v $(pwd):/app ghcr.io/arolang/aro-buildsystem:latest build . -o myapp
 # =============================================================================
 
-FROM swift:6.2-jammy
+FROM swift:6.3-jammy
 
 LABEL org.opencontainers.image.title="ARO Build System"
 LABEL org.opencontainers.image.description="Build environment for compiling ARO applications to native binaries"
