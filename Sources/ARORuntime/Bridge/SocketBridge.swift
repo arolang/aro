@@ -96,6 +96,10 @@ public final class NativeSocketServer: @unchecked Sendable {
 
     /// Start the server
     public func start() -> Bool {
+        // Ignore SIGPIPE process-wide so a broadcast/send to a client that has
+        // gone away cannot terminate the process (default SIGPIPE disposition).
+        signal(SIGPIPE, SIG_IGN)
+
         // Create socket
         serverFd = socket(AF_INET, aroSockStreamType, 0)
         guard serverFd >= 0 else {

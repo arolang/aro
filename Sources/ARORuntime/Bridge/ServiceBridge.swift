@@ -121,6 +121,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
     /// Start the server
     public func start() -> Bool {
+        // Ignore SIGPIPE process-wide: a client that closes the connection
+        // before we finish writing the response would otherwise raise SIGPIPE
+        // on send(), whose default disposition terminates the process. This
+        // manifested as the compiled server dying mid-request on Linux CI
+        // (every subsequent request then failing to connect). NIO handles this
+        // for the interpreter; the native BSD-socket path must do it explicitly.
+        signal(SIGPIPE, SIG_IGN)
+
         // Create socket
         serverFd = socket(AF_INET, aroSockStreamType, 0)
         guard serverFd >= 0 else {
