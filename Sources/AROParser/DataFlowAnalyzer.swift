@@ -941,6 +941,9 @@ public struct DataFlowAnalyzer {
             "port", "host", "directory", "file", "events", "contract", "template",
             "repository",
             // Framework-provided runtime objects
+            "terminal",    // terminal I/O target for Prompt / Clear / Show / Render
+            "env",         // process environment via `<env: NAME>` / `<env>`
+            "git",         // embedded git system object (ARO-0080)
             "parameter",   // CLI arguments via `<parameter: name>` / `<parameter>`
             "input",       // user-defined action arguments via `<input: name>`
             "path",        // file qualifier (`<file: path>` resolves a string variable to a fs path)

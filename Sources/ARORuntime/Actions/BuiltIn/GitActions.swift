@@ -237,7 +237,15 @@ public struct CloneAction: ActionImplementation {
         }
 
         let branch = expr["branch"] as? String
-        let cloneResult = try git.clone(url: url, to: destination, branch: branch)
+        let username = expr["username"] as? String
+        let token = expr["token"] as? String
+        let cloneResult = try git.clone(
+            url: url,
+            to: destination,
+            branch: branch,
+            username: username,
+            token: token
+        )
 
         let value = cloneResult.asDictionary
         context.bind(result.base, value: value)

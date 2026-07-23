@@ -329,8 +329,33 @@ public final class GitService: @unchecked Sendable {
 
     // MARK: - Clone
 
+    /// Credentials handed to libgit2's clone callback via the payload pointer.
+    ///
+    /// The libgit2 credential callback must be a non-capturing C function, so
+    /// the caller-supplied token/username cannot be captured directly — they
+    /// travel through `git_remote_callbacks.payload` instead.
+    private final class CloneAuth {
+        let username: String
+        let token: String?
+        init(username: String, token: String?) {
+            self.username = username
+            self.token = token
+        }
+    }
+
     /// Clone a repository.
-    public func clone(url: String, to destination: URL, branch: String? = nil) throws -> GitCommitResult {
+    ///
+    /// Authenticated clones (ARO-0080): SSH resolves credentials from the local
+    /// `~/.ssh` default keys, falling back to the SSH agent; HTTPS uses a
+    /// userpass token when supplied. Public repositories still clone with no
+    /// credentials.
+    public func clone(
+        url: String,
+        to destination: URL,
+        branch: String? = nil,
+        username: String? = nil,
+        token: String? = nil
+    ) throws -> GitCommitResult {
         lock.lock()
         defer { lock.unlock() }
 
@@ -344,10 +369,75 @@ public final class GitService: @unchecked Sendable {
             opts.checkout_branch = UnsafePointer(branchCopy)
         }
 
+        // Accept certificates (libgit2's verification is unreliable on macOS).
+        opts.fetch_opts.callbacks.certificate_check = { _, _, _, _ in 0 }
+
+        // Credential callback. Non-capturing: the token/username reach it via
+        // the payload pointer, not a Swift capture.
+        let auth = CloneAuth(username: username ?? "git", token: token)
+        opts.fetch_opts.callbacks.payload = Unmanaged.passUnretained(auth).toOpaque()
+        opts.fetch_opts.callbacks.credentials = { cred, _, usernameFromURL, allowedTypes, payload in
+            if allowedTypes == 0 {
+                return Int32(GIT_PASSTHROUGH.rawValue)
+            }
+
+            let auth = payload.map { Unmanaged<CloneAuth>.fromOpaque($0).takeUnretainedValue() }
+            let user = usernameFromURL != nil
+                ? String(cString: usernameFromURL!)
+                : (auth?.username ?? "git")
+
+            // SSH: prefer default key files, fall back to the agent.
+            if (allowedTypes & GIT_CREDENTIAL_SSH_KEY.rawValue) != 0 {
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let ed25519 = "\(home)/.ssh/id_ed25519"
+                let rsa = "\(home)/.ssh/id_rsa"
+
+                let privKey: String?
+                if FileManager.default.fileExists(atPath: ed25519) {
+                    privKey = ed25519
+                } else if FileManager.default.fileExists(atPath: rsa) {
+                    privKey = rsa
+                } else {
+                    privKey = nil
+                }
+
+                if let privKey {
+                    let pubKey = privKey + ".pub"
+                    return user.withCString { u in
+                        pubKey.withCString { pub in
+                            privKey.withCString { priv in
+                                git_credential_ssh_key_new(cred, u, pub, priv, nil)
+                            }
+                        }
+                    }
+                }
+
+                return user.withCString { u in
+                    git_credential_ssh_key_from_agent(cred, u)
+                }
+            }
+
+            // HTTPS userpass: use the supplied token when present.
+            if (allowedTypes & GIT_CREDENTIAL_USERPASS_PLAINTEXT.rawValue) != 0 {
+                if let token = auth?.token, !token.isEmpty {
+                    return user.withCString { u in
+                        token.withCString { p in
+                            git_credential_userpass_plaintext_new(cred, u, p)
+                        }
+                    }
+                }
+                return Int32(GIT_PASSTHROUGH.rawValue)
+            }
+
+            return Int32(GIT_PASSTHROUGH.rawValue)
+        }
+
         var repo: OpaquePointer?
-        let rc = url.withCString { urlCStr in
-            destination.path.withCString { pathCStr in
-                git_clone(&repo, urlCStr, pathCStr, &opts)
+        let rc = withExtendedLifetime(auth) {
+            url.withCString { urlCStr in
+                destination.path.withCString { pathCStr in
+                    git_clone(&repo, urlCStr, pathCStr, &opts)
+                }
             }
         }
         guard rc == 0, let repo else { throw gitError("Cannot clone '\(url)'") }
