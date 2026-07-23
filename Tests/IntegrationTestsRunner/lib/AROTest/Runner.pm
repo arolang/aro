@@ -516,6 +516,13 @@ sub run_test {
         $result->{compiled_message} = 'Native compilation not supported on Windows';
         $result->{compiled_duration} = 0;
         $result->{build_duration} = 0;
+    # Note: some examples' native (compiled) server crashes only under Linux CI.
+    # Interpreter mode still runs on Linux and both modes still run on macOS.
+    } elsif ($is_linux && defined $hints->{'skip-compiled-on-linux'} && ($mode eq 'compiled' || $mode eq 'both')) {
+        $result->{compiled_status} = 'SKIP';
+        $result->{compiled_message} = "Compiled skipped on Linux: $hints->{'skip-compiled-on-linux'}";
+        $result->{compiled_duration} = 0;
+        $result->{build_duration} = 0;
     } elsif ($mode eq 'compiled' || $mode eq 'both') {
         # Build the example first (use workdir if specified)
         # Use global timeout for build (not hints timeout) - hints timeout may be very short

@@ -55,6 +55,7 @@ sub read_test_hint {
         'skip-on-linux' => undef,
         'skip-on-macos' => undef,
         'skip-on-ci' => undef,
+        'skip-compiled-on-linux' => undef,
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
