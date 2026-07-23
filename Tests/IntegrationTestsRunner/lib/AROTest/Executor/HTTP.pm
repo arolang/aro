@@ -158,6 +158,36 @@ sub run_http_example_internal {
     # Determine command based on mode
     my @cmd;
     my %extra_env = (ARO_HTTP_PORT => $port);
+
+    # Some HTTP examples also start a socket server. SimpleChat, for
+    # instance, binds a hardcoded port 9000 in main.aro. In "both" mode the
+    # interpreter run is torn down and the compiled run started immediately
+    # after; under slower/contended Linux CI the interpreter's NIO socket
+    # server isn't always reaped in time, so it is still actively listening
+    # on 9000 when the compiled native socket server tries to bind it.
+    # SO_REUSEADDR does not permit two live listeners on the same port, so
+    # the bind fails, the socket Start throws during Application-Start, the
+    # app never serves, and every request surfaces as "599 Internal
+    # Exception" (only reproduces in compiled mode on Linux CI; passes in
+    # interpreter mode and on macOS).
+    #
+    # Hand the example a free ARO_SOCKET_PORT — which the runtime honors
+    # over the {port:...} literal (resolvePort in ExecutionContext) — so it
+    # can never collide with a 9000 held by the interpreter run, a leaked
+    # process, or a concurrent worker. Mirrors what the MultiService and
+    # Console executors already do.
+    if ($has_net_emptyport) {
+        my $socket_port;
+        if ($options{jobs} > 1) {
+            # Allocate from +500 within this worker's 1000-wide lane so it
+            # stays clear of the HTTP port taken from the lane's base above.
+            my $slot = $ENV{ARO_TEST_WORKER_ID} // 0;
+            $socket_port = Net::EmptyPort::empty_port(30500 + ($slot * 1000));
+        } else {
+            $socket_port = Net::EmptyPort::empty_port(9000);
+        }
+        $extra_env{ARO_SOCKET_PORT} = $socket_port;
+    }
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         # Use provided binary_name (for workdir cases) or derive from dir
