@@ -118,18 +118,23 @@ SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
 #   v2 (2026-04-22): majority caps doubled (code_generation=1200,
 #       syntax_qa=900); minority categories uncapped (None) so every
 #       sample we have is kept.
+#   v3 (2026-07-24): eval-derived generation (Train/eval_derived) added
+#       ~8k validated pairs weighted to error→fix. Raise code_generation
+#       (1200→3000) and syntax_qa (900→2500) so the distinct new examples
+#       aren't dropped, and bound correction at 4000 so the heavy error→fix
+#       set stays the dominant category without overwhelming the mix.
 # Bump TYPE_CAPS_VERSION whenever the caps change.
-TYPE_CAPS_VERSION = 'v2-2026-04-22'
+TYPE_CAPS_VERSION = 'v3-2026-07-24'
 
 TYPE_CAPS = {
-    'code_generation':     1200,   # doubled — primary task
-    'syntax_qa':           900,    # doubled — knowledge Q&A
+    'code_generation':     3000,   # raised — keep distinct eval-derived code
+    'syntax_qa':           2500,   # raised — keep distinct knowledge Q&A
     'code_explanation':    None,   # uncapped (minority)
     'fim':                 None,   # uncapped (minority)
     'code_transformation': None,   # uncapped (minority)
     'tool_calling':        None,   # uncapped — critical for aro ask
     'debugging':           None,   # uncapped — always useful
-    'correction':          None,   # uncapped — teaches model what actions DON'T exist
+    'correction':          4000,   # bounded — dominant error→fix, not overwhelming
     'full_application':    None,   # uncapped — plan → complete multi-file app
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
