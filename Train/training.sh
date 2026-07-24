@@ -171,6 +171,16 @@ fi
 # kernel cwd to the notebook's directory for us; running as a script we must cd
 # there ourselves, or it looks for 01_corpus_collection.ipynb in the wrong place.
 cd "${NB_DIR}"
-# -u: unbuffered stdout/stderr so progress streams line-by-line. `exec` so the
-# script's exit status becomes the script's, and Ctrl-C reaches it directly.
-exec "${PYTHON}" -u "${META_PY}"
+# -u: unbuffered stdout/stderr so progress streams line-by-line.
+"${PYTHON}" -u "${META_PY}"
+META_STATUS=$?
+
+# Post-training PDF report: a management summary, the charts that best describe
+# training quality (each explained by the local Qwen model), and a conclusion,
+# saved to Train/Reports/. Best-effort — never fails the run.
+echo
+echo "==> Generating post-training report (Train/Reports/)"
+"${PYTHON}" "${NB_DIR}/generate_training_report.py" \
+  || echo "  (report generation skipped/failed — see output above)"
+
+exit ${META_STATUS}
