@@ -163,9 +163,13 @@ BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
 FALLBACK_MODEL_ID  = BASE_MODEL_ID
 
 
-def _hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
+def hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
     """Return True if repo_id exists on HuggingFace Hub AND contains config.json.
-    A repo page existing is not enough — it may be an empty placeholder."""
+    A repo page existing is not enough — it may be an empty placeholder.
+
+    Public name (no leading underscore) so `from config import *` exports it —
+    notebooks call it bare. `_hf_model_exists` is kept as a backward-compat
+    alias for existing references."""
     try:
         import urllib.request
         # Check for config.json specifically — required by mlx-lm to load the model.
@@ -174,6 +178,11 @@ def _hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
         return True
     except Exception:
         return False
+
+
+# Backward-compat alias (leading-underscore names are NOT exported by
+# `from config import *`, so notebooks must use the public `hf_model_exists`).
+_hf_model_exists = hf_model_exists
 
 
 def resolve_model_id() -> tuple[str, bool]:
@@ -190,7 +199,7 @@ def resolve_model_id() -> tuple[str, bool]:
     if TRAIN_ON_BASE:
         print(f'TRAIN_ON_BASE=True → using base model: {BASE_MODEL_ID}')
         return BASE_MODEL_ID, False
-    if _hf_model_exists(TEACHER_MODEL_ID):
+    if hf_model_exists(TEACHER_MODEL_ID):
         print(f'Fine-tuned teacher found on HF: {TEACHER_MODEL_ID}')
         return TEACHER_MODEL_ID, True
     print(f'Teacher not found on HuggingFace, using base: {BASE_MODEL_ID}')
