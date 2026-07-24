@@ -406,6 +406,25 @@ def test_word_overlap_ratio():
     assert word_overlap_ratio('a an the of', 'unrelated') == 1.0  # no long words → vacuous pass
 
 
+def test_normalize_aro_whitespace_covers_uppercase_names():
+    norm = config._normalize_aro_whitespace
+    # Uppercase status/event names after `<` are the regression case: the
+    # model bakes in `Return an<OK: status>` and the old `[a-z]` class left
+    # it broken because `OK` starts uppercase.
+    assert norm('Return an<OK: status> for the <startup>.') == \
+        'Return an <OK: status> for the <startup>.'
+    assert norm('Return a<Created: status> with <user>.') == \
+        'Return a <Created: status> with <user>.'
+    assert norm('Emit a<UserCreated: event> with <user>.') == \
+        'Emit a <UserCreated: event> with <user>.'
+    # Lowercase system objects still fixed.
+    assert norm('Log "x" to the<console>.') == 'Log "x" to the <console>.'
+    # Valid spacing and the space-separated CLI form are left untouched.
+    assert norm('Return an <OK: status>.') == 'Return an <OK: status>.'
+    assert norm('count < 3') == 'count < 3'
+    assert norm('aro check .') == 'aro check .'
+
+
 def test_auto_wrap_aro():
     wrapped, was = auto_wrap_aro('Extract the <a> from the <b>.\nCompute the <c> from <a> * 2.')
     assert was and wrapped.startswith('(Application-Start: Example) {')

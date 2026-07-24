@@ -232,9 +232,9 @@ public actor NativeMLXBackend: LMBackend {
                 break
             }
         }
-        // Normalise the missing-space-before-`<` bug the base model bakes
-        // into ARO output (mirrors Train/script/config.py).
-        let normalized = normalizeAROWhitespace(in: accumulated)
+        // The missing-space-before-`<` bug the base model bakes into ARO
+        // output is normalised centrally in AskSession so every backend gets
+        // the same correction — see AskSession.normalizeAROWhitespace.
 
         // Tool-call parsing uses a thinking-stripped local copy so it can't
         // pick up speculative tool calls the model wrote inside its
@@ -244,35 +244,16 @@ public actor NativeMLXBackend: LMBackend {
         // text is empty. If we stripped here, AskSession would see empty
         // text with no `<think>` tag and the truncation signal would be
         // lost.
-        let textForToolParsing = stripThinking(normalized).text
+        let textForToolParsing = stripThinking(accumulated).text
         let detectedToolCalls = parseToolCalls(from: textForToolParsing)
 
-        let cleanedText = stripToolCallMarkup(from: normalized)
+        let cleanedText = stripToolCallMarkup(from: accumulated)
         return LMChatResponse.Choice.Message(
             role: "assistant",
             content: cleanedText.isEmpty ? nil : cleanedText,
             toolCalls: detectedToolCalls.isEmpty ? nil : detectedToolCalls
         )
     }
-
-    /// Insert the missing space before `<lower` that the base model bakes
-    /// into ARO output (`Log "x" to the<console>.` → `... to <console>.`).
-    /// Canonical ARO always has whitespace before `<` for system objects,
-    /// qualifiers and variables, so the regex is unconditionally safe.
-    /// Mirrors `Train/script/config.py::_normalize_aro_whitespace` so the
-    /// runtime patch and the next training run converge.
-    private static let missingSpaceBeforeAngle: NSRegularExpression = {
-        // Force-try is fine — the pattern is a compile-time literal.
-        try! NSRegularExpression(pattern: #"(\w)<([a-z])"#)
-    }()
-
-    private func normalizeAROWhitespace(in text: String) -> String {
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return Self.missingSpaceBeforeAngle.stringByReplacingMatches(
-            in: text, range: range, withTemplate: "$1 <$2"
-        )
-    }
-
 
     // MARK: - Tool call parsing
 
