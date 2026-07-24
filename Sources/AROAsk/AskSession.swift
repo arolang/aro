@@ -510,6 +510,53 @@ public actor AskSession {
                 }
             }
 
+            // Disguised-tool retry: the model sometimes "calls" a tool by
+            // printing it as a shell command in a ```bash block (e.g.
+            // `aro_mcp_aro_check /path`) instead of using the tool-call
+            // protocol, so nothing runs and the user gets a fake command.
+            // Nudge it once to re-issue as a real tool call. Operate on a
+            // copy so the corrective turn never lands in saved context.
+            if (reply.toolCalls ?? []).isEmpty
+                && looksLikeDisguisedToolCall(stripped.text, toolNames: tools.map { $0.function.name }) {
+                emitStatus(
+                    "model wrote a tool call as a code block instead of invoking it — " +
+                    "retrying via the tool-call protocol…"
+                )
+                var nudgeMessages = context.messages
+                nudgeMessages.append(AskMessage(
+                    role: "assistant",
+                    content: stripped.text.isEmpty ? nil : stripped.text,
+                    toolCalls: nil
+                ))
+                nudgeMessages.append(AskMessage(
+                    role: "user",
+                    content: """
+                    That tool call was written as a code block, so it did not run. \
+                    Never print a tool name (such as read_file or aro_check) as a shell \
+                    command or inside a code fence. Invoke the tool through the tool-call \
+                    protocol so it actually executes, then use its result to answer.
+                    """
+                ))
+                let nudgeRequest = LMChatRequest(
+                    model: config.model,
+                    messages: await requestMessages(from: nudgeMessages),
+                    tools: tools.isEmpty ? nil : tools,
+                    temperature: config.temperature,
+                    stream: false
+                )
+                let nudgeReply = try await backend.chat(request: nudgeRequest)
+                if Self.isVerbose, let raw = nudgeReply.content, !raw.isEmpty {
+                    FileHandle.standardError.write(Data(
+                        "\n=== model raw output (tool-call nudge) ===\n\(raw)\n=== end raw ===\n\n".utf8
+                    ))
+                }
+                let nudgeStripped = stripThinking(nudgeReply.content ?? "")
+                if !(nudgeReply.toolCalls ?? []).isEmpty || !nudgeStripped.text.isEmpty {
+                    reply = nudgeReply
+                    stripped = nudgeStripped
+                }
+            }
+
             if stripped.truncatedDuringThinking {
                 // Retry didn't help (or wasn't run). Surface the tail of
                 // the reasoning block as a best-effort explanation —
@@ -529,6 +576,17 @@ public actor AskSession {
                         "or `aro ask -v` to see what it was thinking about"
                     )
                 }
+            }
+
+            // Normalise the missing-space-before-`<` bug the base model bakes
+            // into ARO output, for every backend (see normalizeAROWhitespace).
+            // Done before persist so the saved turn, the self-repair `aro
+            // check`, and the returned text all see the corrected code.
+            if !stripped.text.isEmpty {
+                stripped = StrippedReply(
+                    text: normalizeAROWhitespace(stripped.text),
+                    truncatedDuringThinking: stripped.truncatedDuringThinking
+                )
             }
 
             // Persist assistant turn (stripped)
@@ -717,6 +775,66 @@ public actor AskSession {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         let r = NSRange(block.startIndex..., in: block)
         return regex.firstMatch(in: block, range: r) != nil
+    }
+
+    /// True when the reply carries no structured tool call but a fenced code
+    /// block is really a disguised tool invocation — the model wrote the tool
+    /// as a shell command (```bash\naro_mcp_aro_check /path\n```) or a
+    /// function call in a non-ARO block instead of using the JSON tool-call
+    /// protocol, so nothing actually ran. Matches the underscore /
+    /// `aro_mcp_`-prefixed TOOL names, never the space-separated `aro check`
+    /// CLI form, so legitimate CLI examples in answers are left untouched.
+    private func looksLikeDisguisedToolCall(_ text: String, toolNames: [String]) -> Bool {
+        guard !toolNames.isEmpty else { return false }
+        // Candidate command tokens: each tool name plus the wrapper prefixes
+        // the model invents when it can't reach the real protocol.
+        var tokens = Set<String>()
+        for name in toolNames {
+            tokens.insert(name)
+            tokens.insert("aro_mcp_" + name)
+            tokens.insert("mcp_" + name)
+            tokens.insert("functions." + name)
+        }
+        // Scan fenced code blocks only — prose that merely names a tool is
+        // fine; a runnable-looking block is the failure signal.
+        guard let fence = try? NSRegularExpression(
+            pattern: #"```[^\n]*\n(.*?)```"#, options: [.dotMatchesLineSeparators]
+        ) else { return false }
+        let full = NSRange(text.startIndex..., in: text)
+        for m in fence.matches(in: text, range: full) {
+            guard let br = Range(m.range(at: 1), in: text) else { continue }
+            for rawLine in text[br].split(separator: "\n") {
+                var line = rawLine.trimmingCharacters(in: .whitespaces)
+                if line.hasPrefix("$ ") { line = String(line.dropFirst(2)) }
+                // First token, up to whitespace or an opening paren.
+                let head = line.prefix { $0 != " " && $0 != "\t" && $0 != "(" }
+                if tokens.contains(String(head)) { return true }
+            }
+        }
+        return false
+    }
+
+    /// Insert the missing space before `<` that the base model bakes into
+    /// ARO output (`Return an<OK: status>.` → `Return an <OK: status>.`,
+    /// `... to the<console>.` → `... to the <console>.`). The name after `<`
+    /// may be lowercase (system objects, qualifiers, variables) or uppercase
+    /// (status literals like OK/Created and PascalCase event names), so the
+    /// class spans both. Canonical ARO always has whitespace before `<`, so
+    /// the rewrite is safe; the space-separated `aro check` CLI form and
+    /// spaced comparisons (`count < 3`) are left untouched. Applied here
+    /// rather than in a single backend so every backend — MLX, llama-server,
+    /// remote, OpenAI — gets the same correction. Mirrors
+    /// `Train/script/config.py::_normalize_aro_whitespace`.
+    private static let missingSpaceBeforeAngle: NSRegularExpression = {
+        // Force-try is fine — the pattern is a compile-time literal.
+        try! NSRegularExpression(pattern: #"(\w)<([A-Za-z])"#)
+    }()
+
+    private func normalizeAROWhitespace(_ text: String) -> String {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Self.missingSpaceBeforeAngle.stringByReplacingMatches(
+            in: text, range: range, withTemplate: "$1 <$2"
+        )
     }
 
     /// Render a short preview of a proposed fix for printing between

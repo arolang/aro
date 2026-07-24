@@ -900,6 +900,19 @@ You have tools to read and modify the user's project and to run the ARO
 toolchain. Invoke them via the JSON tool-call protocol, one call per tool:
 <tool_call>{{"name": "write_file", "arguments": {{"path": "main.aro", "content": "..."}}}}</tool_call>
 
+A tool call ONLY runs when emitted through this protocol. NEVER print a tool
+as a shell command or inside a code fence — that just shows the user a
+command that never executed. Do not prefix tool names with `aro_mcp_`,
+`mcp_`, or `functions.`. WRONG (nothing runs):
+```bash
+aro_mcp_aro_check /path/to/App
+```
+```sh
+read_file main.aro
+```
+RIGHT — emit the tool call directly, then use its result:
+<tool_call>{{"name": "aro_check", "arguments": {{"path": "/path/to/App"}}}}</tool_call>
+
 AVAILABLE TOOLS (name(arguments) — purpose):
   read_file(path, offset?, limit?)          read a file with line numbers
   write_file(path, content)                 create or overwrite a file
@@ -1113,11 +1126,15 @@ def clean_notebook_pairs(notebook_tag: str) -> int:
 # Hand-written corpus already has the space, so this regex is a no-op there.
 # ---------------------------------------------------------------------------
 
-_MISSING_SPACE_BEFORE_ANGLE_RE = _re.compile(r'(\w)<([a-z])')
+# The name after `<` may be lowercase (system objects, qualifiers,
+# variables) or uppercase (status literals like OK/Created/BadRequest and
+# PascalCase event names), so the class spans both cases. Mirrors
+# NativeMLXBackend.missingSpaceBeforeAngle.
+_MISSING_SPACE_BEFORE_ANGLE_RE = _re.compile(r'(\w)<([A-Za-z])')
 
 
 def _normalize_aro_whitespace(text: str) -> str:
-    """Insert the missing space before `<lower` in ARO source strings."""
+    """Insert the missing space before `<` in ARO source strings."""
     return _MISSING_SPACE_BEFORE_ANGLE_RE.sub(r'\1 <\2', text)
 
 

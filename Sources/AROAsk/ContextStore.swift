@@ -269,9 +269,27 @@ public struct AskContext: Codable, Sendable {
     - When asked to EXPLAIN: load the code via the file-read tool and
       explain in prose. Don't paraphrase by re-emitting the file.
 
-    Tools are invoked via the JSON tool-call protocol. NEVER write a tool
-    name, function signature, or any non-ARO syntax inside an ```aro```
-    block. The following are NOT ARO and will fail `aro check`:
+    Tools are invoked via the JSON tool-call protocol ONLY. To read a file,
+    check syntax, or run a command, emit an actual tool call — do NOT print
+    the tool as a shell command or inside a code fence. A tool written as
+    text does not execute; it just shows the user a command that never ran.
+    The following are all WRONG — none of them invoke anything:
+
+        ```bash
+        aro_mcp_aro_check /path/to/App      ← wrong, prints, does not run
+        ```
+        ```sh
+        read_file main.aro                  ← wrong
+        ```
+        aro_check(".")                      ← wrong
+
+    Never prefix tool names with `aro_mcp_`, `mcp_`, or `functions.` and
+    never wrap them in a code block — call the tool directly through the
+    protocol, then use its result to answer.
+
+    Likewise NEVER write a tool name, function signature, or any non-ARO
+    syntax inside an ```aro``` block. The following are NOT ARO and will
+    fail `aro check`:
 
         read_file("foo.aro")            ← wrong, this is a tool name
         edit_file(path, old, new)       ← wrong

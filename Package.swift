@@ -259,8 +259,11 @@ let package = Package(
         // declared here so ARORuntime can take an explicit `.product`
         // dependency.
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
-        // LineNoise for REPL line editing (arrow keys, history)
-        .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
+        // LineNoise (REPL line editing: arrow keys, history) is vendored as a
+        // local `LineNoise` target under Sources/LineNoise — a fork of
+        // andybest/linenoise-swift patched with multi-line refresh so long
+        // wrapped input renders correctly (the upstream port is single-line
+        // only and duplicates rows once a line wraps).
         // Swift Log for structured logging
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         // STTextView — TextKit 2 editor used by SOLARO's center pane.
@@ -342,6 +345,14 @@ let package = Package(
                 ],
                 path: "Sources/AROPackageManager"
             ),
+            // Vendored line editor (fork of andybest/linenoise-swift) with a
+            // multi-line refresh patch. Keeps the `LineNoise` module name so
+            // `import LineNoise` call sites are unchanged.
+            .target(
+                name: "LineNoise",
+                path: "Sources/LineNoise",
+                exclude: ["LICENSE"]
+            ),
             // CLI tool
             .executableTarget(
                 name: "AROCLI",
@@ -352,7 +363,7 @@ let package = Package(
                     "AROCompiler",
                     "AROPackageManager",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                    .product(name: "LineNoise", package: "linenoise-swift"),
+                    "LineNoise",
                     .product(name: "Logging", package: "swift-log"),
                 ] + cliLspDependency + askDependency,
                 path: "Sources/AROCLI",
@@ -428,7 +439,7 @@ let package = Package(
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
-                    .product(name: "LineNoise", package: "linenoise-swift"),
+                    "LineNoise",
                 ] + askMLXTargetDependencies,
                 path: "Sources/AROAsk"
             ),

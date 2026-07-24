@@ -146,7 +146,14 @@ build:linux:
   script:
     # Generate version file
     - |
-      VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+      # On a tag pipeline the version IS the tag; avoid `git describe
+      # --dirty`, whose "-dirty" suffix (from an earlier step touching a
+      # tracked file) would leak into a clean release.
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        VERSION="${CI_COMMIT_TAG#v}"
+      else
+        VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+      fi
       COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
       BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
