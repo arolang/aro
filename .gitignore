@@ -189,3 +189,6 @@ Train/script/output/
 /Examples/StandupDigest/StandupDigest
 /Examples/UptimeMonitor/UptimeMonitor
 /Train/run
+
+# eval run artifact (large; regenerable)
+/ask-eval.csv
