@@ -14,7 +14,7 @@ public struct AskCommand: AsyncParsableCommand {
         discussion: """
             `aro ask` is an interactive coding assistant that can read, write,
             and test ARO code in your project using a local language model
-            (default: ARO-Lang/aro-coder-4bit).
+            (default: ARO-Lang/aro-coder-6bit).
 
             It can generate ARO code, answer questions about the language,
             fix errors, create plugins, generate OpenAPI contracts, and
@@ -43,8 +43,8 @@ public struct AskCommand: AsyncParsableCommand {
     @Argument(parsing: .remaining, help: "Prompt or slash command. Omit to enter the REPL.")
     public var prompt: [String] = []
 
-    @Option(name: .long, help: "Model identifier (default: ARO-Lang/aro-coder-4bit)")
-    public var model: String = "ARO-Lang/aro-coder-4bit"
+    @Option(name: .long, help: "Model identifier (default: ARO-Lang/aro-coder-6bit)")
+    public var model: String = "ARO-Lang/aro-coder-6bit"
 
     @Flag(name: .long, help: "Approve all tool calls without prompting")
     public var yes: Bool = false

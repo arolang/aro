@@ -160,7 +160,7 @@ STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-bf16'
 # After the first complete pipeline run, set to False for iterative improvement.
 TRAIN_ON_BASE = True
 
-PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'       # distilled 8B student (for inference)
+PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-6bit'       # distilled 8B student (for inference)
 TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-4bit'  # fine-tuned 30B teacher (for retraining)
 BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
 

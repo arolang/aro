@@ -109,7 +109,7 @@ The fine-tune runs locally, and local inference has constraints that cloud infer
 
 **Temperature.** The default is `0.2`. Leave it there. Higher temperatures produce more creative prose but less accurate ARO. If you are asking for an explanation, `0.4` is fine. If you are asking for code, `0.2` or lower. The training data was terse and correct; the model performs best when it is not being asked to improvise.
 
-**Model selection.** The default `aro-coder-4bit` is a 4-bit quantised 8-billion-parameter dense model — about 4.5 GB on disk. It runs comfortably on any machine with 8 GB of memory. If tokens come out slowly or the fan spins up, check that you are using the right backend for your hardware (see section 3.2).
+**Model selection.** The default `aro-coder-6bit` is a 4-bit quantised 8-billion-parameter dense model — about 4.5 GB on disk. It runs comfortably on any machine with 8 GB of memory. If tokens come out slowly or the fan spins up, check that you are using the right backend for your hardware (see section 3.2).
 
 **Backend.** On Apple Silicon, the native MLX backend runs in-process and is the fastest option. On Linux with an NVIDIA GPU, `llama-server` with CUDA is the way to go. On CPU-only machines, both are slow, and the best optimisation is to point `ARO_ASK_ENDPOINT` at a machine that has a GPU.
 

@@ -51,7 +51,7 @@ actor SolaroAskService {
     private var prepareTask: Task<AskSession?, Never>?
 
     /// Default model shipped with `aro ask` (matches AskCommand).
-    private let model = "ARO-Lang/aro-coder-4bit"
+    private let model = "ARO-Lang/aro-coder-6bit"
 
     /// Isolated working directory: its `.context` / index stay out
     /// of every real project so suggestion calls can't leak into or

@@ -35,7 +35,7 @@ private let embeddedModelManifestJSON: String = #"""
 {
   "models": [
     {
-      "model_id": "ARO-Lang/aro-coder-4bit",
+      "model_id": "ARO-Lang/aro-coder-6bit",
       "primary_file": "config.json",
       "backend": "auto",
       "context_length": 8192

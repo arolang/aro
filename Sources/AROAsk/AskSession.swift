@@ -28,7 +28,7 @@ public struct AskSessionConfig: Sendable {
 
     public init(
         workingDirectory: URL,
-        model: String = "ARO-Lang/aro-coder-4bit",
+        model: String = "ARO-Lang/aro-coder-6bit",
         autoApproveAll: Bool = false,
         maxToolCallRounds: Int = 25,
         temperature: Double = 0.2,

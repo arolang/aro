@@ -70,7 +70,7 @@ The pipeline lives in `ARO-Train/Train/script/`. All notebooks share a common co
 
 **NB21 (distillation)** distils the 30B teacher model into an 8B student. The teacher generates 5,000 validated outputs; the student is fine-tuned on the merged dataset.
 
-**NB22 (package)** quantises the best model to 4-bit, generates a README, smoke-tests the output, and uploads both the distilled student (`ARO-Lang/aro-coder-4bit`) and the teacher (`ARO-Lang/aro-teacher-30b-4bit`) to HuggingFace.
+**NB22 (package)** quantises the best model to 4-bit, generates a README, smoke-tests the output, and uploads both the distilled student (`ARO-Lang/aro-coder-6bit`) and the teacher (`ARO-Lang/aro-teacher-30b-4bit`) to HuggingFace.
 
 **NB23 (chat)** is a live test environment for the packaged model.
 
@@ -85,14 +85,14 @@ The lifecycle flows top-to-bottom:
 5. **Iterative loop** (NB20: generate, validate, retrain)
 6. **Upload teacher** to `ARO-Lang/aro-teacher-30b-4bit`
 7. **Distil** 30B teacher into 8B student (NB21)
-8. **Upload student** to `ARO-Lang/aro-coder-4bit`
-9. **End user** downloads `aro-coder-4bit` via `aro ask`
+8. **Upload student** to `ARO-Lang/aro-coder-6bit`
+9. **End user** downloads `aro-coder-6bit` via `aro ask`
 
 ## A.4 Iterative Improvement
 
 After the first complete pipeline run, set `TRAIN_ON_BASE = False` in `config.py`. On the next run, the pipeline will download the teacher model from HuggingFace instead of starting from vanilla Qwen. Each cycle builds on the previous one.
 
-The teacher model (`ARO-Lang/aro-teacher-30b-4bit`) is the full 30B model after all fine-tuning and DPO. The student model (`ARO-Lang/aro-coder-4bit`) is the distilled 8B version for everyday inference. Both are uploaded after each training cycle.
+The teacher model (`ARO-Lang/aro-teacher-30b-4bit`) is the full 30B model after all fine-tuning and DPO. The student model (`ARO-Lang/aro-coder-6bit`) is the distilled 8B version for everyday inference. Both are uploaded after each training cycle.
 
 ## A.5 Key Configuration
 
@@ -106,7 +106,7 @@ The teacher model (`ARO-Lang/aro-teacher-30b-4bit`) is the full 30B model after 
 :   `ARO-Lang/aro-teacher-30b-4bit`
 
 `PREFERRED_MODEL_ID`
-:   `ARO-Lang/aro-coder-4bit` (distilled student)
+:   `ARO-Lang/aro-coder-6bit` (distilled student)
 
 `STUDENT_MODEL_ID`
 :   `mlx-community/Qwen3-8B-4bit`

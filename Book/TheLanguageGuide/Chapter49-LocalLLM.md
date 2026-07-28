@@ -18,7 +18,7 @@ The first time you run `aro ask`, it will offer to download the default model fr
 
 ```
 $ aro ask "write a hello world feature set"
-Model 'ARO-Lang/aro-coder-4bit' (~4.5 GB) is not installed. Download from Hugging Face? [y/N] y
+Model 'ARO-Lang/aro-coder-6bit' (~4.5 GB) is not installed. Download from Hugging Face? [y/N] y
 model.safetensors: 100%
 ...
 ```
@@ -49,7 +49,7 @@ Running `aro ask` with no arguments drops you into an interactive REPL. Type `/q
 
 ```
 $ aro ask
-aro ask — backend: native-mlx, model: ARO-Lang/aro-coder-4bit
+aro ask — backend: native-mlx, model: ARO-Lang/aro-coder-6bit
 type /quit to exit, /help for commands
 > explain the difference between Compute and Transform
 …

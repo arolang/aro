@@ -43,7 +43,7 @@ Train/
 │   ├── distill/student/     # Distilled 8B student
 │   └── loop_metrics.json    # Per-round eval metrics
 └── release/                 # Final packaged artifacts
-    ├── aro-coder-4bit/      # Tokenizer + weights uploaded to HuggingFace
+    ├── aro-coder-6bit/      # Tokenizer + weights uploaded to HuggingFace
     ├── aro_system_prompt.txt
     ├── model_manifest.json
     └── serve.sh
@@ -104,7 +104,7 @@ before writing new ones, so reruns replace rather than duplicate.
 | # | Notebook | Purpose |
 |---|----------|---------|
 | 21 | `21_distillation` | Distill the 30B teacher into an 8B Qwen3 student. Writes `models/distill/student/`. |
-| 22 | `22_package` | Quantize, copy tokenizer, write `model_manifest.json`, populate `release/aro-coder-4bit/`. |
+| 22 | `22_package` | Quantize, copy tokenizer, write `model_manifest.json`, populate `release/aro-coder-6bit/`. |
 | 23 | `23_material_finetune` | Targeted booster fine-tune on the curated `Train/Material/` set. |
 | 24 | `24_chat_teacher` | **Manual.** Interactive chat against the teacher before distilling — sanity check, not run by the meta pipeline. |
 | 25 | `25_chat` | **Manual.** REPL test of the packaged student via `aro ask`. |
@@ -179,8 +179,8 @@ After a clean run:
 - `models/finetune/round_0/` — SFT teacher.
 - `models/iterative/round_N/` — iterative self-improvement rounds.
 - `models/distill/student/` — distilled 8B student.
-- `release/aro-coder-4bit/` — quantized student + tokenizer + chat template,
-  ready to upload to `ARO-Lang/aro-coder-4bit` on HuggingFace.
+- `release/aro-coder-6bit/` — quantized student + tokenizer + chat template,
+  ready to upload to `ARO-Lang/aro-coder-6bit` on HuggingFace.
 - `release/model_manifest.json` — version metadata consumed by the CLI.
 - `release/aro_system_prompt.txt` — the system prompt shipped with the model
   (built by `config.build_system_prompt()` from `knowledge.json`).
@@ -193,7 +193,7 @@ HuggingFace and applies the shipped system prompt.
 The intended cadence after the first complete run:
 
 1. Set `TRAIN_ON_BASE = False` in `config.py`.
-2. Just re-run — do **not** delete the old `ARO-Lang/aro-coder-4bit` repo.
+2. Just re-run — do **not** delete the old `ARO-Lang/aro-coder-6bit` repo.
    NB22 versions each release automatically: it derives a semantic version
    from `release/model_manifest.json`, tags the Hub commit `v<version>`,
    regenerates the model card from the manifest + promotion-gate metrics,

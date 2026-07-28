@@ -15,11 +15,11 @@ $ aro ask "write a feature set that returns OK for GET /health"
 That is the entire interface. Everything after `aro ask` is a prompt. The first time you run this, the CLI will notice it has no model cached and offer to download one:
 
 ```
-Model 'ARO-Lang/aro-coder-4bit' (~4.5 GB) is not installed.
+Model 'ARO-Lang/aro-coder-6bit' (~4.5 GB) is not installed.
 Download from Hugging Face? [y/N]
 ```
 
-Say yes. The weights land in `~/.cache/aro/models/ARO-Lang/aro-coder-4bit/`. Subsequent invocations find them there and skip the download.
+Say yes. The weights land in `~/.cache/aro/models/ARO-Lang/aro-coder-6bit/`. Subsequent invocations find them there and skip the download.
 
 If you would rather put the cache somewhere else — a shared network drive, an external SSD — set the `HF_HOME` environment variable before running `aro ask`. If the model is gated and you have a token, set `HF_TOKEN`. Neither is required for the default model.
 
@@ -48,7 +48,7 @@ If you run it with no arguments *and* stdin is a terminal, it drops into an inte
 
 ```
 $ aro ask
-aro ask — backend: llama.cpp, model: ARO-Lang/aro-coder-4bit
+aro ask — backend: llama.cpp, model: ARO-Lang/aro-coder-6bit
 type /quit to exit, /help for commands
 lm>
 ```
@@ -111,7 +111,7 @@ Every conversation lives in a single file, `.context`, in the current working di
 A shortened example:
 
 ```yaml
-model: ARO-Lang/aro-coder-4bit
+model: ARO-Lang/aro-coder-6bit
 created: 2026-04-06T12:00:00Z
 messages:
   - role: system

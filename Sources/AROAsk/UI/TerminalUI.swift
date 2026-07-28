@@ -170,7 +170,7 @@ public enum TerminalUI {
     ///
     /// Example output:
     /// ```
-    ///   Downloading ARO-Lang/aro-coder-4bit
+    ///   Downloading ARO-Lang/aro-coder-6bit
     ///   ━━━━━━━━━━━━━━━━━━━━░░░░░░░░░░  62%  3.1 / 5.0 GB  (7/12) model.safetensors
     /// ```
     public static func printDownloadProgress(_ p: DownloadProgress) {

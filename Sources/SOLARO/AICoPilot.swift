@@ -233,7 +233,7 @@ final class AICoPilotProcess {
             setenv("ARO_BIN", aroBin, 1)
         }
 
-        let model = "ARO-Lang/aro-coder-4bit"
+        let model = "ARO-Lang/aro-coder-6bit"
         let manager = try ModelManager()
         let env = ProcessInfo.processInfo.environment
         var available = !((env["ARO_ASK_ENDPOINT"] ?? env["ARO_LM_ENDPOINT"]) ?? "").isEmpty

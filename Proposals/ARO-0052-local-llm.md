@@ -21,7 +21,7 @@ in public training data.
 
 Instead of asking users to copy-paste documentation into a cloud assistant, we
 ship a local coding assistant as a first-class CLI subcommand: `aro lm`. It
-runs a fine-tuned model (`ARO-Lang/aro-coder-4bit`) on the user's machine,
+runs a fine-tuned model (`ARO-Lang/aro-coder-6bit`) on the user's machine,
 persists conversation context per working directory, and uses tool calling to
 let the model read the project, run the toolchain and search the
 specification.
@@ -61,7 +61,7 @@ download starts.
 
 Bundled manifest entries:
 
-- `ARO-Lang/aro-coder-4bit` — primary chat model (~4.5 GB)
+- `ARO-Lang/aro-coder-6bit` — primary chat model (~4.5 GB)
 - `ARO-Lang/aro-embed` — optional embedding model (~150 MB)
 
 ## 4. Context management
@@ -70,7 +70,7 @@ Each working directory gets its own `.context` YAML file. The schema is a
 simple, human-readable document:
 
 ```yaml
-model: ARO-Lang/aro-coder-4bit
+model: ARO-Lang/aro-coder-6bit
 created: 2026-04-06T12:00:00Z
 messages:
   - role: system
@@ -110,7 +110,7 @@ injected on first use.
 Flags:
 
 - `--model <id>` — override the model identifier (default
-  `ARO-Lang/aro-coder-4bit`)
+  `ARO-Lang/aro-coder-6bit`)
 - `--yes` — auto-approve every `run_shell` tool call
 - `--no-mcp` — skip MCP bridge bootstrap
 - `--temperature <value>` — sampling temperature (default `0.2`)
