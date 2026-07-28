@@ -50,6 +50,22 @@ hallucinated verb as invalid (a `chosen` with one is contamination; a
 also unions this set so valid verbs (update, set, insert, …) stop being
 miscounted as hallucinations.
 
+## Post-release probe fixes (issue #441)
+
+`probefill.jsonl` — **36** `aro check`-validated pairs (18 probe topics × 2
+paraphrased instructions) giving a correct reference answer with a `<think>`
+trace for every NB26 post-release **code probe**. The published model failed 4/22
+complete-program probes; authoring these caught a real recurring bug — the
+Retrieve-where field must be angle-bracketed (`where <id> = <id>`, not
+`where id = ...`). Built by `generators/gen_probefill.py`; instructions are
+paraphrased (not the verbatim probe strings) to teach the pattern, not memorise
+the eval. Merged via NB15b.
+
+NB26 now **classifies each failing probe's error** (immutability_rebind /
+preposition / variable_syntax / missing_bracket / missing_period_or_keyword) and
+prints a per-class breakdown, so "4 probes fail" becomes an actionable list of
+what to add here.
+
 ## Pipeline placement
 
 Injected upstream (before `16_dataset_assembly`) into the curated pairs stream so
