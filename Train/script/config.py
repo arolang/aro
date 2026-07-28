@@ -1448,6 +1448,20 @@ def authoritative_action_verbs():
         return set()
 
 
+def authoritative_action_catalog():
+    """The authoritative per-action catalog (issue #437): for each action, its
+    role, valid prepositions, and verb aliases — extracted straight from the
+    ActionImplementation / SynchronousAction structs. Read from
+    aro_action_catalog.json (regenerate with extract_action_catalog.py). Keyed
+    by canonical verb; every alias is present in authoritative_action_verbs().
+    Returns {} if the catalog hasn't been generated."""
+    p = Path(__file__).resolve().parent / 'aro_action_catalog.json'
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
+
+
 def canonical_verb_set(kb=None):
     """All valid ARO action verbs (lowercased): the authoritative ActionRegistry
     set (aro_action_verbs.json) plus knowledge.json verbs, the documented

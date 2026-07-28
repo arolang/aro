@@ -1,0 +1,898 @@
+{
+ "accept": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "on"
+  ],
+  "aliases": [
+   "accept"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/AcceptAction.swift"
+ },
+ "append": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to",
+   "into"
+  ],
+  "aliases": [
+   "append"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "assert": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "assert"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TestActions.swift"
+ },
+ "broadcast": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to",
+   "via"
+  ],
+  "aliases": [
+   "broadcast"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "call": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "to",
+   "with",
+   "via"
+  ],
+  "aliases": [
+   "call",
+   "invoke"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/CallAction.swift"
+ },
+ "checkout": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "checkout"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "clear": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "clear"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "clone": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "with",
+   "to"
+  ],
+  "aliases": [
+   "clone"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "close": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "with",
+   "from"
+  ],
+  "aliases": [
+   "close",
+   "disconnect",
+   "terminate"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "commit": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "commit"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "compare": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "against",
+   "with",
+   "to"
+  ],
+  "aliases": [
+   "compare",
+   "match"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "compute": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "compute",
+   "calculate",
+   "derive"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "connect": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "connect"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "copy": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "to"
+  ],
+  "aliases": [
+   "copy"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "create": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with",
+   "from",
+   "for",
+   "to"
+  ],
+  "aliases": [
+   "create",
+   "build",
+   "construct"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "delete": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "for"
+  ],
+  "aliases": [
+   "delete",
+   "remove",
+   "destroy",
+   "clear"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "emit": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "with",
+   "to"
+  ],
+  "aliases": [
+   "emit"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "execute": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "on",
+   "with",
+   "for"
+  ],
+  "aliases": [
+   "execute",
+   "exec",
+   "run",
+   "shell"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ExecAction.swift"
+ },
+ "exists": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "exists"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "extract": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "via"
+  ],
+  "aliases": [
+   "extract",
+   "parse",
+   "get"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
+ },
+ "filter": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "filter"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift"
+ },
+ "given": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "given"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TestActions.swift"
+ },
+ "group": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "group"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift"
+ },
+ "include": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with",
+   "from"
+  ],
+  "aliases": [
+   "include",
+   "embed",
+   "insert"
+  ],
+  "source": "Sources/ARORuntime/Templates/IncludeAction.swift"
+ },
+ "join": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "join"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/JoinAction.swift"
+ },
+ "list": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "list"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "listen": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "on",
+   "for",
+   "to"
+  ],
+  "aliases": [
+   "listen",
+   "await"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "log": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "for",
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "log",
+   "print",
+   "output",
+   "debug"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "make": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "to",
+   "for",
+   "at"
+  ],
+  "aliases": [
+   "make",
+   "touch",
+   "createdirectory",
+   "mkdir"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "map": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "to"
+  ],
+  "aliases": [
+   "map"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift"
+ },
+ "merge": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with",
+   "from"
+  ],
+  "aliases": [
+   "merge",
+   "combine"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "move": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "to"
+  ],
+  "aliases": [
+   "move",
+   "rename"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "notify": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to",
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "notify",
+   "alert",
+   "signal"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "parse": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "parse"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ParseAction.swift"
+ },
+ "parsehtml": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "parsehtml"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ParseAction.swift"
+ },
+ "probe": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "with"
+  ],
+  "aliases": [
+   "probe"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ProbeAction.swift"
+ },
+ "prompt": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "with",
+   "from"
+  ],
+  "aliases": [
+   "prompt",
+   "ask"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "publish": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "publish",
+   "export",
+   "expose",
+   "share"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "pull": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "pull"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "push": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "push"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "read": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "read"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
+ },
+ "receive": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "via"
+  ],
+  "aliases": [
+   "receive"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
+ },
+ "reduce": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "with"
+  ],
+  "aliases": [
+   "reduce",
+   "aggregate"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift"
+ },
+ "render": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to"
+  ],
+  "aliases": [
+   "render"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "repaint": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "at",
+   "to"
+  ],
+  "aliases": [
+   "repaint",
+   "patch"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "request": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "to",
+   "via",
+   "with"
+  ],
+  "aliases": [
+   "request",
+   "http"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/RequestAction.swift"
+ },
+ "retrieve": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "retrieve",
+   "fetch",
+   "load",
+   "find"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
+ },
+ "return": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "for",
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "return",
+   "respond"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "schedule": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "schedule"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ScheduleAction.swift"
+ },
+ "select": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "with"
+  ],
+  "aliases": [
+   "select",
+   "choose"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "send": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to",
+   "via",
+   "with"
+  ],
+  "aliases": [
+   "send",
+   "dispatch"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "show": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "show"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
+ },
+ "sleep": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "sleep",
+   "delay",
+   "pause"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/SleepAction.swift"
+ },
+ "sort": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "sort",
+   "order",
+   "arrange"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "split": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "split"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/SplitAction.swift"
+ },
+ "stage": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "to",
+   "for"
+  ],
+  "aliases": [
+   "stage"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "start": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "start"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "stat": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "stat"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
+ },
+ "stop": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "stop"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "store": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "into",
+   "to",
+   "in"
+  ],
+  "aliases": [
+   "store",
+   "save",
+   "persist"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "stream": {
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "with"
+  ],
+  "aliases": [
+   "stream",
+   "subscribe"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/StreamAction.swift"
+ },
+ "tag": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "tag"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/GitActions.swift"
+ },
+ "then": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with"
+  ],
+  "aliases": [
+   "then"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TestActions.swift"
+ },
+ "throw": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "throw",
+   "raise",
+   "fail"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ },
+ "transform": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from",
+   "into",
+   "to"
+  ],
+  "aliases": [
+   "transform",
+   "convert",
+   "map"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "update": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "with",
+   "to",
+   "for",
+   "from"
+  ],
+  "aliases": [
+   "update",
+   "modify",
+   "change",
+   "set",
+   "configure"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "validate": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for",
+   "against",
+   "with"
+  ],
+  "aliases": [
+   "validate",
+   "verify",
+   "check"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "wait": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "for"
+  ],
+  "aliases": [
+   "wait",
+   "keepalive",
+   "block"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
+ },
+ "when": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "from"
+  ],
+  "aliases": [
+   "when"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/TestActions.swift"
+ },
+ "write": {
+  "role": "response",
+  "role_label": "RESPONSE (Internal \u2192 External)",
+  "prepositions": [
+   "to",
+   "into"
+  ],
+  "aliases": [
+   "write"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+ }
+}
