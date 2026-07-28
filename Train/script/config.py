@@ -1435,15 +1435,30 @@ VERB_SUPPLEMENT = frozenset({
 CONTROL_FLOW_WORDS = frozenset({'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'})
 
 
+def authoritative_action_verbs():
+    """The runtime ActionRegistry verb set (ground truth), read from
+    aro_action_verbs.json (regenerate with extract_action_verbs.py). This is the
+    complete set incl. aliases; knowledge.json omitted 16 of them (update, set,
+    modify, insert, join, respond, ...), which made valid verbs count as
+    hallucinations (issue #436)."""
+    p = Path(__file__).resolve().parent / 'aro_action_verbs.json'
+    try:
+        return {v.lower() for v in json.loads(p.read_text())}
+    except Exception:
+        return set()
+
+
 def canonical_verb_set(kb=None):
-    """All valid ARO action verbs (lowercased) from knowledge.json plus the
-    documented supplement and control-flow keywords."""
+    """All valid ARO action verbs (lowercased): the authoritative ActionRegistry
+    set (aro_action_verbs.json) plus knowledge.json verbs, the documented
+    supplement, and control-flow keywords."""
     try:
         verbs = valid_action_verbs(kb)
     except Exception:
         # knowledge.json not built yet — fall back to the static supplement
         verbs = set()
-    return set(verbs) | set(VERB_SUPPLEMENT) | set(CONTROL_FLOW_WORDS)
+    return (set(verbs) | authoritative_action_verbs()
+            | set(VERB_SUPPLEMENT) | set(CONTROL_FLOW_WORDS))
 
 
 _STATEMENT_VERB_RE = _re.compile(r'^\s*([A-Z][a-z]+(?:[A-Z][a-z]+)*)\s+', _re.MULTILINE)
