@@ -102,6 +102,57 @@ def concept_overlap(reference, candidate, concepts):
     return 2 * precision * recall / (precision + recall)
 
 
+# ── Fact-checked reference judging for syntax_qa / knowledge (issue #437) ────
+
+_BACKTICK_RE = re.compile(r'`([^`]+)`')
+_PROP_RE = re.compile(r'ARO-\d{4}')
+
+
+def extract_reference_facts(reference):
+    """The checkable facts a grounded answer asserts: its backtick-delimited
+    spans (verb names, prepositions, `openapi.yaml`, code snippets, …) plus any
+    ARO-#### proposal ids. These are concrete, verifiable claims — unlike bag-of-
+    words token overlap, reproducing them is what a *correct* answer must do."""
+    facts, seen = [], set()
+    for f in _BACKTICK_RE.findall(reference or '') + _PROP_RE.findall(reference or ''):
+        f = f.strip()
+        key = f.lower()
+        if f and key not in seen:
+            seen.add(key)
+            facts.append(f)
+    return facts
+
+
+def fact_reference_score(reference, candidate, provided_facts=None):
+    """Fact-level F1 between the grounded facts in the reference answer and the
+    facts the model reproduced — the fact-checked replacement for token-overlap
+    judging of syntax_qa/knowledge (issue #437).
+
+    Recall  = fraction of reference facts that appear (verbatim, case-insensitive)
+              in the candidate.
+    Precision = fraction of the candidate's own asserted facts that are grounded
+              in the reference (penalises fabricated `code`/proposal claims).
+    Returns None when the reference asserts no checkable facts (metric undefined
+    → caller falls back to token overlap)."""
+    ref_facts = provided_facts if provided_facts else extract_reference_facts(reference)
+    if not ref_facts:
+        return None
+    cand_lower = (candidate or '').lower()
+    present = sum(1 for f in ref_facts if f.lower() in cand_lower)
+    recall = present / len(ref_facts)
+
+    cand_facts = extract_reference_facts(candidate)
+    ref_lower = {f.lower() for f in ref_facts}
+    if cand_facts:
+        grounded = sum(1 for f in cand_facts if f.lower() in ref_lower)
+        precision = grounded / len(cand_facts)
+    else:
+        precision = recall  # no asserted facts to over-claim; judge on recall
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)
+
+
 # ── Stratified sampling (issue #417) ─────────────────────────────────────────
 
 def stratified_sample(samples, budget, key_fn=None, seed=0):

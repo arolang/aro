@@ -1,41 +1,88 @@
 #!/usr/bin/env python3
-"""Curated, accurate ARO knowledge / syntax_qa pairs. Facts are hand-curated
-from CLAUDE.md + proposals (not the noisy auto verb map), each rendered in a few
-question phrasings. Accuracy matters more than volume here — wrong knowledge
+"""Grounded ARO knowledge / syntax_qa pairs (issue #437).
+
+Every answer is grounded in an authoritative source and cites it:
+  * per-verb role + preposition Q&A come straight from the runtime
+    ActionRegistry catalog (aro_action_catalog.json, via extract_action_catalog.py),
+    so they can never drift from the code.
+  * per-proposal Q&A read the real title + summary from Proposals/ARO-*.md.
+  * curated concept facts (from CLAUDE.md + proposals) carry a source citation.
+
+Each emitted pair also carries a `facts` list (the backtick-delimited spans the
+answer asserts) and a `grounding` source, so NB19's fact-checked judge and any
+downstream gate can verify the answer reproduces the grounded facts rather than
+merely overlapping tokens. Accuracy matters more than volume — wrong knowledge
 poisons training."""
 import json
+import re
+import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent / "knowledge.jsonl"
+HERE = Path(__file__).resolve().parent
+REPO = Path("/Users/kris/Projects/ARO/ARO-Lang")
+sys.path.insert(0, str(REPO / "Train" / "script"))
+OUT = HERE / "knowledge.jsonl"
 
-ROLES = {
-    "REQUEST (External → Internal)": ["Extract", "Parse", "Retrieve", "Fetch", "Probe", "Pull", "Clone"],
-    "OWN (Internal → Internal)": ["Compute", "Validate", "Compare", "Create", "Transform", "Stage", "Checkout"],
-    "RESPONSE (Internal → External)": ["Return", "Throw"],
-    "EXPORT (makes symbols global / exports data)": ["Publish", "Store", "Log", "Send", "Emit", "Commit", "Push", "Tag"],
-}
+# ── authoritative action catalog (role / prepositions / aliases) ────────────
+try:
+    import extract_action_catalog
+    CATALOG = extract_action_catalog.load()
+except Exception:
+    CATALOG = json.loads((REPO / "Train" / "script" / "aro_action_catalog.json").read_text())
 
-# Canonical prepositions (curated from CLAUDE.md action tables — deliberately
-# excludes the auto-map's spurious Log→for).
-PREPS = {
-    "Log": ["to"], "Retrieve": ["from"], "Store": ["in", "into"], "Emit": ["with"],
-    "Commit": ["to", "with"], "Stage": ["to", "for"], "Extract": ["from"],
-    "Return": ["with", "for"], "Push": ["to", "with"], "Pull": ["from"],
-    "Clone": ["from", "with", "to"], "Checkout": ["from", "to", "with"], "Tag": ["for", "with"],
-}
+PARAPHRASE = ["{q}", "In ARO, {q_lower}", "Explain: {q_lower}", "Question about ARO: {q}"]
 
-# (question, answer) curated concept facts.
+
+def _facts(answer):
+    """The checkable facts an answer asserts: its backtick-delimited spans plus
+    any ARO-#### proposal ids. NB19 verifies these appear in the model's reply."""
+    spans = [s.strip() for s in re.findall(r"`([^`]+)`", answer) if s.strip()]
+    props = re.findall(r"ARO-\d{4}", answer)
+    seen, out = set(), []
+    for f in spans + props:
+        if f.lower() not in seen:
+            seen.add(f.lower())
+            out.append(f)
+    return out
+
+
+# ── per-proposal grounding: read real titles + summaries ────────────────────
+def load_proposals():
+    props = {}
+    for f in sorted((REPO / "Proposals").glob("ARO-*.md")):
+        text = f.read_text(errors="ignore")
+        title_m = re.search(r"^#\s+(ARO-\d{4}):\s*(.+)$", text, re.M)
+        if not title_m:
+            continue
+        pid, title = title_m.group(1), title_m.group(2).strip()
+        # first prose line after the title/metadata block (skip headings, meta,
+        # tables, list markers, and blank lines)
+        summary = ""
+        for line in text[title_m.end():].splitlines():
+            s = line.strip()
+            if not s or s.startswith(("#", "|", "-", "*", ">", "`")) or ":" in s[:12] and s.split(":")[0] in (
+                    "Status", "Author", "Created", "Type", "Proposal", "Champion"):
+                continue
+            summary = re.sub(r"\s+", " ", s)
+            break
+        props[pid] = {"title": title, "summary": summary, "file": f"Proposals/{f.name}"}
+    return props
+
+
+PROPOSALS = load_proposals()
+
+# ── curated concept facts (accurate, from CLAUDE.md + proposals) ────────────
 CONCEPTS = [
     ("What is a feature set in ARO?",
      "A feature set is a named block `(Name: Business Activity) { ... }` containing ARO statements. It is triggered by an event that matches its business activity, not called directly."),
     ("How many Application-Start feature sets can an ARO application have?",
      "Exactly one. `Application-Start` is the entry point; zero or more than one is an error."),
     ("What triggers a feature set in ARO?",
-     "Events. A feature set runs when an event matches its business activity — an HTTP route (operationId), a custom `{Event} Handler`, a `{repository} Observer`, or a file/socket event."),
+     "Events. A feature set runs when an event matches its business activity — an HTTP route (`operationId`), a custom `{Event} Handler`, a `{repository} Observer`, or a file/socket event."),
     ("Are ARO variables mutable?",
      "No. ARO variables are immutable — you cannot rebind a name. Introduce a new name instead, e.g. via the qualifier-as-name form."),
     ("What is the 'code is the error message' philosophy?",
-     "ARO code contains only the happy case. Errors are handled by the runtime, which reports what failed (e.g. 'Can not retrieve the user from the user-repository where id = 530')."),
+     "ARO code contains only the happy case. Errors are handled by the runtime, which reports what failed (e.g. `Can not retrieve the user from the user-repository where id = 530`)."),
     ("How does contract-first HTTP work in ARO?",
      "HTTP routes are defined in `openapi.yaml`, and feature sets are named after `operationId` values. Without `openapi.yaml` the HTTP server does not start."),
     ("How do you write a comment in ARO?",
@@ -54,10 +101,10 @@ CONCEPTS = [
      "Actions return an `AROFuture` handle rather than the resolved value; the work is forced the first time something reads the value (a Return, an Emit payload, a When guard, an export, etc.)."),
     ("What is a user-defined action in ARO?",
      "A feature set whose business activity is `Action` becomes callable application-wide as `Application.<Name>` from any other feature set."),
-    ("What are the four action roles in ARO?",
-     "REQUEST (external→internal), OWN (internal→internal), RESPONSE (internal→external), and EXPORT (makes symbols global or exports data)."),
+    ("What are the action roles in ARO?",
+     "REQUEST (external→internal), OWN (internal→internal), RESPONSE (internal→external), EXPORT (makes symbols global or exports data), and SERVER (service lifecycle)."),
     ("Does every feature set need a Return or Throw?",
-     "Yes. Every feature set must end with a Return or a Throw."),
+     "Yes. Every feature set must end with a `Return` or a `Throw`."),
     ("How do you emit a custom event in ARO?",
      "`Emit a <SomethingCreated: event> with <payload>.` — the event type goes in the result position with a `: event` qualifier and the payload follows `with`."),
     ("How do you keep an application running to process events?",
@@ -65,55 +112,17 @@ CONCEPTS = [
     ("What is a store file in ARO?",
      "A `.store` file that seeds a repository with YAML data; it is read-only unless made writable (chmod o+w)."),
     ("What Compute operations does ARO support?",
-     "length/count, uppercase, lowercase, hash, and arithmetic (+, -, *, /, %). Use the qualifier-as-name form for multiple results of the same operation."),
-]
-
-PARAPHRASE = ["{q}", "In ARO, {q_lower}", "Explain: {q_lower}", "Question about ARO: {q}"]
-
-# Proposal one-line topics (from CLAUDE.md proposal index).
-PROPOSALS = {
-    "ARO-0001": "Language fundamentals — core syntax, literals, expressions, scoping",
-    "ARO-0002": "Control flow — When guards, match expressions, iteration",
-    "ARO-0003": "Type system — types, OpenAPI integration, schemas",
-    "ARO-0004": "Actions — action roles, built-in actions, extensions",
-    "ARO-0005": "Application architecture — app structure, lifecycle, concurrency",
-    "ARO-0006": "Error philosophy — 'code is the error message'",
-    "ARO-0007": "Events & reactive — events, state, repositories",
-    "ARO-0008": "I/O services — HTTP, files, sockets, system objects",
-    "ARO-0009": "Native compilation — LLVM, aro build, plugins in binaries",
-    "ARO-0010": "Advanced features — regex, dates, exec",
-    "ARO-0011": "HTML/XML parsing — the Parse action for HTML/XML documents",
-    "ARO-0015": "Testing framework — colocated tests, Given/When/Then",
-    "ARO-0018": "Data pipelines — filter, transform, aggregate, group collections",
-    "ARO-0022": "State guards — event handler filtering with field:value syntax",
-    "ARO-0036": "Extended file operations — Exists, Stat, Make, Copy, Move actions",
-    "ARO-0037": "Regex split — the Split action with regex delimiters",
-    "ARO-0040": "Format-aware I/O — auto format detection for JSON, YAML, CSV",
-    "ARO-0041": "Date/time ranges — date arithmetic, ranges, recurrence patterns",
-    "ARO-0042": "Set operations — intersect, difference, union on collections",
-    "ARO-0043": "Sink syntax — expressions in result position",
-    "ARO-0044": "Runtime metrics — execution counts, timing, Prometheus format",
-    "ARO-0047": "Command-line parameters — CLI argument parsing, Parameters action",
-    "ARO-0048": "WebSocket — WebSocket server support, real-time messaging",
-    "ARO-0050": "Template engine — Mustache-style templates, Render action",
-    "ARO-0051": "Streaming execution — lazy evaluation, Stream Tee, aggregation fusion",
-    "ARO-0073": "Store files — file-backed repositories, YAML seed data",
-    "ARO-0080": "Git actions — native Git via libgit2: status, stage, commit, push, pull",
-    "ARO-0081": "User-defined actions — feature sets callable as Application.<Name>",
-}
-
-# Extra curated concepts (accurate, from CLAUDE.md + proposals).
-CONCEPTS2 = [
+     "`length`/`count`, `uppercase`, `lowercase`, `hash`, and arithmetic (`+`, `-`, `*`, `/`, `%`). Use the qualifier-as-name form for multiple results of the same operation."),
     ("How do you iterate over a collection in ARO?",
      "With `For-each <item> in <collection> { ... }`. There is no `while` loop; For-each is the iteration construct."),
     ("What is a When guard in ARO?",
      "A conditional that gates a statement, e.g. `Throw a <BadRequest: status> with \"...\" when <value> == \"\".`"),
     ("How do you start an HTTP server in ARO?",
-     "In Application-Start: `Start the <http-server> with <contract>.` — the contract comes from openapi.yaml."),
+     "In Application-Start: `Start the <http-server> with <contract>.` — the contract comes from `openapi.yaml`."),
     ("What does the Publish action do?",
      "It makes a variable globally accessible to other feature sets: `Publish as <alias> <variable>.`"),
     ("What is the difference between Emit and Publish?",
-     "Emit fires a domain event that triggers handler feature sets; Publish exposes a variable's value globally to other feature sets. Emit is for events, Publish is for shared state."),
+     "`Emit` fires a domain event that triggers handler feature sets; `Publish` exposes a variable's value globally to other feature sets. Emit is for events, Publish is for shared state."),
     ("How do you read a file in ARO?",
      "`Read the <content> from the <file: \"path.txt\">.`"),
     ("How do you write a file in ARO?",
@@ -125,7 +134,7 @@ CONCEPTS2 = [
     ("How do you commit changes with the git system object?",
      "`Stage the <files> to the <git> with \".\".` then `Commit the <result> to the <git> with \"message\".`"),
     ("What events do git actions emit?",
-     "GitCommit, GitPush, GitPull, GitCheckout, GitTag, and GitClone."),
+     "`GitCommit`, `GitPush`, `GitPull`, `GitCheckout`, `GitTag`, and `GitClone`."),
     ("How do you compute the intersection of two sets in ARO?",
      "`Compute the <common: intersect> from <set-a> with <set-b>.` Union and difference use the same shape with `union`/`difference`."),
     ("How do you render a template in ARO?",
@@ -148,23 +157,50 @@ CONCEPTS2 = [
      "`Extract the <name> from the <parameters: name>.`"),
     ("How do you send a message over a websocket?",
      "`Send the <message> to the <websocket>.`"),
-    ("How do you expose Prometheus metrics in ARO?",
-     "Log to a metrics counter; the runtime exposes counts/timing in Prometheus format (ARO-0044)."),
     ("How do you configure a runtime timeout?",
-     "`Configure the <timeout> with 30.` (ARO-0035)."),
-    ("What is the happy-case rule for production code?",
-     "ARO's happy-case model is intentionally insecure for production — it omits error handling because the runtime reports failures. Do not use it for production as-is."),
+     "`Configure the <timeout> with 30.`"),
     ("How are feature sets discovered in an ARO application?",
      "All `.aro` files in the directory and its subdirectories are discovered and parsed automatically; no imports are needed."),
     ("What makes a feature set an HTTP route handler?",
-     "Its name matches an `operationId` in openapi.yaml."),
+     "Its name matches an `operationId` in `openapi.yaml`."),
     ("How do you stop an HTTP server gracefully?",
      "In an Application-End handler: `Stop the <http-server> with <application>.`"),
 ]
 
+# concept → authoritative source citation (keyword-routed; all are in CLAUDE.md).
+_SRC_KEYWORDS = [
+    (("operationId", "openapi", "http route", "route handler", "contract-first"), "ARO-0005 / CLAUDE.md · Contract-First HTTP"),
+    (("arofuture", "lazy"), "CLAUDE.md · Lazy Execution"),
+    (("keepalive",), "CLAUDE.md · Long-Running Applications"),
+    (("git", "gitcommit", "stage the"), "ARO-0080 · Git Actions"),
+    (("application.<name>", "user-defined action"), "ARO-0081 · User-Defined Actions"),
+    (("happy case", "error message", "code contains only"), "ARO-0006 · Error Philosophy"),
+    (("observer", "repository changes"), "ARO-0007 · Events & Reactive"),
+    (("for-each", "when guard", "match"), "ARO-0002 · Control Flow"),
+    (("intersect", "union", "difference"), "ARO-0042 · Set Operations"),
+    (("render", "{{", "template"), "ARO-0050 · Template Engine"),
+    (("store file", ".store"), "ARO-0073 · Store Files"),
+    (("websocket",), "ARO-0048 · WebSocket"),
+    (("parameters:", "command-line"), "ARO-0047 · Command-Line Parameters"),
+    (("configure the",), "ARO-0035 · Configurable Runtime"),
+    (("immutable", "qualifier-as-name", "compute", "length", "hash", "concatenation", "++"), "ARO-0001 · Language Fundamentals"),
+    (("action role", "roles in aro", "return or", "publish"), "ARO-0004 · Actions"),
+]
 
-def emit(f, q, a, cat="syntax_qa"):
+
+def concept_source(answer):
+    low = answer.lower()
+    for kws, src in _SRC_KEYWORDS:
+        if any(k in low for k in kws):
+            return src
+    return "CLAUDE.md"
+
+
+def emit(f, q, a, cat="syntax_qa", grounding=None):
+    grounding = grounding or concept_source(a)
+    facts = _facts(a)
     seen = set()
+    n = 0
     for p in PARAPHRASE:
         ql = q[0].lower() + q[1:]
         inst = p.format(q=q, q_lower=ql)
@@ -174,34 +210,45 @@ def emit(f, q, a, cat="syntax_qa"):
         f.write(json.dumps({
             "instruction": inst, "output": a,
             "category": cat, "task_type": cat, "source": "eval_gen_knowledge",
+            "grounding": grounding, "facts": facts,
         }) + "\n")
+        n += 1
+    return n
 
 
 def main():
-    n = 0
+    facts_written = 0
     with open(OUT, "w") as f:
-        # role Q&A
-        for role, verbs in ROLES.items():
-            rname = role.split(" ")[0]
-            for v in verbs:
-                emit(f, f"What is the action role of the {v} action in ARO?",
-                     f"`{v}` is a {rname}-role action — {role.split('(')[1].rstrip(') ')}.")
-                n += 1
-        # preposition Q&A
-        for v, ps in PREPS.items():
-            emit(f, f"Which prepositions does the {v} action use in ARO?",
-                 f"`{v}` uses: {', '.join('`'+p+'`' for p in ps)}.")
-            n += 1
-        # concepts
-        for q, a in CONCEPTS + CONCEPTS2:
+        # per-verb role + preposition Q&A — authoritative, from the catalog
+        for verb, meta in CATALOG.items():
+            V = verb.capitalize()
+            src = f"ActionRegistry ({meta['source']})"
+            role_label = meta["role_label"]
+            aliases = ", ".join(f"`{a}`" for a in meta["aliases"])
+            emit(f, f"What is the action role of the {V} action in ARO?",
+                 f"`{V}` has the {meta['role'].upper()} role — {role_label}. "
+                 f"Aliases: {aliases}. (Source: {src}.)", grounding=src)
+            preps = ", ".join(f"`{p}`" for p in meta["prepositions"]) or "(none)"
+            emit(f, f"Which prepositions does the {V} action use in ARO?",
+                 f"`{V}` accepts the prepositions {preps}. (Source: {src}.)", grounding=src)
+            facts_written += 2
+        # curated concept facts
+        for q, a in CONCEPTS:
             emit(f, q, a)
-            n += 1
-        # proposals
-        for pid, topic in PROPOSALS.items():
-            emit(f, f"What does {pid} cover in ARO?", f"{pid} covers {topic}.", cat="knowledge")
-            n += 1
+            facts_written += 1
+        # per-proposal Q&A grounded in the actual proposal file
+        for pid, meta in PROPOSALS.items():
+            ans = f"{pid} — *{meta['title']}*."
+            if meta["summary"]:
+                ans += f" {meta['summary']}"
+            ans += f" (Source: {meta['file']}.)"
+            emit(f, f"What does {pid} cover in ARO?", ans,
+                 cat="knowledge", grounding=meta["file"])
+            facts_written += 1
     total = sum(1 for _ in open(OUT))
-    print(f"knowledge concepts/roles/preps: {n} facts -> {total} pairs (with paraphrases)")
+    print(f"knowledge: {facts_written} grounded facts "
+          f"({len(CATALOG)} actions×2 + {len(CONCEPTS)} concepts + {len(PROPOSALS)} proposals) "
+          f"-> {total} pairs (with paraphrases)")
 
 
 if __name__ == "__main__":
