@@ -81,6 +81,20 @@ Merged via NB15b (added to its FILES list). NB16 now respects the explicit
 `task_type` on curated pairs, so translation examples land under `translation`
 (they were previously relabelled `code_generation` and never counted) — which
 also widens the reserved translation slice of the NB19 held-out eval.
+## Long-tail verb coverage (issue #439)
+
+`verbfill.jsonl` — **503** `aro check`-validated feature sets exercising the
+thin-domain / long-tail verbs the 2026-07-28 report flagged (Split, Merge,
+Render, Transform, Reduce, set-ops, Accept, Configure, Parameters, Compare,
+Parse, Validate, and the git verbs Status/Push/Pull/Checkout/Tag/Clone), each
+across many entities for variety. Built by `generators/gen_verbfill.py`; the
+aro-check gate caught real syntax while authoring (Merge is 2-arg `with`, Compare
+needs a fresh result name).
+
+NB16 adds a **per-verb coverage floor**: after the held-out/valid/test split it
+up-samples the *train* split only (holdout stays clean) so every ARO action verb
+that appears reaches ≥150 samples, and reports any verb with zero train carriers
+as a generation gap to fill here. Merged via NB15b (added to FILES).
 
 ## Pipeline placement
 
