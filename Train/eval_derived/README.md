@@ -95,6 +95,19 @@ NB16 adds a **per-verb coverage floor**: after the held-out/valid/test split it
 up-samples the *train* split only (holdout stays clean) so every ARO action verb
 that appears reaches ≥150 samples, and reports any verb with zero train carriers
 as a generation gap to fill here. Merged via NB15b (added to FILES).
+## Reduce coverage — qualifier-as-name + `with sum()` fix
+
+`reducer.jsonl` — **130** `aro check`-validated pairs teaching the two `Reduce`
+forms after a real `aro ask` miss (it suggested `Reduce the <sum> from the
+<numbers> with sum.`, which fails — a bare `with sum` needs `sum()`):
+- the concise **qualifier-as-name** reducer `Reduce the <total: sum> from the
+  <values>.` for sum/avg/min/max (each verified to *run*, not just parse:
+  sum→100, avg→25, min→10, max→40) and the `with count()` call form;
+- a self-contained "sum a variable amount of numbers" example (verified → 15);
+- an error→fix pair for the exact mistake, gated so the broken `with sum` form
+  genuinely fails aro check and the fix passes.
+
+Built by `generators/gen_reducer.py`; merged via NB15b (added to FILES).
 
 ## Pipeline placement
 
