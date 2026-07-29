@@ -1895,43 +1895,66 @@ extension Parser {
     // MARK: - Infix Parsing
 
     /// Gets the precedence of an infix operator
+    /// Binary-operator precedence as **data**, not control flow (issue #348).
+    /// This table is the single source of truth for how tightly each operator
+    /// binds — adding or retuning an operator means editing one line here rather
+    /// than tracing parse methods. Token kinds are mapped to operators by
+    /// `binaryOperator(from:)`; the context-sensitive tokens (`<`/`>` as
+    /// comparison vs. `<variable>` reference, `.` as member access vs. statement
+    /// terminator, `[` as subscript) still need lookahead and stay in
+    /// `infixPrecedence` below.
+    private static let binaryPrecedence: [BinaryOperator: Precedence] = [
+        .or:           .or,
+        .and:          .and,
+        .equal:        .equality,
+        .notEqual:     .equality,
+        .is:           .equality,
+        .isNot:        .equality,
+        .contains:     .equality,
+        .matches:      .equality,
+        .lessThan:     .comparison,
+        .greaterThan:  .comparison,
+        .lessEqual:    .comparison,
+        .greaterEqual: .comparison,
+        .add:          .term,
+        .subtract:     .term,
+        .concat:       .term,
+        .multiply:     .factor,
+        .divide:       .factor,
+        .modulo:       .factor,
+    ]
+
     private func infixPrecedence(_ token: Token) -> Precedence? {
         switch token.kind {
-        case .or: return .or
-        case .and: return .and
-        case .equalEqual, .equals, .bangEqual, .is, .contains, .matches: return .equality
-        case .lessThan, .greaterThan, .lessEqual, .greaterEqual: return .comparison
-        // Handle < and > as comparison operators in expression context
-        // They will only reach here if not part of a <variable> reference
+        // Context-sensitive: `<` / `>` are comparison operators here only when
+        // they are not starting a `<variable>` reference.
         case .leftAngle, .rightAngle:
-            // Only treat as comparison if not followed by identifier (which would start a variable ref)
             let nextIndex = current + 1
-            if nextIndex < tokens.count {
-                if case .identifier = tokens[nextIndex].kind {
-                    // This could be starting a variable ref, don't treat as comparison
-                    return nil
-                }
+            if nextIndex < tokens.count, case .identifier = tokens[nextIndex].kind {
+                // Could be starting a variable ref — don't treat as comparison.
+                return nil
             }
             return .comparison
-        case .plus, .minus, .hyphen, .plusPlus: return .term
-        case .star, .slash, .percent: return .factor
-        case .leftBracket: return .postfix
+
+        // Context-sensitive: `.` is member access only before a lowercase
+        // identifier; otherwise it's a statement terminator (capitalized
+        // identifiers are action verbs like Log/Return that start new statements).
         case .dot:
-            // Only treat . as member access if followed by a lowercase identifier
-            // This prevents statement-ending . from being parsed as member access
-            // Capitalized identifiers are action verbs (Log, Return, etc.) and start new statements
             let nextIndex = current + 1
-            if nextIndex < tokens.count {
-                if case .identifier(let name) = tokens[nextIndex].kind {
-                    // Only treat as member access if identifier starts with lowercase
-                    // Uppercase identifiers are action verbs that start new statements
-                    if let first = name.first, first.isLowercase {
-                        return .postfix
-                    }
-                }
+            if nextIndex < tokens.count,
+               case .identifier(let name) = tokens[nextIndex].kind,
+               let first = name.first, first.isLowercase {
+                return .postfix
             }
             return nil
-        default: return nil
+
+        // Subscript.
+        case .leftBracket:
+            return .postfix
+
+        // Every other binary operator: precedence comes from the table.
+        default:
+            return binaryOperator(from: token.kind).flatMap { Self.binaryPrecedence[$0] }
         }
     }
 
