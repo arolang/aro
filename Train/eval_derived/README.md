@@ -65,6 +65,22 @@ NB26 now **classifies each failing probe's error** (immutability_rebind /
 preposition / variable_syntax / missing_bracket / missing_period_or_keyword) and
 prints a per-class breakdown, so "4 probes fail" becomes an actionable list of
 what to add here.
+## Translation (issue #438)
+
+`translation.jsonl` — **156** validated `source→ARO` pairs (Python / JavaScript /
+Go → ARO) built by `generators/gen_translation.py`. translation had 100%
+syntax-pass but ~75% hallucination and semantic_score ≈ 0: well-formed ARO that
+doesn't preserve the source's meaning. These pairs fix that by construction —
+each scenario family knows both the source behaviour and the ARO verbs that
+realise it, and every output is validated **twice**: `aro check` passes *and* the
+ARO contains every verb in the scenario's intent set (verb-intent / semantic
+match, not just aro check). Each pair carries a `<think>` trace mapping each
+source statement to its ARO action so the model learns to translate by intent.
+
+Merged via NB15b (added to its FILES list). NB16 now respects the explicit
+`task_type` on curated pairs, so translation examples land under `translation`
+(they were previously relabelled `code_generation` and never counted) — which
+also widens the reserved translation slice of the NB19 held-out eval.
 
 ## Pipeline placement
 
