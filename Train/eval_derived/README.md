@@ -109,6 +109,17 @@ forms after a real `aro ask` miss (it suggested `Reduce the <sum> from the
 
 Built by `generators/gen_reducer.py`; merged via NB15b (added to FILES).
 
+## File operations — Move/Copy + `from … to …` fix
+
+`fileops.jsonl` — **33** `aro check`-validated pairs teaching `Move`/`Copy` after a
+real `aro ask` miss: it suggested `Move the <file> from the <source: "…"> to the
+<destination: "…">.`, which fails to parse — `Move` has no `from` preposition
+(only `to`), and the source path belongs in the *result* qualifier. The reliable
+form (verified to actually move the file — source dir empties, destination gains
+it) creates file handles first, then moves/copies between them. Includes an
+error→fix pair for the exact mistake, gated so the broken `from … to …` form
+genuinely fails aro check and the fix passes. Built by `generators/gen_fileops.py`.
+
 ## Pipeline placement
 
 Injected upstream (before `16_dataset_assembly`) into the curated pairs stream so

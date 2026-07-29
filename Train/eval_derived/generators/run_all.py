@@ -22,6 +22,7 @@ def main():
     log("gen_codegen"); import gen_codegen; gen_codegen.main()
     log("gen_openapi"); import gen_openapi; gen_openapi.main()
     log("gen_knowledge"); import gen_knowledge; gen_knowledge.main()
+    log("gen_fileops"); import gen_fileops; gen_fileops.main()
     log("gen_probefill"); import gen_probefill; gen_probefill.main()
     log("gen_translation"); import gen_translation; gen_translation.main()
     log("gen_verbfill"); import gen_verbfill; gen_verbfill.main()
