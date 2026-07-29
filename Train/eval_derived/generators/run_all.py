@@ -25,6 +25,7 @@ def main():
     log("gen_probefill"); import gen_probefill; gen_probefill.main()
     log("gen_translation"); import gen_translation; gen_translation.main()
     log("gen_verbfill"); import gen_verbfill; gen_verbfill.main()
+    log("gen_reducer"); import gen_reducer; gen_reducer.main()
     log("gen_toolcalls"); import gen_toolcalls; gen_toolcalls.main()
     log("assemble"); import assemble; assemble.main()
     log("DONE")
