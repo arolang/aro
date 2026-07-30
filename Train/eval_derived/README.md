@@ -131,7 +131,7 @@ single-turn, so the model never learns to carry context or apply an incremental
 edit. Built by `generators/gen_conversations.py` (every assistant turn is
 re-validated with `aro check`; a conversation is dropped if any turn fails).
 
-`Train/script/29_conversation_finetune.ipynb` fine-tunes on these with
+`Train/script/27_conversation_finetune.ipynb` fine-tunes on these with
 `--mask-prompt` (assistant turns only) and measures multi-turn quality
 before/after on a held-out slice: does the final reply stay valid ARO, apply the
 last requested change, and keep the feature-set name from earlier turns. Emitted
@@ -139,7 +139,7 @@ by `generators/build_conversation_notebook.py`.
 
 ## Pipeline placement
 
-Injected upstream (before `16_dataset_assembly`) into the curated pairs stream so
+Injected upstream (before `17_dataset_assembly`) into the curated pairs stream so
 it flows into the 30B teacher (NB17) and, via distillation (NB21) + booster (NB23),
 into the shipped student — not a post-packaging patch. `TYPE_CAPS` bumped to
 `v3-2026-07-24` in `config.py` to keep the distinct new examples.

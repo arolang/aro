@@ -9,7 +9,7 @@
 #   Train/training.sh                  # run the full pipeline
 #   Train/training.sh --from 17        # resume: run notebook 17 onward, skip
 #                                        every notebook numbered below it.
-#                                        Accepts "17" or "17_finetune".
+#                                        Accepts "17" or "18_finetune".
 #   Train/training.sh --skip 03,07     # skip specific notebooks (forwarded
 #                                        as SKIP env var read by the meta
 #                                        notebook). Combine with --from.
@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --from)
       # Start at notebook N: skip every notebook numbered below it. Accepts
-      # "17" or "17_finetune" — only the leading number is used.
+      # "17" or "18_finetune" — only the leading number is used.
       FROM="${2%%_*}"
       shift 2
       ;;
@@ -169,7 +169,7 @@ fi
 # The meta notebook derives SCRIPT_DIR/OUTPUT_DIR and the child-notebook paths
 # from `Path('.')`, i.e. the process cwd. `nbconvert --execute` used to set the
 # kernel cwd to the notebook's directory for us; running as a script we must cd
-# there ourselves, or it looks for 01_corpus_collection.ipynb in the wrong place.
+# there ourselves, or it looks for 03_corpus_collection.ipynb in the wrong place.
 cd "${NB_DIR}"
 # -u: unbuffered stdout/stderr so progress streams line-by-line.
 "${PYTHON}" -u "${META_PY}"

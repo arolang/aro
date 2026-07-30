@@ -108,7 +108,7 @@ RUN_TIMESTAMP = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
                  or f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}")
 
-# ── Dataset assembly type caps (used by 16_dataset_assembly) ─────────────────
+# ── Dataset assembly type caps (used by 17_dataset_assembly) ─────────────────
 # Versioned so stats.json records which caps produced a given dataset
 # (issue #406). Changelog:
 #   v1 (initial): hard caps on every category (code_generation=600,

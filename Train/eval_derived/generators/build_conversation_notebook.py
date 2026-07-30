@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Emit Train/script/29_conversation_finetune.ipynb — fine-tunes the ARO model on
+"""Emit Train/script/27_conversation_finetune.ipynb — fine-tunes the ARO model on
 multi-turn `aro ask` REPL conversations and measures multi-turn quality
 before/after."""
 import json
 from pathlib import Path
 
-OUT = Path("/Users/kris/Projects/ARO/ARO-Lang/Train/script/29_conversation_finetune.ipynb")
+OUT = Path("/Users/kris/Projects/ARO/ARO-Lang/Train/script/27_conversation_finetune.ipynb")
 CELLS = []
 
 
@@ -47,10 +47,10 @@ import config
 
 BASE_MODEL   = "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit"
 DATA_IN      = REPO / "Train" / "eval_derived" / "conversations.jsonl"
-WORK         = REPO / "Train" / "data" / "29_conversation"
+WORK         = REPO / "Train" / "data" / "27_conversation"
 MLX_DIR      = WORK / "mlx"
 ADAPTER_DIR  = WORK / "adapter"
-CHART        = REPO / "Train" / "Reports" / "conversation_finetune.png"
+CHART        = REPO / "Train" / "Reports" / "27_conversation_finetune.png"
 ITERS        = 300           # keep modest; raise for a full run
 LORA_LAYERS  = 16
 BATCH_SIZE   = 1
@@ -221,7 +221,7 @@ md("""## Conclusion
 `applied_change` and `name_kept` should rise: the model learns to carry the
 conversation's context and apply each incremental edit to the same feature set,
 while `valid_code` stays high. The chart is saved to
-`Train/Reports/conversation_finetune.png` for the post-training PDF report.
+`Train/Reports/27_conversation_finetune.png` for the post-training PDF report.
 
 To grow coverage, add more arcs to `generators/gen_conversations.py` (each new arc
 is a sequence of `(user_request, updated_aro)` turns; every assistant turn is

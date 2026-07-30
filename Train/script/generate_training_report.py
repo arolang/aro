@@ -34,15 +34,15 @@ REPORT_DIR = REPO / "Train" / "Reports"
 # Charts that describe training quality, newest-first substring match.
 # (substring, human title, what-this-chart-shows focus for the passage prompt)
 CHARTS = [
-    ("19_evaluation", "Model Quality: Base vs Fine-tuned",
+    ("20_evaluation", "Model Quality: Base vs Fine-tuned",
      "per-task metrics comparing the fine-tuned model against the base model: syntax pass rate, answer-quality F1, and hallucination rate"),
-    ("26_post_release_validation", "Post-Release Validation Gate",
+    ("25_post_release_validation", "Post-Release Validation Gate",
      "the released model's pass/fail rate on aro-check code probes and whether each release gate (reply rate, empty-think, syntax pass, tool leak, URL contamination) cleared its threshold"),
-    ("16_dataset_assembly", "Training Dataset Composition",
+    ("17_dataset_assembly", "Training Dataset Composition",
      "how many training samples of each task type were assembled after dedup and caps"),
-    ("17_finetune", "Fine-tune Training Loss",
+    ("18_finetune", "Fine-tune Training Loss",
      "the training/validation loss curve of the supervised fine-tune over steps — lower and converging is better"),
-    ("21_distillation", "Teacher → Student Distillation",
+    ("22_distillation", "Teacher → Student Distillation",
      "the distillation loss and acceptance as the small student model learns from the larger teacher"),
     ("10_action_coverage", "Action Verb Coverage",
      "how often each ARO action verb appears in the training corpus — a long tail means rare verbs are under-represented"),
@@ -67,7 +67,7 @@ def read_csv(path):
 def collect_facts(run_dirs):
     """Pull headline numbers for the summary/passages."""
     facts = {}
-    ev = read_csv(newest("19_evaluation", ".csv", run_dirs))
+    ev = read_csv(newest("20_evaluation", ".csv", run_dirs))
     for r in ev:
         if r.get("task_type") == "code_generation" and r.get("metric") == "syntax_pass_rate":
             facts["syntax_pass_ft"] = r.get("fine_tuned_score")
@@ -172,9 +172,9 @@ def main():
             if not img:
                 continue
             extra = ""
-            if sub == "16_dataset_assembly" and facts.get("task_counts"):
+            if sub == "17_dataset_assembly" and facts.get("task_counts"):
                 extra = " Sample counts by task type: " + json.dumps(facts["task_counts"]) + "."
-            elif sub == "19_evaluation":
+            elif sub == "20_evaluation":
                 extra = (f" Syntax pass rate went {facts.get('syntax_pass_base')}→{facts.get('syntax_pass_ft')}; "
                          f"hallucination rate {facts.get('hallucination_ft')}.")
             passage = llm.ask(
