@@ -82,6 +82,23 @@ Merged via NB15b (added to its FILES list). NB16 now respects the explicit
 (they were previously relabelled `code_generation` and never counted) — which
 also widens the reserved translation slice of the NB19 held-out eval.
 
+## Multi-turn conversations (interactive `aro ask` REPL)
+
+`conversations.jsonl` — validated **multi-turn** chat traces
+(`{messages: [system, user, assistant, user, assistant, …]}`) for the interactive
+`aro ask` REPL, where the user iteratively shapes an application ("add validation",
+"now emit an event", "filter it") and each assistant turn returns the
+cumulatively-updated, `aro check`-valid feature set. All other training data is
+single-turn, so the model never learns to carry context or apply an incremental
+edit. Built by `generators/gen_conversations.py` (every assistant turn is
+re-validated with `aro check`; a conversation is dropped if any turn fails).
+
+`Train/script/29_conversation_finetune.ipynb` fine-tunes on these with
+`--mask-prompt` (assistant turns only) and measures multi-turn quality
+before/after on a held-out slice: does the final reply stay valid ARO, apply the
+last requested change, and keep the feature-set name from earlier turns. Emitted
+by `generators/build_conversation_notebook.py`.
+
 ## Pipeline placement
 
 Injected upstream (before `16_dataset_assembly`) into the curated pairs stream so
