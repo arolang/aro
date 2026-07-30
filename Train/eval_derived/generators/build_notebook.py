@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Emit Train/script/28_thinking_finetune.ipynb — a self-contained notebook that
+"""Emit Train/script/26_thinking_finetune.ipynb — a self-contained notebook that
 fine-tunes the ARO model to REASON before answering and measures reasoning
 quality before/after with a chart."""
 import json
 from pathlib import Path
 
-OUT = Path("/Users/kris/Projects/ARO/ARO-Lang/Train/script/28_thinking_finetune.ipynb")
+OUT = Path("/Users/kris/Projects/ARO/ARO-Lang/Train/script/26_thinking_finetune.ipynb")
 
 CELLS = []
 
@@ -43,10 +43,10 @@ import config
 
 BASE_MODEL   = "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit"
 DATA_IN      = REPO / "Train" / "eval_derived"
-WORK         = REPO / "Train" / "data" / "28_thinking"
+WORK         = REPO / "Train" / "data" / "26_thinking"
 MLX_DIR      = WORK / "mlx"
 ADAPTER_DIR  = WORK / "adapter"
-CHART        = REPO / "Train" / "Reports" / "thinking_finetune.png"
+CHART        = REPO / "Train" / "Reports" / "26_thinking_finetune.png"
 ITERS        = 400          # keep modest; raise for a full run
 LORA_LAYERS  = 16
 BATCH_SIZE   = 2
@@ -173,7 +173,7 @@ md("""## Conclusion
 `reasons` should rise toward ~100% (the model now emits a planning `<think>`
 block) and `valid_code` should climb as the reasoning forces it to respect
 immutability, prepositions and the built-in verb set before generating. The
-chart is saved to `Train/Reports/thinking_finetune.png` and can be embedded in
+chart is saved to `Train/Reports/26_thinking_finetune.png` and can be embedded in
 the post-training PDF report.
 """)
 

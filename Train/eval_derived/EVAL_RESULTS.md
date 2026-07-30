@@ -32,4 +32,4 @@ conditionals/When 0% · error/Throw 2% · publish 3% · config 7% · REST 19% ·
 * **1,160** bad answers fixed (canonical, `aro check`-validated) → `eval_feedback_pairs.jsonl`
 * **161** unfixable (marked in the CSV `resolution` column)
 * **334** gap-fill examples for the weak domains → `gapfill.jsonl`
-* **1,260** reasoning traces → `thinking.jsonl` (see `Train/script/28_thinking_finetune.ipynb`)
+* **1,260** reasoning traces → `thinking.jsonl` (see `Train/script/26_thinking_finetune.ipynb`)
