@@ -70,9 +70,24 @@ public struct EventAnalyzer {
             }
         }
 
-        // Collect all emitted events and check for orphans
+        // Collect all emitted events and check for orphans.
+        //
+        // #339: consume the cached flattened statement walk built during
+        // data-flow analysis instead of re-traversing the tree. Filtering the
+        // cache for `emit` verbs yields the identical (eventType, location)
+        // sequence `findEmittedEventsWithLocations` would produce — the cache is
+        // every AROStatement in the same source order — so diagnostics are
+        // unchanged. Feature sets analyzed without the cache (empty list) fall
+        // back to a fresh walk to preserve behaviour for any external caller.
         for analyzed in featureSets {
-            let emittedEvents = Self.findEmittedEventsWithLocations(in: analyzed.featureSet.statements)
+            let emittedEvents: [(String, SourceLocation)]
+            if !analyzed.flattenedAROStatements.isEmpty {
+                emittedEvents = analyzed.flattenedAROStatements
+                    .filter { $0.action.verb.lowercased() == "emit" }
+                    .map { ($0.result.base, $0.span.start) }
+            } else {
+                emittedEvents = Self.findEmittedEventsWithLocations(in: analyzed.featureSet.statements)
+            }
 
             for (eventType, location) in emittedEvents {
                 if !handledEvents.contains(eventType) {

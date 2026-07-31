@@ -108,6 +108,16 @@ public struct AnalyzedFeatureSet: Sendable {
     public let aggregationFusions: [AggregationFusionGroup]  // Groups of fusible reduces
     public let streamConsumers: [StreamConsumerInfo]          // Multi-consumer streams
 
+    /// Every `AROStatement` in this feature set, flattened in source order
+    /// (descending into `match` cases/otherwise and `for-each` bodies).
+    ///
+    /// #339 — pass fusion: `DataFlowAnalyzer.analyzeFeatureSet` already walks
+    /// the whole statement tree once to build this list for its side-effect /
+    /// template / qualifier-base checks. Caching it here lets later passes
+    /// (e.g. orphaned-emission detection) consume the same walk instead of
+    /// re-traversing the tree, without changing any diagnostic output or order.
+    public let flattenedAROStatements: [AROStatement]
+
     public init(
         featureSet: FeatureSet,
         symbolTable: SymbolTable,
@@ -115,7 +125,8 @@ public struct AnalyzedFeatureSet: Sendable {
         dependencies: Set<String>,
         exports: Set<String>,
         aggregationFusions: [AggregationFusionGroup] = [],
-        streamConsumers: [StreamConsumerInfo] = []
+        streamConsumers: [StreamConsumerInfo] = [],
+        flattenedAROStatements: [AROStatement] = []
     ) {
         self.featureSet = featureSet
         self.symbolTable = symbolTable
@@ -124,6 +135,7 @@ public struct AnalyzedFeatureSet: Sendable {
         self.exports = exports
         self.aggregationFusions = aggregationFusions
         self.streamConsumers = streamConsumers
+        self.flattenedAROStatements = flattenedAROStatements
     }
 }
 

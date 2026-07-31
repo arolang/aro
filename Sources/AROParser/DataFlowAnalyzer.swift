@@ -133,7 +133,12 @@ public struct DataFlowAnalyzer {
             dependencies: dependencies,
             exports: exports,
             aggregationFusions: aggregationFusions,
-            streamConsumers: streamConsumers
+            streamConsumers: streamConsumers,
+            // #339: reuse the tree walk already performed above (`allAros`) so
+            // later passes don't re-traverse. `allAros` is every AROStatement in
+            // source order, descending into match cases/otherwise and for-each
+            // bodies — exactly the traversal the emitted-event scan needs.
+            flattenedAROStatements: allAros
         )
     }
 
