@@ -27,6 +27,45 @@
 //     error-collecting diagnostics bag.
 //   - Subsequent analyzers never throw; they refine the
 //     diagnostics in the same bag.
+//
+// ------------------------------------------------------------
+// TokenKind dispatch map (#337)
+// ------------------------------------------------------------
+// The parser decides "what does this leading token start?" at
+// three levels. Each level's *primary* dispatch is centralized
+// and documented so adding a token/rule is one edit:
+//
+//   1. Statement level  — `statementDispatch` (static table).
+//        Leading keyword → statement parser. Default fallthrough
+//        is an ARO action statement / `|>` pipeline.
+//   2. Expression prefix — `parsePrefix` (single dispatch site).
+//        Leading token → prefix expression parser. Payload cases
+//        (identifier/literals) bind their value inline, so this
+//        stays one pattern-matching `switch` rather than a
+//        closure table that would re-extract payloads.
+//   3. Expression infix  — `binaryPrecedence` (static table, #348)
+//        + `infixPrecedence`/`parseInfix`. Operator token →
+//        precedence/parser; context-sensitive `<`,`>`,`.`,`[`
+//        keep their lookahead in `infixPrecedence`.
+//
+// The remaining `switch`es over TokenKind are deliberately kept
+// LOCAL: they are single-production decisions, not parse-rule
+// selection, and a global table would obscure rather than help.
+// They are, with the value they map to:
+//   - `parseImportPath`        token → path fragment
+//   - `parseActionVerb`        verb-shaped token → Action
+//   - `isExpressionStart` / `isSinkSyntaxStart` / `isLiteralToken`
+//                              token → Bool predicates
+//   - `parseWhereClause`       token → WhereOperator
+//   - `parseLiteralValue`      literal token → LiteralValue
+//   - `parseAggregationIfPresent` name → AggregationType
+//   - `parseRequireStatement`  source name → RequireSource
+//   - `expectIdentifier`       keyword-as-identifier acceptance
+//   - `binaryOperator(from:)`  token → BinaryOperator
+//   - `parseMapEntry`          token → map key
+//   - `parseInterpolatedString` interpolation token → StringPart
+// Adding a new *dispatch* (a token that starts a new kind of
+// statement/expression) touches only the three tables above.
 
 import Foundation
 
@@ -236,58 +275,49 @@ public final class Parser {
     // MARK: - Statement Parsing
 
     /// Parses a statement (ARO, Publish, Require, Match, or ForEach)
+    /// A statement-level parse rule. The leading keyword token has already
+    /// been matched by `statementDispatch`; the parselet consumes it (and any
+    /// lookahead it needs) and produces the corresponding `Statement`.
+    private typealias StatementParselet = @Sendable (Parser) throws -> Statement
+
+    /// Centralized statement dispatch table (#337).
+    ///
+    /// This is THE single place that maps a *leading keyword token* to the
+    /// statement parser it selects. Introducing a statement form that begins
+    /// with a dedicated keyword is one entry here — no other method changes,
+    /// and the dispatch strategy is data rather than an implicit `if`/`switch`
+    /// chain. It mirrors the infix `binaryPrecedence` table (#348) so all
+    /// primary parse-rule selection lives in explicit tables.
+    ///
+    /// Tokens NOT listed here (action verbs, identifiers, `<`, literals, …)
+    /// fall through to the default ARO action-statement / `|>` pipeline path
+    /// documented in `parseStatement`. Entries are matched by `TokenKind`
+    /// equality; keys are payload-free keyword kinds, so the scan is exact.
+    /// `for` appears twice because the lexer may emit it as either the `.for`
+    /// keyword or `.preposition(.for)`.
+    private static let statementDispatch: [(match: TokenKind, parse: StatementParselet)] = [
+        (.match,             { try $0.parseMatchStatement() }),               // ARO-0004
+        (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
+        (.preposition(.for), { try $0.parseForOrRangeLoop() }),
+        (.parallel,          { try $0.parseParallelForEachLoop() }),
+        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / ARO-0131
+        (.break,             { try $0.parseBreakStatement() }),
+        (.publish,           { try $0.parsePublishStatementForm() }),
+        (.require,           { try $0.parseRequireStatementForm() }),         // ARO-0003
+    ]
+
     private func parseStatement() throws -> Statement {
-        // Check for match statement (ARO-0004) - starts with 'match' keyword
-        if check(.match) {
-            return try parseMatchStatement()
+        // Centralized keyword dispatch (#337): the leading token selects a
+        // dedicated statement parser. See `statementDispatch`.
+        let kind = peek().kind
+        if let rule = Parser.statementDispatch.first(where: { $0.match == kind }) {
+            return try rule.parse(self)
         }
 
-        // Check for for-each loop (ARO-0005) or range loop (ARO-0072)
-        // Note: 'for' can be tokenized as either .for keyword or .preposition(.for)
-        if check(.for) || check(.preposition(.for)) {
-            // Peek ahead: if next non-'for' token is 'each', it's a for-each loop.
-            // If next is '<', it's a range loop: for <var> from <low> to <high>
-            let savedPos = current
-            advance() // consume 'for'
-            if check(.each) {
-                current = savedPos
-                return try parseForEachLoop(isParallel: false)
-            } else if check(.leftAngle) {
-                current = savedPos
-                return try parseRangeLoop()
-            } else {
-                current = savedPos
-                return try parseForEachLoop(isParallel: false)
-            }
-        }
-        if check(.parallel) {
-            return try parseParallelForEachLoop()
-        }
-
-        // Check for while loop (ARO-0002 extension, ARO-0131)
-        if check(.while) {
-            return try parseWhileLoop()
-        }
-
-        // Check for break statement (exits innermost while loop)
-        if check(.break) {
-            let tok = try expect(.break, message: "'break'")
-            try expectStatementTerminator()
-            return BreakStatement(span: tok.span)
-        }
-
-        // Check for Publish/Require special forms (no angle brackets, like other actions)
-        if check(.publish) {
-            let startToken = advance()
-            return try parsePublishStatement(startToken: startToken)
-        }
-        if check(.require) {
-            let startToken = advance()
-            return try parseRequireStatement(startToken: startToken)
-        }
-
-        // Parse ARO statement (action without angle brackets)
-        // ARO-0067: Don't expect dot yet - check for pipeline first
+        // Default path: an ARO action statement (action without angle
+        // brackets), optionally continuing into a `|>` pipeline. This is the
+        // fallthrough for every token not claimed by a keyword rule above.
+        // ARO-0067: Don't expect dot yet - check for pipeline first.
         let statement = try parseAROStatement(expectDot: false)
 
         // ARO-0067: Check for pipeline operator |>
@@ -299,6 +329,46 @@ public final class Parser {
         try expectStatementTerminator()
 
         return statement
+    }
+
+    /// Parses a for-each loop (ARO-0005) or a range loop (ARO-0072).
+    ///
+    /// `for` can be tokenized as either the `.for` keyword or
+    /// `.preposition(.for)`. Disambiguation needs one token of lookahead:
+    /// `for each …` / bare `for …` is a for-each loop, `for <var> from …` is
+    /// a range loop.
+    private func parseForOrRangeLoop() throws -> Statement {
+        let savedPos = current
+        advance() // consume 'for'
+        if check(.each) {
+            current = savedPos
+            return try parseForEachLoop(isParallel: false)
+        } else if check(.leftAngle) {
+            current = savedPos
+            return try parseRangeLoop()
+        } else {
+            current = savedPos
+            return try parseForEachLoop(isParallel: false)
+        }
+    }
+
+    /// Parses a `break` statement (exits the innermost while loop).
+    private func parseBreakStatement() throws -> Statement {
+        let tok = try expect(.break, message: "'break'")
+        try expectStatementTerminator()
+        return BreakStatement(span: tok.span)
+    }
+
+    /// Consumes the leading `Publish` keyword and parses the publish form.
+    private func parsePublishStatementForm() throws -> Statement {
+        let startToken = advance()
+        return try parsePublishStatement(startToken: startToken)
+    }
+
+    /// Consumes the leading `Require` keyword and parses the require form.
+    private func parseRequireStatementForm() throws -> Statement {
+        let startToken = advance()
+        return try parseRequireStatement(startToken: startToken)
     }
 
     /// Parses pipeline statement: statement |> statement |> statement .
