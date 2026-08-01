@@ -103,17 +103,19 @@ public struct Query: Sendable {
     }
 }
 
-// MARK: - Execution Context Protocol
+// MARK: - Focused Execution Context Protocols
+//
+// `ExecutionContext` is decomposed into a set of focused protocols, each
+// grouping a single concern (variable binding, service registry, repository
+// access, response management, event emission, metadata, wait-state
+// signaling, output formatting, template buffering). `ExecutionContext`
+// composes them all, so existing code that depends on the full context keeps
+// compiling and the concrete `RuntimeContext` conforms automatically. Tests
+// and mocks may instead conform to just the focused protocol(s) they need
+// (e.g. `VariableBinding` alone) rather than stubbing every member.
 
-/// Protocol for runtime execution context
-///
-/// The execution context provides:
-/// - Variable binding and resolution
-/// - Service access (dependency injection)
-/// - Repository access for data operations
-/// - Response management
-/// - Event emission
-public protocol ExecutionContext: AnyObject, Sendable {
+/// Variable binding and resolution, including type-aware bindings.
+public protocol VariableBinding: AnyObject, Sendable {
     // MARK: - Variable Management
 
     /// Resolve a variable by name
@@ -189,7 +191,10 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Parameter name: The variable name to look up
     /// - Returns: The DataType if the variable exists, nil otherwise
     func typeOf(_ name: String) -> DataType?
+}
 
+/// Service registry (dependency injection) and schema registry access.
+public protocol ServiceRegistryAccess: AnyObject, Sendable {
     // MARK: - Service Access
 
     /// Get a registered service by type
@@ -214,7 +219,10 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Returns nil if no OpenAPI spec is loaded or schemas aren't available.
     /// Used by ExtractAction when a PascalCase qualifier indicates a schema name.
     var schemaRegistry: SchemaRegistry? { get }
+}
 
+/// Named repository registration and lookup.
+public protocol RepositoryAccess: AnyObject, Sendable {
     // MARK: - Repository Access
 
     /// Get a repository by name
@@ -227,7 +235,10 @@ public protocol ExecutionContext: AnyObject, Sendable {
     ///   - name: The repository name
     ///   - repository: The repository instance
     func registerRepository<T: Sendable>(name: String, repository: any Repository<T>)
+}
 
+/// Response management for a feature set execution.
+public protocol ResponseManagement: AnyObject, Sendable {
     // MARK: - Response Management
 
     /// Set the response for this execution
@@ -237,15 +248,10 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Get the current response
     /// - Returns: The response if set, nil otherwise
     func getResponse() -> Response?
+}
 
-    // MARK: - Dependency Injection
-
-    /// The runtime container providing shared infrastructure services.
-    ///
-    /// Actions should prefer `context.container.xxx` over direct singleton
-    /// access (`XYZ.shared`) so tests can inject isolated instances.
-    var container: RuntimeContainer { get }
-
+/// Event emission and event-bus access.
+public protocol EventEmission: AnyObject, Sendable {
     // MARK: - Event Emission
 
     /// Access to the event bus for direct event operations
@@ -254,6 +260,17 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Emit an event to the event bus
     /// - Parameter event: The event to emit
     func emit(_ event: any RuntimeEvent)
+}
+
+/// Execution metadata, dependency-injection container, and child-context creation.
+public protocol ContextMetadata: AnyObject, Sendable {
+    // MARK: - Dependency Injection
+
+    /// The runtime container providing shared infrastructure services.
+    ///
+    /// Actions should prefer `context.container.xxx` over direct singleton
+    /// access (`XYZ.shared`) so tests can inject isolated instances.
+    var container: RuntimeContainer { get }
 
     // MARK: - Metadata
 
@@ -274,25 +291,6 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Returns: A new child context
     func createChild(featureSetName: String) -> ExecutionContext
 
-    // MARK: - Wait State Management
-
-    /// Enter wait state - signals the application should stay alive for events
-    func enterWaitState()
-
-    /// Wait for shutdown signal (blocks until application should terminate)
-    func waitForShutdown() async throws
-
-    /// Check if the context is in wait state
-    var isWaiting: Bool { get }
-
-    /// Signal that the wait should end
-    func signalShutdown()
-
-    // MARK: - Output Context
-
-    /// The output context for formatting responses and logs
-    var outputContext: OutputContext { get }
-
     /// Whether execution is in debug mode
     var isDebugMode: Bool { get }
 
@@ -306,7 +304,35 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// in `.human` output. Used by stdin-pipe entry point so one-liners
     /// produce clean output.
     var suppressLogPrefix: Bool { get }
+}
 
+/// Wait-state signaling for long-running (server/watcher) applications.
+public protocol WaitStateSignaling: AnyObject, Sendable {
+    // MARK: - Wait State Management
+
+    /// Enter wait state - signals the application should stay alive for events
+    func enterWaitState()
+
+    /// Wait for shutdown signal (blocks until application should terminate)
+    func waitForShutdown() async throws
+
+    /// Check if the context is in wait state
+    var isWaiting: Bool { get }
+
+    /// Signal that the wait should end
+    func signalShutdown()
+}
+
+/// Output-context access for formatting responses and logs.
+public protocol OutputFormatting: AnyObject, Sendable {
+    // MARK: - Output Context
+
+    /// The output context for formatting responses and logs
+    var outputContext: OutputContext { get }
+}
+
+/// Template output buffer used by the template engine (ARO-0050).
+public protocol TemplateBuffering: AnyObject, Sendable {
     // MARK: - Template Buffer (ARO-0050)
 
     /// Append content to the template output buffer
@@ -322,9 +348,38 @@ public protocol ExecutionContext: AnyObject, Sendable {
     var isTemplateContext: Bool { get }
 }
 
+// MARK: - Execution Context Protocol
+
+/// Protocol for runtime execution context
+///
+/// The execution context composes focused protocols, each covering a single
+/// concern:
+/// - `VariableBinding`: variable binding and resolution (incl. typed values)
+/// - `ServiceRegistryAccess`: service access (dependency injection) + schemas
+/// - `RepositoryAccess`: repository access for data operations
+/// - `ResponseManagement`: response management
+/// - `EventEmission`: event emission
+/// - `ContextMetadata`: metadata, container, child-context creation
+/// - `WaitStateSignaling`: keepalive / shutdown signaling
+/// - `OutputFormatting`: output context
+/// - `TemplateBuffering`: template output buffer
+public protocol ExecutionContext:
+    VariableBinding,
+    ServiceRegistryAccess,
+    RepositoryAccess,
+    ResponseManagement,
+    EventEmission,
+    ContextMetadata,
+    WaitStateSignaling,
+    OutputFormatting,
+    TemplateBuffering,
+    AnyObject,
+    Sendable
+{}
+
 // MARK: - Default Implementations
 
-public extension ExecutionContext {
+public extension VariableBinding {
     func require<T: Sendable>(_ name: String) throws -> T {
         guard let value: T = resolve(name) else {
             throw ActionError.undefinedVariable(name)
@@ -338,20 +393,6 @@ public extension ExecutionContext {
     func resolveAnyRaw(_ name: String) -> (any Sendable)? {
         resolveAny(name)
     }
-
-    /// Default: the global container backed by all shared singletons.
-    /// Conformers that need test isolation should store and return a
-    /// per-instance `RuntimeContainer`.
-    var container: RuntimeContainer { .default }
-
-    /// Default: not compiled (interpreter mode)
-    var isCompiled: Bool { false }
-
-    /// Default: show feature set prefix in Log output
-    var suppressLogPrefix: Bool { false }
-
-    /// Default: no schema registry (no OpenAPI spec loaded)
-    var schemaRegistry: SchemaRegistry? { nil }
 
     // MARK: - Default Type-Aware Implementations
 
@@ -373,7 +414,27 @@ public extension ExecutionContext {
     func typeOf(_ name: String) -> DataType? {
         resolveTyped(name)?.type
     }
+}
 
+public extension ServiceRegistryAccess {
+    /// Default: no schema registry (no OpenAPI spec loaded)
+    var schemaRegistry: SchemaRegistry? { nil }
+}
+
+public extension ContextMetadata {
+    /// Default: the global container backed by all shared singletons.
+    /// Conformers that need test isolation should store and return a
+    /// per-instance `RuntimeContainer`.
+    var container: RuntimeContainer { .default }
+
+    /// Default: not compiled (interpreter mode)
+    var isCompiled: Bool { false }
+
+    /// Default: show feature set prefix in Log output
+    var suppressLogPrefix: Bool { false }
+}
+
+public extension TemplateBuffering {
     // MARK: - Default Template Buffer Implementations
 
     /// Default: no-op (not in template context)
@@ -388,7 +449,9 @@ public extension ExecutionContext {
 
     /// Default: not a template context
     var isTemplateContext: Bool { false }
+}
 
+public extension VariableBinding {
     // MARK: - Object Resolution with Specifiers
 
     /// Resolve an object with optional property access via specifiers
