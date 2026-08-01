@@ -1994,6 +1994,12 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Main Function Generation
 
+    /// Emit the program's `main` function.
+    ///
+    /// This orchestrates the fixed sequence of runtime bring-up phases. Each
+    /// phase is a private `emit*` helper below; the emission order here is the
+    /// contract — the helpers only move cohesive blocks of IR emission out of
+    /// this method, they must never reorder it.
     private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
@@ -2012,6 +2018,29 @@ public final class LLVMCodeGenerator {
         let argv = mainFunc.parameters[1]
         _ = ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)
 
+        // Phase 1: embed OpenAPI spec + templates metadata into the runtime.
+        emitRuntimeMetadataSetup(openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, at: ip)
+
+        // Phase 2: register embedded / static / Python / precompiled plugins.
+        emitPluginRegistration(embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle, at: ip)
+
+        // Phase 3: register feature-set metadata, event/observer handlers, and
+        // user-defined actions.
+        emitHandlerRegistration(program: program, runtime: runtime, at: ip)
+
+        // Phase 4: invoke all Application-Start feature sets; the last one's
+        // context is retained for response printing and teardown.
+        let mainCtx = emitApplicationStart(program: program, runtime: runtime, at: ip)
+
+        // Phase 5: drain pending events, then run the Application-End handler.
+        emitApplicationEnd(program: program, runtime: runtime, at: ip)
+
+        // Phase 6: print the response (unless --keep-alive) and tear down.
+        emitCleanup(mainFunc: mainFunc, runtime: runtime, mainCtx: mainCtx, at: ip)
+    }
+
+    /// Phase 1 — embed the OpenAPI spec and template bundle into the runtime.
+    private func emitRuntimeMetadataSetup(openAPISpecJSON: String?, templatesJSON: String?, at ip: InsertionPoint) {
         // Set embedded OpenAPI spec if provided
         if let spec = openAPISpecJSON {
             let specStr = ctx.stringConstant(spec)
@@ -2023,7 +2052,10 @@ public final class LLVMCodeGenerator {
             let templatesStr = ctx.stringConstant(templates)
             _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
         }
+    }
 
+    /// Phase 2 — register all bundled plugins and load precompiled plugins.
+    private func emitPluginRegistration(embeddedPlugins: [(name: String, yaml: String, base64Library: String)]?, staticPlugins: [StaticPluginIRInfo]?, pythonPlugins: [EmbeddedPythonPluginIRInfo]?, pythonBundle: PythonBundleIRInfo?, at ip: InsertionPoint) {
         // Register embedded plugins (base64-encoded .so files compiled into the binary — Python only)
         if let plugins = embeddedPlugins {
             for plugin in plugins {
@@ -2069,10 +2101,15 @@ public final class LLVMCodeGenerator {
         // TODO: Embed Python stdlib and deps as binary data when pythonBundle is provided
         // This requires LLVM IR binary constant support (not string constants)
         // For now, the runtime extracts from the cache or uses system Python stdlib
+        _ = pythonBundle
 
         // Load precompiled plugins
         _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
+    }
 
+    /// Phase 3 — register feature-set metadata, event/observer handlers, and
+    /// user-defined actions.
+    private func emitHandlerRegistration(program: AnalyzedProgram, runtime: IRValue, at ip: InsertionPoint) {
         // Register feature set metadata (name -> business activity) for HTTP routing
         for analyzed in program.featureSets {
             let fsName = ctx.stringConstant(analyzed.featureSet.name)
@@ -2087,7 +2124,12 @@ public final class LLVMCodeGenerator {
         // subsequent action call dispatched through `aro_action_dynamic`
         // can find the right compiled body.
         registerUserDefinedActions(program: program, runtime: runtime)
+    }
 
+    /// Phase 4 — create a context for each Application-Start feature set and
+    /// invoke it. Returns the main application's context (the last one), which
+    /// is retained for response printing and teardown.
+    private func emitApplicationStart(program: AnalyzedProgram, runtime: IRValue, at ip: InsertionPoint) -> IRValue {
         // Find all Application-Start feature sets
         let appStartFeatureSets = program.featureSets.filter {
             $0.featureSet.name == "Application-Start"
@@ -2124,6 +2166,12 @@ public final class LLVMCodeGenerator {
             }
         }
 
+        return mainCtx
+    }
+
+    /// Phase 5 — wait for pending events to drain, then run the
+    /// Application-End: Success handler if one is defined.
+    private func emitApplicationEnd(program: AnalyzedProgram, runtime: IRValue, at ip: InsertionPoint) {
         // Wait for pending events (10 second timeout)
         // Must complete BEFORE Application-End so all handlers finish first
         _ = ctx.module.insertCall(
@@ -2150,7 +2198,12 @@ public final class LLVMCodeGenerator {
                 _ = ctx.module.insertCall(externals.contextDestroy, on: [endCtx], at: ip)
             }
         }
+    }
 
+    /// Phase 6 — branch on the --keep-alive flag to optionally print the
+    /// response, then destroy the main context, shut down the runtime, and
+    /// return success.
+    private func emitCleanup(mainFunc: Function, runtime: IRValue, mainCtx: IRValue, at ip: InsertionPoint) {
         // Print response (unless --keep-alive flag is set)
         let keepAliveFlag = ctx.module.insertCall(externals.hasKeepAlive, on: [], at: ip)
         let isNotKeepAlive = ctx.module.insertIntegerComparison(.eq, keepAliveFlag, ctx.i32Type.zero, at: ip)
