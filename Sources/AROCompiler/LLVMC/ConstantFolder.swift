@@ -9,6 +9,17 @@ import AROParser
 
 /// Constant folder for compile-time expression evaluation
 /// Implements constant folding optimization (GitLab #102)
+///
+/// Boundary (audit — GitLab #325): this is one of ARO's three
+/// expression-evaluation sites and the ONLY compile-time one. It folds
+/// pure-literal subtrees (`AROParser.Expression` → `AROParser.LiteralValue?`)
+/// with no `ExecutionContext`, returning `nil` for anything it cannot fold
+/// (variables, concat, contains, matches, division by zero). The runtime
+/// value semantics it mirrors a subset of live in
+/// `ARORuntime/Core/ExpressionEvaluator.swift` (interpreter) and
+/// `ARORuntime/Bridge/RuntimeExecutionBridge.evaluateBinaryOp` (compiled
+/// binary); see the boundary note in `ExpressionEvaluator.swift`. Keep the
+/// folded result equal to what those evaluators would produce at runtime.
 public struct ConstantFolder {
 
     // MARK: - Public API
