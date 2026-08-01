@@ -816,6 +816,202 @@ struct PathLevelParameterMergingTests {
     }
 }
 
+// MARK: - External Documentation Tests
+
+@Suite("External Documentation Parsing Tests")
+struct ExternalDocumentationTests {
+
+    @Test("Parse root-level externalDocs")
+    func testRootLevelExternalDocs() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Docs API", "version": "1.0.0" },
+            "paths": {},
+            "externalDocs": {
+                "description": "Full developer guide",
+                "url": "https://example.com/docs"
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+
+        let docs = try #require(spec.externalDocs)
+        #expect(docs.url == "https://example.com/docs")
+        #expect(docs.description == "Full developer guide")
+    }
+
+    @Test("Root-level externalDocs is optional (absent by default)")
+    func testExternalDocsOptional() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "No Docs API", "version": "1.0.0" },
+            "paths": {}
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        #expect(spec.externalDocs == nil)
+        #expect(spec.tags == nil)
+    }
+
+    @Test("externalDocs description is optional (only url required)")
+    func testExternalDocsUrlOnly() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Docs API", "version": "1.0.0" },
+            "paths": {},
+            "externalDocs": { "url": "https://example.com/only-url" }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+
+        let docs = try #require(spec.externalDocs)
+        #expect(docs.url == "https://example.com/only-url")
+        #expect(docs.description == nil)
+    }
+
+    @Test("Parse per-tag externalDocs")
+    func testTagExternalDocs() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Tagged API", "version": "1.0.0" },
+            "paths": {},
+            "tags": [
+                {
+                    "name": "users",
+                    "description": "User operations",
+                    "externalDocs": {
+                        "description": "User guide",
+                        "url": "https://example.com/users"
+                    }
+                },
+                { "name": "misc" }
+            ]
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+
+        let tags = try #require(spec.tags)
+        #expect(tags.count == 2)
+
+        let usersTag = try #require(tags.first { $0.name == "users" })
+        #expect(usersTag.description == "User operations")
+        let tagDocs = try #require(usersTag.externalDocs)
+        #expect(tagDocs.url == "https://example.com/users")
+        #expect(tagDocs.description == "User guide")
+
+        let miscTag = try #require(tags.first { $0.name == "misc" })
+        #expect(miscTag.externalDocs == nil)
+    }
+
+    @Test("Parse per-operation externalDocs")
+    func testOperationExternalDocs() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Op API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "listUsers",
+                        "externalDocs": {
+                            "description": "List endpoint docs",
+                            "url": "https://example.com/list"
+                        },
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+
+        let op = try #require(spec.paths["/users"]?.get)
+        let opDocs = try #require(op.externalDocs)
+        #expect(opDocs.url == "https://example.com/list")
+        #expect(opDocs.description == "List endpoint docs")
+    }
+
+    @Test("Parse per-schema externalDocs")
+    func testSchemaExternalDocs() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Schema API", "version": "1.0.0" },
+            "paths": {},
+            "components": {
+                "schemas": {
+                    "User": {
+                        "type": "object",
+                        "externalDocs": {
+                            "description": "User schema docs",
+                            "url": "https://example.com/schema/user"
+                        },
+                        "properties": {
+                            "id": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+
+        let schema = try #require(spec.components?.schemas?["User"]?.value)
+        let schemaDocs = try #require(schema.externalDocs)
+        #expect(schemaDocs.url == "https://example.com/schema/user")
+        #expect(schemaDocs.description == "User schema docs")
+    }
+
+    @Test("Schema externalDocs round-trips through encode/decode")
+    func testSchemaExternalDocsRoundTrip() throws {
+        let original = Schema(
+            type: "object",
+            externalDocs: ExternalDocumentation(url: "https://example.com/rt", description: "round trip")
+        )
+        let encoded = try JSONEncoder().encode(SchemaRef(original))
+        let decoded = try JSONDecoder().decode(SchemaRef.self, from: encoded)
+
+        let docs = try #require(decoded.value.externalDocs)
+        #expect(docs.url == "https://example.com/rt")
+        #expect(docs.description == "round trip")
+    }
+
+    @Test("Parse externalDocs from YAML at all levels")
+    func testExternalDocsFromYAML() throws {
+        let yaml = """
+        openapi: 3.0.3
+        info:
+          title: YAML Docs API
+          version: 1.0.0
+        externalDocs:
+          description: Root docs
+          url: https://example.com/root
+        tags:
+          - name: users
+            externalDocs:
+              url: https://example.com/tag
+        paths:
+          /users:
+            get:
+              operationId: listUsers
+              externalDocs:
+                url: https://example.com/op
+              responses:
+                '200':
+                  description: OK
+        """
+        let spec = try OpenAPILoader.parse(data: yaml.data(using: .utf8)!, filename: "openapi.yaml")
+
+        #expect(spec.externalDocs?.url == "https://example.com/root")
+        #expect(spec.tags?.first?.externalDocs?.url == "https://example.com/tag")
+        #expect(spec.paths["/users"]?.get?.externalDocs?.url == "https://example.com/op")
+    }
+}
+
 // MARK: - Deprecation Warning Tests
 
 #if !os(Windows)

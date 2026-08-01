@@ -17,6 +17,10 @@ public struct OpenAPISpec: Sendable, Codable {
     public let webhooks: [String: PathItem]?
     /// OpenAPI 3.1: JSON Schema dialect URI
     public let jsonSchemaDialect: String?
+    /// Root-level tag definitions (each may carry its own `externalDocs`)
+    public let tags: [Tag]?
+    /// Root-level External Documentation Object
+    public let externalDocs: ExternalDocumentation?
 
     /// Returns true when this is an OpenAPI 3.1.x specification
     public var is31: Bool { openapi.hasPrefix("3.1") }
@@ -29,7 +33,9 @@ public struct OpenAPISpec: Sendable, Codable {
         servers: [Server]? = nil,
         security: [[String: [String]]]? = nil,
         webhooks: [String: PathItem]? = nil,
-        jsonSchemaDialect: String? = nil
+        jsonSchemaDialect: String? = nil,
+        tags: [Tag]? = nil,
+        externalDocs: ExternalDocumentation? = nil
     ) {
         self.openapi = openapi
         self.info = info
@@ -39,6 +45,56 @@ public struct OpenAPISpec: Sendable, Codable {
         self.security = security
         self.webhooks = webhooks
         self.jsonSchemaDialect = jsonSchemaDialect
+        self.tags = tags
+        self.externalDocs = externalDocs
+    }
+}
+
+// MARK: - External Documentation
+
+/// OpenAPI External Documentation Object.
+///
+/// Referenced from the root spec, tags, operations, and (unofficially but
+/// commonly) schemas. Purely descriptive metadata — it has no effect on
+/// request routing or execution; it is surfaced for documentation
+/// generation, LSP hover, and contract-validation output.
+///
+/// ```yaml
+/// externalDocs:
+///   description: Find more info here
+///   url: https://example.com/docs
+/// ```
+public struct ExternalDocumentation: Sendable, Codable {
+    /// URL to the external documentation (required per the OpenAPI spec).
+    public let url: String
+    /// Optional markdown description of the target documentation.
+    public let description: String?
+
+    public init(url: String, description: String? = nil) {
+        self.url = url
+        self.description = description
+    }
+}
+
+// MARK: - Tag
+
+/// OpenAPI Tag Object.
+///
+/// Defined at the root of the document (`tags:`) and referenced by name from
+/// `Operation.tags`. Each tag may carry an `externalDocs` link.
+public struct Tag: Sendable, Codable {
+    public let name: String
+    public let description: String?
+    public let externalDocs: ExternalDocumentation?
+
+    public init(
+        name: String,
+        description: String? = nil,
+        externalDocs: ExternalDocumentation? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.externalDocs = externalDocs
     }
 }
 
@@ -147,6 +203,8 @@ public struct Operation: Sendable, Codable {
     /// (e.g. `{$request.body#/callbackUrl}`) to a Path Item describing the
     /// out-of-band request the server makes back to the caller (ARO-0187).
     public let callbacks: [String: Callback]?
+    /// Operation-level External Documentation Object
+    public let externalDocs: ExternalDocumentation?
 
     public init(
         operationId: String? = nil,
@@ -158,7 +216,8 @@ public struct Operation: Sendable, Codable {
         responses: [String: OpenAPIResponse] = [:],
         deprecated: Bool? = nil,
         security: [[String: [String]]]? = nil,
-        callbacks: [String: Callback]? = nil
+        callbacks: [String: Callback]? = nil,
+        externalDocs: ExternalDocumentation? = nil
     ) {
         self.operationId = operationId
         self.summary = summary
@@ -170,6 +229,7 @@ public struct Operation: Sendable, Codable {
         self.deprecated = deprecated
         self.security = security
         self.callbacks = callbacks
+        self.externalDocs = externalDocs
     }
 }
 
@@ -441,6 +501,8 @@ public final class Schema: Sendable, Codable {
     public let exclusiveMaximumBool: Bool?
     /// exclusiveMaximum as a numeric value (OpenAPI 3.1)
     public let exclusiveMaximumValue: Double?
+    /// External Documentation Object (unofficial at schema level, but widely used)
+    public let externalDocs: ExternalDocumentation?
 
     private enum CodingKeys: String, CodingKey {
         case type, format, title, description, properties, required
@@ -455,6 +517,7 @@ public final class Schema: Sendable, Codable {
         case const
         case exclusiveMinimum
         case exclusiveMaximum
+        case externalDocs
     }
 
     public init(from decoder: Decoder) throws {
@@ -493,6 +556,7 @@ public final class Schema: Sendable, Codable {
         additionalProperties = try container.decodeIfPresent(AdditionalProperties.self, forKey: .additionalProperties)
         discriminator = try container.decodeIfPresent(Discriminator.self, forKey: .discriminator)
         const = try container.decodeIfPresent(AnyCodableValue.self, forKey: .const)
+        externalDocs = try container.decodeIfPresent(ExternalDocumentation.self, forKey: .externalDocs)
 
         // exclusiveMinimum: Bool (3.0.x) or Double (3.1)
         if let boolVal = try? container.decode(Bool.self, forKey: .exclusiveMinimum) {
@@ -553,6 +617,7 @@ public final class Schema: Sendable, Codable {
         try container.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
         try container.encodeIfPresent(discriminator, forKey: .discriminator)
         try container.encodeIfPresent(const, forKey: .const)
+        try container.encodeIfPresent(externalDocs, forKey: .externalDocs)
         if let b = exclusiveMinimumBool { try container.encode(b, forKey: .exclusiveMinimum) }
         else if let v = exclusiveMinimumValue { try container.encode(v, forKey: .exclusiveMinimum) }
         if let b = exclusiveMaximumBool { try container.encode(b, forKey: .exclusiveMaximum) }
@@ -589,7 +654,8 @@ public final class Schema: Sendable, Codable {
         exclusiveMinimumBool: Bool? = nil,
         exclusiveMinimumValue: Double? = nil,
         exclusiveMaximumBool: Bool? = nil,
-        exclusiveMaximumValue: Double? = nil
+        exclusiveMaximumValue: Double? = nil,
+        externalDocs: ExternalDocumentation? = nil
     ) {
         // Resolve types: explicit types array wins, else derive from type string
         if let t = types {
@@ -627,6 +693,7 @@ public final class Schema: Sendable, Codable {
         self.exclusiveMinimumValue = exclusiveMinimumValue
         self.exclusiveMaximumBool = exclusiveMaximumBool
         self.exclusiveMaximumValue = exclusiveMaximumValue
+        self.externalDocs = externalDocs
     }
 }
 
