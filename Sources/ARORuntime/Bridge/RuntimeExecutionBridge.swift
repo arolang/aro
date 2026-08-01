@@ -873,7 +873,15 @@ private func stringValue(_ value: any Sendable) -> String {
     }
 }
 
-/// Evaluate a binary operation
+/// Evaluate a binary operation for the COMPILED-BINARY runtime (`aro build`).
+///
+/// Boundary (audit — GitLab #325): this is the compiled-mode sibling of the
+/// interpreter's `ExpressionEvaluator` (ARORuntime/Core). Same operators,
+/// different input representation — here operators arrive as stringly-typed
+/// JSON ("+", "<", …) over the C ABI rather than as typed AST nodes. The two
+/// must agree so `aro run` and `aro build` produce the same results; see the
+/// operator-semantics contract in `ExpressionEvaluator.swift`. When you touch
+/// operator behaviour here, mirror it there (and vice versa).
 private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
     switch op {
     // Arithmetic

@@ -239,3 +239,44 @@ struct ContainsOperatorTests {
         #expect(hit == false)
     }
 }
+
+// MARK: - Arithmetic Divide/Modulo Guards (GitLab #325)
+
+/// Division and modulo by zero must raise a catchable runtime error, not
+/// trap the interpreter process. The `.divide` path already guarded Int/Int;
+/// `.modulo` did not and would trap on `<a> % 0`. Both are covered here.
+@Suite("Arithmetic Zero-Divisor Guards")
+struct ArithmeticZeroDivisorTests {
+
+    let evaluator = ExpressionEvaluator()
+    private let span = SourceSpan(at: SourceLocation())
+
+    private func binaryLiteral(_ a: Int, _ op: BinaryOperator, _ b: Int) -> BinaryExpression {
+        let left = LiteralExpression(value: .integer(a), span: span)
+        let right = LiteralExpression(value: .integer(b), span: span)
+        return BinaryExpression(left: left, op: op, right: right, span: span)
+    }
+
+    @Test("Modulo by zero throws instead of trapping")
+    func testModuloByZeroThrows() async throws {
+        let context = RuntimeContext(featureSetName: "Test")
+        await #expect(throws: (any Error).self) {
+            _ = try await evaluator.evaluate(binaryLiteral(5, .modulo, 0), context: context)
+        }
+    }
+
+    @Test("Integer divide by zero throws instead of trapping")
+    func testDivideByZeroThrows() async throws {
+        let context = RuntimeContext(featureSetName: "Test")
+        await #expect(throws: (any Error).self) {
+            _ = try await evaluator.evaluate(binaryLiteral(5, .divide, 0), context: context)
+        }
+    }
+
+    @Test("Modulo with non-zero divisor still works")
+    func testModuloNonZero() async throws {
+        let context = RuntimeContext(featureSetName: "Test")
+        let result = try await evaluator.evaluate(binaryLiteral(17, .modulo, 5), context: context)
+        #expect((result as? Int) == 2)
+    }
+}

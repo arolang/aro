@@ -6,7 +6,55 @@
 import Foundation
 import AROParser
 
-/// Evaluates expressions at runtime
+// ============================================================
+// Expression-evaluation boundary (audit — GitLab #325)
+// ============================================================
+//
+// ARO has THREE expression-evaluation sites. They are intentionally
+// separate because each consumes a different representation and produces
+// a different output; they are NOT accidental copies of one another:
+//
+//   1. `ExpressionEvaluator` (this file, ARORuntime/Core) — the
+//      INTERPRETER runtime evaluator (`aro run`, REPL, debugger
+//      predicates). Input: `AROParser.Expression` AST. Output: live
+//      `any Sendable` runtime values. Owns everything that needs a live
+//      `ExecutionContext`: variable/qualifier resolution, repository and
+//      metrics access, dates, member/subscript access, and string
+//      interpolation. This is the reference semantics for operators.
+//
+//   2. `ConstantFolder` (AROCompiler/LLVMC/ConstantFolder.swift) — the
+//      COMPILE-TIME literal folder. Input: `AROParser.Expression` AST.
+//      Output: `AROParser.LiteralValue?` (nil when the subtree is not a
+//      pure literal). It only ever sees constant subtrees — no context,
+//      no variables — so it is a strict subset of the operators here and
+//      returns `nil` rather than throwing on anything it cannot fold.
+//
+//   3. `evaluateBinaryOp` (ARORuntime/Bridge/RuntimeExecutionBridge.swift)
+//      — the COMPILED-BINARY runtime evaluator (`aro build`). Input:
+//      serialized JSON expression trees with stringly-typed operators
+//      ("+", "<", …), reached over the C ABI. Output: `any Sendable`.
+//      It must stay operator-compatible with THIS file so that `aro run`
+//      and `aro build` agree.
+//
+// The parser (`AROParser`) owns *syntax → AST* only; it never evaluates
+// values. That responsibility split is the answer to #325: parser =
+// syntax, these three sites = values, kept apart by input representation
+// and lifecycle stage, not by duplicated intent.
+//
+// Operator-semantics contract (must hold across sites 1 and 3):
+//   - Int / Int and Int % Int by zero → a catchable runtime error, never
+//     a process trap (see the `.divide` / `intOperation` guards below and
+//     the `evaluateBinaryOp` "/" and "%" cases).
+//   - `+` is numeric; string joining uses `++` (`.concat`).
+//   - `*` with a String operand and an Int count is repetition.
+// When you change operator behaviour in one runtime site, mirror it in
+// the other and extend the cross-mode tests.
+// ============================================================
+
+/// Evaluates expressions at runtime for the interpreter (`aro run`).
+///
+/// See the boundary note above for how this relates to the compile-time
+/// `ConstantFolder` and the compiled-binary `evaluateBinaryOp`.
 public struct ExpressionEvaluator: Sendable {
 
     public init() {}
@@ -405,6 +453,11 @@ public struct ExpressionEvaluator: Sendable {
         guard let l = left as? Int, let r = right as? Int else {
             throw ExpressionError.typeMismatch("Expected integers for modulo operation")
         }
+        // Modulo is division: guard the zero divisor so `<a> % 0` raises a
+        // catchable runtime error instead of trapping the process. Mirrors
+        // the `.divide` Int/Int guard above and keeps the interpreter from
+        // crashing where the compiled runtime (evaluateBinaryOp) does not.
+        guard r != 0 else { throw ActionError.runtimeError("Division by zero") }
         return op(l, r)
     }
 
