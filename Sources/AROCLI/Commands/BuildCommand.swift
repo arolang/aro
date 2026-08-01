@@ -187,26 +187,16 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Determine output paths.
-        // --output may be a bare name (resolved against rootPath, in-place) or an
-        // absolute/relative path (out-of-place). Intermediate .ll/.o always stay in
-        // the workspace's .build dir keyed by the binary's filename, never the full
-        // path — otherwise an absolute --output produces nested junk dirs.
-        let outputArg = output ?? appConfig.rootPath.lastPathComponent
-        let buildDir = appConfig.rootPath.appendingPathComponent(".build")
-
-        // On Windows, executables need .exe extension
-        #if os(Windows)
-        let outputArgWithExt = outputArg.hasSuffix(".exe") ? outputArg : outputArg + ".exe"
-        #else
-        let outputArgWithExt = outputArg
-        #endif
-
-        let binaryPath = URL(fileURLWithPath: outputArgWithExt, relativeTo: appConfig.rootPath)
-            .standardizedFileURL
-        let intermediateBaseName = binaryPath.deletingPathExtension().lastPathComponent
-        let llPath = buildDir.appendingPathComponent("\(intermediateBaseName).ll")
-        let objectPath = buildDir.appendingPathComponent("\(intermediateBaseName).o").path
+        // Determine output paths. Binary layout + platform-flag concerns (the
+        // Windows .exe suffix, .build intermediates, managed-plugin dirs) live in
+        // BuildLayout (#354) so the command stays a thin coordinator.
+        let layout = BuildLayout(rootPath: appConfig.rootPath, output: output)
+        let binaryPath = layout.binaryPath
+        let buildDir = layout.buildDir
+        let llPath = layout.llPath
+        let objectPath = layout.objectPath
+        let sourceManagedPluginsDirEarly = layout.sourceManagedPluginsDir
+        let outputManagedPluginsDirEarly = layout.outputManagedPluginsDir
 
         AROLogger.debug("Binary path: \(binaryPath.path)", subsystem: "build")
 
@@ -218,19 +208,10 @@ struct BuildCommand: AsyncParsableCommand {
         // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
         // Python plugins fall back to base64 embedding (they run via subprocess).
         // The full pipeline lives in PluginCompiler (#366) so it stays reusable.
-        // Check both "Plugins" (canonical) and "plugins" (convention) — Linux is case-sensitive
-        let pluginsDirCandidates = [
-            appConfig.rootPath.appendingPathComponent("Plugins"),
-            appConfig.rootPath.appendingPathComponent("plugins"),
-        ]
-        let sourceManagedPluginsDirEarly = pluginsDirCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
-            ?? appConfig.rootPath.appendingPathComponent("Plugins")
-        let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
-
         let pluginCompiler = PluginCompiler(
             sourcePluginsDir: sourceManagedPluginsDirEarly,
             outputPluginsDir: outputManagedPluginsDirEarly,
-            staticBuildDir: buildDir.appendingPathComponent("static-plugins"),
+            staticBuildDir: layout.staticPluginsDir,
             verbose: verbose
         )
         let compiledPlugins = try await pluginCompiler.compile(buildDir: buildDir)
@@ -247,54 +228,11 @@ struct BuildCommand: AsyncParsableCommand {
 
         AROLogger.debug("Starting LLVM IR generation", subsystem: "build")
 
-        // Serialize OpenAPI spec to JSON for embedding (if present)
-        var openAPISpecJSON: String? = nil
-        if let spec = appConfig.openAPISpec {
-            do {
-                let encoder = JSONEncoder()
-                let jsonData = try encoder.encode(spec)
-                openAPISpecJSON = String(data: jsonData, encoding: .utf8)
-                if verbose {
-                    print("  Embedding OpenAPI spec (\(jsonData.count) bytes)")
-                }
-            } catch {
-                print("Warning: Could not serialize OpenAPI spec: \(error)")
-                // Continue without embedding - fall back to file-based loading at runtime
-            }
-        }
-
-        // Discover and serialize templates for embedding (ARO-0050)
-        var templatesJSON: String? = nil
-        let templatesDir = appConfig.rootPath.appendingPathComponent("templates")
-        if FileManager.default.fileExists(atPath: templatesDir.path) {
-            do {
-                var templates: [String: String] = [:]
-                let enumerator = FileManager.default.enumerator(at: templatesDir, includingPropertiesForKeys: nil)
-                while let fileURL = enumerator?.nextObject() as? URL {
-                    var isDirectory: ObjCBool = false
-                    FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
-                    if !isDirectory.boolValue {
-                        // Get relative path from templates directory
-                        let relativePath = fileURL.path.replacingOccurrences(
-                            of: templatesDir.path + "/",
-                            with: ""
-                        )
-                        let content = try String(contentsOf: fileURL, encoding: .utf8)
-                        templates[relativePath] = content
-                    }
-                }
-                if !templates.isEmpty {
-                    let jsonData = try JSONSerialization.data(withJSONObject: templates)
-                    templatesJSON = String(data: jsonData, encoding: .utf8)
-                    if verbose {
-                        print("  Embedding \(templates.count) template(s) (\(jsonData.count) bytes)")
-                    }
-                }
-            } catch {
-                print("Warning: Could not serialize templates: \(error)")
-                // Continue without embedding - fall back to file-based loading at runtime
-            }
-        }
+        // Gather assets embedded into the binary (OpenAPI contract + templates).
+        // The serialization / directory-walking lives in BuildAssetCollector (#354);
+        // both return nil to fall back to file-based loading at runtime.
+        let openAPISpecJSON = BuildAssetCollector.openAPISpecJSON(from: appConfig.openAPISpec, verbose: verbose)
+        let templatesJSON = BuildAssetCollector.templatesJSON(rootPath: appConfig.rootPath, verbose: verbose)
 
         #if os(Windows)
         print("Error: Native compilation is not yet supported on Windows.")
