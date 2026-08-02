@@ -33,6 +33,18 @@ import Foundation
 /// Note: For production use with better performance, consider using PythonKit
 /// for direct Python embedding. This subprocess approach is simpler and more
 /// portable but has higher overhead per call.
+///
+/// Sendable-safety: the mutable stored properties (`pluginInfo`, `registry`) are
+/// populated during the one-time setup phase (`init` → `loadPluginInfo`, before
+/// the host is registered and invoked) and only read during `execute` /
+/// `executeQualifier`, which run the Python code out-of-process. There is no
+/// post-load mutation path, so concurrent readers of a loaded host never race a
+/// writer. The type is `@unchecked Sendable` because that load-once discipline
+/// is invisible to the compiler.
+///
+/// Caveat (documented, not enforced): the shared `encoder`/`decoder` below are
+/// reference types reused across calls; correctness relies on a given host
+/// instance not being invoked concurrently. See their declaration.
 public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin name
     public let pluginName: String
@@ -79,8 +91,15 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
     /// `RuntimeDefaults.pythonPluginTimeout` (#328).
     private static let defaultTimeout: TimeInterval = RuntimeDefaults.pythonPluginTimeout
 
-    /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
-    /// and qualifier calls are serialised through the plugin host.
+    /// Reused encoder/decoder.
+    ///
+    /// Sendable-safety: `JSONEncoder`/`JSONDecoder` are reference types. Reusing a
+    /// single instance is sound only while calls into a given host are not
+    /// concurrent — which holds because a host is loaded once and its
+    /// `execute`/`executeQualifier` are driven serially per action statement.
+    /// This is an assumption on the caller, NOT enforced here; if plugin
+    /// invocation ever becomes concurrent per-host these must move behind a lock
+    /// or become per-call locals. Tracked in the #314 audit.
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -485,6 +504,11 @@ struct PythonPluginInfo: Sendable {
 // MARK: - Python Plugin Action Wrapper
 
 /// Wrapper for Python plugin action execution
+///
+/// Sendable-safety: every stored property is `let`, immutable after `init`. It
+/// holds no mutable state of its own; `host` is a `PythonPluginHost`, whose own
+/// Sendable contract is documented on that type. `@unchecked` is needed only
+/// because `host` is not statically Sendable.
 final class PythonPluginActionWrapper: @unchecked Sendable {
     let pluginName: String
     let actionName: String

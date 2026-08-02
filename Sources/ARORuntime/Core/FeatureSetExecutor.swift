@@ -1201,6 +1201,16 @@ struct BreakSignal: Error {}
 // MARK: - Runtime
 
 /// Main runtime that manages program execution lifecycle
+///
+/// Sendable-safety: every mutable stored property (`_isRunning`,
+/// `_currentProgram`, `_shutdownError`, `_enteredWaitState`,
+/// `_compiledHandlers`) is read/written exclusively through the `withLock(_:)`
+/// helper backed by `lock` (an `NSLock`) — see the computed accessors and
+/// `registerCompiledHandler` below; none is touched outside that lock. The
+/// immutable dependencies (`engine`, `eventBus`, `lock`) are `let`, and
+/// `globalSymbols` delegates to the `ExecutionEngine` actor. The class is
+/// `@unchecked Sendable` because that lock-based discipline is invisible to the
+/// compiler.
 public final class Runtime: @unchecked Sendable {
     // MARK: - Properties
 
@@ -1517,6 +1527,13 @@ public final class Runtime: @unchecked Sendable {
 // MARK: - Signal Handler
 
 /// Thread-safe signal handler for runtime shutdown
+///
+/// Sendable-safety: the two mutable fields (`runtime`, `isSetup`) are only ever
+/// read/written under `lock` (an `NSLock`) in `register`, `handleSignal`,
+/// `isActive`, and `reset`. `handleSignal` deliberately copies `runtime` out
+/// under the lock and releases it before calling `stop()`, so no user code runs
+/// while the lock is held. The class is `@unchecked Sendable` because this
+/// lock-based discipline is invisible to the compiler.
 public final class RuntimeSignalHandler: @unchecked Sendable {
     public static let shared = RuntimeSignalHandler()
 

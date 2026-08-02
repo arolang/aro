@@ -38,6 +38,14 @@ public typealias NativeHTTPRequestHandler = (String, String, [String: String], D
 
 /// Native HTTP Server using BSD sockets
 /// This provides a working HTTP server for compiled binaries with WebSocket support
+///
+/// Sendable-safety: all mutable state is guarded by explicit locks, not the
+/// type system. `serverFd`, `isRunning`, and `requestHandler` are read/written
+/// under `lock`; the WebSocket connection table (`wsConnections`) is read/written
+/// under `wsLock` (see `wsConnectionCount` / `broadcastWebSocket`). The remaining
+/// mutable vars (`eventBus`, `wsPath`) are configuration set once via
+/// `setEventBus` / `setWebSocketPath` during server setup, before the accept loop
+/// begins to serve requests, and are only read afterward.
 public final class NativeHTTPServer: @unchecked Sendable {
     private var serverFd: Int32 = -1
     private var isRunning = false
@@ -647,6 +655,11 @@ public final class NativeHTTPServer: @unchecked Sendable {
 }
 
 /// Global native HTTP server instance
+///
+/// Sendable-safety: assigned exactly once when the compiled binary starts its
+/// HTTP server, before any request-handling thread runs, and only read (never
+/// reassigned) thereafter. Route mutation that happens alongside it is guarded
+/// by `httpServerLock` below.
 nonisolated(unsafe) public var nativeHTTPServer: NativeHTTPServer?
 private let httpServerLock = NSLock()
 
@@ -744,24 +757,43 @@ private func convertAnyToSendable(_ value: Any) -> any Sendable {
     }
 }
 
+// MARK: - Compiled-binary bootstrap registries
+//
+// Sendable-safety (applies to every `nonisolated(unsafe)` global in this
+// section): these are write-once-at-startup / read-only-at-runtime tables. In a
+// compiled ARO binary the generated `main` calls the `@_cdecl` registration and
+// `aro_set_*` entry points (`aro_http_register_route`,
+// `aro_register_static_plugin`, `aro_set_embedded_openapi`, …) sequentially on a
+// single thread during bootstrap, BEFORE the HTTP server accept loop / event
+// loop starts. Once serving begins these tables are only ever read, so the
+// concurrent readers never overlap a writer. `httpRoutes` mutation is
+// additionally taken under `httpServerLock` at its append sites as belt-and-
+// braces. There is no post-startup mutation path.
+
 /// Registered feature set handlers for HTTP routing
 /// Maps operationId to a function that executes the feature set
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var httpRouteHandlers: [String: (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?] = [:]
 
 /// Route registry for matching paths to operationIds
+/// Sendable-safety: see bootstrap note above; appends also hold `httpServerLock`.
 nonisolated(unsafe) public var httpRoutes: [(method: String, path: String, operationId: String)] = []
 
 /// Response content type registry for operationIds (extracted from OpenAPI spec)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var httpResponseContentTypes: [String: String] = [:]
 
 /// Global storage for embedded OpenAPI spec (JSON string, set at compile time)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedOpenAPISpec: String? = nil
 
 /// Global storage for embedded templates (JSON dictionary: path -> content, set at compile time)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedTemplates: [String: String]? = nil
 
 /// Global registry for embedded plugin libraries (base64-encoded .so files compiled into the binary)
 /// Key: plugin name, Value: (yaml: plugin.yaml content, base64So: base64-encoded library bytes)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedPluginRegistry: [String: (yaml: String, base64So: String)] = [:]
 
 /// Entry for a statically-linked plugin whose function pointers are baked into the binary
@@ -777,6 +809,7 @@ public struct StaticPluginEntry {
 
 /// Global registry for statically-linked plugins (function pointers, no dlopen)
 /// Key: plugin name, Value: StaticPluginEntry with function pointers and YAML metadata
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var staticPluginRegistry: [String: StaticPluginEntry] = [:]
 
 /// Entry for an embedded Python plugin (source + deps bundled in binary)
@@ -789,12 +822,15 @@ public struct EmbeddedPythonPluginEntry {
 
 /// Global registry for embedded Python plugins (source + deps, executed in-process)
 /// Key: plugin name, Value: EmbeddedPythonPluginEntry
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedPythonPluginRegistry: [String: EmbeddedPythonPluginEntry] = [:]
 
 /// Embedded Python stdlib zip data (shared across all Python plugins)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedPythonStdlibZip: Data? = nil
 
 /// Embedded Python site-packages zip data (all pip deps bundled together)
+/// Sendable-safety: see "Compiled-binary bootstrap registries" note above.
 nonisolated(unsafe) public var embeddedPythonDepsZip: Data? = nil
 
 /// Set the embedded OpenAPI spec (called from generated main)
