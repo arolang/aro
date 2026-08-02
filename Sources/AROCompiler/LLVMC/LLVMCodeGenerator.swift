@@ -71,6 +71,17 @@ public final class LLVMCodeGenerator {
     private var ctx: LLVMCodeGenContext!
     private var types: LLVMTypeMapper!
     private var externals: LLVMExternalDeclEmitter!
+
+    /// Pure AST → JSON serialization (issue #334). Stateless, so it can be
+    /// created up-front and shared with the modifier binder.
+    private let serializer = ExpressionSerializer()
+
+    /// Builds result/object descriptor structs for action calls (issue #334).
+    private var descriptors: DescriptorBuilder!
+
+    /// Binds query/range modifiers and value sources into the runtime
+    /// context before an action call (issue #334).
+    private var binder: ModifierBinder!
     /// Issue #231 — DWARF emitter. Populated only when the host LLVM
     /// install accepts the DI setup; nil means "emit IR without
     /// debug info" (compatible with what AROCompiler shipped before).
@@ -113,6 +124,8 @@ public final class LLVMCodeGenerator {
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
         types = LLVMTypeMapper(context: ctx)
         externals = LLVMExternalDeclEmitter(context: ctx, types: types)
+        descriptors = DescriptorBuilder(context: ctx, types: types)
+        binder = ModifierBinder(context: ctx, externals: externals, serializer: serializer)
 
         // Issue #231 — DWARF emitter. Function-level debug info: each
         // feature set gets a DISubprogram. lldb backtraces report
@@ -284,7 +297,7 @@ public final class LLVMCodeGenerator {
             let guardTrueBlock = ctx.module.appendBlock(named: "guard_true", to: function)
             let guardFalseBlock = ctx.module.appendBlock(named: "guard_false", to: function)
 
-            let condJSON = ctx.stringConstant(serializeExpression(guardCond))
+            let condJSON = ctx.stringConstant(serializer.serializeExpression(guardCond))
             let guardResult = ctx.module.insertCall(
                 externals.evaluateWhenGuard,
                 on: [ctxParam, condJSON],
@@ -498,7 +511,7 @@ public final class LLVMCodeGenerator {
             guardMergeBlock = mergeBlock
 
             // Evaluate guard condition
-            let conditionJSON = ctx.stringConstant(serializeExpression(condition))
+            let conditionJSON = ctx.stringConstant(serializer.serializeExpression(condition))
             let guardResult = ctx.module.insertCall(
                 externals.evaluateWhenGuard,
                 on: [ctx.currentContextVar!, conditionJSON],
@@ -521,10 +534,10 @@ public final class LLVMCodeGenerator {
         }
 
         // Build result descriptor
-        let resultDesc = buildResultDescriptor(statement.result, prefix: prefix)
+        let resultDesc = descriptors.buildResultDescriptor(statement.result, prefix: prefix)
 
         // Build object descriptor
-        let objectDesc = buildObjectDescriptor(statement.object, prefix: prefix)
+        let objectDesc = descriptors.buildObjectDescriptor(statement.object, prefix: prefix)
 
         // Clear transient query modifiers before binding fresh ones (mirrors FeatureSetExecutor lines 248-256)
         // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
@@ -537,13 +550,13 @@ public final class LLVMCodeGenerator {
         }
 
         // Bind query modifiers if present
-        bindQueryModifiers(statement.queryModifiers)
+        binder.bindQueryModifiers(statement.queryModifiers)
 
         // Bind range modifiers if present
-        bindRangeModifiers(statement.rangeModifiers)
+        binder.bindRangeModifiers(statement.rangeModifiers)
 
         // Bind value source if present
-        bindValueSource(statement.valueSource, prefix: prefix)
+        binder.bindValueSource(statement.valueSource, prefix: prefix)
 
         // Call action function
         let verb = statement.action.verb.lowercased()
@@ -607,519 +620,6 @@ public final class LLVMCodeGenerator {
         }
     }
 
-    // MARK: - Descriptor Building
-
-    private func buildResultDescriptor(_ result: QualifiedNoun, prefix: String) -> IRValue {
-        let ip = ctx.insertionPoint
-        let descType = types.resultDescriptorType
-
-        // Hoist alloca to function entry block so it is a *static* stack allocation
-        // (allocated once at function entry). Allocas in loop-body blocks are "dynamic"
-        // in LLVM at -O0: they grow the stack on every iteration and cause SIGBUS after
-        // ~30 k files when the 8 MB thread stack overflows.
-        let descPtr = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        // Fill in the struct fields at the current (body) insertion point.
-        let baseStr = ctx.stringConstant(result.base)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 0, at: ip
-        )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 1, at: ip
-        )
-
-        if result.specifiers.isEmpty {
-            ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-        } else {
-            let arrayType = types.pointerArrayType(count: result.specifiers.count)
-            let arrayPtr = ctx.module.insertAlloca(arrayType, atEntryOf: ctx.currentFunction!)
-
-            for (i, spec) in result.specifiers.enumerated() {
-                let specStr = ctx.stringConstant(spec)
-                let elemPtr = ctx.module.insertGetElementPointer(
-                    of: arrayPtr,
-                    typed: arrayType,
-                    indices: [ctx.i32Type.zero, ctx.i32Type.constant(i)],
-                    at: ip
-                )
-                ctx.module.insertStore(specStr, to: elemPtr, at: ip)
-            }
-
-            ctx.module.insertStore(arrayPtr, to: specsPtr, at: ip)
-        }
-
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.constant(result.specifiers.count), to: countPtr, at: ip)
-
-        return descPtr
-    }
-
-    private func buildObjectDescriptor(_ object: ObjectClause, prefix: String) -> IRValue {
-        let ip = ctx.insertionPoint
-        let descType = types.objectDescriptorType
-
-        let descPtr = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        let baseStr = ctx.stringConstant(object.noun.base)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 0, at: ip
-        )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        let prepPtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 1, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.constant(LLVMTypeMapper.prepositionValue(object.preposition)), to: prepPtr, at: ip)
-
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 2, at: ip
-        )
-
-        let specifiers = object.noun.specifiers
-        if specifiers.isEmpty {
-            ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-        } else {
-            let arrayType = types.pointerArrayType(count: specifiers.count)
-            let arrayPtr = ctx.module.insertAlloca(arrayType, atEntryOf: ctx.currentFunction!)
-
-            for (i, spec) in specifiers.enumerated() {
-                let specStr = ctx.stringConstant(spec)
-                let elemPtr = ctx.module.insertGetElementPointer(
-                    of: arrayPtr,
-                    typed: arrayType,
-                    indices: [ctx.i32Type.zero, ctx.i32Type.constant(i)],
-                    at: ip
-                )
-                ctx.module.insertStore(specStr, to: elemPtr, at: ip)
-            }
-
-            ctx.module.insertStore(arrayPtr, to: specsPtr, at: ip)
-        }
-
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: descPtr, typed: descType, index: 3, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.constant(specifiers.count), to: countPtr, at: ip)
-
-        return descPtr
-    }
-
-    // MARK: - Value Source Binding
-
-    private func bindValueSource(_ valueSource: ValueSource, prefix: String) {
-        let ip = ctx.insertionPoint
-
-        switch valueSource {
-        case .none:
-            // No binding needed
-            break
-
-        case .literal(let literal):
-            bindLiteral(literal)
-
-        case .expression(let expr):
-            // Serialize expression (with constant folding if applicable)
-            let exprJSON = ctx.stringConstant(serializeExpression(expr))
-            _ = ctx.module.insertCall(
-                externals.evaluateExpression,
-                on: [ctx.currentContextVar!, exprJSON],
-                at: ip
-            )
-
-        case .sinkExpression(let expr):
-            // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
-            // Constant folding happens in serializeExpression (GitLab #102)
-            let resultExprName = ctx.stringConstant("_result_expression_")
-            let exprJSON = ctx.stringConstant(serializeExpression(expr))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, resultExprName, exprJSON],
-                at: ip
-            )
-        }
-    }
-
-    // MARK: - Query and Range Modifiers Binding
-
-    private func bindQueryModifiers(_ modifiers: QueryModifiers) {
-        guard !modifiers.isEmpty else { return }
-        let ip = ctx.insertionPoint
-
-        // Bind where clause if present
-        if let whereClause = modifiers.whereClause {
-            // Bind _where_field_
-            let fieldName = ctx.stringConstant("_where_field_")
-            let fieldValue = ctx.stringConstant(whereClause.field)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, fieldName, fieldValue],
-                at: ip
-            )
-
-            // Bind _where_op_
-            let opName = ctx.stringConstant("_where_op_")
-            let opValue = ctx.stringConstant(whereClause.op.rawValue)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, opName, opValue],
-                at: ip
-            )
-
-            // Bind _where_value_ by evaluating the expression
-            let valueName = ctx.stringConstant("_where_value_")
-            let valueJSON = ctx.stringConstant(serializeExpression(whereClause.value))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, valueName, valueJSON],
-                at: ip
-            )
-        }
-
-        // Bind aggregation clause if present
-        if let aggregation = modifiers.aggregation {
-            // Bind _aggregation_type_
-            let typeName = ctx.stringConstant("_aggregation_type_")
-            let typeValue = ctx.stringConstant(aggregation.type.rawValue)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, typeName, typeValue],
-                at: ip
-            )
-
-            // Bind _aggregation_field_ (can be nil for count())
-            let fieldName = ctx.stringConstant("_aggregation_field_")
-            let fieldValue = ctx.stringConstant(aggregation.field ?? "")
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, fieldName, fieldValue],
-                at: ip
-            )
-        }
-
-        // Bind by clause if present (for Split action with regex, or Group action with field name)
-        if let byClause = modifiers.byClause {
-            // Bind _by_pattern_
-            let patternName = ctx.stringConstant("_by_pattern_")
-            let patternValue = ctx.stringConstant(byClause.pattern)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, patternName, patternValue],
-                at: ip
-            )
-
-            // Bind _by_flags_
-            let flagsName = ctx.stringConstant("_by_flags_")
-            let flagsValue = ctx.stringConstant(byClause.flags)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, flagsName, flagsValue],
-                at: ip
-            )
-
-            // Bind _by_field_ for Group action (field-based grouping)
-            if byClause.isFieldName {
-                let fieldName = ctx.stringConstant("_by_field_")
-                let fieldValue = ctx.stringConstant(byClause.pattern)
-                _ = ctx.module.insertCall(
-                    externals.variableBindString,
-                    on: [ctx.currentContextVar!, fieldName, fieldValue],
-                    at: ip
-                )
-            }
-        }
-
-        // Bind default value if present (for optional retrieve with fallback)
-        if let defaultExpr = modifiers.defaultValue {
-            let defaultName = ctx.stringConstant("_default_value_")
-            let defaultJSON = ctx.stringConstant(serializeExpression(defaultExpr))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, defaultName, defaultJSON],
-                at: ip
-            )
-        }
-    }
-
-    private func bindRangeModifiers(_ modifiers: RangeModifiers) {
-        guard !modifiers.isEmpty else { return }
-        let ip = ctx.insertionPoint
-
-        // Bind to clause if present (e.g., date range end) - evaluate expression
-        if let toClause = modifiers.toClause {
-            let toName = ctx.stringConstant("_to_")
-            let toJSON = ctx.stringConstant(serializeExpression(toClause))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, toName, toJSON],
-                at: ip
-            )
-        }
-
-        // Bind with clause if present (e.g., set operations) - evaluate expression
-        if let withClause = modifiers.withClause {
-            let withName = ctx.stringConstant("_with_")
-            let withJSON = ctx.stringConstant(serializeExpression(withClause))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, withName, withJSON],
-                at: ip
-            )
-        }
-    }
-
-    private func bindLiteral(_ literal: LiteralValue) {
-        let ip = ctx.insertionPoint
-        let literalVar = ctx.stringConstant("_literal_")
-
-        switch literal {
-        case .string(let value):
-            let valueStr = ctx.stringConstant(value)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, literalVar, valueStr],
-                at: ip
-            )
-
-        case .integer(let value):
-            _ = ctx.module.insertCall(
-                externals.variableBindInt,
-                on: [ctx.currentContextVar!, literalVar, ctx.i64Type.constant(value)],
-                at: ip
-            )
-
-        case .float(let value):
-            _ = ctx.module.insertCall(
-                externals.variableBindDouble,
-                on: [ctx.currentContextVar!, literalVar, ctx.doubleType.constant(value)],
-                at: ip
-            )
-
-        case .boolean(let value):
-            _ = ctx.module.insertCall(
-                externals.variableBindBool,
-                on: [ctx.currentContextVar!, literalVar, ctx.i32Type.constant(value ? 1 : 0)],
-                at: ip
-            )
-
-        case .null:
-            // Bind null as empty string or skip
-            break
-
-        case .array(let elements):
-            // Serialize array as plain JSON (not expression-wrapped) for variableBindArray
-            let json = serializeLiteralArrayPlain(elements)
-            let jsonStr = ctx.stringConstant(json)
-            _ = ctx.module.insertCall(
-                externals.variableBindArray,
-                on: [ctx.currentContextVar!, literalVar, jsonStr],
-                at: ip
-            )
-
-        case .object(let entries):
-            // Serialize object as plain JSON (not expression-wrapped) for variableBindDict
-            let json = serializeLiteralObjectPlain(entries)
-            let jsonStr = ctx.stringConstant(json)
-            _ = ctx.module.insertCall(
-                externals.variableBindDict,
-                on: [ctx.currentContextVar!, literalVar, jsonStr],
-                at: ip
-            )
-
-        case .regex(let pattern, let flags):
-            // Bind regex as pattern string
-            let regexStr = ctx.stringConstant("/\(pattern)/\(flags)")
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, literalVar, regexStr],
-                at: ip
-            )
-        }
-    }
-
-    // MARK: - Expression Serialization
-
-    private func serializeExpression(_ expr: any AROParser.Expression) -> String {
-        // GitLab #102: Constant folding optimization
-        // If the expression is entirely constant, evaluate it at compile time
-        if ConstantFolder.isConstant(expr), let value = ConstantFolder.evaluate(expr) {
-            return serializeLiteralValue(value)
-        }
-
-        if let literal = expr as? LiteralExpression {
-            return serializeLiteralValue(literal.value)
-        } else if let ref = expr as? VariableRefExpression {
-            return serializeVariableRef(ref)
-        } else if let binary = expr as? BinaryExpression {
-            return """
-            {"$binary":{"op":"\(binary.op.rawValue)","left":\(serializeExpression(binary.left)),"right":\(serializeExpression(binary.right))}}
-            """
-        } else if let unary = expr as? UnaryExpression {
-            return """
-            {"$unary":{"op":"\(unary.op.rawValue)","operand":\(serializeExpression(unary.operand))}}
-            """
-        } else if let interpolated = expr as? InterpolatedStringExpression {
-            return serializeInterpolatedString(interpolated.parts)
-        } else if let array = expr as? ArrayLiteralExpression {
-            return serializeArrayLiteral(array.elements)
-        } else if let map = expr as? MapLiteralExpression {
-            return serializeMapLiteral(map.entries)
-        } else if let member = expr as? MemberAccessExpression {
-            return """
-            {"$member":{"base":\(serializeExpression(member.base)),"member":"\(member.member)"}}
-            """
-        } else if let subscript_ = expr as? SubscriptExpression {
-            return """
-            {"$subscript":{"base":\(serializeExpression(subscript_.base)),"index":\(serializeExpression(subscript_.index))}}
-            """
-        } else if let grouped = expr as? GroupedExpression {
-            return serializeExpression(grouped.expression)
-        } else if let existence = expr as? ExistenceExpression {
-            return """
-            {"$exists":\(serializeExpression(existence.expression))}
-            """
-        } else if let typeCheck = expr as? TypeCheckExpression {
-            return """
-            {"$typeCheck":{"expr":\(serializeExpression(typeCheck.expression)),"type":"\(typeCheck.typeName)"}}
-            """
-        }
-        return "{\"$unknown\":true}"
-    }
-
-    private func serializeLiteralValue(_ lit: LiteralValue) -> String {
-        switch lit {
-        case .string(let s):
-            return "{\"$lit\":\"\(escapeJSON(s))\"}"
-        case .integer(let i):
-            return "{\"$lit\":\(i)}"
-        case .float(let f):
-            return "{\"$lit\":\(f)}"
-        case .boolean(let b):
-            return "{\"$lit\":\(b)}"
-        case .null:
-            return "{\"$lit\":null}"
-        case .array(let elements):
-            return serializeLiteralArray(elements)
-        case .object(let entries):
-            return serializeLiteralObject(entries)
-        case .regex(let pattern, let flags):
-            return "{\"$regex\":{\"pattern\":\"\(escapeJSON(pattern))\",\"flags\":\"\(flags)\"}}"
-        }
-    }
-
-    private func serializeVariableRef(_ ref: VariableRefExpression) -> String {
-        var result = "{\"$var\":\"\(ref.noun.base)\""
-        if !ref.noun.specifiers.isEmpty {
-            let specs = ref.noun.specifiers.map { "\"\($0)\"" }.joined(separator: ",")
-            result += ",\"$specs\":[\(specs)]"
-        }
-        result += "}"
-        return result
-    }
-
-    private func serializeInterpolatedString(_ parts: [StringPart]) -> String {
-        var template = ""
-        for part in parts {
-            switch part {
-            case .literal(let s):
-                template += escapeJSON(s)
-            case .interpolation(let expr):
-                // Serialize the expression and embed it
-                if let varRef = expr as? VariableRefExpression {
-                    // Include specifiers for property access: <base: spec1: spec2>
-                    if varRef.noun.specifiers.isEmpty {
-                        template += "${<\(varRef.noun.base)>}"
-                    } else {
-                        let specifiers = varRef.noun.specifiers.joined(separator: ": ")
-                        template += "${<\(varRef.noun.base): \(specifiers)>}"
-                    }
-                } else {
-                    template += "${...}"
-                }
-            }
-        }
-        return "{\"$interpolated\":\"\(template)\"}"
-    }
-
-    private func serializeArrayLiteral(_ elements: [any AROParser.Expression]) -> String {
-        let serialized = elements.map { serializeExpression($0) }.joined(separator: ",")
-        return "[\(serialized)]"
-    }
-
-    private func serializeMapLiteral(_ entries: [MapEntry]) -> String {
-        let serialized = entries.map { entry in
-            "\"\(escapeJSON(entry.key))\":\(serializeExpression(entry.value))"
-        }.joined(separator: ",")
-        return "{\(serialized)}"
-    }
-
-    private func serializeLiteralArray(_ elements: [LiteralValue]) -> String {
-        let serialized = elements.map { serializeLiteralValue($0) }.joined(separator: ",")
-        return "[\(serialized)]"
-    }
-
-    private func serializeLiteralObject(_ entries: [(String, LiteralValue)]) -> String {
-        let serialized = entries.map { key, value in
-            "\"\(escapeJSON(key))\":\(serializeLiteralValue(value))"
-        }.joined(separator: ",")
-        return "{\(serialized)}"
-    }
-
-    // Plain JSON serialization (no $lit wrappers) for variableBindDict/variableBindArray
-    private func serializeLiteralValuePlain(_ lit: LiteralValue) -> String {
-        switch lit {
-        case .string(let s):
-            return "\"\(escapeJSON(s))\""
-        case .integer(let i):
-            return "\(i)"
-        case .float(let f):
-            return "\(f)"
-        case .boolean(let b):
-            return "\(b)"
-        case .null:
-            return "null"
-        case .array(let elements):
-            return serializeLiteralArrayPlain(elements)
-        case .object(let entries):
-            return serializeLiteralObjectPlain(entries)
-        case .regex(let pattern, let flags):
-            return "\"/\(escapeJSON(pattern))/\(flags)\""
-        }
-    }
-
-    private func serializeLiteralArrayPlain(_ elements: [LiteralValue]) -> String {
-        let serialized = elements.map { serializeLiteralValuePlain($0) }.joined(separator: ",")
-        return "[\(serialized)]"
-    }
-
-    private func serializeLiteralObjectPlain(_ entries: [(String, LiteralValue)]) -> String {
-        let serialized = entries.map { key, value in
-            "\"\(escapeJSON(key))\":\(serializeLiteralValuePlain(value))"
-        }.joined(separator: ",")
-        return "{\(serialized)}"
-    }
-
-    private func escapeJSON(_ s: String) -> String {
-        var result = ""
-        for scalar in s.unicodeScalars {
-            switch scalar.value {
-            case 0x5C: result += "\\\\"          // backslash
-            case 0x22: result += "\\\""          // double quote
-            case 0x0A: result += "\\n"           // newline
-            case 0x0D: result += "\\r"           // carriage return
-            case 0x09: result += "\\t"           // tab
-            case 0x00..<0x20:                    // other control characters (incl. ESC 0x1B)
-                result += String(format: "\\u%04x", scalar.value)
-            default:
-                result += String(scalar)
-            }
-        }
-        return result
-    }
-
     // MARK: - Control Flow (Stubs)
 
     private func generateMatchStatement(_ statement: MatchStatement, index: Int, errorBlock: BasicBlock) {
@@ -1129,7 +629,7 @@ public final class LLVMCodeGenerator {
         let endBlock = ctx.module.appendBlock(named: "\(prefix)_end", to: ctx.currentFunction!)
 
         // Create subject JSON for pattern matching
-        let subjectJSON = ctx.stringConstant(serializeMatchSubject(statement.subject))
+        let subjectJSON = ctx.stringConstant(serializer.serializeMatchSubject(statement.subject))
 
         // Generate code for each case
         for (caseIndex, caseClause) in statement.cases.enumerated() {
@@ -1140,7 +640,7 @@ public final class LLVMCodeGenerator {
             let caseNextBlock = ctx.module.appendBlock(named: "\(casePrefix)_next", to: ctx.currentFunction!)
 
             // Evaluate if pattern matches
-            let patternJSON = ctx.stringConstant(serializePattern(caseClause.pattern))
+            let patternJSON = ctx.stringConstant(serializer.serializePattern(caseClause.pattern))
             let matchResult = ctx.module.insertCall(
                 externals.matchPattern,
                 on: [ctx.currentContextVar!, subjectJSON, patternJSON],
@@ -1182,50 +682,6 @@ public final class LLVMCodeGenerator {
 
         // Continue from end block
         ctx.setInsertionPoint(atEndOf: endBlock)
-    }
-
-    /// Serialize match subject to JSON
-    private func serializeMatchSubject(_ subject: QualifiedNoun) -> String {
-        let specsJSON = subject.specifiers.map { "\"\(escapeJSON($0))\"" }.joined(separator: ",")
-        return "{\"name\":\"\(escapeJSON(subject.base))\",\"specifiers\":[\(specsJSON)]}"
-    }
-
-    /// Serialize a pattern to JSON for match statement
-    private func serializePattern(_ pattern: Pattern) -> String {
-        switch pattern {
-        case .literal(let literal):
-            return "{\"type\":\"literal\",\"value\":\(serializePatternLiteral(literal))}"
-        case .variable(let noun):
-            return "{\"type\":\"variable\",\"name\":\"\(escapeJSON(noun.base))\"}"
-        case .wildcard:
-            return "{\"type\":\"wildcard\"}"
-        case .regex(let patternStr, let flags):
-            return "{\"type\":\"regex\",\"pattern\":\"\(escapeJSON(patternStr))\",\"flags\":\"\(escapeJSON(flags))\"}"
-        }
-    }
-
-    /// Serialize a literal value to raw JSON (for pattern matching)
-    private func serializePatternLiteral(_ literal: LiteralValue) -> String {
-        switch literal {
-        case .string(let s):
-            return "\"\(escapeJSON(s))\""
-        case .integer(let i):
-            return "\(i)"
-        case .float(let f):
-            return "\(f)"
-        case .boolean(let b):
-            return b ? "true" : "false"
-        case .null:
-            return "null"
-        case .array(let elements):
-            let items = elements.map { serializePatternLiteral($0) }.joined(separator: ",")
-            return "[\(items)]"
-        case .object(let entries):
-            let items = entries.map { (key, value) in "\"\(escapeJSON(key))\":\(serializePatternLiteral(value))" }.joined(separator: ",")
-            return "{\(items)}"
-        case .regex(let pattern, let flags):
-            return "{\"pattern\":\"\(escapeJSON(pattern))\",\"flags\":\"\(escapeJSON(flags))\"}"
-        }
     }
 
     // MARK: - Loop Body Variable Collection
@@ -1429,7 +885,7 @@ public final class LLVMCodeGenerator {
 
         // Check filter if present — failed filter jumps to incrBlock (freeing nextElem there)
         if let filter = loop.filter {
-            let filterJSON = ctx.stringConstant(serializeExpression(filter))
+            let filterJSON = ctx.stringConstant(serializer.serializeExpression(filter))
             let filterResult = ctx.module.insertCall(
                 externals.evaluateWhenGuard,
                 on: [ctx.currentContextVar!, filterJSON],
@@ -1573,7 +1029,7 @@ public final class LLVMCodeGenerator {
 
         // Apply filter (if present)
         if let filter = loop.filter {
-            let filterJSON = ctx.stringConstant(serializeExpression(filter))
+            let filterJSON = ctx.stringConstant(serializer.serializeExpression(filter))
             let filterResult = ctx.module.insertCall(
                 externals.evaluateWhenGuard, on: [bodyCtxParam, filterJSON], at: ctx.insertionPoint)
             let passed = ctx.module.insertIntegerComparison(
@@ -1645,10 +1101,10 @@ public final class LLVMCodeGenerator {
         let fromTempName = ctx.stringConstant("_rng_from_\(index)_")
         let toTempName   = ctx.stringConstant("_rng_to_\(index)_")
 
-        let fromJSON = ctx.stringConstant(serializeExpression(loop.from))
+        let fromJSON = ctx.stringConstant(serializer.serializeExpression(loop.from))
         _ = ctx.module.insertCall(externals.evaluateAndBind, on: [ctx.currentContextVar!, fromTempName, fromJSON], at: ctx.insertionPoint)
 
-        let toJSON = ctx.stringConstant(serializeExpression(loop.to))
+        let toJSON = ctx.stringConstant(serializer.serializeExpression(loop.to))
         _ = ctx.module.insertCall(externals.evaluateAndBind, on: [ctx.currentContextVar!, toTempName, toJSON], at: ctx.insertionPoint)
 
         // Extract integer values into stack-allocated i64 storage
@@ -1743,7 +1199,7 @@ public final class LLVMCodeGenerator {
         // === Condition Block ===
         ctx.setInsertionPoint(atEndOf: condBlock)
 
-        let condJSON = ctx.stringConstant(serializeExpression(loop.condition))
+        let condJSON = ctx.stringConstant(serializer.serializeExpression(loop.condition))
         let condResult = ctx.module.insertCall(
             externals.evaluateWhenGuard,
             on: [ctx.currentContextVar!, condJSON],
@@ -2271,7 +1727,7 @@ public final class LLVMCodeGenerator {
                     // Serialize whenCondition as JSON, or pass "" (empty = no condition guard)
                     let conditionJSON: String
                     if let whenCondition = analyzed.featureSet.whenCondition {
-                        conditionJSON = serializeExpression(whenCondition)
+                        conditionJSON = serializer.serializeExpression(whenCondition)
                     } else {
                         conditionJSON = ""
                     }
@@ -2426,7 +1882,7 @@ public final class LLVMCodeGenerator {
                         // Check for when condition on the feature set
                         if let whenCondition = analyzed.featureSet.whenCondition {
                             // Serialize the when condition to JSON
-                            let conditionJSON = serializeExpression(whenCondition)
+                            let conditionJSON = serializer.serializeExpression(whenCondition)
                             let conditionStr = ctx.stringConstant(conditionJSON)
                             _ = ctx.module.insertCall(
                                 externals.registerRepositoryObserverWithGuard,
