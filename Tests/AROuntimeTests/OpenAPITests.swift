@@ -3912,4 +3912,214 @@ struct OpenAPIRuntimeExpressionTests {
     }
 }
 
+// MARK: - OpenAPI Callback Dispatch Tests (ARO-0187)
+
+/// Records every outbound callback request so dispatch behaviour can be
+/// verified without a live network.
+private actor RecordingCallbackInvoker: CallbackHTTPInvoker {
+    struct Sent: Sendable, Equatable {
+        let method: String
+        let url: String
+        let body: Data?
+        let headers: [String: String]
+    }
+
+    private(set) var sent: [Sent] = []
+    private let status: Int
+    private let shouldThrow: Bool
+
+    init(status: Int = 200, shouldThrow: Bool = false) {
+        self.status = status
+        self.shouldThrow = shouldThrow
+    }
+
+    struct InvokerError: Error {}
+
+    func send(method: String, url: String, body: Data?, headers: [String: String]) async throws -> Int {
+        sent.append(Sent(method: method, url: url, body: body, headers: headers))
+        if shouldThrow { throw InvokerError() }
+        return status
+    }
+
+    func recorded() -> [Sent] { sent }
+}
+
+@Suite("OpenAPI Callback Dispatch Tests")
+struct OpenAPICallbackDispatchTests {
+    typealias Dispatcher = OpenAPICallbackDispatcher
+
+    /// An operation with a single `onEvent` callback keyed off the request body,
+    /// plus (optionally) a second static-URL callback.
+    private static func operationJSON(secondCallback: Bool = false) -> String {
+        let second = secondCallback ? """
+        ,
+        "onPing": {
+            "https://static.example/ping": {
+                "get": { "responses": { "200": { "description": "ok" } } }
+            }
+        }
+        """ : ""
+        return """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "CB API", "version": "1.0.0" },
+            "paths": {
+                "/subscribe": {
+                    "post": {
+                        "operationId": "subscribe",
+                        "responses": { "201": { "description": "Created" } },
+                        "callbacks": {
+                            "onEvent": {
+                                "{$request.body#/callbackUrl}": {
+                                    "post": { "responses": { "200": { "description": "ack" } } }
+                                }
+                            }\(second)
+                        }
+                    }
+                }
+            }
+        }
+        """
+    }
+
+    private func subscribeOperation(secondCallback: Bool = false) throws -> ARORuntime.Operation {
+        let json = Self.operationJSON(secondCallback: secondCallback)
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        return try #require(spec.paths["/subscribe"]?.post)
+    }
+
+    private func context(body: String) -> OpenAPIRuntimeExpression.Context {
+        OpenAPIRuntimeExpression.Context(
+            method: "POST",
+            url: "/subscribe",
+            headers: [:],
+            queryParameters: [:],
+            pathParameters: [:],
+            body: body.data(using: .utf8)
+        )
+    }
+
+    @Test("plan resolves the callback URL and method from the request body")
+    func testPlanResolves() throws {
+        let op = try subscribeOperation()
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let plans = Dispatcher.plan(operation: op, context: ctx)
+        #expect(plans.count == 1)
+        let plan = try #require(plans.first)
+        #expect(plan.callbackName == "onEvent")
+        #expect(plan.method == "POST")
+        #expect(plan.resolvedURL == "https://client.example/cb")
+        #expect(plan.resolutionError == nil)
+        #expect(plan.isResolved)
+    }
+
+    @Test("plan reports an unresolvable expression instead of throwing")
+    func testPlanUnresolved() throws {
+        let op = try subscribeOperation()
+        // Body has no callbackUrl field -> the JSON pointer cannot resolve.
+        let ctx = context(body: #"{"other":"value"}"#)
+        let plans = Dispatcher.plan(operation: op, context: ctx)
+        let plan = try #require(plans.first)
+        #expect(plan.resolvedURL == nil)
+        #expect(plan.resolutionError != nil)
+        #expect(!plan.isResolved)
+    }
+
+    @Test("plan on an operation without callbacks is empty")
+    func testPlanNoCallbacks() throws {
+        let op = ARORuntime.Operation(operationId: "noop", responses: ["200": OpenAPIResponse(description: "ok", headers: nil, content: nil, ref: nil)])
+        let plans = Dispatcher.plan(operation: op, context: context(body: "{}"))
+        #expect(plans.isEmpty)
+    }
+
+    @Test("plan orders multiple callbacks deterministically by name")
+    func testPlanDeterministicOrder() throws {
+        let op = try subscribeOperation(secondCallback: true)
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let plans = Dispatcher.plan(operation: op, context: ctx)
+        #expect(plans.map { $0.callbackName } == ["onEvent", "onPing"])
+        #expect(plans.map { $0.method } == ["POST", "GET"])
+    }
+
+    @Test("dispatch fires a resolved callback and reports delivery")
+    func testDispatchDelivers() async throws {
+        let op = try subscribeOperation()
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let invoker = RecordingCallbackInvoker(status: 202)
+
+        let results = await Dispatcher.dispatch(operation: op, context: ctx, invoker: invoker)
+
+        #expect(results.count == 1)
+        let result = try #require(results.first)
+        #expect(result.statusCode == 202)
+        #expect(result.isDelivered)
+        #expect(result.error == nil)
+
+        let sent = await invoker.recorded()
+        #expect(sent.count == 1)
+        #expect(sent.first?.url == "https://client.example/cb")
+        #expect(sent.first?.method == "POST")
+        // Default payload forwards the triggering request body.
+        #expect(sent.first?.body == ctx.body)
+    }
+
+    @Test("dispatch skips an unresolved callback without calling the invoker")
+    func testDispatchSkipsUnresolved() async throws {
+        let op = try subscribeOperation()
+        let ctx = context(body: #"{"other":"value"}"#)
+        let invoker = RecordingCallbackInvoker()
+
+        let results = await Dispatcher.dispatch(operation: op, context: ctx, invoker: invoker)
+
+        let result = try #require(results.first)
+        #expect(result.statusCode == nil)
+        #expect(!result.isDelivered)
+        #expect(result.error != nil)
+
+        let sent = await invoker.recorded()
+        #expect(sent.isEmpty)
+    }
+
+    @Test("dispatch reports a send failure as a non-delivered result")
+    func testDispatchSendFailure() async throws {
+        let op = try subscribeOperation()
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let invoker = RecordingCallbackInvoker(shouldThrow: true)
+
+        let results = await Dispatcher.dispatch(operation: op, context: ctx, invoker: invoker)
+
+        let result = try #require(results.first)
+        #expect(result.statusCode == nil)
+        #expect(!result.isDelivered)
+        #expect(result.error != nil)
+    }
+
+    @Test("dispatch uses an explicit payload over the request body")
+    func testDispatchExplicitPayload() async throws {
+        let op = try subscribeOperation()
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let invoker = RecordingCallbackInvoker()
+        let payload = Data(#"{"forwarded":true}"#.utf8)
+
+        _ = await Dispatcher.dispatch(operation: op, context: ctx, invoker: invoker, payload: payload)
+
+        let sent = await invoker.recorded()
+        #expect(sent.first?.body == payload)
+    }
+
+    @Test("dispatch fires every resolved callback in a multi-callback operation")
+    func testDispatchMultiple() async throws {
+        let op = try subscribeOperation(secondCallback: true)
+        let ctx = context(body: #"{"callbackUrl":"https://client.example/cb"}"#)
+        let invoker = RecordingCallbackInvoker()
+
+        let results = await Dispatcher.dispatch(operation: op, context: ctx, invoker: invoker)
+
+        #expect(results.count == 2)
+        #expect(results.allSatisfy { $0.isDelivered })
+        let sent = await invoker.recorded()
+        #expect(Set(sent.map { $0.url }) == ["https://client.example/cb", "https://static.example/ping"])
+    }
+}
+
 #endif  // !os(Windows)

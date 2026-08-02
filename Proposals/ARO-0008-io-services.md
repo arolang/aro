@@ -469,10 +469,28 @@ paths:
                 '200': { description: ack }
 ```
 
-ARO **parses** callback definitions into the OpenAPI model. Firing the outbound
-request is currently left to explicit, event-driven ARO code (emit an event and
-have a handler use the HTTP client — see §3), which fits ARO's model better than
-implicit side effects. Automatic callback triggering is a documented follow-up.
+ARO **parses** callback definitions into the OpenAPI model and provides a
+**callback dispatcher** that resolves each callback's URL from the triggering
+request (via the runtime-expression evaluator below) and fires the out-of-band
+request through the standard ARO HTTP client. Dispatch is a two-step,
+independently testable process:
+
+1. **Plan** — a pure resolution step that turns an operation's Callback Objects
+   into a deterministic list of `(callback name, expression, HTTP method,
+   resolved URL)` entries. A callback whose expression cannot be resolved is
+   reported with a diagnostic rather than aborting the batch, so one bad URL
+   never blocks the others (ARO's "happy case" philosophy).
+2. **Dispatch** — sends each planned request through a `CallbackHTTPInvoker`
+   seam. The production seam is the ARO HTTP client; tests inject a recording
+   mock so firing is verified without a live network.
+
+Outbound firing is **opt-in**: the HTTP request path only dispatches callbacks
+when a runtime injects a callback invoker into the OpenAPI handler. Left unset
+(the default), callbacks are parsed and inspectable on the model but never
+fired, so the request path performs no implicit network side effects. When
+enabled, callbacks for a matched operation are dispatched fire-and-forget after
+the operation event is published, forwarding the triggering request body as the
+callback payload by default.
 
 **Supported runtime-expression subset.** ARO does not implement the full
 OpenAPI runtime-expression grammar. The evaluator resolves this common subset,
