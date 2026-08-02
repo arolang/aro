@@ -13,10 +13,26 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
     private let eventBus: EventBus
     private let spec: OpenAPISpec
 
-    public init(routeRegistry: OpenAPIRouteRegistry, eventBus: EventBus) {
+    /// Optional seam for firing outbound OpenAPI callbacks (ARO-0187).
+    ///
+    /// Outbound callbacks are **off by default**: unless a runtime injects an
+    /// invoker here, a matched operation's `callbacks` are parsed and available
+    /// on the model but never fired, so the request path makes no surprise
+    /// network calls. When an invoker is present, the callbacks declared on the
+    /// matched operation are dispatched fire-and-forget after the operation
+    /// event is published, resolving each callback URL against the triggering
+    /// request via ``OpenAPICallbackDispatcher``.
+    private let callbackInvoker: CallbackHTTPInvoker?
+
+    public init(
+        routeRegistry: OpenAPIRouteRegistry,
+        eventBus: EventBus,
+        callbackInvoker: CallbackHTTPInvoker? = nil
+    ) {
         self.routeRegistry = routeRegistry
         self.eventBus = eventBus
         self.spec = routeRegistry.spec
+        self.callbackInvoker = callbackInvoker
     }
 
     /// Handle an incoming HTTP request using OpenAPI routing
@@ -203,6 +219,29 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             body: request.body
         )
         eventBus.publish(legacyEvent)
+
+        // Fire any outbound OpenAPI callbacks declared on the matched operation
+        // (ARO-0187). This runs only when a runtime has opted in by injecting a
+        // callback invoker; otherwise callbacks are inert. Dispatch is
+        // fire-and-forget so the callback round-trip never blocks the response.
+        if let invoker = callbackInvoker, match.operation.callbacks != nil {
+            let exprContext = OpenAPIRuntimeExpression.Context(
+                method: request.method,
+                url: request.path,
+                headers: request.headers,
+                queryParameters: enrichedQueryParams,
+                pathParameters: match.pathParameters,
+                body: request.body
+            )
+            let operation = match.operation
+            Task.detached {
+                await OpenAPICallbackDispatcher.dispatch(
+                    operation: operation,
+                    context: exprContext,
+                    invoker: invoker
+                )
+            }
+        }
 
         return HTTPResponse(
             statusCode: 200,
