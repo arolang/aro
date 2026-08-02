@@ -96,6 +96,20 @@ struct CPluginString {
 /// // Ownership: caller must free the returned pointer via aro_plugin_free().
 /// char* aro_object_list(const char* pattern);
 /// ```
+///
+/// Sendable-safety: the mutable stored properties (`libraryHandle`,
+/// `pluginInfo`, `registry`, `actionDescriptors`, the resolved C function
+/// pointers, `eventSubscriptions`, `systemObjects`) are all populated during the
+/// one-time setup phase — `init` / `loadLibrary` / `loadPluginInfo`, called
+/// before the host is registered and invoked — and are only read during
+/// `execute` / `executeQualifier`. There is no post-load mutation path, so the
+/// concurrent readers of a loaded host never race a writer. The type is
+/// `@unchecked Sendable` because it stores non-Sendable C function pointers and
+/// raw handles that the compiler cannot reason about.
+///
+/// Caveat (documented, not enforced): the shared `encoder`/`decoder` below are
+/// reference types reused across calls; correctness relies on a given host
+/// instance not being invoked concurrently. See their declaration.
 public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Plugin name
     public let pluginName: String
@@ -160,6 +174,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     private var systemObjects: [SystemObjectDescriptor] = []
 
     /// Invoke callback: set by the runtime so plugins can call ARO feature sets
+    ///
+    /// Sendable-safety: installed exactly once via `setInvokeCallback` at runtime
+    /// bootstrap, before any plugin executes, and only read afterward (the
+    /// `execute` snake_case path reads it). Write-once / read-only, so no locking
+    /// is required.
     private nonisolated(unsafe) static var invokeCallback: ((_ featureSet: String, _ inputJSON: String) -> String)?
 
     /// Qualifier registrations from this plugin.
@@ -172,8 +191,15 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         set { registry.qualifierRegistrations = newValue }
     }
 
-    /// Reused encoder/decoder — safe because NativePluginHost is @unchecked Sendable
-    /// and qualifier calls are serialised through the plugin host.
+    /// Reused encoder/decoder.
+    ///
+    /// Sendable-safety: `JSONEncoder`/`JSONDecoder` are reference types. Reusing a
+    /// single instance is sound only while calls into a given host are not
+    /// concurrent — which holds because a host is loaded once and its
+    /// `execute`/`executeQualifier` are driven serially per action statement.
+    /// This is an assumption on the caller, NOT enforced here; if plugin
+    /// invocation ever becomes concurrent per-host these must move behind a lock
+    /// or become per-call locals. Tracked in the #314 audit.
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -1535,6 +1561,11 @@ struct DeprecationDescriptor: Sendable {
 // MARK: - Native Plugin Action Wrapper
 
 /// Wrapper for native plugin action execution
+///
+/// Sendable-safety: every stored property is `let`, immutable after `init`. It
+/// holds no mutable state of its own; `host` is a `NativePluginHost`, whose own
+/// Sendable contract is documented on that type. `@unchecked` is needed only
+/// because `host` and `descriptor` are not statically Sendable.
 final class NativePluginActionWrapper: @unchecked Sendable {
     let pluginName: String
     let actionName: String

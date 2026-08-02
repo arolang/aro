@@ -8,13 +8,35 @@ import AROParser
 
 /// Concrete implementation of ExecutionContext
 ///
-/// RuntimeContext is an actor, so its internal serial executor replaces the
-/// old NSLock. All protocol methods are `nonisolated` so they can be called
-/// synchronously from outside the actor context; they access storage marked
-/// `nonisolated(unsafe)` — safe because a single FeatureSetExecutor drives
-/// one RuntimeContext serially, never concurrently.
+/// ## Sendable-safety of the `nonisolated(unsafe)` storage
+///
+/// RuntimeContext is an actor, but every `ExecutionContext` protocol method is
+/// `nonisolated` so actions can call it synchronously without hopping onto the
+/// actor executor. Those methods therefore touch the mutable stored properties
+/// below directly, which is why each is marked `nonisolated(unsafe)` rather than
+/// relying on actor isolation.
+///
+/// The invariant that makes this sound: **exactly one flow of control mutates a
+/// given RuntimeContext instance at a time.** A single `FeatureSetExecutor`
+/// drives one context through its statements serially — even though action work
+/// runs on `ActionTaskExecutor` and `await` resumptions hop OS threads, the
+/// mutations of *this* instance are strictly ordered and never overlap.
+/// Genuinely concurrent regions (parallel `For each`, template rendering) do NOT
+/// share this instance: they operate on their own child via
+/// `createChild(...)` / `createTemplateContext()`, mutating only the child and
+/// reading the parent read-only.
+///
+/// This contract is enforced in DEBUG builds by `ExclusivityChecker` (see the
+/// type at the bottom of this file and the `exclusivity` field): every mutating
+/// entry point runs inside `withExclusiveMutation { … }`, which traps if a
+/// second flow mutates the same instance concurrently. All the
+/// `nonisolated(unsafe)` fields below share this single mechanism.
 public actor RuntimeContext: ExecutionContext {
     // MARK: - Properties
+
+    // Sendable-safety for all `nonisolated(unsafe)` fields in this type: the
+    // single-driver-per-instance invariant documented on the type above, checked
+    // in DEBUG by `ExclusivityChecker`. Not individually locked by design.
 
     /// Variable storage (now using TypedValue for type preservation)
     nonisolated(unsafe) private var variables: [String: TypedValue] = [:]
@@ -891,6 +913,11 @@ extension RuntimeContext {
 /// (no `await` inside it), the owning thread is stable for the whole
 /// section, so cross-thread overlap can only mean a genuine concurrent
 /// driver — never a legitimate cooperative-pool thread hop.
+///
+/// Sendable-safety: all mutable state (`owner`, `depth`) is read and written
+/// only under `lock` (an `NSLock`) in `enter()` / `leave()`; nothing else
+/// touches it. The class is `@unchecked Sendable` purely because `pthread_t` is
+/// not itself Sendable.
 final class ExclusivityChecker: @unchecked Sendable {
     private let lock = NSLock()
     private var owner: pthread_t?
