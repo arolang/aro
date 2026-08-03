@@ -149,10 +149,29 @@ public struct Server: Sendable, Codable {
 
     /// Returns the URL with all variable placeholders replaced by their default values
     public var resolvedURL: String {
+        resolvedURL(overrides: [:])
+    }
+
+    /// Returns the URL with each `{name}` placeholder substituted (ARO-0195).
+    ///
+    /// A value from `overrides` wins when present; otherwise the Server
+    /// Variable's `default` is used. Overrides that are not declared in the
+    /// variable's `enum` are ignored and the default is used instead, matching
+    /// the OpenAPI constraint that a supplied value must be a member of `enum`.
+    public func resolvedURL(overrides: [String: String]) -> String {
         guard let variables = variables else { return url }
         var resolved = url
         for (name, variable) in variables {
-            resolved = resolved.replacingOccurrences(of: "{\(name)}", with: variable.default)
+            var value = variable.default
+            if let override = overrides[name] {
+                if let allowed = variable.enum, !allowed.contains(override) {
+                    // Invalid selection — fall back to the default value.
+                    value = variable.default
+                } else {
+                    value = override
+                }
+            }
+            resolved = resolved.replacingOccurrences(of: "{\(name)}", with: value)
         }
         return resolved
     }
@@ -170,6 +189,12 @@ public struct PathItem: Sendable, Codable {
     public let options: Operation?
     public let trace: Operation?
     public let parameters: [Parameter]?
+    /// PathItem-level `servers` override (ARO-0195).
+    ///
+    /// When present, these servers override the root-level `servers` for every
+    /// operation on this path (unless an operation declares its own `servers`).
+    /// Stored so they are available for documentation and future proxy support.
+    public let servers: [Server]?
 
     public var allOperations: [(method: String, operation: Operation)] {
         var ops: [(String, Operation)] = []
@@ -205,6 +230,12 @@ public struct Operation: Sendable, Codable {
     public let callbacks: [String: Callback]?
     /// Operation-level External Documentation Object
     public let externalDocs: ExternalDocumentation?
+    /// Operation-level `servers` override (ARO-0195).
+    ///
+    /// When present, these servers override both the PathItem-level and
+    /// root-level `servers` for this specific operation. Stored so they are
+    /// available for documentation and future proxy support.
+    public let servers: [Server]?
 
     public init(
         operationId: String? = nil,
@@ -217,7 +248,8 @@ public struct Operation: Sendable, Codable {
         deprecated: Bool? = nil,
         security: [[String: [String]]]? = nil,
         callbacks: [String: Callback]? = nil,
-        externalDocs: ExternalDocumentation? = nil
+        externalDocs: ExternalDocumentation? = nil,
+        servers: [Server]? = nil
     ) {
         self.operationId = operationId
         self.summary = summary
@@ -230,6 +262,7 @@ public struct Operation: Sendable, Codable {
         self.security = security
         self.callbacks = callbacks
         self.externalDocs = externalDocs
+        self.servers = servers
     }
 }
 

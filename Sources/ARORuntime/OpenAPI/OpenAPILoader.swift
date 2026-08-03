@@ -121,10 +121,61 @@ extension OpenAPILoadError: CustomStringConvertible {
 // MARK: - OpenAPI Spec Extensions
 
 extension OpenAPISpec {
-    /// Extract port from the first server URL
+    /// Environment variable used to select which root server ARO binds when a
+    /// spec declares multiple `servers` (ARO-0195). Accepts a zero-based index
+    /// (e.g. `1`) or a server `description` string. When unset or unmatched the
+    /// first server is used, preserving single-server behaviour.
+    public static let serverSelectionEnvVar = "ARO_OPENAPI_SERVER"
+
+    /// The server-selection value taken from the environment, if any.
+    public static var serverSelectionFromEnvironment: String? {
+        let value = ProcessInfo.processInfo.environment[serverSelectionEnvVar]
+        return (value?.isEmpty == false) ? value : nil
+    }
+
+    /// Selects the root-level server to bind (ARO-0195).
+    ///
+    /// - Parameter selection: `nil`/empty → the first server (default).
+    ///   An integer string selects by zero-based index; any other string
+    ///   matches a server `description`. Unmatched selections fall back to
+    ///   the first server.
+    public func selectedServer(selection: String? = nil) -> Server? {
+        guard let servers = servers, !servers.isEmpty else { return nil }
+        guard let selection = selection, !selection.isEmpty else { return servers.first }
+        if let index = Int(selection) {
+            if index >= 0 && index < servers.count { return servers[index] }
+            return servers.first
+        }
+        if let match = servers.first(where: { $0.description == selection }) {
+            return match
+        }
+        return servers.first
+    }
+
+    /// The root-level server ARO binds, honouring the environment selection.
+    public var effectiveRootServer: Server? {
+        selectedServer(selection: OpenAPISpec.serverSelectionFromEnvironment)
+    }
+
+    /// Effective servers for a path+operation, applying OpenAPI precedence:
+    /// operation-level > path-level > root-level (ARO-0195). Returns `nil`
+    /// only when no servers are declared at any level.
+    public func effectiveServers(path: String, operation: Operation) -> [Server]? {
+        if let opServers = operation.servers, !opServers.isEmpty { return opServers }
+        if let pathServers = paths[path]?.servers, !pathServers.isEmpty { return pathServers }
+        return servers
+    }
+
+    /// Effective servers for an operation looked up by its `operationId`.
+    public func effectiveServers(forOperationId operationId: String) -> [Server]? {
+        guard let (path, _, operation) = operation(byId: operationId) else { return servers }
+        return effectiveServers(path: path, operation: operation)
+    }
+
+    /// Extract port from the selected server URL (variables resolved)
     /// e.g., "http://localhost:8000" → 8000
     public var serverPort: Int? {
-        guard let serverURL = servers?.first?.resolvedURL,
+        guard let serverURL = effectiveRootServer?.resolvedURL,
               let url = URL(string: serverURL),
               let port = url.port else {
             return nil
@@ -132,9 +183,9 @@ extension OpenAPISpec {
         return port
     }
 
-    /// Extract host from the first server URL
+    /// Extract host from the selected server URL (variables resolved)
     public var serverHost: String? {
-        guard let serverURL = servers?.first?.resolvedURL,
+        guard let serverURL = effectiveRootServer?.resolvedURL,
               let url = URL(string: serverURL) else {
             return nil
         }

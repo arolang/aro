@@ -28,6 +28,16 @@ public final class OpenAPISpecService: Sendable {
         spec.serverHost
     }
 
+    /// The root server ARO binds, honouring `ARO_OPENAPI_SERVER` selection (ARO-0195).
+    public var selectedServer: Server? {
+        spec.effectiveRootServer
+    }
+
+    /// The resolved URL (variables substituted) of the selected root server.
+    public var selectedServerURL: String? {
+        spec.effectiveRootServer?.resolvedURL
+    }
+
     /// Get the API title
     public var title: String? {
         spec.info.title
