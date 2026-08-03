@@ -27,11 +27,31 @@ esac
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Self-healing `swift build`. On macOS a debug->release switch can leave a
+# stale `_NumericsShims` module that makes the release build fail with
+# "missing required module '_NumericsShims'" (issue #295). Detect that one
+# failure, clear the stale release artifacts, and retry once. Config-agnostic:
+# debug builds and unrelated failures pass straight through. (`set -o pipefail`
+# from the script header makes the pipeline report swift's exit, not tee's.)
+swift_build() {
+    local log
+    log="$(mktemp)"
+    if swift build "$@" 2>&1 | tee "$log"; then rm -f "$log"; return 0; fi
+    if grep -q _NumericsShims "$log"; then
+        echo "[solaro-app] stale _NumericsShims release module (#295); clearing and retrying once…" >&2
+        rm -f "$log"
+        local rel; rel="$(swift build -c release --show-bin-path 2>/dev/null || true)"
+        [ -n "$rel" ] && rm -rf "$rel"
+        swift build "$@"; return $?
+    fi
+    rm -f "$log"; return 1
+}
+
 echo "[solaro-app] swift build -c $CONFIG --product SolaroApp"
-swift build -c "$CONFIG" --product SolaroApp
+swift_build -c "$CONFIG" --product SolaroApp
 
 echo "[solaro-app] swift build -c $CONFIG --product solaro"
-swift build -c "$CONFIG" --product solaro
+swift_build -c "$CONFIG" --product solaro
 
 # Also rebuild the `aro` CLI so SOLARO's runtime resolver
 # (Console.resolveAroBinary) finds a binary that matches the
@@ -40,13 +60,13 @@ swift build -c "$CONFIG" --product solaro
 # a stale `aro` from a previous build and the flag fails with
 # "Unknown option" — issue #283.
 echo "[solaro-app] swift build -c $CONFIG --product aro"
-swift build -c "$CONFIG" --product aro
+swift_build -c "$CONFIG" --product aro
 
 # Build the out-of-process XPC runtime host (#282 phase 3). The
 # SOLARO-side proxy walks up from the project root looking for
 # `.build/<config>/AROXPCService` — same resolver shape as `aro`.
 echo "[solaro-app] swift build -c $CONFIG --product AROXPCService"
-swift build -c "$CONFIG" --product AROXPCService
+swift_build -c "$CONFIG" --product AROXPCService
 
 # `aro ask`'s native MLX backend looks for `mlx.metallib` alongside the
 # binary. SwiftPM doesn't compile .metal sources, so we shell out to the
