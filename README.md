@@ -326,6 +326,14 @@ swift build -c release
 
 The binary is at `.build/release/aro`.
 
+> **Release build after a debug build?** On macOS, a `swift build -c release`
+> that follows a `swift build` (debug) can intermittently fail with
+> `error: missing required module '_NumericsShims'` (issue #295). If you hit
+> it, run `make release` (or `make aro`) — it clears the stale release
+> artifacts and retries once. `make clean-release` does the clear by hand.
+> A clean checkout and CI are unaffected, so plain `swift build -c release`
+> works everywhere else.
+
 If LLVM is installed in a non-standard location, set the `LLVM_PATH` environment variable:
 
 ```bash
