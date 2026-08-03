@@ -33,6 +33,16 @@ final class AROHoverTextView: STTextView {
     /// in the breakpoints binding.
     var onGutterClick: ((Int) -> Void)?
 
+    /// Callback invoked when the user right-clicks / Control-clicks the
+    /// gutter on a 1-indexed source line. The SwiftUI wrapper opens the
+    /// "Edit Breakpoint…" sheet for that line (#259).
+    var onGutterAltClick: ((Int) -> Void)?
+
+    /// Right-mouse-down monitor mirroring `clickMonitor`. STGutterView
+    /// swallows some mouse events on existing markers, so we listen at
+    /// the app level and resolve the gutter line ourselves.
+    private var rightClickMonitor: Any?
+
     private var trackingAreaCache: NSTrackingArea?
     /// Click monitor that fires for every left-mouse-down anywhere
     /// in the app. We use it because STGutterView has its own
@@ -178,6 +188,10 @@ final class AROHoverTextView: STTextView {
             NSEvent.removeMonitor(clickMonitor)
             self.clickMonitor = nil
         }
+        if let rightClickMonitor {
+            NSEvent.removeMonitor(rightClickMonitor)
+            self.rightClickMonitor = nil
+        }
         super.removeFromSuperview()
     }
 
@@ -193,35 +207,57 @@ final class AROHoverTextView: STTextView {
                 return event
             }
         }
+        if rightClickMonitor == nil {
+            rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown]) { [weak self] event in
+                if self?.handleRightMouseDown(event) == true { return nil }
+                return event
+            }
+        }
     }
 
     /// Forward gutter clicks to the SwiftUI layer so breakpoints can
     /// toggle. Adds new breakpoints when clicking empty gutter
     /// rows; removes existing ones when clicking the red dot.
     private func handleLeftMouseDown(_ event: NSEvent) {
+        guard let line = gutterLine(for: event) else { return }
+        onGutterClick?(line)
+    }
+
+    /// Right-click / Control-click in the gutter opens the
+    /// "Edit Breakpoint…" sheet (#259). Returns `true` when the event
+    /// was in the gutter and consumed, so the monitor can swallow it
+    /// (otherwise the editor's own context menu would also appear).
+    private func handleRightMouseDown(_ event: NSEvent) -> Bool {
+        guard let line = gutterLine(for: event) else { return false }
+        onGutterAltClick?(line)
+        return true
+    }
+
+    /// Map a mouse event to the 1-indexed source line under it, but
+    /// only when the click landed inside the line-number gutter.
+    /// Returns nil for clicks outside the gutter (or in another
+    /// window). The gutter shares its vertical metrics with the text
+    /// view, so we map y → layout fragment → line.
+    private func gutterLine(for event: NSEvent) -> Int? {
         guard
             let window, event.window == window,
             let gutter = gutterView
-        else { return }
+        else { return nil }
         let pointInGutter = gutter.convert(event.locationInWindow, from: nil)
-        guard gutter.bounds.contains(pointInGutter) else { return }
+        guard gutter.bounds.contains(pointInGutter) else { return nil }
 
-        // Find the source line under the click. The gutter shares
-        // its vertical metrics with the text view, so we can use
-        // the textLayoutManager to map y → fragment → line.
         let pointInTextView = gutter.convert(pointInGutter, to: self)
         let probe = CGPoint(x: 4, y: pointInTextView.y)
         guard let fragment = textLayoutManager.textLayoutFragment(for: probe)
-        else { return }
+        else { return nil }
         let elementStart = fragment.textElement?.elementRange?.location
             ?? fragment.rangeInElement.location
         let docStart = textContentManager.documentRange.location
         guard let prefixRange = NSTextRange(location: docStart, end: elementStart)
-        else { return }
+        else { return nil }
         let prefix = textContentManager
             .attributedString(in: prefixRange)?.string ?? ""
-        let line = prefix.filter { $0.isNewline }.count + 1
-        onGutterClick?(line)
+        return prefix.filter { $0.isNewline }.count + 1
     }
 
     /// Cursor moved somewhere in this process. Filter by whether
@@ -740,6 +776,15 @@ struct AROCodeEditor: NSViewRepresentable {
     /// Breakpoint source lines (1-indexed). Toggled by clicking the
     /// gutter; persisted to the file's LayoutSidecar by the parent.
     @Binding var breakpoints: Set<Int>
+    /// Per-line breakpoint refinements (conditions / logpoints, #259),
+    /// keyed by 1-indexed line. Drives the gutter marker style:
+    /// logpoints render as a filled diamond, conditional breakpoints
+    /// as a hollow diamond, plain breakpoints as the default marker.
+    var breakpointConfigs: [Int: LayoutSidecar.BreakpointConfig] = [:]
+    /// Invoked when the user right-clicks (or Control-clicks) a gutter
+    /// line — the parent opens the "Edit Breakpoint…" sheet for that
+    /// line (#259).
+    var onEditBreakpoint: ((Int) -> Void)? = nil
     /// 1-indexed source line where the debugger is currently paused.
     /// When non-nil, that line gets a tinted background so the
     /// caller sees "execution is stopped here".
@@ -833,6 +878,11 @@ struct AROCodeEditor: NSViewRepresentable {
         }
         textView.onGutterClick = { [weak coordinator = context.coordinator] line in
             coordinator?.parent.toggleBreakpoint(line, in: textView)
+        }
+        // Right-click / Control-click a gutter line → open the
+        // "Edit Breakpoint…" sheet for that line (#259).
+        textView.onGutterAltClick = { [weak coordinator = context.coordinator] line in
+            coordinator?.parent.onEditBreakpoint?(line)
         }
         // #272: ghost text plumbing.
         textView.ghostTextEnabled = ghostTextEnabled
@@ -1006,10 +1056,13 @@ struct AROCodeEditor: NSViewRepresentable {
             textView.scrollRangeToVisible(clamped)
         }
 
-        // Re-render breakpoint markers whenever the binding changes.
-        if context.coordinator.lastRenderedBreakpoints != breakpoints {
+        // Re-render breakpoint markers whenever the line set OR the
+        // per-line config (condition / logpoint style, #259) changes.
+        if context.coordinator.lastRenderedBreakpoints != breakpoints
+            || context.coordinator.lastRenderedBreakpointConfigs != breakpointConfigs {
             renderBreakpoints(on: textView)
             context.coordinator.lastRenderedBreakpoints = breakpoints
+            context.coordinator.lastRenderedBreakpointConfigs = breakpointConfigs
         }
         // Same idea for the test-result chips. Breakpoints win the
         // line if both want it — we render breakpoints last in
@@ -1332,7 +1385,26 @@ struct AROCodeEditor: NSViewRepresentable {
             gutter.removeMarker(lineNumber: line)
         }
         for line in breakpoints {
-            gutter.addMarker(STGutterMarker(lineNumber: line))
+            let config = breakpointConfigs[line]
+            switch config?.kind {
+            case .logpoint:
+                // Filled diamond — traces without pausing (#259).
+                let view = BreakpointMarkerView(
+                    style: .logpoint,
+                    tooltip: config?.logMessage.map { "Logpoint: \($0)" }
+                        ?? "Logpoint")
+                gutter.addMarker(STGutterMarker(lineNumber: line, view: view))
+            case .regular where !(config?.condition?.isEmpty ?? true):
+                // Hollow diamond — a conditional (still pausing)
+                // breakpoint.
+                let view = BreakpointMarkerView(
+                    style: .conditional,
+                    tooltip: "Conditional: \(config?.condition ?? "")")
+                gutter.addMarker(STGutterMarker(lineNumber: line, view: view))
+            default:
+                // Plain regular breakpoint — default marker.
+                gutter.addMarker(STGutterMarker(lineNumber: line))
+            }
         }
     }
 
@@ -1400,6 +1472,10 @@ struct AROCodeEditor: NSViewRepresentable {
         /// sidecar reload) without re-rendering on every body
         /// re-evaluation.
         var lastRenderedBreakpoints: Set<Int> = []
+        /// Companion to `lastRenderedBreakpoints` — tracks the per-line
+        /// config so a condition/logpoint edit re-stamps the gutter
+        /// even when the line set itself is unchanged (#259).
+        var lastRenderedBreakpointConfigs: [Int: LayoutSidecar.BreakpointConfig] = [:]
         /// Last rendered set of test-result markers. Used by
         /// updateNSView to skip the gutter render when the
         /// test status hasn't actually changed since the last pass.

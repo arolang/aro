@@ -621,6 +621,7 @@ struct WorkspaceView: View {
                         consoleProcess.startDebug(
                             project: project,
                             breakpointsByFile: collectBreakpoints(),
+                            breakpointConfigs: collectBreakpointConfigs(),
                             parameters: values
                         )
                     }
@@ -1357,7 +1358,8 @@ struct WorkspaceView: View {
             case .debug:
                 consoleProcess.startDebug(
                     project: project,
-                    breakpointsByFile: collectBreakpoints()
+                    breakpointsByFile: collectBreakpoints(),
+                    breakpointConfigs: collectBreakpointConfigs()
                 )
             }
         } else {
@@ -1838,6 +1840,24 @@ struct WorkspaceView: View {
             let sidecar = LayoutSidecar.load(for: url)
             if !sidecar.breakpoints.isEmpty {
                 out[url] = sidecar.breakpoints
+            }
+        }
+        return out
+    }
+
+    /// Per-line breakpoint refinements (conditions / logpoints, #259),
+    /// flattened across every source file by line number to match the
+    /// runtime's file-agnostic line matching (the same flattening
+    /// `Console` applies to `breakpointsByFile`). When two files share a
+    /// line number with different configs the last one wins — an
+    /// accepted limitation of the line-only bridge.
+    private func collectBreakpointConfigs() -> [Int: LayoutSidecar.BreakpointConfig] {
+        guard let model = controller.model else { return [:] }
+        var out: [Int: LayoutSidecar.BreakpointConfig] = [:]
+        for url in model.sourceFiles {
+            let sidecar = LayoutSidecar.load(for: url)
+            for (lineKey, config) in sidecar.breakpointConfigs {
+                if let line = Int(lineKey) { out[line] = config }
             }
         }
         return out

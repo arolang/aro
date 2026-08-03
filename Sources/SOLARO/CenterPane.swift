@@ -57,6 +57,43 @@ struct CenterPaneView: View {
                               tick: controller.fileReloadTick)) {
             loadCurrentFileIntoCache()
         }
+        // "Edit Breakpoint…" sheet (#259) — opened by right-clicking a
+        // gutter line. Only meaningful for a line that already carries a
+        // breakpoint marker.
+        .sheet(item: $editingBreakpoint) { editing in
+            EditBreakpointSheet(
+                line: editing.id,
+                config: breakpointConfigsBinding.wrappedValue[editing.id]
+                    ?? .init(),
+                hasBreakpoint: breakpointsBinding.wrappedValue.contains(editing.id),
+                onSave: { newConfig in
+                    applyBreakpointEdit(line: editing.id, config: newConfig)
+                    editingBreakpoint = nil
+                },
+                onCancel: { editingBreakpoint = nil }
+            )
+        }
+    }
+
+    /// Line currently being edited in the "Edit Breakpoint…" sheet.
+    /// Wrapped so it is `Identifiable` for `.sheet(item:)`.
+    private struct EditingBreakpoint: Identifiable { let id: Int }
+    @State private var editingBreakpoint: EditingBreakpoint? = nil
+
+    /// Persist an edit from the sheet: writes the per-line config and
+    /// ensures the line has a breakpoint marker (editing implies the
+    /// user wants one there).
+    private func applyBreakpointEdit(line: Int,
+                                     config: LayoutSidecar.BreakpointConfig) {
+        guard let url = controller.currentFile else { return }
+        var sidecar = LayoutSidecar.load(for: url)
+        sidecar.breakpoints.insert(line)
+        sidecar.setBreakpointConfig(config, forLine: line)
+        try? sidecar.save(for: url)
+        // The caller clears `editingBreakpoint` right after this, which
+        // re-evaluates the pane body → the editor re-reads the config
+        // binding (fresh from disk) → `updateNSView` re-stamps the
+        // gutter for the changed line.
     }
 
     /// Composite id for the text-cache load task: reload when the
@@ -238,6 +275,8 @@ struct CenterPaneView: View {
                     currentLine: currentLineBinding,
                     currentColumn: currentColumnBinding,
                     breakpoints: breakpointsBinding,
+                    breakpointConfigs: breakpointConfigsBinding.wrappedValue,
+                    onEditBreakpoint: { editingBreakpoint = EditingBreakpoint(id: $0) },
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),
@@ -340,6 +379,34 @@ struct CenterPaneView: View {
                 guard let url = controller.currentFile else { return }
                 var sidecar = LayoutSidecar.load(for: url)
                 sidecar.breakpoints = newValue
+                try? sidecar.save(for: url)
+            }
+        )
+    }
+
+    /// Binding to the current file's per-line breakpoint refinements
+    /// (conditions / logpoints, #259), keyed by 1-indexed line. Reads
+    /// from the same sidecar as `breakpointsBinding`; the editor uses
+    /// it to pick each gutter marker's style.
+    private var breakpointConfigsBinding: Binding<[Int: LayoutSidecar.BreakpointConfig]> {
+        Binding(
+            get: {
+                guard let url = controller.currentFile else { return [:] }
+                let sidecar = LayoutSidecar.load(for: url)
+                var out: [Int: LayoutSidecar.BreakpointConfig] = [:]
+                for (key, config) in sidecar.breakpointConfigs {
+                    if let line = Int(key) { out[line] = config }
+                }
+                return out
+            },
+            set: { newValue in
+                guard let url = controller.currentFile else { return }
+                var sidecar = LayoutSidecar.load(for: url)
+                var configs: [String: LayoutSidecar.BreakpointConfig] = [:]
+                for (line, config) in newValue where !config.isPlainRegular {
+                    configs[String(line)] = config
+                }
+                sidecar.breakpointConfigs = configs
                 try? sidecar.save(for: url)
             }
         )
@@ -1239,6 +1306,8 @@ struct CenterPaneView: View {
                     currentLine: currentLineBinding,
                     currentColumn: currentColumnBinding,
                     breakpoints: breakpointsBinding,
+                    breakpointConfigs: breakpointConfigsBinding.wrappedValue,
+                    onEditBreakpoint: { editingBreakpoint = EditingBreakpoint(id: $0) },
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),

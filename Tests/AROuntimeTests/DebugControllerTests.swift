@@ -298,4 +298,79 @@ final class DebugControllerTests: XCTestCase {
         }
         XCTAssertEqual(breakpointPauses.count, 1, "expected exactly one conditional bp hit on line 3")
     }
+
+    // MARK: - Logpoints (#259)
+
+    /// `interpolateLogMessage` substitutes `{name}` tokens with the
+    /// matching symbol's preview, leaves unknown tokens intact, and
+    /// honours `\{` / `\}` escapes.
+    func testLogpointMessageInterpolation() {
+        let symbols = [
+            SymbolSnapshot(name: "count", typeName: "Integer", valuePreview: "41"),
+            SymbolSnapshot(name: "user", typeName: "String", valuePreview: "Ada"),
+        ]
+        XCTAssertEqual(
+            DebugController.interpolateLogMessage("count={count} user={user}", symbols: symbols),
+            "count=41 user=Ada")
+        // Unknown token is left verbatim so the miss is visible.
+        XCTAssertEqual(
+            DebugController.interpolateLogMessage("x={missing}", symbols: symbols),
+            "x={missing}")
+        // Escaped braces render literally.
+        XCTAssertEqual(
+            DebugController.interpolateLogMessage("literal \\{count\\} = {count}", symbols: symbols),
+            "literal {count} = 41")
+        // Whitespace inside the token is tolerated.
+        XCTAssertEqual(
+            DebugController.interpolateLogMessage("v={ count }", symbols: symbols),
+            "v=41")
+    }
+
+    /// A logpoint never pauses: running a program with a logpoint on a
+    /// line produces zero breakpoint pauses (the frontend only sees the
+    /// entry pause it auto-continues from).
+    func testLogpointDoesNotPause() async throws {
+        actor CapturingFrontend: DebugFrontend {
+            private(set) var pauses: [PauseInfo] = []
+            nonisolated func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
+                await record(pause)
+                return .continue
+            }
+            private func record(_ p: PauseInfo) { pauses.append(p) }
+            nonisolated func didEnd(error: Error?) async {}
+            func get() -> [PauseInfo] { pauses }
+        }
+        let frontend = CapturingFrontend()
+        let controller = DebugController(frontend: frontend)
+        await controller.addBreakpoint(.logpoint(file: "", line: 3, message: "count={count}"))
+
+        let body = """
+        (Application-Start: Probe) {
+            Create the <count: Integer> with 41.
+            Log <count> to the <console>.
+            Return an <OK: status> for the <application>.
+        }
+        """
+        let result = Compiler().compile(body)
+        XCTAssertTrue(result.isSuccess)
+        let app = Application(
+            programs: [result.analyzedProgram],
+            entryPoint: "Application-Start",
+            config: ApplicationConfig(verbose: false, workingDirectory: "."),
+            openAPISpec: nil,
+            recordPath: nil,
+            replayPath: nil,
+            storeFiles: []
+        )
+        try await Debug.$controller.withValue(controller) {
+            try await Debug.$currentSourceFile.withValue("probe.aro") {
+                _ = try await app.run()
+            }
+        }
+        let allPauses = await frontend.get()
+        let breakpointPauses = allPauses.filter {
+            if case .breakpoint = $0.reason { return true } else { return false }
+        }
+        XCTAssertEqual(breakpointPauses.count, 0, "a logpoint must not produce a breakpoint pause")
+    }
 }
