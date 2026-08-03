@@ -4123,3 +4123,184 @@ struct OpenAPICallbackDispatchTests {
 }
 
 #endif  // !os(Windows)
+
+// MARK: - Multiple Servers & Server Selection (ARO-0195)
+
+@Suite("OpenAPI Multiple Servers & Selection Tests")
+struct OpenAPIMultipleServersTests {
+
+    private func decode(_ json: String) throws -> OpenAPISpec {
+        try JSONDecoder().decode(OpenAPISpec.self, from: Data(json.utf8))
+    }
+
+    // MARK: Variable substitution helper
+
+    @Test("resolvedURL substitutes variable defaults into the template")
+    func testResolvedURLDefaults() throws {
+        let server = Server(
+            url: "{scheme}://api.{environment}.example.com:{port}",
+            description: "Configurable",
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: ["https", "http"], description: nil),
+                "environment": ServerVariable(default: "production", enum: nil, description: nil),
+                "port": ServerVariable(default: "8443", enum: ["8443", "443"], description: nil)
+            ]
+        )
+        #expect(server.resolvedURL == "https://api.production.example.com:8443")
+    }
+
+    @Test("resolvedURL(overrides:) applies valid overrides and ignores invalid ones")
+    func testResolvedURLOverrides() throws {
+        let server = Server(
+            url: "{scheme}://api.example.com:{port}",
+            description: nil,
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: ["https", "http"], description: nil),
+                "port": ServerVariable(default: "8443", enum: ["8443", "443"], description: nil)
+            ]
+        )
+        // Valid override wins; invalid (not in enum) falls back to default.
+        #expect(server.resolvedURL(overrides: ["scheme": "http", "port": "9999"])
+                == "http://api.example.com:8443")
+    }
+
+    @Test("resolvedURL leaves URL untouched when no variables are declared")
+    func testResolvedURLNoVariables() throws {
+        let server = Server(url: "https://api.example.com", description: nil, variables: nil)
+        #expect(server.resolvedURL == "https://api.example.com")
+    }
+
+    // MARK: Multiple root servers + selection
+
+    private let multiServerJSON = """
+    {
+        "openapi": "3.0.3",
+        "info": { "title": "Multi", "version": "1.0.0" },
+        "paths": {},
+        "servers": [
+            { "url": "http://localhost:8080", "description": "Local development" },
+            { "url": "https://staging.example.com:9090", "description": "Staging" },
+            { "url": "https://api.example.com", "description": "Production" }
+        ]
+    }
+    """
+
+    @Test("All root servers are parsed and stored")
+    func testAllServersStored() throws {
+        let spec = try decode(multiServerJSON)
+        #expect(spec.servers?.count == 3)
+        #expect(spec.servers?.map(\.url) == [
+            "http://localhost:8080",
+            "https://staging.example.com:9090",
+            "https://api.example.com"
+        ])
+    }
+
+    @Test("selectedServer defaults to the first server")
+    func testSelectionDefaultsToFirst() throws {
+        let spec = try decode(multiServerJSON)
+        #expect(spec.selectedServer()?.url == "http://localhost:8080")
+        // serverPort/serverHost derive from the first server by default.
+        #expect(spec.serverPort == 8080)
+        #expect(spec.serverHost == "localhost")
+    }
+
+    @Test("selectedServer honours an index selection")
+    func testSelectionByIndex() throws {
+        let spec = try decode(multiServerJSON)
+        #expect(spec.selectedServer(selection: "1")?.url == "https://staging.example.com:9090")
+        #expect(spec.selectedServer(selection: "2")?.description == "Production")
+    }
+
+    @Test("selectedServer honours a description selection")
+    func testSelectionByDescription() throws {
+        let spec = try decode(multiServerJSON)
+        #expect(spec.selectedServer(selection: "Staging")?.url == "https://staging.example.com:9090")
+    }
+
+    @Test("Out-of-range or unmatched selection falls back to the first server")
+    func testSelectionFallback() throws {
+        let spec = try decode(multiServerJSON)
+        #expect(spec.selectedServer(selection: "99")?.url == "http://localhost:8080")
+        #expect(spec.selectedServer(selection: "nope")?.url == "http://localhost:8080")
+        #expect(spec.selectedServer(selection: "")?.url == "http://localhost:8080")
+    }
+
+    @Test("selectedServer returns nil when no servers are declared")
+    func testSelectionNoServers() throws {
+        let spec = try decode("""
+        { "openapi": "3.0.3", "info": { "title": "None", "version": "1.0.0" }, "paths": {} }
+        """)
+        #expect(spec.selectedServer() == nil)
+        #expect(spec.serverPort == nil)
+    }
+
+    // MARK: Path- and operation-level overrides + precedence
+
+    private let overrideJSON = """
+    {
+        "openapi": "3.0.3",
+        "info": { "title": "Overrides", "version": "1.0.0" },
+        "servers": [ { "url": "https://root.example.com", "description": "Root" } ],
+        "paths": {
+            "/widgets": {
+                "servers": [ { "url": "https://widgets.example.com", "description": "Widgets host" } ],
+                "get": {
+                    "operationId": "listWidgets",
+                    "responses": { "200": { "description": "ok" } }
+                },
+                "post": {
+                    "operationId": "createWidget",
+                    "servers": [ { "url": "https://write.example.com", "description": "Write host" } ],
+                    "responses": { "201": { "description": "created" } }
+                }
+            },
+            "/health": {
+                "get": {
+                    "operationId": "health",
+                    "responses": { "200": { "description": "ok" } }
+                }
+            }
+        }
+    }
+    """
+
+    @Test("PathItem.servers and Operation.servers are parsed and stored")
+    func testOverridesStored() throws {
+        let spec = try decode(overrideJSON)
+        let widgets = try #require(spec.paths["/widgets"])
+        #expect(widgets.servers?.first?.url == "https://widgets.example.com")
+        #expect(widgets.post?.servers?.first?.url == "https://write.example.com")
+        // Operation without its own servers stores nil.
+        #expect(widgets.get?.servers == nil)
+    }
+
+    @Test("effectiveServers applies operation > path > root precedence")
+    func testEffectiveServersPrecedence() throws {
+        let spec = try decode(overrideJSON)
+        // Operation-level override wins.
+        #expect(spec.effectiveServers(forOperationId: "createWidget")?.first?.url
+                == "https://write.example.com")
+        // Falls back to path-level when the operation has none.
+        #expect(spec.effectiveServers(forOperationId: "listWidgets")?.first?.url
+                == "https://widgets.example.com")
+        // Falls back to root when neither path nor operation declare servers.
+        #expect(spec.effectiveServers(forOperationId: "health")?.first?.url
+                == "https://root.example.com")
+    }
+
+    @Test("Single-server spec behaviour is unchanged")
+    func testSingleServerUnchanged() throws {
+        let spec = try decode("""
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Single", "version": "1.0.0" },
+            "paths": {},
+            "servers": [ { "url": "http://localhost:3000" } ]
+        }
+        """)
+        #expect(spec.selectedServer()?.url == "http://localhost:3000")
+        #expect(spec.serverPort == 3000)
+        #expect(spec.serverHost == "localhost")
+    }
+}

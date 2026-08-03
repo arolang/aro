@@ -126,6 +126,15 @@ public struct StartAction: ActionImplementation {
             port = p
         }
 
+        // Log which OpenAPI server URL is being used to bind (ARO-0195).
+        // For single-server specs this is simply the sole server; when a spec
+        // declares multiple servers, ARO_OPENAPI_SERVER selects among them.
+        if let specService = context.service(OpenAPISpecService.self),
+           let server = specService.selectedServer {
+            let descriptionSuffix = server.description.map { " (\($0))" } ?? ""
+            print("[ARO] HTTP server using OpenAPI server: \(server.resolvedURL)\(descriptionSuffix)")
+        }
+
         // Try HTTP server service (interpreter mode with NIO)
         if let httpServerService = context.service(HTTPServerService.self) {
             // Configure WebSocket if path is specified
