@@ -418,10 +418,12 @@ final class ConsoleProcess {
     /// `<parameter: NAME>` values collected by the pre-run sheet.
     func startDebug(project: Project,
                     breakpointsByFile: [URL: Set<Int>],
+                    breakpointConfigs: [Int: LayoutSidecar.BreakpointConfig] = [:],
                     parameters: [String: String] = [:]) {
         start(project: project,
               mode: .debug,
               breakpointsByFile: breakpointsByFile,
+              breakpointConfigs: breakpointConfigs,
               parameters: parameters)
     }
 
@@ -437,6 +439,7 @@ final class ConsoleProcess {
     func start(project: Project,
                mode: Mode,
                breakpointsByFile: [URL: Set<Int>] = [:],
+               breakpointConfigs: [Int: LayoutSidecar.BreakpointConfig] = [:],
                parameters: [String: String] = [:]) {
         if case .running = state { return }
         log.removeAll()
@@ -473,9 +476,27 @@ final class ConsoleProcess {
         case .debug:
             subArgs = ["debug", project.rootPath.path,
                        "--record", recordPath(for: project)]
+            // Each breakpoint line becomes one of three flag shapes
+            // depending on its per-line config (#259):
+            //   * logpoint   → --logpoint "LINE=MESSAGE" (never pauses)
+            //   * conditional→ --break-condition "LINE=EXPR"
+            //   * plain      → --breakpoint LINE
+            // The runtime matches on line number (file-agnostic),
+            // mirroring how `breakpointLines` is already flattened
+            // across files.
             for line in lines {
-                subArgs.append("--breakpoint")
-                subArgs.append(String(line))
+                let config = breakpointConfigs[line] ?? .init()
+                if config.kind == .logpoint,
+                   let message = config.logMessage, !message.isEmpty {
+                    subArgs.append("--logpoint")
+                    subArgs.append("\(line)=\(message)")
+                } else if let condition = config.condition, !condition.isEmpty {
+                    subArgs.append("--break-condition")
+                    subArgs.append("\(line)=\(condition)")
+                } else {
+                    subArgs.append("--breakpoint")
+                    subArgs.append(String(line))
+                }
             }
             // Forward `<parameter: NAME>` values exactly the same
             // way `.run` does so the Debug button can prompt for

@@ -57,6 +57,14 @@ struct DebugCommand: AsyncParsableCommand {
     @Option(name: .long, parsing: .upToNextOption, help: "Initial breakpoints (line numbers or verb names)")
     var breakpoint: [String] = []
 
+    @Option(name: .long, parsing: .upToNextOption,
+            help: "Conditional breakpoint(s) as \"LINE=EXPRESSION\" — pauses only when EXPRESSION is truthy (issue #259)")
+    var breakCondition: [String] = []
+
+    @Option(name: .long, parsing: .upToNextOption,
+            help: "Logpoint(s) as \"LINE=MESSAGE\" — logs MESSAGE (with {var} interpolation) without pausing (issue #259)")
+    var logpoint: [String] = []
+
     @Flag(name: .long, help: "Speak Debug Adapter Protocol over stdio (issue #229 Phase 2)")
     var dap: Bool = false
 
@@ -135,6 +143,16 @@ struct DebugCommand: AsyncParsableCommand {
                     breakpoint.append(applicationArguments[i + 1])
                     i += 2
                 } else { remaining.append(arg); i += 1 }
+            case "--break-condition":
+                if i + 1 < applicationArguments.count {
+                    breakCondition.append(applicationArguments[i + 1])
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
+            case "--logpoint":
+                if i + 1 < applicationArguments.count {
+                    logpoint.append(applicationArguments[i + 1])
+                    i += 2
+                } else { remaining.append(arg); i += 1 }
             default:
                 remaining.append(arg)
                 i += 1
@@ -166,6 +184,8 @@ struct DebugCommand: AsyncParsableCommand {
         let entryPoint = mutableSelf.entryPoint
         let verbose = mutableSelf.verbose
         let breakpoint = mutableSelf.breakpoint
+        let breakCondition = mutableSelf.breakCondition
+        let logpoint = mutableSelf.logpoint
         let record = mutableSelf.record
         let replay = mutableSelf.replay
         let dap = mutableSelf.dap
@@ -291,6 +311,33 @@ struct DebugCommand: AsyncParsableCommand {
             } else {
                 await controller.addBreakpoint(.verb(spec))
             }
+        }
+
+        // Seed conditional breakpoints (#259): "LINE=EXPRESSION". Split on
+        // the FIRST `=` only — the line number never contains `=`, so any
+        // `==` / `>=` inside the predicate survives intact.
+        for spec in breakCondition {
+            guard let eq = spec.firstIndex(of: "="),
+                  let line = Int(spec[..<eq]) else {
+                print("warning: ignoring malformed --break-condition '\(spec)' (expected LINE=EXPRESSION)")
+                continue
+            }
+            let predicate = String(spec[spec.index(after: eq)...])
+                .trimmingCharacters(in: .whitespaces)
+            await controller.addBreakpoint(
+                .conditionalLocation(file: "", line: line, predicate: predicate))
+        }
+
+        // Seed logpoints (#259): "LINE=MESSAGE". Same first-`=` split.
+        for spec in logpoint {
+            guard let eq = spec.firstIndex(of: "="),
+                  let line = Int(spec[..<eq]) else {
+                print("warning: ignoring malformed --logpoint '\(spec)' (expected LINE=MESSAGE)")
+                continue
+            }
+            let message = String(spec[spec.index(after: eq)...])
+            await controller.addBreakpoint(
+                .logpoint(file: "", line: line, message: message))
         }
 
         let application = Application(

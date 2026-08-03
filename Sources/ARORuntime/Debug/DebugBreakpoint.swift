@@ -31,6 +31,14 @@ public enum DebugBreakpoint: Sendable, Hashable {
     /// Pause when an event with the given name is about to be published.
     case event(String)
 
+    /// A *logpoint* (issue #259). Does NOT pause: when execution reaches
+    /// `file` + `line` the controller renders `message` — interpolating
+    /// `{name}` tokens against the current scope — and logs it to the
+    /// console, then continues. Behaves like a regular breakpoint that
+    /// "traces" instead of stopping. `file` matches on suffix (empty ⇒
+    /// any file), mirroring `.location`.
+    case logpoint(file: String, line: Int, message: String)
+
     /// Pause on the first run-time error before the error message is built.
     /// Phase 3 wires this on caught exceptions in the statement dispatcher.
     case errorAny
@@ -45,6 +53,8 @@ public enum DebugBreakpoint: Sendable, Hashable {
             return "\(file):\(line) if \(pred)"
         case .event(let name):
             return "event \(name)"
+        case .logpoint(let file, let line, let message):
+            return "\(file):\(line) log \"\(message)\""
         case .errorAny:
             return "any error"
         }

@@ -262,6 +262,65 @@ final class TestResultMarkerView: NSView {
     }
 }
 
+/// Gutter marker for a *logpoint* (#259). Draws a filled diamond so a
+/// logpoint reads as visually distinct from STGutterMarker's default
+/// breakpoint pentagon. Conditional (still-pausing) breakpoints get a
+/// diamond outline badge instead — see `BreakpointMarkerView`.
+final class BreakpointMarkerView: NSView {
+    enum Style { case logpoint, conditional }
+
+    private let style: Style
+
+    init(style: Style, tooltip: String?) {
+        self.style = style
+        super.init(frame: .zero)
+        wantsLayer = true
+        clipsToBounds = false
+        toolTip = tooltip
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let side = min(bounds.width, bounds.height) - 4
+        let cx = bounds.midX
+        let cy = bounds.midY
+        let r = side / 2
+        let path = NSBezierPath()
+        path.move(to: CGPoint(x: cx, y: cy - r))       // top
+        path.line(to: CGPoint(x: cx + r, y: cy))       // right
+        path.line(to: CGPoint(x: cx, y: cy + r))       // bottom
+        path.line(to: CGPoint(x: cx - r, y: cy))       // left
+        path.close()
+
+        switch style {
+        case .logpoint:
+            // Solid diamond in the accent tint.
+            NSColor(SolaroColor.accent).setFill()
+            path.fill()
+        case .conditional:
+            // Hollow diamond so a conditional breakpoint reads as a
+            // "gated" regular breakpoint rather than a logpoint.
+            NSColor(SolaroColor.accent).setFill()
+            path.fill()
+            NSColor(SolaroColor.backdrop).setFill()
+            let inner = side * 0.42
+            let ir = inner / 2
+            let innerPath = NSBezierPath()
+            innerPath.move(to: CGPoint(x: cx, y: cy - ir))
+            innerPath.line(to: CGPoint(x: cx + ir, y: cy))
+            innerPath.line(to: CGPoint(x: cx, y: cy + ir))
+            innerPath.line(to: CGPoint(x: cx - ir, y: cy))
+            innerPath.close()
+            innerPath.fill()
+        }
+    }
+}
+
 /// Thin `@unchecked Sendable` weak box used by the gutter's
 /// notification observer closures. NSView subclasses aren't
 /// Sendable, so the closures fail Swift 6 strict concurrency

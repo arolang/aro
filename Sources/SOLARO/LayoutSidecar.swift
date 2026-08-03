@@ -31,7 +31,112 @@ struct LayoutSidecar: Codable, Equatable {
     /// Phase 15: 1-indexed source lines where the editor's gutter
     /// shows a breakpoint marker. Persisted next to the file so a
     /// debugging session resumes with the same breakpoints set.
+    ///
+    /// This stays the source of truth for "is there a breakpoint on
+    /// this line." Richer per-line settings (condition / logpoint)
+    /// live in `breakpointConfigs`, keyed by the same line number; a
+    /// line present here with no config entry is a plain regular
+    /// breakpoint. Old sidecars that predate `breakpointConfigs`
+    /// decode cleanly — every breakpoint reads back as plain regular.
     var breakpoints: Set<Int> = []
+
+    /// Issue #259 — per-line breakpoint refinements, keyed by the
+    /// 1-indexed line number as a string (JSON object keys must be
+    /// strings). Only lines that differ from a plain regular
+    /// breakpoint appear here; a missing entry means "regular, no
+    /// condition." Defaults to empty so pre-#259 sidecars migrate
+    /// forward without losing data.
+    var breakpointConfigs: [String: BreakpointConfig] = [:]
+
+    /// Refinement carried by a single breakpoint line (#259).
+    /// `regular` breakpoints pause (unconditionally, or only when
+    /// `condition` is truthy); `logpoint` breakpoints never pause —
+    /// they log `logMessage` (with `{var}` interpolation) and
+    /// continue.
+    struct BreakpointConfig: Codable, Equatable {
+        enum Kind: String, Codable { case regular, logpoint }
+
+        /// Regular (pauses) vs. logpoint (traces without pausing).
+        var kind: Kind = .regular
+        /// Optional ARO expression. When set on a `regular`
+        /// breakpoint the debugger pauses only when it evaluates
+        /// truthy at that line.
+        var condition: String? = nil
+        /// Logpoint message with `{variableName}` interpolation.
+        /// Only meaningful when `kind == .logpoint`.
+        var logMessage: String? = nil
+
+        init(kind: Kind = .regular,
+             condition: String? = nil,
+             logMessage: String? = nil) {
+            self.kind = kind
+            self.condition = condition
+            self.logMessage = logMessage
+        }
+
+        /// True when this config carries no refinement — i.e. it is
+        /// equivalent to a plain regular breakpoint. Callers prune
+        /// these so the sidecar only stores meaningful settings.
+        var isPlainRegular: Bool {
+            kind == .regular
+                && (condition?.isEmpty ?? true)
+                && (logMessage?.isEmpty ?? true)
+        }
+    }
+
+    /// The effective config for `line`. Returns the stored refinement
+    /// when present, else a default plain regular breakpoint. Safe to
+    /// call for any line — it does not assert the line is in
+    /// `breakpoints`.
+    func breakpointConfig(forLine line: Int) -> BreakpointConfig {
+        breakpointConfigs[String(line)] ?? BreakpointConfig()
+    }
+
+    /// Set (or clear) the refinement for `line`. A plain-regular
+    /// config is stored as *absence* so the sidecar stays minimal and
+    /// round-trips identically to a pre-#259 file. Does not touch
+    /// `breakpoints`; callers keep the marker set in sync.
+    mutating func setBreakpointConfig(_ config: BreakpointConfig, forLine line: Int) {
+        if config.isPlainRegular {
+            breakpointConfigs.removeValue(forKey: String(line))
+        } else {
+            breakpointConfigs[String(line)] = config
+        }
+    }
+
+    // Custom Codable so a sidecar written by an OLDER SOLARO — which
+    // has no `breakpointConfigs` key (and, for truly old files, no
+    // `breakpoints` key either) — still decodes cleanly instead of
+    // throwing `keyNotFound`. Swift's *synthesized* decoder requires
+    // every non-optional key to be present even when the property has a
+    // default value, so we decode each field with `decodeIfPresent` and
+    // fall back to the default. This is the crux of the #259 forward
+    // migration: old files load, missing new fields default to "plain
+    // regular breakpoint," and no existing data is dropped.
+    enum CodingKeys: String, CodingKey {
+        case paneMode, nodes, view, breakpoints, breakpointConfigs
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        paneMode = try c.decodeIfPresent(PaneMode.self, forKey: .paneMode) ?? .text
+        nodes = try c.decodeIfPresent([String: NodePosition].self, forKey: .nodes) ?? [:]
+        view = try c.decodeIfPresent(ViewState.self, forKey: .view) ?? .init()
+        breakpoints = try c.decodeIfPresent(Set<Int>.self, forKey: .breakpoints) ?? []
+        breakpointConfigs = try c.decodeIfPresent(
+            [String: BreakpointConfig].self, forKey: .breakpointConfigs) ?? [:]
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(paneMode, forKey: .paneMode)
+        try c.encode(nodes, forKey: .nodes)
+        try c.encode(view, forKey: .view)
+        try c.encode(breakpoints, forKey: .breakpoints)
+        try c.encode(breakpointConfigs, forKey: .breakpointConfigs)
+    }
 
     struct NodePosition: Codable, Equatable {
         var x: Double
@@ -109,9 +214,9 @@ struct LayoutSidecar: Codable, Equatable {
 ///
 /// ```json
 /// {
-///   "version": 1,
+///   "version": 2,
 ///   "files": {
-///     "crawler.aro": { paneMode, nodes, view, breakpoints },
+///     "crawler.aro": { paneMode, nodes, view, breakpoints, breakpointConfigs },
 ///     "main.aro":    { ... }
 ///   }
 /// }
@@ -120,8 +225,20 @@ struct LayoutSidecar: Codable, Equatable {
 /// File-path keys are project-relative so the file is portable.
 /// Files outside the root are stored under their absolute path as
 /// a fallback.
+///
+/// Schema history:
+///   * v1 — paneMode, nodes, view, breakpoints (`Set<Int>`).
+///   * v2 — adds per-line `breakpointConfigs` (conditional
+///          breakpoints + logpoints, issue #259). All new fields
+///          are additive with defaults, so v1 files decode cleanly
+///          and are re-stamped to v2 on the next save.
 struct ProjectLayoutStore: Codable, Equatable {
-    var version: Int = 1
+    /// Current on-disk schema version. Bumped 1 → 2 for #259 so a
+    /// file written by this build is recognisably newer than a
+    /// pre-#259 one.
+    static let currentSchemaVersion = 2
+
+    var version: Int = currentSchemaVersion
     var files: [String: LayoutSidecar] = [:]
 
     /// On-disk filename at the project root.
@@ -175,6 +292,11 @@ struct ProjectLayoutStore: Codable, Equatable {
         else { return ProjectLayoutStore(root: projectRoot(for: source)) }
         var out = decoded
         out.rootPath = projectRoot(for: source)
+        // Re-stamp to the current schema version so a v1 file that is
+        // loaded and later saved records that it now carries v2 fields.
+        // Decoding already folded in the new `breakpointConfigs` field
+        // with its default (empty), so no data is lost either way.
+        out.version = Self.currentSchemaVersion
         return out
     }
 
@@ -182,13 +304,13 @@ struct ProjectLayoutStore: Codable, Equatable {
     /// resolved fresh on every load.
     var rootPath: URL? = nil
 
-    init(version: Int = 1, files: [String: LayoutSidecar] = [:]) {
+    init(version: Int = currentSchemaVersion, files: [String: LayoutSidecar] = [:]) {
         self.version = version
         self.files = files
     }
 
     init(root: URL) {
-        self.version = 1
+        self.version = Self.currentSchemaVersion
         self.files = [:]
         self.rootPath = root
     }

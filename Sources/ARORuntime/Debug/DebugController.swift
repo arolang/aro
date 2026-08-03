@@ -153,6 +153,18 @@ public actor DebugController {
                     result = Self.evaluatePredicateFromSnapshot(predicate, symbols: symbols)
                 }
                 if result { matched = bp }
+            case .logpoint(let f, let l, let message):
+                // Logpoints never pause: when the line matches we render
+                // the interpolated message to the console and keep
+                // scanning. A regular/conditional breakpoint on the same
+                // line still wins the pause below (#259).
+                if l == line && (f.isEmpty || basename.hasSuffix(f)) {
+                    let rendered = Self.interpolateLogMessage(message, symbols: symbols)
+                    let prefix = basename.isEmpty ? "" : "\(basename):\(line) "
+                    print("[logpoint] \(prefix)\(rendered)")
+                    await record(logpoint: rendered, file: basename, line: line)
+                }
+                continue
             case .event, .errorAny:
                 continue   // not relevant at statement boundaries
             }
@@ -312,6 +324,62 @@ public actor DebugController {
             body["syms"] = symsStr
         }
         await recorder.write(.pause, body: body)
+    }
+
+    /// Record a logpoint hit (#259). Uses the `.event` record kind — a
+    /// logpoint traces rather than pauses, so it has no `PauseInfo` — and
+    /// tags the body so a replay can tell it apart from a real emit.
+    private func record(logpoint rendered: String, file: String, line: Int) async {
+        guard let recorder else { return }
+        await recorder.write(.event, body: [
+            "logpoint": rendered,
+            "file": file,
+            "line": "\(line)"
+        ])
+    }
+
+    /// Render a logpoint template by substituting `{name}` tokens with the
+    /// matching symbol's `valuePreview` from the current scope. Unmatched
+    /// tokens are left verbatim so a typo shows up in the trace instead of
+    /// silently vanishing. `\{` / `\}` escape a literal brace. Issue #259.
+    static func interpolateLogMessage(_ template: String, symbols: [SymbolSnapshot]) -> String {
+        var lookup: [String: String] = [:]
+        for s in symbols { lookup[s.name] = s.valuePreview }
+
+        var out = ""
+        var i = template.startIndex
+        while i < template.endIndex {
+            let ch = template[i]
+            if ch == "\\" {
+                // Escaped brace: emit the next char literally.
+                let next = template.index(after: i)
+                if next < template.endIndex,
+                   template[next] == "{" || template[next] == "}" {
+                    out.append(template[next])
+                    i = template.index(after: next)
+                    continue
+                }
+                out.append(ch)
+                i = template.index(after: i)
+                continue
+            }
+            if ch == "{", let close = template[i...].firstIndex(of: "}") {
+                let nameStart = template.index(after: i)
+                let rawName = String(template[nameStart..<close])
+                let name = rawName.trimmingCharacters(in: .whitespaces)
+                if let value = lookup[name] {
+                    out.append(value)
+                } else {
+                    // Leave the token intact so the miss is visible.
+                    out.append("{\(rawName)}")
+                }
+                i = template.index(after: close)
+                continue
+            }
+            out.append(ch)
+            i = template.index(after: i)
+        }
+        return out
     }
 
     // MARK: - Predicate evaluation (Phase 3)
