@@ -311,22 +311,23 @@ With custom actions registered, use natural ARO syntax:
     Create the <now> with { timestamp: 1707660600 }.
 
     (* Format using the FormatDate action - feels native! *)
-    <FormatDate> the <formatted> from the <now: timestamp> with {
+    FormatDate the <formatted> from the <now: timestamp> with {
         format: "EEEE, MMMM d, yyyy",
         locale: "en_US"
     }.
-    Log "Formatted: " with <formatted: formatted> to the <console>.
+    Log "Formatted: " ++ <formatted: formatted> to the <console>.
 
     (* Get relative time using RelativeDate action *)
-    Compute the <past> from <now: timestamp> - 7200.
-    <RelativeDate> the <relative> from the <past>.
+    Extract the <ts> from the <now: timestamp>.
+    Compute the <past> from <ts> - 7200.
+    RelativeDate the <relative> from the <past>.
     Log <relative: relative> to the <console>.
 
     (* Parse a date string back to timestamp *)
-    <ParseDate> the <parsed> from "2026-02-11" with {
+    ParseDate the <parsed> from "2026-02-11" with {
         format: "yyyy-MM-dd"
     }.
-    Log "Parsed timestamp: " with <parsed: timestamp> to the <console>.
+    Log "Parsed timestamp: " ++ <parsed: timestamp> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
@@ -434,12 +435,12 @@ Usage in ARO (with custom action `<FormatCurrency>`):
     Extract the <amount> from the <invoice: total>.
 
     (* Use the FormatCurrency custom action *)
-    <FormatCurrency> the <formatted> from <amount> with {
+    FormatCurrency the <formatted> from <amount> with {
         currency: "EUR",
         locale: "de_DE"
     }.
 
-    Log "Total: " with <formatted: formatted> to the <console>.
+    Log "Total: " ++ <formatted: formatted> to the <console>.
     (* Output: Total: 1.234,56 € *)
 
     Return an <OK: status> with <formatted>.

@@ -105,8 +105,8 @@ Consider this ARO feature set:
 ```aro
 (createUser: User API) {
     Extract the <data> from the <request: body>.
-    Validate the <data> against the <user: schema>.
-    Create the <user> with <data>.
+    Validate the <valid-data> for <data>.
+    Create the <user> with <valid-data>.
     Emit a <UserCreated: event> with <user>.
     Return a <Created: status> with <user>.
 }

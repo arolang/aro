@@ -610,24 +610,20 @@ With custom actions registered, you use native ARO syntax:
     Extract the <phone> from the <request: phone>.
 
     (* Validate email using custom action - feels native! *)
-    <ValidateEmail> the <email-result> from <email>.
+    ValidateEmail the <email-result> from <email>.
 
-    When the <email-result: valid> is false {
-        Return a <BadRequest: status> with "Invalid email address".
-    }.
+    Return a <BadRequest: status> with "Invalid email address" when <email-result: valid> is false.
 
     (* Validate phone using custom action *)
-    <ValidatePhone> the <phone-result> from <phone>.
+    ValidatePhone the <phone-result> from <phone>.
 
-    When the <phone-result: valid> is false {
-        Return a <BadRequest: status> with "Invalid phone number".
-    }.
+    Return a <BadRequest: status> with "Invalid phone number" when <phone-result: valid> is false.
 
     (* Validate credit card with options *)
     Extract the <card> from the <request: creditCard>.
-    <ValidateCreditCard> the <card-result> from <card>.
+    ValidateCreditCard the <card-result> from <card>.
 
-    Log "Card type: " with <card-result: card_type> to the <console>.
+    Log "Card type: " ++ <card-result: card_type> to the <console>.
 
     Return an <OK: status> with <email-result>.
 }

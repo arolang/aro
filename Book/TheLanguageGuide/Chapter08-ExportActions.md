@@ -91,7 +91,7 @@ Data stored in a repository can be retrieved by any feature set:
     Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve with a filter *)
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
     Return an <OK: status> with <user>.
 }
 ```
@@ -100,7 +100,7 @@ The where clause filters the repository contents. Multiple conditions can be com
 
 ```aro
 Retrieve the <orders> from the <order-repository>
-    where status = "pending" and customer = <customer-id>.
+    where <status> = "pending" and <customer> = <customer-id>.
 ```
 
 ### Repository Observers
@@ -175,7 +175,7 @@ Handlers receive the event payload and can extract data from it:
     Extract the <email> from the <user: email>.
 
     Send the <welcome-email> to the <email-service> with {
-        to: <email>,
+        recipient: <email>,
         subject: "Welcome!",
         template: "welcome"
     }.
@@ -516,7 +516,7 @@ Here is a realistic example that uses all three export actions appropriately. Th
     Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve stored user *)
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
 
     Return an <OK: status> with <user>.
 }
@@ -538,11 +538,11 @@ Here is a realistic example that uses all three export actions appropriately. Th
     Extract the <email> from the <user: email>.
 
     (* Access published config *)
-    Extract the <from-address> from the <app-config: email.fromAddress>.
+    Extract the <sender-address> from the <app-config: email.fromAddress>.
 
     Send the <welcome-email> to the <email-service> with {
-        to: <email>,
-        from: <from-address>,
+        recipient: <email>,
+        sender: <sender-address>,
         subject: "Welcome to our service!",
         template: "welcome"
     }.

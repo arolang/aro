@@ -462,17 +462,17 @@ With custom actions registered, use native ARO syntax:
 ```aro
 (Math Demo: Application-Start) {
     (* Calculate statistics using custom action *)
-    <Statistics> the <stats> from [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
-    Log "Mean: " with <stats: mean> to the <console>.
-    Log "Std Dev: " with <stats: stddev> to the <console>.
+    Statistics the <stats> from [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+    Log "Mean: " ++ <stats: mean> to the <console>.
+    Log "Std Dev: " ++ <stats: stddev> to the <console>.
 
     (* Evaluate polynomial: 2x^2 + 3x + 1 at x=5 *)
-    <Polynomial> the <poly> from [1, 3, 2] with { x: 5 }.
-    Log "Polynomial result: " with <poly: result> to the <console>.
+    Polynomial the <poly> from [1, 3, 2] with { x: 5 }.
+    Log "Polynomial result: " ++ <poly: result> to the <console>.
 
     (* Generate Fibonacci sequence using custom action *)
-    <Fibonacci> the <fib> from 10.
-    Log "Fibonacci: " with <fib: sequence> to the <console>.
+    Fibonacci the <fib> from 10.
+    Log "Fibonacci: " ++ <fib: sequence> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }

@@ -12,7 +12,7 @@ ARO supports five core data operations:
 | **Filter** | Filter existing collection | `Filter the <active: List<User>> from the <users>...` |
 | **Map** | Transform to different type | `Map the <summaries> as List<UserSummary> from the <users>.` |
 | **Reduce** | Aggregate to single value | `Reduce the <total> as Float from the <orders> with sum(<amount>).` |
-| **Group** | Partition by field value | `Group the <by-status> from the <orders> by "status".` |
+| **Group** | Partition by field value | `Group the <status-groups> from the <orders> by "status".` |
 
 ### Type Annotation Syntax
 
@@ -42,22 +42,14 @@ Retrieve the <users: List<User>> from the <user-repository>.
 Retrieve the <active-users: List<User>> from the <users>
     where <status> is "active".
 
-(* With sorting *)
-Retrieve the <recent-users: List<User>> from the <users>
-    order by <created-at> desc.
-
-(* With pagination *)
-Retrieve the <page: List<User>> from the <users>
-    order by <name> asc
-    limit 20
-    offset 40.
-
-(* Combined *)
-Retrieve the <top-customers: List<User>> from the <users>
-    where <tier> is "premium"
-    order by <total-purchases> desc
-    limit 10.
+(* Ordering is a separate Sort step *)
+Retrieve the <all-users: List<User>> from the <users>.
+Sort the <recent-users: List<User>> from the <all-users> by "created-at".
 ```
+
+> **Note:** SQL-style `order by ... asc/desc`, `limit`, and `offset` clauses are
+> not part of the current parser. Order a collection with the `Sort` action (see
+> **Sorting** below).
 
 ---
 
@@ -74,9 +66,11 @@ Filter the <admins: List<User>> from the <users>
 Filter the <high-value: List<Order>> from the <orders>
     where <amount> > 1000.
 
-(* Filter with multiple conditions *)
-Filter the <active-premium: List<User>> from the <users>
-    where <status> is "active" and <tier> is "premium".
+(* Filter with multiple conditions — chain one predicate per Filter *)
+Filter the <active: List<User>> from the <users>
+    where <status> is "active".
+Filter the <active-premium: List<User>> from the <active>
+    where <tier> is "premium".
 ```
 
 ### Comparison Operators
@@ -88,11 +82,11 @@ Filter the <active-premium: List<User>> from the <users>
 | `>`, `>=`, `<`, `<=` | Comparison | `<age> >= 18` |
 | `in` | Set membership | `<status> in ["a", "b"]` |
 | `not in` | Set exclusion | `<status> not in <excluded>` |
-| `between` | Range | `<price> between 10 and 100` |
 | `contains` | Substring | `<name> contains "test"` |
-| `starts with` | Prefix match | `<email> starts with "admin"` |
-| `ends with` | Suffix match | `<file> ends with ".pdf"` |
 | `matches` | Regex pattern | `<email> matches /^admin@/i` |
+
+A single `where` clause holds **one** predicate. To combine conditions, chain
+`Filter` statements — each stage narrows the previous result.
 
 ### Set Membership with `in` and `not in`
 
@@ -108,9 +102,11 @@ Create the <exclude-statuses> with ["cancelled", "refunded"].
 Filter the <active: List<Order>> from the <orders>
     where <status> not in <exclude-statuses>.
 
-(* Combining with other conditions *)
-Filter the <valid-orders: List<Order>> from the <orders>
-    where <amount> > 0 and <status> not in <exclude-statuses>.
+(* Combining with other conditions — chain one predicate per Filter *)
+Filter the <positive-orders: List<Order>> from the <orders>
+    where <amount> > 0.
+Filter the <valid-orders: List<Order>> from the <positive-orders>
+    where <status> not in <exclude-statuses>.
 ```
 
 The `matches` operator supports regex literals with flags:
@@ -190,9 +186,10 @@ Reduce the <avg-price: Float> from the <products>
 Reduce the <highest-score: Float> from the <scores>
     with max(<value>).
 
-(* With filter *)
-Reduce the <pending-count: Integer> from the <orders>
-    where <status> is "pending"
+(* With filter — filter first, then reduce *)
+Filter the <pending: List<Order>> from the <orders>
+    where <status> is "pending".
+Reduce the <pending-count: Integer> from the <pending>
     with count().
 ```
 
@@ -260,7 +257,7 @@ Group the <status-groups> from the <orders> by "status".
 (* Result: { "active": [{id:1,...}, {id:3,...}], "pending": [{id:2,...}] } *)
 
 (* Group users by role *)
-Group the <by-role> from the <users> by "role".
+Group the <role-groups> from the <users> by "role".
 (* Result: { "admin": [...], "editor": [...], "viewer": [...] } *)
 ```
 
@@ -269,10 +266,10 @@ Group the <by-role> from the <users> by "role".
 The grouped result is a dictionary, so you can extract individual groups or iterate over them:
 
 ```aro
-Group the <by-region> from the <orders> by "region".
+Group the <region-groups> from the <orders> by "region".
 
 (* Extract a specific group *)
-Extract the <eu-orders> from the <by-region: EU>.
+Extract the <eu-orders> from the <region-groups: EU>.
 
 (* Aggregate within a group *)
 Reduce the <eu-total: Float> from the <eu-orders>
@@ -289,7 +286,7 @@ Filter the <active> from the <orders> where <status> is "active".
 Filter the <pending> from the <orders> where <status> is "pending".
 
 (* Using Group — all buckets in one pass *)
-Group the <by-status> from the <orders> by "status".
+Group the <status-groups> from the <orders> by "status".
 ```
 
 ---
@@ -348,26 +345,26 @@ Chain operations to build complex data transformations:
 
 ```aro
 (Generate Report: Analytics) {
-    (* Step 1: Retrieve recent orders *)
-    Retrieve the <recent-orders: List<Order>> from the <orders>
-        where <created-at> > now().minus(30.days)
-        order by <created-at> desc.
-
-    (* Step 2: Filter high-value orders *)
-    Filter the <high-value: List<Order>> from the <recent-orders>
+    (* Step 1: Filter high-value orders *)
+    Filter the <high-value: List<Order>> from the <orders>
         where <amount> > 1000.
 
-    (* Step 3: Map to summaries *)
-    Map the <summaries: List<OrderSummary>> from the <high-value>.
+    (* Step 2: Sort by amount, largest first *)
+    Sort the <ranked: descending> from the <high-value> by "amount".
 
-    (* Step 4: Calculate total *)
+    (* Step 3: Map to summaries *)
+    Map the <summaries: List<OrderSummary>> from the <ranked>.
+
+    (* Step 4: Aggregate *)
     Reduce the <total: Float> from the <high-value>
         with sum(<amount>).
+    Reduce the <count: Integer> from the <high-value>
+        with count().
 
     Return an <OK: status> with {
         orders: <summaries>,
         total: <total>,
-        count: <high-value>.count()
+        count: <count>
     }.
 }
 ```
@@ -460,45 +457,41 @@ For the complete design and implementation of automatic pipeline detection, see:
 
 ## Sorting
 
-Sort results by one or more fields:
+The `Sort` action orders a collection. Verbs `Sort`, `Order`, and `Arrange` are
+equivalent. Sort ascending by default; descending is selected with the
+`descending` qualifier on the result.
 
 ```aro
-(* Single field, ascending *)
-Retrieve the <users: List<User>> from the <repository>
-    order by <name> asc.
+(* Sort a list of objects by a field, ascending *)
+Sort the <users: List<User>> from the <all-users> by "name".
 
-(* Single field, descending *)
-Retrieve the <recent: List<Order>> from the <orders>
-    order by <created-at> desc.
+(* Sort descending by a field *)
+Sort the <recent: descending> from the <orders> by "created-at".
 
-(* Multiple fields *)
-Retrieve the <products: List<Product>> from the <catalog>
-    order by <category> asc, <price> desc.
+(* Sort a list of plain numbers ascending *)
+Sort the <sorted-scores> for the <scores>.
 ```
 
 ---
 
 ## Pagination
 
-Limit results with offset for pagination:
+There is no SQL-style `limit`/`offset` clause. Sort the collection first, then
+slice a page out of it with an `Extract` range specifier (see **Chapter 15 —
+List Element Access**). A range like `0-19` selects the elements at those
+positions:
 
 ```aro
-(* First page: items 1-20 *)
-Retrieve the <page1: List<User>> from the <users>
-    order by <name> asc
-    limit 20.
+Sort the <ordered: List<User>> from the <users> by "name".
 
-(* Second page: items 21-40 *)
-Retrieve the <page2: List<User>> from the <users>
-    order by <name> asc
-    limit 20
-    offset 20.
+(* First page: elements 0-19 *)
+Extract the <page1: 0-19> from the <ordered>.
 
-(* Third page: items 41-60 *)
-Retrieve the <page3: List<User>> from the <users>
-    order by <name> asc
-    limit 20
-    offset 40.
+(* Second page: elements 20-39 *)
+Extract the <page2: 20-39> from the <ordered>.
+
+(* Third page: elements 40-59 *)
+Extract the <page3: 40-59> from the <ordered>.
 ```
 
 ---
@@ -547,10 +540,9 @@ components:
 
 (* Analytics report generation *)
 (Generate Report: Order Analytics) {
-    (* Retrieve recent orders *)
-    Retrieve the <recent: List<Order>> from the <orders>
-        where <created-at> > now().minus(30.days)
-        order by <created-at> desc.
+    (* Retrieve orders, then order newest-first *)
+    Retrieve the <all-orders: List<Order>> from the <orders>.
+    Sort the <recent: descending> from the <all-orders> by "created-at".
 
     (* Calculate metrics *)
     Reduce the <total-revenue: Float> from the <recent>
@@ -615,30 +607,31 @@ Map the <summaries: List<UserSummary>> from the <active>.
 Map the <all-summaries: List<UserSummary>> from the <users>.
 ```
 
-2. **Limit Results**: Use `limit` with sorting to avoid processing unnecessary data.
+2. **Slice After Sorting**: Sort, then take only the elements you need with an `Extract` range instead of materialising and scanning the whole collection downstream.
 
 ```aro
-(* Good: Retrieve only top 10 *)
-Retrieve the <top-orders: List<Order>> from the <orders>
-    order by <amount> desc
-    limit 10.
+(* Good: sort, then take the top 10 *)
+Sort the <ranked: descending> from the <orders> by "amount".
+Extract the <top-orders: 0-9> from the <ranked>.
 
-(* Expensive: Retrieve all, then filter in application *)
-Retrieve the <all-orders: List<Order>> from the <orders>
-    order by <amount> desc.
+(* Expensive: retrieve all, then filter in application *)
+Retrieve the <all-orders: List<Order>> from the <orders>.
+Sort the <sorted-orders: descending> from the <all-orders> by "amount".
 ```
 
-3. **Combine Where Clauses**: Multiple conditions in one `where` clause are more efficient than chained filters.
+3. **Most-Selective Filter First**: A `where` clause holds a single predicate, so multiple conditions become a chain of `Filter` statements. Apply the most selective predicate first so later stages scan a smaller collection.
 
 ```aro
-(* Good: Single filter with combined conditions *)
-Filter the <premium-active: List<User>> from the <users>
-    where <status> is "active" and <tier> is "premium".
+(* Good: the rarer predicate (premium) runs first *)
+Filter the <premium: List<User>> from the <users>
+    where <tier> is "premium".
+Filter the <premium-active: List<User>> from the <premium>
+    where <status> is "active".
 
-(* Less efficient: Two separate filter passes *)
+(* Less efficient: the broad predicate (active) runs first *)
 Filter the <active: List<User>> from the <users>
     where <status> is "active".
-Filter the <premium-active: List<User>> from the <active>
+Filter the <active-premium: List<User>> from the <active>
     where <tier> is "premium".
 ```
 
@@ -672,10 +665,11 @@ For very complex data transformations, consider splitting into multiple feature 
 (* Feature set 1: Heavy data processing *)
 (Process Orders: Order Handler) {
     Retrieve the <orders: List<Order>> from the <order-repository>
-        where <status> is "pending"
-        limit 1000.
+        where <status> is "pending".
+    Reduce the <order-count: Integer> from the <orders>
+        with count().
     Store the <orders> into the <pending-cache>.
-    Emit a <OrdersProcessed: event> with { count: <orders>.count() }.
+    Emit a <OrdersProcessed: event> with { count: <order-count> }.
     Return an <OK: status> for the <processing>.
 }
 

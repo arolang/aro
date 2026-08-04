@@ -474,11 +474,11 @@ When an ARO application has an `openapi.yaml` file, the `Contract` magic object 
     Start the <http-server> with <Contract>.
 
     (* Access Contract properties *)
-    Log <Contract.http-server.port> to the <console>.
-    Log <Contract.http-server.routes> to the <console>.
+    Log <Contract: http-server.port> to the <console>.
+    Log <Contract: http-server.routes> to the <console>.
 
     (* Shorthand: <http-server> resolves to Contract.http-server *)
-    Log <http-server.port> to the <console>.
+    Log <http-server: port> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }

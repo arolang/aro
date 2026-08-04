@@ -143,13 +143,13 @@ ecommerce-api/
 ```aro
 (Application-Start: E-commerce API) {
     Log "Starting e-commerce API..." to the <console>.
-    Start the <http-server> on port 8080.
+    Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
     Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    Stop the <http-server>.
+    Stop the <http-server> with <application>.
     Log "E-commerce API stopped." to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
@@ -164,7 +164,7 @@ ecommerce-api/
 
 (getProduct: Product API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <product> from the <product-repository> where id = <id>.
+    Retrieve the <product> from the <product-repository> where <id> = <id>.
     Return an <OK: status> with <product>.
 }
 ```
@@ -196,7 +196,7 @@ ecommerce-api/
     Extract the <order> from the <event: order>.
     Extract the <email> from the <order: customerEmail>.
     Send the <confirmation-email> to the <email-service> with {
-        to: <email>,
+        "to": <email>,
         template: "order-confirmation",
         order: <order>
     }.

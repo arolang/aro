@@ -287,8 +287,7 @@ Basic validation:
 Call the <result> from the <validation: validateEmail> with {
     email: "user@example.com"
 }.
-When <result: valid> is false:
-    Log "Invalid email: " ++ <result: errors 0 message> to the <console>.
+Log "Invalid email: " ++ <result: errors.first.message> to the <console> when <result: valid> is false.
 ```
 
 Strict validation:
@@ -335,9 +334,7 @@ Each example should be runnable:
     Call the <email-result> from the <validation: validateEmail> with {
         email: <form-data: email>
     }.
-    Log "Email: " ++ <form-data: email> ++ " -> " ++
-          (if <email-result: valid> then "Valid" else "Invalid")
-          to the <console>.
+    Log "Email: " ++ <form-data: email> ++ " -> valid=" ++ <email-result: valid> to the <console>.
 
     Call the <password-result> from the <validation: validatePassword> with {
         password: <form-data: password>,
@@ -345,24 +342,18 @@ Each example should be runnable:
         requireUppercase: true,
         requireSpecial: true
     }.
-    Log "Password: " ++
-          (if <password-result: valid> then "Strong" else "Weak")
-          to the <console>.
+    Log "Password: valid=" ++ <password-result: valid> to the <console>.
 
     Call the <phone-result> from the <validation: validatePhone> with {
         phone: <form-data: phone>,
         locale: "US"
     }.
-    Log "Phone: " ++ <form-data: phone> ++ " -> " ++
-          (if <phone-result: valid> then "Valid" else "Invalid")
-          to the <console>.
+    Log "Phone: " ++ <form-data: phone> ++ " -> valid=" ++ <phone-result: valid> to the <console>.
 
     Call the <url-result> from the <validation: validateURL> with {
         url: <form-data: website>
     }.
-    Log "Website: " ++ <form-data: website> ++ " -> " ++
-          (if <url-result: valid> then "Valid" else "Invalid")
-          to the <console>.
+    Log "Website: " ++ <form-data: website> ++ " -> valid=" ++ <url-result: valid> to the <console>.
 
     Return an <OK: status> for the <demo>.
 }

@@ -32,24 +32,22 @@ You can read the resulting `main.aro`, and so can the person sitting next to you
 
 ```aro
 (Application-Start: Nightly Report) {
-    Retrieve the <log-files> from the <filesystem>
-        where path = "./logs" and extension = ".log".
+    List the <log-files> from the <directory: "./logs">.
 
-    For each <file> in <log-files> {
-        Retrieve the <content> from the <file>.
+    for each <file> in <log-files> {
+        Read the <content> from the <file>.
         Filter the <error-lines> from the <content>
-            where line contains "ERROR".
+            where <line> contains "ERROR".
         Compute the <error-count: length>
             from the <error-lines>.
-        Publish as <counts> append <counts>
-            with <error-count>.
+        Store the <error-count> into the <counts-repository>.
     }
 
-    Compute the <total: sum> from the <counts>.
+    Retrieve the <all-counts> from the <counts-repository>.
+    Reduce the <total: sum> from the <all-counts>.
     Compute the <report-text>
         from "Total errors: " ++ <total>.
-    Store the <report-text> to the <filesystem>
-        where path = "./report.md".
+    Write the <report-text> to the <file: "./report.md">.
 
     Return an <OK: status> for the <report>.
 }

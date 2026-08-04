@@ -102,7 +102,7 @@ Plugins provide **custom actions** that work like built-in ARO verbs. Once insta
 ```aro
 (* Plugin actions feel native *)
 Hash the <digest: sha256> from the <password>.
-Encrypt the <ciphertext> with the <secret-data> using <key>.
+Encrypt the <ciphertext> from the <secret-data> with <key>.
 ParseCSV the <records> from the <csv-file>.
 Summarize the <summary> from the <document> with { maxLength: 200 }.
 ```
@@ -117,14 +117,14 @@ Action the <result> preposition the <object>.
 
 ```aro
 (Secure Password: User Registration) {
-    Extract the <password> from the <request: body password>.
+    Extract the <password> from the <request: body.password>.
 
     (* Hash the password using the plugin's Hash action *)
     Hash the <password-hash: argon2> from the <password>.
 
     (* Store the hashed password *)
     Create the <user> with {
-        email: <request: body email>,
+        email: <request: body.email>,
         passwordHash: <password-hash>
     }.
     Store the <user> into the <user-repository>.
@@ -136,7 +136,7 @@ Action the <result> preposition the <object>.
 ### Example: CSV Plugin
 
 ```aro
-(Import Data: Data Handler) {
+(Ingest Data: Data Handler) {
     Read the <csv-content> from the <file: "./data/users.csv">.
 
     (* Parse CSV using the plugin's ParseCSV action *)
@@ -146,9 +146,10 @@ Action the <result> preposition the <object>.
     }.
 
     (* Process each record *)
-    For each <record> in <records>:
+    for each <record> in <records> {
         Create the <user> with <record>.
         Store the <user> into the <user-repository>.
+    }
 
     Return an <OK: status> with { imported: <records: length> }.
 }
@@ -165,7 +166,7 @@ Action the <result> preposition the <object>.
     Classify the <sentiment> from the <text> with {
         labels: ["positive", "negative", "neutral"]
     }.
-    <Embed> the <embedding> from the <text>.
+    Embed the <embedding> from the <text>.
 
     Create the <analysis> with {
         original: <text>,
@@ -203,7 +204,7 @@ Pass additional parameters using the `with` clause:
 
 ```aro
 (* Options for encryption *)
-Encrypt the <ciphertext> with the <plaintext> using {
+Encrypt the <ciphertext> from the <plaintext> with {
     key: <encryption-key>,
     algorithm: "aes-256-gcm",
     encoding: "base64"
@@ -229,7 +230,7 @@ Resize the <thumbnail> from the <image> with {
 For plugins that expose multiple related methods as a service API, use the `<Call>` action:
 
 ```aro
-Call the <result> from the <service: method> with { arguments }.
+Call the <result> from the <service: method> with <arguments>.
 ```
 
 This is useful when:
@@ -259,7 +260,7 @@ This is useful when:
 
     Call the <count> from the <postgres: count> with {
         table: "users",
-        where: { active: true }
+        filter: { active: true }
     }.
 
     Return an <OK: status> with { users: <users>, total: <count> }.
@@ -284,8 +285,8 @@ For nested results:
 Classify the <analysis> from the <text>.
 
 (* Access nested data *)
-Extract the <label> from the <analysis: prediction label>.
-Extract the <confidence> from the <analysis: prediction confidence>.
+Extract the <label> from the <analysis: prediction.label>.
+Extract the <confidence> from the <analysis: prediction.confidence>.
 ```
 
 ## 3.7 Error Handling
@@ -300,11 +301,11 @@ Cannot Hash the <digest> from the <input>.
 For controlled error handling, check for error fields:
 
 ```aro
-Encrypt the <result> with the <data> using <key>.
+Encrypt the <result> from the <data> with <key>.
 
-When <result: error> exists:
-    Log "Encryption failed: " ++ <result: error> to the <console>.
-    Return a <Failed: status> with <result>.
+(* Inspect the result for an error field with a `when` guard *)
+Log "Encryption failed: " ++ <result: error> to the <console> when <result: error> exists.
+Return a <Failed: status> with <result> when <result: error> exists.
 
 (* Continue with successful result *)
 Extract the <ciphertext> from the <result: encrypted>.
@@ -321,7 +322,7 @@ Chain multiple plugin actions:
     Read the <content> from the <file: document-path>.
 
     (* Chain of plugin actions *)
-    <ExtractText> the <text> from the <content>.
+    ExtractText the <text> from the <content>.
     Summarize the <summary> from the <text> with { maxLength: 200 }.
     Translate the <translated> from the <summary> with { target: "es" }.
 
@@ -341,11 +342,20 @@ Choose actions based on input:
 (Process File: File Handler) {
     Extract the <extension> from the <file: extension>.
 
-    Match <extension>:
-        "csv" => ParseCSV the <data> from the <file: content>.
-        "json" => Parse the <data> from the <file: content> as JSON.
-        "xml" => <ParseXML> the <data> from the <file: content>.
-        _ => Return an <UnsupportedFormat: error> with <extension>.
+    match <extension> {
+        case "csv" {
+            ParseCSV the <data> from the <file: content>.
+        }
+        case "json" {
+            Parse the <data> from the <file: content>.
+        }
+        case "xml" {
+            ParseXML the <data> from the <file: content>.
+        }
+        otherwise {
+            Return an <UnsupportedFormat: error> with <extension>.
+        }
+    }
 
     Return an <OK: status> with <data>.
 }
@@ -360,16 +370,16 @@ Process multiple items efficiently:
     Retrieve the <documents> from the <document-repository>.
 
     (* Some plugins support batch operations *)
-    <EmbedBatch> the <embeddings> from the <documents> with {
+    EmbedBatch the <embeddings> from the <documents> with {
         model: "text-embedding-ada-002"
     }.
 
     (* Or iterate with individual actions *)
-    For each <doc> in <documents>:
+    for each <doc> in <documents> {
         Summarize the <summary> from the <doc: content>.
-        Update the <document-repository> where id = <doc: id> with {
-            summary: <summary>
-        }.
+        Merge the <updated-doc: doc> with { summary: <summary> }.
+        Store the <updated-doc> into the <document-repository>.
+    }
 
     Return an <OK: status> with { processed: <documents: length> }.
 }
@@ -379,18 +389,19 @@ Process multiple items efficiently:
 
 ```aro
 (Store Secret: Security Handler) {
-    Extract the <api-key> from the <request: body apiKey>.
+    Extract the <api-key> from the <request: body.apiKey>.
 
     (* Encrypt before storage *)
-    Encrypt the <encrypted-key> with the <api-key> using <master-key>.
+    Encrypt the <encrypted-key> from the <api-key> with <master-key>.
 
     (* Hash for indexing *)
     Hash the <key-hash: sha256> from the <api-key>.
 
-    Store the <secret> with {
+    Create the <secret> with {
         hash: <key-hash>,
         encrypted: <encrypted-key>
-    } into the <secrets-repository>.
+    }.
+    Store the <secret> into the <secrets-repository>.
 
     Return a <Created: status> for the <secret>.
 }

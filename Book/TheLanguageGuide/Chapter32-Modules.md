@@ -171,7 +171,7 @@ When you import an application, you get access to its published variables within
 (* In auth-service/auth.aro *)
 (Authenticate User: Security) {
     Extract the <credentials> from the <request: body>.
-    Retrieve the <user> from the <user-repository> where credentials = <credentials>.
+    Retrieve the <user> from the <user-repository> where <credentials> = <credentials>.
     Publish as <authenticated-user> <user>.
     Return an <OK: status> with <user>.
 }
@@ -182,7 +182,7 @@ After importing auth-service, other feature sets can access the published variab
 import ../auth-service
 (Process Request: Gateway) {
     (* Access published variable from imported application *)
-    <Use> the <authenticated-user> in the <authorization-check>.
+    Use the <authenticated-user> for the <authorization-check>.
     Return an <OK: status> for the <request>.
 }
 ```
@@ -199,10 +199,10 @@ Similarly, Application-End handlers from imported applications are not triggered
 
 Circular imports are technically allowed:
 ```aro
-(* service-a/main.aro *)
-import ../service-b
-(* service-b/main.aro *)
-import ../service-a
+(* service-one/main.aro *)
+import ../service-two
+(* service-two/main.aro *)
+import ../service-one
 ```
 The compiler handles this by loading all files from all imported applications, building a unified symbol table, and resolving references across all loaded feature sets.
 However, circular dependencies usually indicate poor architecture. If two applications need each other, consider:

@@ -152,11 +152,11 @@ List the <entries> from the <directory: uploads-path>.
 
 (* Filter with glob pattern *)
 Create the <src-path> with "./src".
-List the <aro-files> from the <directory: src-path> matching "*.aro".
+List the <aro-files: "*.aro"> from the <directory: src-path>.
 
 (* List recursively *)
 Create the <project-path> with "./project".
-List the <all-files> from the <directory: project-path> recursively.
+List the <all-files: recursively> from the <directory: project-path>.
 ```
 
 Each entry contains: name, path, size, isFile, isDirectory, and modified.
@@ -166,7 +166,7 @@ Each entry contains: name, path, size, isFile, isDirectory, and modified.
 The CreateDirectory action creates a directory, including any necessary parent directories.
 
 ```aro
-<CreateDirectory> the <output-dir> to the <path: "./output/reports/2024">.
+Make the <output-dir> to the <path: "./output/reports/2024">.
 ```
 
 ### Copying Files and Directories
@@ -192,7 +192,7 @@ Move the <file: "./inbox/report.pdf"> to the <destination: "./archive/report.pdf
 The Delete action removes a file from the file system.
 
 ```aro
-Delete the <file: "./temp/cache.json">.
+Delete the <removed> from the <file: "./temp/cache.json">.
 ```
 
 ### File Watching
@@ -280,7 +280,6 @@ Here is a complete example demonstrating multiple built-in services working toge
 (Report Config Change: File Event Handler) {
     (* Extract the changed file path *)
     Extract the <path> from the <event: path>.
-    Extract the <event-type> from the <event: type>.
 
     Log "Config changed:" to the <console>.
     Log <path> to the <console>.
@@ -288,7 +287,6 @@ Here is a complete example demonstrating multiple built-in services working toge
     (* Build notification payload *)
     Create the <notification> with {
         file: <path>,
-        change: <event-type>,
         timestamp: "now"
     }.
 

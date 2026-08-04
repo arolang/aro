@@ -42,15 +42,14 @@ public func generateToken(...) -> Int32 { ... }
     Extract the <email> from the <credentials: email>.
     Extract the <password> from the <credentials: password>.
 
-    Retrieve the <user> from the <user-repository> where email = <email>.
+    Retrieve the <user> from the <user-repository> where <email> is <email>.
     Call the <valid> from the <auth: verifyPassword> with {
         password: <password>,
         hash: <user: passwordHash>
     }.
 
-    When <valid> is false:
-        Log "Failed login attempt for " ++ <email> to the <console>.
-        Return a <Forbidden: status> for the <authentication>.
+    Log "Failed login attempt for " ++ <email> to the <console> when <valid> is false.
+    Return a <Forbidden: status> for the <authentication> when <valid> is false.
 
     Call the <token> from the <auth: generateToken> with { userId: <user: id> }.
     Return an <OK: status> with { token: <token> }.
@@ -648,11 +647,11 @@ Now the ARO layer that orchestrates these native capabilities:
 (* Authentication workflows using native crypto *)
 
 (Login: Authentication Handler) {
-    Extract the <email> from the <request: body email>.
-    Extract the <password> from the <request: body password>.
+    Extract the <email> from the <request: body.email>.
+    Extract the <password> from the <request: body.password>.
 
     (* Look up user by email *)
-    Retrieve the <user> from the <user-repository> where email = <email>.
+    Retrieve the <user> from the <user-repository> where <email> is <email>.
 
     (* Verify password using native Argon2id *)
     Call the <verification> from the <auth: verifyPassword> with {
@@ -661,14 +660,13 @@ Now the ARO layer that orchestrates these native capabilities:
     }.
     Extract the <valid> from the <verification: valid>.
 
-    When <valid> is false:
-        (* Log failed attempt for security monitoring *)
-        Emit a <LoginFailed: event> with {
-            email: <email>,
-            timestamp: <now>,
-            reason: "invalid_credentials"
-        }.
-        Return a <Forbidden: status> with { error: "Invalid credentials" }.
+    (* Log failed attempt for security monitoring, then reject *)
+    Emit a <LoginFailed: event> with {
+        email: <email>,
+        timestamp: <now>,
+        reason: "invalid_credentials"
+    } when <valid> is false.
+    Return a <Forbidden: status> with { error: "Invalid credentials" } when <valid> is false.
 
     (* Generate JWT token *)
     Call the <token-result> from the <auth: generateToken> with {
@@ -676,14 +674,14 @@ Now the ARO layer that orchestrates these native capabilities:
         expirationMinutes: 60
     }.
     Extract the <token> from the <token-result: token>.
-    Extract the <expires-at> from the <token-result: expiresAt>.
+    Extract the <expiry> from the <token-result: expiresAt>.
 
     (* Create session record *)
     Create the <session> with {
         userId: <user: id>,
         token: <token>,
         createdAt: <now>,
-        expiresAt: <expires-at>
+        expiresAt: <expiry>
     }.
     Store the <session> into the <session-repository>.
 
@@ -695,7 +693,7 @@ Now the ARO layer that orchestrates these native capabilities:
 
     Return an <OK: status> with {
         token: <token>,
-        expiresAt: <expires-at>,
+        expiresAt: <expiry>,
         user: {
             id: <user: id>,
             email: <user: email>,
@@ -705,8 +703,10 @@ Now the ARO layer that orchestrates these native capabilities:
 }
 
 (Logout: Authentication Handler) {
-    Extract the <token> from the <request: headers Authorization>.
-    Transform the <clean-token> by removing "Bearer " from <token>.
+    Extract the <auth-header> from the <request: headers.Authorization>.
+    (* Strip the "Bearer " prefix by taking the token portion *)
+    Split the <token-parts> from <auth-header> with " ".
+    Extract the <clean-token> from the <token-parts: last>.
 
     (* Validate the token first *)
     Call the <validation> from the <auth: validateToken> with {
@@ -714,27 +714,26 @@ Now the ARO layer that orchestrates these native capabilities:
     }.
     Extract the <valid> from the <validation: valid>.
 
-    When <valid> is false:
-        Return a <Forbidden: status> with { error: "Invalid token" }.
+    Return a <Forbidden: status> with { error: "Invalid token" } when <valid> is false.
 
     (* Remove session *)
     Extract the <token-id> from the <validation: tokenId>.
-    Delete from the <session-repository> where tokenId = <token-id>.
+    Delete the <removed-session> from the <session-repository> where <tokenId> is <token-id>.
 
     Return an <OK: status> with { message: "Logged out successfully" }.
 }
 
 (Validate Token: Authentication Handler) {
-    Extract the <token> from the <request: headers Authorization>.
-    Transform the <clean-token> by removing "Bearer " from <token>.
+    Extract the <auth-header> from the <request: headers.Authorization>.
+    Split the <token-parts> from <auth-header> with " ".
+    Extract the <clean-token> from the <token-parts: last>.
 
     Call the <validation> from the <auth: validateToken> with {
         token: <clean-token>
     }.
 
     Extract the <valid> from the <validation: valid>.
-    When <valid> is false:
-        Return a <Forbidden: status> with { error: "Invalid or expired token" }.
+    Return a <Forbidden: status> with { error: "Invalid or expired token" } when <valid> is false.
 
     Return an <OK: status> with <validation>.
 }
@@ -745,33 +744,32 @@ Now the ARO layer that orchestrates these native capabilities:
 (* Password reset workflow *)
 
 (Request Password Reset: Password Reset Handler) {
-    Extract the <email> from the <request: body email>.
+    Extract the <email> from the <request: body.email>.
 
     (* Find user - don't reveal if email exists *)
-    Retrieve the <user> from the <user-repository> where email = <email>.
+    Retrieve the <user> from the <user-repository> where <email> is <email>.
 
-    When <user> exists:
-        (* Generate reset token *)
-        Call the <reset-result> from the <auth: generateResetToken> with {
-            userId: <user: id>
-        }.
-        Extract the <reset-token> from the <reset-result: resetToken>.
+    (* Only issue a reset token when the user exists; each step is guarded *)
+    Call the <reset-result> from the <auth: generateResetToken> with {
+        userId: <user: id>
+    } when <user> exists.
+    Extract the <reset-token> from the <reset-result: resetToken> when <user> exists.
 
-        (* Store reset request *)
-        Create the <reset-request> with {
-            userId: <user: id>,
-            token: <reset-token>,
-            createdAt: <now>,
-            used: false
-        }.
-        Store the <reset-request> into the <password-reset-repository>.
+    (* Store reset request *)
+    Create the <reset-request> with {
+        userId: <user: id>,
+        token: <reset-token>,
+        createdAt: <now>,
+        used: false
+    } when <user> exists.
+    Store the <reset-request> into the <password-reset-repository> when <user> exists.
 
-        (* Send email *)
-        Emit a <SendPasswordResetEmail: event> with {
-            email: <email>,
-            resetToken: <reset-token>,
-            userName: <user: name>
-        }.
+    (* Send email *)
+    Emit a <SendPasswordResetEmail: event> with {
+        email: <email>,
+        resetToken: <reset-token>,
+        userName: <user: name>
+    } when <user> exists.
 
     (* Always return success to prevent email enumeration *)
     Return an <OK: status> with {
@@ -780,8 +778,8 @@ Now the ARO layer that orchestrates these native capabilities:
 }
 
 (Complete Password Reset: Password Reset Handler) {
-    Extract the <reset-token> from the <request: body resetToken>.
-    Extract the <new-password> from the <request: body newPassword>.
+    Extract the <reset-token> from the <request: body.resetToken>.
+    Extract the <new-password> from the <request: body.newPassword>.
 
     (* Validate reset token *)
     Call the <validation> from the <auth: validateToken> with {
@@ -789,16 +787,14 @@ Now the ARO layer that orchestrates these native capabilities:
     }.
     Extract the <valid> from the <validation: valid>.
 
-    When <valid> is false:
-        Return a <BadRequest: status> with { error: "Invalid or expired reset token" }.
+    Return a <BadRequest: status> with { error: "Invalid or expired reset token" } when <valid> is false.
 
     (* Check if token was already used *)
     Extract the <token-id> from the <validation: tokenId>.
     Retrieve the <reset-request> from the <password-reset-repository>
-        where token = <reset-token>.
+        where <token> is <reset-token>.
 
-    When <reset-request: used> is true:
-        Return a <BadRequest: status> with { error: "Reset token already used" }.
+    Return a <BadRequest: status> with { error: "Reset token already used" } when <reset-request: used> is true.
 
     (* Hash new password *)
     Call the <hash-result> from the <auth: hashPassword> with {
@@ -806,21 +802,24 @@ Now the ARO layer that orchestrates these native capabilities:
     }.
     Extract the <password-hash> from the <hash-result: hash>.
 
-    (* Update user password *)
+    (* Update user password: retrieve, merge, store *)
     Extract the <user-id> from the <validation: userId>.
-    Update the <user-repository> where id = <user-id> with {
+    Retrieve the <user> from the <user-repository> where <id> is <user-id>.
+    Merge the <updated-user: user> with {
         passwordHash: <password-hash>,
         updatedAt: <now>
     }.
+    Store the <updated-user> into the <user-repository>.
 
     (* Mark reset token as used *)
-    Update the <password-reset-repository> where token = <reset-token> with {
+    Merge the <used-request: reset-request> with {
         used: true,
         usedAt: <now>
     }.
+    Store the <used-request> into the <password-reset-repository>.
 
     (* Invalidate all existing sessions for security *)
-    Delete from the <session-repository> where userId = <user-id>.
+    Delete the <removed-sessions> from the <session-repository> where <userId> is <user-id>.
 
     Emit a <PasswordChanged: event> with { userId: <user-id> }.
 
@@ -833,7 +832,7 @@ Now the ARO layer that orchestrates these native capabilities:
 (* Session management and refresh *)
 
 (Refresh Session: Session Handler) {
-    Extract the <token> from the <request: body refreshToken>.
+    Extract the <token> from the <request: body.refreshToken>.
 
     (* Validate existing token *)
     Call the <validation> from the <auth: validateToken> with {
@@ -841,18 +840,16 @@ Now the ARO layer that orchestrates these native capabilities:
     }.
     Extract the <valid> from the <validation: valid>.
 
-    When <valid> is false:
-        Return a <Forbidden: status> with { error: "Invalid refresh token" }.
+    Return a <Forbidden: status> with { error: "Invalid refresh token" } when <valid> is false.
 
     Extract the <user-id> from the <validation: userId>.
     Extract the <token-id> from the <validation: tokenId>.
 
     (* Check session exists *)
     Retrieve the <session> from the <session-repository>
-        where tokenId = <token-id>.
+        where <tokenId> is <token-id>.
 
-    When <session> does not exist:
-        Return a <Forbidden: status> with { error: "Session not found" }.
+    Return a <Forbidden: status> with { error: "Session not found" } when <session> is null.
 
     (* Generate new token *)
     Call the <new-token-result> from the <auth: generateToken> with {
@@ -860,50 +857,50 @@ Now the ARO layer that orchestrates these native capabilities:
         expirationMinutes: 60
     }.
     Extract the <new-token> from the <new-token-result: token>.
-    Extract the <expires-at> from the <new-token-result: expiresAt>.
+    Extract the <expiry> from the <new-token-result: expiresAt>.
 
-    (* Update session *)
-    Update the <session-repository> where tokenId = <token-id> with {
+    (* Update session: merge new values into the retrieved record and store *)
+    Merge the <updated-session: session> with {
         token: <new-token>,
         refreshedAt: <now>,
-        expiresAt: <expires-at>
+        expiresAt: <expiry>
     }.
+    Store the <updated-session> into the <session-repository>.
 
     Return an <OK: status> with {
         token: <new-token>,
-        expiresAt: <expires-at>
+        expiresAt: <expiry>
     }.
 }
 
 (List Active Sessions: Session Handler) {
     (* Extract user from validated token *)
-    Extract the <token> from the <request: headers Authorization>.
-    Transform the <clean-token> by removing "Bearer " from <token>.
+    Extract the <auth-header> from the <request: headers.Authorization>.
+    Split the <token-parts> from <auth-header> with " ".
+    Extract the <clean-token> from the <token-parts: last>.
 
     Call the <validation> from the <auth: validateToken> with {
         token: <clean-token>
     }.
 
-    When <validation: valid> is false:
-        Return a <Forbidden: status> with { error: "Invalid token" }.
+    Return a <Forbidden: status> with { error: "Invalid token" } when <validation: valid> is false.
 
     Extract the <user-id> from the <validation: userId>.
 
     (* Get all sessions for user *)
     Retrieve the <sessions> from the <session-repository>
-        where userId = <user-id>.
+        where <userId> is <user-id>.
 
-    (* Remove sensitive data *)
-    Transform the <safe-sessions> from <sessions> by selecting [
-        id, createdAt, expiresAt, lastActivity
-    ].
+    (* Project to non-sensitive fields (id, createdAt, expiresAt, lastActivity) *)
+    Map the <safe-sessions> from the <sessions>.
 
     Return an <OK: status> with { sessions: <safe-sessions> }.
 }
 
 (Revoke Session: Session Handler) {
-    Extract the <token> from the <request: headers Authorization>.
-    Transform the <clean-token> by removing "Bearer " from <token>.
+    Extract the <auth-header> from the <request: headers.Authorization>.
+    Split the <token-parts> from <auth-header> with " ".
+    Extract the <clean-token> from the <token-parts: last>.
     Extract the <session-id> from the <pathParameters: sessionId>.
 
     (* Validate requesting user's token *)
@@ -911,20 +908,18 @@ Now the ARO layer that orchestrates these native capabilities:
         token: <clean-token>
     }.
 
-    When <validation: valid> is false:
-        Return a <Forbidden: status> with { error: "Invalid token" }.
+    Return a <Forbidden: status> with { error: "Invalid token" } when <validation: valid> is false.
 
     Extract the <user-id> from the <validation: userId>.
 
     (* Verify session belongs to user *)
     Retrieve the <session> from the <session-repository>
-        where id = <session-id>.
+        where <id> is <session-id>.
 
-    When <session: userId> is not <user-id>:
-        Return a <Forbidden: status> with { error: "Cannot revoke another user's session" }.
+    Return a <Forbidden: status> with { error: "Cannot revoke another user's session" } when <session: userId> != <user-id>.
 
     (* Delete the session *)
-    Delete from the <session-repository> where id = <session-id>.
+    Delete the <removed-session> from the <session-repository> where <id> is <session-id>.
 
     Return an <OK: status> with { message: "Session revoked" }.
 }
@@ -987,7 +982,7 @@ public func invalidateToken(...) -> Int32 {
 (Logout: Authentication Handler) {
     (* ... validation ... *)
     Call the <_> from the <auth: invalidateToken> with { token: <token> }.
-    Delete from the <session-repository> where tokenId = <token-id>.
+    Delete the <removed-session> from the <session-repository> where <tokenId> is <token-id>.
     (* ... *)
 }
 ```
@@ -998,7 +993,8 @@ For complex state sharing, use system objects as the synchronization point:
 
 ```aro
 (* Both native and ARO read/write to Redis *)
-Write <session> to the <redis: "session:" ++ <session-id>>.
+Compute the <session-key> from "session:" ++ <session-id>.
+Write <session> to the <redis: session-key>.
 ```
 
 Native code can also access the same Redis instance:
@@ -1074,7 +1070,7 @@ func notifyARO(event: String, payload: [String: Any]) {
 (* The feature set invoked by native code via aro_plugin_invoke *)
 (Token Expired: Auth Handler) {
     Extract the <token-id> from the <event: tokenId>.
-    Delete from the <session-repository> where tokenId = <token-id>.
+    Delete the <removed-session> from the <session-repository> where <tokenId> is <token-id>.
     Return an <OK: status> for the <cleanup>.
 }
 ```
@@ -1153,7 +1149,7 @@ Test the complete workflow using ARO test files:
         password: "test-password-123"
     }.
     Extract the <hash> from the <hash-result: hash>.
-    Validate the <hash> is not empty.
+    Log "FAIL: password hashing produced empty hash" to the <console> when <hash> == "".
     Log "Test 1 passed: password hashing" to the <console>.
 
     (* Test 2: Password verification - correct *)
@@ -1162,7 +1158,7 @@ Test the complete workflow using ARO test files:
         hash: <hash>
     }.
     Extract the <valid> from the <verify-result: valid>.
-    Validate the <valid> is true.
+    Log "FAIL: correct password did not verify" to the <console> when <valid> is false.
     Log "Test 2 passed: password verification (correct)" to the <console>.
 
     (* Test 3: Password verification - incorrect *)
@@ -1171,7 +1167,7 @@ Test the complete workflow using ARO test files:
         hash: <hash>
     }.
     Extract the <invalid> from the <wrong-result: valid>.
-    Validate the <invalid> is false.
+    Log "FAIL: wrong password verified" to the <console> when <invalid> is true.
     Log "Test 3 passed: password verification (incorrect)" to the <console>.
 
     (* Test 4: Token generation *)
@@ -1180,7 +1176,7 @@ Test the complete workflow using ARO test files:
         expirationMinutes: 5
     }.
     Extract the <token> from the <token-result: token>.
-    Validate the <token> is not empty.
+    Log "FAIL: token generation produced empty token" to the <console> when <token> == "".
     Log "Test 4 passed: token generation" to the <console>.
 
     (* Test 5: Token validation *)
@@ -1188,9 +1184,9 @@ Test the complete workflow using ARO test files:
         token: <token>
     }.
     Extract the <token-valid> from the <validation: valid>.
-    Validate the <token-valid> is true.
+    Log "FAIL: generated token did not validate" to the <console> when <token-valid> is false.
     Extract the <returned-user-id> from the <validation: userId>.
-    Validate the <returned-user-id> equals "test-user-123".
+    Log "FAIL: token returned wrong user id" to the <console> when <returned-user-id> != "test-user-123".
     Log "Test 5 passed: token validation" to the <console>.
 
     Log "All authentication tests passed!" to the <console>.
@@ -1232,13 +1228,13 @@ Test the full authentication flow:
 
     (* Verify session was created *)
     Retrieve the <sessions> from the <session-repository>
-        where userId = "e2e-test-user".
-    Validate the <sessions> is not empty.
+        where <userId> is "e2e-test-user".
+    Log "FAIL: no session created" to the <console> when <sessions> is null.
     Log "E2E Test: Login flow passed" to the <console>.
 
     (* Cleanup *)
-    Delete from the <user-repository> where id = "e2e-test-user".
-    Delete from the <session-repository> where userId = "e2e-test-user".
+    Delete the <removed-user> from the <user-repository> where <id> is "e2e-test-user".
+    Delete the <removed-sessions> from the <session-repository> where <userId> is "e2e-test-user".
 
     Log "All E2E tests passed!" to the <console>.
     Return an <OK: status> for the <tests>.
@@ -1268,9 +1264,8 @@ return setError(resultPtr, "{\"code\": \"INVALID_TOKEN\", \"message\": \"Token h
 ```aro
 (* ARO: handle structured errors *)
 Call the <result> from the <auth: validateToken> with { token: <token> }.
-When <result: error> exists:
-    Log "Auth error: " ++ <result: error message> to the <console>.
-    Return a <Forbidden: status> with <result: error>.
+Log "Auth error: " ++ <result: error.message> to the <console> when <result: error> exists.
+Return a <Forbidden: status> with <result: error> when <result: error> exists.
 ```
 
 ### Versioning Strategy

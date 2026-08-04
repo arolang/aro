@@ -4,82 +4,94 @@ Complete reference for all built-in actions in ARO.
 
 ## Quick Reference Table
 
+The **Role** column is the action's actual `ActionRole` in the runtime — one of
+`REQUEST`, `OWN`, `RESPONSE`, `EXPORT`, or `SERVER`. (Terminal, File, Git, Test,
+and State are functional *domains*, not roles — see the detailed sections.)
+
 | Action | Role | Description | Example |
 |--------|------|-------------|---------|
 | **Extract** | REQUEST | Pull data from structured source | `Extract the <id> from the <request: params>.` |
-| **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id = <id>.` |
+| **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where <id> is <id>.` |
 | **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
 | **Read** | REQUEST | Read from file or URL | `Read the <config> from the <file: "./config.json">.` |
+| **Probe** | REQUEST | Check reachability of a target | `Probe the <reachability> from <target>.` |
 | **Stream** | REQUEST | Stream a file line-by-line (O(1) memory) or subscribe to SSE/WebSocket | `Stream the <lines> from "./bigfile.dat".` |
 | **List** | REQUEST | List directory contents | `List the <files> from the <directory: src-path>.` |
 | **Stat** | REQUEST | Get file metadata | `Stat the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `Receive the <message> from the <event>.` |
-| **Execute** | REQUEST | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
+| **Prompt** | REQUEST | Prompt for text input | `Prompt the <name> with "Enter name: ".` |
+| **Select** | REQUEST | Present a selection menu | `Select the <env> from the <options> with "Choose: ".` |
 | **Pull** | REQUEST | Pull remote changes from `<git>` | `Pull the <updates> from the <git>.` |
 | **Clone** | REQUEST | Clone a remote Git repository | `Clone the <repo> from the <git> with { url: "...", path: "./out" }.` |
-| **Prompt** | TERMINAL | Prompt for text input | `Prompt the <name> with "Enter name: " from the <terminal>.` |
-| **Select** | TERMINAL | Present a selection menu | `Select the <env> from the <options> with "Choose: ".` |
-| **Clear** | TERMINAL | Clear the terminal screen | `Clear the <screen> for the <terminal>.` |
 | **Create** | OWN | Create new data | `Create the <user> with { name: "Alice" }.` |
 | **Compute** | OWN | Perform calculations | `Compute the <total> for the <items>.` |
 | **Transform** | OWN | Convert/map data | `Transform the <dto> from the <entity>.` |
 | **Validate** | OWN | Check against rules | `Validate the <data> for the <schema>.` |
 | **Compare** | OWN | Compare values | `Compare the <hash> against the <stored>.` |
+| **Parse** | OWN | Parse structured text | `Parse the <document> from the <html-content>.` |
+| **Execute** | OWN | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
 | **Update** | OWN | Modify existing data | `Update the <user> with <changes>.` |
+| **Clear** | OWN | Clear the terminal screen | `Clear the <screen> for the <terminal>.` |
+| **Accept** | OWN | Accept state transition | `Accept the <transition: draft_to_placed> on <order: status>.` |
+| **Call** | OWN | Call external API / plugin | `Call the <result> via <API: POST /users>.` |
+| **Sleep** | OWN | Pause execution | `Sleep the <pause> for 2.` |
 | **Stage** | OWN | Stage files for Git commit | `Stage the <files> to the <git> with ".".` |
 | **Checkout** | OWN | Switch Git branches | `Checkout the <branch> from the <git> with "feature/x".` |
-| **Make** | OWN | Create directory | `Make the <dir> to the <path: "./out">.` |
-| **Copy** | OWN | Copy file/directory | `Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
-| **Move** | OWN | Move/rename file | `Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
 | **Map** | OWN | Transform collection elements | `Map the <names> from the <users: name>.` |
-| **Filter** | OWN | Select matching elements | `Filter the <active> from the <users> where status = "active".` |
+| **Filter** | OWN | Select matching elements | `Filter the <active> from the <users> where <status> is "active".` |
 | **Group** | OWN | Partition collection by field | `Group the <by-status> from the <orders> by "status".` |
 | **Reduce** | OWN | Aggregate collection | `Reduce the <total> from the <items> with sum(<amount>).` |
 | **Sort** | OWN | Order collection | `Sort the <users> by <name>.` |
 | **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
 | **Join** | OWN | Join collection to string | `Join the <csv> from <parts> with ",".` |
 | **Merge** | OWN | Combine data | `Merge the <existing-user> with <update-data>.` |
+| **Delete** | OWN | Remove data | `Delete the <user> from the <users> where <id> is <id>.` |
 | **Return** | RESPONSE | Return result | `Return an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
-| **Log** | EXPORT | Write to logs | `Log "Done" to the <console>.` |
-| **Store** | EXPORT | Save to repository | `Store the <user> into the <users>.` |
-| **Write** | EXPORT | Write to file or URL | `Write the <data> to the <file: "./out.txt">.` |
-| **Append** | EXPORT | Append to file | `Append the <line> to the <file: "./log.txt">.` |
-| **Send** | EXPORT | Send to destination | `Send the <email> to the <recipient>.` |
-| **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
+| **Log** | RESPONSE | Write to logs | `Log "Done" to the <console>.` |
+| **Send** | RESPONSE | Send to destination | `Send the <email> to the <recipient>.` |
+| **Write** | RESPONSE | Write to file or URL | `Write the <data> to the <file: "./out.txt">.` |
+| **Append** | RESPONSE | Append to file | `Append the <line> to the <file: "./log.txt">.` |
+| **Notify** | RESPONSE | Send notification | `Notify the <admin> with "alert".` |
+| **Broadcast** | RESPONSE | Send to all connections | `Broadcast the <msg> to the <server>.` |
+| **Render** | RESPONSE | Render a template to a sink | `Render the <screen> to the <console>.` |
+| **Store** | RESPONSE | Save to repository | `Store the <user> into the <users>.` |
 | **Publish** | EXPORT | Make globally available | `Publish as <config> <settings>.` |
+| **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
+| **Schedule** | EXPORT | Schedule a recurring event | `Schedule the <heartbeat> with 30.` |
 | **Commit** | EXPORT | Create a Git commit | `Commit the <result> to the <git> with "feat: add x".` |
 | **Push** | EXPORT | Push commits to Git remote | `Push the <result> to the <git>.` |
 | **Tag** | EXPORT | Create a Git tag | `Tag the <release> for the <git> with "v1.0.0".` |
-| **Notify** | EXPORT | Send notification | `Notify the <alert> to the <admin>.` |
-| **Delete** | EXPORT | Remove data | `Delete the <user> from the <users> where id = <id>.` |
-| **Start** | SERVICE | Start a service | `Start the <http-server> with <contract>.` |
-| **Stop** | SERVICE | Stop a service | `Stop the <http-server> with <application>.` |
-| **Listen** | SERVICE | Listen for connections | `Listen on port 9000 as <socket-server>.` |
-| **Connect** | SERVICE | Connect to service | `Connect to <host: "db"> on port 5432.` |
-| **Close** | SERVICE | Close connection | `Close the <connection>.` |
-| **Broadcast** | SERVICE | Send to all connections | `Broadcast the <msg> to the <server>.` |
-| **Keepalive** | SERVICE | Keep app running | `Keepalive the <app> for the <events>.` |
-| **Call** | SERVICE | Call external API | `Call the <result> via <API: POST /users>.` |
-| **Accept** | STATE | Accept state transition | `Accept the <transition: draft_to_placed> on <order: status>.` |
-| **Given** | TEST | Test precondition | `Given the <user> with { name: "Test" }.` |
-| **When** | TEST | Test action | `When the <action> is performed.` |
-| **Then** | TEST | Test expectation | `Then the <result> should be <expected>.` |
-| **Assert** | TEST | Assert condition | `Assert the <value> equals <expected>.` |
+| **Make** | SERVER | Create directory | `Make the <dir> to the <path: "./out">.` |
+| **Copy** | SERVER | Copy file/directory | `Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
+| **Move** | SERVER | Move/rename file | `Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
+| **Start** | SERVER | Start a service | `Start the <http-server> with <contract>.` |
+| **Stop** | SERVER | Stop a service | `Stop the <http-server> with <application>.` |
+| **Listen** | SERVER | Attach a listener to a stream | `Listen the <keyboard> to the <stdin>.` |
+| **Connect** | SERVER | Connect a socket client | `Connect the <conn> to the <host> with { port: 5432 }.` |
+| **Close** | SERVER | Close connection | `Close the <connection>.` |
+| **Keepalive** | SERVER | Keep app running | `Keepalive the <app> for the <events>.` |
+| **Given** | OWN | Test precondition | `Given the <user> with { name: "Test" }.` |
+| **When** | OWN | Test action | `When the <action> from the <input>.` |
+| **Then** | OWN | Test expectation | `Then the <result> with <expected>.` |
+| **Assert** | OWN | Assert condition | `Assert the <value> for the <expected>.` |
 
 ## Action Categories
 
-| Category | Role | Data Flow |
+The runtime classifies every action into one of **five** roles (`ActionRole`):
+
+| Role | Meaning | Data Flow |
 |----------|------|-----------|
 | REQUEST | Bring data in | External -> Internal |
-| OWN | Transform data | Internal -> Internal |
-| RESPONSE | Send results | Internal -> External |
-| EXPORT | Publish/persist | Internal -> External |
-| SERVICE | Control services | System operations |
-| TERMINAL | User interaction | Terminal I/O |
-| STATE | State transitions | Internal state changes |
-| TEST | Testing | Verification actions |
+| OWN | Transform data internally | Internal -> Internal |
+| RESPONSE | Send results out | Internal -> External |
+| EXPORT | Publish/persist beyond scope | Internal -> External |
+| SERVER | Service & lifecycle management | System operations |
+
+Actions are additionally grouped by *domain* (Terminal, File, Git, Test, State)
+in the sections below — those are organizational groupings for discoverability,
+not separate roles.
 
 ---
 
@@ -150,9 +162,9 @@ Retrieve the <status|log|branch> from the <git>.
 **Examples:**
 ```aro
 Retrieve the <user> from the <user-repository>.
-Retrieve the <user> from the <user-repository> where id = <user-id>.
-Retrieve the <orders> from the <order-repository> where status = "pending".
-Retrieve the <products> from the <repository> where category = <cat> and active = true.
+Retrieve the <user> from the <user-repository> where <id> is <user-id>.
+Retrieve the <orders> from the <order-repository> where <status> is "pending".
+Retrieve the <products> from the <repository> where <category> is <cat> and <active> is true.
 
 (* Git: status, log, branch *)
 Retrieve the <status> from the <git>.
@@ -333,8 +345,8 @@ Return an <OK: status> for the <listing>.
 
 (* With error handling *)
 Execute the <result> for the <command: "df"> with "-h".
-Log <result.message> to the <console> when <result.error> = true.
-Return an <Error: status> for the <result> when <result.error> = true.
+Log <result: message> to the <console> when <result: error> = true.
+Return an <Error: status> for the <result> when <result: error> = true.
 Return an <OK: status> for the <result>.
 
 (* Using array for multiple arguments *)
@@ -426,7 +438,7 @@ Create the <list-b> with [1, 2, 3, 4].
 Compute the <common: intersect> from <list-a> with <list-b>.
 (* Result: [2, 3] *)
 
-Compute the <only-in-a: difference> from <list-a> with <list-b>.
+Compute the <a-only: difference> from <list-a> with <list-b>.
 (* Result: [5] *)
 ```
 
@@ -579,7 +591,7 @@ Merge the <target> from <source>.
 **Examples:**
 ```aro
 (* Merge update data into existing entity *)
-Retrieve the <existing-user> from the <user-repository> where id = <id>.
+Retrieve the <existing-user> from the <user-repository> where <id> is <id>.
 Extract the <update-data> from the <request: body>.
 Merge the <existing-user> with <update-data>.
 Store the <existing-user> into the <user-repository>.
@@ -624,7 +636,7 @@ Group the <status-groups> from the <orders> by "status".
 (* Result: { "active": [{id:1,...}, {id:3,...}], "pending": [{id:2,...}] } *)
 
 (* Group users by role *)
-Group the <by-role> from the <users> by "role".
+Group the <role-groups> from the <users> by "role".
 
 (* Extract a specific group and aggregate *)
 Extract the <active-orders> from the <status-groups: active>.
@@ -784,7 +796,7 @@ Publish as <current-user> <user>.
 
 ### Log
 
-**Role:** EXPORT
+**Role:** RESPONSE
 **Verbs:** log, print, output, debug
 **Prepositions:** to, for, with
 
@@ -1007,16 +1019,16 @@ Lists directory contents.
 ```aro
 Create the <dir-path> with "./path".
 List the <result> from the <directory: dir-path>.
-List the <result> from the <directory: dir-path> matching "pattern".
-List the <result> from the <directory: dir-path> recursively.
+List the <result: "pattern"> from the <directory: dir-path>.
+List the <result: recursively> from the <directory: dir-path>.
 ```
 
 **Examples:**
 ```aro
 Create the <uploads-path> with "./uploads".
 List the <entries> from the <directory: uploads-path>.
-List the <aro-files> from the <directory: src-path> matching "*.aro".
-List the <all-files> from the <directory: project-path> recursively.
+List the <aro-files: "*.aro"> from the <directory: src-path>.
+List the <all-files: recursively> from the <directory: project-path>.
 ```
 
 **Valid Prepositions:** `from`
@@ -1143,9 +1155,9 @@ Delete the <file: path>.
 
 **Examples:**
 ```aro
-Delete the <user> from the <user-repository> where id = <user-id>.
-Delete the <file: "./temp.txt">.
-Delete the <sessions> from the <repository> where expired = true.
+Delete the <user> from the <user-repository> where <id> is <user-id>.
+Delete the <removed> from the <file: "./temp.txt">.
+Delete the <sessions> from the <repository> where <expired> is true.
 ```
 
 **Valid Prepositions:** `from`
@@ -1160,14 +1172,14 @@ Prompts the user for text input via the terminal. Use the `hidden` qualifier to 
 
 **Syntax:**
 ```aro
-Prompt the <result> with "message" from the <terminal>.
-Prompt the <result: hidden> with "message" from the <terminal>.
+Prompt the <result> with "message".
+Prompt the <result: hidden> with "message".
 ```
 
 **Examples:**
 ```aro
-Prompt the <username> with "Enter username: " from the <terminal>.
-Prompt the <password: hidden> with "Password: " from the <terminal>.
+Prompt the <username> with "Enter username: ".
+Prompt the <password: hidden> with "Password: ".
 ```
 
 **Valid Prepositions:** `with`, `from` | **Aliases:** `ask`
@@ -1263,38 +1275,42 @@ Stop the <file-monitor> with <application>.
 
 ### Listen
 
-Listens for connections.
+Attaches a listener to a stream or event channel (for example keyboard input on
+stdin). There is no `on port` form — TCP servers are started with
+`Start the <socket-server> with { port: N }`.
 
 **Syntax:**
 ```aro
-Listen on port <number> as <name>.
+Listen the <result> to the <stream>.
+Listen the <result> on the <channel>.
 ```
 
 **Examples:**
 ```aro
-Listen on port 9000 as <socket-server>.
+Listen the <keyboard> to the <stdin>.
+Listen the <incoming> on the <event-channel>.
 ```
 
-**Valid Prepositions:** `on`, `as`
+**Valid Prepositions:** `on`, `for`, `to`
 
 ---
 
 ### Connect
 
-Connects to a service.
+Connects a socket client to a host. The port is supplied in the `with` object.
 
 **Syntax:**
 ```aro
-Connect to <host: address> on port <number> as <name>.
+Connect the <result> to the <host> with { port: <number> }.
 ```
 
 **Examples:**
 ```aro
-Connect to <host: "localhost"> on port 5432 as <database>.
-Connect to <host: "redis.local"> on port 6379 as <cache>.
+Create the <host> with "localhost".
+Connect the <conn> to the <host> with { port: 5432 }.
 ```
 
-**Valid Prepositions:** `to`, `on`, `as`
+**Valid Prepositions:** `to`, `with`
 
 ---
 
@@ -1537,64 +1553,74 @@ Tag the <release> for the <git> with {
 
 ## Action Summary Table
 
-| Action | Role | Prepositions |
-|--------|------|--------------|
-| Extract | REQUEST | from |
-| Retrieve | REQUEST | from |
-| Request | REQUEST | from, to, via |
-| Read | REQUEST | from |
-| Receive | REQUEST | from |
-| Execute | REQUEST | for, on, with |
-| Create | OWN | with |
-| Compute | OWN | for, from |
-| Transform | OWN | from |
-| Validate | OWN | for |
-| Compare | OWN | against |
-| Update | OWN | with |
-| Map | OWN | from |
-| Filter | OWN | from, where |
-| Group | OWN | from (by clause) |
-| Reduce | OWN | from, with |
-| Sort | OWN | by |
-| Split | OWN | from (by clause) |
-| Merge | OWN | with, into, from |
-| Return | RESPONSE | with, for |
-| Throw | RESPONSE | for |
-| Store | EXPORT | into |
-| Publish | EXPORT | as |
-| Log | EXPORT | to, for, with |
-| Send | EXPORT | to, with |
-| Emit | EXPORT | with |
-| Write | EXPORT | to |
-| Delete | EXPORT | from |
-| Notify | EXPORT | to |
-| List | FILE | from |
-| Stat | FILE | for |
-| Exists | FILE | for |
-| Make | FILE | to |
-| Copy | FILE | to |
-| Move | FILE | to |
-| Append | FILE | to |
-| Start | SERVICE | with |
-| Stop | SERVICE | with |
-| Listen | SERVICE | on, as |
-| Connect | SERVICE | to, on, as |
-| Close | SERVICE | - |
-| Call | SERVICE | via, with |
-| Broadcast | SERVICE | to, with |
-| Keepalive | SERVICE | for |
-| Accept | STATE | on |
-| Prompt | TERMINAL | with, from |
-| Select | TERMINAL | from, with |
-| Clear | TERMINAL | for |
-| Given | TEST | with |
-| When | TEST | - |
-| Then | TEST | - |
-| Assert | TEST | equals, contains |
-| Stage | GIT | to, for |
-| Commit | GIT | to, with |
-| Push | GIT | to, with |
-| Pull | GIT | from |
-| Clone | GIT | from, with |
-| Checkout | GIT | from, to, with |
-| Tag | GIT | for, with |
+`Role` is the runtime `ActionRole`; `Domain` is the functional grouping used by
+the sections above. Prepositions are the action's `validPrepositions`.
+
+| Action | Role | Domain | Prepositions |
+|--------|------|--------|--------------|
+| Extract | REQUEST | Core | from |
+| Retrieve | REQUEST | Repository | from |
+| Request | REQUEST | HTTP | from, to, via, with |
+| Read | REQUEST | File | from |
+| Probe | REQUEST | Network | from, with |
+| Receive | REQUEST | Socket | from, via |
+| Stream / Subscribe | REQUEST | Streaming | from, with |
+| List | REQUEST | File | from |
+| Stat | REQUEST | File | for |
+| Exists | REQUEST | File | for |
+| Prompt | REQUEST | Terminal | with, from |
+| Select | REQUEST | Terminal | from, with |
+| Pull | REQUEST | Git | from |
+| Clone | REQUEST | Git | from, with |
+| Create | OWN | Core | with |
+| Compute | OWN | Core | for, from, with |
+| Transform | OWN | Core | from |
+| Validate | OWN | Core | for |
+| Compare | OWN | Core | against, with, to |
+| Parse | OWN | Core | from |
+| Execute | OWN | System | for, on, with |
+| Update | OWN | Core | with |
+| Map | OWN | Pipeline | from |
+| Filter | OWN | Pipeline | from (where clause) |
+| Group | OWN | Pipeline | from (by clause) |
+| Reduce | OWN | Pipeline | from, with |
+| Sort | OWN | Pipeline | for, with |
+| Split | OWN | String | from (by clause) |
+| Join | OWN | String | from |
+| Merge | OWN | Core | with, from |
+| Sleep | OWN | System | for, with |
+| Accept | OWN | State | on |
+| Call | OWN | Interop | via, with |
+| Clear | OWN | Terminal | for |
+| Delete | OWN | Repository | from, for |
+| Stage | OWN | Git | to, for |
+| Checkout | OWN | Git | from, to, with |
+| Return | RESPONSE | Core | with, for |
+| Throw | RESPONSE | Core | for |
+| Log | RESPONSE | Output | to, for, with |
+| Send | RESPONSE | Output | to, via, with |
+| Write | RESPONSE | File | to |
+| Append | RESPONSE | File | to, into |
+| Notify | RESPONSE | Output | to, for, with |
+| Broadcast | RESPONSE | Socket | to, via |
+| Render | RESPONSE | Terminal | to |
+| Store | RESPONSE | Repository | into, to |
+| Publish | EXPORT | Core | as |
+| Emit | EXPORT | Events | with |
+| Schedule | EXPORT | Events | with |
+| Commit | EXPORT | Git | to, with |
+| Push | EXPORT | Git | to, with |
+| Tag | EXPORT | Git | for, with |
+| Make | SERVER | File | to, for, at |
+| Copy | SERVER | File | to |
+| Move | SERVER | File | to |
+| Start | SERVER | Service | with |
+| Stop | SERVER | Service | with |
+| Listen | SERVER | Service | on, for, to |
+| Connect | SERVER | Service | to, with |
+| Close | SERVER | Service | - |
+| Keepalive | SERVER | Service | for |
+| Given | OWN | Test | with |
+| When | OWN | Test | from |
+| Then | OWN | Test | with |
+| Assert | OWN | Test | for, with |

@@ -12,7 +12,7 @@ Call the <hash> from the <crypto: sha256> with { input: <password> }.
 Your plugin can provide a native action verb:
 
 ```aro
-Hash the <hash> from the <password> with sha256.
+Hash the <hash: sha256> from the <password>.
 ```
 
 Custom actions feel like built-in ARO features. They follow the same `Action the <result> preposition the <object>` syntax, support the same prepositions, and integrate seamlessly with ARO's execution model. This chapter shows you how to create them.
@@ -50,7 +50,7 @@ Custom actions provide new verbs that work like built-in actions:
 Resize the <thumbnail> from the <image> with { width: 200, height: 200 }.
 
 (* Or with qualifier syntax *)
-Resize the <thumbnail: 200x200> from the <image>.
+Resize the <preview: thumb> from the <image>.
 ```
 
 **Characteristics:**
@@ -628,7 +628,7 @@ Now your actions work like native ARO verbs:
 
     (* Encrypt data *)
     Create the <secret-data> with "Sensitive information here".
-    Encrypt the <encrypted> with <secret-data> using <encryption-key>.
+    Encrypt the <encrypted> from <secret-data> with <encryption-key>.
     Log "Encrypted: " ++ <encrypted: encrypted> to the <console>.
 
     (* Decrypt data *)
@@ -662,9 +662,9 @@ Use the result specifier to specify options:
 
 ```aro
 (* Specifier on result picks algorithm *)
-Hash the <result: sha256> from the <data>.
-Hash the <result: sha512> from the <data>.
-Hash the <result: md5> from the <data>.
+Hash the <sha256-result: sha256> from the <data>.
+Hash the <sha512-result: sha512> from the <data>.
+Hash the <md5-result: md5> from the <data>.
 ```
 
 Implementation reads from `result.specifiers[0]`:
@@ -699,7 +699,7 @@ actions:
 Transform the <json> from the <xml>.        (* Convert XML to JSON *)
 Transform the <data> to uppercase.          (* Apply transformation *)
 Transform the <user> into the <dto>.        (* Map to different type *)
-Transform the <text> as <Base64: encoding>. (* Encode as format *)
+Transform the <text> with <Base64: encoding>. (* Encode as format *)
 ```
 
 The `preposition` field is now always present as a top-level string in the input JSON:
@@ -977,19 +977,17 @@ Test with ARO code:
 
     (* Test 1: Hash action *)
     Hash the <hash1: sha256> from "test".
-    When <hash1: hash> is empty:
-        Return a <ServerError: status> with "Hash failed".
+    Return a <ServerError: status> with "Hash failed" when <hash1: hash> == "".
     Log "PASS: Hash action" to the <console>.
 
     (* Test 2: Encrypt/Decrypt roundtrip *)
     Create the <key> with "test-encryption-key-32bytes!".
     Create the <secret> with "sensitive data".
 
-    Encrypt the <encrypted> with <secret> using <key>.
+    Encrypt the <encrypted> from <secret> with <key>.
     Decrypt the <decrypted> from <encrypted: encrypted> with <key>.
 
-    When <decrypted: decrypted> is not <secret>:
-        Return a <ServerError: status> with "Roundtrip failed".
+    Return a <ServerError: status> with "Roundtrip failed" when <decrypted: decrypted> != <secret>.
     Log "PASS: Encrypt/Decrypt roundtrip" to the <console>.
 
     Log "All tests passed!" to the <console>.
@@ -1280,8 +1278,7 @@ Compute the <total: sum> from the <values>.
 **2. In Expressions (Variable Specifier):**
 ```aro
 Log <list: reverse> to the <console>.
-When <numbers: min> < 0:
-    Log "Has negative numbers" to the <console>.
+Log "Has negative numbers" to the <console> when <numbers: min> < 0.
 ```
 
 ### Qualifier vs Action: When to Use Each

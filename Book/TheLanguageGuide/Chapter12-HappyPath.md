@@ -80,7 +80,7 @@ Here is ARO code followed by the runtime error messages it produces when operati
 ```aro
 (getUser: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
     Return an <OK: status> with <user>.
 }
 ```
@@ -106,7 +106,8 @@ Runtime Error: Cannot extract the id from the pathParameters: id
 ```aro
 (createOrder: Order API) {
     Extract the <data> from the <request: body>.
-    Validate the <data> against the <order-schema>.
+    Validate the <valid-data> for <data>.
+    Create the <order> with <valid-data>.
     Store the <order> into the <order-repository>.
     Return a <Created: status> with <order>.
 }

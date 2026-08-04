@@ -106,7 +106,7 @@ Log <error> to the <error-log>.
 Compute the <total> for the <items>.
 Compute the <hash> for the <password>.
 (* Validate for a type *)
-Validate the <input> for the <user-type>.
+Validate the <input> for the <user-schema>.
 ```
 
 ### Semantic Notes
@@ -202,11 +202,9 @@ Compare the <actual> against the <expected>.
 ### Examples
 
 ```aro
-(* Request via proxy *)
-Request the <data> from "https://api.example.com" via the <proxy>.
-(* Send via channel *)
-Send the <message> to the <user> via the <email-service>.
-Send the <notification> to the <subscriber> via the <websocket>.
+(* Send via a channel *)
+Send the <message> via the <email-service>.
+Send the <notification> via the <websocket>.
 ```
 
 ### Semantic Notes
@@ -220,22 +218,26 @@ Send the <notification> to the <subscriber> via the <websocket>.
 
 **Meaning:** Location/surface — indicates attachment or location.
 **Indicates:** The point of attachment or surface.
-**Common with:** `Start`, `Serve`
+**Common with:** `Listen`, `Exec`, `Accept`
 
 ### Examples
 
 ```aro
-(* Start on port *)
-Start the <http-server> on port 8080.
-Start the <socket-server> on port 9000.
-(* Serve on host *)
-Start the <http-server> on "0.0.0.0:8080".
+(* Attach a listener to a channel *)
+Listen the <incoming> on the <event-channel>.
+(* Run a command on the system *)
+Exec the <result> on the <system> with { command: "ls" }.
 ```
+
+> Network ports are **not** passed with `on`. There is no `on port` construct —
+> a socket server takes its port in the `with` object
+> (`Start the <socket-server> with { port: 9000 }`), and the HTTP server reads
+> its port from `openapi.yaml` via `<Contract>`.
 
 ### Semantic Notes
 
-- `on` specifies a location or attachment point
-- Primarily used for network configuration
+- `on` specifies a location or attachment point (a stream, channel, or system)
+- Used by `Listen`, `Exec`, and `Accept`
 - Indicates "located at" or "attached to"
 ---
 
@@ -249,8 +251,8 @@ Start the <http-server> on "0.0.0.0:8080".
 | Push data out | `to` | `Send the <x> to the <y>` |
 | Store/transform | `into` | `Store the <x> into the <y>` |
 | Compare/validate | `against` | `Validate the <x> against the <y>` |
-| Specify channel | `via` | `Request the <x> via the <y>` |
-| Specify location | `on` | `Start the <x> on <y>` |
+| Specify channel | `via` | `Send the <x> via the <y>` |
+| Specify location | `on` | `Listen the <x> on the <y>` |
 ---
 
 ## External Source Indicators

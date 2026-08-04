@@ -98,11 +98,11 @@ Every `<Exec>` action returns a structured result object:
 Exec the <result> for the <command> with "whoami".
 
 (* Access individual fields *)
-Log <result.output> to the <console>.
-Log <result.exitCode> to the <console>.
+Log <result: output> to the <console>.
+Log <result: exitCode> to the <console>.
 
 (* Check for errors *)
-Log <result.message> to the <console> when <result.error> = true.
+Log <result: message> to the <console> when <result: error> = true.
 ```
 
 ## Error Handling
@@ -113,8 +113,8 @@ Log <result.message> to the <console> when <result.error> = true.
 (Check Disk Space: System Monitor) {
     Exec the <result> for the <disk-check> with "df -h".
 
-    Log <result.message> to the <console> when <result.error> = true.
-    Return an <Error: status> with <result> when <result.error> = true.
+    Log <result: message> to the <console> when <result: error> = true.
+    Return an <Error: status> with <result> when <result: error> = true.
 
     Return an <OK: status> with <result>.
 }
@@ -126,12 +126,12 @@ Log <result.message> to the <console> when <result.error> = true.
 (Git Status: Version Control) {
     Exec the <result> for the <git> with "git status --porcelain".
 
-    Log "Not a git repository" to the <console> when <result.exitCode> != 0.
-    Return a <BadRequest: status> with { error: "Not a git repository" } when <result.exitCode> != 0.
+    Log "Not a git repository" to the <console> when <result: exitCode> != 0.
+    Return a <BadRequest: status> with { error: "Not a git repository" } when <result: exitCode> != 0.
 
-    Return an <OK: status> with { message: "Working tree clean" } when <result.output> is empty.
+    Return an <OK: status> with { message: "Working tree clean" } when <result: output> == "".
 
-    Return an <OK: status> with { changes: <result.output> }.
+    Return an <OK: status> with { changes: <result: output> }.
 }
 ```
 
@@ -145,7 +145,7 @@ Exec the <result> for the <long-task> with {
     timeout: 5000
 }.
 
-Log "Command timed out" to the <console> when <result.exitCode> = -1.
+Log "Command timed out" to the <console> when <result: exitCode> = -1.
 ```
 
 ## Configuration Options
@@ -229,9 +229,9 @@ output:
     Exec the <memory> for the <command: "free"> with "-h".
 
     Create the <info> with {
-        hostname: <hostname.output>,
-        uptime: <uptime.output>,
-        memory: <memory.output>
+        hostname: <hostname: output>,
+        uptime: <uptime: output>,
+        memory: <memory: output>
     }.
 
     Return an <OK: status> with <info>.
@@ -249,7 +249,7 @@ output:
         timeout: 120000
     }.
 
-    Return an <Error: status> with <install> when <install.error> = true.
+    Return an <Error: status> with <install> when <install: error> = true.
 
     Log "Running tests..." to the <console>.
     Exec the <test> for the <npm> with {
@@ -257,7 +257,7 @@ output:
         workingDirectory: "./app"
     }.
 
-    Return an <Error: status> with <test> when <test.error> = true.
+    Return an <Error: status> with <test> when <test: error> = true.
 
     Log "Building..." to the <console>.
     Exec the <build> for the <npm> with {
@@ -280,8 +280,8 @@ output:
 
     Return a <ServiceUnavailable: status> with {
         service: "api",
-        error: <curl.message>
-    } when <curl.error> = true.
+        error: <curl: message>
+    } when <curl: error> = true.
 
     Return an <OK: status> with { healthy: true }.
 }
@@ -299,9 +299,9 @@ output:
     Extract the <name> from the <queryParameters: name>.
     Exec the <result> for the <check> with "pgrep -l ${name}".
 
-    Return an <OK: status> with { running: false, process: <name> } when <result.error> = true.
+    Return an <OK: status> with { running: false, process: <name> } when <result: error> = true.
 
-    Return an <OK: status> with { running: true, process: <name>, pids: <result.output> }.
+    Return an <OK: status> with { running: true, process: <name>, pids: <result: output> }.
 }
 ```
 
@@ -316,9 +316,9 @@ Be cautious when constructing commands from user input:
 Exec the <result> for the <command> with "ls ${userInput}".
 
 (* SAFER - validate input first *)
-Validate the <path> for the <userInput> against "^[a-zA-Z0-9_/.-]+$".
-Return a <BadRequest: status> with "Invalid path characters" when <path> is not <valid>.
-Exec the <result> for the <command> with "ls ${path}".
+Validate the <validation> for the <userInput> with "^[a-zA-Z0-9_/.-]+$".
+Return a <BadRequest: status> with "Invalid path characters" when <validation> is failed.
+Exec the <result> for the <command> with "ls ${userInput}".
 ```
 
 ### Best Practices

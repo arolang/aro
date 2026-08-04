@@ -122,14 +122,14 @@ The model calls `read_file` on `openapi.yaml` to refresh its memory of the opera
 
 (getUser: User Service) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
     Return an <OK: status> with <user>.
 }
 
 (deleteUser: User Service) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
-    Delete the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Delete the <removed> from the <user-repository> where <id> is <id>.
     Emit a <UserDeleted: event> with <user>.
     Return a <NoContent: status> for the <deletion>.
 }

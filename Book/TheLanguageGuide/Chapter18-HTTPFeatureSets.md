@@ -144,10 +144,10 @@ paths:
     Extract the <order-id> from the <pathParameters: orderId>.
 
     (* Verify order exists *)
-    Retrieve the <order> from the <order-repository> where id = <order-id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Get items for this order *)
-    Retrieve the <items> from the <item-repository> where orderId = <order-id>.
+    Retrieve the <items> from the <item-repository> where <orderId> is <order-id>.
 
     Return an <OK: status> with <items>.
 }
@@ -159,7 +159,7 @@ paths:
 
     (* Retrieve with both constraints to enforce ownership *)
     Retrieve the <item> from the <item-repository>
-        where id = <item-id> and orderId = <order-id>.
+        where <id> = <item-id> and <orderId> = <order-id>.
 
     Return an <OK: status> with <item>.
 }
@@ -170,17 +170,17 @@ paths:
     Extract the <item-data> from the <request: body>.
 
     (* Verify order exists before adding item *)
-    Retrieve the <order> from the <order-repository> where id = <order-id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Create item with parent reference *)
     Create the <item> with {
         orderId: <order-id>,
-        productId: <item-data>.productId,
-        quantity: <item-data>.quantity,
-        price: <item-data>.price
+        productId: <item-data: productId>,
+        quantity: <item-data: quantity>,
+        price: <item-data: price>
     }.
 
-    Store the <item> into the <item-repository>.
+    Store the <stored-item: item> into the <item-repository>.
 
     (* Recalculate order total *)
     Emit an <OrderItemAdded: event> with { order: <order>, item: <item> }.
@@ -195,9 +195,9 @@ paths:
 
     (* Verify ownership before deletion *)
     Retrieve the <item> from the <item-repository>
-        where id = <item-id> and orderId = <order-id>.
+        where <id> = <item-id> and <orderId> = <order-id>.
 
-    Delete the <item> from the <item-repository>.
+    Delete the <removed> from the <item-repository> where <id> is <item-id>.
 
     Emit an <OrderItemRemoved: event> with { orderId: <order-id>, itemId: <item-id> }.
 

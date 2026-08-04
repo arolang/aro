@@ -94,10 +94,10 @@ The response object contains `body` (parsed content), `status` (HTTP status code
 
 **Examples:**
 ```aro
-Group the <by-status> from the <orders> by "status".
+Group the <status-groups> from the <orders> by "status".
 (* Result: { "active": [...], "pending": [...] } *)
 
-Extract the <active-orders> from the <by-status: active>.
+Extract the <active-orders> from the <status-groups: active>.
 ```
 
 ---
@@ -115,8 +115,8 @@ Split the <parts> from the <url> by /#/.
 Extract the <clean: first> from the <parts>.
 
 (* Split by trailing slashes to normalize URLs *)
-Split the <parts> from the <url> by /\/+$/.
-Extract the <clean: first> from the <parts>.
+Split the <slash-parts> from the <url> by /\/+$/.
+Extract the <trimmed: first> from the <slash-parts>.
 ```
 
 ---
@@ -204,7 +204,7 @@ Log "URL: ${<url>}" to the <console>.
 Actions can include `when` guards:
 
 ```aro
-Action ... when <condition>.
+Emit a <CrawlPage: event> with { url: <url> } when <new-entry> > 0.
 ```
 
 **Condition Types:**
@@ -260,7 +260,7 @@ parallel for each <item> in <list> {
 Variables can be embedded in strings:
 
 ```aro
-"Text with ${<variable>} embedded"
+Log "Text with ${<variable>} embedded" to the <console>.
 ```
 
 Escape sequences:
@@ -307,22 +307,22 @@ Escape sequences:
 (Feature Name: Business Activity) {
 
     (* Extraction *)
-    Extract the <result> from the <source: field>.
+    Extract the <extracted> from the <source: field>.
 
     (* Creation *)
-    Create the <result> with <value>.
+    Create the <created> with <value>.
 
     (* Computation *)
-    Compute the <result: operation> from <input>.
+    Compute the <computed: uppercase> from <input>.
 
     (* HTTP *)
-    Request the <result> from the <url>.
+    Request the <response> from the <url>.
 
     (* HTML parsing *)
-    ParseHtml the <result: specifier> from the <html>.
+    ParseHtml the <parsed: markdown> from the <html>.
 
     (* Data grouping *)
-    Group the <result> from the <collection> by "field".
+    Group the <grouped> from the <collection> by "field".
 
     (* String splitting *)
     Split the <parts> from the <string> by /regex/.
@@ -333,7 +333,7 @@ Escape sequences:
 
     (* Repository *)
     Store the <value> into the <repo>.
-    Retrieve the <value> from the <repo>.
+    Retrieve the <loaded> from the <repo>.
 
     (* Events *)
     Emit a <Event: event> with { key: <value> }.
@@ -342,15 +342,15 @@ Escape sequences:
     Log "message ${<var>}" to the <console>.
 
     (* Conditional *)
-    Action ... when <condition>.
+    Log "ready" to the <console> when <count> > 0.
 
     (* Control flow *)
     match <value> {
-        case /pattern/ { ... }
+        case /pattern/ { Log "matched" to the <console>. }
     }
 
-    for each <item> in <list> { ... }
-    parallel for each <item> in <list> { ... }
+    for each <item> in <list> { Log <item> to the <console>. }
+    parallel for each <item> in <list> { Log <item> to the <console>. }
 
     (* Return *)
     Return an <OK: status> for the <context>.

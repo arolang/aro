@@ -17,10 +17,10 @@ Action the <result> preposition the <object> when <condition>.
 ```aro
 (getUser: User API) {
     Extract the <user-id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <user-id>.
+    Retrieve the <user> from the <user-repository> where <id> = <user-id>.
 
-    (* Return NotFound only when user is empty *)
-    Return a <NotFound: status> for the <missing: user> when <user> is empty.
+    (* Return NotFound only when user is null *)
+    Return a <NotFound: status> for the <missing: user> when <user> is null.
 
     Return an <OK: status> with <user>.
 }
@@ -30,13 +30,13 @@ Action the <result> preposition the <object> when <condition>.
 
 ```aro
 (* Only return OK when count is not zero *)
-Return an <OK: status> with <items> when <count> is not 0.
+Return an <OK: status> with <items> when <count> != 0.
 
 (* Send notification only when user has email *)
 Send the <notification> to the <user: email> when <user: email> exists.
 
 (* Log admin access only for admins *)
-Log "admin access" to the <audit> when <user: role> = "admin".
+Log "admin access" to the <audit> when <user: role> == "admin".
 
 (* Return error when validation fails *)
 Return a <BadRequest: status> for the <invalid: input> when <validation> is failed.
@@ -46,19 +46,24 @@ Return a <BadRequest: status> for the <invalid: input> when <validation> is fail
 
 | Operator | Meaning |
 |----------|---------|
-| `is` | Equality |
-| `is not` | Inequality |
-| `is empty` | Null/empty check |
-| `is not empty` | Has value |
-| `exists` | Value exists |
-| `is defined` | Value is defined |
-| `is null` | Value is null |
+| `==` / `=` | Equality |
+| `!=` | Inequality |
 | `>` | Greater than |
 | `<` | Less than |
 | `>=` | Greater than or equal |
 | `<=` | Less than or equal |
-| `=` | Equality |
-| `!=` | Strict inequality |
+| `exists` | Value exists (postfix, e.g. `<user: email> exists`) |
+| `is true` / `is false` | Boolean check |
+| `is null` | Null check |
+| `is a Type` | Type check (e.g. `<value> is a Number`) |
+| `contains` | Membership |
+| `matches` | Regex match |
+
+> **Note:** In a `when` guard, `is` only works for `is true`, `is false`,
+> `is null`, and type checks. For value equality use `==` (or `=`), not
+> `is`. There is no `is empty` operator — use `is null`, or check `exists`
+> for presence. (Inside a repository `where` clause the `is` keyword *does*
+> read as equality, e.g. `where <status> is "active"`.)
 
 ### Boolean Operators
 
@@ -69,13 +74,13 @@ Combine conditions with `and`, `or`, `not`:
 Return an <OK: status> with <user> when <user: active> is true and <user: verified> is true.
 
 (* Either condition with or *)
-Return a <BadRequest: status> for the <unavailable: product> when <stock> is empty or <stock> < <required>.
+Return a <BadRequest: status> for the <unavailable: product> when <stock> is null or <stock> < <required>.
 
 (* Negation *)
-<Allow> the <access> for the <user> when not <user: banned>.
+Allow the <access> for the <user> when not <user: banned>.
 
 (* Complex condition *)
-Grant the <admin-features> for the <user> when (<user: role> is "admin" or <user: is-owner> is true) and <resource: public> is false.
+Grant the <admin-features> for the <user> when (<user: role> == "admin" or <user: owner> is true) and <resource: public> is false.
 ```
 
 ## Match Expressions
@@ -156,18 +161,18 @@ match <value> {
 ### Simple Value Matching
 
 ```aro
-(PUT /orders/{id}/status: Order API) {
+(updateOrderStatus: Order API) {
     Extract the <order-id> from the <pathParameters: id>.
     Extract the <new-status> from the <request: body.status>.
-    Retrieve the <order> from the <order-repository> where id = <order-id>.
+    Retrieve the <order> from the <order-repository> where <id> = <order-id>.
 
     match <new-status> {
         case "confirmed" {
-            Validate the <order> for the <confirmation-rules>.
+            Validate the <confirmation> for the <order>.
             Emit an <OrderConfirmed: event> with <order>.
         }
         case "shipped" {
-            Validate the <order> for the <shipping-rules>.
+            Validate the <shipment> for the <order>.
             Emit an <OrderShipped: event> with <order>.
         }
         case "delivered" {
@@ -195,10 +200,10 @@ match <http: method> {
         Retrieve the <resource> from the <database>.
     }
     case "POST" {
-        Create the <resource> in the <database>.
+        Create the <resource> with <data>.
     }
     case "PUT" {
-        Update the <resource> in the <database>.
+        Update the <resource> with <data>.
     }
     case "DELETE" {
         Remove the <resource> from the <database>.
@@ -218,7 +223,7 @@ match <user: subscription> {
         Deduct the <credit> from the <user: account>.
     }
     case <premium> {
-        Notify the <user> about the <low-credits>.
+        Notify the <user> with <low-credits>.
         Grant the <basic-features> for the <user>.
     }
     case <basic> {
@@ -256,20 +261,20 @@ match <status-code> {
 Match statements support regex patterns for flexible string matching (see **Section 27.4** for comprehensive regex documentation):
 
 ```aro
-match <message.text> {
+match <message: text> {
     case /^ERROR:/i {
-        Log <message.text> to the <console>.
+        Log <message: text> to the <console>.
         Emit an <AlertTriggered: event> with <message>.
     }
     case /^WARN:/i {
-        Log <message.text> to the <console>.
+        Log <message: text> to the <console>.
     }
     case /^[A-Z]{3}-\d{4}$/ {
         (* Matches ticket IDs like "ABC-1234" *)
         Process the <ticket-reference> from the <message>.
     }
     otherwise {
-        Log <message.text> to the <console>.
+        Log <message: text> to the <console>.
     }
 }
 ```
@@ -324,14 +329,14 @@ Match statements are the primary place to use regex for branching logic:
         }
         case /https?:\/\/[\w.-]+/i {
             (* Contains a URL *)
-            <Scan> the <link> for the <security-check>.
+            Scan the <link> for the <security-check>.
         }
         otherwise {
             Store the <text> into the <message-repository>.
         }
     }
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <message>.
 }
 ```
 
@@ -344,10 +349,10 @@ Filter collections based on regex pattern matching with the `matches` operator:
     Retrieve the <files> from the <file-repository>.
 
     (* Filter for error log files *)
-    Filter the <error-logs> from the <files> where name matches /error-\d{4}-\d{2}-\d{2}\.log$/i.
+    Filter the <error-logs> from the <files> where <name> matches /error-\d{4}-\d{2}-\d{2}\.log$/i.
 
     (* Filter for IP addresses in text *)
-    Filter the <ip-entries> from the <log-lines> where text matches /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.
+    Filter the <ip-entries> from the <log-lines> where <text> matches /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.
 
     Return an <OK: status> with <error-logs>.
 }
@@ -360,10 +365,10 @@ Repository queries support regex matching:
 ```aro
 (Search Users: User API) {
     (* Find users with email addresses from specific domains *)
-    Retrieve the <users> from the <user-repository> where email matches /@(company|example)\.com$/i.
+    Retrieve the <users> from the <user-repository> where <email> matches /@(company|example)\.com$/i.
 
     (* Find tickets by pattern *)
-    Retrieve the <tickets> from the <ticket-repository> where code matches /^PROJ-\d{4}$/.
+    Retrieve the <tickets> from the <ticket-repository> where <code> matches /^PROJ-\d{4}$/.
 
     Return an <OK: status> with <users>.
 }
@@ -378,10 +383,10 @@ Split strings using regex patterns:
     Extract the <line> from the <input>.
 
     (* Split by comma, optional whitespace *)
-    Split the <fields> from the <line> with /\s*,\s*/.
+    Split the <fields> from the <line> by /\s*,\s*/.
 
     (* Split by multiple delimiters *)
-    Split the <words> from the <text> with /[\s,;]+/.
+    Split the <words> from the <text> by /[\s,;]+/.
 
     Return an <OK: status> with <fields>.
 }
@@ -391,10 +396,10 @@ The Split action supports regex flags:
 
 ```aro
 (* Case-insensitive split *)
-Split the <parts> from the <text> with /AND|OR/i.
+Split the <parts> from the <text> by /AND|OR/i.
 
 (* Multiline split *)
-Split the <paragraphs> from the <document> with /\n\n+/m.
+Split the <paragraphs> from the <document> by /\n\n+/m.
 ```
 
 ### Common Regex Patterns
@@ -418,10 +423,10 @@ match <email> {
 match <text> {
     case /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/i {
         Extract the <url> from the <text>.
-        Validate the <url> for the <security-check>.
+        Validate the <checked-url> for the <url>.
     }
     otherwise {
-        Process the <text> as the <plain-message>.
+        Process the <plain-message> from the <text>.
     }
 }
 ```
@@ -486,9 +491,9 @@ match <input> {
 #### Log Level Filtering
 
 ```aro
-Filter the <error-logs> from the <logs> where message matches /^\[ERROR\]/i.
-Filter the <warning-logs> from the <logs> where message matches /^\[WARN(ING)?\]/i.
-Filter the <critical-logs> from the <logs> where message matches /^\[(ERROR|FATAL|CRITICAL)\]/i.
+Filter the <error-logs> from the <logs> where <message> matches /^\[ERROR\]/i.
+Filter the <warning-logs> from the <logs> where <message> matches /^\[WARN(ING)?\]/i.
+Filter the <critical-logs> from the <logs> where <message> matches /^\[(ERROR|FATAL|CRITICAL)\]/i.
 ```
 
 ### Best Practices
@@ -537,7 +542,7 @@ match <phone> {
 (* Good - clear intent *)
 match <email> {
     case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i {
-        Validate the <email>.
+        Validate the <checked> for the <email>.
     }
 }
 
@@ -551,14 +556,24 @@ match <email> {
 
 #### Test Your Patterns
 
-Regex can be tricky. Test patterns with sample data:
+Regex can be tricky. The subject of a `match` must be a variable, so bind a
+sample value first, then match it:
 
 ```aro
-(* Test different email formats *)
-match "user@example.com" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✓ *)
-match "user.name+tag@example.co.uk" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✓ *)
-match "invalid@" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✗ *)
+(* Bind a sample address, then test it against the pattern *)
+Create the <sample> with "user@example.com".
+match <sample> {
+    case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i {
+        (* ✓ matches — "user@example.com" is valid *)
+    }
+    otherwise {
+        (* ✗ no match *)
+    }
+}
 ```
+
+Other inputs worth testing against the same pattern: `"user.name+tag@example.co.uk"`
+(✓ valid) and `"invalid@"` (✗ no match).
 
 ### Regex in ARO vs Other Languages
 
@@ -579,9 +594,9 @@ ARO's syntax prioritizes readability and inline usage within statements.
 ### Validate-or-Fail
 
 ```aro
-(POST /users: User API) {
+(createUser: User API) {
     Extract the <user-data> from the <request: body>.
-    Validate the <user-data> for the <user-schema>.
+    Validate the <validation> for the <user-data>.
 
     Return a <BadRequest: status> with <validation: errors> when <validation> is failed.
 
@@ -594,11 +609,11 @@ ARO's syntax prioritizes readability and inline usage within statements.
 ### Find-or-404
 
 ```aro
-(GET /products/{id}: Product API) {
+(getProduct: Product API) {
     Extract the <product-id> from the <pathParameters: id>.
-    Retrieve the <product> from the <product-repository> where id = <product-id>.
+    Retrieve the <product> from the <product-repository> where <id> = <product-id>.
 
-    Return a <NotFound: status> for the <missing: product> when <product> is empty.
+    Return a <NotFound: status> for the <missing: product> when <product> is null.
 
     Return an <OK: status> with <product>.
 }
@@ -607,16 +622,16 @@ ARO's syntax prioritizes readability and inline usage within statements.
 ### Check-Permission
 
 ```aro
-(DELETE /posts/{id}: Post API) {
+(deletePost: Post API) {
     Extract the <post-id> from the <pathParameters: id>.
-    Retrieve the <post> from the <post-repository> where id = <post-id>.
+    Retrieve the <post> from the <post-repository> where <id> = <post-id>.
 
-    Return a <NotFound: status> for the <missing: post> when <post> is empty.
+    Return a <NotFound: status> for the <missing: post> when <post> is null.
 
     Return a <Forbidden: status> for the <unauthorized: deletion>
-        when <post: authorId> is not <current-user: id> and <current-user: role> is not "admin".
+        when <post: authorId> != <current-user: id> and <current-user: role> != "admin".
 
-    Delete the <post> from the <post-repository> where id = <post-id>.
+    Delete the <removed-post> from the <post-repository> where <id> = <post-id>.
     Return a <NoContent: status> for the <deletion>.
 }
 ```
@@ -626,23 +641,23 @@ ARO's syntax prioritizes readability and inline usage within statements.
 Check error conditions early with guarded returns:
 
 ```aro
-(POST /transfer: Banking) {
+(transferFunds: Banking) {
     Extract the <amount> from the <request: body.amount>.
-    Extract the <from-account> from the <request: body.from>.
-    Extract the <to-account> from the <request: body.to>.
+    Extract the <source-id> from the <request: body.source>.
+    Extract the <target-id> from the <request: body.target>.
 
     (* Early exits for invalid input *)
     Return a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
-    Return a <BadRequest: status> for the <same: accounts> when <from-account> is <to-account>.
+    Return a <BadRequest: status> for the <same: accounts> when <source-id> == <target-id>.
 
-    Retrieve the <source> from the <account-repository> where id = <from-account>.
+    Retrieve the <source> from the <account-repository> where <id> = <source-id>.
 
-    Return a <NotFound: status> for the <missing: source-account> when <source> is empty.
+    Return a <NotFound: status> for the <missing: source-account> when <source> is null.
     Return a <BadRequest: status> for the <insufficient: funds> when <source: balance> < <amount>.
 
     (* Now proceed with transfer *)
-    Retrieve the <destination> from the <account-repository> where id = <to-account>.
-    <Transfer> the <amount> from the <source> to the <destination>.
+    Retrieve the <destination> from the <account-repository> where <id> = <target-id>.
+    Transfer the <receipt> to the <destination> with <amount>.
     Return an <OK: status> for the <transfer>.
 }
 ```
@@ -650,20 +665,25 @@ Check error conditions early with guarded returns:
 ### Conditional Processing
 
 ```aro
-(POST /orders: Order API) {
+(createOrder: Order API) {
     Extract the <order-data> from the <request: body>.
     Create the <order> with <order-data>.
+    Extract the <total> from the <order: total>.
 
-    (* Conditional discount *)
-    Compute the <discount> with <order: total> * 0.1 when <order: total> >= 100.
-    Transform the <order> from the <order> with { discount: <discount> } when <discount> exists.
+    (* Conditional discount - only computed when the order qualifies.
+       Arithmetic operands must be plain variables, so extract the field first. *)
+    Compute the <discount> from <total> * 0.1 when <total> >= 100.
+
+    (* Fold in the discount when present. Transform binds a NEW name -
+       variables are immutable. *)
+    Transform the <discounted-order> from the <order> with { discount: <discount> } when <discount> exists.
 
     (* Conditional express shipping *)
     Compute the <express-fee> for the <order> when <order: express> is true.
-    Transform the <order> from the <order> with { shippingFee: <express-fee> } when <express-fee> exists.
+    Transform the <priced-order> from the <discounted-order> with { shippingFee: <express-fee> } when <express-fee> exists.
 
-    Store the <order> into the <order-repository>.
-    Return a <Created: status> with <order>.
+    Store the <priced-order> into the <order-repository>.
+    Return a <Created: status> with <priced-order>.
 }
 ```
 
@@ -680,7 +700,7 @@ Check error conditions early with guarded returns:
 
     (* Validate input - guarded return *)
     Return a <BadRequest: error> for the <request>
-        when <username> is empty or <password> is empty.
+        when <username> is null or <password> is null.
 
     (* Look up user *)
     Retrieve the <user> from the <user-repository>.
@@ -710,7 +730,7 @@ Check error conditions early with guarded returns:
                 }
                 otherwise {
                     Increment the <failed-attempts> for the <user>.
-                    Lock the <user: account> for the <security-policy>
+                    Lock the <account-lock> for the <user>
                         when <failed-attempts> >= 5.
                     Return an <Unauthorized: error> for the <request>.
                 }
@@ -797,8 +817,8 @@ Guards with `when` are ideal for:
 
 ```aro
 (* Good - guards for early exit *)
-Return a <BadRequest: status> for the <missing: id> when <user-id> is empty.
-Return a <NotFound: status> for the <missing: user> when <user> is empty.
+Return a <BadRequest: status> for the <missing: id> when <user-id> is null.
+Return a <NotFound: status> for the <missing: user> when <user> is null.
 Return a <Forbidden: status> for the <private: profile> when <user: private> is true.
 
 (* Continue with main logic *)
@@ -816,11 +836,11 @@ Match expressions are ideal for:
 ```aro
 (* Good - match for multiple cases *)
 match <order: status> {
-    case "pending" { ... }
-    case "processing" { ... }
-    case "shipped" { ... }
-    case "delivered" { ... }
-    otherwise { ... }
+    case "pending" { (* ... *) }
+    case "processing" { (* ... *) }
+    case "shipped" { (* ... *) }
+    case "delivered" { (* ... *) }
+    otherwise { (* ... *) }
 }
 ```
 

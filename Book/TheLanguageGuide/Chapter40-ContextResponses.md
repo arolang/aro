@@ -106,7 +106,7 @@ The runtime automatically detects context:
 
 ```aro
 (getUser: User API) {
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> = <id>.
     Log "User retrieved" to the <console>.
     Return an <OK: status> with <user>.
 }

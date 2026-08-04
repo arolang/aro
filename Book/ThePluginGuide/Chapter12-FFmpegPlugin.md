@@ -733,9 +733,9 @@ char* action_extract_audio(const char* input_json) {
     }.
 
     Log "Video info:" to the <console>.
-    Log "  Duration: " with <info: duration> to the <console>.
-    Log "  Resolution: " with <info: video: width> to the <console>.
-    Log "  Video codec: " with <info: video: codec> to the <console>.
+    Log "  Duration: " ++ <info: duration> to the <console>.
+    Log "  Resolution: " ++ <info: video.width> to the <console>.
+    Log "  Video codec: " ++ <info: video.codec> to the <console>.
 
     (* Generate thumbnail at 5 seconds *)
     Call the <thumb> from the <plugin-c-ffmpeg: thumbnail> with {
@@ -744,7 +744,7 @@ char* action_extract_audio(const char* input_json) {
         timestamp: 5.0,
         width: 320
     }.
-    Log "Thumbnail created: " with <thumb: output> to the <console>.
+    Log "Thumbnail created: " ++ <thumb: output> to the <console>.
 
     (* Transcode to WebM for web delivery *)
     Call the <webm> from the <plugin-c-ffmpeg: transcode> with {
@@ -764,7 +764,7 @@ char* action_extract_audio(const char* input_json) {
         output: "podcast.mp3",
         bitrate: 192
     }.
-    Log "Audio extracted: " with <audio: output> to the <console>.
+    Log "Audio extracted: " ++ <audio: output> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
