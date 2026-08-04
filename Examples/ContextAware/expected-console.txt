@@ -16,4 +16,5 @@ items: 3
 order-id: ORD-2024-001
 status: completed
 total: 249.99
+HTTP server using OpenAPI server: http://localhost:8080 (Local development server)
 HTTP Server started on port 8081

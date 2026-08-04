@@ -271,6 +271,13 @@ class AROCContextHandle: @unchecked Sendable {
         if let loadedSpec = spec {
             let registry = OpenAPISchemaRegistry(spec: loadedSpec)
             context.setSchemaRegistry(registry)
+
+            // Dual-mode parity: register the OpenAPI spec service in compiled
+            // binaries too (the interpreter registers it in Application.swift).
+            // Without it, StartAction cannot resolve the selected server and the
+            // "HTTP server using OpenAPI server: …" startup log (ARO-0195) is
+            // emitted only under `aro run`, diverging from the compiled binary.
+            context.register(OpenAPISpecService(spec: loadedSpec))
         }
     }
 
