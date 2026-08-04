@@ -572,14 +572,16 @@ Once installed, the Redis plugin enables natural syntax for cache operations:
 
     (* Generate session data *)
     Create the <session-id> with <uuid>.
+    Compute the <expiry> from <now> + 3600.
     Create the <session> with {
         userId: <user-id>,
         createdAt: <now>,
-        expiresAt: <now + 3600>
+        expiresAt: <expiry>
     }.
 
-    (* Store in Redis with 1 hour TTL *)
-    Write <session> to the <redis: "session:" ++ <session-id>> with { ttl: 3600 }.
+    (* Build the key, then store in Redis with 1 hour TTL *)
+    Compute the <session-key> from "session:" ++ <session-id>.
+    Write <session> to the <redis: session-key> with { ttl: 3600 }.
 
     Return a <Created: status> with { sessionId: <session-id> }.
 }
@@ -588,7 +590,8 @@ Once installed, the Redis plugin enables natural syntax for cache operations:
     Extract the <session-id> from the <pathParameters: id>.
 
     (* Read from Redis *)
-    Read the <session> from the <redis: "session:" ++ <session-id>>.
+    Compute the <session-key> from "session:" ++ <session-id>.
+    Read the <session> from the <redis: session-key>.
 
     Return an <OK: status> with <session>.
 }
@@ -596,8 +599,10 @@ Once installed, the Redis plugin enables natural syntax for cache operations:
 (deleteSession: Session API) {
     Extract the <session-id> from the <pathParameters: id>.
 
-    (* Delete by writing null *)
-    Write null to the <redis: "session:" ++ <session-id>>.
+    (* Delete by writing a null value *)
+    Compute the <session-key> from "session:" ++ <session-id>.
+    Create the <blank> with null.
+    Write <blank> to the <redis: session-key>.
 
     Return a <NoContent: status> for the <deletion>.
 }
@@ -992,7 +997,8 @@ The plugin enables powerful document operations with clean syntax:
     Extract the <id> from the <pathParameters: id>.
 
     (* Fetch specific document *)
-    Read the <product> from the <elasticsearch: "products/" ++ <id>>.
+    Compute the <doc-path> from "products/" ++ <id>.
+    Read the <product> from the <elasticsearch: doc-path>.
 
     Return an <OK: status> with <product>.
 }
@@ -1028,7 +1034,8 @@ The plugin enables powerful document operations with clean syntax:
     Extract the <update-data> from the <body>.
 
     (* Update by writing to specific ID *)
-    Write <update-data> to the <elasticsearch: "products/" ++ <id>>.
+    Compute the <doc-path> from "products/" ++ <id>.
+    Write <update-data> to the <elasticsearch: doc-path>.
 
     Return an <OK: status> with <update-data>.
 }
@@ -1036,8 +1043,10 @@ The plugin enables powerful document operations with clean syntax:
 (deleteProduct: Products API) {
     Extract the <id> from the <pathParameters: id>.
 
-    (* Delete by writing null *)
-    Write null to the <elasticsearch: "products/" ++ <id>>.
+    (* Delete by writing a null value *)
+    Compute the <doc-path> from "products/" ++ <id>.
+    Create the <blank> with null.
+    Write <blank> to the <elasticsearch: doc-path>.
 
     Return a <NoContent: status> for the <deletion>.
 }
@@ -1220,9 +1229,10 @@ Create test ARO files that exercise your system object:
     Log "Running Redis plugin tests..." to the <console>.
 
     (* Test 1: Write and read string *)
-    Write "test-value" to the <redis: "test:string">.
+    Create the <test-string> with "test-value".
+    Write <test-string> to the <redis: "test:string">.
     Read the <value> from the <redis: "test:string">.
-    Compare the <value> against "test-value".
+    Log "FAIL: string mismatch" to the <console> when <value> != <test-string>.
     Log "Test 1 passed: string read/write" to the <console>.
 
     (* Test 2: Write and read object *)
@@ -1230,12 +1240,13 @@ Create test ARO files that exercise your system object:
     Write <obj> to the <redis: "test:object">.
     Read the <retrieved> from the <redis: "test:object">.
     Extract the <name> from the <retrieved: name>.
-    Compare the <name> against "Alice".
+    Log "FAIL: object mismatch" to the <console> when <name> != "Alice".
     Log "Test 2 passed: object read/write" to the <console>.
 
     (* Cleanup *)
-    Write null to the <redis: "test:string">.
-    Write null to the <redis: "test:object">.
+    Create the <blank> with null.
+    Write <blank> to the <redis: "test:string">.
+    Write <blank> to the <redis: "test:object">.
 
     Log "All Redis tests passed!" to the <console>.
     Return an <OK: status> for the <tests>.

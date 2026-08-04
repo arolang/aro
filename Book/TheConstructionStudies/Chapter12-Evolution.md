@@ -17,9 +17,9 @@ Early ARO looked something like this:
 ```aro
 (processOrder: Commerce) {
     Extract the <order> from the <request: body>.
-    Validate the <order> with <schema>.
-    Store the <order> into the <order-repository>.
-    Return a <Created: status> with <order>.
+    Validate the <valid-order> with <schema>.
+    Store the <valid-order> into the <order-repository>.
+    Return a <Created: status> with <valid-order>.
 }
 ```
 

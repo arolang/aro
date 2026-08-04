@@ -19,8 +19,8 @@ Consider what ARO does well out of the box:
 ```aro
 (Process Order: Order Handler) {
     Extract the <items> from the <order: items>.
-    Validate the <items> against the <inventory>.
-    Compute the <total> from the <items>.
+    Validate the <valid-items: items> against the <inventory>.
+    Compute the <total> from the <valid-items>.
     Store the <order> into the <order-repository>.
     Emit an <OrderPlaced: event> with <order>.
     Return an <OK: status> with <order>.

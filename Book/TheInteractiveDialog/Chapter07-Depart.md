@@ -60,13 +60,13 @@ The result:
 
 (Pricing Test: Test) {
     Set the <base-price> to 100.
-    Assert the <base-price> is 100.
+    Assert the <base-price> for 100.
 
     Compute the <tax> from <base-price> * 0.2.
-    Assert the <tax> is 20.
+    Assert the <tax> for 20.
 
     Compute the <total> from <base-price> + <tax>.
-    Assert the <total> is 120.
+    Assert the <total> for 120.
 }
 ```
 

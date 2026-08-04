@@ -366,15 +366,15 @@ With custom actions registered, use native ARO syntax:
 
     (* Use custom Hash action - feels native! *)
     Hash the <hash-result> from <message>.
-    Log "Hash: " with <hash-result: hash> to the <console>.
+    Log "Hash: " ++ <hash-result: hash> to the <console>.
 
     (* DJB2 custom action *)
-    <DJB2> the <djb2-result> from <message>.
-    Log "DJB2: " with <djb2-result: hash> to the <console>.
+    DJB2 the <djb2-result> from <message>.
+    Log "DJB2: " ++ <djb2-result: hash> to the <console>.
 
     (* FNV-1a custom action *)
-    <FNV1a> the <fnv-result> from <message>.
-    Log "FNV-1a: " with <fnv-result: hash> to the <console>.
+    FNV1a the <fnv-result> from <message>.
+    Log "FNV-1a: " ++ <fnv-result: hash> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
@@ -702,17 +702,17 @@ Usage (with custom actions `<SystemInfo>`, `<FileStat>`, `<GetEnv>`):
 ```aro
 (System Info: Application-Start) {
     (* Get system information using custom action *)
-    <SystemInfo> the <system> from the <uname>.
-    Log "Running on: " with <system: system> to the <console>.
-    Log "Machine: " with <system: machine> to the <console>.
+    SystemInfo the <system> from the <uname>.
+    Log "Running on: " ++ <system: system> to the <console>.
+    Log "Machine: " ++ <system: machine> to the <console>.
 
     (* Check file stats using custom action *)
-    <FileStat> the <stats> from "/etc/hosts".
-    Log "File size: " with <stats: size> to the <console>.
+    FileStat the <stats> from "/etc/hosts".
+    Log "File size: " ++ <stats: size> to the <console>.
 
     (* Get environment variable using custom action *)
-    <GetEnv> the <home> from "HOME".
-    Log "Home directory: " with <home: value> to the <console>.
+    GetEnv the <home> from "HOME".
+    Log "Home directory: " ++ <home: value> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }

@@ -129,7 +129,7 @@ Create the <str-b> with "bello".
 Compute the <shared: intersect> from <str-a> with <str-b>.
 (* "ello" — 'l' appears twice in both, 'o' once in both *)
 
-Compute the <unique-to-a: difference> from <str-a> with <str-b>.
+Compute the <unique-a: difference> from <str-a> with <str-b>.
 (* "h" — 'h' is in "hello" but not in "bello" *)
 
 Compute the <combined: union> from <str-a> with <str-b>.
@@ -345,16 +345,16 @@ Finding what to add, remove, and keep when syncing two collections:
     Extract the <desired-tags> from the <event: desired>.
 
     (* Tags to add: in desired but not yet in current *)
-    Compute the <to-add: difference> from <desired-tags> with <current-tags>.
+    Compute the <additions: difference> from <desired-tags> with <current-tags>.
 
     (* Tags to remove: in current but not in desired *)
-    Compute the <to-remove: difference> from <current-tags> with <desired-tags>.
+    Compute the <removals: difference> from <current-tags> with <desired-tags>.
 
     (* Tags to keep: already correct *)
-    Compute the <to-keep: intersect> from <current-tags> with <desired-tags>.
+    Compute the <retained: intersect> from <current-tags> with <desired-tags>.
 
-    Emit a <TagsToAdd: event> with <to-add>.
-    Emit a <TagsToRemove: event> with <to-remove>.
+    Emit a <TagsToAdd: event> with <additions>.
+    Emit a <TagsToRemove: event> with <removals>.
     Return an <OK: status> for the <sync>.
 }
 ```
@@ -376,7 +376,7 @@ Create the <team-c> with ["carol", "dave", "frank"].
 Compute the <ab: union> from <team-a> with <team-b>.
 
 (* Of those, who is also on team-c? *)
-Compute the <on-all-teams: intersect> from <ab> with <team-c>.
+Compute the <all-three: intersect> from <ab> with <team-c>.
 (* ["carol", "dave"] *)
 
 (* People on team-a but on neither team-b nor team-c *)

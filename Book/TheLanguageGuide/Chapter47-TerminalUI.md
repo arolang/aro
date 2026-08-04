@@ -41,7 +41,7 @@ Terminal user interfaces remain the optimal choice for many scenarios: system mo
 
 Templates automatically have access to a `terminal` object containing capability information:
 
-```aro
+```text
 {{ <terminal: rows> }}           (* Terminal height in lines *)
 {{ <terminal: columns> }}        (* Terminal width in characters *)
 {{ <terminal: width> }}          (* Alias for columns *)
@@ -53,7 +53,7 @@ Templates automatically have access to a `terminal` object containing capability
 ```
 
 **Example Template (templates/status.screen)**:
-```aro
+```text
 Terminal: {{ <terminal: columns> }}×{{ <terminal: rows> }}
 Color Support: {{ <terminal: supports_color> }}
 
@@ -79,7 +79,7 @@ ARO provides template filters for applying ANSI styling to text. These filters i
 
 Apply foreground and background colors using the `color` and `bg` filters:
 
-```aro
+```text
 {{ "Success!" | color: "green" }}
 {{ "Error!" | color: "red" }}
 {{ "Warning" | color: "yellow" }}
@@ -94,7 +94,7 @@ Apply foreground and background colors using the `color` and `bg` filters:
 - **Semantic**: success (green), error (red), warning (yellow), info (blue)
 
 **RGB Colors** (24-bit true color):
-```aro
+```text
 {{ "Custom Color" | color: "rgb(100, 200, 50)" }}
 {{ "Dark Background" | bg: "rgb(30, 30, 30)" }}
 ```
@@ -109,7 +109,7 @@ ARO automatically converts RGB to the best available color mode:
 
 Apply text styles using simple filters:
 
-```aro
+```text
 {{ "Important" | bold }}
 {{ "Subdued" | dim }}
 {{ "Emphasis" | italic }}
@@ -121,14 +121,14 @@ Apply text styles using simple filters:
 
 Combine multiple filters for rich formatting:
 
-```aro
+```text
 {{ "SUCCESS" | color: "green" | bold }}
 {{ "ERROR" | color: "red" | bold | underline }}
 {{ "Debug Info" | color: "cyan" | dim }}
 ```
 
 **Example Template (templates/task-list.screen)**:
-```aro
+```text
 {{ "=== Task List ===" | bold | color: "cyan" }}
 
 {{for task in tasks}}
@@ -148,12 +148,18 @@ Watch is **not an action**—it's a **feature set pattern** that combines with H
 
 **Event-Based Watch**:
 ```aro
-(Name Watch: EventType Handler)
+(Name Watch: EventType Handler) {
+    (* re-render when the event fires *)
+    Return an <OK: status> for the <watch>.
+}
 ```
 
 **Repository-Based Watch**:
 ```aro
-(Name Watch: repository Observer)
+(Name Watch: repository Observer) {
+    (* re-render when the repository changes *)
+    Return an <OK: status> for the <watch>.
+}
 ```
 
 ### 47.4.2 Repository Observer Watch
@@ -208,7 +214,7 @@ The most common pattern: UI updates automatically when repository data changes.
 ```
 
 **templates/dashboard.screen**:
-```aro
+```text
 {{ "=== Task Dashboard ===" | bold | color: "cyan" }}
 
 {{ "Active Tasks:" | bold }}
@@ -303,7 +309,7 @@ setInterval(() => {
     Retrieve the <tasks> from the <task-repository>.
     Transform the <view> from the <template: dashboard.screen>.
     Log <view> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <dashboard>.
 }
 ```
 
@@ -356,11 +362,11 @@ Display an interactive menu:
 Create the <options> with ["Red", "Green", "Blue", "Yellow"].
 
 (* Single selection *)
-Select the <choice> from <options> from the <terminal>.
+Select the <choice> from the <options>.
 Log "You selected: <choice>" to the <console>.
 
 (* Multi-selection *)
-Select the <choices: multi-select> from <options> from the <terminal>.
+Select the <choices: multi-select> from the <options>.
 Log "You selected: <choices>" to the <console>.
 ```
 
@@ -519,15 +525,16 @@ A `KeyPress Handler` feature set fires whenever a key is pressed. There are two 
 ```aro
 (Navigate Menu: KeyPress Handler) {
     Extract the <key> from the <event: key>.
-    ...
+    (* ... handle the key ... *)
+    Return an <OK: status> for the <navigation>.
 }
 ```
 
 **Filtered handler** — fires only when a specific key is pressed:
 ```aro
-(Select Item: KeyPress Handler<key:enter>) { ... }
-(Go Back:     KeyPress Handler<key:backspace>) { ... }
-(Quit App:    KeyPress Handler<key:q>) { ... }
+(Select Item: KeyPress Handler<key:enter>) { (* ... *) }
+(Go Back:     KeyPress Handler<key:backspace>) { (* ... *) }
+(Quit App:    KeyPress Handler<key:q>) { (* ... *) }
 ```
 
 The filter is declared in angle brackets as `<key:name>` inside the business activity. Named keys include:
@@ -551,8 +558,8 @@ Inside a universal handler, extract the key name from the event:
     Extract the <pressed-key> from the <event: key>.
 
     match <pressed-key> {
-        case "up"   { ... }
-        case "down" { ... }
+        case "up"   { (* ... *) }
+        case "down" { (* ... *) }
     }
 
     Return an <OK: status> for the <navigation>.
@@ -952,12 +959,12 @@ TaskDashboard/
 
     (* Filter by status *)
     Filter the <done> from <all-tasks> where <status> = "done".
-    Filter the <in-progress> from <all-tasks> where <status> = "in-progress".
+    Filter the <active> from <all-tasks> where <status> = "in-progress".
     Filter the <pending> from <all-tasks> where <status> = "pending".
 
     (* Compute statistics *)
     Compute the <done-count: length> from <done>.
-    Compute the <progress-count: length> from <in-progress>.
+    Compute the <progress-count: length> from <active>.
     Compute the <pending-count: length> from <pending>.
     Compute the <total-count: length> from <all-tasks>.
 
@@ -972,8 +979,9 @@ TaskDashboard/
 (Complete Task: TaskCompleted Handler) {
     Extract the <task-id> from the <event: taskId>.
 
-    Retrieve the <task> from the <task-repository> where id = <task-id>.
-    Update the <task: status> with "done" into the <task-repository>.
+    Retrieve the <task> from the <task-repository> where <id> = <task-id>.
+    Transform the <completed-task> from the <task> with { status: "done" }.
+    Store the <completed-task> into the <task-repository>.
 
     (* Watch handler triggers automatically! *)
 
@@ -998,7 +1006,7 @@ TaskDashboard/
 ```
 
 **templates/dashboard.screen**:
-```aro
+```text
 {{ "╔════════════════════════════════════════════════════════════╗" }}
 {{ "║ " }}{{ "TASK DASHBOARD" | bold | color: "cyan" }}{{ "                                            ║" }}
 {{ "╚════════════════════════════════════════════════════════════╝" }}
@@ -1052,7 +1060,7 @@ aro run TaskDashboard
 
 Adapt layouts to terminal size:
 
-```aro
+```text
 {{when <terminal: columns> > 120}}
   (* Wide screen: show detailed 3-column layout *)
   Transform the <view> from the <template: templates/wide.screen>.
@@ -1069,7 +1077,7 @@ Adapt layouts to terminal size:
 
 Check capabilities before using advanced features:
 
-```aro
+```text
 {{when <terminal: supports_color>}}
   {{ <error> | color: "red" | bold }}
   {{ <success> | color: "green" | bold }}
@@ -1096,7 +1104,7 @@ Only clear and re-render when necessary:
     Retrieve the <data> from the <data-repository>.
     Transform the <view> from the <template: dashboard.screen>.
     Log <view> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <render>.
 }
 
 (* Also good: Update specific line without clearing *)
@@ -1104,7 +1112,7 @@ Only clear and re-render when necessary:
     (* Don't clear - just update status line *)
     Retrieve the <status> from the <status-repository>.
     Log "Status: <status>" to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <status-line>.
 }
 ```
 

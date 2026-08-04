@@ -316,14 +316,14 @@ build:
             email: "alice@example.com"
         }
     }.
-    Log "Inserted row: " with <inserted: lastInsertRowid> to the <console>.
+    Log "Inserted row: " ++ <inserted: lastInsertRowid> to the <console>.
 
     (* Query data *)
     Call the <results> from the <sqlite: query> with {
         name: "users",
         sql: "SELECT * FROM users"
     }.
-    Log "Found " with <results: count> to the <console>.
+    Log "Found " ++ <results: count> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }

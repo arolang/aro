@@ -53,8 +53,8 @@ ARO supports two types of string literals:
 Log "Hello\nWorld" to the <console>.          (* Prints on two lines *)
 
 (* Raw string - backslashes are literal *)
-Transform <versions> from <text> with regex '\d+\.\d+\.\d+'.
-Read <config> from 'C:\Users\Admin\config.json'.
+Create the <version-pattern> with '\d+\.\d+\.\d+'.
+Create the <config-path> with 'C:\Users\Admin\config.json'.
 ```
 
 Use single quotes when working with regex patterns, file paths, LaTeX commands, or any content with many backslashes. Use double quotes for normal text with escape sequences.
@@ -243,7 +243,7 @@ Type annotations are optional but recommended when:
 (* Recommended: explicit types for external data *)
 Extract the <userId: String> from the <request: body>.
 Extract the <items: List<OrderItem>> from the <request: body>.
-Retrieve the <user: User> from the <user-repository> where id = <userId>.
+Retrieve the <user: User> from the <user-repository> where <id> = <userId>.
 ```
 
 ## Type Inference
@@ -269,9 +269,9 @@ The runtime throws a descriptive error:
 ```aro
 (Get User: API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user: User> from the <user-repository> where id = <id>.
+    Retrieve the <user: User> from the <user-repository> where <id> = <id>.
     (* If user doesn't exist, runtime throws: *)
-    (* "Cannot retrieve the user from the user-repository where id = 123" *)
+    (* "Cannot retrieve the user from the user-repository where <id> = 123" *)
 
     Return an <OK: status> with <user>.
 }
@@ -292,7 +292,7 @@ console.log(user.name);
 ARO code:
 
 ```aro
-Retrieve the <user> from the <user-repository> where id = <id>.
+Retrieve the <user> from the <user-repository> where <id> = <id>.
 Log <user: name> to the <console>.
 ```
 

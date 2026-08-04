@@ -236,7 +236,8 @@ provides:
     Extract the <text> from the <input: text>.
     Extract the <max-length> from the <input: maxLength>.
     Compute the <length: length> from <text>.
-    match <length> > <max-length> {
+    Compute the <over-limit> from <length> > <max-length>.
+    match <over-limit> {
         case true {
             Transform the <truncated: substring> from <text>.
             Create the <result> with <truncated> ++ "...".
@@ -853,8 +854,8 @@ Plugins can provide custom system objects that integrate with ARO's Source/Sink 
 
 ```aro
 (* Using a Redis system object provided by a plugin *)
-Store the <user-data> to the <redis: users/42>.
-Retrieve the <cached> from the <redis: sessions/abc>.
+Store the <user-data> to the <redis: "users/42">.
+Retrieve the <cached> from the <redis: "sessions/abc">.
 ```
 
 Declare capabilities in `aro_plugin_info`:

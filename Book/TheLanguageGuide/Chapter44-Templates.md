@@ -103,7 +103,7 @@ Template paths are always relative to the `templates/` directory. When you refer
 
 Execution blocks are delimited by `{{ }}` and contain ARO statements. Any valid ARO statement can appear inside an execution block.
 
-```aro
+```text
 (* templates/greeting.tpl *)
 Hello, {{ Print <user: name> to the <template>. }}!
 
@@ -113,7 +113,7 @@ Welcome to our service. Your account was created on
 
 Multiple statements can appear in a single block:
 
-```aro
+```text
 {{
     Compute the <total> from <price> * <quantity>.
     Print <total> to the <template>.
@@ -134,7 +134,7 @@ Print <price> * 1.1 to the <template>.
 
 For simple variable output, ARO provides a shorthand syntax. When an execution block contains only a variable reference, it's automatically printed:
 
-```aro
+```text
 (* Full syntax *)
 {{ Print <username> to the <template>. }}
 
@@ -144,14 +144,14 @@ For simple variable output, ARO provides a shorthand syntax. When an execution b
 
 The shorthand also works with expressions:
 
-```aro
+```text
 {{ <price> * 1.1 }}
 {{ <first-name> ++ " " ++ <last-name> }}
 ```
 
 And with qualified specifiers:
 
-```aro
+```text
 {{ <user: name> }}
 {{ <order: total> }}
 ```
@@ -179,7 +179,7 @@ The `<Transform>` action renders a template with the current context:
 
 The template receives all variables from the current execution context:
 
-```aro
+```text
 (* templates/welcome.tpl *)
 Dear {{ <user: name> }},
 
@@ -226,7 +226,7 @@ This isolation ensures templates are safe and predictable—they cannot accident
 
 For iterating over collections, templates use spanning blocks with a special syntax:
 
-```aro
+```text
 (* templates/user-list.tpl *)
 <h1>Users</h1>
 <ul>
@@ -242,7 +242,7 @@ The opening block `{{ for each <item> in <collection> { }}` starts the loop, and
 
 To access the current index, use the `at` keyword:
 
-```aro
+```text
 {{ for each <item> at <idx> in <items> { }}
     {{ <idx> }}. {{ <item: name> }}
 {{ } }}
@@ -254,7 +254,7 @@ Indices are zero-based.
 
 Loops can be nested for complex data structures:
 
-```aro
+```text
 {{ for each <category> in <categories> { }}
 <h2>{{ <category: name> }}</h2>
 <ul>
@@ -269,7 +269,7 @@ Loops can be nested for complex data structures:
 
 Use `when` guards for conditional output:
 
-```aro
+```text
 (* Conditional print *)
 {{ Print "Premium Member" to the <template> when <user: isPremium>. }}
 
@@ -285,7 +285,7 @@ Use `when` guards for conditional output:
 
 For conditional sections, combine with for-each over a filtered collection or use a guarded block:
 
-```aro
+```text
 {{ for each <item> in <items> { }}
 {{ Print <item: name> to the <template> when <item: isActive>. }}
 {{ } }}
@@ -295,7 +295,7 @@ For conditional sections, combine with for-each over a filtered collection or us
 
 The `<Include>` action embeds one template inside another:
 
-```aro
+```text
 (* templates/page.tpl *)
 <!DOCTYPE html>
 <html>
@@ -318,7 +318,7 @@ The `<Include>` action embeds one template inside another:
 
 Use the `with` clause to pass additional variables:
 
-```aro
+```text
 {{ Include the <template: partials/user-card.tpl> with {
     user: <current-user>,
     showEmail: true
@@ -331,7 +331,7 @@ The included template receives both the parent context variables and the explici
 
 This pattern enables component-style template composition:
 
-```aro
+```text
 (* templates/components/button.tpl *)
 <button class="{{ <class> }}" type="{{ <type> }}">
     {{ <label> }}
@@ -352,7 +352,7 @@ This pattern enables component-style template composition:
 
 A common use case for templates is generating formatted cards for dates and events. Here's a pattern for creating date-aware cards:
 
-```aro
+```text
 (* templates/cards/event-card.tpl *)
 <div class="event-card">
     <div class="event-date">
@@ -372,7 +372,7 @@ Use with the Transform action:
 ```aro
 (Render Event Cards: Calendar Display) {
     Retrieve the <events> from the <calendar-repository>
-        where date >= <today> and date <= <nextWeek>.
+        where <date> >= <today> and <date> <= <nextWeek>.
 
     Transform the <cards> from the <template: cards/event-list.tpl>.
 
@@ -384,7 +384,7 @@ Use with the Transform action:
 
 For displaying upcoming dates like birthdays, deadlines, or appointments:
 
-```aro
+```text
 (* templates/cards/upcoming-dates.tpl *)
 <div class="upcoming-dates">
     <h2>Upcoming</h2>
@@ -401,13 +401,14 @@ For displaying upcoming dates like birthdays, deadlines, or appointments:
 ```aro
 (Show Upcoming Dates: Dashboard) {
     Retrieve the <deadlines> from the <task-repository>
-        where dueDate >= <today>.
+        where <dueDate> >= <today>.
 
     (* Compute days until each deadline *)
-    {{ for each <deadline> in <deadlines> { }}
-        Compute the <days> from <deadline: dueDate> - <today>.
+    for each <deadline> in <deadlines> {
+        Extract the <due> from the <deadline: dueDate>.
+        Compute the <days> from <due> - <today>.
         (* Add to processed list *)
-    {{ } }}
+    }
 
     Transform the <widget> from the <template: cards/upcoming-dates.tpl>.
 
@@ -458,8 +459,8 @@ Here's a complete example showing a feature set that renders a user profile page
 
 (getUserProfile: Profile API) {
     Extract the <userId> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <userId>.
-    Retrieve the <posts> from the <post-repository> where authorId = <userId>.
+    Retrieve the <user> from the <user-repository> where <id> = <userId>.
+    Retrieve the <posts> from the <post-repository> where <authorId> = <userId>.
 
     Transform the <html> from the <template: profile.tpl>.
 
@@ -467,7 +468,7 @@ Here's a complete example showing a feature set that renders a user profile page
 }
 ```
 
-```aro
+```text
 (* templates/profile.tpl *)
 <!DOCTYPE html>
 <html>
@@ -528,13 +529,15 @@ Do computations and data preparation in your feature set, not in templates. Temp
 (Render Dashboard: Admin View) {
     Retrieve the <users> from the <user-repository>.
     Compute the <user-count: count> from <users>.
-    Compute the <active-users> from <users> where isActive = true.
+    Filter the <active-users> from <users> where <isActive> is true.
     Compute the <active-count: count> from <active-users>.
 
     Transform the <page> from the <template: dashboard.tpl>.
     Return an <OK: status> with <page>.
 }
+```
 
+```text
 (* Template just displays prepared values *)
 (* templates/dashboard.tpl *)
 <p>Total users: {{ <user-count> }}</p>
@@ -557,7 +560,7 @@ Transform the <result> from the <template: email.tpl>.
 
 Consider what happens when optional data is missing:
 
-```aro
+```text
 (* Template with conditional rendering *)
 {{ Print <user: bio> to the <template> when <user: bio>. }}
 {{ Print "No bio provided" to the <template> when not <user: bio>. }}

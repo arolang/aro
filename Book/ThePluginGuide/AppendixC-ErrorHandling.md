@@ -358,12 +358,11 @@ When calling plugins from ARO, handle errors appropriately:
         email: <email>
     }.
 
-    When <result: error> exists:
-        Log "Validation failed: " ++ <result: error> to the <console>.
-        Return a <BadRequest: status> with {
-            error: <result: error>,
-            code: <result: code>
-        }.
+    Log "Validation failed: " ++ <result: error> to the <console> when <result: error> exists.
+    Return a <BadRequest: status> with {
+        error: <result: error>,
+        code: <result: code>
+    } when <result: error> exists.
 
     Return an <OK: status> with <result>.
 }
@@ -378,16 +377,15 @@ When calling plugins from ARO, handle errors appropriately:
     Call the <validation> from the <validation: validateForm> with {
         fields: <form-data>,
         rules: {
-            email: { required: true, type: "email" },
+            email: { required: true, format: "email" },
             password: { required: true, minLength: 8 }
         }
     }.
 
-    When <validation: errors> exists:
-        Return a <BadRequest: status> with {
-            message: "Validation failed",
-            errors: <validation: errors>
-        }.
+    Return a <BadRequest: status> with {
+        message: "Validation failed",
+        errors: <validation: errors>
+    } when <validation: errors> exists.
 
     Return an <OK: status> with { valid: true }.
 }
@@ -396,28 +394,26 @@ When calling plugins from ARO, handle errors appropriately:
 ### Error Recovery
 
 ```aro
-(Fetch With Retry: Data Handler) {
-    Create the <attempts> with 0.
+(Retrying Data Fetch: Data Handler) {
     Create the <max-attempts> with 3.
+    Create the <attempt-numbers> with [1, 2, 3].
 
-    <Loop>:
-        Increment the <attempts>.
-
+    (* Loop over a bounded set of attempts; return early on success *)
+    for each <attempt> in <attempt-numbers> {
         Call the <result> from the <http: fetch> with {
             url: "https://api.example.com/data"
         }.
 
-        When <result: error> does not exist:
-            Return an <OK: status> with <result>.
+        Return an <OK: status> with <result> when <result: error> is null.
 
-        When <attempts> >= <max-attempts>:
-            Return a <ServerError: status> with {
-                error: "Failed after " ++ <max-attempts> ++ " attempts",
-                lastError: <result: error>
-            }.
+        Log "Attempt " ++ <attempt> ++ " failed, retrying..." to the <console> when <result: error> exists.
+        Sleep the <backoff> for 1.
+    }
 
-        Log "Attempt " ++ <attempts> ++ " failed, retrying..." to the <console>.
-        Wait 1 second.
+    (* All attempts exhausted *)
+    Return a <ServerError: status> with {
+        error: "Failed after " ++ <max-attempts> ++ " attempts"
+    }.
 }
 ```
 

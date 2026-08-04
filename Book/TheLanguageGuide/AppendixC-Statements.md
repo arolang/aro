@@ -16,7 +16,7 @@ Action [article] <result> preposition [article] <object> [modifiers].
 
 | Component | Required | Description |
 |-----------|----------|-------------|
-| Action | Yes | Verb in angle brackets |
+| Action | Yes | Plain action verb (no angle brackets) |
 | Article | No | a, an, or the |
 | Result | Yes | Output variable |
 | Preposition | Yes | Relationship word |
@@ -30,8 +30,8 @@ Extract the <user-id> from the <request: parameters>.
 Create a <user> with <user-data>.
 Return an <OK: status> for the <request>.
 Store the <order> into the <order-repository>.
-Retrieve the <user> from the <repository> where id = <user-id>.
-Start the <http-server> on port 8080.
+Retrieve the <found-user> from the <repository> where <id> is <user-id>.
+Start the <http-server> with <Contract>.
 ```
 
 ## Publish Statement
@@ -72,10 +72,10 @@ Action the <result> preposition the <object> when <condition>.
 
 | Condition | Description |
 |-----------|-------------|
-| `<var> is <value>` | Equality |
-| `<var> is not <value>` | Inequality |
-| `<var> is empty` | Null/empty check |
-| `<var> is not empty` | Has value |
+| `<var> is <value>` / `<var> = <value>` | Equality |
+| `<var> is not <value>` / `<var> != <value>` | Inequality |
+| `<var> == ""` | Empty-string check |
+| `<var> != ""` | Non-empty check |
 | `<var> exists` | Value exists |
 | `<var> is null` | Null check |
 | `<var> > <value>` | Greater than |
@@ -89,8 +89,8 @@ Action the <result> preposition the <object> when <condition>.
 ### Examples
 
 ```aro
-(* Return not found only when user is empty *)
-Return a <NotFound: status> for the <missing: user> when <user> is empty.
+(* Return not found only when user is null *)
+Return a <NotFound: status> for the <missing: user> when <user> is null.
 
 (* Send notification only when user has email *)
 Send the <notification> to the <user: email> when <user: email> exists.
@@ -108,17 +108,17 @@ Grant the <access> for the <user> when <user: active> is true and <user: verifie
 ### Usage Pattern
 
 ```aro
-(PUT /users/{id}: User API) {
+(updateUser: User API) {
     Extract the <user-id> from the <request: parameters>.
     Extract the <updates> from the <request: body>.
 
     (* Early exit guards *)
-    Return a <BadRequest: status> for the <missing: id> when <user-id> is empty.
-    Return a <BadRequest: status> for the <missing: data> when <updates> is empty.
+    Return a <BadRequest: status> for the <missing: id> when <user-id> == "".
+    Return a <BadRequest: status> for the <missing: data> when <updates> is null.
 
     (* Continue with valid input *)
-    Retrieve the <user> from the <repository> where id = <user-id>.
-    Return a <NotFound: status> for the <missing: user> when <user> is empty.
+    Retrieve the <user> from the <repository> where <id> is <user-id>.
+    Return a <NotFound: status> for the <missing: user> when <user> is null.
 
     Transform the <updated-user> from the <user> with <updates>.
     Store the <updated-user> into the <repository>.
@@ -186,7 +186,7 @@ match <user: subscription> {
         Deduct the <credit> from the <user: account>.
     }
     case <premium> {
-        Notify the <user> about the <low-credits>.
+        Notify the <user> with <low-credits>.
         Grant the <basic-features> for the <user>.
     }
     case <basic> {
@@ -212,19 +212,20 @@ Return [article] <status> [with <data>] [for <context>].
 
 | Status | HTTP Code | Usage |
 |--------|-----------|-------|
-| `OK` | 200 | Successful request |
+| `OK` (or `Success`) | 200 | Successful request |
 | `Created` | 201 | Resource created |
 | `Accepted` | 202 | Async operation started |
 | `NoContent` | 204 | Success, no body |
-| `BadRequest` | 400 | Invalid input |
+| `BadRequest` (or `Invalid`) | 400 | Invalid input |
 | `Unauthorized` | 401 | Auth required |
 | `Forbidden` | 403 | Access denied |
 | `NotFound` | 404 | Not found |
 | `Conflict` | 409 | Resource conflict |
-| `UnprocessableEntity` | 422 | Validation failed |
-| `TooManyRequests` | 429 | Rate limited |
-| `InternalError` | 500 | Server error |
-| `ServiceUnavailable` | 503 | Service down |
+| `Error` (or `ServerError`) | 500 | Server error |
+
+> These are the status names the runtime maps to HTTP codes. Any other name
+> (e.g. `UnprocessableEntity`, `TooManyRequests`) is accepted syntactically but
+> falls through to `200 OK`.
 
 ### Examples
 
@@ -257,16 +258,17 @@ Adds documentation to code.
    multi-line comment
 *)
 
-(* Comments can be (* nested *) *)
+(* Comments do not nest *)
 
 (Process Order: Order Processing) {
     (* Extract order data from request *)
     Extract the <order-data> from the <request: body>.
 
     (* Validate before processing *)
-    Validate the <order-data> for the <order-schema>.
+    Validate the <validated-order> for the <order-schema>.
 
     (* Store and return *)
+    Create the <order> with <order-data>.
     Store the <order> into the <repository>.
     Return a <Created: status> with <order>.
 }
@@ -274,23 +276,28 @@ Adds documentation to code.
 
 ## Where Clause
 
-Filters data in retrieval and deletion.
+Filters data in repository retrieval and deletion. Repository `where` clauses
+are **equality-only** and the field name must be **bracketed** (`<field>`). Use
+`is` (or `=`) for the comparison; an unbracketed field is a syntax error.
 
 ### Syntax
 
 ```
-... where <field> = <value>
-... where <field> = <value> and <field2> = <value2>
+... where <field> is <value>
+... where <field> is <value> and <field2> is <value2>
 ```
 
 ### Examples
 
 ```aro
-Retrieve the <user> from the <repository> where id = <user-id>.
-Retrieve the <orders> from the <repository> where status = "pending".
-Retrieve the <users> from the <repository> where role = "admin" and active = true.
-Delete the <sessions> from the <repository> where userId = <user-id>.
+Retrieve the <user> from the <repository> where <id> is <user-id>.
+Retrieve the <orders> from the <repository> where <status> is "pending".
+Retrieve the <users> from the <repository> where <role> is "admin" and <active> is true.
+Delete the <sessions> from the <repository> where <userId> is <user-id>.
 ```
+
+> Richer predicates (`>`, `in`, `contains`, `matches`, …) are available on the
+> **Filter** action for in-memory collections.
 
 ## With Clause
 
@@ -316,20 +323,29 @@ Log "Application started" to the <console>.
 
 ## On Clause
 
-Specifies ports for network operations.
+`on` is a preposition indicating location or attachment. There is **no**
+`on port` construct — network ports are passed in a `with { port: N }` object.
 
 ### Syntax
 
 ```
-... on port <number>
+Action the <result> on the <object> [with <config>].
 ```
 
 ### Examples
 
 ```aro
-Start the <http-server> on port 8080.
-Listen on port 9000 as <socket-server>.
-Connect to <host: "localhost"> on port 5432 as <database>.
+(* Attach a listener to a stream / channel *)
+Listen the <keyboard> to the <stdin>.
+
+(* Start a socket server — port comes from the with-object *)
+Start the <socket-server> with { port: 9000 }.
+
+(* Connect a socket client — port comes from the with-object *)
+Connect the <conn> to the <host> with { port: 5432 }.
+
+(* The HTTP server port comes from openapi.yaml, via <Contract> *)
+Start the <http-server> with <Contract>.
 ```
 
 ## When Clause
@@ -345,7 +361,7 @@ Action the <result> preposition the <object> when <condition>.
 ### Examples
 
 ```aro
-Return a <NotFound: status> for the <user> when <user> is empty.
+Return a <NotFound: status> for the <user> when <user> is null.
 Log "Low stock" to the <console> when <stock> < 10.
 Send the <alert> to the <admin: email> when <errors> > <threshold>.
 ```
@@ -360,7 +376,7 @@ Statements execute sequentially from top to bottom:
     Extract the <data> from the <request: body>.
 
     (* 2. Second *)
-    Validate the <data> for the <schema>.
+    Validate the <validated-data> for the <schema>.
 
     (* 3. Third *)
     Create the <result> with <data>.
@@ -394,7 +410,7 @@ Match blocks use braces without periods on closing brace:
 ```aro
 match <status> {
     case "active" {
-        Return an <OK: status>.  (* Period on inner statement *)
+        Return an <OK: status> for the <request>.  (* Period on inner statement *)
     }
 }  (* No period on closing brace *)
 ```

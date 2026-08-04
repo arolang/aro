@@ -69,8 +69,8 @@ Statements are grouped into *feature sets*, which are named collections of state
 ```aro
 (createUser: User API) {
     Extract the <data> from the <request: body>.
-    Validate the <data> against the <user: schema>.
-    Create the <user> with <data>.
+    Validate the <valid-data> against the <user-schema>.
+    Create the <user> with <valid-data>.
     Emit a <UserCreated: event> with <user>.
     Return a <Created: status> with <user>.
 }
@@ -101,7 +101,7 @@ When a transformation produces a value that will be used differently downstream,
 ```aro
 Compute the <first-length: length> from the <first-message>.
 Compute the <second-length: length> from the <second-message>.
-Compare the <first-length> against the <second-length>.
+Compute the <difference> from <first-length> - <second-length>.
 ```
 
 The qualifier-as-name pattern — where the result name carries the variable identity and the qualifier specifies the operation — allows multiple applications of the same transformation without name collisions.
@@ -224,7 +224,7 @@ Repositories are in-memory, event-sourced key-value stores managed by the runtim
 
 ```aro
 Store the <user> into the <user-repository>.
-Retrieve the <user> from the <user-repository> where id = <user-id>.
+Retrieve the <user> from the <user-repository> where <id> is <user-id>.
 Update the <user: name> with "Alice".
 ```
 
@@ -264,7 +264,9 @@ Any feature set with the activity `UserCreated Handler` will receive this event.
 
 ```aro
 (Send Welcome Email: UserCreated Handler) where <event: role> == "customer" {
-    ...
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -328,8 +330,8 @@ Version control is part of the action vocabulary, not a shell-out. The `<git>` s
 ```aro
 Retrieve the <status> from the <git>.
 Stage the <files> to the <git> with ".".
-Commit the <result> to the <git> with "feat: add feature".
-Push the <result> to the <git>.
+Commit the <commit> to the <git> with "feat: add feature".
+Push the <pushed> to the <git>.
 ```
 
 Each Git action emits a corresponding event (`git.commit`, `git.push`, `git.pull`, `git.checkout`, `git.tag`, `git.clone`), so the rest of the application can react to repository state without polling. See ARO-0080 for the full action surface.

@@ -189,39 +189,43 @@ And a feature set that expects a flag gets a boolean it can use in a guard:
 
 ```aro
 Extract the <params> from the <parameter>.
-Create the <verbose> with <params: verbose> or false.
+Extract the <verbose> from the <params: verbose>.
 
 Log "Verbose mode enabled" to the <console> when <verbose> is true.
 ```
+
+An optional flag that was not supplied resolves to a null/absent value, so the
+`when <verbose> is true` guard simply does not fire — no explicit default is
+needed for the boolean case.
 
 ---
 
 ## 23.6 Optional Parameters with Defaults
 
-When a parameter may or may not be present, extract all parameters first, then use the `or` operator to provide a default:
+When a parameter may or may not be present, extract all parameters first, then read the optional fields off the dictionary. A field that was not supplied resolves to a null/absent value rather than raising an error:
 
 ```aro
 Extract the <params> from the <parameter>.
 
-Create the <port> with <params: port> or 8080.
-Create the <host> with <params: host> or "0.0.0.0".
-Create the <verbose> with <params: verbose> or false.
+Extract the <port> from the <params: port>.
+Extract the <host> from the <params: host>.
+Extract the <verbose> from the <params: verbose>.
 ```
 
-The `or` operator evaluates the right side when the left side is absent (the key does not exist in the dictionary). This is ARO's standard approach for optional values — it reads naturally and keeps the code linear.
+Reading a field off the all-parameters dictionary is safe when the key is missing — the binding is simply absent. Apply a default where you use the value (for example with a `when` guard or a `match` `otherwise` branch).
 
-Contrast with extracting a parameter directly, which fails if the parameter was not provided:
+Contrast with extracting a parameter directly off `<parameter: name>`, which requires the argument to be present:
 
 ```aro
 (* This requires --port to be present. Absent = error. *)
 Extract the <port> from the <parameter: port>.
 
-(* This is optional. Absent = 8080. *)
+(* This is optional. Absent = null, no error. *)
 Extract the <params> from the <parameter>.
-Create the <port> with <params: port> or 8080.
+Extract the <port> from the <params: port>.
 ```
 
-Choose whichever form matches the parameter's intent. Required parameters should use the direct form so the error message is immediate and clear. Optional parameters with sensible defaults should use the all-parameters form.
+Choose whichever form matches the parameter's intent. Required parameters should use the direct form so the error message is immediate and clear. Optional parameters should be read off the all-parameters dictionary.
 
 ---
 
@@ -282,13 +286,14 @@ The choice between them is primarily ergonomic and conventional:
 - The value is sensitive (passwords, API keys should stay in env, not in shell history)
 - You want to avoid repeating long values on every invocation
 
-Nothing prevents using both in the same application — for example, a server might take its port from `--port` when run by a developer locally, and from `$PORT` when deployed in a container. The convention is to check `parameter` first and fall back to `env`:
+Nothing prevents using both in the same application — for example, a server might take its port from `--port` when run by a developer locally, and from `$PORT` when deployed in a container. Extract both, then choose between them where the value is used:
 
 ```aro
 Extract the <all-params> from the <parameter>.
 Extract the <all-env> from the <env>.
 
-Create the <port> with <all-params: port> or <all-env: PORT> or 8080.
+Extract the <cli-port> from the <all-params: port>.
+Extract the <env-port> from the <all-env: PORT>.
 ```
 
 ---
@@ -299,11 +304,11 @@ A CLI tool that reads a file, counts its words, and optionally shows verbose out
 
 ```aro
 (Application-Start: File Processor) {
-    (* All parameters, with defaults for optional ones *)
+    (* All parameters; optional ones resolve to null when absent *)
     Extract the <params> from the <parameter>.
     Extract the <path> from the <parameter: path>.     (* required *)
-    Create the <verbose> with <params: verbose> or false.
-    Create the <format> with <params: format> or "text".
+    Extract the <verbose> from the <params: verbose>.
+    Extract the <format> from the <params: format>.
 
     Log "Processing file:" to the <console> when <verbose> is true.
     Log <path> to the <console> when <verbose> is true.
@@ -312,12 +317,13 @@ A CLI tool that reads a file, counts its words, and optionally shows verbose out
     Split the <words> from <content> with " ".
     Compute the <word-count: count> from <words>.
 
+    (* "text" is the default: the otherwise branch handles a missing --format *)
     match <format> {
         case "json" {
             Create the <result> with { file: <path>, words: <word-count> }.
             Log <result> to the <console>.
         }
-        case "text" {
+        otherwise {
             Log "Word count:" to the <console>.
             Log <word-count> to the <console>.
         }

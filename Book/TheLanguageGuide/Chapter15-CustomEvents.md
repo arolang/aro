@@ -153,7 +153,7 @@ Here is a complete order processing saga showing event-driven choreography:
     Extract the <order> from the <event: order>.
     Extract the <items> from the <order: items>.
     (* Reserve each item in inventory *)
-    Retrieve the <inventory> from the <inventory-service> for <items>.
+    Retrieve the <inventory> from the <inventory-service>.
     Update the <inventory> with { reserved: true }.
     Store the <inventory> into the <inventory-service>.
     (* Continue the saga *)
@@ -187,7 +187,7 @@ Here is a complete order processing saga showing event-driven choreography:
     Extract the <order> from the <event: order>.
     Extract the <email> from the <order: customerEmail>.
     Send the <shipping-notification> to the <email-service> with {
-        to: <email>,
+        recipient: <email>,
         template: "order-shipped",
         order: <order>
     }.

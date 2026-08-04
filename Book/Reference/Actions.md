@@ -27,12 +27,12 @@ Complete reference of all 70 ARO actions organized by category.
 | **Connect**   | Server            | SERVER            | Establishes a link between endpoints.<br>`Connect the <socket> to the <host: "localhost">.` |
 | **Copy**      | File System       | SERVER            | Duplicates data from one location to another.<br>`Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
 | **Create**    | Mutation          | OWN               | Makes a new resource or object.<br>`Create the <user> with { name: "Alice" }.` |
-| **Delete**    | Mutation          | OWN               | Removes a resource or entry.<br>`Delete the <user> from the <user-repository> where id = <id>.` |
+| **Delete**    | Mutation          | OWN               | Removes a resource or entry.<br>`Delete the <user> from the <user-repository> where <id> is <id>.` |
 | **Emit**      | Communication     | EXPORT            | Emits an event to the event bus.<br>`Emit a <UserCreated: event> with <user>.` |
 | **Execute**   | Control           | OWN               | Runs a system command.<br>`Exec the <result> for the <command> with "ls -la".` |
 | **Exists**    | Query             | REQUEST           | Tests whether a resource or value is present.<br>`Exists the <found> for the <file: "./config.json">.` |
 | **Extract**   | Data Access       | REQUEST           | Pulls a field from a data structure. PascalCase qualifiers enable typed extraction with OpenAPI schema validation (ARO-0046).<br>`Extract the <user-id> from the <request: body>.`<br>`Extract the <data: UserEvent> from the <event>.` |
-| **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`Filter the <active> from the <users> where status = "active".` |
+| **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`Filter the <active> from the <users> where <status> is "active".` |
 | **Given**     | Testing           | OWN               | Denotes initial precondition in test scenarios.<br>`Given the <user> with { name: "Test" }.` |
 | **Group**     | Processing        | OWN               | Partitions a collection into sub-collections by field value.<br>`Group the <by-status> from the <orders> by "status".` |
 | **Include**   | Templates         | OWN               | Includes a partial template.<br>`Include the <header> from the <template: "header.tpl">.` |
@@ -58,7 +58,7 @@ Complete reference of all 70 ARO actions organized by category.
 | **Render**    | Terminal          | RESPONSE          | Renders a terminal UI screen from a template.<br>`Render the <screen> from the <template: "menu.screen">.` |
 | **Repaint**   | Terminal          | RESPONSE          | Incrementally updates a terminal screen.<br>`Repaint the <screen> from the <template: "monitor.screen">.` |
 | **Request**   | Communication     | REQUEST           | Makes an HTTP request. Returns response object with body, status, headers.<br>`Request the <response> from the <url>.`<br>`Request the <response> to the <url> with <data>.` |
-| **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier from a repository, or `<status>`/`<log>`/`<branch>` from `<git>`.<br>`Retrieve the <user> from the <user-repository> where id = <id>.`<br>`Retrieve the <status> from the <git>.` |
+| **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier from a repository, or `<status>`/`<log>`/`<branch>` from `<git>`.<br>`Retrieve the <user> from the <user-repository> where <id> is <id>.`<br>`Retrieve the <status> from the <git>.` |
 | **Return**    | Control           | RESPONSE          | Sends back a result from a feature set.<br>`Return an <OK: status> with <data>.` |
 | **Schedule**  | Communication     | EXPORT            | Schedules a delayed or recurring action.<br>`Schedule the <task> for the <timer> with 5000.` |
 | **Select**    | Terminal          | REQUEST           | Presents a terminal selection menu.<br>`Select the <choice> from the <options>.` |

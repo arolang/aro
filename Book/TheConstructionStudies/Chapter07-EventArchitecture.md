@@ -282,17 +282,20 @@ Handlers can filter events based on entity field values using angle bracket synt
 ```aro
 (* Only handle when status = "paid" *)
 (Process Paid Orders: OrderCreated Handler<status:paid>) {
-    ...
+    Extract the <order> from the <event: order>.
+    Return an <OK: status> for the <order>.
 }
 
 (* Multiple values with OR logic *)
 (Handle Active Users: UserUpdated Handler<status:active,premium>) {
-    ...
+    Extract the <user> from the <event: user>.
+    Return an <OK: status> for the <user>.
 }
 
 (* Multiple fields with AND logic *)
 (VIP Processing: OrderCreated Handler<status:paid;tier:gold>) {
-    ...
+    Extract the <order> from the <event: order>.
+    Return an <OK: status> for the <order>.
 }
 ```
 

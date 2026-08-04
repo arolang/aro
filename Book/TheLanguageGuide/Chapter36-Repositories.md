@@ -8,7 +8,7 @@ In ARO, each HTTP request creates a fresh execution context. Variables defined i
 
 ```aro
 (* This won't work - count resets on each request *)
-(GET /count: Counter API) {
+(recordHit: Counter API) {
     Create the <count> with 0.
     Compute the <new-count> from <count> + 1.
     Return an <OK: status> with <new-count>.
@@ -18,14 +18,14 @@ In ARO, each HTTP request creates a fresh execution context. Variables defined i
 Repositories solve this by providing shared storage:
 
 ```aro
-(POST /increment: Counter API) {
+(incrementCount: Counter API) {
     Retrieve the <counts> from the <counter-repository>.
     Compute the <current> from <counts: length>.
     Store the <current> into the <counter-repository>.
     Return an <OK: status> with <current>.
 }
 
-(GET /count: Counter API) {
+(getCount: Counter API) {
     Retrieve the <counts> from the <counter-repository>.
     Compute the <total> from <counts: length>.
     Return an <OK: status> with { count: <total> }.
@@ -107,7 +107,6 @@ All of these are equivalent:
 
 ```aro
 Store the <user> into the <user-repository>.
-Store the <user> into the <user-repository>.
 Store the <user> to the <user-repository>.
 ```
 
@@ -139,7 +138,7 @@ When `<Store>` is called, the runtime automatically deduplicates plain values (s
 (Queue URL: QueueUrl Handler) {
     (* Just store — observer handles the rest *)
     Store the <url> into the <crawled-repository>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <queue>.
 }
 
 (Process New URLs: crawled-repository Observer) {
@@ -147,7 +146,7 @@ When `<Store>` is called, the runtime automatically deduplicates plain values (s
     Extract the <url> from the <event: newValue>.
     Log "Processing: ${<url>}" to the <console>.
     Emit a <ProcessUrl: event> with { url: <url> }.
-    Return an <OK: status>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -220,7 +219,7 @@ Use `where` to filter results:
 ```aro
 (getUserById: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> = <id>.
     Return an <OK: status> with <user>.
 }
 ```
@@ -261,7 +260,8 @@ When a filtered retrieve might return no results, use the `default` clause to su
 ```aro
 (* Without default — need a manual match *)
 Retrieve the <results> from the <cache-repository> where <key> = <cache-key>.
-Compute the <found> from <results: length> > 0.
+Compute the <result-count: length> from <results>.
+Compute the <found> from <result-count> > 0.
 match <found> {
     case true  { Extract the <entry> from the <results: 0>. }
     case false { Create the <entry> with { key: <cache-key>, value: "" }. }
@@ -292,7 +292,7 @@ Repositories are scoped to their **business activity**. Feature sets with the sa
 
 (postMessage: Chat API) {
     Store the <message> into the <message-repository>.
-    Return a <Created: status>.
+    Return a <Created: status> for the <message>.
 }
 
 (getMessages: Chat API) {
@@ -384,7 +384,7 @@ curl http://localhost:8080/status
 Use the `<Delete>` action with a `where` clause to remove items from a repository:
 
 ```aro
-Delete the <user> from the <user-repository> where id = <userId>.
+Delete the <user> from the <user-repository> where <id> = <userId>.
 ```
 
 ### Example: Deleting a User
@@ -392,7 +392,7 @@ Delete the <user> from the <user-repository> where id = <userId>.
 ```aro
 (deleteUser: User API) {
     Extract the <userId> from the <pathParameters: id>.
-    Delete the <user> from the <user-repository> where id = <userId>.
+    Delete the <user> from the <user-repository> where <id> = <userId>.
     Return an <OK: status> with { deleted: <userId> }.
 }
 ```
@@ -446,13 +446,16 @@ Observers are triggered for three types of changes:
     Extract the <changeType> from the <event: changeType>.
     Extract the <entityId> from the <event: entityId>.
 
-    Compare the <changeType> equals "updated".
+    (* Act only on updates — guard each dependent statement.
+       There is no `Compare ... equals`; use a `when` expression guard.
+       To read a nested field, extract the object first, then the field. *)
+    Extract the <old> from the <event: oldValue> when <changeType> == "updated".
+    Extract the <new> from the <event: newValue> when <changeType> == "updated".
+    Extract the <old-name> from the <old: name> when <changeType> == "updated".
+    Extract the <new-name> from the <new: name> when <changeType> == "updated".
 
-    Extract the <oldName> from the <event: oldValue: name>.
-    Extract the <newName> from the <event: newValue: name>.
-
-    Compute the <message> from "User " ++ <entityId> ++ " renamed from " ++ <oldName> ++ " to " ++ <newName>.
-    Log <message> to the <console>.
+    Compute the <message> from "User " ++ <entityId> ++ " renamed from " ++ <old-name> ++ " to " ++ <new-name>.
+    Log <message> to the <console> when <changeType> == "updated".
 
     Return an <OK: status> for the <tracking>.
 }
@@ -467,15 +470,14 @@ You can have multiple observers for the same repository:
 (Log All Changes: user-repository Observer) {
     Extract the <changeType> from the <event: changeType>.
     Log <changeType> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <logging>.
 }
 
-(* Email notification observer *)
+(* Delete-only notification observer *)
 (Notify Admin: user-repository Observer) {
     Extract the <changeType> from the <event: changeType>.
-    Compare the <changeType> equals "deleted".
-    Send the <notification> to the <admin-email>.
-    Return an <OK: status>.
+    Send the <notification> to the <admin-email> when <changeType> == "deleted".
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -503,8 +505,8 @@ The `when` guard is evaluated before the observer executes. If the condition is 
 (* Trigger alert when queue grows too large *)
 (Queue Alert: task-repository Observer) when <task-repository: count> > 1000 {
     Log "Warning: Task queue exceeds 1000 items" to the <console>.
-    Emit a <QueueOverflow: event>.
-    Return an <OK: status>.
+    Emit a <QueueOverflow: event> with { threshold: 1000 }.
+    Return an <OK: status> for the <alert>.
 }
 ```
 
@@ -530,8 +532,7 @@ The straightforward implementation uses sequential processing:
     Log "Creating directory structure..." to the <console>.
 
     (* Process each directory sequentially *)
-    Create the <index> with 0.
-    (For Each: <entry> in <directories>) {
+    for each <entry> in <directories> {
         Extract the <fullpath> from the <entry: path>.
 
         (* Remove template/ prefix *)
@@ -541,8 +542,6 @@ The straightforward implementation uses sequential processing:
         (* Create the directory *)
         Make the <dir> to the <path: relpath>.
         Log "Created: ${relpath}" to the <console>.
-
-        Compute the <index> from <index> + 1.
     }
 
     Log "Replication complete!" to the <console>.
@@ -665,7 +664,7 @@ For 100 directories, the events version can be **100x faster** on multi-core sys
 
 **Imperative**: All logic mixed together
 ```aro
-(Application-Start) {
+(Application-Start: Directory Replicator) {
     (* Scanning logic *)
     (* Processing logic *)
     (* Logging logic *)
@@ -678,7 +677,7 @@ For 100 directories, the events version can be **100x faster** on multi-core sys
 **Events**: Clear separation
 ```aro
 (* main.aro: Scanning and storage *)
-(Application-Start) {
+(Application-Start: Directory Replicator Events) {
     (* Just scan and store *)
 }
 
@@ -701,17 +700,13 @@ To add new functionality:
 
 **Imperative**: Must modify main code
 ```aro
-(Application-Start) {
+(Application-Start: Directory Replicator) {
     (* Existing code... *)
 
     (* NEW: Calculate total size? Must add here! *)
-    Compute the <total-size>...
-
     (* NEW: Send notification? Must add here! *)
-    Send the <notification>...
-
     (* NEW: Validate permissions? Must add here! *)
-    Validate the <permissions>...
+    Return an <OK: status> for the <replication>.
 }
 ```
 
@@ -743,10 +738,10 @@ To add new functionality:
 
 ```aro
 (* Reusable observers *)
-(Process Directory Entry: directory-repository Observer) { ... }
-(Audit Changes: directory-repository Observer) { ... }
-(Calculate Statistics: directory-repository Observer) { ... }
-(Send Notifications: directory-repository Observer) { ... }
+(Process Directory Entry: directory-repository Observer) { (* ... *) }
+(Audit Changes: directory-repository Observer) { (* ... *) }
+(Calculate Statistics: directory-repository Observer) { (* ... *) }
+(Send Notifications: directory-repository Observer) { (* ... *) }
 
 (* Use all of them *)
 (* Or just some *)
@@ -955,8 +950,7 @@ The event payload contains:
 ```aro
 (Application-Start: API Gateway) {
     (* Drop requests older than 1 minute from the window *)
-    Configure the <rate-window-repository: ttl> with 60.
-    Configure the <rate-window-repository: maxSize> with 100.
+    Configure the <rate-window-repository> with { ttl: 60, maxSize: 100 }.
     ...
 }
 ```

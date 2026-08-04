@@ -87,7 +87,7 @@ Inside a feature set, statements execute **synchronously** and **serially**:
 ```aro
 (Process Order: Order API) {
     Extract the <data> from the <request: body>.      (* 1. First *)
-    Validate the <data> for the <order-schema>.       (* 2. Second *)
+    Validate the <valid-data> for <data>.       (* 2. Second *)
     Create the <order> with <data>.                   (* 3. Third *)
     Store the <order> into the <order-repository>.      (* 4. Fourth *)
     Emit a <OrderConfirmed: event> with <order>.      (* 5. Fifth *)
@@ -119,7 +119,7 @@ ARO code:
 ```aro
 (Process Order: Order API) {
     Extract the <data> from the <request: body>.
-    Validate the <data> for the <order-schema>.
+    Validate the <valid-data> for <data>.
     Create the <order> with <data>.
     Store the <order> into the <order-repository>.
     Emit a <OrderConfirmed: event> with <order>.
@@ -219,7 +219,7 @@ Feature sets can trigger other feature sets:
 (Send Welcome Email: UserCreated Handler) {
     Extract the <email> from the <event: email>.
     Send the <welcome-email> to the <email>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -399,15 +399,15 @@ Output (example):
 
 ```aro
 (Application-Start: My API) {
-    Start the <http-server> on port 8080.
+    Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Each request triggers this independently *)
 (getUser: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> = <id>.
     Return an <OK: status> with <user>.
 }
 ```
@@ -416,9 +416,9 @@ Output (example):
 
 ```aro
 (Application-Start: Echo Server) {
-    Start the <socket-server> on port 9000.
+    Start the <socket-server> with { port: 9000 }.
     Keepalive the <application> for the <events>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Each client message triggers this independently *)
@@ -426,7 +426,7 @@ Output (example):
     Extract the <data> from the <event: data>.
     Extract the <connection> from the <event: connection>.
     Send the <data> to the <connection>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <echo>.
 }
 ```
 
@@ -436,16 +436,15 @@ Output (example):
 (Application-Start: File Watcher) {
     Watch the <directory> for the <changes> with "./watched".
     Keepalive the <application> for the <events>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Each file change triggers this independently *)
 (Handle File Change: File Event Handler) {
     Extract the <path> from the <event: path>.
-    Extract the <type> from the <event: type>.
-    Compute the <message> from "File " ++ <path> ++ " " ++ <type>.
+    Compute the <message> from "File changed: " ++ <path>.
     Log <message> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <handling>.
 }
 ```
 
@@ -460,11 +459,11 @@ When building web crawlers or recursive-fetch workflows with `CrawlPage` events,
     Extract the <links> from the <page: links>.
 
     (* The runtime deduplicates: already-visited URLs are skipped *)
-    For each <link> in <links> {
+    for each <link> in <links> {
         Emit a <CrawlPage: event> with <link>.
     }
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <crawl>.
 }
 ```
 

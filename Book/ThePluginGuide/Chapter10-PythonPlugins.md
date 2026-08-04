@@ -613,26 +613,26 @@ With custom actions registered, use native ARO syntax for AI operations:
         max_length: 100,
         temperature: 0.8
     }.
-    Log "Generated: " with <generated: generated_text> to the <console>.
+    Log "Generated: " ++ <generated: generated_text> to the <console>.
 
     (* Summarize a long document using custom action *)
     Create the <document> with "Machine learning is a subset of artificial intelligence (AI) that provides systems the ability to automatically learn and improve from experience without being explicitly programmed. Machine learning focuses on the development of computer programs that can access data and use it to learn for themselves. The process of learning begins with observations or data, such as examples, direct experience, or instruction, in order to look for patterns in data and make better decisions in the future based on the examples that we provide.".
 
     Summarize the <summary> from <document> with { max_length: 50 }.
-    Log "Summary: " with <summary: summary> to the <console>.
+    Log "Summary: " ++ <summary: summary> to the <console>.
 
     (* Classify sentiment using custom action *)
     Classify the <sentiment> from "This product exceeded all my expectations! Highly recommended.".
-    Log "Sentiment: " with <sentiment: label> to the <console>.
-    Log "Confidence: " with <sentiment: score> to the <console>.
+    Log "Sentiment: " ++ <sentiment: label> to the <console>.
+    Log "Confidence: " ++ <sentiment: score> to the <console>.
 
     (* Question answering using custom action *)
     Create the <context> with "ARO is a domain-specific language for expressing business logic. It was created in 2026 and uses an Action-Result-Object syntax pattern.".
 
-    <Answer> the <answer> from "What syntax pattern does ARO use?" with {
+    Answer the <answer> from "What syntax pattern does ARO use?" with {
         context: <context>
     }.
-    Log "Answer: " with <answer: answer> to the <console>.
+    Log "Answer: " ++ <answer: answer> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
