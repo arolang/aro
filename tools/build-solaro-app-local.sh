@@ -87,6 +87,12 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro"
 cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
+# App icon (Graphics/AppIcon.icns, generated from Graphics/solaro.svg by
+# tools/generate-solaro-icon.sh). Referenced via CFBundleIconFile below.
+if [ -f Graphics/AppIcon.icns ]; then
+    cp Graphics/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+fi
+
 # Ship the AROXPCService binary alongside the main executable
 # (#282 phase 3). SOLARO's proxy resolver checks Resources/
 # first before walking the dev build dirs — keeps the .app
@@ -103,6 +109,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Solaro</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <!-- CFBundleIdentifier intentionally keeps the SOLARO suffix even
        though the app is now called Solaro — changing the bundle ID
        would orphan every existing user's NSUserDefaults, Launch
