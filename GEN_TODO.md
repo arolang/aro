@@ -1,1080 +1,420 @@
 # Generation TODO
 
-Failed prompts from NB10 code generation (179 total).
+Failed prompts from NB10 code generation (69 total).
 These prompts did not produce valid ARO output. Investigate and add
 manual training pairs or adjust the prompts for the next run.
 
-## 1. no_output [grounded]
+## 1. no_output
 
-MultilineString:variant1
+task manager API with priorities and due dates
 
 ---
 
 ## 2. no_output
 
-task manager API with priorities and due dates
+customer orders API with status state machine
 
 ---
 
 ## 3. no_output
 
-customer orders API with status state machine
+support ticket API with severity levels
 
 ---
 
-## 4. no_output [grounded]
+## 4. no_output
 
-Immutability:variant2
-
----
-
-## 5. no_output [grounded]
-
-QualifierPluginPython:variant2
+appointment scheduling API with conflict detection
 
 ---
 
-## 6. no_output [grounded]
+## 5. no_output
 
-ExtractInCase:variant1
-
----
-
-## 7. no_output [grounded]
-
-Computations:variant2
+notification preferences API per user
 
 ---
 
-## 8. no_output [grounded]
+## 6. no_output
 
-WebSocketDemo
+poll and voting API with results
 
 ---
 
-## 9. no_output [grounded]
+## 7. no_output
 
-LinkHeaderPagination
+book library API with borrowing and returns
+
+---
+
+## 8. no_output
+
+user profiles API with avatar upload
+
+---
+
+## 9. no_output
+
+subscription billing API with renewal alerts
 
 ---
 
 ## 10. no_output
 
+contact list API with tags and search
+
+---
+
+## 11. no_output
+
+feature flag manager API with rollout percentage
+
+---
+
+## 12. no_output
+
+team management API with roles
+
+---
+
+## 13. no_output
+
 coupon codes API with expiry and usage limits
 
 ---
 
-## 11. no_output [grounded]
+## 14. no_output
 
-MultilineString
-
----
-
-## 12. no_output [grounded]
-
-StateMachine:variant1
-
----
-
-## 13. no_output [grounded]
-
-LogToStderr
-
----
-
-## 14. no_output [grounded]
-
-NotifyExample:variant2
+inventory tracking API with low-stock email alerts
 
 ---
 
 ## 15. no_output [grounded]
 
-Iteration:variant1
+TypeConversion:variant1
 
 ---
 
-## 16. no_output [grounded]
+## 16. no_output
 
-MetricsDemo
-
----
-
-## 17. no_output [grounded]
-
-SinkSyntax:variant2
+task manager API with priorities and due dates
 
 ---
 
-## 18. no_output [grounded]
+## 17. no_output
 
-PipelineDemo:variant1
-
----
-
-## 19. no_output [grounded]
-
-TerminalTaskManager:variant1
+customer orders API with status state machine
 
 ---
 
-## 20. no_output [grounded]
+## 18. no_output
 
-RepositoryLimits:variant1
-
----
-
-## 21. no_output [grounded]
-
-SocketClient:variant1
+support ticket API with severity levels
 
 ---
 
-## 22. no_output [grounded]
+## 19. no_output
 
-MarkdownRenderer:variant1
-
----
-
-## 23. no_output [grounded]
-
-ExtractInCase:variant1
+appointment scheduling API with conflict detection
 
 ---
 
-## 24. no_output [grounded]
+## 20. no_output
 
-PipelineDemo:variant2
+poll and voting API with results
+
+---
+
+## 21. no_output
+
+book library API with borrowing and returns
+
+---
+
+## 22. no_output
+
+subscription billing API with renewal alerts
+
+---
+
+## 23. no_output
+
+contact list API with tags and search
+
+---
+
+## 24. no_output
+
+feature flag manager API with rollout percentage
 
 ---
 
 ## 25. no_output [grounded]
 
-DataSync
+FileOperations
 
 ---
 
-## 26. no_output [grounded]
+## 26. no_output
 
-HashTest:variant1
-
----
-
-## 27. no_output [grounded]
-
-features:variant1
+team management API with roles
 
 ---
 
-## 28. no_output [grounded]
+## 27. no_output
 
-ZipService
+coupon codes API with expiry and usage limits
+
+---
+
+## 28. no_output
+
+inventory tracking API with low-stock email alerts
 
 ---
 
 ## 29. no_output [grounded]
 
-NumericSeparators
+OrderService
 
 ---
 
-## 30. no_output [grounded]
+## 30. no_output
 
-FileCount:variant2
-
----
-
-## 31. no_output [grounded]
-
-Expressions:variant2
+task manager API with priorities and due dates
 
 ---
 
-## 32. no_output [grounded]
+## 31. no_output
 
-StreamExample:variant1
-
----
-
-## 33. no_output [grounded]
-
-QualifierPluginC:variant1
+customer orders API with status state machine
 
 ---
 
-## 34. no_output [grounded]
+## 32. no_output
 
-SimpleChat
-
----
-
-## 35. no_output [grounded]
-
-Expressions:variant1
+support ticket API with severity levels
 
 ---
 
-## 36. no_output [grounded]
+## 33. no_output
 
-FileWatcher
+appointment scheduling API with conflict detection
+
+---
+
+## 34. no_output
+
+poll and voting API with results
+
+---
+
+## 35. no_output
+
+book library API with borrowing and returns
+
+---
+
+## 36. no_output
+
+subscription billing API with renewal alerts
 
 ---
 
 ## 37. no_output
 
-task manager API with priorities and due dates
+contact list API with tags and search
 
 ---
 
-## 38. no_output [grounded]
+## 38. no_output
 
-SinkSyntax
+feature flag manager API with rollout percentage
 
 ---
 
 ## 39. no_output
 
-customer orders API with status state machine
+team management API with roles
 
 ---
 
-## 40. no_output [grounded]
+## 40. no_output
 
-ZipService
+coupon codes API with expiry and usage limits
 
 ---
 
-## 41. no_output [grounded]
+## 41. no_output
 
-RepositoryLimits
+inventory tracking API with low-stock email alerts
 
 ---
 
 ## 42. no_output [grounded]
 
-URLClient
+UserService
 
 ---
 
 ## 43. no_output [grounded]
 
-Parameters
+OrderService:variant2
 
 ---
 
 ## 44. no_output [grounded]
 
-CountingStyles
+UserService:variant1
 
 ---
 
 ## 45. no_output
 
-coupon codes API with expiry and usage limits
-
----
-
-## 46. no_output [grounded]
-
-orders:variant1
-
----
-
-## 47. no_output [grounded]
-
-UserDefinedActions:variant1
-
----
-
-## 48. no_output [grounded]
-
-ModulesExample:variant1
-
----
-
-## 49. no_output [grounded]
-
-WebSocketDemo:variant2
-
----
-
-## 50. no_output [grounded]
-
-StreamExample:variant2
-
----
-
-## 51. no_output [grounded]
-
-StreamingDemo
-
----
-
-## 52. no_output [grounded]
-
-PipelineDemo
-
----
-
-## 53. no_output [grounded]
-
-MultilineString:variant2
-
----
-
-## 54. no_output [grounded]
-
-TerminalSimpleMenu
-
----
-
-## 55. no_output [grounded]
-
-ParallelForEach:variant2
-
----
-
-## 56. no_output [grounded]
-
-LogToStderr
-
----
-
-## 57. no_output [grounded]
-
-ObjectUpdate
-
----
-
-## 58. no_output [grounded]
-
-features
-
----
-
-## 59. no_output [grounded]
-
-SystemLoadMonitor:variant2
-
----
-
-## 60. no_output [grounded]
-
-EventListener
-
----
-
-## 61. no_output [grounded]
-
-ErrorHandling:variant2
-
----
-
-## 62. no_output [grounded]
-
-CSVProcessor:variant2
-
----
-
-## 63. no_output [grounded]
-
-orders
-
----
-
-## 64. no_output [grounded]
-
-StoreFileDemo:variant2
-
----
-
-## 65. no_output [grounded]
-
-ResponseHeaders
-
----
-
-## 66. no_output [grounded]
-
-RawStrings:variant2
-
----
-
-## 67. no_output [grounded]
-
-GitDemo:variant1
-
----
-
-## 68. no_output [grounded]
-
-FileChecks:variant1
-
----
-
-## 69. no_output [grounded]
-
-TemplateEngine
-
----
-
-## 70. no_output [grounded]
-
-ParameterRefs:variant1
-
----
-
-## 71. no_output [grounded]
-
-TypeConversion:variant2
-
----
-
-## 72. no_output [grounded]
-
-SSEStreamDemo
-
----
-
-## 73. no_output [grounded]
-
-Split:variant2
-
----
-
-## 74. no_output [grounded]
-
-features:variant2
-
----
-
-## 75. no_output [grounded]
-
-SimpleChat:variant1
-
----
-
-## 76. no_output [grounded]
-
-SimpleChat:variant1
-
----
-
-## 77. no_output [grounded]
-
-SourceStructure
-
----
-
-## 78. no_output
-
 task manager API with priorities and due dates
 
 ---
 
-## 79. no_output [grounded]
-
-Sumup:variant2
-
----
-
-## 80. no_output
+## 46. no_output
 
 customer orders API with status state machine
 
 ---
 
-## 81. no_output [grounded]
+## 47. no_output
 
-FileWatcher:variant2
-
----
-
-## 82. no_output [grounded]
-
-TerminalUI:variant1
+support ticket API with severity levels
 
 ---
 
-## 83. no_output [grounded]
+## 48. no_output
 
-CountingStyles:variant1
-
----
-
-## 84. no_output [grounded]
-
-WebhookReceiver:variant1
+appointment scheduling API with conflict detection
 
 ---
 
-## 85. no_output [grounded]
+## 49. no_output
 
-MarkdownRenderer:variant2
-
----
-
-## 86. no_output [grounded]
-
-WebSocketDemo:variant1
+poll and voting API with results
 
 ---
 
-## 87. no_output
+## 50. no_output
+
+book library API with borrowing and returns
+
+---
+
+## 51. no_output
+
+subscription billing API with renewal alerts
+
+---
+
+## 52. no_output
+
+contact list API with tags and search
+
+---
+
+## 53. no_output
+
+feature flag manager API with rollout percentage
+
+---
+
+## 54. no_output
+
+team management API with roles
+
+---
+
+## 55. no_output
 
 coupon codes API with expiry and usage limits
 
 ---
 
-## 88. no_output [grounded]
+## 56. no_output
 
-ErrorHandling:variant1
-
----
-
-## 89. no_output [grounded]
-
-WeatherClient
+inventory tracking API with low-stock email alerts
 
 ---
 
-## 90. no_output [grounded]
+## 57. no_output [grounded]
 
-SSEClient:variant2
-
----
-
-## 91. no_output [grounded]
-
-CSVProcessor
+SystemLoadMonitor:variant2
 
 ---
 
-## 92. no_output [grounded]
-
-TemplateEngine:variant1
-
----
-
-## 93. no_output [grounded]
-
-SocketClient
-
----
-
-## 94. no_output [grounded]
-
-URLClient:variant1
-
----
-
-## 95. no_output [grounded]
-
-DateRangeDemo:variant1
-
----
-
-## 96. no_output [grounded]
-
-WeatherClient
-
----
-
-## 97. no_output [grounded]
-
-SourceStructure
-
----
-
-## 98. no_output [grounded]
-
-FileChecks:variant2
-
----
-
-## 99. no_output [grounded]
-
-EventReplay:variant2
-
----
-
-## 100. no_output [grounded]
-
-TerminalSystemMonitor:variant2
-
----
-
-## 101. no_output [grounded]
-
-DataSync:variant2
-
----
-
-## 102. no_output [grounded]
-
-orders
-
----
-
-## 103. no_output [grounded]
-
-Buildflow:variant1
-
----
-
-## 104. no_output [grounded]
-
-RawStrings:variant1
-
----
-
-## 105. no_output [grounded]
-
-GroupDemo
-
----
-
-## 106. no_output [grounded]
-
-StatusPost
-
----
-
-## 107. no_output [grounded]
-
-ObjectUpdate:variant1
-
----
-
-## 108. no_output [grounded]
-
-LogToStderr:variant1
-
----
-
-## 109. no_output [grounded]
-
-TerminalSimpleMenu:variant1
-
----
-
-## 110. no_output [grounded]
-
-Buildflow:variant2
-
----
-
-## 111. no_output [grounded]
-
-DateTimeDemo
-
----
-
-## 112. no_output [grounded]
-
-PageBuilder:variant2
-
----
-
-## 113. no_output [grounded]
-
-mostrecentfile:variant1
-
----
-
-## 114. no_output [grounded]
-
-users:variant1
-
----
-
-## 115. no_output [grounded]
-
-WhileLoop:variant2
-
----
-
-## 116. no_output [grounded]
-
-SQLiteExample:variant1
-
----
-
-## 117. no_output [grounded]
-
-EventReplay
-
----
-
-## 118. no_output
+## 58. no_output
 
 task manager API with priorities and due dates
 
 ---
 
-## 119. no_output [grounded]
+## 59. no_output
 
-DirectoryLister:variant1
-
----
-
-## 120. no_output [grounded]
-
-ZipService:variant2
+customer orders API with status state machine
 
 ---
 
-## 121. no_output [grounded]
+## 60. no_output
 
-Crawler
-
----
-
-## 122. no_output [grounded]
-
-PipelineDemo:variant1
+support ticket API with severity levels
 
 ---
 
-## 123. no_output [grounded]
+## 61. no_output
 
-UptimeMonitor:variant1
+appointment scheduling API with conflict detection
 
 ---
 
-## 124. no_output
+## 62. no_output
+
+poll and voting API with results
+
+---
+
+## 63. no_output
+
+book library API with borrowing and returns
+
+---
+
+## 64. no_output
+
+subscription billing API with renewal alerts
+
+---
+
+## 65. no_output
+
+contact list API with tags and search
+
+---
+
+## 66. no_output
+
+feature flag manager API with rollout percentage
+
+---
+
+## 67. no_output
+
+team management API with roles
+
+---
+
+## 68. no_output
 
 coupon codes API with expiry and usage limits
 
 ---
 
-## 125. no_output [grounded]
+## 69. no_output
 
-features:variant2
-
----
-
-## 126. no_output [grounded]
-
-FileWatcher
-
----
-
-## 127. no_output [grounded]
-
-DirectoryReplicator
-
----
-
-## 128. no_output [grounded]
-
-ParallelForEach:variant1
-
----
-
-## 129. no_output [grounded]
-
-SortExample:variant1
-
----
-
-## 130. no_output [grounded]
-
-SimpleChat:variant2
-
----
-
-## 131. no_output [grounded]
-
-StateMachine:variant1
-
----
-
-## 132. no_output [grounded]
-
-LogToStderr:variant2
-
----
-
-## 133. no_output [grounded]
-
-TerminalUI:variant2
-
----
-
-## 134. no_output [grounded]
-
-StateMachine
-
----
-
-## 135. no_output [grounded]
-
-DataSync:variant2
-
----
-
-## 136. no_output [grounded]
-
-ModulesExample:variant2
-
----
-
-## 137. no_output [grounded]
-
-FileCount:variant1
-
----
-
-## 138. no_output [grounded]
-
-FileMetadata:variant1
-
----
-
-## 139. no_output [grounded]
-
-CountingStyles:variant2
-
----
-
-## 140. no_output [grounded]
-
-ApplicationEnd
-
----
-
-## 141. no_output [grounded]
-
-ResponseHeaders:variant1
-
----
-
-## 142. no_output [grounded]
-
-ErrorHandling
-
----
-
-## 143. no_output [grounded]
-
-TypeConversion:variant1
-
----
-
-## 144. no_output [grounded]
-
-FileOperations
-
----
-
-## 145. no_output [grounded]
-
-SleepDemo
-
----
-
-## 146. no_output [grounded]
-
-Calculator:variant1
-
----
-
-## 147. no_output [grounded]
-
-TerminalSimpleMenu:variant1
-
----
-
-## 148. no_output [grounded]
-
-GroupDemo:variant1
-
----
-
-## 149. no_output [grounded]
-
-SSEStreamDemo:variant1
-
----
-
-## 150. no_output [grounded]
-
-FileMetadata
-
----
-
-## 151. no_output [grounded]
-
-SortExample:variant1
-
----
-
-## 152. no_output [grounded]
-
-ConstantFolding:variant1
-
----
-
-## 153. no_output [grounded]
-
-TerminalTaskManager:variant2
-
----
-
-## 154. no_output [grounded]
-
-ParameterRefs
-
----
-
-## 155. no_output [grounded]
-
-rulpz:variant2
-
----
-
-## 156. no_output [grounded]
-
-StatusPost:variant1
-
----
-
-## 157. no_output
-
-task manager API with priorities and due dates
-
----
-
-## 158. no_output [grounded]
-
-SleepAPI
-
----
-
-## 159. no_output [grounded]
-
-FileWatcher:variant1
-
----
-
-## 160. no_output [grounded]
-
-ResponseHeaders:variant1
-
----
-
-## 161. no_output [grounded]
-
-HashTest:variant1
-
----
-
-## 162. no_output [grounded]
-
-WebSocketDemo:variant1
-
----
-
-## 163. no_output [grounded]
-
-Conditionals:variant2
-
----
-
-## 164. no_output
-
-coupon codes API with expiry and usage limits
-
----
-
-## 165. no_output [grounded]
-
-EchoSocket:variant2
-
----
-
-## 166. no_output [grounded]
-
-ParameterRefs:variant1
-
----
-
-## 167. no_output [grounded]
-
-FormatAwareIO
-
----
-
-## 168. no_output [grounded]
-
-ExternalService:variant2
-
----
-
-## 169. no_output [grounded]
-
-Scoping:variant2
-
----
-
-## 170. no_output [grounded]
-
-UserService:variant2
-
----
-
-## 171. no_output [grounded]
-
-TerminalSimpleMenu
-
----
-
-## 172. no_output [grounded]
-
-SortExample
-
----
-
-## 173. no_output [grounded]
-
-DirectoryReplicatorEvents:variant2
-
----
-
-## 174. no_output [grounded]
-
-RepositoryLimits
-
----
-
-## 175. no_output [grounded]
-
-WeatherClient:variant1
-
----
-
-## 176. no_output [grounded]
-
-DirectoryReplicatorEvents:variant1
-
----
-
-## 177. no_output [grounded]
-
-GitDemo
-
----
-
-## 178. no_output [grounded]
-
-ExternalService:variant1
-
----
-
-## 179. no_output [grounded]
-
-Split
+inventory tracking API with low-stock email alerts
 
 ---
 
