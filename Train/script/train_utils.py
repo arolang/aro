@@ -235,3 +235,135 @@ def load_json(path, default=None):
             return json.load(f)
     except Exception:
         return default
+
+
+# ── Training-meta contamination denylist (aro ask self-reference bug) ────────
+# The fine-tuned `aro ask` model was observed answering an ARO *usage* question
+# ("How do I implement writable stores?") with self-referential training-report
+# narration ("the model's fine-tuned syntax pass rate improved from 12% to 72%
+# … hallucination rate remained stable at 0.40"). That prose is training-process
+# meta-commentary that leaked into the corpus (e.g. via `.context` /
+# `.context.repairs.jsonl` user-session logs) and must never be learned as ARO
+# content. `is_training_meta` flags such text at ingestion time so contaminated
+# samples can be dropped, and at eval time so a model that regurgitates it fails.
+#
+# Strong phrases are essentially only produced when narrating a training run's
+# own results — their bare presence is enough to flag. Soft phrases are training
+# vocabulary that is common enough to appear in legitimate contexts, so one alone
+# never flags: we require either two distinct soft signals, or one soft signal
+# co-occurring with a metric number (a percentage / rate / decimal like 0.40).
+# This keeps the filter PRECISE — legitimate ARO Q&A (a "report generator" app,
+# ARO code that happens to contain the word "training", "fine-tune the timeout
+# config") is not flagged.
+
+_META_STRONG = [
+    r'syntax pass rate',
+    r'hallucination rate',
+    r'held[\s\-]?out',
+    r'eval(?:uation)? prompts?',
+    r'loss curve',
+    r'loss (?:is |was |slowly )?converg',
+    r'(?:val(?:idation)?|training)\s+loss',
+    r'training round',
+    r'training run',
+]
+
+_META_SOFT = [
+    r'fine[\s\-]?tun(?:e|ed|es|ing)',
+    r'base model',
+    r'pass[\s\-]?rate',
+    r'\bepochs?\b',
+    r'\blora\b',
+    r'\badapter weights?\b',
+    r'dataset size',
+    r'\d[\d,\.]*\s+(?:training\s+)?samples\b',
+    r'eval(?:uation)?\s+(?:set|prompts?)',
+    r'hallucination',
+]
+
+_META_STRONG_RE = [re.compile(p, re.IGNORECASE) for p in _META_STRONG]
+_META_SOFT_RE = [re.compile(p, re.IGNORECASE) for p in _META_SOFT]
+# A metric number: an explicit percentage/rate, the word "percent", or a bare
+# two-decimal fraction (e.g. "0.40") of the kind used to report rates.
+_METRIC_NUM_RE = re.compile(r'\d+(?:\.\d+)?\s*%|\bpercent\b|\b\d\.\d{2}\b',
+                            re.IGNORECASE)
+
+
+def is_training_meta(text):
+    """Return True when `text` reads as training-process/report meta rather than
+    ARO content, and should be dropped from (or flagged in) the corpus.
+
+    Intent: catch self-referential training-run narration — syntax pass rates,
+    hallucination rates, fine-tune/held-out/eval-prompt/loss-curve commentary —
+    of the class that leaked into `aro ask` answers, WITHOUT flagging legitimate
+    ARO questions or code. Precision is favoured over recall: a single common
+    training word (e.g. "training", "fine-tune") is never enough on its own —
+    we require a strong metric phrase, two distinct soft signals, or one soft
+    signal alongside a metric number.
+
+    `text` may be any object; non-strings return False.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+
+    for rx in _META_STRONG_RE:
+        if rx.search(text):
+            return True
+
+    soft_hits = sum(1 for rx in _META_SOFT_RE if rx.search(text))
+    if soft_hits >= 2:
+        return True
+    if soft_hits >= 1 and _METRIC_NUM_RE.search(text):
+        return True
+    return False
+
+
+# ── Self-test ────────────────────────────────────────────────────────────────
+# Run with:  python3 train_utils.py
+# Asserts the known contaminating strings ARE flagged and legitimate ARO
+# prompts/code are NOT. Kept in __main__ so importing the module is side-effect
+# free on CI.
+
+if __name__ == '__main__':
+    _CONTAMINATED = [
+        # the verbatim leak that triggered this work
+        "the model's fine-tuned syntax pass rate improved from 12% to 72% "
+        "while the hallucination rate remained stable at 0.40",
+        "hallucination rate remained stable at 0.40",
+        "syntax pass rate rose to 72%",
+        "In training round 3 the held-out eval prompts showed the loss curve "
+        "converging.",
+        "The base model was fine-tuned on a dataset size of 12000 samples.",
+        "After fine-tuning, the pass rate reached 88%.",
+        "evaluation prompts were run against the held-out set",
+        "validation loss plateaued around 0.31 by epoch 4",
+    ]
+    _LEGIT = [
+        "How do I implement writable stores in ARO?",
+        "Write a complete ARO application that generates a monthly sales report.",
+        "Build a report generator that reads a CSV and writes an HTML summary.",
+        "Retrieve the <training-data> from the <repository>.",
+        "How do I fine-tune the timeout configuration for a slow action?",
+        "Compute the <pass-rate: length> from the <students>.",
+        "Log \"Starting the model training service\" to the <console>.",
+        "How did the model perform in training?",  # question, not a report
+        "Write one ARO statement that retrieves the git status.",
+        "Emit a <UserCreated: event> with <user>.",
+    ]
+
+    failures = []
+    for t in _CONTAMINATED:
+        if not is_training_meta(t):
+            failures.append(f'MISSED (should flag): {t!r}')
+    for t in _LEGIT:
+        if is_training_meta(t):
+            failures.append(f'FALSE POSITIVE (should NOT flag): {t!r}')
+
+    if failures:
+        print('is_training_meta self-test FAILED:')
+        for f in failures:
+            print('  -', f)
+        raise SystemExit(1)
+    print(f'is_training_meta self-test PASSED — '
+          f'{len(_CONTAMINATED)} contaminated flagged, '
+          f'{len(_LEGIT)} legitimate passed through.')
