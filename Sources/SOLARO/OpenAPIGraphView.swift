@@ -93,48 +93,36 @@ struct OpenAPIGraphView: View {
             .allowsHitTesting(false)
 
             // The wires/nodes layer needs an explicit
-            // `width × height == contentSize` so wires can be
-            // drawn at absolute coordinates and the scale/offset
-            // transforms behave. But that explicit frame is the
-            // SwiftUI tree's ideal size — and NSHostingView feeds
-            // the ideal size into its SizeConstraints, which is
-            // what `SplitViewChildController` reads. On macOS 26
-            // the resulting min/max-size update re-enqueues a
-            // layout pass per render, eventually tripping AppKit's
-            // "more update-constraints passes than views" guard
-            // and aborting the app.
-            //
-            // Hosting the explicit-size content in
-            // `Color.clear.overlay { ... }` keeps the inner frame
-            // for rendering but breaks the size-propagation pipe:
-            // `Color.clear` is the layout-defining child and has a
-            // flexible ideal size, so the outer ZStack's ideal
-            // size stays "fill available," NSHostingView's min/max
-            // doesn't churn, and SplitViewChildController stops
-            // re-entering.
-            Color.clear.overlay(alignment: .topLeading) {
-                ZStack(alignment: .topLeading) {
-                    OpenAPIWiresLayer(graph: graph)
-                    OpenAPINodesLayer(
-                        graph: graph,
-                        selectedID: selectedID,
-                        warningsByNode: warningsByNode,
-                        onTap: { node in
-                            selectedID = node.id
-                            onSelect(node)
-                        },
-                        onDoubleTap: { node in
-                            onJumpToCode?(node)
-                        }
-                    )
-                }
-                .frame(width: contentSize.width, height: contentSize.height,
-                       alignment: .topLeading)
-                .offset(x: pan.width + dragOffset.width,
-                        y: pan.height + dragOffset.height)
-                .scaleEffect(zoom * magnify, anchor: .topLeading)
-                .animation(.easeOut(duration: 0.15), value: zoom)
+            // `width × height == contentSize` so wires can be drawn
+            // at absolute coordinates and the scale/offset transforms
+            // behave. But that explicit frame is the subtree's ideal
+            // size, and on macOS 26 propagating it up to NSHostingView
+            // trips the SplitViewChildController layout-cycle abort.
+            // `layoutCycleGuard(alignment:)` keeps the inner frame for
+            // rendering while a `Color.clear` base absorbs the ideal
+            // size — see LayoutCycleGuard.swift.
+            ZStack(alignment: .topLeading) {
+                OpenAPIWiresLayer(graph: graph)
+                OpenAPINodesLayer(
+                    graph: graph,
+                    selectedID: selectedID,
+                    warningsByNode: warningsByNode,
+                    onTap: { node in
+                        selectedID = node.id
+                        onSelect(node)
+                    },
+                    onDoubleTap: { node in
+                        onJumpToCode?(node)
+                    }
+                )
             }
+            .frame(width: contentSize.width, height: contentSize.height,
+                   alignment: .topLeading)
+            .offset(x: pan.width + dragOffset.width,
+                    y: pan.height + dragOffset.height)
+            .scaleEffect(zoom * magnify, anchor: .topLeading)
+            .animation(.easeOut(duration: 0.15), value: zoom)
+            .layoutCycleGuard(alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()

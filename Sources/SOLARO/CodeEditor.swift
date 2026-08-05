@@ -125,6 +125,12 @@ final class AROHoverTextView: STTextView {
     /// observer is internal to STTextView and STTextView 2.3.10
     /// is the latest release; this flag breaks the inner loop
     /// without modifying upstream.
+    ///
+    /// This guard and its siblings below (`needsLayout`,
+    /// `invalidateIntrinsicContentSize`, `sizeThatFits`) are pinned to
+    /// `STTextViewCoupling.knownVersion`; see LayoutCycleGuard.swift
+    /// for the shared retirement criteria (bump STTextView past 2.3.10
+    /// once the PR #102 fix ships, re-test, then remove these).
     private var isLayingOut: Bool = false
 
     override func layout() {
