@@ -174,6 +174,10 @@ public actor AskSession {
 
     private func startMCPBridges() async {
         var servers: [MCPServerConfig] = []
+        // No persisted context yet (first run) or an unreadable/corrupt store
+        // → start from an empty list; the built-in `aro mcp` bridge is appended
+        // below regardless, so a load failure just means no user-configured
+        // extra servers this session.
         if let existing = try? contextStore.load(), let configured = existing.mcpServers {
             servers = configured
         }
@@ -254,6 +258,9 @@ public actor AskSession {
 
     static func modifiedPath(tool: String, argumentsJSON: String) -> String? {
         guard let keys = mutatingToolPathKeys[tool] else { return nil }
+        // `argumentsJSON` is model-generated and may be malformed mid-stream;
+        // an unparseable blob (`try?` → nil) just means "no path detected here",
+        // which the caller already handles as nil.
         guard let data = argumentsJSON.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
@@ -289,6 +296,9 @@ public actor AskSession {
         // disk, so "write a function here" sees exactly what the user is
         // looking at. Falls back to disk when no editor host is attached.
         let live = await editorHooks?.liveText(url.path)
+        // The focus file is optional context. If there's no live buffer and the
+        // disk read fails (`try?` → nil) — deleted, unreadable, non-UTF-8 — we
+        // simply inject no OPEN FILE block rather than aborting the request.
         guard let content = live ?? (try? String(contentsOf: url, encoding: .utf8))
         else { return nil }
         let display = displayPath(for: url)
@@ -645,6 +655,9 @@ public actor AskSession {
                     // first failure but bounds the retry storm.
                     if let consec = toolConsecutiveFailures[name], consec > 0 {
                         let delayMs = min(2000, 200 * (1 << min(consec - 1, 4)))
+                        // Task.sleep only throws on cancellation; a cancelled
+                        // backoff should just fall through to the attempt (the
+                        // dispatch below will observe cancellation itself).
                         try? await Task.sleep(for: .milliseconds(delayMs))
                     }
                     output = try await registry.dispatch(
@@ -736,6 +749,9 @@ public actor AskSession {
     /// Extract ```aro code blocks from text.
     private func extractAroBlocks(_ text: String) -> [String] {
         let pattern = #"```aro\n([\s\S]*?)```"#
+        // Compile-time-constant pattern: `try?` can only yield nil if this
+        // literal is edited into something invalid, which a test would catch.
+        // At runtime it always compiles, so "no blocks" is the honest result.
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(text.startIndex..., in: text)
         return regex.matches(in: text, range: range).compactMap { match in
@@ -754,6 +770,9 @@ public actor AskSession {
     /// prose never triggers the loop.
     private func containsCompleteProgram(in text: String) -> Bool {
         let pattern = #"```aro\n[\s\S]*?\(\s*[\w\- ]+\s*:\s*[^)]+\)\s*\{"#
+        // Compile-time-constant pattern (see extractAroBlocks): only nil if the
+        // literal itself is broken. Runtime failure → "no complete program",
+        // which just skips the repair loop — a safe degradation.
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         let r = NSRange(text.startIndex..., in: text)
         return regex.firstMatch(in: text, range: r) != nil
@@ -772,6 +791,9 @@ public actor AskSession {
             "read_proposal", "parse_aro", "run_shell", "write_openapi",
         ]
         let pattern = #"\b(\#(toolNames.joined(separator: "|")))\s*\("#
+        // Pattern is built from the fixed `toolNames` list (plain identifiers),
+        // so it always compiles; `try?` → nil is unreachable at runtime and the
+        // `false` fallback would merely skip the inlined-tool-call hint.
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         let r = NSRange(block.startIndex..., in: block)
         return regex.firstMatch(in: block, range: r) != nil
@@ -797,6 +819,8 @@ public actor AskSession {
         }
         // Scan fenced code blocks only — prose that merely names a tool is
         // fine; a runnable-looking block is the failure signal.
+        // Compile-time-constant fence pattern: only nil if this literal is
+        // broken (a test would catch it); at runtime it always compiles.
         guard let fence = try? NSRegularExpression(
             pattern: #"```[^\n]*\n(.*?)```"#, options: [.dotMatchesLineSeparators]
         ) else { return false }
@@ -862,6 +886,8 @@ public actor AskSession {
                 arguments: ["check", tmp.path],
                 timeout: 10
             )
+            // Best-effort temp cleanup; a leftover dir under the system temp
+            // directory is harmless and reclaimed by the OS.
             try? fm.removeItem(at: tmp)
             if result.exitCode == 0 {
                 return (true, "")
@@ -870,6 +896,8 @@ public actor AskSession {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return (false, String(error.prefix(500)))
         } catch {
+            // Best-effort cleanup on the error path too; the check already
+            // failed, so a leftover temp dir is the least of our concerns.
             try? fm.removeItem(at: tmp)
             return (false, "aro check failed: \(error)")
         }
@@ -1306,6 +1334,9 @@ public actor AskSession {
             // Parse multi-file output (## filename.aro headers)
             var fixedFiles: [String: String] = [:]
             let filePattern = #"##\s+(\S+\.aro)\s*\n```aro\n([\s\S]*?)```"#
+            // Compile-time-constant pattern; nil is unreachable at runtime. If
+            // it ever failed, `fixedFiles` stays empty and the fallback below
+            // uses the first block as main.aro.
             if let regex = try? NSRegularExpression(pattern: filePattern) {
                 let range = NSRange(output.startIndex..., in: output)
                 for match in regex.matches(in: output, range: range) {
@@ -1326,6 +1357,8 @@ public actor AskSession {
             // Step 3: Validate the fix with aro check
             let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+            // Best-effort cleanup of the validation sandbox; harmless if it
+            // lingers under the system temp directory.
             defer { try? fm.removeItem(at: tmpDir) }
 
             for (name, code) in fixedFiles {
@@ -1339,6 +1372,11 @@ public actor AskSession {
                     if fileURL.pathExtension != "aro" && !fileURL.hasDirectoryPath {
                         let rel = fileURL.path.replacingOccurrences(of: appDir.path + "/", with: "")
                         let dest = tmpDir.appendingPathComponent(rel)
+                        // Best-effort copy of sidecars (openapi.yaml, .store) into
+                        // the validation sandbox. A failed copy only makes the
+                        // `aro check` slightly less complete for that one file; it
+                        // never corrupts anything, so we skip it silently rather
+                        // than abort validating the model's fix.
                         try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
                         try? fm.copyItem(at: fileURL, to: dest)
                     }
@@ -1394,6 +1432,9 @@ extension AskMessage {
     func toRequestMessage() -> LMChatRequest.Message {
         var toolCallsValue: [LMToolCall]? = nil
         if let raw = toolCalls, let data = raw.data(using: .utf8) {
+            // Persisted tool-call JSON we wrote ourselves; a decode failure
+            // (schema drift across an upgrade, truncated history) degrades this
+            // message to plain text rather than crashing history rendering.
             toolCallsValue = try? JSONDecoder().decode([LMToolCall].self, from: data)
         }
         return LMChatRequest.Message(

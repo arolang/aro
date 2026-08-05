@@ -117,7 +117,16 @@ struct SourceCheckSubcommand: ParsableCommand {
             source = String(data: data, encoding: .utf8) ?? ""
         } else if FileManager.default.fileExists(atPath: path) {
             label = URL(fileURLWithPath: path).lastPathComponent
-            source = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            // The file exists but may be unreadable (permissions, non-UTF-8).
+            // That's a real failure, not empty input — surfacing it as
+            // "(empty input)" would send the user hunting for a syntax error
+            // that isn't there. Report the read error and exit.
+            do {
+                source = try String(contentsOfFile: path, encoding: .utf8)
+            } catch {
+                FileHandle.standardError.write(Data("\(label): cannot read file: \(error)\n".utf8))
+                Foundation.exit(1)
+            }
         } else {
             // Treat the argument as the inline snippet itself.
             label = "<snippet>"
