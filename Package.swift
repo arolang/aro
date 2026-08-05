@@ -124,6 +124,7 @@ solaroTargets = [
         exclude: [
             "LICENSE-NOTICE.md",
             "ARCHITECTURE.md",
+            "TROUBLESHOOTING.md",
         ]
     ),
     .executableTarget(
