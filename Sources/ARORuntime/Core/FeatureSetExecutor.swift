@@ -224,6 +224,68 @@ public final class FeatureSetExecutor: Sendable {
         }
     }
 
+    // MARK: - Trace Replay (#447 — time-travel branch & edit)
+
+    /// One recorded step of a replay: the statement's source line + verb and
+    /// the symbol snapshot captured just before it ran.
+    public struct ReplayStep: Sendable {
+        public let index: Int          // statement index within the feature set
+        public let line: Int
+        public let verb: String
+        public let symbols: [SymbolSnapshot]
+        public init(index: Int, line: Int, verb: String, symbols: [SymbolSnapshot]) {
+            self.index = index; self.line = line; self.verb = verb; self.symbols = symbols
+        }
+    }
+
+    public struct ReplayResult: Sendable {
+        public let steps: [ReplayStep]
+        public let responseSummary: String?
+        public let error: String?
+    }
+
+    /// Re-run a feature set's statements from `startIndex` onward against a
+    /// pre-seeded context, capturing a per-statement symbol snapshot. Powers
+    /// SOLARO's time-travel "branch & edit" (#447): seed the context with a
+    /// recorded tick's state (one value mutated), replay downstream, and diff
+    /// the forked trace against the original.
+    ///
+    /// Unlike `execute`, this skips dependency/global binding — the caller owns
+    /// the seeded state — emits no lifecycle events, and evicts nothing. It is
+    /// deliberately side-effect-bearing at the action level (a replayed Store
+    /// still writes to its repository), so callers that want an isolated sandbox
+    /// should pass a context backed by throwaway storage.
+    public func replayTrace(
+        _ analyzedFeatureSet: AnalyzedFeatureSet,
+        seededContext context: ExecutionContext,
+        from startIndex: Int
+    ) async -> ReplayResult {
+        let statements = analyzedFeatureSet.featureSet.statements
+        let start = max(0, min(startIndex, statements.count))
+        var steps: [ReplayStep] = []
+        func snapshotStep(index: Int, line: Int, verb: String) async {
+            let symbols = await Self.snapshotSymbols(from: context)
+            steps.append(ReplayStep(index: index, line: line, verb: verb, symbols: symbols))
+        }
+        do {
+            for i in start..<statements.count {
+                let stmt = statements[i]
+                let verb = (stmt as? AROStatement)?.action.verb ?? String(describing: type(of: stmt))
+                await snapshotStep(index: i, line: stmt.span.start.line, verb: verb)
+                try await executeStatement(stmt, context: context)
+                if context.getResponse() != nil { break }
+            }
+            // Post-state snapshot after the last executed statement.
+            await snapshotStep(index: statements.count, line: -1, verb: "(end)")
+            let resp = context.getResponse()
+            let summary = resp.map { "\($0.status): \($0.reason)" }
+            return ReplayResult(steps: steps, responseSummary: summary, error: nil)
+        } catch {
+            await snapshotStep(index: statements.count, line: -1, verb: "(error)")
+            return ReplayResult(steps: steps, responseSummary: nil, error: String(describing: error))
+        }
+    }
+
     // MARK: - Statement Execution
 
     private func executeStatement(
