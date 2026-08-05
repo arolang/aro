@@ -150,45 +150,59 @@ public final class EventChainAnalyzer: Sendable {
     /// - Parameter statements: The statements to search
     /// - Returns: Set of event type names that are emitted
     private func findEmittedEvents(in statements: [Statement]) -> Set<String> {
-        var events: Set<String> = []
-
+        let collector = EmittedEventCollector()
         for statement in statements {
-            collectEmittedEvents(from: statement, into: &events)
+            statement.accept(collector)
         }
-
-        return events
+        return collector.events
     }
 
-    /// Recursively collects emitted events from a statement
-    private func collectEmittedEvents(from statement: Statement, into events: inout Set<String>) {
-        // Check AROStatement for Emit action
-        if let aro = statement as? AROStatement {
-            if aro.action.verb.lowercased() == "emit" {
-                // The event type is in the result's base (e.g., "UserCreated" from <UserCreated: event>)
-                events.insert(aro.result.base)
+    /// Collects the event names produced by `Emit` actions, descending into
+    /// match cases/otherwise and for-each bodies. Replaces the old three-way
+    /// `as?`-chain (#434) with `StatementVisitor` dispatch, so a new statement
+    /// node type surfaces as a missing `visit` requirement rather than being
+    /// silently skipped. Statement kinds the chain ignored — including while /
+    /// range loop bodies, which it never traversed — collect nothing here,
+    /// preserving the original behaviour exactly.
+    private final class EmittedEventCollector: StatementVisitor {
+        typealias Result = Void
+        var events: Set<String> = []
+
+        func visit(_ node: AROStatement) {
+            if node.action.verb.lowercased() == "emit" {
+                // The event type is in the result's base
+                // (e.g., "UserCreated" from <UserCreated: event>).
+                events.insert(node.result.base)
             }
         }
 
-        // Check nested statements in Match
-        if let match = statement as? MatchStatement {
-            for caseClause in match.cases {
+        func visit(_ node: MatchStatement) {
+            for caseClause in node.cases {
                 for bodyStatement in caseClause.body {
-                    collectEmittedEvents(from: bodyStatement, into: &events)
+                    bodyStatement.accept(self)
                 }
             }
-            if let otherwise = match.otherwise {
+            if let otherwise = node.otherwise {
                 for bodyStatement in otherwise {
-                    collectEmittedEvents(from: bodyStatement, into: &events)
+                    bodyStatement.accept(self)
                 }
             }
         }
 
-        // Check nested statements in ForEach
-        if let forEach = statement as? ForEachLoop {
-            for bodyStatement in forEach.body {
-                collectEmittedEvents(from: bodyStatement, into: &events)
+        func visit(_ node: ForEachLoop) {
+            for bodyStatement in node.body {
+                bodyStatement.accept(self)
             }
         }
+
+        // Nodes the original chain matched no case for — no emitted events.
+        func visit(_ node: PublishStatement) {}
+        func visit(_ node: RequireStatement) {}
+        func visit(_ node: WhileLoop) {}
+        func visit(_ node: BreakStatement) {}
+        func visit(_ node: RangeLoop) {}
+        func visit(_ node: PipelineStatement) {}
+        func visit(_ node: ErrorStatement) {}
     }
 
     // MARK: - Cycle Detection

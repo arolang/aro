@@ -47,7 +47,7 @@ public struct CodeQualityValidator {
                 break  // Only report once
             }
 
-            if let aro = statement as? AROStatement {
+            if let aro = statement.asAROStatement {
                 let verb = aro.action.verb.lowercased()
                 // Only terminal if unconditional (no when guard) - ARO-0062
                 let isTerminal = (verb == "return" || verb == "throw") &&
@@ -65,7 +65,7 @@ public struct CodeQualityValidator {
 
         if !isLifecycleHandler && !foundTerminator {
             let hasAnyReturn = statements.contains { stmt in
-                if let aro = stmt as? AROStatement {
+                if let aro = stmt.asAROStatement {
                     let verb = aro.action.verb.lowercased()
                     return verb == "return" || verb == "throw"
                 }

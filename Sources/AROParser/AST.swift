@@ -1502,6 +1502,30 @@ public extension ErrorStatement {
     func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 
+/// Dispatches a `Statement` to `AROStatement` (or nil) via `StatementVisitor`
+/// rather than a raw `as?` cast (#434). Every node type is enumerated, so a
+/// new `Statement` kind surfaces as a missing `visit` requirement here instead
+/// of silently taking the nil path at every call site.
+private struct AROStatementExtractor: StatementVisitor {
+    func visit(_ node: AROStatement) -> AROStatement? { node }
+    func visit(_ node: PublishStatement) -> AROStatement? { nil }
+    func visit(_ node: RequireStatement) -> AROStatement? { nil }
+    func visit(_ node: MatchStatement) -> AROStatement? { nil }
+    func visit(_ node: ForEachLoop) -> AROStatement? { nil }
+    func visit(_ node: WhileLoop) -> AROStatement? { nil }
+    func visit(_ node: BreakStatement) -> AROStatement? { nil }
+    func visit(_ node: RangeLoop) -> AROStatement? { nil }
+    func visit(_ node: PipelineStatement) -> AROStatement? { nil }
+    func visit(_ node: ErrorStatement) -> AROStatement? { nil }
+}
+
+public extension Statement {
+    /// The receiver as an `AROStatement` when it is one, else nil — resolved
+    /// through `StatementVisitor` dispatch so the statement taxonomy stays
+    /// compile-time-checked (#434).
+    var asAROStatement: AROStatement? { accept(AROStatementExtractor()) }
+}
+
 // MARK: - Expression Visitor Protocol
 
 /// Visitor for polymorphic dispatch over `Expression` nodes (#338).
