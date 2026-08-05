@@ -569,6 +569,11 @@ jobs:
           cp .build/release/AROXPCService "$APP_DIR/Contents/Resources/AROXPCService"
           chmod +x "$APP_DIR/Contents/Resources/AROXPCService"
           cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
+          # App icon (checked in at Graphics/AppIcon.icns, generated from
+          # Graphics/solaro.svg via tools/generate-solaro-icon.sh — CI runners
+          # have no SVG rasteriser, so the .icns is committed). Referenced by
+          # CFBundleIconFile below.
+          cp Graphics/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 
           # Reuse the exact version baked into the binary above so the
           # Finder-visible CFBundleShortVersionString can never disagree
@@ -581,6 +586,7 @@ jobs:
           <plist version="1.0"><dict>
             <key>CFBundleDevelopmentRegion</key><string>en</string>
             <key>CFBundleExecutable</key><string>Solaro</string>
+            <key>CFBundleIconFile</key><string>AppIcon</string>
             <!-- CFBundleIdentifier kept stable to preserve user defaults
                  and Launch Services associations across the rename. -->
             <key>CFBundleIdentifier</key><string>com.arolang.SOLARO</string>
