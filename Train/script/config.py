@@ -161,8 +161,11 @@ STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-bf16'
 TRAIN_ON_BASE = True
 
 PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-6bit'       # distilled 8B student (for inference)
-TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-4bit'  # fine-tuned 30B teacher (for retraining)
-BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
+# Teacher is kept at BF16 (not 4-bit): a 4-bit teacher base is lossy and, per the
+# note above, LoRA-on-4bit-base + fuse is fragile in MLX-LM. The bf16 base loads
+# heavier (~60 GB) but trains/distills reliably. (Was: ...-4bit.)
+TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-bf16'  # fine-tuned 30B teacher (for retraining)
+BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16'
 
 # Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
 FALLBACK_MODEL_ID  = BASE_MODEL_ID

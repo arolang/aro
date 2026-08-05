@@ -103,13 +103,14 @@ before writing new ones, so reruns replace rather than duplicate.
 
 | # | Notebook | Purpose |
 |---|----------|---------|
-| 21 | `21_distillation` | Distill the 30B teacher into an 8B Qwen3 student. Writes `models/distill/student/`. |
-| 22 | `22_package` | Quantize, copy tokenizer, write `model_manifest.json`, populate `release/aro-coder-6bit/`. |
-| 23 | `23_material_finetune` | Targeted booster fine-tune on the curated `Train/Material/` set. |
-| 24 | `24_chat_teacher` | **Manual.** Interactive chat against the teacher before distilling — sanity check, not run by the meta pipeline. |
-| 25 | `25_chat` | **Manual.** REPL test of the packaged student via `aro ask`. |
+| 22 | `22_distillation` | Distill the 30B teacher into an 8B Qwen3 student. Writes `models/distill/student/`. |
+| 23 | `23_material_finetune` | **Booster 1** — fine-tune on curated `Train/Material/`, fused onto the distilled student → `models/material/fused`. |
+| 24 | `24_thinking_finetune` | **Booster 2** — reasoning fine-tune fused onto the material model → `models/thinking/fused`. |
+| 25 | `25_conversation_finetune` | **Booster 3** — multi-turn fine-tune fused onto the thinking model → `models/conversation/fused` (**the final model**). |
+| 27 | `27_package` | Quantize, write `model_manifest.json`, populate `release/aro-coder-6bit/`, and upload. The **last-numbered** notebook; runs **after** the boosters and selects the final booster model via `find_best_fused_model()`. |
+| 26 | `26_post_release_validation` | Download the published model + smoke-test like a user. Runs **after** `27_package` (it tests the just-uploaded model). |
 
-`24` and `25` are excluded from automated runs because both need stdin.
+**Release ordering:** `27_package` is the last-numbered notebook. Execution order (set by the `NOTEBOOKS` list in `00_META_PIPELINE`, not the filename numbers) is `… → distillation → material → thinking → conversation → 27_package(+upload) → 26_post_release_validation`, so the model that gets uploaded is the **final** one after the full booster chain. (Post-release validation keeps a lower number but runs after packaging because it tests the upload.)
 
 ## Running the pipeline
 
@@ -141,7 +142,7 @@ to change between runs:
 
 | Setting | Meaning |
 |---------|---------|
-| `BASE_MODEL_ID` | Starting MLX model — currently `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit`. |
+| `BASE_MODEL_ID` | Starting MLX model — `mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16` (BF16, **not** 4-bit: a 4-bit teacher base is lossy and LoRA-on-4bit-fuse is fragile in MLX-LM). |
 | `STUDENT_MODEL_ID` | Distillation target — `mlx-community/Qwen3-8B-bf16` (BF16 to avoid the LoRA-on-4bit fuse issues that have collapsed students before). |
 | `TEACHER_MODEL_ID` | Previously-published teacher on HF, used for iterative improvement. |
 | `PREFERRED_MODEL_ID` | Published student consumed by `aro ask`. |
