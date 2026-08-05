@@ -129,7 +129,11 @@ testrun.log
 /Examples/AuditLogDemo/AuditLogDemo
 /Examples/WebSocketDemo/WebSocketDemo
 /Examples/StateMachine/StateMachine
-core
+# Core dumps — anchored + suffix-matched so this does NOT match source
+# directories named `Core/` on case-insensitive filesystems (macOS), which
+# would otherwise silently ignore new files under e.g. Sources/ARORuntime/Core/.
+/core
+core.[0-9]*
 /.claude
 /Examples/SourceStructure/SourceStructure
 /Examples/StreamingDemo/StreamingDemo

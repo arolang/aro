@@ -10,6 +10,7 @@
 // scrubbable timeline with a synchronized record detail panel.
 
 import SwiftUI
+import ARORuntime
 
 struct TimeTravelView: View {
     let project: Project
@@ -40,6 +41,13 @@ struct TimeTravelView: View {
     /// non-nil, torn down on pause / unmount.
     @State private var playTimer: Timer?
 
+    // MARK: Branch & edit (#447)
+    @State private var showBranchSheet = false
+    @State private var fork: TraceReplayEngine.Fork?
+    @State private var branchInfo: (symbol: String, value: String)?
+    @State private var branching = false
+    @State private var branchError: String?
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -49,6 +57,16 @@ struct TimeTravelView: View {
         .frame(width: 720, height: 540)
         .background(SolaroColor.surface)
         .onAppear(perform: load)
+        .sheet(isPresented: $showBranchSheet) {
+            BranchEditSheet(
+                record: records[currentIndex],
+                onReplay: { symbol, value in
+                    showBranchSheet = false
+                    Task { await runReplay(symbol: symbol, newValue: value) }
+                },
+                onCancel: { showBranchSheet = false }
+            )
+        }
     }
 
     // MARK: - Header
@@ -113,6 +131,14 @@ struct TimeTravelView: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             scrubber
+            if let fork, let info = branchInfo {
+                ForkedRailView(
+                    fork: fork,
+                    branchedSymbol: info.symbol,
+                    branchedValue: info.value,
+                    onClear: { self.fork = nil; self.branchInfo = nil }
+                )
+            }
         }
         .frame(width: 320)
     }
@@ -278,8 +304,37 @@ struct TimeTravelView: View {
                         }
                     }
                 }
+
+                branchButton
             }
             .padding(SolaroSpace.m)
+        }
+    }
+
+    @ViewBuilder
+    private var branchButton: some View {
+        let record = records[currentIndex]
+        if record.featureSet != nil, record.line != nil,
+           record.symbols.contains(where: { $0.records == nil }) {
+            Button {
+                showBranchSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                    Text("Branch & edit")
+                    Text("⌥").foregroundStyle(SolaroColor.textTertiary)
+                    if branching { ProgressView().controlSize(.small) }
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(branching)
+            .padding(.top, SolaroSpace.s)
+            if let branchError {
+                Text(branchError)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.stateError)
+                    .lineLimit(3)
+            }
         }
     }
 
@@ -319,6 +374,49 @@ struct TimeTravelView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Concatenate every `.aro` file under the project root so the target
+    /// feature set resolves (globals from sibling files included) when the
+    /// replay engine recompiles it.
+    private func projectSource() -> String {
+        var parts: [String] = []
+        if let en = FileManager.default.enumerator(
+            at: project.rootPath, includingPropertiesForKeys: nil
+        ) {
+            for case let url as URL in en where url.pathExtension == "aro" {
+                if let s = try? String(contentsOf: url, encoding: .utf8) { parts.append(s) }
+            }
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// Seed the recorded tick's scalar state (re-typed from strings), apply the
+    /// user's edit, and replay the feature set from this tick in a sandbox.
+    @MainActor
+    private func runReplay(symbol: String, newValue: String) async {
+        let record = records[currentIndex]
+        guard let fsName = record.featureSet, let line = record.line else { return }
+        branching = true
+        branchError = nil
+        let source = projectSource()
+        var seeds: [String: any Sendable] = [:]
+        for s in record.symbols where s.records == nil {
+            seeds[s.name] = TraceReplayEngine.reconstruct(s.value)
+        }
+        seeds[symbol] = TraceReplayEngine.reconstruct(newValue)
+        do {
+            let result = try await TraceReplayEngine.replay(
+                source: source, featureSetName: fsName, fromLine: line, seeds: seeds
+            )
+            self.fork = result
+            self.branchInfo = (symbol, newValue)
+        } catch {
+            self.branchError = String(describing: error)
+            self.fork = nil
+            self.branchInfo = nil
+        }
+        branching = false
     }
 
     private func load() {
