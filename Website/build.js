@@ -19,6 +19,10 @@ fs.copyFileSync('src/partials/animations.css', 'dist/animations.css');
 fs.copyFileSync('src/partials/animations.js', 'dist/animations.js');
 fs.copyFileSync('src/partials/subpage.css', 'dist/subpage.css');
 
+// Copy docs search assets to dist (#449 — client-side ⌘K search)
+fs.copyFileSync('src/partials/search.css', 'dist/search.css');
+fs.copyFileSync('src/partials/search.js', 'dist/search.js');
+
 // Copy social share image
 fs.copyFileSync('../Graphics/social.png', 'dist/social.png');
 
@@ -232,5 +236,79 @@ if (fs.existsSync(languageRefDir)) {
         }
     });
 }
+
+// -------------------------------------------------------------------------
+// Static search index (#449). Walk the generated HTML in dist/ and emit a
+// dist/search-index.json the client-side ⌘K search (src/partials/search.js)
+// ranks in-browser — no server, no external service (ADR-015 / no Algolia).
+// -------------------------------------------------------------------------
+function buildSearchIndex() {
+    // Pages that aren't real content (templates, error page, legal boilerplate).
+    const skip = new Set([
+        '404.html', 'doc-template.html', 'doc-template-nested.html', 'imprint.html',
+    ]);
+
+    function walk(dir) {
+        let out = [];
+        for (const name of fs.readdirSync(dir)) {
+            const full = path.join(dir, name);
+            const stat = fs.statSync(full);
+            if (stat.isDirectory()) {
+                if (name === 'img') continue;
+                out = out.concat(walk(full));
+            } else if (name.endsWith('.html') && !skip.has(name)) {
+                out.push(full);
+            }
+        }
+        return out;
+    }
+
+    function stripTags(s) {
+        return s
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+            .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+            .replace(/&#x?[0-9a-f]+;/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function textOf(m) { return m ? stripTags(m[1]) : ''; }
+
+    const entries = [];
+    for (const file of walk('dist')) {
+        const html = fs.readFileSync(file, 'utf8');
+        const url = path.relative('dist', file).split(path.sep).join('/');
+        // Section = top folder (docs / guide / reference) or "home".
+        const parts = url.split('/');
+        const section = parts.length > 1 ? parts[parts.length - 2] : 'home';
+
+        let title = textOf(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i));
+        if (!title) {
+            title = textOf(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i))
+                .replace(/\s*[-|]\s*ARO.*$/i, '').trim();
+        }
+        if (!title) title = url;
+
+        const headings = (html.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi) || [])
+            .map(h => stripTags(h)).filter(Boolean).join(' · ');
+
+        // Body text: prefer <main>, else <body>, stripped + truncated.
+        const bodyMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+            || html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        const text = stripTags(bodyMatch ? bodyMatch[1] : html).slice(0, 2000);
+
+        entries.push({ url, title, section, headings, text });
+    }
+
+    fs.writeFileSync('dist/search-index.json', JSON.stringify(entries));
+    console.log(`Search index: ${entries.length} pages -> dist/search-index.json`);
+}
+
+buildSearchIndex();
 
 console.log('Build complete! Files written to dist/');
