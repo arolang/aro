@@ -114,7 +114,7 @@ struct PluginCompiler: Sendable {
                 let yamlContent = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
 
                 // Check if this is a Python plugin
-                let isPythonPlugin = yamlContent.contains("python-plugin")
+                let isPythonPlugin = Self.manifestDeclaresPythonPlugin(yamlContent)
                 if isPythonPlugin {
                     // Embedded Python: read source, install deps, link libpython
                     let searchDirs = [
@@ -157,10 +157,7 @@ struct PluginCompiler: Sendable {
                 // plugins that ship feature sets and nothing to statically link).
                 // Without this guard, the hard-error path below fires on any
                 // plugin that legitimately has no .o files to bake.
-                let hasNativeType = yamlContent.contains("swift-plugin")
-                    || yamlContent.contains("c-plugin")
-                    || yamlContent.contains("cpp-plugin")
-                    || yamlContent.contains("rust-plugin")
+                let hasNativeType = Self.manifestDeclaresNativePlugin(yamlContent)
                 if !hasNativeType {
                     if verbose {
                         print("  Skipping '\(pluginName)' — no native plugin code to statically link")
@@ -476,6 +473,31 @@ struct PluginCompiler: Sendable {
             "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift",
         ]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    // MARK: - Manifest language detection
+
+    // These mirror the plugin-language branch selection in `compile()`. They are
+    // pure string inspection of the `plugin.yaml` manifest — no filesystem or
+    // toolchain access — so the pipeline's Python-vs-native routing can be
+    // unit-tested without a real build (#435, follow-up to !351).
+
+    /// Whether a managed plugin's `plugin.yaml` declares a Python plugin
+    /// (routed to the embedded-interpreter / base64 path rather than static
+    /// linking).
+    static func manifestDeclaresPythonPlugin(_ yaml: String) -> Bool {
+        yaml.contains("python-plugin")
+    }
+
+    /// Whether a managed plugin's `plugin.yaml` declares native code
+    /// (Swift/C/C++/Rust) that must be compiled and statically linked into the
+    /// host binary. A manifest with none of these ships only feature sets and
+    /// is skipped by the static-link path.
+    static func manifestDeclaresNativePlugin(_ yaml: String) -> Bool {
+        yaml.contains("swift-plugin")
+            || yaml.contains("c-plugin")
+            || yaml.contains("cpp-plugin")
+            || yaml.contains("rust-plugin")
     }
 
     /// Locate a Rust staticlib (lib*.a) inside cargo's target/release directory.
