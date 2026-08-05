@@ -56,8 +56,10 @@ REPL commands over stdin. Issue #229 Phase 1.
 
 Note: this driver runs the program through the ARO interpreter
 (the same path as `aro run`). Compiled binaries produced by
-`aro build` do not yet emit DWARF debug info — that's tracked
-separately as issue #231. To debug, run from source.
+`aro build` now emit DWARF debug info and support source-level
+breakpoints in lldb on both macOS and Linux — build the app,
+then `lldb <binary>` and e.g. `breakpoint set --file main.aro
+--line 5` (issue #231).
 
 Commands at a pause prompt:
   s, step            — advance one statement
@@ -107,6 +109,19 @@ Program ended cleanly.
 ```
 
 You now have a working debugger and a known-good project to practice on. Chapter 3 walks the rest of the session in detail.
+
+## 2.3b Debugging a compiled binary with lldb
+
+`aro debug` steps the interpreter. When you want to debug the *native* binary that `aro build` produces, use `lldb` directly — compiled binaries now carry DWARF source-mapping (issue #231), so lldb resolves breakpoints against your `.aro` files by name and line on both macOS and Linux.
+
+```bash
+aro build ./Examples/HelloWorld
+lldb ./Examples/HelloWorld/HelloWorld \
+  -o 'breakpoint set --file main.aro --line 5' \
+  -o run
+```
+
+On macOS the source line tables live in the object file's `__DWARF` segment; the linker records them so `dsymutil` can build a `.dSYM` next to the binary. lldb finds that `.dSYM` automatically by UUID — you do not have to run `dsymutil` yourself for a debug session, and breakpoints set by `--file X.aro --line N` resolve to the true source file (for multi-file apps, each feature set maps back to the `.aro` file it was written in).
 
 ## 2.4 Where the binary looks for things
 

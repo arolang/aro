@@ -87,6 +87,18 @@ public final class LLVMCodeGenerator {
     /// debug info" (compatible with what AROCompiler shipped before).
     private var debugInfo: LLVMDebugInfoEmitter?
 
+    /// Issue #231 — source-file provenance for DWARF. `sourceDirectory`
+    /// is the app's absolute source directory (`DW_AT_comp_dir`);
+    /// `sourceFileMap` maps each feature-set name to the basename of the
+    /// `.aro` file it came from; `entryFilename` is the basename of the
+    /// file holding `Application-Start` and is the fallback for any name
+    /// not in the map. These thread the real origin file through to the
+    /// emitter — without them lldb attributes code to a synthesized
+    /// `Entry Point.aro` instead of the true source file.
+    private var sourceDirectory: String = ""
+    private var sourceFileMap: [String: String] = [:]
+    private var entryFilename: String = "aro_program.aro"
+
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
@@ -118,8 +130,15 @@ public final class LLVMCodeGenerator {
         staticPlugins: [StaticPluginIRInfo]? = nil,
         pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
         pythonBundle: PythonBundleIRInfo? = nil,
-        sourceFilename: String? = nil
+        sourceFilename: String? = nil,
+        sourceDirectory: String? = nil,
+        sourceFileMap: [String: String]? = nil
     ) throws -> LLVMCodeGenerationResult {
+        // Issue #231 — capture source-file provenance for DWARF emission.
+        self.sourceDirectory = sourceDirectory ?? ""
+        self.sourceFileMap = sourceFileMap ?? [:]
+        self.entryFilename = sourceFilename ?? "aro_program.aro"
+
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
         types = LLVMTypeMapper(context: ctx)
@@ -133,10 +152,10 @@ public final class LLVMCodeGenerator {
         // by virtue of failable init — if LLVM rejects the metadata
         // setup we fall back to a no-DI emit rather than failing the
         // whole compile.
-        let primaryFilename = sourceFilename ?? "aro_program.aro"
         debugInfo = LLVMDebugInfoEmitter(
             swiftyModule: ctx.module,
-            primaryFilename: primaryFilename,
+            primaryFilename: entryFilename,
+            directory: self.sourceDirectory,
             producerVersion: "ARO compiler"
         )
 
@@ -260,11 +279,11 @@ public final class LLVMCodeGenerator {
         ctx.currentFunction = function
 
         // Issue #231 — attach a DISubprogram so lldb can map this
-        // function back to its `.aro` source location. Filename is
-        // synthesized from the business activity until source-file
-        // tracking lands on AnalyzedFeatureSet.
+        // function back to its `.aro` source location. Use the real
+        // origin file for this feature set (threaded via sourceFileMap);
+        // fall back to the entry file for any name not in the map.
         if let debugInfo {
-            let sourceFile = "\(fs.businessActivity.isEmpty ? fs.name : fs.businessActivity).aro"
+            let sourceFile = sourceFileMap[fs.name] ?? entryFilename
             let line = fs.span.start.line
             debugInfo.beginFunction(
                 function: function,

@@ -36,6 +36,14 @@ final class LLVMDebugInfoEmitter {
     private let builder: LLVMDIBuilderRef
     private let compileUnit: LLVMMetadataRef
     private let primaryFile: LLVMMetadataRef
+    /// Absolute source directory (`DW_AT_comp_dir`) stamped on every
+    /// `DIFile` and the CompileUnit. On macOS this is what makes `ld64`
+    /// emit an `N_OSO` stab for our object file: the linker's debug-map
+    /// builder skips any object whose first compile unit lacks a
+    /// comp_dir, so an empty string here means `dsymutil` never relocates
+    /// our DWARF into the `.dSYM` and lldb can't resolve source
+    /// breakpoints (issue #231). Must be a real absolute path.
+    private let defaultDirectory: String
     /// Reused subroutine type for every feature set. ARO's emitted
     /// functions all have the same signature
     /// `i64 (i64 ctx_handle)`-ish shape, so one `DISubroutineType`
@@ -66,9 +74,14 @@ final class LLVMDebugInfoEmitter {
     ///     separately in `beginFunction`.
     ///   - producerVersion: the ARO compiler version string baked into
     ///     the DWARF metadata, useful for `lldb image dump-line-table`.
-    init?(swiftyModule: SwiftyLLVM.Module, primaryFilename: String, producerVersion: String) {
+    ///   - directory: the absolute source directory used as
+    ///     `DW_AT_comp_dir` on all DIFile / CompileUnit metadata. Empty
+    ///     is tolerated but defeats macOS OSO emission — pass the app's
+    ///     real source directory.
+    init?(swiftyModule: SwiftyLLVM.Module, primaryFilename: String, directory: String, producerVersion: String) {
         let moduleRef = unsafeBitCast(swiftyModule.llvm, to: LLVMModuleRef.self)
         self.module = moduleRef
+        self.defaultDirectory = directory
 
         guard let ctxRef: LLVMContextRef = LLVMGetModuleContext(moduleRef) else { return nil }
         self.context = ctxRef
@@ -77,14 +90,15 @@ final class LLVMDebugInfoEmitter {
         self.builder = diBuilder
 
         // DIFile for the CompileUnit. ARO's source files are flat per-
-        // application; we don't track per-feature-set directory paths
-        // yet, so the directory string is empty.
+        // application, so one comp_dir (the app source directory) covers
+        // every file. This directory MUST be non-empty on macOS — see
+        // `defaultDirectory` above for why (ld64 OSO emission).
         let primary = primaryFilename.withCString { cFilename -> LLVMMetadataRef? in
-            "".withCString { cDir in
+            directory.withCString { cDir in
                 LLVMDIBuilderCreateFile(
                     diBuilder,
                     cFilename, primaryFilename.utf8.count,
-                    cDir, 0
+                    cDir, directory.utf8.count
                 )
             }
         }
@@ -250,11 +264,11 @@ final class LLVMDebugInfoEmitter {
     private func fileFor(filename: String) -> LLVMMetadataRef {
         if let cached = fileCache[filename] { return cached }
         let made: LLVMMetadataRef = filename.withCString { cFilename in
-            "".withCString { cDir in
+            defaultDirectory.withCString { cDir in
                 LLVMDIBuilderCreateFile(
                     builder,
                     cFilename, filename.utf8.count,
-                    cDir, 0
+                    cDir, defaultDirectory.utf8.count
                 )!
             }
         }

@@ -24,8 +24,10 @@ struct DebugCommand: AsyncParsableCommand {
 
             Note: this driver runs the program through the ARO interpreter
             (the same path as `aro run`). Compiled binaries produced by
-            `aro build` do not yet emit DWARF debug info — that's tracked
-            separately as issue #231. To debug, run from source.
+            `aro build` now emit DWARF debug info and support source-level
+            breakpoints in lldb on both macOS and Linux — build the app,
+            then `lldb <binary>` and e.g. `breakpoint set --file main.aro
+            --line 5` (issue #231).
 
             Commands at a pause prompt:
               s, step            — advance one statement

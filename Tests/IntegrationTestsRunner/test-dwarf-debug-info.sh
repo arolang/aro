@@ -3,9 +3,10 @@
 # Integration test — DWARF debug info in `aro build` binaries
 # =============================================================================
 # Issue #231. Verifies the compiler pipeline emits per-line DWARF that lldb
-# can read. On Linux this should land directly in the ELF executable. On
-# macOS the line tables reach the `.o`; whether they reach the linked
-# executable depends on the dSYM workaround (still pending in v2).
+# can read. On Linux this lands directly in the ELF executable. On macOS the
+# line tables live in the `.o`'s __DWARF segment; because the compiler now
+# emits a real DW_AT_comp_dir, ld64 writes an N_OSO stab for our object so
+# `dsymutil` relocates the DWARF into a `.dSYM` that lldb resolves against.
 #
 # Run from the repository root:
 #   ./Tests/IntegrationTestsRunner/test-dwarf-debug-info.sh
@@ -203,12 +204,49 @@ case "$(uname -s)" in
         fi
         ;;
     Darwin)
-        # macOS dSYM gap (issue #231 phase 2 follow-up) means the executable
-        # itself doesn't ship the DWARF; lldb can't resolve file:line until
-        # the workaround lands. Inspecting the .o passes, which is what
-        # we assert above.
-        echo "[dwarf-test] macOS dSYM packaging gap — see #231; binary-level"
-        echo "                source breakpoint test skipped here."
+        # macOS: DWARF lives in the .o; a real DW_AT_comp_dir makes ld64
+        # emit our N_OSO stab, so `dsymutil` can build a .dSYM that lldb
+        # resolves source breakpoints against. Assert the whole chain.
+        if ! command -v dsymutil >/dev/null 2>&1; then
+            echo "[dwarf-test] WARN: dsymutil not on PATH — skipping macOS dSYM test"
+        else
+            # The N_OSO for our object is the signal ld64 accepted our
+            # comp_dir. Without it dsymutil never sees our DWARF. Capture
+            # to a temp file first: piping `dsymutil -s` (hundreds of OSO
+            # lines) into `grep -q` races on SIGPIPE under `set -o pipefail`
+            # (same hazard documented for check 7 above).
+            STABS_DUMP="$(mktemp)"
+            dsymutil -s "$BIN" > "$STABS_DUMP" 2>/dev/null || true
+            # Command substitution (not `grep -q`) so nothing dies on
+            # SIGPIPE under pipefail; the match set is tiny (one OSO line).
+            OSO_MATCH="$(grep N_OSO "$STABS_DUMP" | grep -i "$(basename "$OBJ")" || true)"
+            rm -f "$STABS_DUMP"
+            if [[ -z "$OSO_MATCH" ]]; then
+                echo "FAIL: no N_OSO stab for $(basename "$OBJ") — ld64 skipped our object (missing comp_dir?)" >&2
+                exit 1
+            fi
+            echo "[dwarf-test] macOS: ld64 emitted N_OSO for our object ✓"
+            dsymutil "$BIN" >/dev/null 2>&1 || true
+            if [[ ! -d "$BIN.dSYM" ]]; then
+                echo "FAIL: dsymutil did not produce $BIN.dSYM" >&2
+                exit 1
+            fi
+            if command -v lldb >/dev/null 2>&1; then
+                BP_OUTPUT=$(lldb -b \
+                    -o 'breakpoint set --file main.aro --line 5' \
+                    -o quit \
+                    "$BIN" 2>&1 || true)
+                if grep -q "Breakpoint 1: where = " <<<"$BP_OUTPUT"; then
+                    echo "[dwarf-test] macOS lldb resolved source-level breakpoint ✓"
+                else
+                    echo "FAIL: macOS lldb could not resolve main.aro:5 source breakpoint" >&2
+                    echo "$BP_OUTPUT" | head -10 >&2
+                    exit 1
+                fi
+            else
+                echo "[dwarf-test] WARN: lldb not on PATH — skipping macOS source-level bp test"
+            fi
+        fi
         ;;
     *)
         echo "[dwarf-test] WARN: $(uname -s) — no platform-specific lldb test wired"
