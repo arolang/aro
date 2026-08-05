@@ -125,6 +125,14 @@ struct BuildCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
+        // Issue #231 — DWARF source-mapping provenance. The AST does not
+        // track which file a feature set came from, so we record it here
+        // while we still know the origin file: map each feature-set name
+        // to its `.aro` basename, and remember the file that holds
+        // `Application-Start` (the entry / fallback file).
+        var sourceFileMap: [String: String] = [:]
+        var entryFilename: String?
+
         AROLogger.debug("Starting compilation of \(appConfig.sourceFiles.count) files", subsystem: "build")
 
         for sourceFile in appConfig.sourceFiles {
@@ -145,8 +153,24 @@ struct BuildCommand: AsyncParsableCommand {
 
             if result.isSuccess {
                 compiledPrograms.append(result.analyzedProgram)
+                let basename = sourceFile.lastPathComponent
+                for afs in result.analyzedProgram.featureSets {
+                    let name = afs.featureSet.name
+                    sourceFileMap[name] = basename
+                    if name == "Application-Start" {
+                        entryFilename = basename
+                    }
+                }
             }
         }
+
+        // Absolute app source directory becomes DW_AT_comp_dir; a real
+        // (non-empty) comp_dir is what makes macOS `ld64` emit an N_OSO
+        // stab for our object so `dsymutil` relocates our DWARF (#231).
+        let sourceDirectory = appConfig.rootPath.standardizedFileURL.path
+        let resolvedEntryFilename = entryFilename
+            ?? appConfig.sourceFiles.first?.lastPathComponent
+            ?? "aro_program.aro"
 
         AROLogger.debug("Compilation completed, \(compiledPrograms.count) programs", subsystem: "build")
 
@@ -254,6 +278,9 @@ struct BuildCommand: AsyncParsableCommand {
             buildDir: buildDir,
             openAPISpecJSON: openAPISpecJSON,
             templatesJSON: templatesJSON,
+            sourceDirectory: sourceDirectory,
+            sourceFileMap: sourceFileMap,
+            entryFilename: resolvedEntryFilename,
             embeddedPlugins: embeddedPlugins,
             staticPluginInfos: staticPluginInfos,
             staticPluginIRInfos: staticPluginIRInfos,

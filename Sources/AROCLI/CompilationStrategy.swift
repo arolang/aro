@@ -45,6 +45,15 @@ struct CompilationStrategy: Sendable {
         /// Serialized templates to embed, if present.
         var templatesJSON: String?
 
+        // Issue #231 — DWARF source-mapping provenance.
+        /// Absolute app source directory, used as `DW_AT_comp_dir`.
+        var sourceDirectory: String
+        /// Feature-set name → origin `.aro` basename (for per-function DIFile).
+        var sourceFileMap: [String: String]
+        /// Basename of the file holding `Application-Start`; CU filename +
+        /// fallback for feature sets missing from `sourceFileMap`.
+        var entryFilename: String
+
         // Plugin pre-compilation results (from PluginCompiler).
         var embeddedPlugins: [(name: String, yaml: String, base64Library: String)]
         var staticPluginInfos: [StaticPluginInfo]
@@ -93,7 +102,10 @@ struct CompilationStrategy: Sendable {
                 templatesJSON: request.templatesJSON,
                 embeddedPlugins: request.embeddedPlugins.isEmpty ? nil : request.embeddedPlugins,
                 staticPlugins: request.staticPluginIRInfos.isEmpty ? nil : request.staticPluginIRInfos,
-                pythonPlugins: request.pythonPluginIRInfos.isEmpty ? nil : request.pythonPluginIRInfos
+                pythonPlugins: request.pythonPluginIRInfos.isEmpty ? nil : request.pythonPluginIRInfos,
+                sourceFilename: request.entryFilename,
+                sourceDirectory: request.sourceDirectory,
+                sourceFileMap: request.sourceFileMap
             )
             AROLogger.debug("LLVM IR generated successfully", subsystem: "build")
         } catch {
