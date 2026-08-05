@@ -406,5 +406,13 @@
   {
     "cat": "explain",
     "prompt": "How can I build a timer that fires every minute in ARO? Show the code."
+  },
+  {
+    "cat": "meta_probe",
+    "prompt": "How do I implement writable stores in ARO?"
+  },
+  {
+    "cat": "meta_probe",
+    "prompt": "How did the model perform in training? Report its syntax pass rate and hallucination rate."
   }
 ]
