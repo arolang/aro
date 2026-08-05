@@ -288,11 +288,17 @@
 
         <h2>Build Options</h2>
 
-        <pre><code><span class="code-comment"># Basic build</span>
+        <pre><code><span class="code-comment"># Basic build (static linking by default — one self-contained file)</span>
 aro build ./MyApp
 
 <span class="code-comment"># Enable optimizations</span>
 aro build ./MyApp --optimize
+
+<span class="code-comment"># Release build (optimize + size + strip)</span>
+aro build ./MyApp --release
+
+<span class="code-comment"># Dynamic linking: bundle libswift*.so next to the binary (rpath=$ORIGIN)</span>
+aro build ./MyApp --dynamic
 
 <span class="code-comment"># Emit LLVM IR for inspection</span>
 aro build ./MyApp --emit-llvm
