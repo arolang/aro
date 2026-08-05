@@ -166,7 +166,7 @@ extension Compiler {
                 report += "\n\(analyzed.featureSet.name):\n"
                 for (index, flow) in analyzed.dataFlows.enumerated() {
                     let stmt = analyzed.featureSet.statements[index]
-                    if let aro = stmt as? AROStatement {
+                    if let aro = stmt.asAROStatement {
                         report += "  [\(index + 1)] <\(aro.action.verb)>\n"
                         report += "      Inputs:  \(flow.inputs.sorted().joined(separator: ", "))\n"
                         report += "      Outputs: \(flow.outputs.sorted().joined(separator: ", "))\n"

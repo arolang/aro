@@ -108,38 +108,55 @@ public struct EventAnalyzer {
 
     /// Finds all emitted events with their source locations
     public static func findEmittedEventsWithLocations(in statements: [Statement]) -> [(String, SourceLocation)] {
-        var events: [(String, SourceLocation)] = []
+        let collector = EmittedEventLocationCollector()
         for statement in statements {
-            collectEmittedEventsWithLocations(from: statement, into: &events)
+            statement.accept(collector)
         }
-        return events
+        return collector.events
     }
 
-    /// Recursively collects emitted events with locations from a statement
-    private static func collectEmittedEventsWithLocations(from statement: Statement, into events: inout [(String, SourceLocation)]) {
-        if let aro = statement as? AROStatement {
-            if aro.action.verb.lowercased() == "emit" {
-                events.append((aro.result.base, aro.span.start))
+    /// Collects `(eventName, location)` for each `Emit` action, descending into
+    /// match cases/otherwise and for-each bodies in source order. Replaces the
+    /// old three-way `as?`-chain (#434) with `StatementVisitor` dispatch;
+    /// statement kinds the chain ignored — including while / range loop bodies,
+    /// which it never traversed — collect nothing here, preserving the original
+    /// behaviour and ordering exactly.
+    private final class EmittedEventLocationCollector: StatementVisitor {
+        typealias Result = Void
+        var events: [(String, SourceLocation)] = []
+
+        func visit(_ node: AROStatement) {
+            if node.action.verb.lowercased() == "emit" {
+                events.append((node.result.base, node.span.start))
             }
         }
 
-        if let match = statement as? MatchStatement {
-            for caseClause in match.cases {
+        func visit(_ node: MatchStatement) {
+            for caseClause in node.cases {
                 for bodyStatement in caseClause.body {
-                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                    bodyStatement.accept(self)
                 }
             }
-            if let otherwise = match.otherwise {
+            if let otherwise = node.otherwise {
                 for bodyStatement in otherwise {
-                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                    bodyStatement.accept(self)
                 }
             }
         }
 
-        if let forEach = statement as? ForEachLoop {
-            for bodyStatement in forEach.body {
-                collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+        func visit(_ node: ForEachLoop) {
+            for bodyStatement in node.body {
+                bodyStatement.accept(self)
             }
         }
+
+        // Nodes the original chain matched no case for — no emitted events.
+        func visit(_ node: PublishStatement) {}
+        func visit(_ node: RequireStatement) {}
+        func visit(_ node: WhileLoop) {}
+        func visit(_ node: BreakStatement) {}
+        func visit(_ node: RangeLoop) {}
+        func visit(_ node: PipelineStatement) {}
+        func visit(_ node: ErrorStatement) {}
     }
 }
