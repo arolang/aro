@@ -170,7 +170,7 @@ paths:
 
 (getUser: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
     Return an <OK: status> with <user>.
 }
 

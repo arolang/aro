@@ -64,7 +64,7 @@ Event types follow these conventions:
 (updateEmail: User API) {
     Extract the <userId> from the <pathParameters: id>.
     Extract the <newEmail> from the <request: body>.
-    Retrieve the <user> from the <user-repository> where id = <userId>.
+    Retrieve the <user> from the <user-repository> where <id> is <userId>.
 
     Create the <oldEmail> with <user: email>.
     Update the <user: email> with <newEmail>.
@@ -408,14 +408,14 @@ Transition data available to observers:
 
 ## 5. Repositories
 
-Repositories provide persistent storage that survives across feature set executions within the same business activity.
+Repositories provide persistent storage that survives across feature set executions. A repository is identified solely by its name, so it is application-global: every feature set that names the same repository reads and writes the same storage.
 
 ### 5.1 Repository Definition
 
 A **repository** is a named storage container that:
 
 - Persists for the lifetime of the application
-- Is scoped to a **business activity** by default
+- Is **application-global**, keyed by repository name (not by business activity)
 - Is identified by names ending with `-repository`
 
 ### 5.2 Naming Convention
@@ -429,33 +429,39 @@ Repository names MUST end with `-repository`:
 <messages>                (* NOT a repository - regular variable *)
 ```
 
-### 5.3 Business Activity Scoping
+### 5.3 Repository Scoping
 
-Repositories are scoped to their business activity:
+Repositories are **application-global**, keyed by their name alone. A
+repository is NOT scoped to a business activity: any feature set — in any
+business activity — that names `<user-repository>` reads and writes the
+same underlying storage. The business activity of the accessing feature set
+does not select a separate copy.
 
 ```
 +-------------------------------------------------------------+
 |                    Application Scope                         |
-|  (Exported repositories available to all activities)         |
+|         (All repositories are keyed by name only)           |
 |                                                              |
-|  +-------------------------------------------------------+  |
-|  |              Business Activity: "Chat API"             |  |
-|  |                                                        |  |
-|  |   <message-repository>  <user-repository>              |  |
-|  |                                                        |  |
-|  |   Accessible by: postMessage, getMessages              |  |
-|  +-------------------------------------------------------+  |
+|   <message-repository>   <user-repository>                  |
+|   <order-repository>     <inventory-repository>             |
 |                                                              |
-|  +-------------------------------------------------------+  |
-|  |              Business Activity: "Order API"            |  |
-|  |                                                        |  |
-|  |   <order-repository>  <inventory-repository>           |  |
-|  |                                                        |  |
-|  |   Accessible by: createOrder, getOrders                |  |
-|  +-------------------------------------------------------+  |
+|   Any feature set naming a repository shares its storage,   |
+|   regardless of business activity:                          |
+|                                                              |
+|     "Chat API"   postMessage / getMessages                  |
+|          \                                                   |
+|           +--> <user-repository> <--+                        |
+|          /                          \                        |
+|     "Order API"  createOrder / getOrders                    |
 |                                                              |
 +-------------------------------------------------------------+
 ```
+
+**Practical implication:** because names are the only key, give each
+repository a globally-unique, purpose-specific name (e.g.
+`<chat-user-repository>` vs `<order-user-repository>`) whenever two parts of
+the application must not share storage. Reusing a name anywhere in the
+application always targets the same repository.
 
 ### 5.4 Store Operation
 
@@ -491,8 +497,16 @@ Behavior:
 
 Filtering:
 ```aro
-Retrieve the <user> from the <user-repository> where id = <user-id>.
+Retrieve the <user> from the <user-repository> where <id> is <user-id>.
 ```
+
+The `where` field MUST be written in angle brackets (`where <id> is <user-id>`);
+the unbracketed form `where id = <user-id>` is a parse error. Repository
+filtering is **equality-only**: the storage matches rows through an equality
+index on the named field, so `where <id> is <user-id>` (or the `=` spelling)
+selects rows whose `id` equals `<user-id>`. Range or substring operators
+(`>`, `<`, `contains`, `matches`) are not applied by repository storage — use
+the query language (ARO-0018) over a retrieved collection for those.
 
 Single-value retrieval:
 ```aro
@@ -536,7 +550,7 @@ Retrieve the <newest> from the <user-repository: 0>.
 (* GET /messages/{id} - Retrieve single message *)
 (getMessage: Chat API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <message> from the <message-repository> where id = <id>.
+    Retrieve the <message> from the <message-repository> where <id> is <id>.
     Return an <OK: status> with <message>.
 }
 ```
@@ -604,7 +618,7 @@ Observers are triggered for:
 To delete items and trigger observers:
 
 ```aro
-Delete the <user> from the <user-repository> where id = <userId>.
+Delete the <user> from the <user-repository> where <id> is <userId>.
 ```
 
 ### 6.5 Observer Flow
