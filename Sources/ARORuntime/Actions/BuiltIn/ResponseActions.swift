@@ -662,22 +662,29 @@ public struct StoreAction: ActionImplementation {
 
                 // Emit event if there was an actual change
                 if let changeType = changeType {
+                    let changeEvent = RepositoryChangedEvent(
+                        repositoryName: repoName,
+                        changeType: changeType,
+                        entityId: storeResult.entityId,
+                        newValue: storeResult.storedValue,
+                        oldValue: oldValue
+                    )
                     if let eventBus = context.eventBus {
-                        await eventBus.publishAndTrack(RepositoryChangedEvent(
-                            repositoryName: repoName,
-                            changeType: changeType,
-                            entityId: storeResult.entityId,
-                            newValue: storeResult.storedValue,
-                            oldValue: oldValue
-                        ))
+                        if RuntimeDefaults.asyncObserverDispatch {
+                            // #227: fire-and-forget through the bounded observer
+                            // worker pool. Store returns without awaiting the
+                            // observer subtree, so this handler's locals (e.g. a
+                            // crawler's HTML body / parsed DOM) are freed
+                            // immediately instead of staying resident until every
+                            // descendant store drains. The pool caps concurrent
+                            // observer bodies so memory stays bounded. Opt-in via
+                            // ARO_ASYNC_OBSERVERS; default keeps the awaited path.
+                            eventBus.publishBackpressured(changeEvent)
+                        } else {
+                            await eventBus.publishAndTrack(changeEvent)
+                        }
                     } else {
-                        context.emit(RepositoryChangedEvent(
-                            repositoryName: repoName,
-                            changeType: changeType,
-                            entityId: storeResult.entityId,
-                            newValue: storeResult.storedValue,
-                            oldValue: oldValue
-                        ))
+                        context.emit(changeEvent)
                     }
                 }
             }

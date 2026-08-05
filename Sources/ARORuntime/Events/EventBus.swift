@@ -187,6 +187,60 @@ public actor EventBus {
     /// Each entry carries a deadline so background cleanup can sweep expired ones.
     private var flushContinuations: [UUID: (deadline: Date, continuation: SafeContinuation)] = [:]
 
+    // MARK: - Bounded observer worker pool (#227)
+
+    /// One unit of backpressured observer work: run `subscription.handler` with
+    /// `event`. Small (two references), so a deep queue is cheap — the memory
+    /// bound that matters is on *concurrent handler bodies*, enforced by the
+    /// fixed worker count, not on the queue.
+    private struct ObserverWork {
+        let subscription: Subscription
+        let event: any RuntimeEvent
+    }
+
+    /// FIFO of pending observer work. Consumed head-first via `observerQueueHead`
+    /// (amortised O(1)) and compacted periodically so the backing array doesn't
+    /// grow without bound.
+    private var observerQueue: [ObserverWork] = []
+    private var observerQueueHead: Int = 0
+
+    /// Workers parked because the queue was empty. `enqueueObserverWork` resumes
+    /// one per item pushed.
+    private var idleObserverWorkers: [CheckedContinuation<Void, Never>] = []
+
+    /// Producers suspended because the queue was at capacity. A worker resumes
+    /// one each time it frees a slot. Producers are always the fire-and-forget
+    /// publish Task — never a pool worker — so suspending them can't stall the
+    /// drain (no deadlock in recursive observer → store → observer patterns).
+    private var observerSpaceWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Whether the persistent worker Tasks have been spawned yet (lazy on first
+    /// backpressured publish, so programs that never opt in pay nothing).
+    private var observerWorkersStarted = false
+
+    /// Per-instance overrides for the pool sizing (else the process-wide
+    /// `RuntimeDefaults`). Set via `configureObserverPool` before the first
+    /// backpressured publish; primarily for deterministic tests that don't want
+    /// to mutate global config.
+    private var observerWorkerCountOverride: Int?
+    private var observerQueueCapacityOverride: Int?
+
+    private var effectiveObserverWorkerCount: Int {
+        max(1, observerWorkerCountOverride ?? RuntimeDefaults.observerWorkerCount)
+    }
+    private var effectiveObserverQueueCapacity: Int {
+        max(1, observerQueueCapacityOverride ?? RuntimeDefaults.observerQueueCapacity)
+    }
+
+    /// Override the observer pool's worker count / queue capacity for this bus.
+    /// Must be called before the first `publishBackpressured` (the pool starts
+    /// lazily and reads the worker count once); a no-op afterwards for worker
+    /// count, though capacity is read per-enqueue and so still takes effect.
+    public func configureObserverPool(workerCount: Int? = nil, queueCapacity: Int? = nil) {
+        if let workerCount { observerWorkerCountOverride = workerCount }
+        if let queueCapacity { observerQueueCapacityOverride = queueCapacity }
+    }
+
     /// Shared instance
     public static let shared = EventBus()
 
@@ -283,6 +337,128 @@ public actor EventBus {
     /// Called from the publish() task path after the pending-publish counter
     /// reaches zero, so the actor can recheck and signal completion.
     private func checkFlushReadiness() {
+        if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
+            let pending = flushContinuations
+            flushContinuations.removeAll()
+            for (_, entry) in pending { entry.continuation.resumeOnce() }
+        }
+    }
+
+    // MARK: - Backpressured publish (bounded worker pool, #227)
+
+    /// Publish fire-and-forget through the bounded observer worker pool.
+    ///
+    /// Use for high-fan-out, observer-routed events (`RepositoryChangedEvent`
+    /// from a `Store` under `RuntimeDefaults.asyncObserverDispatch`) where
+    /// awaiting the whole observer chain (`publishAndTrack`) would pin the
+    /// caller's locals on the await stack, and running every handler
+    /// concurrently (the naive `publish`) would exhaust memory. The pool caps
+    /// how many observer bodies run at once while the queue absorbs bursts.
+    ///
+    /// Liveness tracking matches `publish()`: the pending-publish counter is
+    /// raised synchronously so `awaitPendingEvents` / `isQuiescent` cannot exit
+    /// between this call and the queued handlers draining.
+    nonisolated public func publishBackpressured(_ event: any RuntimeEvent) {
+        pendingFireAndForgetPublishes.increment()
+        Task {
+            await self.publishInternalBackpressured(event)
+            let drained = self.pendingFireAndForgetPublishes.decrement()
+            if drained { await self.checkFlushReadiness() }
+        }
+    }
+
+    /// Route each matching callback subscription through the worker queue,
+    /// counting it in `inFlightHandlers` exactly like the Task-per-subscription
+    /// path so `awaitPendingEvents` waits for the full cascade to drain.
+    private func publishInternalBackpressured(_ event: any RuntimeEvent) async {
+        let eventType = type(of: event).eventType
+        let matchingSubscriptions = store.matching(for: eventType)
+
+        // Stream subscribers are unbuffered fan-out — deliver inline, same as
+        // the normal path; only callback handlers are pooled.
+        for continuation in continuations.values {
+            continuation.yield(event)
+        }
+
+        guard !matchingSubscriptions.isEmpty else { return }
+        startObserverWorkersIfNeeded()
+
+        for subscription in matchingSubscriptions {
+            inFlightHandlers += 1
+            await enqueueObserverWork(ObserverWork(subscription: subscription, event: event))
+        }
+    }
+
+    /// Spawn the persistent worker pool once, on the first backpressured
+    /// publish. Programs that never opt in pay nothing.
+    private func startObserverWorkersIfNeeded() {
+        guard !observerWorkersStarted else { return }
+        observerWorkersStarted = true
+        let count = effectiveObserverWorkerCount
+        for _ in 0..<count {
+            Task { await self.observerWorkerLoop() }
+        }
+    }
+
+    /// Each worker pulls one item (parking while the queue is empty), runs its
+    /// handler to completion, then accounts for it. A worker only ever *drains*
+    /// — producers park in `observerSpaceWaiters`, never workers — so the pool
+    /// cannot deadlock under recursive observer → store → observer.
+    private func observerWorkerLoop() async {
+        while true {
+            let work = await takeObserverWork()
+            await work.subscription.handler(work.event)
+            observerHandlerCompleted()
+        }
+    }
+
+    /// Dequeue the next item, or suspend until one is enqueued. Frees a queue
+    /// slot and wakes one blocked producer on success. Actor isolation makes
+    /// the "saw empty → park" transition atomic w.r.t. `enqueueObserverWork`,
+    /// so there is no lost-wakeup window.
+    private func takeObserverWork() async -> ObserverWork {
+        while true {
+            if observerQueueHead < observerQueue.count {
+                let work = observerQueue[observerQueueHead]
+                observerQueueHead += 1
+                // Compact the consumed prefix so the backing array can't grow
+                // without bound across a long-running drain.
+                if observerQueueHead >= 512 && observerQueueHead * 2 >= observerQueue.count {
+                    observerQueue.removeFirst(observerQueueHead)
+                    observerQueueHead = 0
+                }
+                if !observerSpaceWaiters.isEmpty {
+                    observerSpaceWaiters.removeFirst().resume()
+                }
+                return work
+            }
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                idleObserverWorkers.append(c)
+            }
+        }
+    }
+
+    /// Append work, applying backpressure: while the queue is at capacity,
+    /// suspend the caller (always the fire-and-forget publish Task, never a
+    /// pool worker) until a worker frees a slot. Wakes one idle worker after
+    /// appending.
+    private func enqueueObserverWork(_ work: ObserverWork) async {
+        let capacity = effectiveObserverQueueCapacity
+        while (observerQueue.count - observerQueueHead) >= capacity {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                observerSpaceWaiters.append(c)
+            }
+        }
+        observerQueue.append(work)
+        if !idleObserverWorkers.isEmpty {
+            idleObserverWorkers.removeFirst().resume()
+        }
+    }
+
+    /// After a pooled observer handler finishes — mirrors
+    /// `fireForgetHandlerCompleted` so flush waiters wake once all work drains.
+    private func observerHandlerCompleted() {
+        inFlightHandlers -= 1
         if inFlightHandlers == 0 && pendingFireAndForgetPublishes.isZero {
             let pending = flushContinuations
             flushContinuations.removeAll()
