@@ -31,8 +31,8 @@ This constraint is intentional. When there is only one way to express an operati
 ```aro
 (createUser: User API) {
     <Extract> the <data> from the <request: body>.
-    <Validate> the <data> against the <user: schema>.
-    <Create> the <user> with <data>.
+    <Validate> the <valid-data> for the <data>.
+    <Create> the <user> with <valid-data>.
     <Store> the <user> into the <user-repository>.
     <Emit> a <UserCreated: event> with <user>.
     <Return> a <Created: status> with <user>.
