@@ -697,7 +697,7 @@ public actor MCPResourceProvider {
         Check data against rules or schemas.
         Prepositions: `for`, `against`, `with` | Aliases: `verify`, `check`
         ```aro
-        Validate the <data> against the <schema>.
+        Validate the <valid-data> against the <schema>.
         ```
 
         ### Compare
