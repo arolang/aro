@@ -317,6 +317,11 @@ struct BuildCommand: AsyncParsableCommand {
         // "Plugins/" resolve to the same directory. Skip legacy compilation in that case to
         // avoid double-compiling managed plugins and causing module-cache conflicts.
         let isLegacySameAsManaged: Bool = {
+            // Best-effort inode probe. If either directory is missing or
+            // unreadable we can't prove they're the same file, so `try?` →
+            // nil → the guard returns false (treat them as distinct). That's
+            // the safe default: worst case we attempt legacy compilation on a
+            // dir that isn't there, which the fileExists check below skips.
             guard let legacyAttrs = try? FileManager.default.attributesOfItem(atPath: sourcePluginsDir.path),
                   let managedAttrs = try? FileManager.default.attributesOfItem(atPath: sourceManagedPluginsDirEarly.path),
                   let legacyInode = legacyAttrs[.systemFileNumber] as? UInt,
@@ -334,7 +339,9 @@ struct BuildCommand: AsyncParsableCommand {
             do {
                 try await PluginLoader.shared.compilePluginsParallel(from: sourcePluginsDir, to: outputPluginsDir)
                 if verbose {
-                    // Count compiled plugins
+                    // Count compiled plugins for the verbose report only. A
+                    // failed listing (`try?` → nil) just prints "0 plugin(s)";
+                    // the build already succeeded, so this is cosmetic.
                     let pluginFiles = try? FileManager.default.contentsOfDirectory(at: outputPluginsDir, includingPropertiesForKeys: nil)
                     let dylibCount = pluginFiles?.filter { $0.pathExtension == "dylib" || $0.pathExtension == "so" }.count ?? 0
                     print("  \(dylibCount) plugin(s) compiled to: \(outputPluginsDir.path)")
@@ -373,6 +380,8 @@ struct BuildCommand: AsyncParsableCommand {
         AROLogger.debug("Binary created successfully", subsystem: "build")
         AROLogger.debug("Path: \(binaryPath.path)", subsystem: "build")
         if FileManager.default.fileExists(atPath: binaryPath.path) {
+            // Diagnostic size readout only; `try?` → nil prints "nil" in the
+            // debug line and changes nothing about the build.
             AROLogger.debug("Binary exists, size: \(String(describing: try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size]))", subsystem: "build")
         } else {
             AROLogger.error("Binary NOT found after build!", subsystem: "build")
