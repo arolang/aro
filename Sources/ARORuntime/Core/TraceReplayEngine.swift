@@ -69,7 +69,12 @@ public enum TraceReplayEngine {
         case let s as String:
             return s
         case let n as NSNumber:
-            if CFGetTypeID(n) == CFBooleanGetTypeID() { return n.boolValue }
+            // Distinguish a JSON boolean from a numeric NSNumber portably:
+            // `CFBooleanGetTypeID` is CoreFoundation (macOS-only), so use the
+            // Objective-C type encoding, which is "c" (char) for booleans on
+            // both Apple and swift-corelibs Foundation. (JSON has no int8, so
+            // "c" here always means a boolean.)
+            if String(cString: n.objCType) == "c" { return n.boolValue }
             // Integral if it has no fractional part.
             if n.doubleValue == n.doubleValue.rounded() && abs(n.doubleValue) < 9.0e15 {
                 return n.intValue
