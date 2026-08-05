@@ -65,6 +65,14 @@ final class AROCRuntimeHandle: @unchecked Sendable {
     let runtime: Runtime
     var contexts: [UnsafeMutableRawPointer: AROCContextHandle] = [:]
 
+    /// Write-back service for writable `.store` files discovered next to the
+    /// binary (issue #442). Retained here so it (and its RepositoryChangedEvent
+    /// subscription) outlives `aro_runtime_init`; flushed in
+    /// `aro_runtime_shutdown`. `nil` when no writable stores are present.
+    /// Set once during init (under the init semaphore, before the handle is
+    /// published) and read on shutdown, so no additional locking is needed.
+    var storeFlushService: StoreFlushService?
+
     #if !os(Windows)
     /// Lazy event loop group - deferred until first access to avoid
     /// crash when created before Swift async runtime is ready
@@ -350,6 +358,29 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
                     )
                 }
             }
+
+            // Wire write-back for writable stores (issue #442). Mirrors the
+            // interpreter path in Application.registerDefaultServices(): create a
+            // StoreFlushService, register the discovered stores, and mark a
+            // repository dirty whenever a RepositoryChangedEvent for it fires.
+            // The compiled Store/Update/Delete actions emit RepositoryChangedEvent
+            // on `context.eventBus` (== EventBus.shared, since the bridge Runtime
+            // is created with the default `.shared` bus), so subscribing here on
+            // EventBus.shared receives those changes. The service is retained on
+            // the runtime handle and flushed in aro_runtime_shutdown.
+            let writableStores = discoveredStoreFiles.filter { $0.isWritable }
+            if !writableStores.isEmpty {
+                let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                await flushService.register(stores: discoveredStoreFiles)
+                handle.storeFlushService = flushService
+
+                let writableNames = Set(writableStores.map { $0.repositoryName })
+                EventBus.shared.subscribe(to: RepositoryChangedEvent.self) { event in
+                    if writableNames.contains(event.repositoryName) {
+                        await flushService.markDirty(repositoryName: event.repositoryName)
+                    }
+                }
+            }
         }
 
         semaphore.signal()
@@ -377,7 +408,12 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
     guard let ptr = runtimePtr else { return }
 
     handleLock.lock()
+    // Capture the flush service so writable .store files persist on exit
+    // (issue #442). Held past the lock so the blocking flushAll() below does
+    // not run while handleLock is held.
+    var flushService: StoreFlushService?
     if let handle = runtimeHandles.removeValue(forKey: ptr) {
+        flushService = handle.storeFlushService
         // Clean up all contexts
         for (contextPtr, _) in handle.contexts {
             Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
@@ -389,6 +425,19 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
         globalRuntimePtr = nil
     }
     handleLock.unlock()
+
+    // Flush any dirty writable stores to disk before the handle is released.
+    // Bridge the async flush to this sync @_cdecl entry point via a semaphore.
+    // This runs on normal exit and on the Ctrl-C keepalive path (SIGINT unblocks
+    // Keepalive, teardown proceeds through here).
+    if let flushService = flushService {
+        let flushSemaphore = DispatchSemaphore(value: 0)
+        Task.detached {
+            await flushService.flushAll()
+            flushSemaphore.signal()
+        }
+        flushSemaphore.wait()
+    }
 
     Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).release()
 }

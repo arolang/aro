@@ -108,15 +108,16 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Warn about writable .store files — compiled binaries always load them
-        // as read-only, so the o+w bit is harmless (but may surprise the user).
+        // Inform about writable .store files — compiled binaries persist changes
+        // back to the .store file placed next to the executable (issue #442),
+        // matching `aro run`. The o+w bit is preserved into the bundle.
         let writableStores = appConfig.storeFiles.filter { $0.isWritable }
         if !writableStores.isEmpty {
-            print("Warning: Store files with world-write permission will be treated as read-only in compiled binaries.")
+            print("Note: Writable store files persist changes to the .store file next to the binary.")
             for store in writableStores {
-                print("  - \(store.filePath.lastPathComponent) has o+w permission set")
+                print("  - \(store.filePath.lastPathComponent) -> \(store.repositoryName) (writable, persisted next to the binary)")
             }
-            print("Hint: chmod o-w <file>.store to silence this warning.")
+            print("Hint: the .store file next to the binary must be writable by the running user; chmod o-w <file>.store for a read-only (seed-only) store.")
         }
 
         // Compile all source files to AST
