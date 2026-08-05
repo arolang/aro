@@ -568,10 +568,12 @@ you exactly which slice of the business logic moved.
 
 ## 10. Settings
 
-Cmd+, opens Settings. The window is six tabs, each focused on one
-configurable surface; everything is stored under the `solaro.*`
-keyspace in standard `UserDefaults` so backing it up is `defaults
-export com.arolang.SOLARO`.
+Cmd+, opens Settings. The window is five tabs — Editor, Backends,
+Keybindings, Books, Privacy — each focused on one configurable surface;
+everything is stored under the `solaro.*` keyspace in standard
+`UserDefaults` so backing it up is `defaults export com.arolang.SOLARO`.
+(The Plugins surface in §10.6 is a *separate* window opened from
+Help → Plugins, not a Settings tab.)
 
 ![Settings — Editor tab](screenshots/11-settings-editor.png){ width=85% }
 
@@ -664,6 +666,79 @@ github:owner/repo` and reloads the runtime.
 The book viewer (Help → Books) downloads every one of these PDFs on
 demand. They all build from this same repo via `Book/*/build-pdf.sh`
 and ship as artefacts on every tagged release.
+
+---
+
+## Appendix A — Building SOLARO from source, and the dev rough edges
+
+Chapter 2 covered installing the shipped app. This appendix is for the
+other audience: people **hacking on SOLARO itself** — fixing the editor,
+adding a canvas overlay, or (increasingly) an agent rebuilding the IDE in
+a loop. The macOS dev cycle has a handful of sharp edges that aren't the
+app's fault but bite everyone once. They're documented in full, with
+copy-paste fixes, in
+[`Sources/SOLARO/TROUBLESHOOTING.md`](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Sources/SOLARO/TROUBLESHOOTING.md);
+this is the tour.
+
+### A.1 The pieces
+
+SOLARO is not one binary. A source checkout builds three things that
+matter:
+
+- **`SolaroApp`** (target `SOLARO`) — the SwiftUI/AppKit app itself.
+  `swift build -c release --product SolaroApp` → `.build/release/SolaroApp`.
+- **`solaro`** (target `SOLAROLauncher`) — a thin CLI launcher that finds
+  and opens the app bundle.
+- **`AROXPCService`** — the out-of-process runtime host. SOLARO talks to
+  it over XPC so a runtime crash can't take the editor down.
+
+The `aro` CLI is a fourth, separate binary the app shells out to for
+run / debug / test / build. During development it's easiest to point
+Settings → Backends → `SOLARO_ARO` at your local `.build/debug/aro`
+rather than copying it around.
+
+### A.2 The six rough edges
+
+Each of these is a one-time surprise with a one-line fix. Reach for
+`TROUBLESHOOTING.md` for the full symptom/cause/fix write-up; the
+short version:
+
+1. **"Code Signature Invalid" after copying into the bundle.** macOS
+   signs the bundle; any manual `cp` into it breaks the signature.
+   Re-sign ad-hoc:
+   `codesign --force --sign - .build/Solaro.app/Contents/MacOS/Solaro`.
+2. **A stale `.o` — "Compiling File.swift" but nothing changes.**
+   SwiftPM's incremental tracking can miss a `touch`-only edit. Drop the
+   object: `rm .build/debug/SOLARO.build/File.swift.o` and rebuild.
+3. **A restored Settings window instead of the workspace.** macOS
+   replays saved window state from a build that died with Settings
+   frontmost. Clear it:
+   `rm -rf ~/Library/Saved\ Application\ State/com.arolang.SOLARO.savedState`.
+4. **`open -a` launching the running instance, not your new build.**
+   Launch Services forwards to a live instance. Kill first:
+   `pgrep -f Solaro | xargs kill -9` then `open -a …`.
+5. **A stale `.build/release/aro` shadowing your debug build.** Fixed in
+   the resolver (commit `56595328`), but deleting the older artefact — or
+   pinning `SOLARO_ARO` — removes all doubt.
+6. **Accumulating SOLARO processes.** The launcher and the app can both
+   spawn, and `pgrep Solaro` misses helpers. Use the full-command form:
+   `pgrep -f Solaro | xargs kill -9`.
+
+### A.3 A clean-slate relaunch
+
+When a dev build behaves strangely, this sequence resets every piece of
+mutable state above and starts fresh:
+
+```bash
+pgrep -f Solaro | xargs kill -9 2>/dev/null                                # no stale processes
+rm -rf ~/Library/Saved\ Application\ State/com.arolang.SOLARO.savedState   # no restored windows
+swift build -c release --product SolaroApp                                 # rebuild
+open .build/release/Solaro.app                                             # or run .build/release/SolaroApp directly
+```
+
+If a specific file's edits still aren't landing, delete its `.o`
+(edge #2) before the `swift build`. If you copied anything into a signed
+`.app`, re-sign it (edge #1) before `open`.
 
 ---
 

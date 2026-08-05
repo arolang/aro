@@ -4,6 +4,10 @@ Quick reference for engineers entering the SOLARO codebase. The
 authoritative design lives in [issue #228 — note 8488 ADRs](https://git.ausdertechnik.de/arolang/aro/-/issues/228#note_8488)
 and the wireframes in [note 8467](https://git.ausdertechnik.de/arolang/aro/-/issues/228#note_8467).
 
+Hitting a rough edge in the dev build loop (invalid code signature after a
+copy, a stale `.o`, a restored Settings window, accumulating processes)?
+See [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md).
+
 ## Platform pivot (2026-06)
 
 SOLARO was originally built on SwiftCrossUI for one-binary cross-platform
