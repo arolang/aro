@@ -30,34 +30,29 @@ struct InspectorPaneView: View {
     @Bindable var controller: WorkspaceController
 
     var body: some View {
-        // Same anti-cycle defense as OpenAPIGraphView: Color.clear
-        // is the layout-defining child (flexible ideal size), so
-        // the inspector's @Observable-driven content (sections that
-        // expand and contract on every controller mutation) can't
+        // macOS-26 layout-cycle defense — see LayoutCycleGuard.swift.
+        // The inspector's @Observable-driven content (sections that
+        // expand and contract on every controller mutation) must not
         // propagate its ideal size up to the NSHostingView hosting
-        // this column. That feedback path was triggering
-        // `SplitViewChildController.hostingController_didUpdateMinSize_maxSize`
-        // on every file selection — same macOS 26 hard-assert the
-        // `.metrics` case (Workspace.swift:1146) already documents
-        // and works around with a raw AppKit panel.
-        Color.clear.overlay {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SolaroSpace.m) {
-                    fileHeader
-                    openAPIEditorSection
-                    SelectedStatementSection(controller: controller)
-                    SelectedRepositorySection(controller: controller)
-                    variablesSection
-                    WatchesSection(controller: controller, store: controller.watches)
-                    lspDiagnosticsSection
-                    featureSetSection
-                    deployRail
-                    Spacer(minLength: SolaroSpace.l)
-                }
-                .padding(.horizontal, SolaroSpace.m)
-                .padding(.top, SolaroSpace.m)
+        // this column, or `SplitViewChildController` re-enters and
+        // trips the constraint-cycle abort.
+        ScrollView {
+            VStack(alignment: .leading, spacing: SolaroSpace.m) {
+                fileHeader
+                openAPIEditorSection
+                SelectedStatementSection(controller: controller)
+                SelectedRepositorySection(controller: controller)
+                variablesSection
+                WatchesSection(controller: controller, store: controller.watches)
+                lspDiagnosticsSection
+                featureSetSection
+                deployRail
+                Spacer(minLength: SolaroSpace.l)
             }
+            .padding(.horizontal, SolaroSpace.m)
+            .padding(.top, SolaroSpace.m)
         }
+        .layoutCycleGuard()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // Transparent so the right rail's frosted-glass background
         // shows through. The pane outside owns the material; this
