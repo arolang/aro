@@ -175,21 +175,30 @@ For writable stores, changes are persisted back to disk:
 └──────────────────────────────────────────────────┘
 ```
 
-### 6. Compiled Binary Restrictions
+### 6. Compiled Binaries
 
-When using `aro build` to produce a native binary, writable stores are rejected at build time:
+Writable stores persist in compiled binaries too, matching `aro run`. The
+persistence target is the `.store` file that sits **next to the executable**
+(the binary's own directory, resolved via
+`ToolResolver.resolveExecutableDirectory`). At startup the runtime discovers
+the `.store` files beside the binary — carrying their `isWritable` bit — seeds
+the repositories, and, for every writable store, wires up the same
+`StoreFlushService` write-back the interpreter uses (debounced atomic writes
+during the run, plus a final flush on graceful shutdown / Ctrl-C).
 
 ```
 $ aro build ./MyApp
-Error: config.store has other-write permission set.
-       Writable stores are not supported in compiled binaries
-       because the binary cannot write back to bundled data.
-
-       Fix: chmod o-w config.store
-       Or:  remove config.store and seed via Application-Start
+Note: Writable store files persist changes to the .store file next to the binary.
+  - config.store -> config-repository (writable, persisted next to the binary)
+Hint: the .store file next to the binary must be writable by the running user;
+      chmod o-w <file>.store for a read-only (seed-only) store.
 ```
 
-Read-only stores are embedded in the binary as bundled resources and loaded into repositories at startup, just as they would be in interpreter mode.
+Read-only stores are loaded into repositories at startup and never written
+back, exactly as in interpreter mode. Writable stores require that the
+`.store` file beside the binary be writable by the running user (its `o+w`
+bit is preserved into the build output); on a read-only filesystem the store
+simply falls back to seed-only behavior.
 
 ---
 
@@ -375,7 +384,8 @@ This proposal requires **zero changes** to ARO syntax. Store files are a runtime
 **Modified files:**
 - `Sources/ARORuntime/Application/Application.swift` -- Load `.store` files before `Application-Start`
 - `Sources/ARORuntime/Core/RepositoryStorage.swift` -- Hook write-back on mutations for writable stores
-- `Sources/AROCompiler/Linker.swift` -- Bundle read-only stores; reject writable stores
+- `Sources/ARORuntime/Bridge/RuntimeCoreBridge.swift` -- Compiled-binary runtime: discover `.store` files next to the executable, seed repositories, and wire `StoreFlushService` write-back for writable stores (flushed on shutdown)
+- `Sources/AROCLI/Commands/BuildCommand.swift` -- Report that writable stores persist next to the binary (no longer downgraded to read-only)
 
 ---
 
