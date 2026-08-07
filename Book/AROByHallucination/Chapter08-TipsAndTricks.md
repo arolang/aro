@@ -103,7 +103,58 @@ After `/clean`, the model starts fresh. It re-reads the system prompt, re-discov
 
 The pattern is: use `aro ask` for generation and debugging, use the other commands for verification and deployment. The model is good at writing code and finding bugs. You are good at deciding whether the code does the right thing.
 
-## 8.7 Performance Tips
+## 8.7 Getting a One-Liner for the REPL
+
+By default `aro ask` answers with a complete **feature set** — `(Name: Business Activity) { ... }`. That is the right shape for a file you are going to `aro run`. It is the wrong shape for the REPL. A feature set is triggered by an event; paste one into `aro repl` (or pipe it with `echo '...' | aro`) and nothing happens, because nothing triggers it. What you want for a quick calculation is one or two **bare statements** that run immediately and print a result.
+
+There is a convention for asking. Phrase the request as a REPL or one-liner request and the model returns bare statements instead of a wrapped feature set. Any of these phrasings work:
+
+- Begin the prompt with `REPL:`
+- Include the words *one line*, *one-liner*, or *without a feature set wrapper*
+
+So instead of "write a feature set that sums a list", ask:
+
+```
+REPL: sum the list [10, 20, 30]
+```
+
+and the model answers with statements you can paste straight into the REPL:
+
+```aro
+Create the <numbers> with [10, 20, 30].
+Reduce the <total: Integer> from the <numbers> with sum().
+Log <total> to the <console>.
+```
+
+Run it either way:
+
+```bash
+# pipe it — bare statements evaluate in order, Log prints the result
+echo 'Create the <numbers> with [10, 20, 30].
+Reduce the <total: Integer> from the <numbers> with sum().
+Log <total> to the <console>.' | aro
+# => 60.00
+```
+
+```
+$ aro repl
+aro> Compute the <r> from 7 * 6.
+aro> Log <r> to the <console>.
+42
+```
+
+A few more validated one-liners, to show the range:
+
+| Ask | Statements the model returns |
+|-----|------------------------------|
+| `REPL: uppercase "hello"` | `Compute the <u: uppercase> from "hello". Log <u> to the <console>.` → `HELLO` |
+| `one line: length of [4, 8, 6]` | `Create the <x> with [4,8,6]. Compute the <n: length> from the <x>. Log <n> to the <console>.` → `3` |
+| `REPL: sort [3, 1, 2] ascending` | `Create the <x> with [3,1,2]. Sort the <s> for the <x>. Log <s> to the <console>.` → `[1, 2, 3]` |
+| `REPL: first element of [10, 20, 30]` | `Create the <x> with [10,20,30]. Extract the <f: first> from the <x>. Log <f> to the <console>.` → `10` |
+
+Two rules keep one-liners working. End with a `Log ... to the <console>.` so the value prints — bare statements in a piped script do not auto-echo the way a full REPL session does. And remember which forms are actions rather than qualifiers: sorting is `Sort the <s> for the <x>.`, not a `Compute` qualifier; first and last are `Extract the <f: first> from the <x>.`, with the qualifier on the result. If the model hands you `Compute the <s: sort> ...`, it will pass `aro check` and quietly return the list unsorted — tell it to use the `Sort` action instead.
+
+## 8.8 Performance Tips
 
 The fine-tune runs locally, and local inference has constraints that cloud inference does not. A few things make a noticeable difference.
 
@@ -117,7 +168,7 @@ The fine-tune runs locally, and local inference has constraints that cloud infer
 
 **Indexing.** Run `/index` once after cloning a project. The retrieval index lets the model find relevant files without scanning the whole directory tree, which saves tool calls and time. A project with an index gets better answers faster than one without.
 
-## 8.8 Asking About New Language Features
+## 8.9 Asking About New Language Features
 
 The training corpus only covers the language up to the snapshot the model was distilled from. Anything newer is *outside* the model's competence, and it will improvise — usually badly. Treat the following as known blind spots and either run `/index` after pulling a recent ARO release, or paste the relevant chapter into the conversation manually:
 
