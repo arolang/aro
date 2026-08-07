@@ -945,6 +945,16 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     public let typeAnnotation: String?  // Raw type string (e.g., "String", "List<User>")
     public let span: SourceSpan
 
+    /// The `as <Type>` result annotation, when present.
+    ///
+    /// Kept separate from `typeAnnotation` because the two are different things:
+    /// the qualifier selects an *operation* (`<n: length>`), while `as` requests a
+    /// *result type* (`as Float`). The parser used to overwrite `typeAnnotation`
+    /// with the `as` type, which silently discarded the operation — so
+    /// `Compute the <m: length> as Integer from <s>.` computed the identity and
+    /// returned the string, not its length (GitLab #475).
+    public let asType: String?
+
     // Specifiers are parsed from typeAnnotation as dot-separated property path
     public var specifiers: [String] {
         guard let type = typeAnnotation else { return [] }
@@ -982,10 +992,16 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         return type.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
-    public init(base: String, typeAnnotation: String? = nil, span: SourceSpan) {
+    public init(
+        base: String,
+        typeAnnotation: String? = nil,
+        span: SourceSpan,
+        asType: String? = nil
+    ) {
         self.base = base
         self.typeAnnotation = typeAnnotation
         self.span = span
+        self.asType = asType
     }
 
     /// Initializer for when you have a specifiers array (joins with dots)
@@ -993,6 +1009,7 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         self.base = base
         self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
         self.span = span
+        self.asType = nil
     }
 
     /// The full qualified name

@@ -57,7 +57,26 @@ import AROParser
 /// `ConstantFolder` and the compiled-binary `evaluateBinaryOp`.
 public struct ExpressionEvaluator: Sendable {
 
-    public init() {}
+    /// How Int-valued arithmetic is treated.
+    public enum NumericMode: Sendable {
+        /// Int ⊕ Int stays Int; `/` truncates. The default.
+        case natural
+        /// Int ⊕ Int is evaluated in floating point and the result stays a
+        /// Double, so `7 / 2` is 3.5. Selected by an `as Float` / `as Double`
+        /// result annotation (GitLab #475).
+        case float
+    }
+
+    /// The numeric mode for this evaluator.
+    ///
+    /// Stored rather than threaded through `evaluate` because evaluation is
+    /// deeply recursive: every nested call uses `self`, so the mode reaches
+    /// sub-expressions automatically and `7 / 2 + 1` behaves consistently.
+    public let numericMode: NumericMode
+
+    public init(numericMode: NumericMode = .natural) {
+        self.numericMode = numericMode
+    }
 
     /// Evaluates an expression in the given context
     /// - Parameters:
@@ -241,10 +260,17 @@ public struct ExpressionEvaluator: Sendable {
             }
             return try numericOperation(left, right) { $0 * $1 }
         case .divide:
-            // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
-            if let li = left as? Int, let ri = right as? Int {
+            // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior).
+            // Skipped in .float mode so `<x> / 2 as Float` yields 3.5 rather than 3.
+            if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
                 guard ri != 0 else { throw ActionError.runtimeError("Division by zero") }
                 return li / ri
+            }
+            if numericMode == .float, let ri = right as? Int, ri == 0 {
+                throw ActionError.runtimeError("Division by zero")
+            }
+            if numericMode == .float, let rd = right as? Double, rd == 0 {
+                throw ActionError.runtimeError("Division by zero")
             }
             return try numericOperation(left, right) { $0 / $1 }
         case .modulo:
@@ -442,8 +468,12 @@ public struct ExpressionEvaluator: Sendable {
         let r = try asDouble(right)
         let result = op(l, r)
 
-        // Return Int if both inputs were Int and result is whole
-        if left is Int && right is Int && result.truncatingRemainder(dividingBy: 1) == 0 {
+        // Return Int if both inputs were Int and result is whole.
+        // In .float mode the caller asked for a Double, so keep it one — narrowing
+        // `<x> * 2 as Float` back to Int would drop the annotation again (#475).
+        if numericMode == .natural,
+           left is Int, right is Int,
+           result.truncatingRemainder(dividingBy: 1) == 0 {
             return Int(result)
         }
         return result

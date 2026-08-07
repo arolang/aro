@@ -159,9 +159,13 @@ public struct ComputeAction: SynchronousAction {
             return try Self.opMarkdown(input, context)
         }
         if let op = Self.computations[canonical] {
-            return try op(input, context)
+            // GitLab #475: honour `as <Type>` on the result. Expression-valued
+            // statements are already evaluated in the right numeric mode by
+            // FeatureSetExecutor; this covers the operation paths, e.g.
+            // `Compute the <n: length> as Float from <s>.`
+            return ResultTypeCoercion.coerce(try op(input, context), to: result.asType)
         }
-        return input
+        return ResultTypeCoercion.coerce(input, to: result.asType)
     }
 
     // MARK: - #326: extracted computation implementations
