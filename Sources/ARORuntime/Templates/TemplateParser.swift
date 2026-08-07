@@ -50,9 +50,25 @@ public struct ParsedTemplate: Sendable {
     /// The parsed segments
     public let segments: [TemplateSegment]
 
-    public init(path: String, segments: [TemplateSegment]) {
+    /// 1-based source line for each segment, parallel to `segments`.
+    ///
+    /// A parallel array rather than an associated value on `TemplateSegment`,
+    /// which is `Equatable` and compared directly by existing tests — adding a
+    /// line to every case would make two structurally identical blocks unequal
+    /// just for appearing on different lines. Empty when a caller constructs a
+    /// template without position information (GitLab #484).
+    public let segmentLines: [Int]
+
+    public init(path: String, segments: [TemplateSegment], segmentLines: [Int] = []) {
         self.path = path
         self.segments = segments
+        self.segmentLines = segmentLines
+    }
+
+    /// The 1-based source line of `segments[index]`, if known.
+    public func line(ofSegment index: Int) -> Int? {
+        guard index >= 0, index < segmentLines.count else { return nil }
+        return segmentLines[index]
     }
 }
 
@@ -89,6 +105,8 @@ public struct TemplateParser {
     /// - Throws: TemplateParseError if the template is malformed
     public func parse(_ content: String, path: String = "<inline>") throws -> ParsedTemplate {
         var segments: [TemplateSegment] = []
+        // Parallel to `segments` — see ParsedTemplate.segmentLines (#484).
+        var segmentLines: [Int] = []
         var currentIndex = content.startIndex
         var forEachDepth = 0
 
@@ -100,6 +118,7 @@ public struct TemplateParser {
                     let staticText = String(content[currentIndex..<blockStart.lowerBound])
                     if !staticText.isEmpty {
                         segments.append(.staticText(staticText))
+                        segmentLines.append(lineNumber(at: currentIndex, in: content))
                     }
                 }
 
@@ -113,7 +132,8 @@ public struct TemplateParser {
                 let blockContent = String(content[blockStart.upperBound..<blockEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
 
                 // Parse the block content
-                let segment = try parseBlockContent(blockContent, line: lineNumber(at: blockStart.lowerBound, in: content))
+                let blockLine = lineNumber(at: blockStart.lowerBound, in: content)
+                let segment = try parseBlockContent(blockContent, line: blockLine)
 
                 // Track for-each depth
                 switch segment {
@@ -130,12 +150,14 @@ public struct TemplateParser {
                 }
 
                 segments.append(segment)
+                segmentLines.append(blockLine)
                 currentIndex = blockEnd.upperBound
             } else {
                 // No more blocks, add remaining static text
                 let remainingText = String(content[currentIndex...])
                 if !remainingText.isEmpty {
                     segments.append(.staticText(remainingText))
+                    segmentLines.append(lineNumber(at: currentIndex, in: content))
                 }
                 break
             }
@@ -146,7 +168,7 @@ public struct TemplateParser {
             throw TemplateParseError.nestedForEachNotClosed(line: lineNumber(at: content.endIndex, in: content))
         }
 
-        return ParsedTemplate(path: path, segments: segments)
+        return ParsedTemplate(path: path, segments: segments, segmentLines: segmentLines)
     }
 
     /// Parse the content inside a {{ }} block

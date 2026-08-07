@@ -347,17 +347,22 @@ struct RunCommand: AsyncParsableCommand {
                 )
             }
         } catch let error as ActionError {
+            let description = CLIErrorFormatter.describe(error)
             if TTYDetector.stderrIsTTY {
-                print("\u{001B}[31mRuntime error:\u{001B}[0m \(error)")
+                print("\u{001B}[31mRuntime error:\u{001B}[0m \(description)")
             } else {
-                print("Runtime error: \(error)")
+                print("Runtime error: \(description)")
             }
             throw ExitCode.failure
         } catch {
+            // `"\(error)"` prints an enum's raw case for LocalizedError types, e.g.
+            // `renderError(path: "page.html", message: "…")`, which exposes internal
+            // case names and Swift token spellings to ARO authors (GitLab #484).
+            let description = CLIErrorFormatter.describe(error)
             if TTYDetector.stderrIsTTY {
-                print("\u{001B}[31mError:\u{001B}[0m \(error)")
+                print("\u{001B}[31mError:\u{001B}[0m \(description)")
             } else {
-                print("Error: \(error)")
+                print("Error: \(description)")
             }
             throw ExitCode.failure
         }

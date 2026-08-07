@@ -45,6 +45,10 @@ public enum TemplateError: Error, LocalizedError {
     case notFound(path: String)
     case parseError(path: String, message: String)
     case renderError(path: String, message: String)
+    /// A render failure with the offending block's position and source text,
+    /// so the message can point at the line instead of just naming the file
+    /// (GitLab #484).
+    case renderErrorAt(path: String, line: Int, source: String, message: String, hint: String?)
     case invalidPath(path: String)
 
     public var errorDescription: String? {
@@ -55,9 +59,67 @@ public enum TemplateError: Error, LocalizedError {
             return "Template parse error in \(path): \(message)"
         case .renderError(let path, let message):
             return "Template render error in \(path): \(message)"
+        case .renderErrorAt(let path, let line, let source, let message, let hint):
+            var out = "Template render error in \(path):\(line): \(message)"
+            let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                // One line of context; templates can be long and the block text
+                // is what the author actually needs to see.
+                let firstLine = trimmed.split(separator: "\n", maxSplits: 1).first ?? ""
+                out += "\n  \(line) | {{ \(firstLine) }}"
+            }
+            if let hint {
+                out += "\n  hint: \(hint)"
+            }
+            return out
         case .invalidPath(let path):
             return "Invalid template path: \(path)"
         }
+    }
+
+    /// The path of the template this error concerns.
+    public var templatePath: String {
+        switch self {
+        case .notFound(let path), .invalidPath(let path):
+            return path
+        case .parseError(let path, _), .renderError(let path, _):
+            return path
+        case .renderErrorAt(let path, _, _, _, _):
+            return path
+        }
+    }
+}
+
+/// Recognises common authoring mistakes in a template block and suggests a fix.
+///
+/// The `{{ }}` delimiters look like Mustache, so `{{name}}` is the mistake people
+/// will make first — ARO expects an ARO statement inside the braces. Without a
+/// hint the resulting diagnostic talks about an unexpected identifier token,
+/// which explains nothing (GitLab #484).
+enum TemplateBlockHint {
+
+    static func hint(forBlock source: String) -> String? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // A bare identifier or dotted path, i.e. Mustache interpolation.
+        let looksLikeMustache = !trimmed.contains(" ")
+            && !trimmed.contains("<")
+            && !trimmed.hasSuffix(".")
+            && trimmed.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" || $0 == "." }
+
+        if looksLikeMustache {
+            let name = trimmed.split(separator: ".").first.map(String.init) ?? trimmed
+            return "Template blocks contain ARO statements, not Mustache variables."
+                + " Did you mean: {{ Print <\(name)> to the <template>. }}"
+        }
+
+        // A statement without its terminating period.
+        if trimmed.contains("<") && !trimmed.hasSuffix(".") && !trimmed.hasSuffix("{") && !trimmed.hasSuffix("}") {
+            return "ARO statements end with a period: {{ \(trimmed). }}"
+        }
+
+        return nil
     }
 }
 
