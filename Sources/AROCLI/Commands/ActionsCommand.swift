@@ -16,9 +16,12 @@ struct ActionsCommand: ParsableCommand {
             Commands for inspecting ARO actions and qualifiers.
 
             Example:
-              aro actions list                   # List all built-in and plugin actions
-              aro actions list --qualifiers       # Also list registered qualifiers
-              aro actions list -d ./MyApp         # Load plugins from MyApp and list all actions
+              aro actions                         # List all built-in and plugin actions
+              aro actions Log                     # Show one action, by name or by any of its verbs
+              aro actions createdirectory         # Aliases resolve too
+              aro actions --qualifiers            # Also list registered qualifiers
+              aro actions --format json           # Machine-readable output
+              aro actions -d ./MyApp              # Load plugins from MyApp and list all actions
             """,
         subcommands: [ListActions.self],
         defaultSubcommand: ListActions.self
@@ -40,6 +43,12 @@ struct ListActions: AsyncParsableCommand {
     @Flag(name: .long, help: "Also list registered qualifiers")
     var qualifiers: Bool = false
 
+    @Option(name: .long, help: "Output format: text (default) or json")
+    var format: String = "text"
+
+    @Argument(help: "Action name or verb to look up. Omit to list everything.")
+    var name: String?
+
     func run() async throws {
         let appDir = directory.map { URL(fileURLWithPath: $0) }
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -55,21 +64,152 @@ struct ListActions: AsyncParsableCommand {
             }
         }
 
-        // -- Built-in Actions --
         let builtIns = ActionRegistry.shared.allBuiltInActionInfos
+        let pluginActions = ActionRegistry.shared.allPluginActionInfos
+        let asJSON = format.lowercased() == "json"
+
+        // -- Single-action lookup --
+        if let query = name {
+            try lookUp(query, builtIns: builtIns, pluginActions: pluginActions, asJSON: asJSON)
+            return
+        }
+
+        if asJSON {
+            printJSON(builtIns: builtIns, pluginActions: pluginActions)
+            return
+        }
+
         printBuiltInActions(builtIns)
 
-        // -- Plugin Actions --
-        let pluginActions = ActionRegistry.shared.allPluginActionInfos
         if !pluginActions.isEmpty {
             printPluginActions(pluginActions)
         }
 
-        // -- Qualifiers --
         if qualifiers {
             let registrations = QualifierRegistry.shared.allRegistrations()
             printQualifiers(registrations)
         }
+    }
+
+    // MARK: - Single-Action Lookup
+
+    /// Resolves `query` against canonical names *and* verb aliases.
+    ///
+    /// Alias resolution is the point: `CreateDirectory` and `Keepalive` appear in
+    /// the project's own examples and documentation but are verbs of `Make` and
+    /// `WaitForEvents`, so looking them up used to find nothing and a user would
+    /// reasonably conclude the action had been removed (GitLab #483).
+    private func lookUp(
+        _ query: String,
+        builtIns: [ActionRegistry.BuiltInActionInfo],
+        pluginActions: [ActionRegistry.PluginActionInfo],
+        asJSON: Bool
+    ) throws {
+        let needle = query.lowercased()
+
+        if let match = builtIns.first(where: {
+            $0.name.lowercased() == needle || $0.verbs.contains { $0.lowercased() == needle }
+        }) {
+            if asJSON {
+                printJSON(builtIns: [match], pluginActions: [])
+            } else {
+                printActionDetail(match, queriedAs: query)
+            }
+            return
+        }
+
+        if let plugin = pluginActions.first(where: { $0.verb.lowercased() == needle }) {
+            if asJSON {
+                printJSON(builtIns: [], pluginActions: [plugin])
+            } else {
+                print("")
+                print("\(plugin.verb)  (plugin action)")
+                print("  Plugin: \(plugin.pluginName ?? "(anonymous)")")
+                print("")
+            }
+            return
+        }
+
+        // Suggest near matches over any name or alias, so a typo is recoverable.
+        // Suggest canonical names only — offering both "Log" and its own verb
+        // "log" is noise, since looking up either resolves to the same action.
+        let suggestions = builtIns
+            .filter { action in
+                let names = [action.name] + action.verbs
+                return names.contains {
+                    $0.lowercased().contains(needle) || needle.contains($0.lowercased())
+                }
+            }
+            .map(\.name)
+            .sorted()
+            .prefix(5)
+
+        var message = "No action named '\(query)'."
+        if !suggestions.isEmpty {
+            message += " Did you mean: \(suggestions.joined(separator: ", "))?"
+        } else {
+            message += " Run 'aro actions' to list them all."
+        }
+        throw ValidationError(message)
+    }
+
+    private func printActionDetail(_ action: ActionRegistry.BuiltInActionInfo, queriedAs query: String) {
+        print("")
+        let aliases = action.verbs.sorted()
+        print("\(action.name)")
+        if action.name.lowercased() != query.lowercased() {
+            print("  (matched the verb '\(query.lowercased())')")
+        }
+        print("  Role:         \(action.role.rawValue)")
+        print("  Verbs:        \(aliases.joined(separator: ", "))")
+        let preps = action.prepositions.isEmpty ? "(any)" : action.prepositions.sorted().joined(separator: ", ")
+        print("  Prepositions: \(preps)")
+        print("")
+        print("  Example: \(exampleStatement(for: action))")
+        print("")
+    }
+
+    /// A minimal well-formed statement for the action, so the shape is obvious.
+    ///
+    /// Uses the canonical name rather than the alphabetically-first verb, so the
+    /// example reads `Make the <result> …` and not `Createdirectory the <result> …`.
+    private func exampleStatement(for action: ActionRegistry.BuiltInActionInfo) -> String {
+        let preposition = action.prepositions.sorted().first ?? "with"
+        return "\(action.name) the <result> \(preposition) the <object>."
+    }
+
+    // MARK: - JSON Output
+
+    /// Emits the catalog as JSON so SOLARO, the LSP and the MCP server can consume
+    /// one source instead of each maintaining a partial mirror.
+    private func printJSON(
+        builtIns: [ActionRegistry.BuiltInActionInfo],
+        pluginActions: [ActionRegistry.PluginActionInfo]
+    ) {
+        var payload: [String: Any] = [:]
+        payload["builtin"] = builtIns.map { action in
+            [
+                "name": action.name,
+                "role": action.role.rawValue,
+                "verbs": action.verbs.sorted(),
+                "prepositions": action.prepositions.sorted()
+            ] as [String: Any]
+        }
+        payload["plugin"] = pluginActions.map { entry in
+            [
+                "verb": entry.verb,
+                "plugin": entry.pluginName ?? ""
+            ] as [String: Any]
+        }
+
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: payload,
+            options: [.prettyPrinted, .sortedKeys]
+        ), let text = String(data: data, encoding: .utf8) else {
+            FileHandle.standardError.write(Data("Error: could not serialise action catalog\n".utf8))
+            return
+        }
+        print(text)
     }
 
     // MARK: - Formatting
@@ -82,23 +222,29 @@ struct ListActions: AsyncParsableCommand {
         // Column widths
         let nameWidth  = max(16, actions.map { $0.name.count }.max() ?? 16)
         let roleWidth  = 10
-        let prepWidth  = 30
+        let prepWidth  = 22
 
         let nameHdr  = "Name".padding(toLength: nameWidth,  withPad: " ", startingAt: 0)
         let roleHdr  = "Role".padding(toLength: roleWidth,  withPad: " ", startingAt: 0)
         let prepHdr  = "Prepositions".padding(toLength: prepWidth, withPad: " ", startingAt: 0)
-        print("  \(nameHdr)  \(roleHdr)  \(prepHdr)")
-        print("  \(String(repeating: "─", count: nameWidth))  \(String(repeating: "─", count: roleWidth))  \(String(repeating: "─", count: prepWidth))")
+        print("  \(nameHdr)  \(roleHdr)  \(prepHdr)  Verbs")
+        print("  \(String(repeating: "─", count: nameWidth))  \(String(repeating: "─", count: roleWidth))  \(String(repeating: "─", count: prepWidth))  \(String(repeating: "─", count: 40))")
 
         for action in actions {
             let name  = action.name.padding(toLength: nameWidth, withPad: " ", startingAt: 0)
             let role  = action.role.rawValue.padding(toLength: roleWidth, withPad: " ", startingAt: 0)
-            let preps = action.prepositions.isEmpty ? "(any)" : action.prepositions.joined(separator: ", ")
-            print("  \(name)  \(role)  \(preps)")
+            let preps = (action.prepositions.isEmpty ? "(any)" : action.prepositions.sorted().joined(separator: ", "))
+                          .padding(toLength: prepWidth, withPad: " ", startingAt: 0)
+            // Verbs are the spellings users actually write. Omitting them made
+            // `CreateDirectory` and `Keepalive` — both in this project's own
+            // examples — impossible to find here (GitLab #483).
+            let verbs = action.verbs.sorted().joined(separator: ", ")
+            print("  \(name)  \(role)  \(preps)  \(verbs)")
         }
 
         print("")
         print("  \(actions.count) built-in \(actions.count == 1 ? "action" : "actions")")
+        print("  Run 'aro actions <name-or-verb>' for one action's details.")
     }
 
     private func printPluginActions(_ actions: [ActionRegistry.PluginActionInfo]) {
