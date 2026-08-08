@@ -1395,15 +1395,19 @@ public final class Parser {
         let startToken = peek()
         let base = try parseCompoundIdentifier()
         var typeAnnotation: String? = nil
+        var isLiteralQualifier = false
 
         if check(.colon) {
             advance()
 
             // ARO-0068: Check for string literal after colon (e.g., <command: "uptime">)
-            // This allows commands and other values to be specified inline
+            // This allows commands and other values to be specified inline.
+            // Flag it so the value is never mistaken for a dot-separated property
+            // path — `<file: "data.json">` is the path `data.json`, not `data` → `json`.
             if case .stringLiteral(let value) = peek().kind {
                 advance()
                 typeAnnotation = value
+                isLiteralQualifier = true
             } else {
                 // Parse type annotation (ARO-0006)
                 typeAnnotation = try parseTypeAnnotation()
@@ -1413,7 +1417,8 @@ public final class Parser {
         return QualifiedNoun(
             base: base,
             typeAnnotation: typeAnnotation,
-            span: startToken.span.merged(with: previous().span)
+            span: startToken.span.merged(with: previous().span),
+            isLiteralQualifier: isLiteralQualifier
         )
     }
 
