@@ -80,6 +80,10 @@ public final class TemplateExecutor: @unchecked Sendable {
 
         let templateContext = runtimeContext.createTemplateContext()
         templateContext.register(templateService)
+        // GitLab #476: escape-by-default for HTML templates. Derived from the
+        // template's extension, so `Print … to the <template>` is safe in an
+        // .html file without the author having to remember.
+        templateContext.setTemplateEscaping(TemplateEscaping.forTemplate(path: template.path))
 
         // Inject terminal object (mirrors render()) — always bind with defaults for non-TTY contexts
         let terminalObject: [String: any Sendable]
@@ -215,6 +219,10 @@ public final class TemplateExecutor: @unchecked Sendable {
 
         // Register the template service for nested includes
         templateContext.register(templateService)
+        // GitLab #476: escape-by-default for HTML templates. Derived from the
+        // template's extension, so `Print … to the <template>` is safe in an
+        // .html file without the author having to remember.
+        templateContext.setTemplateEscaping(TemplateEscaping.forTemplate(path: template.path))
 
         // Inject terminal object (ARO-0052) — always bind with defaults for non-TTY contexts
         let terminalObject: [String: any Sendable]

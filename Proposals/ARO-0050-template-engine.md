@@ -199,6 +199,56 @@ Print expression to the <template>.
 {{ Print <count> * 100 to the <template>. }}
 ```
 
+### 6.4 Output Escaping
+
+Values printed into an **HTML** template are HTML-escaped by default. Static
+template text is never touched — only interpolated values are escaped.
+
+| Template extension | Escaping |
+|--------------------|----------|
+| `.html`, `.htm` | `& < > " '` are escaped |
+| everything else (`.tpl`, `.txt`, `.md`, …) | none |
+
+```aro
+(* templates/page.html *)
+<h1>{{ Print <name> to the <template>. }}</h1>
+```
+
+With `name` = `<script>alert(1)</script>`, the output is
+`<h1>&lt;script&gt;alert(1)&lt;/script&gt;</h1>`.
+
+**Threat model**: a template rendering data that came from `<request: …>`,
+`<parameter: …>`, a repository, or a file is rendering attacker-influenced text.
+Without escaping, that is stored or reflected XSS, and before this rule there was
+no way to write the safe version — no escaping primitive existed. Escaping by
+default is the only setting that makes the safe path the short path.
+
+Note this is **not** the Mustache convention the `{{ }}` syntax resembles.
+Mustache escapes `{{ }}` and requires `{{{ }}}` to opt out; ARO's `{{ }}`
+previously behaved like Mustache's `{{{ }}}`, which is the worst combination for
+reader expectations.
+
+#### Opting out
+
+To emit trusted markup verbatim, qualify the **target**:
+
+```aro
+{{ Print <trusted-html> to the <template: raw>. }}
+```
+
+The qualifier goes on `<template>`, not on the value: result specifiers are
+resolved as qualifiers or property access before `Print` runs, so
+`<trusted-html: raw>` fails as an undefined member. Qualifying the target also
+matches `<console: error>` for stream selection.
+
+Only use `raw` for markup your own code produced. For anything derived from
+input, escape explicitly with the standard-library primitives instead
+(ARO-0019 §3.1):
+
+```aro
+Compute the <safe: html-escape> from <user-input>.
+```
+
 ## 7. Variable Interpolation Shorthand
 
 ### 7.1 Syntax
