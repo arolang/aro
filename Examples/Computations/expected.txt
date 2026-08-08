@@ -24,9 +24,9 @@ Quantity:
 Subtotal:
 300
 Tax (8%):
-24.00
+24
 Total:
-324.00
+324
 Number of items:
 4
 === Demo Complete ===

@@ -115,7 +115,7 @@ public struct ResponseFormatter: Sendable {
         case let int as Int:
             return String(int)
         case let double as Double:
-            return String(format: "%.2f", double)
+            return AroNumberFormatting.string(for: double)
         case let bool as Bool:
             return bool ? "true" : "false"
         case let response as Response:
@@ -226,7 +226,7 @@ public struct ResponseFormatter: Sendable {
         case let int as Int:
             return String(int)
         case let double as Double:
-            return String(format: "%.2f", double)
+            return AroNumberFormatting.string(for: double)
         case let bool as Bool:
             return bool ? "true" : "false"
         case let dict as [String: any Sendable]:

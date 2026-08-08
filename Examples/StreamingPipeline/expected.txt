@@ -257,13 +257,13 @@ year: 2024
 
 === Aggregation Results ===
 Total Amount:
-5650.00
+5650
 Transaction Count:
 4
 Average Amount:
-1412.50
+1412.5
 Max Amount:
-2000.00
+2000
 
 === Pipeline Complete ===
 In streaming mode, each row flows through all 5 filter stages.

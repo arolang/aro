@@ -6,9 +6,9 @@
 original:
 100
 after 20% discount:
-80.00
+80
 after 10% tax:
-88.00
+88
 === 2. Qualifier-as-Name ===
 first-word length:
 5
@@ -27,13 +27,13 @@ double length:
 price:
 10
 after tax:
-12.00
+12
 price:
 25
 after tax:
-30.00
+30
 price:
 50
 after tax:
-60.00
+60
 startup

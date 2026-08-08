@@ -20,6 +20,6 @@ true
 Object as JSON:
 --- Integer to Double ---
 Integer 100 as double:
-100.00
+100
 All conversions complete!
 demo
