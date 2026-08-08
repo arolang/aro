@@ -74,8 +74,20 @@ public struct ExecResult: Sendable, Codable, CustomStringConvertible {
 
 /// Configuration for command execution
 public struct ExecConfig: Sendable {
-    /// The shell command to execute
+    /// The shell command to execute, or — when `argv` is set — a display-only
+    /// rendering of the argument vector.
     public let command: String
+
+    /// The argument vector to execute directly, bypassing the shell.
+    ///
+    /// When non-nil, `argv[0]` is the executable (resolved through `PATH`) and the
+    /// remaining elements are passed as literal arguments. No shell is involved, so
+    /// no element can be interpreted as a metacharacter.
+    ///
+    /// When nil, `command` is handed to `shell -c`, which *does* interpret
+    /// metacharacters — that is the point of the single-string form
+    /// (`Exec the <r> for the <command: "ps aux | head">.`).
+    public let argv: [String]?
 
     /// Working directory (default: current)
     public let workingDirectory: String?
@@ -94,6 +106,7 @@ public struct ExecConfig: Sendable {
 
     public init(
         command: String,
+        argv: [String]? = nil,
         workingDirectory: String? = nil,
         environment: [String: String]? = nil,
         timeout: Int = 30000,
@@ -101,11 +114,45 @@ public struct ExecConfig: Sendable {
         captureStderr: Bool = true
     ) {
         self.command = command
+        self.argv = argv
         self.workingDirectory = workingDirectory
         self.environment = environment
         self.timeout = timeout
         self.shell = shell
         self.captureStderr = captureStderr
+    }
+
+    /// Builds a shell-free config from an argument vector.
+    ///
+    /// - Parameter argv: `argv[0]` is the executable; the rest are literal arguments.
+    public static func direct(
+        argv: [String],
+        workingDirectory: String? = nil,
+        environment: [String: String]? = nil,
+        timeout: Int = 30000,
+        captureStderr: Bool = true
+    ) -> ExecConfig {
+        ExecConfig(
+            command: displayString(for: argv),
+            argv: argv,
+            workingDirectory: workingDirectory,
+            environment: environment,
+            timeout: timeout,
+            captureStderr: captureStderr
+        )
+    }
+
+    /// Renders an argv for humans, quoting any element that is not a plain token.
+    ///
+    /// Display only — this string is never executed.
+    static func displayString(for argv: [String]) -> String {
+        argv.map { element in
+            let needsQuoting = element.isEmpty || element.contains(where: {
+                !($0.isLetter || $0.isNumber || "-_./=:@+".contains($0))
+            })
+            guard needsQuoting else { return element }
+            return "'" + element.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+        }.joined(separator: " ")
     }
 }
 
@@ -130,6 +177,30 @@ public struct ExecConfig: Sendable {
 ///
 /// (* Legacy: Full command in with clause *)
 /// <Execute> the <result> for the <command> with "ls -la".
+/// ```
+///
+/// ## Shell interpretation
+///
+/// There are two execution modes, and the difference matters for security:
+///
+/// - **With a `with` clause** the qualifier names an executable and the `with`
+///   values are its arguments. They are passed as a literal argument vector with
+///   **no shell**, so metacharacters in them are inert. A single string is split
+///   on whitespace (`with "-l -a"` → two flags); use the array form for an
+///   argument that must contain whitespace (`with ["-m", "two words"]`).
+///   This is the form to use for anything derived from untrusted input.
+///
+/// - **Without a `with` clause** the qualifier is a full command line run through
+///   `/bin/sh -c`, so pipes and redirection work:
+///   `<Execute> the <result> for the <command: "ps aux | head -20">.`
+///   Never build this string from untrusted input — it is shell-interpreted.
+///
+/// ```aro
+/// (* Safe: the value is one argument, whatever it contains *)
+/// <Execute> the <r> for the <command: "echo"> with <untrusted>.
+///
+/// (* Shell-interpreted: only for command lines you control *)
+/// <Execute> the <r> for the <command: "ps aux | head -20">.
 ///
 /// (* With configuration object *)
 /// <Execute> the <result> on the <system> with {
@@ -197,25 +268,32 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
         // NEW SYNTAX: <Exec> the <result> for the <command: "uptime"> with "-args".
         // When object.base is "command" and specifiers contain the command name,
         // treat the "with" clause as arguments rather than the full command.
-        if object.base == "command" && !object.specifiers.isEmpty {
-            // The first specifier is the command name (e.g., "uptime" from <command: "uptime">)
-            let commandName = object.specifiers[0]
-
-            // Check for arguments in the "with" clause
+        if object.base == "command", let commandName = object.specifiers.first {
+            // Arguments from the "with" clause. These are passed as a literal argv,
+            // never spliced into a shell string — otherwise a value like
+            // "hello; rm -rf ." would execute as two commands (GitLab #471).
             var arguments: [String] = []
+            var hasWithClause = false
 
-            // Check _literal_ for string arguments
+            // A single string is whitespace-tokenised, so `with "-l -a"` still yields
+            // two flags. Tokens are passed literally, so shell metacharacters in them
+            // are inert. Use the array form for an argument containing spaces.
             if let literalArgs = context.resolveAny("_literal_") as? String, !literalArgs.isEmpty {
-                arguments.append(literalArgs)
+                hasWithClause = true
+                arguments.append(contentsOf: Self.tokenize(literalArgs))
             }
             // Check _expression_ for string or array arguments
             else if let expr = context.resolveAny("_expression_") {
                 if let stringArgs = expr as? String, !stringArgs.isEmpty {
-                    arguments.append(stringArgs)
+                    hasWithClause = true
+                    arguments.append(contentsOf: Self.tokenize(stringArgs))
                 } else if let arrayArgs = expr as? [String] {
+                    // Array elements are exact argv entries — never re-tokenised,
+                    // so `["--message", "hello world"]` stays two arguments.
+                    hasWithClause = true
                     arguments.append(contentsOf: arrayArgs)
                 } else if let arrayAnySendable = expr as? [any Sendable] {
-                    // Handle array of Any Sendable (convert to strings)
+                    hasWithClause = true
                     for arg in arrayAnySendable {
                         if let str = arg as? String {
                             arguments.append(str)
@@ -226,15 +304,22 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
                 }
             }
 
-            // Build the full command
-            let fullCommand: String
-            if arguments.isEmpty {
-                fullCommand = commandName
-            } else {
-                fullCommand = commandName + " " + arguments.joined(separator: " ")
+            // No `with` clause: the qualifier is a full command line, so keep the
+            // shell so that pipes and redirection still work
+            // (`<command: "ps aux | head -20">`).
+            guard hasWithClause else {
+                return ExecConfig(command: commandName)
             }
 
-            return ExecConfig(command: fullCommand)
+            // With a `with` clause the qualifier names an executable. Tokenise it too,
+            // so `<command: "python3 -u"> with <script>` behaves sensibly.
+            let argv = Self.tokenize(commandName) + arguments
+            guard !argv.isEmpty else {
+                throw ActionError.missingRequiredField(
+                    "command - '<command: \"...\">' resolved to an empty executable name"
+                )
+            }
+            return ExecConfig.direct(argv: argv)
         }
 
         // LEGACY SYNTAX: <Exec> the <result> for the <name> with "full command".
@@ -291,10 +376,39 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
 
     /// Fully synchronous process execution on a dedicated thread.
     /// Reads pipes concurrently with process execution to prevent buffer deadlocks.
+    /// Test hook for the process-execution path, so argv construction and shell
+    /// avoidance can be asserted without going through the full action pipeline.
+    static func runCommandSyncForTesting(_ config: ExecConfig) -> ExecResult {
+        runCommandSync(config)
+    }
+
+    /// Splits a string into argv tokens on whitespace.
+    ///
+    /// Deliberately does *not* honour quotes: tokens are handed to the process
+    /// verbatim, so there is no quoting layer to get wrong. An argument that must
+    /// contain whitespace is passed via the array form (`with ["-m", "two words"]`).
+    static func tokenize(_ input: String) -> [String] {
+        input.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    }
+
     private static func runCommandSync(_ config: ExecConfig) -> ExecResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: config.shell)
-        process.arguments = ["-c", config.command]
+
+        if let argv = config.argv, let executable = argv.first {
+            // Shell-free execution: `env` performs the PATH lookup without
+            // interpreting any argument (GitLab #471). Arguments reach the process
+            // exactly as written, so metacharacters in them are inert.
+            if executable.contains("/") {
+                process.executableURL = URL(fileURLWithPath: executable)
+                process.arguments = Array(argv.dropFirst())
+            } else {
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = argv
+            }
+        } else {
+            process.executableURL = URL(fileURLWithPath: config.shell)
+            process.arguments = ["-c", config.command]
+        }
 
         if let workDir = config.workingDirectory {
             process.currentDirectoryURL = URL(fileURLWithPath: workDir)
