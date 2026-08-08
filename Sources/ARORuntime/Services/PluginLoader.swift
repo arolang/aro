@@ -253,7 +253,7 @@ public final class PluginLoader: @unchecked Sendable {
     /// Extract the handler namespace from a plugin.yaml file.
     ///
     /// Priority:
-    /// 1. Root-level `handle:` (canonical PascalCase field, ARO-0095)
+    /// 1. Root-level `handle:` (canonical PascalCase field, GitLab #95)
     /// 2. `handler:` inside `provides:` entries (legacy, still supported)
     private func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
         var insideProvides = false

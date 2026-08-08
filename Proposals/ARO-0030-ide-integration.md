@@ -190,7 +190,7 @@ aro lsp  # Start language server
 
 - **ARO-0001**: Core Syntax (defines the grammar)
 - **ARO-0015**: Testing Framework (test syntax highlighting)
-- **ARO-0027**: OpenAPI Integration (schema references)
+- **ARO-0003**: Type System / OpenAPI Integration (schema references)
 
 ---
 

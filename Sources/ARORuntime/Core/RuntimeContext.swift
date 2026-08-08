@@ -128,7 +128,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Schema registry for typed event extraction (ARO-0046)
     nonisolated(unsafe) private var _schemaRegistry: SchemaRegistry?
 
-    /// Mutable scope depth for while loops (ARO-0131)
+    /// Mutable scope depth for while loops (GitLab #131)
     /// When > 0, all bind calls automatically allow rebinding
     nonisolated(unsafe) private var mutableScopeDepth: Int = 0
 

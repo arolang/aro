@@ -752,7 +752,7 @@ public func aro_action_arrange(
     return executeAction(verb: "arrange", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
-// MARK: - System Exec Action (ARO-0033)
+// MARK: - System Exec Action (ARO-0010)
 
 @_cdecl("aro_action_exec")
 public func aro_action_exec(

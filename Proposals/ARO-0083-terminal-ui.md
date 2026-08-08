@@ -1,6 +1,9 @@
-# ARO-0052: Terminal UI System
+# ARO-0083: Terminal UI System
 
-* Proposal: ARO-0052
+> **Renumbered from ARO-0052** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0052 for this document should be updated to ARO-0083.
+
+
+* Proposal: ARO-0083
 * Author: ARO Language Team
 * Status: **Implemented**
 * Requires: ARO-0001, ARO-0002, ARO-0004, ARO-0005, ARO-0007, ARO-0050

@@ -46,7 +46,7 @@ public struct OpenAPIRouteRegistry: Sendable {
         // Top-level webhooks (OpenAPI 3.1). The webhook map key is the natural
         // identifier: it becomes the request path and — when the operation
         // omits `operationId` — the feature-set name (webhook naming
-        // convention, ARO-0187). An explicit `operationId` still wins so
+        // convention, GitLab #187). An explicit `operationId` still wins so
         // authors can decouple the handler name from the webhook name.
         for (name, item) in spec.webhooks ?? [:] {
             let key = name.hasPrefix("/") ? name : "/\(name)"

@@ -2,8 +2,14 @@
 
 * Proposal: ARO-0056
 * Author: ARO Language Team
-* Status: **Implemented**
+* Status: **Superseded by [ARO-0082](ARO-0082-numeric-separators.md)**
 * Related Issues: GitLab #98
+
+> **Superseded.** This proposal and ARO-0082 (originally filed as ARO-0052)
+> specify the same feature — underscore separators in decimal numeric literals —
+> and both were marked Implemented, so neither could be trusted as the definitive
+> statement of the behaviour (GitLab #481). ARO-0082 is the more complete
+> document and is now authoritative; this one is kept for its GitLab #98 history.
 
 ## Abstract
 

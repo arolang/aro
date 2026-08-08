@@ -460,7 +460,7 @@ public final class Application: @unchecked Sendable {
                 }
                 var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
 
-                // Validate response body against OpenAPI response schema (ARO-0180)
+                // Validate response body against OpenAPI response schema (GitLab #180)
                 if let body = httpResponse.body,
                    let bodyJSON = try? JSONSerialization.jsonObject(with: body) {
                     let components = self.routeRegistry?.spec.components

@@ -404,7 +404,7 @@ Error: Missing ARO feature set handlers for the following operations:
 Create feature sets with names matching the operationIds in your OpenAPI contract.
 ```
 
-### 2.8 Webhooks and Callbacks (ARO-0187)
+### 2.8 Webhooks and Callbacks (GitLab #187)
 
 ARO parses OpenAPI's webhook and callback constructs and routes **incoming
 webhooks** to feature sets.

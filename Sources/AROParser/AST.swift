@@ -833,7 +833,7 @@ public struct ErrorStatement: Statement {
     }
 }
 
-// MARK: - While Loop (ARO-0002 extension, ARO-0131)
+// MARK: - While Loop (ARO-0002 extension, GitLab #131)
 
 /// An unbounded `while <condition> { body }` loop.
 ///

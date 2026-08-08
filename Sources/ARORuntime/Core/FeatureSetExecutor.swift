@@ -1225,7 +1225,7 @@ public final class FeatureSetExecutor: Sendable {
         return true  // Non-nil values are truthy
     }
 
-    // MARK: - While Loop Execution (ARO-0131)
+    // MARK: - While Loop Execution (GitLab #131)
 
     private func executeWhileLoop(
         _ loop: WhileLoop,

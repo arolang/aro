@@ -16,7 +16,7 @@ public enum SystemActionsModule: ActionModule {
             // External integration (ARO-0016)
             CallAction.self,
 
-            // Shell execution (ARO-0033)
+            // Shell execution (ARO-0010)
             ExecuteAction.self,
 
             // Template rendering (ARO-0050)

@@ -1,6 +1,6 @@
 // ============================================================
 // SocketActionsModule.swift
-// ARO Runtime - Socket action module (ARO-0024)
+// ARO Runtime - Socket action module (ARO-0008)
 // ============================================================
 
 /// Socket actions manage TCP connections and bidirectional messaging.
