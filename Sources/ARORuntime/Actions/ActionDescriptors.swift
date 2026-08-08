@@ -22,6 +22,13 @@ public struct ResultDescriptor: Sendable, Equatable, CustomStringConvertible {
     /// Source location for error reporting
     public let span: SourceSpan
 
+    /// The `as <Type>` result annotation, when the statement carried one.
+    ///
+    /// Distinct from `specifiers`: a qualifier selects the operation
+    /// (`<n: length>`), `as` requests the result type (`as Float`). See
+    /// `ResultTypeCoercion` (GitLab #475).
+    public let asType: String?
+
     /// Full qualified name for display
     public var fullName: String {
         specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: "."))"
@@ -42,13 +49,15 @@ public struct ResultDescriptor: Sendable, Equatable, CustomStringConvertible {
         self.base = qualifiedNoun.base
         self.specifiers = qualifiedNoun.specifiers
         self.span = qualifiedNoun.span
+        self.asType = qualifiedNoun.asType
     }
 
     /// Initialize with explicit values
-    public init(base: String, specifiers: [String] = [], span: SourceSpan) {
+    public init(base: String, specifiers: [String] = [], span: SourceSpan, asType: String? = nil) {
         self.base = base
         self.specifiers = specifiers
         self.span = span
+        self.asType = asType
     }
 
     public var description: String {

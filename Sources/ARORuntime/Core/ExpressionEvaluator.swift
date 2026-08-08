@@ -64,7 +64,26 @@ import AROParser
 /// `ConstantFolder` and the compiled-binary `evaluateBinaryOp`.
 public struct ExpressionEvaluator: Sendable {
 
-    public init() {}
+    /// How Int-valued arithmetic is treated.
+    public enum NumericMode: Sendable {
+        /// Int ⊕ Int stays Int; `/` truncates. The default.
+        case natural
+        /// Int ⊕ Int is evaluated in floating point and the result stays a
+        /// Double, so `7 / 2` is 3.5. Selected by an `as Float` / `as Double`
+        /// result annotation (GitLab #475).
+        case float
+    }
+
+    /// The numeric mode for this evaluator.
+    ///
+    /// Stored rather than threaded through `evaluate` because evaluation is
+    /// deeply recursive: every nested call uses `self`, so the mode reaches
+    /// sub-expressions automatically and `7 / 2 + 1` behaves consistently.
+    public let numericMode: NumericMode
+
+    public init(numericMode: NumericMode = .natural) {
+        self.numericMode = numericMode
+    }
 
     /// Evaluates an expression in the given context
     /// - Parameters:
@@ -260,16 +279,25 @@ public struct ExpressionEvaluator: Sendable {
                 doubleOp: { $0 * $1 }
             )
         case .divide:
-            // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
-            if let li = left as? Int, let ri = right as? Int {
+            // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior).
+            // Skipped in .float mode so `<x> / 2 as Float` yields 3.5 rather than 3.
+            if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
                 guard ri != 0 else { throw ActionError.runtimeError("Division by zero") }
                 // Int.min / -1 overflows — the quotient is not representable.
                 let (value, overflow) = li.dividedReportingOverflow(by: ri)
                 guard !overflow else { throw Self.overflowError(li, "/", ri) }
                 return value
             }
-            // Mixed Int/Double divide — the Int/Int case is fully handled above,
-            // including its distinct zero-divisor message.
+            // Everything that reaches here divides in Double: mixed Int/Double in
+            // either mode, and Int/Int in `.float` mode. The Int/Int `.natural` case
+            // is fully handled above, including its distinct zero-divisor message —
+            // so `.float` has to guard the zero divisor itself.
+            if numericMode == .float, let ri = right as? Int, ri == 0 {
+                throw ActionError.runtimeError("Division by zero")
+            }
+            if numericMode == .float, let rd = right as? Double, rd == 0 {
+                throw ActionError.runtimeError("Division by zero")
+            }
             return try asDouble(left) / asDouble(right)
         case .modulo:
             return try intOperation(left, right, symbol: "%") { $0.remainderReportingOverflow(dividingBy: $1) }
@@ -480,6 +508,9 @@ public struct ExpressionEvaluator: Sendable {
     /// that did fit (GitLab #472). Both operands being Int now takes an exact Int
     /// path with overflow reporting; mixed operands still go through Double, where
     /// the narrowing branch is unreachable and the result stays a Double.
+    ///
+    /// The Int path is skipped in `.float` mode: the caller asked for a Double, and
+    /// keeping `<x> * 2 as Float` in Int would drop the annotation again (#475).
     private func numericOperation(
         _ left: any Sendable,
         _ right: any Sendable,
@@ -487,7 +518,7 @@ public struct ExpressionEvaluator: Sendable {
         intOp: (Int, Int) -> (partialValue: Int, overflow: Bool),
         doubleOp: (Double, Double) -> Double
     ) throws -> any Sendable {
-        if let li = left as? Int, let ri = right as? Int {
+        if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
             let (value, overflow) = intOp(li, ri)
             guard !overflow else { throw Self.overflowError(li, symbol, ri) }
             return value

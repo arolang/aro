@@ -946,6 +946,16 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     public let typeAnnotation: String?  // Raw type string (e.g., "String", "List<User>")
     public let span: SourceSpan
 
+    /// The `as <Type>` result annotation, when present.
+    ///
+    /// Kept separate from `typeAnnotation` because the two are different things:
+    /// the qualifier selects an *operation* (`<n: length>`), while `as` requests a
+    /// *result type* (`as Float`). The parser used to overwrite `typeAnnotation`
+    /// with the `as` type, which silently discarded the operation — so
+    /// `Compute the <m: length> as Integer from <s>.` computed the identity and
+    /// returned the string, not its length (GitLab #475).
+    public let asType: String?
+
     /// True when the qualifier was written as a quoted string literal, e.g. `<file: "data.json">`.
     ///
     /// A quoted literal is a value, not a property path, so it must never be split on `.`.
@@ -989,11 +999,13 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         base: String,
         typeAnnotation: String? = nil,
         span: SourceSpan,
+        asType: String? = nil,
         isLiteralQualifier: Bool = false
     ) {
         self.base = base
         self.typeAnnotation = typeAnnotation
         self.span = span
+        self.asType = asType
         self.isLiteralQualifier = isLiteralQualifier
     }
 
@@ -1002,6 +1014,7 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         self.base = base
         self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
         self.span = span
+        self.asType = nil
         self.isLiteralQualifier = false
     }
 

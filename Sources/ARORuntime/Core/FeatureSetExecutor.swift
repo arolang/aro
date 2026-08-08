@@ -520,7 +520,15 @@ public final class FeatureSetExecutor: Sendable {
 
         // ARO-0002: Evaluate expression if present
         if case .expression(let expression) = statement.valueSource {
-            let expressionValue = try await expressionEvaluator.evaluate(expression, context: context)
+            // GitLab #475: an `as Float` / `as Double` result annotation puts the
+            // expression in floating-point mode, so `<x> / 2 as Float` is 3.5
+            // instead of truncating to 3. Coercing after the fact cannot work —
+            // by then the integer division has already happened.
+            let evaluator = ResultTypeCoercion.evaluator(
+                for: statement.result.asType,
+                default: expressionEvaluator
+            )
+            let expressionValue = try await evaluator.evaluate(expression, context: context)
             context.bind("_expression_", value: expressionValue)
 
             // ARO-0042: If preposition is "with" and object is expression, also bind to _with_

@@ -552,11 +552,20 @@ public final class Parser {
         var result = try parseQualifiedNoun()
         try expect(.rightAngle, message: "'>'")
 
-        // ARO-0038: optional 'as Type' annotation
+        // ARO-0038: optional 'as Type' annotation.
+        // Recorded in `asType`, NOT by overwriting `typeAnnotation` — the
+        // qualifier selects the operation and `as` requests the result type, so
+        // clobbering one with the other silently changed what the statement
+        // computed (GitLab #475).
         if check(.as) {
             advance()
-            let typeAnnotation = try parseTypeAnnotation()
-            result = QualifiedNoun(base: result.base, typeAnnotation: typeAnnotation, span: result.span)
+            let asType = try parseTypeAnnotation()
+            result = QualifiedNoun(
+                base: result.base,
+                typeAnnotation: result.typeAnnotation,
+                span: result.span,
+                asType: asType
+            )
         }
 
         return (result, nil)
