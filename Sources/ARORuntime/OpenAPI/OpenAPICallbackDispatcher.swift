@@ -1,12 +1,12 @@
 // ============================================================
 // OpenAPICallbackDispatcher.swift
-// ARO Runtime - OpenAPI Outbound Callback Dispatch (ARO-0187)
+// ARO Runtime - OpenAPI Outbound Callback Dispatch (GitLab #187)
 // ============================================================
 
 import Foundation
 
 /// Fires the out-of-band HTTP requests described by an operation's OpenAPI
-/// Callback Objects (server-initiated / outgoing webhooks, ARO-0187).
+/// Callback Objects (server-initiated / outgoing webhooks, GitLab #187).
 ///
 /// An `Operation.callbacks` map associates a *callback name* with a Callback
 /// Object, which is itself a map from an OpenAPI *runtime expression*

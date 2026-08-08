@@ -1195,7 +1195,7 @@ public final class LLVMCodeGenerator {
         ctx.setInsertionPoint(atEndOf: endBlock)
     }
 
-    // MARK: - While Loop Generation (ARO-0131)
+    // MARK: - While Loop Generation (GitLab #131)
 
     private func generateWhileLoop(_ loop: WhileLoop, index: Int, errorBlock: BasicBlock) {
         let prefix = "while\(index)"

@@ -13,7 +13,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
     private let eventBus: EventBus
     private let spec: OpenAPISpec
 
-    /// Optional seam for firing outbound OpenAPI callbacks (ARO-0187).
+    /// Optional seam for firing outbound OpenAPI callbacks (GitLab #187).
     ///
     /// Outbound callbacks are **off by default**: unless a runtime injects an
     /// invoker here, a matched operation's `callbacks` are parsed and available
@@ -221,7 +221,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         eventBus.publish(legacyEvent)
 
         // Fire any outbound OpenAPI callbacks declared on the matched operation
-        // (ARO-0187). This runs only when a runtime has opted in by injecting a
+        // (GitLab #187). This runs only when a runtime has opted in by injecting a
         // callback invoker; otherwise callbacks are inert. Dispatch is
         // fire-and-forget so the callback round-trip never blocks the response.
         if let invoker = callbackInvoker, match.operation.callbacks != nil {

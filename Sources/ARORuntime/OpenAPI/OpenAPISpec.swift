@@ -152,7 +152,7 @@ public struct Server: Sendable, Codable {
         resolvedURL(overrides: [:])
     }
 
-    /// Returns the URL with each `{name}` placeholder substituted (ARO-0195).
+    /// Returns the URL with each `{name}` placeholder substituted (GitLab #195).
     ///
     /// A value from `overrides` wins when present; otherwise the Server
     /// Variable's `default` is used. Overrides that are not declared in the
@@ -189,7 +189,7 @@ public struct PathItem: Sendable, Codable {
     public let options: Operation?
     public let trace: Operation?
     public let parameters: [Parameter]?
-    /// PathItem-level `servers` override (ARO-0195).
+    /// PathItem-level `servers` override (GitLab #195).
     ///
     /// When present, these servers override the root-level `servers` for every
     /// operation on this path (unless an operation declares its own `servers`).
@@ -226,11 +226,11 @@ public struct Operation: Sendable, Codable {
     ///
     /// Each Callback Object is itself a map from an OpenAPI *runtime expression*
     /// (e.g. `{$request.body#/callbackUrl}`) to a Path Item describing the
-    /// out-of-band request the server makes back to the caller (ARO-0187).
+    /// out-of-band request the server makes back to the caller (GitLab #187).
     public let callbacks: [String: Callback]?
     /// Operation-level External Documentation Object
     public let externalDocs: ExternalDocumentation?
-    /// Operation-level `servers` override (ARO-0195).
+    /// Operation-level `servers` override (GitLab #195).
     ///
     /// When present, these servers override both the PathItem-level and
     /// root-level `servers` for this specific operation. Stored so they are
@@ -268,7 +268,7 @@ public struct Operation: Sendable, Codable {
 
 // MARK: - Callback
 
-/// OpenAPI Callback Object (ARO-0187).
+/// OpenAPI Callback Object (GitLab #187).
 ///
 /// A Callback Object maps a *runtime expression* — used to build the target
 /// URL for an out-of-band request — to a `PathItem` describing that request.

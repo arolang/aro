@@ -833,7 +833,7 @@ public struct ErrorStatement: Statement {
     }
 }
 
-// MARK: - While Loop (ARO-0002 extension, ARO-0131)
+// MARK: - While Loop (ARO-0002 extension, GitLab #131)
 
 /// An unbounded `while <condition> { body }` loop.
 ///
@@ -940,6 +940,7 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
 /// - `<name: String>` - Primitive type annotation
 /// - `<items: List<Order>>` - Collection type annotation
 /// - `<user: User>` - OpenAPI schema type annotation
+/// - `<file: "data.json">` - Quoted string literal (an opaque value, never a property path)
 public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     public let base: String
     public let typeAnnotation: String?  // Raw type string (e.g., "String", "List<User>")
@@ -955,9 +956,20 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     /// returned the string, not its length (GitLab #475).
     public let asType: String?
 
+    /// True when the qualifier was written as a quoted string literal, e.g. `<file: "data.json">`.
+    ///
+    /// A quoted literal is a value, not a property path, so it must never be split on `.`.
+    /// Without this the extension of a bare relative filename is silently discarded and
+    /// `<file: "data.json">` resolves to the path `data`.
+    public let isLiteralQualifier: Bool
+
     // Specifiers are parsed from typeAnnotation as dot-separated property path
     public var specifiers: [String] {
         guard let type = typeAnnotation else { return [] }
+        // A quoted string literal is an opaque value — never a property path.
+        if isLiteralQualifier {
+            return [type]
+        }
         // Qualifier chains (e.g., "stats.sort|list.take") are returned as a single element
         // so that the runtime can detect and handle them via resolveChain.
         if type.contains("|") {
@@ -965,15 +977,6 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         }
         // If it contains < it's a generic type like List<User>, return as single element
         if type.contains("<") {
-            return [type]
-        }
-        // If it looks like a file path, don't split by dots (preserve extensions)
-        // File paths start with /, ./, ../, or ~ (home directory)
-        if type.hasPrefix("/") || type.hasPrefix("./") || type.hasPrefix("../") || type.hasPrefix("~") {
-            return [type]
-        }
-        // If it looks like a URL, don't split by dots (ARO-0052)
-        if type.hasPrefix("http://") || type.hasPrefix("https://") {
             return [type]
         }
         // Split by dots for property path syntax (e.g., "customer.address.city")
@@ -996,12 +999,14 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         base: String,
         typeAnnotation: String? = nil,
         span: SourceSpan,
-        asType: String? = nil
+        asType: String? = nil,
+        isLiteralQualifier: Bool = false
     ) {
         self.base = base
         self.typeAnnotation = typeAnnotation
         self.span = span
         self.asType = asType
+        self.isLiteralQualifier = isLiteralQualifier
     }
 
     /// Initializer for when you have a specifiers array (joins with dots)
@@ -1010,6 +1015,7 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
         self.span = span
         self.asType = nil
+        self.isLiteralQualifier = false
     }
 
     /// The full qualified name

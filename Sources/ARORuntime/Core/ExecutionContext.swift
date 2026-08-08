@@ -505,10 +505,16 @@ public extension VariableBinding {
 
     /// Resolve a string value from a descriptor's specifiers and base, using the
     /// standard ARO resolution order:
-    ///   1. First specifier resolved as a context variable
+    ///   1. Specifier resolved as a context variable
     ///   2. Base resolved as a context variable
     ///   3. Base used as a literal (unless it's a generic keyword like "file" or "directory")
-    ///   4. First specifier used as a literal
+    ///   4. Specifier used as a literal
+    ///
+    /// The specifiers are rejoined with `.` before resolution, because this helper
+    /// resolves *paths*: an unquoted `<file: data.json>` is parsed as the property
+    /// path `["data", "json"]`, and taking only the first element silently drops the
+    /// extension (GitLab #470). Rejoining restores `data.json`, and is a no-op for
+    /// the single-specifier cases (`<file: hello-file>`, `<file: "data.json">`).
     ///
     /// - Parameters:
     ///   - base: The descriptor's base identifier
@@ -525,10 +531,11 @@ public extension VariableBinding {
         field: String,
         action: String
     ) throws -> String {
-        if let spec = specifiers.first, let v: String = resolve(spec) { return v }
+        let specifier = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
+        if let spec = specifier, let v: String = resolve(spec) { return v }
         if let v: String = resolve(base) { return v }
         if !excluding.contains(base) { return base }
-        if let spec = specifiers.first { return spec }
+        if let spec = specifier { return spec }
         throw ActionError.missingRequiredField(field: field, action: action)
     }
 

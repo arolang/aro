@@ -122,7 +122,7 @@ extension OpenAPILoadError: CustomStringConvertible {
 
 extension OpenAPISpec {
     /// Environment variable used to select which root server ARO binds when a
-    /// spec declares multiple `servers` (ARO-0195). Accepts a zero-based index
+    /// spec declares multiple `servers` (GitLab #195). Accepts a zero-based index
     /// (e.g. `1`) or a server `description` string. When unset or unmatched the
     /// first server is used, preserving single-server behaviour.
     public static let serverSelectionEnvVar = "ARO_OPENAPI_SERVER"
@@ -133,7 +133,7 @@ extension OpenAPISpec {
         return (value?.isEmpty == false) ? value : nil
     }
 
-    /// Selects the root-level server to bind (ARO-0195).
+    /// Selects the root-level server to bind (GitLab #195).
     ///
     /// - Parameter selection: `nil`/empty → the first server (default).
     ///   An integer string selects by zero-based index; any other string
@@ -158,7 +158,7 @@ extension OpenAPISpec {
     }
 
     /// Effective servers for a path+operation, applying OpenAPI precedence:
-    /// operation-level > path-level > root-level (ARO-0195). Returns `nil`
+    /// operation-level > path-level > root-level (GitLab #195). Returns `nil`
     /// only when no servers are declared at any level.
     public func effectiveServers(path: String, operation: Operation) -> [Server]? {
         if let opServers = operation.servers, !opServers.isEmpty { return opServers }
@@ -199,7 +199,7 @@ extension OpenAPISpec {
 
         // `paths` operations must carry an operationId (it is the feature-set
         // name). Top-level `webhooks` (OpenAPI 3.1) may omit it: the webhook
-        // map key becomes the handler name (ARO-0187), so they are exempt.
+        // map key becomes the handler name (GitLab #187), so they are exempt.
         for (path, pathItem) in paths {
             for (method, operation) in pathItem.allOperations {
                 if operation.operationId == nil || operation.operationId?.isEmpty == true {

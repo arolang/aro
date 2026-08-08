@@ -68,7 +68,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case parallel           // parallel (for parallel for-each)
     case concurrency        // concurrency (for concurrency limit)
 
-    // Keywords - While Loop (ARO-0002 extension, ARO-0131)
+    // Keywords - While Loop (ARO-0002 extension, GitLab #131)
     case `while`            // while (unbounded loop)
     case `break`            // break (exit innermost loop)
 

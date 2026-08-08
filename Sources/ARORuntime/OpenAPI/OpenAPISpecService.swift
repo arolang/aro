@@ -28,7 +28,7 @@ public final class OpenAPISpecService: Sendable {
         spec.serverHost
     }
 
-    /// The root server ARO binds, honouring `ARO_OPENAPI_SERVER` selection (ARO-0195).
+    /// The root server ARO binds, honouring `ARO_OPENAPI_SERVER` selection (GitLab #195).
     public var selectedServer: Server? {
         spec.effectiveRootServer
     }

@@ -218,7 +218,7 @@ public struct ExtractAction: SynchronousAction {
             }
         }
 
-        // Single numeric index (0 = last element, reverse indexing per ARO-0032)
+        // Single numeric index (0 = last element, reverse indexing per ARO-0038)
         if let index = Int(spec), index >= 0, index < array.count {
             return array[array.count - 1 - index]
         }
@@ -808,7 +808,7 @@ public struct ReadAction: ActionImplementation {
 
         // Handle <url: ...> pattern for HTTP GET (ARO-0052)
         // Check URL first before requiring FileSystemService
-        if object.base == "url", let specifier = object.specifiers.first {
+        if object.base == "url", let specifier = object.pathSpecifier {
             let urlString: String
             if let resolvedURL: String = context.resolve(specifier) {
                 urlString = resolvedURL
@@ -825,7 +825,7 @@ public struct ReadAction: ActionImplementation {
 
         // Get file path - handle <file: path-variable> pattern
         let path: String
-        if object.base == "file", let specifier = object.specifiers.first {
+        if object.base == "file", let specifier = object.pathSpecifier {
             // Pattern: <file: path-variable> - resolve the specifier as the path
             if let resolvedPath: String = context.resolve(specifier) {
                 path = resolvedPath

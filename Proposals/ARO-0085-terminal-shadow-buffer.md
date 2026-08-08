@@ -1,4 +1,7 @@
-# ARO-0053: Terminal Shadow Buffer Optimization
+# ARO-0085: Terminal Shadow Buffer Optimization
+
+> **Renumbered from ARO-0053** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0053 for this document should be updated to ARO-0085.
+
 
 **Status**: Draft
 **Author**: ARO Team

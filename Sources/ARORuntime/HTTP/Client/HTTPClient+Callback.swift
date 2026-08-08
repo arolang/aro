@@ -1,6 +1,6 @@
 // ============================================================
 // HTTPClient+Callback.swift
-// ARO Runtime - AROHTTPClient as an OpenAPI callback invoker (ARO-0187)
+// ARO Runtime - AROHTTPClient as an OpenAPI callback invoker (GitLab #187)
 // ============================================================
 
 #if !os(Windows)

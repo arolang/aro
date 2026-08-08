@@ -1,4 +1,7 @@
-# ARO-0052: Local LLM Integration (`aro lm`)
+# ARO-0084: Local LLM Integration (`aro lm`)
+
+> **Renumbered from ARO-0052** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0052 for this document should be updated to ARO-0084.
+
 
 **Status:** Superseded by `aro ask` (0.10.0)
 **Author:** ARO team

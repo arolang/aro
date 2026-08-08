@@ -133,6 +133,55 @@ Strings support common operations through actions.
 }
 ```
 
+### 3.1 Encoding and Escaping
+
+ARO's primary use case is contract-first HTTP APIs, which means untrusted text
+routinely flows from a request into HTML, a URL, or a JSON body. These
+computations make that safe. They follow the same qualifier shape as
+`uppercase`/`lowercase`, so there is no new syntax.
+
+| Qualifier | Purpose | Example |
+|-----------|---------|---------|
+| `html-escape` | Escape `& < > " '` for HTML output | `Compute the <safe: html-escape> from <input>.` |
+| `url-encode` | Percent-encode a query-string value | `Compute the <enc: url-encode> from <query>.` |
+| `url-decode` | Reverse `url-encode` | `Compute the <dec: url-decode> from <raw>.` |
+| `base64-encode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
+| `base64-decode` | Reverse `base64-encode` | `Compute the <raw: base64-decode> from <b64>.` |
+| `base64url-encode` | URL-safe Base64 (RFC 4648 §5) — JWTs, URL payloads | `Compute the <tok: base64url-encode> from <payload>.` |
+| `base64url-decode` | Reverse `base64url-encode` | `Compute the <raw: base64url-decode> from <tok>.` |
+| `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |
+| `trim` | Strip leading/trailing whitespace | `Compute the <clean: trim> from <field>.` |
+| `replace` | Substring replacement | `Compute the <out: replace> from <text> with { find: "-", replace: "_" }.` |
+
+**Why `replace` differs**: it needs two arguments, which a single qualifier
+cannot carry, so it takes them from the `with` clause. `find` must be non-empty.
+
+**Scope of `url-encode`**: it encodes for a single query *value*, so the RFC 3986
+sub-delimiters (`&`, `=`, `+`, …) and `/` are all escaped. It is not for
+encoding a whole path or URL, where those characters are structural.
+
+**Decoding failures**: `url-decode` passes malformed input through unchanged,
+following the happy-case philosophy. `base64-decode` and `base64url-decode`
+raise a runtime error, because there is no meaningful pass-through for input
+that is not valid Base64 UTF-8.
+
+```aro
+(searchProducts: Product API) {
+    Extract the <q> from the <queryParameters: q>.
+
+    (* Safe upstream call: `&` in q can no longer corrupt the query string *)
+    Compute the <enc: url-encode> from <q>.
+    Compute the <target> from "https://upstream.example.com/search?q=" ++ <enc>.
+    Request the <results> from the <url: target>.
+
+    (* Safe rendering: a <script> in q is inert *)
+    Compute the <safe: html-escape> from <q>.
+    Create the <ctx> with { query: <safe>, results: <results> }.
+    Transform the <page> from the <template: results.html> with <ctx>.
+    Return an <OK: status> with <page>.
+}
+```
+
 ---
 
 ## 4. Date and Time
@@ -229,3 +278,4 @@ Primitive types are handled throughout the runtime:
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification |
 | 1.1 | 2024-12 | Simplified to core primitives (Integer, Float, String, Boolean, DateTime), removed Result type, added ARO examples |
+| 1.2 | 2026-08 | Added §3.1 Encoding and Escaping: html-escape, url-encode/decode, base64(url)-encode/decode, json-escape, trim, replace (GitLab #482) |

@@ -811,3 +811,118 @@ struct SourceLocationTests {
         #expect(merged.end.column == 15)
     }
 }
+
+// MARK: - Literal Qualifier Tests (GitLab #470)
+
+@Suite("Literal Qualifier Tests")
+struct LiteralQualifierTests {
+
+    /// Parses `source` and returns the object noun of its first ARO statement.
+    private func objectNoun(_ statement: String) throws -> QualifiedNoun {
+        let source = """
+        (Test: Test) {
+            \(statement)
+        }
+        """
+        let program = try Parser.parse(source)
+        let aro = try #require(program.featureSets[0].statements[0] as? AROStatement)
+        return aro.object.noun
+    }
+
+    @Test("Bare relative filename keeps its extension")
+    func testBareRelativeFilenameKeepsExtension() throws {
+        let noun = try objectNoun(#"Write the <c> to the <file: "data.json">."#)
+
+        #expect(noun.base == "file")
+        #expect(noun.isLiteralQualifier)
+        // Regression: used to split into ["data", "json"], so the file was named "data".
+        #expect(noun.specifiers == ["data.json"])
+    }
+
+    @Test("Dot-prefixed path keeps its extension")
+    func testDotPrefixedPathKeepsExtension() throws {
+        let noun = try objectNoun(#"Write the <c> to the <file: "./out/data.json">."#)
+
+        #expect(noun.isLiteralQualifier)
+        #expect(noun.specifiers == ["./out/data.json"])
+    }
+
+    @Test("Multiple dots in a filename are all preserved")
+    func testMultipleDotsPreserved() throws {
+        let noun = try objectNoun(#"Read the <c> from the <file: "archive.tar.gz">."#)
+
+        #expect(noun.specifiers == ["archive.tar.gz"])
+    }
+
+    @Test("Absolute path keeps its extension")
+    func testAbsolutePathKeepsExtension() throws {
+        let noun = try objectNoun(#"Read the <c> from the <file: "/etc/hosts.allow">."#)
+
+        #expect(noun.specifiers == ["/etc/hosts.allow"])
+    }
+
+    @Test("Host-only URL literal is not split")
+    func testHostOnlyURLNotSplit() throws {
+        let noun = try objectNoun(#"Request the <r> from the <url: "api.example.com/v1">."#)
+
+        #expect(noun.specifiers == ["api.example.com/v1"])
+    }
+
+    @Test("Scheme-qualified URL literal is not split")
+    func testSchemeQualifiedURLNotSplit() throws {
+        let noun = try objectNoun(#"Request the <r> from the <url: "https://example.com/a.json">."#)
+
+        #expect(noun.specifiers == ["https://example.com/a.json"])
+    }
+
+    @Test("Command literal containing a dot is not split")
+    func testCommandLiteralNotSplit() throws {
+        let noun = try objectNoun(#"Exec the <r> for the <command: "python3 script.py">."#)
+
+        #expect(noun.specifiers == ["python3 script.py"])
+    }
+
+    @Test("Unquoted property path still splits on dots")
+    func testUnquotedPropertyPathStillSplits() throws {
+        let noun = try objectNoun("Extract the <city> from the <customer: address.city>.")
+
+        #expect(noun.base == "customer")
+        #expect(!noun.isLiteralQualifier)
+        #expect(noun.specifiers == ["address", "city"])
+    }
+
+    @Test("Unquoted single qualifier is unaffected")
+    func testUnquotedSingleQualifier() throws {
+        let noun = try objectNoun("Extract the <data> from the <request: body>.")
+
+        #expect(!noun.isLiteralQualifier)
+        #expect(noun.specifiers == ["body"])
+    }
+
+    @Test("Result-position literal qualifier is not split")
+    func testResultPositionLiteralNotSplit() throws {
+        let source = """
+        (Test: Test) {
+            Copy the <file: "in.txt"> to the <destination: "out.txt">.
+        }
+        """
+        let program = try Parser.parse(source)
+        let aro = try #require(program.featureSets[0].statements[0] as? AROStatement)
+
+        #expect(aro.result.specifiers == ["in.txt"])
+        #expect(aro.object.noun.specifiers == ["out.txt"])
+    }
+
+    @Test("Unquoted dotted path stays splittable but rejoinable")
+    func testUnquotedDottedPathIsRejoinable() throws {
+        // `<file: unq.txt>` is lexed as identifiers, not a string literal, so the
+        // parser cannot tell it from a property path such as `<customer: a.b>`.
+        // It therefore still splits — path-consuming actions rejoin the specifiers
+        // (see ExecutionContext.resolveString), which is what preserves ".txt".
+        let noun = try objectNoun("Write the <c> to the <file: unq.txt>.")
+
+        #expect(!noun.isLiteralQualifier)
+        #expect(noun.specifiers == ["unq", "txt"])
+        #expect(noun.specifiers.joined(separator: ".") == "unq.txt")
+    }
+}

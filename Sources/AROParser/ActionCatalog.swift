@@ -47,7 +47,7 @@ public enum ActionCatalog {
         "filter", "reduce", "map", "group",
         // Sort
         "sort", "order", "arrange",
-        // System exec (ARO-0033)
+        // System exec (ARO-0010)
         "exec", "shell",
         // Repository
         "delete", "merge", "combine", "join", "concat", "close",

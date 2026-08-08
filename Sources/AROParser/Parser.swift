@@ -300,7 +300,7 @@ public final class Parser {
         (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
         (.preposition(.for), { try $0.parseForOrRangeLoop() }),
         (.parallel,          { try $0.parseParallelForEachLoop() }),
-        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / ARO-0131
+        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / GitLab #131
         (.break,             { try $0.parseBreakStatement() }),
         (.publish,           { try $0.parsePublishStatementForm() }),
         (.require,           { try $0.parseRequireStatementForm() }),         // ARO-0003
@@ -515,7 +515,7 @@ public final class Parser {
             let actionToken = advance()
             var fullVerb = actionToken.lexeme
             var endSpan = actionToken.span
-            // ARO-0095: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
+            // GitLab #95: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
             while case .dot = peek().kind {
                 let savedPosition = current
                 advance() // consume dot
@@ -1327,7 +1327,7 @@ public final class Parser {
         )
     }
 
-    // MARK: - While Loop Parsing (ARO-0002 extension, ARO-0131)
+    // MARK: - While Loop Parsing (ARO-0002 extension, GitLab #131)
 
     /// Parses: "while" <condition> "{" statements "}"
     ///
@@ -1404,15 +1404,19 @@ public final class Parser {
         let startToken = peek()
         let base = try parseCompoundIdentifier()
         var typeAnnotation: String? = nil
+        var isLiteralQualifier = false
 
         if check(.colon) {
             advance()
 
             // ARO-0068: Check for string literal after colon (e.g., <command: "uptime">)
-            // This allows commands and other values to be specified inline
+            // This allows commands and other values to be specified inline.
+            // Flag it so the value is never mistaken for a dot-separated property
+            // path — `<file: "data.json">` is the path `data.json`, not `data` → `json`.
             if case .stringLiteral(let value) = peek().kind {
                 advance()
                 typeAnnotation = value
+                isLiteralQualifier = true
             } else {
                 // Parse type annotation (ARO-0006)
                 typeAnnotation = try parseTypeAnnotation()
@@ -1422,7 +1426,8 @@ public final class Parser {
         return QualifiedNoun(
             base: base,
             typeAnnotation: typeAnnotation,
-            span: startToken.span.merged(with: previous().span)
+            span: startToken.span.merged(with: previous().span),
+            isLiteralQualifier: isLiteralQualifier
         )
     }
 

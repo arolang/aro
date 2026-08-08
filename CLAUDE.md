@@ -341,7 +341,7 @@ Log <numbers: collections.reverse> to the <console>.
 ```yaml
 name: plugin-collection
 version: 1.0.0
-handle: Collections        # root-level PascalCase handle (canonical, ARO-0095)
+handle: Collections        # root-level PascalCase handle (canonical, GitLab #95)
 provides:
   - type: swift-plugin
     path: Sources/
@@ -413,7 +413,18 @@ The Compute action transforms data using built-in operations:
 | `uppercase` | Convert to UPPERCASE | `Compute the <upper: uppercase> from <text>.` |
 | `lowercase` | Convert to lowercase | `Compute the <lower: lowercase> from <text>.` |
 | `hash` | Compute hash value | `Compute the <hash: hash> from <password>.` |
+| `trim` | Strip surrounding whitespace | `Compute the <clean: trim> from <field>.` |
+| `replace` | Substring replacement | `Compute the <out: replace> from <t> with { find: "-", replace: "_" }.` |
+| `html-escape` | Escape `& < > " '` for HTML | `Compute the <safe: html-escape> from <input>.` |
+| `url-encode` / `url-decode` | Percent-encode a query value | `Compute the <enc: url-encode> from <query>.` |
+| `base64-encode` / `base64-decode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
+| `base64url-encode` / `base64url-decode` | URL-safe Base64 (JWTs) | `Compute the <tok: base64url-encode> from <payload>.` |
+| `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
+
+Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1.
+Always `html-escape` untrusted values before rendering them into an HTML template —
+the template engine does not escape for you.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
@@ -675,7 +686,13 @@ Proposals/              # Language specifications
 ├── ARO-0051-streaming-execution.md
 ├── ARO-0073-store-files.md
 ├── ARO-0080-git-actions.md
-└── ARO-0081-user-defined-actions.md
+├── ARO-0081-user-defined-actions.md
+├── ARO-0082-numeric-separators.md
+├── ARO-0083-terminal-ui.md
+├── ARO-0084-local-llm.md
+├── ARO-0085-terminal-shadow-buffer.md
+├── ARO-0086-automatic-pipeline-detection.md
+└── ARO-0087-plugin-sdk.md
 ```
 
 ## Language Proposals
@@ -722,6 +739,18 @@ The `Proposals/` directory contains language specifications:
 | **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
 | **0080 Git Actions** | Native Git via libgit2: status, stage, commit, push, pull, clone, checkout, tag |
 | **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
+| **0082 Numeric Separators** | Underscores in decimal literals (supersedes 0056) |
+| **0083 Terminal UI** | Terminal UI system |
+| **0084 Local LLM** | `aro lm` (superseded by `aro ask`) |
+| **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
+| **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
+| **0087 Plugin SDK** | Plugin SDK & developer experience |
+
+Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
+enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab
+issue in code or docs, write `GitLab #<number>` — never the `ARO-` prefix, which
+reads as a proposal reference. Eight such mistakes had accumulated in `Sources/`
+before the check existed (GitLab #481).
 
 ## Concurrency
 

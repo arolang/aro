@@ -384,8 +384,17 @@ extension ActionRunner {
         context: ExecutionContext
     ) -> ActionRunnerResult {
         // Fast path: bypass the future for trivially-synchronous actions.
+        //
+        // Skipped entirely while any middleware is registered (#107). Middleware
+        // is async and wraps `ActionRegistry.execute`, which this path bypasses —
+        // so taking it would silently skip the chain for exactly the actions
+        // (store, delete, log, …) that an authorization or audit hook most needs
+        // to see. Correctness over the optimization; with no middleware
+        // registered the check is one uncontended lock read and behaviour is
+        // unchanged.
         let canonicalVerb = Self.canonicalizeVerb(verb)
-        if let syncResult = executeSynchronouslyIfSupported(
+        if !registry.hasMiddleware,
+           let syncResult = executeSynchronouslyIfSupported(
             canonicalVerb: canonicalVerb, result: result, object: object, context: context
         ) {
             return syncResult

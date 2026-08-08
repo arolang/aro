@@ -570,16 +570,16 @@ public final class FeatureSetExecutor: Sendable {
                 if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
-                    // Still need to get the action for side effects (like Return, Log, etc.)
-                    if let action = actionRegistry.action(for: verb) {
-                        // For response actions, execute them with the expression result
-                        if statement.action.semanticRole == .response {
-                            _ = try await action.execute(
-                                result: resultDescriptor,
-                                object: objectDescriptor,
-                                context: context
-                            )
-                        }
+                    // Still need to run the action for side effects (like Return, Log, etc.).
+                    // Goes through the registry so middleware sees it too (#107).
+                    if statement.action.semanticRole == .response,
+                       actionRegistry.isRegistered(verb) {
+                        _ = try await actionRegistry.execute(
+                            verb: verb,
+                            result: resultDescriptor,
+                            object: objectDescriptor,
+                            context: context
+                        )
                     }
                     return
                 }
@@ -672,21 +672,17 @@ public final class FeatureSetExecutor: Sendable {
 
         // Execute action with ARO-0008 error wrapping
         do {
-            // Get action implementation (try built-in first, then dynamic plugin actions)
-            let result: any Sendable
-            if let action = actionRegistry.action(for: verb) {
-                // Execute built-in action
-                result = try await action.execute(
-                    result: resultDescriptor,
-                    object: objectDescriptor,
-                    context: context
-                )
-            } else if let dynamicHandler = actionRegistry.dynamicHandler(for: verb) {
-                // Execute dynamic plugin action
-                result = try await dynamicHandler(resultDescriptor, objectDescriptor, context)
-            } else {
-                throw ActionError.unknownAction(verb)
-            }
+            // Dispatch through the registry rather than resolving built-in and
+            // dynamic handlers here. The registry performs the identical lookup
+            // (`action(for:)` then `dynamicHandler(for:)`, else `unknownAction`)
+            // and is the single place middleware wraps (#107) — resolving locally
+            // meant `aro run` bypassed every registered hook.
+            let result = try await actionRegistry.execute(
+                verb: verb,
+                result: resultDescriptor,
+                object: objectDescriptor,
+                context: context
+            )
 
             // Bind result to context (unless it's a response action that already set the response)
             // Also skip binding if the action already bound the result (to avoid double-binding)
@@ -1237,7 +1233,7 @@ public final class FeatureSetExecutor: Sendable {
         return true  // Non-nil values are truthy
     }
 
-    // MARK: - While Loop Execution (ARO-0131)
+    // MARK: - While Loop Execution (GitLab #131)
 
     private func executeWhileLoop(
         _ loop: WhileLoop,

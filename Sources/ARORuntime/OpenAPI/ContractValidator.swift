@@ -43,7 +43,7 @@ public struct ContractValidator {
         }
 
         // Webhooks (OpenAPI 3.1): handler name is the operationId when present,
-        // otherwise the webhook name (ARO-0187) — operationId is not required.
+        // otherwise the webhook name (GitLab #187) — operationId is not required.
         for (name, item) in spec.webhooks ?? [:] {
             let key = name.hasPrefix("/") ? name : "/\(name)"
             for (method, operation) in item.allOperations {

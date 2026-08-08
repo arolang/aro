@@ -161,7 +161,9 @@ public struct ConstantFolder {
 
         case .negate:
             if case .integer(let value) = operand {
-                return .integer(-value)
+                // -Int.min is not representable — not foldable.
+                let (negated, overflow) = Int(0).subtractingReportingOverflow(value)
+                return overflow ? nil : .integer(negated)
             } else if case .float(let value) = operand {
                 return .float(-value)
             }
@@ -198,7 +200,11 @@ public struct ConstantFolder {
     private static func add(_ left: AROParser.LiteralValue, _ right: AROParser.LiteralValue) -> AROParser.LiteralValue? {
         switch (left, right) {
         case (.integer(let a), .integer(let b)):
-            return .integer(a + b)
+            // Overflow is not foldable: leave the expression for the runtime,
+            // which reports it as a proper error (GitLab #472). Folding it here
+            // would trap the compiler.
+            let (value, overflow) = a.addingReportingOverflow(b)
+            return overflow ? nil : .integer(value)
         case (.float(let a), .float(let b)):
             return .float(a + b)
         case (.integer(let a), .float(let b)):
@@ -215,7 +221,8 @@ public struct ConstantFolder {
     private static func subtract(_ left: AROParser.LiteralValue, _ right: AROParser.LiteralValue) -> AROParser.LiteralValue? {
         switch (left, right) {
         case (.integer(let a), .integer(let b)):
-            return .integer(a - b)
+            let (value, overflow) = a.subtractingReportingOverflow(b)
+            return overflow ? nil : .integer(value)
         case (.float(let a), .float(let b)):
             return .float(a - b)
         case (.integer(let a), .float(let b)):
@@ -230,7 +237,8 @@ public struct ConstantFolder {
     private static func multiply(_ left: AROParser.LiteralValue, _ right: AROParser.LiteralValue) -> AROParser.LiteralValue? {
         switch (left, right) {
         case (.integer(let a), .integer(let b)):
-            return .integer(a * b)
+            let (value, overflow) = a.multipliedReportingOverflow(by: b)
+            return overflow ? nil : .integer(value)
         case (.float(let a), .float(let b)):
             return .float(a * b)
         case (.integer(let a), .float(let b)):
@@ -246,7 +254,8 @@ public struct ConstantFolder {
         switch (left, right) {
         case (.integer(let a), .integer(let b)):
             guard b != 0 else { return nil }
-            return .integer(a / b)
+            let (value, overflow) = a.dividedReportingOverflow(by: b)
+            return overflow ? nil : .integer(value)
         case (.float(let a), .float(let b)):
             guard b != 0 else { return nil }
             return .float(a / b)
@@ -265,7 +274,8 @@ public struct ConstantFolder {
         switch (left, right) {
         case (.integer(let a), .integer(let b)):
             guard b != 0 else { return nil }
-            return .integer(a % b)
+            let (value, overflow) = a.remainderReportingOverflow(dividingBy: b)
+            return overflow ? nil : .integer(value)
         default:
             return nil
         }

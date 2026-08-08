@@ -10,7 +10,7 @@ public final class Lexer: @unchecked Sendable {
     
     // MARK: - Properties
 
-    // ARO-0115: UTF-8 byte buffer replaces String.Index arithmetic for O(1) position operations.
+    // GitLab #115: UTF-8 byte buffer replaces String.Index arithmetic for O(1) position operations.
     // All scanning uses integer byte positions into `utf8`; `source` is kept only for the
     // public initialiser signature and for fallback multi-byte Character decoding.
     private let source: String
@@ -61,7 +61,7 @@ public final class Lexer: @unchecked Sendable {
         "parallel": .keyword(.parallel),
         "concurrency": .keyword(.concurrency),
 
-        // Keywords - While Loop (ARO-0002 extension, ARO-0131)
+        // Keywords - While Loop (ARO-0002 extension, GitLab #131)
         "while": .keyword(.while),
         "break": .keyword(.break),
 
@@ -122,7 +122,7 @@ public final class Lexer: @unchecked Sendable {
         self.source = source
         self.utf8 = Array(source.utf8)
         self.pos = 0
-        // ARO-0115: Cache the next byte position for O(1) peekNext()
+        // GitLab #115: Cache the next byte position for O(1) peekNext()
         self.nextPos = Self.advanceBytePos(0, in: Array(source.utf8))
         self.location = SourceLocation()
         self.diagnostics = diagnostics
@@ -397,7 +397,7 @@ public final class Lexer: @unchecked Sendable {
         addToken(.stringLiteral(value), start: start)
     }
 
-    /// Scans a triple-quoted multiline string literal (ARO-0097).
+    /// Scans a triple-quoted multiline string literal (GitLab #97).
     ///
     /// Syntax:
     /// ```
@@ -759,7 +759,7 @@ public final class Lexer: @unchecked Sendable {
     /// Attempts to scan a regex literal. Returns pattern and flags if successful, nil otherwise.
     /// This method saves and restores state if the scan fails.
     private func tryScanRegex(start: SourceLocation) -> (pattern: String, flags: String)? {
-        // Save current position for backtracking (ARO-0115: byte positions)
+        // Save current position for backtracking (GitLab #115: byte positions)
         let savedPos = pos
         let savedNextPos = nextPos
         let savedLocation = location
@@ -885,7 +885,7 @@ public final class Lexer: @unchecked Sendable {
         }
     }
     
-    // MARK: - Character Access (ARO-0115: UTF-8 byte buffer)
+    // MARK: - Character Access (GitLab #115: UTF-8 byte buffer)
 
     /// Returns the number of UTF-8 bytes in the character starting at byte position `p`.
     private static func charByteCount(at p: Int, in bytes: [UInt8]) -> Int {
@@ -927,7 +927,7 @@ public final class Lexer: @unchecked Sendable {
         decodeChar(at: pos)
     }
 
-    /// O(1) lookahead — uses the cached `nextPos` (ARO-0115, supersedes ARO-0057).
+    /// O(1) lookahead — uses the cached `nextPos` (GitLab #115, supersedes ARO-0057).
     private func peekNext() -> Character {
         decodeChar(at: nextPos)
     }
@@ -955,7 +955,7 @@ public final class Lexer: @unchecked Sendable {
 
     // MARK: - Token Creation
 
-    /// Extracts the token's lexeme via O(1) byte-range slicing (ARO-0115).
+    /// Extracts the token's lexeme via O(1) byte-range slicing (GitLab #115).
     private func addToken(_ kind: TokenKind, start: SourceLocation) {
         let raw = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
         let lexeme = intern(raw)

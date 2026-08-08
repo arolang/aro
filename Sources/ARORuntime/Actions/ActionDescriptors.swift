@@ -34,6 +34,16 @@ public struct ResultDescriptor: Sendable, Equatable, CustomStringConvertible {
         specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: "."))"
     }
 
+    /// The specifiers rejoined with `.`, for qualifiers that denote a path or URL
+    /// rather than a property path.
+    ///
+    /// An unquoted `<file: data.json>` parses as the property path `["data", "json"]`,
+    /// so reading only `specifiers.first` silently drops the extension (GitLab #470).
+    /// Path-consuming actions must use this instead.
+    public var pathSpecifier: String? {
+        specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
+    }
+
     /// Initialize from AST QualifiedNoun
     public init(from qualifiedNoun: QualifiedNoun) {
         self.base = qualifiedNoun.base
@@ -91,6 +101,16 @@ public struct ObjectDescriptor: Sendable, Equatable, CustomStringConvertible {
             return base
         }
         return "\(base).\(specifiers.joined(separator: "."))"
+    }
+
+    /// The specifiers rejoined with `.`, for qualifiers that denote a path or URL
+    /// rather than a property path.
+    ///
+    /// An unquoted `<file: data.json>` parses as the property path `["data", "json"]`,
+    /// so reading only `specifiers.first` silently drops the extension (GitLab #470).
+    /// Path-consuming actions must use this instead.
+    public var pathSpecifier: String? {
+        specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
     }
 
     /// Initialize from AST ObjectClause

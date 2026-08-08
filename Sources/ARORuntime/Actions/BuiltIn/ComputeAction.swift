@@ -98,6 +98,16 @@ public struct ComputeAction: SynchronousAction {
         "difference": Self.opDifference,
         "union":      Self.opUnion,
         "markdown":   Self.opMarkdown,
+        // Encoding / escaping primitives (GitLab #482)
+        "html-escape":       Self.opHTMLEscape,
+        "url-encode":        Self.opURLEncode,
+        "url-decode":        Self.opURLDecode,
+        "base64-encode":     Self.opBase64Encode,
+        "base64-decode":     Self.opBase64Decode,
+        "base64url-encode":  Self.opBase64URLEncode,
+        "base64url-decode":  Self.opBase64URLDecode,
+        "json-escape":       Self.opJSONEscape,
+        "replace":           Self.opReplace,
     ]
 
     /// Names recognised by the fast-path resolver. Derived from the
@@ -223,6 +233,74 @@ public struct ComputeAction: SynchronousAction {
 
     private static func opIdentity(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
         input
+    }
+
+    // MARK: - Encoding / escaping (GitLab #482)
+
+    /// Coerces the operand to a String the same way `opTrim`/`opUppercase` do,
+    /// so encoding a number or a bool works rather than erroring.
+    private static func asText(_ input: any Sendable) -> String {
+        input as? String ?? String(describing: input)
+    }
+
+    private static func opHTMLEscape(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.htmlEscape(asText(input))
+    }
+
+    private static func opURLEncode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.urlEncode(asText(input))
+    }
+
+    private static func opURLDecode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.urlDecode(asText(input))
+    }
+
+    private static func opBase64Encode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.base64Encode(asText(input))
+    }
+
+    private static func opBase64Decode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        guard let decoded = StringEncoding.base64Decode(text) else {
+            throw ActionError.runtimeError("Cannot base64-decode the value: not valid Base64 UTF-8")
+        }
+        return decoded
+    }
+
+    private static func opBase64URLEncode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.base64URLEncode(asText(input))
+    }
+
+    private static func opBase64URLDecode(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        guard let decoded = StringEncoding.base64URLDecode(text) else {
+            throw ActionError.runtimeError("Cannot base64url-decode the value: not valid Base64URL UTF-8")
+        }
+        return decoded
+    }
+
+    private static func opJSONEscape(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        StringEncoding.jsonEscape(asText(input))
+    }
+
+    /// `Compute the <out: replace> from <text> with { find: "-", replace: "_" }.`
+    ///
+    /// Takes its arguments from the `with` clause because it needs two of them,
+    /// which the single-qualifier shape cannot express. `find` may not be empty —
+    /// replacing the empty string is a no-op at best and ambiguous at worst, so
+    /// it is reported rather than silently ignored.
+    private static func opReplace(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        guard let config = context.resolveAny("_with_") as? [String: any Sendable] else {
+            throw ActionError.missingRequiredField(
+                "replace requires 'with { find: \"…\", replace: \"…\" }'"
+            )
+        }
+        guard let find = config["find"] as? String, !find.isEmpty else {
+            throw ActionError.missingRequiredField("replace requires a non-empty 'find'")
+        }
+        let replacement = config["replace"] as? String ?? ""
+        return text.replacingOccurrences(of: find, with: replacement)
     }
 
     private static func opClip(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
