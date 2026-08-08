@@ -882,24 +882,53 @@ private func stringValue(_ value: any Sendable) -> String {
 /// must agree so `aro run` and `aro build` produce the same results; see the
 /// operator-semantics contract in `ExpressionEvaluator.swift`. When you touch
 /// operator behaviour here, mirror it there (and vice versa).
+/// Reports an unrecoverable arithmetic error in compiled mode and exits.
+///
+/// `evaluateExpressionJSON` and `evaluateBinaryOp` are non-throwing all the way
+/// down the C ABI, so there is no channel to raise a catchable error on — unlike
+/// the interpreter, which throws `ActionError.runtimeError`. Terminating with a
+/// readable, ARO-shaped message is the honest behaviour available here: it beats
+/// `fatalError`'s Swift crash dump, and it beats silently returning 0 for a
+/// computation whose result cannot be represented.
+///
+/// Making this catchable in compiled mode means threading `throws` through the
+/// JSON evaluator — tracked separately, see GitLab #472.
+private func aroArithmeticFailure(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("Runtime Error: \(message)\n".utf8))
+    exit(1)
+}
+
+/// Unwraps an overflow-reporting arithmetic result, failing with an ARO-shaped
+/// message instead of trapping the process.
+private func checkedInt(
+    _ result: (partialValue: Int, overflow: Bool),
+    _ left: Int,
+    _ symbol: String,
+    _ right: Int
+) -> Int {
+    guard !result.overflow else {
+        aroArithmeticFailure("Integer overflow in \(left) \(symbol) \(right)")
+    }
+    return result.partialValue
+}
+
 private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
     switch op {
     // Arithmetic
     case "+":
+        if let li = left as? Int, let ri = right as? Int {
+            return checkedInt(li.addingReportingOverflow(ri), li, "+", ri)
+        }
         if let l = asDouble(left), let r = asDouble(right) {
-            // Preserve int type if both are ints
-            if let li = left as? Int, let ri = right as? Int {
-                return li + ri
-            }
             return l + r
         }
         return 0
 
     case "-":
+        if let li = left as? Int, let ri = right as? Int {
+            return checkedInt(li.subtractingReportingOverflow(ri), li, "-", ri)
+        }
         if let l = asDouble(left), let r = asDouble(right) {
-            if let li = left as? Int, let ri = right as? Int {
-                return li - ri
-            }
             return l - r
         }
         return 0
@@ -912,28 +941,30 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         if let str = right as? String, let count = left as? Int {
             return String(repeating: str, count: max(0, count))
         }
+        if let li = left as? Int, let ri = right as? Int {
+            return checkedInt(li.multipliedReportingOverflow(by: ri), li, "*", ri)
+        }
         if let l = asDouble(left), let r = asDouble(right) {
-            if let li = left as? Int, let ri = right as? Int {
-                return li * ri
-            }
             return l * r
         }
         return 0
 
     case "/":
-        if let l = asDouble(left), let r = asDouble(right) {
-            guard r != 0 else { fatalError("Division by zero") }
+        if let li = left as? Int, let ri = right as? Int {
+            guard ri != 0 else { aroArithmeticFailure("Division by zero") }
             // Integer / Integer → integer floor division (e.g. 80/3 = 26)
-            if let li = left as? Int, let ri = right as? Int {
-                return li / ri
-            }
+            return checkedInt(li.dividedReportingOverflow(by: ri), li, "/", ri)
+        }
+        if let l = asDouble(left), let r = asDouble(right) {
+            guard r != 0 else { aroArithmeticFailure("Division by zero") }
             return l / r
         }
         return 0
 
     case "%":
-        if let li = left as? Int, let ri = right as? Int, ri != 0 {
-            return li % ri
+        if let li = left as? Int, let ri = right as? Int {
+            guard ri != 0 else { aroArithmeticFailure("Division by zero") }
+            return checkedInt(li.remainderReportingOverflow(dividingBy: ri), li, "%", ri)
         }
         return 0
 

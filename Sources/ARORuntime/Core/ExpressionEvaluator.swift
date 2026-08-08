@@ -45,6 +45,13 @@ import AROParser
 //   - Int / Int and Int % Int by zero → a catchable runtime error, never
 //     a process trap (see the `.divide` / `intOperation` guards below and
 //     the `evaluateBinaryOp` "/" and "%" cases).
+//   - Int arithmetic stays in Int and reports overflow; it is never routed
+//     through Double and narrowed back, which both trapped the process and
+//     lost precision above 2^53 (#472). `+ - * / %` and unary `-` all use
+//     the `…ReportingOverflow` family. Site 1 throws
+//     `ActionError.runtimeError("Integer overflow in <l> <op> <r>")`;
+//     site 3 cannot throw (non-throwing C ABI) and exits with the same
+//     message; site 2 returns nil so the expression is left for runtime.
 //   - `+` is numeric; string joining uses `++` (`.concat`).
 //   - `*` with a String operand and an Int count is repetition.
 // When you change operator behaviour in one runtime site, mirror it in
@@ -226,9 +233,17 @@ public struct ExpressionEvaluator: Sendable {
         switch expr.op {
         // Arithmetic operators
         case .add:
-            return try numericOperation(left, right) { $0 + $1 }
+            return try numericOperation(
+                left, right, symbol: "+",
+                intOp: { $0.addingReportingOverflow($1) },
+                doubleOp: { $0 + $1 }
+            )
         case .subtract:
-            return try numericOperation(left, right) { $0 - $1 }
+            return try numericOperation(
+                left, right, symbol: "-",
+                intOp: { $0.subtractingReportingOverflow($1) },
+                doubleOp: { $0 - $1 }
+            )
         case .multiply:
             // String repetition: "●" * 7 → "●●●●●●●" (like Python)
             if let str = left as? String {
@@ -239,16 +254,25 @@ public struct ExpressionEvaluator: Sendable {
                 if let count = left as? Int    { return String(repeating: str, count: max(0, count)) }
                 if let count = left as? Double { return String(repeating: str, count: max(0, Int(count))) }
             }
-            return try numericOperation(left, right) { $0 * $1 }
+            return try numericOperation(
+                left, right, symbol: "*",
+                intOp: { $0.multipliedReportingOverflow(by: $1) },
+                doubleOp: { $0 * $1 }
+            )
         case .divide:
             // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
             if let li = left as? Int, let ri = right as? Int {
                 guard ri != 0 else { throw ActionError.runtimeError("Division by zero") }
-                return li / ri
+                // Int.min / -1 overflows — the quotient is not representable.
+                let (value, overflow) = li.dividedReportingOverflow(by: ri)
+                guard !overflow else { throw Self.overflowError(li, "/", ri) }
+                return value
             }
-            return try numericOperation(left, right) { $0 / $1 }
+            // Mixed Int/Double divide — the Int/Int case is fully handled above,
+            // including its distinct zero-divisor message.
+            return try asDouble(left) / asDouble(right)
         case .modulo:
-            return try intOperation(left, right) { $0 % $1 }
+            return try intOperation(left, right, symbol: "%") { $0.remainderReportingOverflow(dividingBy: $1) }
 
         // String concatenation
         case .concat:
@@ -293,7 +317,12 @@ public struct ExpressionEvaluator: Sendable {
 
         switch expr.op {
         case .negate:
-            if let i = operand as? Int { return -i }
+            if let i = operand as? Int {
+                // -Int.min is not representable, so negation can overflow too.
+                let (value, overflow) = Int(0).subtractingReportingOverflow(i)
+                guard !overflow else { throw Self.overflowError(0, "-", i) }
+                return value
+            }
             if let d = operand as? Double { return -d }
             throw ExpressionError.typeMismatch("Cannot negate \(type(of: operand))")
         case .not:
@@ -437,19 +466,44 @@ public struct ExpressionEvaluator: Sendable {
         throw ExpressionError.typeMismatch("Cannot access property '\(property)' on \(type(of: value))")
     }
 
-    private func numericOperation(_ left: any Sendable, _ right: any Sendable, _ op: (Double, Double) -> Double) throws -> any Sendable {
-        let l = try asDouble(left)
-        let r = try asDouble(right)
-        let result = op(l, r)
-
-        // Return Int if both inputs were Int and result is whole
-        if left is Int && right is Int && result.truncatingRemainder(dividingBy: 1) == 0 {
-            return Int(result)
-        }
-        return result
+    /// The canonical overflow error, shared with the compiled-mode evaluator so
+    /// both runtimes report overflow identically.
+    static func overflowError(_ left: Int, _ symbol: String, _ right: Int) -> ActionError {
+        .runtimeError("Integer overflow in \(left) \(symbol) \(right)")
     }
 
-    private func intOperation(_ left: any Sendable, _ right: any Sendable, _ op: (Int, Int) -> Int) throws -> any Sendable {
+    /// Applies an arithmetic operator, keeping Int arithmetic in Int.
+    ///
+    /// Int/Int used to be computed in `Double` and narrowed back with `Int(result)`.
+    /// That trapped the process on overflow — `Int.max + 1` produced a Double that
+    /// no `Int` can represent — and silently lost precision above 2^53 for values
+    /// that did fit (GitLab #472). Both operands being Int now takes an exact Int
+    /// path with overflow reporting; mixed operands still go through Double, where
+    /// the narrowing branch is unreachable and the result stays a Double.
+    private func numericOperation(
+        _ left: any Sendable,
+        _ right: any Sendable,
+        symbol: String,
+        intOp: (Int, Int) -> (partialValue: Int, overflow: Bool),
+        doubleOp: (Double, Double) -> Double
+    ) throws -> any Sendable {
+        if let li = left as? Int, let ri = right as? Int {
+            let (value, overflow) = intOp(li, ri)
+            guard !overflow else { throw Self.overflowError(li, symbol, ri) }
+            return value
+        }
+
+        let l = try asDouble(left)
+        let r = try asDouble(right)
+        return doubleOp(l, r)
+    }
+
+    private func intOperation(
+        _ left: any Sendable,
+        _ right: any Sendable,
+        symbol: String,
+        _ op: (Int, Int) -> (partialValue: Int, overflow: Bool)
+    ) throws -> any Sendable {
         guard let l = left as? Int, let r = right as? Int else {
             throw ExpressionError.typeMismatch("Expected integers for modulo operation")
         }
@@ -458,7 +512,10 @@ public struct ExpressionEvaluator: Sendable {
         // the `.divide` Int/Int guard above and keeps the interpreter from
         // crashing where the compiled runtime (evaluateBinaryOp) does not.
         guard r != 0 else { throw ActionError.runtimeError("Division by zero") }
-        return op(l, r)
+        // Int.min % -1 overflows in the same way Int.min / -1 does.
+        let (value, overflow) = op(l, r)
+        guard !overflow else { throw Self.overflowError(l, symbol, r) }
+        return value
     }
 
     private func compareValues(_ left: any Sendable, _ right: any Sendable, _ compare: (Double, Double) -> Bool) throws -> Bool {
