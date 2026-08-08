@@ -736,7 +736,7 @@ public struct WriteAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Handle <url: ...> pattern for HTTP POST (ARO-0052)
-        if object.base == "url", let specifier = object.specifiers.first {
+        if object.base == "url", let specifier = object.pathSpecifier {
             let urlString: String
             if let resolvedURL: String = context.resolve(specifier) {
                 urlString = resolvedURL
@@ -748,7 +748,7 @@ public struct WriteAction: ActionImplementation {
 
         // Get file path - handle <file: path-variable> pattern
         let path: String
-        if object.base == "file", let specifier = object.specifiers.first {
+        if object.base == "file", let specifier = object.pathSpecifier {
             // Pattern: <file: path-variable> - resolve the specifier as the path
             if let resolvedPath: String = context.resolve(specifier) {
                 path = resolvedPath
