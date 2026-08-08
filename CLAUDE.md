@@ -413,7 +413,18 @@ The Compute action transforms data using built-in operations:
 | `uppercase` | Convert to UPPERCASE | `Compute the <upper: uppercase> from <text>.` |
 | `lowercase` | Convert to lowercase | `Compute the <lower: lowercase> from <text>.` |
 | `hash` | Compute hash value | `Compute the <hash: hash> from <password>.` |
+| `trim` | Strip surrounding whitespace | `Compute the <clean: trim> from <field>.` |
+| `replace` | Substring replacement | `Compute the <out: replace> from <t> with { find: "-", replace: "_" }.` |
+| `html-escape` | Escape `& < > " '` for HTML | `Compute the <safe: html-escape> from <input>.` |
+| `url-encode` / `url-decode` | Percent-encode a query value | `Compute the <enc: url-encode> from <query>.` |
+| `base64-encode` / `base64-decode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
+| `base64url-encode` / `base64url-decode` | URL-safe Base64 (JWTs) | `Compute the <tok: base64url-encode> from <payload>.` |
+| `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
+
+Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1.
+Always `html-escape` untrusted values before rendering them into an HTML template —
+the template engine does not escape for you.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
