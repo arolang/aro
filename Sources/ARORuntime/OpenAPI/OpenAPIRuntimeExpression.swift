@@ -1,6 +1,6 @@
 // ============================================================
 // OpenAPIRuntimeExpression.swift
-// ARO Runtime - OpenAPI Runtime Expression Evaluation (ARO-0187)
+// ARO Runtime - OpenAPI Runtime Expression Evaluation (GitLab #187)
 // ============================================================
 
 import Foundation
@@ -12,7 +12,7 @@ import Foundation
 /// <https://spec.openapis.org/oas/v3.1.0#runtime-expressions>) used, among
 /// other places, as the *keys* of a Callback Object to compute the URL the
 /// server should call back. The full grammar is intentionally **out of scope**
-/// for ARO-0187; this evaluator implements the common, high-value subset:
+/// for GitLab #187; this evaluator implements the common, high-value subset:
 ///
 /// | Expression                    | Resolves to                                   |
 /// |-------------------------------|-----------------------------------------------|

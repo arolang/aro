@@ -1459,7 +1459,7 @@ private func parseOpenAPIRoutesJSON(_ json: String) {
     }
 
     // Top-level webhooks (OpenAPI 3.1): route POST /<name> to the feature set
-    // named after the webhook (or its operationId, when present) — ARO-0187.
+    // named after the webhook (or its operationId, when present) — GitLab #187.
     for (name, item) in spec.webhooks ?? [:] {
         let path = name.hasPrefix("/") ? name : "/\(name)"
         for (method, operation) in item.allOperations {

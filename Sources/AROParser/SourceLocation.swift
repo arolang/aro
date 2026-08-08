@@ -11,7 +11,7 @@ public struct SourceLocation: Sendable, Equatable, CustomStringConvertible {
     public let column: Int
     /// Unicode scalar count from the start of the source (character offset).
     public let offset: Int
-    /// UTF-8 byte offset from the start of the source (ARO-0115).
+    /// UTF-8 byte offset from the start of the source (GitLab #115).
     ///
     /// Used by the lexer for O(1) lexeme extraction from the UTF-8 byte buffer.
     /// Equal to `offset` for ASCII-only source; larger for source containing

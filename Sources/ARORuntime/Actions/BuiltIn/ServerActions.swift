@@ -126,7 +126,7 @@ public struct StartAction: ActionImplementation {
             port = p
         }
 
-        // Log which OpenAPI server URL is being used to bind (ARO-0195).
+        // Log which OpenAPI server URL is being used to bind (GitLab #195).
         // For single-server specs this is simply the sole server; when a spec
         // declares multiple servers, ARO_OPENAPI_SERVER selects among them.
         if let specService = context.service(OpenAPISpecService.self),

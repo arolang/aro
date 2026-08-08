@@ -89,4 +89,10 @@ Proposals/
 
 ---
 
+> **Note:** the listing above is a curated subset and is not kept in sync with the
+> directory — there are 63 proposals on disk. The authoritative list is
+> `Proposals/` itself; `Scripts/check-proposals.py` (run in CI) enforces that every
+> identifier is unique and that every `ARO-NNNN` reference resolves. Regenerating
+> this document's narrative from the directory is tracked separately (GitLab #481).
+
 *Last updated: January 2026*

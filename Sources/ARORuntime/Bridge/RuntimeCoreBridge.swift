@@ -283,7 +283,7 @@ class AROCContextHandle: @unchecked Sendable {
             // Dual-mode parity: register the OpenAPI spec service in compiled
             // binaries too (the interpreter registers it in Application.swift).
             // Without it, StartAction cannot resolve the selected server and the
-            // "HTTP server using OpenAPI server: …" startup log (ARO-0195) is
+            // "HTTP server using OpenAPI server: …" startup log (GitLab #195) is
             // emitted only under `aro run`, diverging from the compiled binary.
             context.register(OpenAPISpecService(spec: loadedSpec))
         }

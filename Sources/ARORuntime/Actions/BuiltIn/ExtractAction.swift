@@ -218,7 +218,7 @@ public struct ExtractAction: SynchronousAction {
             }
         }
 
-        // Single numeric index (0 = last element, reverse indexing per ARO-0032)
+        // Single numeric index (0 = last element, reverse indexing per ARO-0038)
         if let index = Int(spec), index >= 0, index < array.count {
             return array[array.count - 1 - index]
         }

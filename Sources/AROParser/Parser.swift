@@ -300,7 +300,7 @@ public final class Parser {
         (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
         (.preposition(.for), { try $0.parseForOrRangeLoop() }),
         (.parallel,          { try $0.parseParallelForEachLoop() }),
-        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / ARO-0131
+        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / GitLab #131
         (.break,             { try $0.parseBreakStatement() }),
         (.publish,           { try $0.parsePublishStatementForm() }),
         (.require,           { try $0.parseRequireStatementForm() }),         // ARO-0003
@@ -515,7 +515,7 @@ public final class Parser {
             let actionToken = advance()
             var fullVerb = actionToken.lexeme
             var endSpan = actionToken.span
-            // ARO-0095: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
+            // GitLab #95: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
             while case .dot = peek().kind {
                 let savedPosition = current
                 advance() // consume dot
@@ -1318,7 +1318,7 @@ public final class Parser {
         )
     }
 
-    // MARK: - While Loop Parsing (ARO-0002 extension, ARO-0131)
+    // MARK: - While Loop Parsing (ARO-0002 extension, GitLab #131)
 
     /// Parses: "while" <condition> "{" statements "}"
     ///

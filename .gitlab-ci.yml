@@ -33,6 +33,18 @@ default:
     - adt
 
 # =============================================================================
+# Proposal identifier hygiene (GitLab #481)
+# =============================================================================
+# Proposals/ is the project's top-priority source of truth, so a duplicated or
+# dangling ARO-NNNN identifier is a real defect. Cheap and dependency-free, so it
+# runs before the Swift build rather than after it.
+proposals:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/check-proposals.py
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:

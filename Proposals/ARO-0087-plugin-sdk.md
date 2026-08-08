@@ -1,6 +1,9 @@
 # Proposal: Plugin SDK & Developer Experience
 
-**Proposal-ID:** ARO-0073
+> **Renumbered from ARO-0073** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0073 for this document should be updated to ARO-0087.
+
+
+**Proposal-ID:** ARO-0087
 **Author:** ARO Language Team
 **Status:** Draft
 **Created:** 2026-04-11

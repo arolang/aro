@@ -1,9 +1,14 @@
-# ARO-0052: Numeric Separators
+# ARO-0082: Numeric Separators
 
-* Proposal: ARO-0052
+> **Renumbered from ARO-0052** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0052 for this document should be updated to ARO-0082.
+
+
+* Proposal: ARO-0082
 * Author: ARO Language Team
 * Status: **Implemented**
 * Requires: ARO-0001
+* Supersedes: ARO-0056 (same feature, also marked Implemented — see GitLab #481)
+* Related Issues: GitLab #98
 
 ## Abstract
 

@@ -2068,7 +2068,7 @@ public func aro_runtime_foreach_stream(
     semaphore.wait()
 }
 
-// MARK: - Mutable Scope (ARO-0131 While Loop)
+// MARK: - Mutable Scope (GitLab #131 While Loop)
 
 /// Enter a mutable scope in the given context (called at start of while loop)
 @_cdecl("aro_runtime_enter_mutable_scope")

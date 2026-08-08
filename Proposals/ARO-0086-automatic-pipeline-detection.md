@@ -1,4 +1,7 @@
-# ARO-0067: Automatic Pipeline Detection
+# ARO-0086: Automatic Pipeline Detection
+
+> **Renumbered from ARO-0067** — that number was claimed by four different proposals (GitLab #481). External references to ARO-0067 for this document should be updated to ARO-0086.
+
 
 - **Status:** Implemented
 - **Author:** ARO Team
