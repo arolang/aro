@@ -54,9 +54,52 @@ public final class ActionRegistry: @unchecked Sendable {
     /// Cache of raw verb string → normalised form so the string work happens at most once per unique input.
     private var normalizedNameCache: [String: String] = [:]
 
+    /// Registered action middleware, in registration order (GitLab #107).
+    private var middleware: [RegisteredMiddleware] = []
+
+    /// Monotonic source of middleware token IDs.
+    private var nextMiddlewareID: UInt64 = 0
+
     /// Private initializer - use shared instance
     private init() {
         self.actions = Self.createBuiltInActions()
+    }
+
+    // MARK: - Middleware Storage (GitLab #107)
+
+    func registerMiddleware(verbs: Set<String>?, body: @escaping ActionMiddleware) -> ActionMiddlewareToken {
+        lock.lock(); defer { lock.unlock() }
+        nextMiddlewareID += 1
+        let token = ActionMiddlewareToken(id: nextMiddlewareID)
+        middleware.append(RegisteredMiddleware(token: token, verbs: verbs, body: body))
+        return token
+    }
+
+    func removeMiddlewareInternal(_ token: ActionMiddlewareToken) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let before = middleware.count
+        middleware.removeAll { $0.token == token }
+        return middleware.count != before
+    }
+
+    func removeAllMiddlewareInternal() {
+        lock.lock(); defer { lock.unlock() }
+        middleware.removeAll()
+    }
+
+    var hasMiddlewareInternal: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !middleware.isEmpty
+    }
+
+    /// Snapshot of the middleware applicable to `canonicalVerb`, in registration order.
+    ///
+    /// Must be called with `lock` held — `execute` folds this into the same lock
+    /// acquisition it already makes to resolve the action, so enabling middleware
+    /// costs no extra locking on the execution path.
+    func middlewareSnapshotLocked(for canonicalVerb: String) -> [RegisteredMiddleware] {
+        guard !middleware.isEmpty else { return [] }
+        return middleware.filter { $0.applies(to: canonicalVerb) }
     }
 
     // MARK: - Registration
@@ -332,20 +375,43 @@ extension ActionRegistry {
         context: ExecutionContext
     ) async throws -> any Sendable {
         // Resolve under lock, execute outside lock so the async action body
-        // doesn't block other registry readers.
-        let resolved: (action: (any ActionImplementation)?, handler: DynamicActionHandler?) = {
+        // doesn't block other registry readers. The middleware snapshot is taken
+        // in the same acquisition, so hooks add no extra locking here (#107).
+        // Verbs arrive as written in source ("Log", "Compute"). Middleware filters
+        // and `ActionInvocation.verb` use the canonical lowercase form, so a hook
+        // registered for ["log"] matches a statement written `Log …` or `Print …`.
+        let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
+
+        let resolved: (
+            action: (any ActionImplementation)?,
+            handler: DynamicActionHandler?,
+            middleware: [RegisteredMiddleware]
+        ) = {
             lock.lock(); defer { lock.unlock() }
             let action = actions[verb.lowercased()].map { $0.init() }
             let handler = dynamicHandlers[normalizeActionNameLocked(verb)]
-            return (action, handler)
+            return (action, handler, middlewareSnapshotLocked(for: canonicalVerb))
         }()
 
+        // Resolve the target before running any middleware, so an unknown verb
+        // still reports `unknownAction` rather than surfacing from inside a hook.
+        let invoke: ActionNext
         if let action = resolved.action {
-            return try await action.execute(result: result, object: object, context: context)
+            invoke = { try await action.execute(result: result, object: object, context: context) }
+        } else if let handler = resolved.handler {
+            invoke = { try await handler(result, object, context) }
+        } else {
+            throw ActionError.unknownAction(verb)
         }
-        if let handler = resolved.handler {
-            return try await handler(result, object, context)
+
+        guard !resolved.middleware.isEmpty else {
+            return try await invoke()
         }
-        throw ActionError.unknownAction(verb)
+        return try await Self.chain(
+            resolved.middleware,
+            around: invoke,
+            invocation: ActionInvocation(verb: canonicalVerb, result: result, object: object),
+            context: context
+        )()
     }
 }
