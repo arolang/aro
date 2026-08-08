@@ -9,7 +9,7 @@ email: alice@example.com
 id: 42
 name: Alice Smith
 role: admin
-score: 98.50
+score: 98.5
 Order data:
 customer: Alice Smith
 items: 3

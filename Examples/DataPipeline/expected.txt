@@ -8,13 +8,13 @@ Numbers:
 Count:
 5
 Sum:
-15.00
+15
 Average:
-3.00
+3
 Min:
-1.00
+1
 Max:
-5.00
+5
 === Test 2: Object Array with Filter ===
 All Orders:
 amount: 100
@@ -49,11 +49,11 @@ amount: 300
 id: 5
 status: active
 Active Orders Total:
-900.00
+900
 Active Orders Count:
 3
 Active Orders Average:
-300.00
+300
 === Test 3: Map Operation ===
 Mapped Active Orders (pass-through):
 amount: 100
@@ -81,5 +81,5 @@ amount: 300
 id: 5
 status: active
 High Value Total:
-1050.00
+1050
 pipeline-test

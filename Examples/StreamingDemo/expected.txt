@@ -97,15 +97,15 @@ timestamp: __TIMESTAMP__
 5. Error count:
 3
 6. Total API response time:
-8139.00
+8139
 7. Average API response time:
-1627.80
+1627.8
 
 8. API response time range (aggregation fusion - single pass):
 Min:
-5.00
+5
 Max:
-5000.00
+5000
 
 9. Slow requests (>1000ms):
 level: ERROR

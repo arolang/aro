@@ -15,8 +15,8 @@ Shopping cart: 3 items @ $50 each
 Subtotal: $
 150
 Tax (8%): $
-12.00
+12
 Total: $
-162.00
+162
 === Calculator Demo Complete ===
 calculator

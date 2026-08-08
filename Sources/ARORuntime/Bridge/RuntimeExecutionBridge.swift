@@ -1086,11 +1086,11 @@ private func asString(_ value: any Sendable) -> String {
     case let s as String: return s
     case let i as Int: return String(i)
     case let d as Double:
-        // Format nicely - no trailing zeros
-        if d == floor(d) {
-            return String(Int(d))
-        }
-        return String(format: "%.2f", d)
+        // Shared with the interpreter's ResponseFormatter so `aro run` and
+        // `aro build` render the same number the same way (#474). Also avoids
+        // the `String(Int(d))` trap this used to hit for whole values outside
+        // Int's range, e.g. 1e21.
+        return AroNumberFormatting.string(for: d)
     case let b as Bool: return b ? "true" : "false"
     default: return String(describing: value)
     }
