@@ -938,27 +938,14 @@ public struct DataFlowAnalyzer {
         return rebindingVerbs.contains(verb.lowercased())
     }
 
+    /// Whether `name` is a framework-provided object rather than a user variable.
+    ///
+    /// Delegates to `SystemObjectCatalog`, which is the single source of truth
+    /// shared with the rest of the toolchain. Keeping this list inline here is
+    /// what let it drift from the runtime and produce false "used before
+    /// definition" warnings on correct code (GitLab #478).
     func isKnownExternal(_ name: String) -> Bool {
-        let knownExternals: Set<String> = [
-            "request", "incoming-request", "context", "session",
-            "pathparameters", "queryparameters", "headers",
-            "console", "application", "event", "shutdown",
-            "port", "host", "directory", "file", "events", "contract", "template",
-            "repository",
-            // Framework-provided runtime objects
-            "terminal",    // terminal I/O target for Prompt / Clear / Show / Render
-            "env",         // process environment via `<env: NAME>` / `<env>`
-            "git",         // embedded git system object (ARO-0080)
-            "parameter",   // CLI arguments via `<parameter: name>` / `<parameter>`
-            "input",       // user-defined action arguments via `<input: name>`
-            "path",        // file qualifier (`<file: path>` resolves a string variable to a fs path)
-            "_literal_",
-            "_expression_"
-        ]
-        if name.lowercased().hasSuffix("-repository") {
-            return true
-        }
-        return knownExternals.contains(name.lowercased())
+        SystemObjectCatalog.isSystemObject(name)
     }
 
     private func isServiceObject(_ name: String) -> Bool {
