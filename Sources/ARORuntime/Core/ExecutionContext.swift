@@ -346,6 +346,12 @@ public protocol TemplateBuffering: AnyObject, Sendable {
 
     /// Check if we're currently in a template rendering context
     var isTemplateContext: Bool { get }
+
+    /// How values printed into the template buffer are escaped (GitLab #476).
+    ///
+    /// Set by the template engine from the template's extension when it creates
+    /// the render context. `.none` outside a template render.
+    var templateEscaping: TemplateEscaping { get }
 }
 
 // MARK: - Execution Context Protocol
@@ -449,6 +455,9 @@ public extension TemplateBuffering {
 
     /// Default: not a template context
     var isTemplateContext: Bool { false }
+
+    /// Default: no escaping outside a template render.
+    var templateEscaping: TemplateEscaping { .none }
 }
 
 public extension VariableBinding {

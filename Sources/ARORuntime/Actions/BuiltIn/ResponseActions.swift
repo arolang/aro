@@ -441,6 +441,9 @@ public struct LogAction: ActionImplementation {
             // Apply specifiers (qualifiers) to the value
             // e.g., Log <numbers: reverse> applies the "reverse" qualifier
             for specifier in result.specifiers {
+                // `raw` is an escaping directive for template output (#476), not a
+                // value transform — applying it would warn about an unknown qualifier.
+                if TemplateEscaping.isRawQualifier(specifier) { continue }
                 // Apply qualifier; skip on failure (qualifier may not apply to this type)
                 do {
                     value = try context.container.qualifierRegistry.resolve(specifier, value: value)
@@ -464,9 +467,22 @@ public struct LogAction: ActionImplementation {
         // ARO-0050: Check for template target
         // Syntax: <Print> "message" to the <template>.
         if target.lowercased() == "template" {
+            // GitLab #476: escape by default for the template's format, so the safe
+            // path is the short path. `<value: raw>` opts a single value out for
+            // deliberate markup injection.
+            // The opt-out is a qualifier on the *target*, not the value:
+            // `Print <trusted> to the <template: raw>.` A qualifier on the value
+            // (`<trusted: raw>`) cannot work — the expression evaluator resolves
+            // result specifiers as qualifiers or property access, so `raw` would
+            // fail as an undefined member before Log ever sees it. Target
+            // qualifiers are also the established pattern here, matching
+            // `<console: error>` for stream selection.
+            let isRaw = object.specifiers.contains(where: { TemplateEscaping.isRawQualifier($0) })
+            let escaped = isRaw ? message : context.templateEscaping.apply(to: message)
+
             // Append to template buffer instead of stdout/stderr
-            context.appendToTemplateBuffer(message)
-            return LogResult(message: message, target: target)
+            context.appendToTemplateBuffer(escaped)
+            return LogResult(message: escaped, target: target)
         }
 
         // Extract output stream qualifier (for console: stdout vs stderr)

@@ -125,6 +125,10 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether this is a template rendering context
     private nonisolated let _isTemplateContext: Bool
 
+    /// How values printed into the template buffer are escaped (GitLab #476).
+    /// Set by the template engine once the template's path is known.
+    nonisolated(unsafe) private var _templateEscaping: TemplateEscaping = .none
+
     /// Schema registry for typed event extraction (ARO-0046)
     nonisolated(unsafe) private var _schemaRegistry: SchemaRegistry?
 
@@ -662,6 +666,22 @@ public actor RuntimeContext: ExecutionContext {
 
     public nonisolated var isTemplateContext: Bool {
         _isTemplateContext
+    }
+
+    /// How values printed into the template buffer are escaped (GitLab #476).
+    ///
+    /// Inherited from the parent so a template that `Include`s another keeps the
+    /// outer template's escaping unless the inner one sets its own.
+    public nonisolated var templateEscaping: TemplateEscaping {
+        if _templateEscaping != .none { return _templateEscaping }
+        return (parent as? RuntimeContext)?.templateEscaping ?? .none
+    }
+
+    /// Sets the escaping mode for this render. Called by the template engine.
+    public nonisolated func setTemplateEscaping(_ mode: TemplateEscaping) {
+        withExclusiveMutation {
+            _templateEscaping = mode
+        }
     }
 
     // MARK: - Schema Registry (ARO-0046)
