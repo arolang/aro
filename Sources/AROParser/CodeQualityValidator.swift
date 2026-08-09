@@ -20,6 +20,11 @@ public struct CodeQualityValidator {
     public func validate(_ featureSet: FeatureSet) {
         let statements = featureSet.statements
 
+        // GitLab #479: prepositions are part of an action's contract, and the
+        // constraint is decidable from the AST. Checked over the whole statement
+        // tree so guarded statements, match cases and loop bodies are covered too.
+        validatePrepositions(in: statements)
+
         // Check for empty feature set
         if statements.isEmpty {
             diagnostics.warning(
@@ -84,4 +89,70 @@ public struct CodeQualityValidator {
             }
         }
     }
+    // MARK: - Preposition Validation (GitLab #479)
+
+    /// Reports statements whose preposition the action does not accept.
+    ///
+    /// Silent before this check: a one-word mistake compiled clean and failed at
+    /// run time with a message that never mentioned the preposition, so the user
+    /// went looking at the wrong thing entirely.
+    ///
+    /// Only built-in verbs are checked. `PrepositionCatalog` returns nil for
+    /// plugin and `Application.<Name>` actions, whose prepositions are known only
+    /// at run time, and nil is treated as "cannot check" rather than "invalid".
+    private func validatePrepositions(in statements: [Statement]) {
+        for aro in collectAROStatements(statements) {
+            let verb = aro.action.verb
+            guard let accepted = PrepositionCatalog.prepositions(forVerb: verb) else { continue }
+
+            let preposition = aro.object.preposition
+            guard !accepted.contains(preposition) else { continue }
+
+            var hints = ["Valid prepositions for \(verb): \(PrepositionCatalog.hintList(forVerb: verb))"]
+            if let closest = accepted.sorted(by: { $0.rawValue < $1.rawValue }).first {
+                hints.append(
+                    "Did you mean: \(verb) the <\(aro.result.base)> \(closest.rawValue) the <\(aro.object.noun.base)>."
+                )
+            }
+
+            // Reported as a warning, not an error, though #479 asked for an error.
+            //
+            // Some statements never dispatch their action: FeatureSetExecutor's
+            // `!needsExecution` fast path binds the expression value directly, so
+            // the action's `validatePreposition` never runs. `Make the <value>
+            // with "first".` therefore *works today* even though MakeAction
+            // accepts only to/for/at — it works by accident, but it works, and it
+            // appears in the existing test suite. Erroring would break running
+            // programs for a spelling the runtime currently tolerates.
+            //
+            // Whether the fast path should honour the contract is a separate
+            // question; once it does, or once such spellings are cleaned up, this
+            // can be promoted to an error.
+            diagnostics.warning(
+                "Action '\(verb)' does not accept the preposition '\(preposition.rawValue)'",
+                at: aro.object.noun.span.start,
+                hints: hints
+            )
+        }
+    }
+
+    /// Flattens the statement tree, descending into match cases and loop bodies.
+    /// Mirrors `DataFlowAnalyzer.collectAROStatements`.
+    private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
+        var result: [AROStatement] = []
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                result.append(aro)
+            } else if let match = statement as? MatchStatement {
+                for matchCase in match.cases {
+                    result.append(contentsOf: collectAROStatements(matchCase.body))
+                }
+                result.append(contentsOf: collectAROStatements(match.otherwise ?? []))
+            } else if let loop = statement as? ForEachLoop {
+                result.append(contentsOf: collectAROStatements(loop.body))
+            }
+        }
+        return result
+    }
+
 }

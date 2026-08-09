@@ -27,7 +27,7 @@
     Stop the <http-server> with <application>.
 
     (* Close database connections *)
-    Close the <database-connections> for the <application>.
+    Close the <database-connections> with <application>.
 
     Log "User Service stopped. Goodbye!" to the <console>.
     Return an <OK: status> for the <shutdown>.
@@ -40,7 +40,7 @@
     Log "FATAL: User Service crashed!" to the <console>.
 
     (* Attempt to close connections gracefully *)
-    Close the <database-connections> for the <application>.
+    Close the <database-connections> with <application>.
 
     Return an <OK: status> for the <error-handling>.
 }
