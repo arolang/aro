@@ -45,6 +45,18 @@ proposals:
     - python3 Scripts/check-proposals.py
 
 # =============================================================================
+# Action reference is generated, not hand-maintained (GitLab #480)
+# =============================================================================
+# ARO-0004 §11 is the authoritative action spec. It had drifted to 48 of 70
+# actions with several wrong rows; it is now derived from the runtime and this
+# job fails if the committed table no longer matches.
+action-reference:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-action-reference.py --check
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:

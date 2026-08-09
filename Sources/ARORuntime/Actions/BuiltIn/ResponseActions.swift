@@ -569,7 +569,12 @@ public struct LogAction: ActionImplementation {
 public struct StoreAction: ActionImplementation {
     public static let role: ActionRole = .response
     public static let verbs: Set<String> = ["store", "save", "persist"]
-    public static let validPrepositions: Set<Preposition> = [.into, .to, .in]
+    // `.in` used to be listed here too, which is why ARO-0004 documented Store as
+    // accepting `in`. It is an alias for `.into` (ServerActions.swift), not a case,
+    // and the lexer has no `in` token — so `Store the <x> in the <repo>.` never
+    // parsed. Dropping it is a no-op for the set and stops the declaration from
+    // implying otherwise (GitLab #480).
+    public static let validPrepositions: Set<Preposition> = [.into, .to]
 
     public init() {}
 
