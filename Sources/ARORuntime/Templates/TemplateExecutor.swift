@@ -168,7 +168,12 @@ public final class TemplateExecutor: @unchecked Sendable {
             case .statements(let statementsSource):
                 // Execute directly against templateContext so bindings are visible
                 // to subsequent expression blocks in the same template rendering pass.
-                try await executeStatements(statementsSource, context: templateContext, templatePath: template.path)
+                try await executeStatements(
+                    statementsSource,
+                    context: templateContext,
+                    templatePath: template.path,
+                    templateLine: template.line(ofSegment: index)
+                )
                 let stmtOutput = templateContext.flushTemplateBuffer()
                 advancePosition(stmtOutput)
                 parts.append(stmtOutput)
@@ -270,7 +275,12 @@ public final class TemplateExecutor: @unchecked Sendable {
                 index += 1
 
             case .statements(let statementsSource):
-                try await executeStatements(statementsSource, context: templateContext, templatePath: template.path)
+                try await executeStatements(
+                    statementsSource,
+                    context: templateContext,
+                    templatePath: template.path,
+                    templateLine: template.line(ofSegment: index)
+                )
                 parts.append(templateContext.flushTemplateBuffer())
                 index += 1
 
@@ -708,7 +718,8 @@ public final class TemplateExecutor: @unchecked Sendable {
     private func executeStatements(
         _ source: String,
         context: ExecutionContext,
-        templatePath: String
+        templatePath: String,
+        templateLine: Int? = nil
     ) async throws {
         // Wrap statements in a temporary feature set for parsing
         let wrappedSource = """
@@ -722,9 +733,23 @@ public final class TemplateExecutor: @unchecked Sendable {
 
         if result.hasErrors {
             let errorMessages = result.diagnostics.filter { $0.severity == .error }.map { $0.message }
+            let message = errorMessages.joined(separator: "; ")
+            // Report the block's position and text when we know it, plus a hint
+            // for the common authoring mistakes — a bare Mustache-style
+            // `{{name}}` otherwise yields a token-level message that explains
+            // nothing to a template author (GitLab #484).
+            if let templateLine {
+                throw TemplateError.renderErrorAt(
+                    path: templatePath,
+                    line: templateLine,
+                    source: source,
+                    message: message,
+                    hint: TemplateBlockHint.hint(forBlock: source)
+                )
+            }
             throw TemplateError.renderError(
                 path: templatePath,
-                message: "Statement compilation error: \(errorMessages.joined(separator: "; "))"
+                message: "Statement compilation error: \(message)"
             )
         }
 
