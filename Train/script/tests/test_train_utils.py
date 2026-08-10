@@ -10,6 +10,7 @@ from train_utils import (  # noqa: E402
     lr_schedule_config, find_resume_checkpoint, resolve_resume,
     check_convergence, detect_regressions, per_task_trends,
     select_min_max_checkpoint, best_round, source_to_task_type,
+    write_resume_provenance, read_resume_provenance, check_resume_provenance,
 )
 
 
@@ -92,6 +93,104 @@ class TestResume(unittest.TestCase):
                                      fallback_adapter=None)
         self.assertIsNone(f)
         self.assertEqual(iters, 100)
+
+
+class TestResumeProvenance(unittest.TestCase):
+    """Guard against resuming an adapter trained on a different base model.
+
+    Regression test for the 2026-08-08 NB18 failure: checkpoints trained
+    against Qwen3-Coder-30B-A3B-Instruct-4bit were resumed onto the bf16
+    base (LoRA shapes match, so load_weights(strict=False) stays silent).
+    """
+
+    BF16 = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16'
+    Q4 = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
+    LORA = {'rank': 8, 'dropout': 0.0, 'scale': 20.0}
+
+    def _mk(self, tmp, names):
+        for n in names:
+            (Path(tmp) / n).write_bytes(b'')
+
+    def test_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_resume_provenance(tmp, self.BF16,
+                                    lora_parameters=self.LORA, num_layers=16)
+            prov = read_resume_provenance(tmp)
+            self.assertEqual(prov['base_model'], self.BF16)
+            self.assertEqual(prov['lora_parameters'], self.LORA)
+            self.assertEqual(prov['num_layers'], 16)
+
+    def test_read_missing_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(read_resume_provenance(tmp))
+
+    def test_check_detects_base_model_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_resume_provenance(tmp, self.Q4, lora_parameters=self.LORA,
+                                    num_layers=16)
+            ok, reason = check_resume_provenance(tmp, self.BF16, self.LORA, 16)
+            self.assertFalse(ok)
+            self.assertIn('4bit', reason)
+
+    def test_check_detects_lora_and_layer_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_resume_provenance(tmp, self.BF16, lora_parameters=self.LORA,
+                                    num_layers=16)
+            ok, _ = check_resume_provenance(
+                tmp, self.BF16, {'rank': 16, 'dropout': 0.0, 'scale': 20.0}, 16)
+            self.assertFalse(ok)
+            ok, _ = check_resume_provenance(tmp, self.BF16, self.LORA, 8)
+            self.assertFalse(ok)
+
+    def test_check_passes_when_matching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_resume_provenance(tmp, self.BF16, lora_parameters=self.LORA,
+                                    num_layers=16)
+            ok, _ = check_resume_provenance(tmp, self.BF16, self.LORA, 16)
+            self.assertTrue(ok)
+
+    def test_resolve_refuses_cross_base_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mk(tmp, ['0000600_adapters.safetensors'])
+            write_resume_provenance(tmp, self.Q4, lora_parameters=self.LORA,
+                                    num_layers=16)
+            f, iters, msg = resolve_resume(
+                tmp, 1000, fallback_adapter='warm', base_model=self.BF16,
+                lora_parameters=self.LORA, num_layers=16)
+            self.assertEqual(f, 'warm')
+            self.assertEqual(iters, 1000)      # full run, not 400 remaining
+            self.assertIn('NOT resuming', msg)
+
+    def test_resolve_refuses_when_provenance_absent(self):
+        """Checkpoints predating the guard have unknown provenance."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mk(tmp, ['0000600_adapters.safetensors'])
+            f, iters, msg = resolve_resume(
+                tmp, 1000, fallback_adapter='warm', base_model=self.BF16)
+            self.assertEqual(f, 'warm')
+            self.assertEqual(iters, 1000)
+            self.assertIn('NOT resuming', msg)
+
+    def test_resolve_resumes_when_provenance_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mk(tmp, ['0000600_adapters.safetensors'])
+            write_resume_provenance(tmp, self.BF16, lora_parameters=self.LORA,
+                                    num_layers=16)
+            f, iters, msg = resolve_resume(
+                tmp, 1000, fallback_adapter='warm', base_model=self.BF16,
+                lora_parameters=self.LORA, num_layers=16)
+            self.assertEqual(Path(f).name, '0000600_adapters.safetensors')
+            self.assertEqual(iters, 400)
+            self.assertIn('RESUME', msg)
+
+    def test_resolve_without_base_model_skips_guard(self):
+        """Existing callers that pass no base_model keep the old behaviour."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mk(tmp, ['0000600_adapters.safetensors'])
+            f, iters, msg = resolve_resume(tmp, 1000, fallback_adapter='warm')
+            self.assertEqual(Path(f).name, '0000600_adapters.safetensors')
+            self.assertEqual(iters, 400)
+            self.assertIn('RESUME', msg)
 
 
 class TestConvergence(unittest.TestCase):
