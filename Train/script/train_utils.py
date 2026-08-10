@@ -68,8 +68,79 @@ def find_resume_checkpoint(adapter_dir):
     return best, best_iter
 
 
+# ── Resume provenance guard ──────────────────────────────────────────────────
+# LoRA A/B tensors have identical shapes across the 4-bit and bf16 checkpoints
+# of the same architecture, so `model.load_weights(ckpt, strict=False)` accepts
+# an adapter trained on a *different* base without a word of complaint. On
+# 2026-08-08 NB18 resumed `round_0/adapter/0000600` — trained 2026-08-04 against
+# Qwen3-Coder-30B-A3B-Instruct-4bit — onto the bf16 base that config.py had
+# since switched to, and training went NaN at iter 10 (before the first
+# optimizer step, so it could not have been the learning rate).
+#
+# mlx-lm's own adapter_config.json is no help: it is rewritten with the *new*
+# model id at the start of every run, so after one bad run it describes weights
+# it does not match. We therefore keep our own sidecar, written only once the
+# training command is actually launched, and refuse to resume unless it agrees
+# with the run we are about to start. A missing sidecar means the checkpoints
+# predate this guard — provenance unknown, so do not resume.
+
+PROVENANCE_FILE = 'resume_provenance.json'
+
+
+def write_resume_provenance(adapter_dir, base_model, lora_parameters=None,
+                            num_layers=None):
+    """Record what base model / LoRA geometry an adapter dir's checkpoints
+    belong to. Call this when a training run starts writing into the dir."""
+    adapter_dir = Path(adapter_dir)
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        'base_model': base_model,
+        'lora_parameters': lora_parameters,
+        'num_layers': num_layers,
+    }
+    (adapter_dir / PROVENANCE_FILE).write_text(json.dumps(payload, indent=2))
+    return payload
+
+
+def read_resume_provenance(adapter_dir):
+    """Read the provenance sidecar, or None when absent/unreadable."""
+    path = Path(adapter_dir) / PROVENANCE_FILE
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (ValueError, OSError):
+        return None
+
+
+def check_resume_provenance(adapter_dir, base_model, lora_parameters=None,
+                            num_layers=None):
+    """Return (ok, reason) for resuming `adapter_dir` into the given run.
+
+    `ok` is False when the sidecar is missing or disagrees with the run being
+    started — resuming would silently load mismatched weights.
+    """
+    prov = read_resume_provenance(adapter_dir)
+    if prov is None:
+        return False, (f'no {PROVENANCE_FILE} — checkpoint provenance unknown '
+                       f'(predates the provenance guard)')
+    if prov.get('base_model') != base_model:
+        return False, (f'checkpoint was trained against {prov.get("base_model")!r}, '
+                       f'this run uses {base_model!r}')
+    if (lora_parameters is not None and prov.get('lora_parameters') is not None
+            and prov['lora_parameters'] != lora_parameters):
+        return False, (f'checkpoint LoRA parameters {prov["lora_parameters"]} '
+                       f'!= this run\'s {lora_parameters}')
+    if (num_layers is not None and prov.get('num_layers') is not None
+            and prov['num_layers'] != num_layers):
+        return False, (f'checkpoint has {prov["num_layers"]} LoRA layers, '
+                       f'this run uses {num_layers}')
+    return True, 'provenance matches'
+
+
 def resolve_resume(adapter_dir, total_iters, fallback_adapter=None,
-                   enabled=True):
+                   enabled=True, base_model=None, lora_parameters=None,
+                   num_layers=None):
     """Decide how an (possibly interrupted) training run should start.
 
     Returns (resume_file or None, run_iters, decision_str):
@@ -79,13 +150,32 @@ def resolve_resume(adapter_dir, total_iters, fallback_adapter=None,
         from the finished run are ignored; clear the dir to silence this)
       - nothing to resume              → use `fallback_adapter` (e.g. the
         warm-start adapter) for the full iteration count
+
+    When `base_model` is given, a partial run is only resumed if the adapter
+    dir's provenance sidecar agrees with it (see `check_resume_provenance`);
+    otherwise the checkpoints are ignored and the run starts from
+    `fallback_adapter`. Pass None to skip the check.
     """
     ckpt, done = find_resume_checkpoint(adapter_dir)
-    if enabled and ckpt is not None and 0 < done < total_iters:
+    mismatch = None
+    if enabled and ckpt is not None and 0 < done < total_iters and base_model is not None:
+        ok, reason = check_resume_provenance(
+            adapter_dir, base_model, lora_parameters, num_layers)
+        if not ok:
+            mismatch = reason
+    if mismatch is None and enabled and ckpt is not None and 0 < done < total_iters:
         remaining = total_iters - done
         return ckpt, remaining, (
             f'RESUME: found checkpoint {ckpt.name} (iter {done}/{total_iters}) '
             f'— resuming with {remaining} remaining iterations')
+    if mismatch is not None:
+        decision = (
+            f'NOT resuming: {ckpt.name} exists but {mismatch}. '
+            f'Ignoring the stale checkpoints and starting a fresh run — '
+            f'clear {adapter_dir} to remove them.')
+        if fallback_adapter is not None:
+            decision += f' (initial weights: {fallback_adapter})'
+        return fallback_adapter, total_iters, decision
     if ckpt is not None and done >= total_iters:
         decision = (
             f'NOT resuming: latest checkpoint {ckpt.name} already covers '
