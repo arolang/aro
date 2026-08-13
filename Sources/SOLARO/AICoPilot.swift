@@ -707,6 +707,16 @@ struct AICoPilotPanel: View {
     /// Which row in the slash-command picker is currently
     /// highlighted. Wraps modulo the filtered list size.
     @State private var slashHighlight: Int = 0
+    /// Height of the whole panel, the input to the prompt field's
+    /// growth cap (#489) — the ceiling is a fraction of the panel,
+    /// not a hard-coded line count, so a tall right rail gets a
+    /// taller composer and a short one doesn't lose its transcript.
+    @State private var panelHeight: CGFloat = 0
+    /// Current measured height of the prompt field. The transcript
+    /// re-pins to the bottom whenever it changes, so growing the
+    /// composer pushes the conversation up instead of hiding its
+    /// last turn behind the field.
+    @State private var promptHeight: CGFloat = 0
     @AppStorage("solaro.copilot.firstUseAcknowledged")
     private var firstUseAcknowledged: Bool = false
 
@@ -727,6 +737,11 @@ struct AICoPilotPanel: View {
         // an opaque rectangle on top of the material and the
         // liquid-glass effect disappears.
         .background(Color.clear)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            panelHeight = height
+        }
     }
 
     private var header: some View {
@@ -815,28 +830,21 @@ struct AICoPilotPanel: View {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
             }
+            // The composer grows downwards into the transcript's
+            // space (#489). A ScrollView keeps its offset from the
+            // top, so without this the last turn would slide up out
+            // of sight as the field expanded.
+            .onChange(of: promptHeight) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
         }
     }
 
     private var promptField: some View {
         VStack(spacing: 0) {
             slashCommandPicker
-            HStack(spacing: SolaroSpace.s) {
-                TextField(
-                    "Ask…",
-                    text: $promptDraft,
-                    axis: .vertical
-                )
-                .lineLimit(1...4)
-                .textFieldStyle(.roundedBorder)
-                .disabled(!firstUseAcknowledged)
-                .onSubmit(handleReturn)
-                .onKeyPress(.upArrow) {
-                    moveSlashHighlight(by: -1)
-                }
-                .onKeyPress(.downArrow) {
-                    moveSlashHighlight(by: 1)
-                }
+            HStack(alignment: .bottom, spacing: SolaroSpace.s) {
+                growingPrompt
                 Button {
                     send()
                 } label: {
@@ -857,6 +865,57 @@ struct AICoPilotPanel: View {
             let matches = AskSlashCommand.filter(promptDraft)
             if slashHighlight >= matches.count { slashHighlight = 0 }
         }
+    }
+
+    /// The prompt itself (#489) — one line to start, growing with
+    /// the draft up to a cap taken from the panel height, then
+    /// scrolling. The rounded-border chrome is drawn here because
+    /// the field underneath is an `NSTextView`, not a `TextField`;
+    /// see `AskPromptEditor` for why.
+    private var growingPrompt: some View {
+        AskPromptEditor(
+            text: $promptDraft,
+            isEnabled: firstUseAcknowledged,
+            maxHeight: AskPromptMetrics.maxHeight(
+                panelHeight: panelHeight,
+                lineHeight: promptLineHeight),
+            onSubmit: handleReturn,
+            onSend: send,
+            onArrow: { delta in moveSlashHighlight(by: delta) },
+            onHeightChange: { height in
+                guard abs(height - promptHeight) > 0.5 else { return }
+                promptHeight = height
+            }
+        )
+        .frame(minHeight: AskPromptMetrics.minHeight(
+            lineHeight: promptLineHeight))
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: SolaroRadius.s)
+                .fill(SolaroColor.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.s)
+                .stroke(SolaroColor.divider, lineWidth: 1)
+        )
+        .overlay(alignment: .topLeading) {
+            if promptDraft.isEmpty {
+                Text("Ask…")
+                    .font(.system(size: 13))
+                    .foregroundStyle(SolaroColor.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, AskPromptMetrics.verticalInset)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// One line of the prompt font. Kept here (rather than read off
+    /// the text view) so the SwiftUI side can size the field's floor
+    /// before the view exists.
+    private var promptLineHeight: CGFloat {
+        let font = NSFont.systemFont(ofSize: 13)
+        return ceil(NSLayoutManager().defaultLineHeight(for: font))
     }
 
     /// Pops up above the prompt field while the draft starts with
@@ -966,7 +1025,7 @@ struct AICoPilotPanel: View {
     /// `.handled` (and updates `slashHighlight`) when the picker is
     /// visible, otherwise `.ignored` so the TextField handles the
     /// arrow normally.
-    private func moveSlashHighlight(by delta: Int) -> KeyPress.Result {
+    private func moveSlashHighlight(by delta: Int) -> AskPromptKeyResult {
         let matches = AskSlashCommand.filter(promptDraft)
         guard !matches.isEmpty else { return .ignored }
         let count = matches.count
