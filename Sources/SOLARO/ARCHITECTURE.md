@@ -33,6 +33,9 @@ Sources/
 │   ├── FileTree.swift            ← directory-grouped tree builder
 │   ├── CenterPane.swift          ← Text / Canvas / Split / Map dispatcher
 │   ├── CodeEditor.swift          ← NSViewRepresentable around NSTextView
+│   ├── MarkdownDocument.swift    ← markdown buffer + block source ranges (#488)
+│   ├── MarkdownInlineEditor.swift← rendered .md with one raw block (#488)
+│   ├── MarkdownBlockSourceEditor.swift ← the single editable block
 │   ├── SyntaxHighlighter.swift   ← Lexer-driven token coloring
 │   ├── CanvasView.swift          ← action-graph rendering + Bézier wires (#232)
 │   ├── CanvasGraph.swift         ← node + edge data model

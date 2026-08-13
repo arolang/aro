@@ -707,7 +707,7 @@ struct BookMarkdownView: View {
     }
 }
 
-enum BookMarkdownBlock {
+enum BookMarkdownBlock: Equatable {
     case heading(level: Int, text: String)
     case paragraph(String)
     case unorderedList([String])
@@ -727,7 +727,15 @@ enum BookMarkdownBlock {
     case htmlBlock(String)
 }
 
-private enum BookMarkdownParser {
+enum BookMarkdownParser {
+    /// Block list without positional information — what the book
+    /// viewer needs. The editor path calls `parseSourceBlocks`
+    /// instead, which is the same walk with each block's line span
+    /// attached.
+    static func parse(_ source: String) -> [BookMarkdownBlock] {
+        parseSourceBlocks(source).map(\.block)
+    }
+
     /// Walk the source line by line, grouping lines into blocks.
     /// The grammar handled:
     ///   `#` ATX headings (1–6 `#`s)
@@ -737,12 +745,34 @@ private enum BookMarkdownParser {
     ///   ``` fenced code blocks
     ///   `---` / `***` horizontal rules
     ///   anything else → paragraph (consecutive non-blank lines merge)
-    static func parse(_ source: String) -> [BookMarkdownBlock] {
-        var blocks: [BookMarkdownBlock] = []
+    ///
+    /// Every emitted block carries the half-open range of source
+    /// lines it was built from (#488). Blank separator lines belong
+    /// to no block, so the ranges do not tile the document — they
+    /// are anchors into the authoritative text buffer, which stays
+    /// the single source of truth for the inline markdown editor.
+    ///
+    /// `lineOffset` shifts every emitted range, so a caller can
+    /// re-parse a slice of a larger document and get ranges in the
+    /// coordinates of the whole thing.
+    static func parseSourceBlocks(
+        _ source: String,
+        lineOffset: Int = 0
+    ) -> [MarkdownSourceBlock] {
+        var blocks: [MarkdownSourceBlock] = []
         let lines = source.split(separator: "\n",
                                  omittingEmptySubsequences: false)
         var i = 0
+        // Records `block` as spanning source lines `start..<i` — call
+        // it after the walk has consumed every line of the block.
+        func emit(_ block: BookMarkdownBlock, from start: Int) {
+            blocks.append(MarkdownSourceBlock(
+                block: block,
+                lineRange: (start + lineOffset)..<(i + lineOffset)
+            ))
+        }
         while i < lines.count {
+            let start = i
             let line = String(lines[i])
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
@@ -763,10 +793,10 @@ private enum BookMarkdownParser {
                     body.append(inner)
                     i += 1
                 }
-                blocks.append(.codeBlock(
+                emit(.codeBlock(
                     language: lang.isEmpty ? nil : lang,
                     body: body.joined(separator: "\n")
-                ))
+                ), from: start)
                 continue
             }
 
@@ -790,14 +820,14 @@ private enum BookMarkdownParser {
                     html.append(inner)
                     i += 1
                 }
-                blocks.append(.htmlBlock(html.joined(separator: "\n")))
+                emit(.htmlBlock(html.joined(separator: "\n")), from: start)
                 continue
             }
 
             // Horizontal rule.
             if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-                blocks.append(.horizontalRule)
                 i += 1
+                emit(.horizontalRule, from: start)
                 continue
             }
 
@@ -810,8 +840,8 @@ private enum BookMarkdownParser {
                 if level <= 6 {
                     let body = String(trimmed.dropFirst(level))
                         .trimmingCharacters(in: .whitespaces)
-                    blocks.append(.heading(level: level, text: body))
                     i += 1
+                    emit(.heading(level: level, text: body), from: start)
                     continue
                 }
             }
@@ -827,7 +857,7 @@ private enum BookMarkdownParser {
                         .trimmingCharacters(in: .whitespaces))
                     i += 1
                 }
-                blocks.append(.blockquote(quoted.joined(separator: "\n")))
+                emit(.blockquote(quoted.joined(separator: "\n")), from: start)
                 continue
             }
 
@@ -844,7 +874,7 @@ private enum BookMarkdownParser {
                     } else { break }
                     i += 1
                 }
-                blocks.append(.unorderedList(items))
+                emit(.unorderedList(items), from: start)
                 continue
             }
 
@@ -867,7 +897,7 @@ private enum BookMarkdownParser {
                     rows.append(splitTableRow(inner))
                     i += 1
                 }
-                blocks.append(.table(headers: headers, rows: rows))
+                emit(.table(headers: headers, rows: rows), from: start)
                 continue
             }
 
@@ -884,7 +914,7 @@ private enum BookMarkdownParser {
                         .trimmingCharacters(in: .whitespaces))
                     i += 1
                 }
-                blocks.append(.orderedList(items))
+                emit(.orderedList(items), from: start)
                 continue
             }
 
@@ -892,21 +922,31 @@ private enum BookMarkdownParser {
             // lines and join them with a space so wrapped lines in
             // the source render as one flowing paragraph (standard
             // CommonMark soft-break behaviour).
+            //
+            // The first line is consumed unconditionally. It reached
+            // the paragraph branch because no earlier rule claimed
+            // it, but it can still *look* like a block opener that
+            // the rule rejected — `| a | b |` with no separator row,
+            // or `####### seven hashes`. Re-testing those break
+            // conditions on the opening line would consume nothing,
+            // leave `i` where it was, and spin the walk forever.
             var paragraph: [String] = []
             while i < lines.count {
                 let inner = String(lines[i])
                 let innerTrim = inner.trimmingCharacters(in: .whitespaces)
-                if innerTrim.isEmpty { break }
-                if innerTrim.hasPrefix("```") { break }
-                if innerTrim.hasPrefix("#") { break }
-                if innerTrim.hasPrefix(">") { break }
-                if innerTrim.hasPrefix("- ") || innerTrim.hasPrefix("* ") { break }
-                if isOrderedListLine(innerTrim) { break }
-                if innerTrim == "---" || innerTrim == "***" || innerTrim == "___" { break }
-                // Tables: stop paragraph absorption when a `|` row
-                // appears — otherwise a table embedded in flowing
-                // prose dumps every cell into the paragraph text.
-                if innerTrim.hasPrefix("|") { break }
+                if !paragraph.isEmpty {
+                    if innerTrim.isEmpty { break }
+                    if innerTrim.hasPrefix("```") { break }
+                    if innerTrim.hasPrefix("#") { break }
+                    if innerTrim.hasPrefix(">") { break }
+                    if innerTrim.hasPrefix("- ") || innerTrim.hasPrefix("* ") { break }
+                    if isOrderedListLine(innerTrim) { break }
+                    if innerTrim == "---" || innerTrim == "***" || innerTrim == "___" { break }
+                    // Tables: stop paragraph absorption when a `|` row
+                    // appears — otherwise a table embedded in flowing
+                    // prose dumps every cell into the paragraph text.
+                    if innerTrim.hasPrefix("|") { break }
+                }
                 paragraph.append(innerTrim)
                 i += 1
             }
@@ -920,9 +960,9 @@ private enum BookMarkdownParser {
                 if joined.contains("<") && joined.contains(">"),
                    containsHTMLTag(joined)
                 {
-                    blocks.append(.htmlBlock(joined))
+                    emit(.htmlBlock(joined), from: start)
                 } else {
-                    blocks.append(.paragraph(joined))
+                    emit(.paragraph(joined), from: start)
                 }
             }
         }
@@ -1008,8 +1048,40 @@ private enum BookMarkdownParser {
     }
 }
 
-private struct BookMarkdownBlockView: View {
+/// `.textSelection` has no conditional form — the enabled and
+/// disabled selectabilities are distinct types — so the choice has
+/// to be made by branching on whole views.
+private struct SelectableText: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.textSelection(.enabled)
+        } else {
+            content.textSelection(.disabled)
+        }
+    }
+}
+
+/// Renders one parsed markdown block. Shared by the book viewer
+/// and the inline markdown editor (#488) — the editor needs the
+/// exact same block typography so a rendered `.md` file and a
+/// book chapter read as one design.
+struct BookMarkdownBlockView: View {
     let block: BookMarkdownBlock
+    /// Editor blocks get a highlighted ARO fence and a tighter code
+    /// gutter; book blocks keep the long-form treatment. Defaults to
+    /// `.book` so existing call sites are unchanged.
+    var style: Style = .book
+
+    enum Style { case book, editor }
+
+    /// Book blocks are selectable prose. Editor blocks are not:
+    /// selectable `Text` swallows the first mouse-down, so a click
+    /// on a rendered block would take *two* clicks to put the caret
+    /// in it. Clicking an editor block hands it to the raw-source
+    /// field, where selection works the way it does in any editor.
+    private var selectable: Bool { style == .book }
 
     var body: some View {
         switch block {
@@ -1020,7 +1092,7 @@ private struct BookMarkdownBlockView: View {
                 .font(.system(size: 14))
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+                .modifier(SelectableText(enabled: selectable))
         case .unorderedList(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -1030,7 +1102,7 @@ private struct BookMarkdownBlockView: View {
                         inlineText(item)
                             .font(.system(size: 14))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                            .modifier(SelectableText(enabled: selectable))
                     }
                 }
             }
@@ -1046,7 +1118,7 @@ private struct BookMarkdownBlockView: View {
                         inlineText(item)
                             .font(.system(size: 14))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                            .modifier(SelectableText(enabled: selectable))
                     }
                 }
             }
@@ -1062,7 +1134,7 @@ private struct BookMarkdownBlockView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, SolaroSpace.s)
                     .padding(.vertical, 4)
-                    .textSelection(.enabled)
+                    .modifier(SelectableText(enabled: selectable))
             }
             .background(SolaroColor.surfaceRaised.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -1078,9 +1150,9 @@ private struct BookMarkdownBlockView: View {
                     .padding(.horizontal, SolaroSpace.s)
                     .padding(.top, 4)
                 }
-                Text(body)
+                codeBody(body, language: language)
                     .font(SolaroFont.mono)
-                    .textSelection(.enabled)
+                    .modifier(SelectableText(enabled: selectable))
                     .padding(SolaroSpace.s)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1100,7 +1172,7 @@ private struct BookMarkdownBlockView: View {
         case .table(let headers, let rows):
             tableView(headers: headers, rows: rows)
         case .htmlBlock(let html):
-            HTMLBlockView(html: html)
+            HTMLBlockView(html: html, selectable: selectable)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -1119,12 +1191,14 @@ private struct BookMarkdownBlockView: View {
             VStack(alignment: .leading, spacing: 0) {
                 BookTableRowView(
                     cells: pad(headers, to: columnCount),
-                    isHeader: true)
+                    isHeader: true,
+                    selectable: selectable)
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Divider().background(SolaroColor.divider.opacity(0.5))
                     BookTableRowView(
                         cells: pad(row, to: columnCount),
-                        isHeader: false)
+                        isHeader: false,
+                        selectable: selectable)
                 }
             }
             .frame(minWidth: 480, alignment: .leading)
@@ -1136,6 +1210,22 @@ private struct BookMarkdownBlockView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 4))
         }
+    }
+
+    /// Fenced-code body. In `.editor` style an ```aro fence runs
+    /// through the same lexer-driven highlighter the code pane uses,
+    /// so a markdown file documenting ARO shows coloured samples.
+    /// Any other language (and the whole book path) stays plain
+    /// mono — we only claim to highlight what we have a highlighter
+    /// for.
+    private func codeBody(_ body: String, language: String?) -> Text {
+        guard style == .editor,
+              let language,
+              ["aro"].contains(language.lowercased())
+        else { return Text(body) }
+        let attributed = NSMutableAttributedString(string: body)
+        AROSyntaxHighlighter.apply(to: attributed, source: body)
+        return Text(AttributedString(attributed))
     }
 
     /// Right-pad a short row so the column count matches the
@@ -1164,13 +1254,17 @@ private struct BookMarkdownBlockView: View {
 private struct BookTableRowView: View {
     let cells: [String]
     let isHeader: Bool
+    /// False inside the inline markdown editor: there, a click on
+    /// the table belongs to "put the caret in this block", not to
+    /// text selection or the example popover.
+    var selectable: Bool = true
 
     @State private var showExample = false
 
     var body: some View {
         let split = cells.map(splitExample(from:))
         let exampleCells = split.compactMap { $0.example }
-        let hasExample = !isHeader && !exampleCells.isEmpty
+        let hasExample = selectable && !isHeader && !exampleCells.isEmpty
         let actionName = split.first?.prose ?? cells.first ?? ""
 
         rowContent(splitCells: split, hasExample: hasExample)
@@ -1203,7 +1297,7 @@ private struct BookTableRowView: View {
                         .frame(width: 1)
                 }
                 cellLabel(pair.prose)
-                    .textSelection(.enabled)
+                    .modifier(SelectableText(enabled: selectable))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1352,7 +1446,7 @@ private extension BookMarkdownBlockView {
             .font(.system(size: size, weight: weight))
             .padding(.top, topPad)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
+            .modifier(SelectableText(enabled: selectable))
     }
 
     /// HTML block renderer. Hands the source to AppKit's
@@ -1362,11 +1456,12 @@ private extension BookMarkdownBlockView {
     /// the system's appearance (dark/light) automatically.
     private struct HTMLBlockView: View {
         let html: String
+        var selectable: Bool = true
 
         var body: some View {
             if let attributed = Self.attributedString(from: html) {
                 Text(attributed)
-                    .textSelection(.enabled)
+                    .modifier(SelectableText(enabled: selectable))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 // Last resort: render the raw markup as monospace
@@ -1374,7 +1469,7 @@ private extension BookMarkdownBlockView {
                 Text(html)
                     .font(SolaroFont.mono)
                     .foregroundStyle(SolaroColor.textSecondary)
-                    .textSelection(.enabled)
+                    .modifier(SelectableText(enabled: selectable))
             }
         }
 

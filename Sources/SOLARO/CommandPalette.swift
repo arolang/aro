@@ -98,6 +98,21 @@ enum CommandPaletteBuilder {
             symbol: "sidebar.right",
             action: { controller.inspectorShown.toggle() }
         ))
+        // Markdown rendered/raw toggle (#488) — only meaningful
+        // while a `.md` file is open.
+        if controller.currentFileIsMarkdown {
+            items.append(.init(
+                id: "toggle-markdown-render",
+                title: controller.currentMarkdownShowsRawSource
+                    ? "Toggle rendered markdown · show rendered"
+                    : "Toggle rendered markdown · show raw source",
+                subtitle: "Remembered per file",
+                category: "View",
+                trailing: nil,
+                symbol: "doc.richtext",
+                action: { controller.toggleMarkdownRawSource() }
+            ))
+        }
         items.append(.init(
             id: "rp-inspector",
             title: "Right rail · Inspector",

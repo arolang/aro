@@ -46,6 +46,7 @@ enum QuickOpenBuilder {
         case .openapi:         return "rectangle.connected.to.line.below"
         case .projectManifest: return "gearshape.fill"
         case .directory:       return "folder.fill"
+        case .markdown:        return "doc.richtext"
         case .other:           return "doc"
         }
     }

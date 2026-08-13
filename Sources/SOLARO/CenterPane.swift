@@ -169,10 +169,37 @@ struct CenterPaneView: View {
         if let url = controller.currentFile {
             if isDiffFile(url) {
                 diffView(for: url)
+            } else if MarkdownFile.isMarkdown(url), !markdownRawSource {
+                markdownView(for: url)
             } else {
                 editorView(for: url)
             }
         }
+    }
+
+    /// Rendered markdown with a block-level inline editor (#488).
+    /// The `.id(url)` rebuilds the editor's model when the active
+    /// file changes — its block list and caret belong to one file.
+    @ViewBuilder
+    private func markdownView(for url: URL) -> some View {
+        MarkdownInlineEditor(
+            text: editableBinding(for: url),
+            fontSize: CGFloat(editorFontSize)
+        )
+        .id(url.standardizedFileURL)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @AppStorage(SolaroPrefs.editorFontSize.rawValue)
+    private var editorFontSize: Double = 13
+
+    /// Per-file "show raw markdown" flag, persisted in the file's
+    /// layout sidecar so the choice survives a relaunch. Toggled
+    /// from the toolbar, the View menu, and ⌘⇧P.
+    private var markdownRawSource: Bool {
+        guard let url = controller.currentFile else { return false }
+        _ = controller.markdownModeTick   // re-render on toggle
+        return LayoutSidecar.load(for: url).markdownRawSource
     }
 
     @ViewBuilder

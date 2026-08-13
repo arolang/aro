@@ -524,6 +524,37 @@ final class WorkspaceController {
     /// `currentFile` didn't change.
     var fileReloadTick: Int = 0
 
+    /// Bumped when a markdown file's rendered/raw mode is toggled
+    /// (#488). The flag itself lives in the file's `LayoutSidecar`
+    /// on disk — this makes the center pane re-read it.
+    var markdownModeTick: Int = 0
+
+    /// Flip the current markdown file between the rendered inline
+    /// editor and raw source in the code editor. The choice is
+    /// remembered per file.
+    func toggleMarkdownRawSource() {
+        guard let url = currentFile, MarkdownFile.isMarkdown(url) else { return }
+        var sidecar = LayoutSidecar.load(for: url)
+        sidecar.markdownRawSource.toggle()
+        try? sidecar.save(for: url)
+        markdownModeTick &+= 1
+    }
+
+    /// Whether the current file is markdown currently showing raw
+    /// source. Drives the toolbar / menu item's label.
+    var currentMarkdownShowsRawSource: Bool {
+        guard let url = currentFile, MarkdownFile.isMarkdown(url) else { return false }
+        _ = markdownModeTick
+        return LayoutSidecar.load(for: url).markdownRawSource
+    }
+
+    /// Whether a "Toggle rendered markdown" affordance applies right
+    /// now — i.e. the open file is a `.md` / `.markdown`.
+    var currentFileIsMarkdown: Bool {
+        guard let url = currentFile else { return false }
+        return MarkdownFile.isMarkdown(url)
+    }
+
     // MARK: - AI co-pilot live editing (#…)
 
     /// A single co-pilot edit to apply into the OPEN editor's STTextView,
