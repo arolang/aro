@@ -161,22 +161,33 @@ enum GlobalSearchEngine {
             }
         }
 
-        // Content — every file, not just cached ones.
+        // Content — every file, not just cached ones. Streamed line
+        // by line (#487): the old whole-file read meant a project
+        // that merely *contained* a large file stalled the UI on
+        // every keystroke in the search box, and held that file's
+        // full text in memory while scanning it.
         var contentHits = 0
         contentLoop: for url in model.sourceFiles {
             guard contentHits < maxTotalContentHits else { break }
-            guard let text = try? String(contentsOf: url, encoding: .utf8)
-            else { continue }
+            // Files past the large-file guard are skipped outright.
+            // Streaming keeps memory flat but a 1 GB file still costs
+            // ~24 s of line splitting, and this runs on the main
+            // thread on every keystroke in the search box. SOLARO
+            // doesn't parse or highlight files that size either.
+            guard !LargeFilePolicy.isLarge(url) else { continue }
             let program = controller.programs[url]
             var perFile = 0
-            let lines = text.split(separator: "\n",
-                                   omittingEmptySubsequences: false)
-            for (idx, rawLine) in lines.enumerated() {
-                guard perFile < maxContentHitsPerFile else { break }
-                let line = String(rawLine)
+            var fileHits: [GlobalSearchHit] = []
+            var exhausted = false
+            StreamReader(url: url).forEachLine { lineNumber, line in
+                guard perFile < maxContentHitsPerFile,
+                      contentHits + fileHits.count < maxTotalContentHits
+                else {
+                    exhausted = contentHits + fileHits.count >= maxTotalContentHits
+                    return false
+                }
                 let lower = line.lowercased()
-                guard let range = lower.range(of: needle) else { continue }
-                let lineNumber = idx + 1
+                guard let range = lower.range(of: needle) else { return true }
                 let (snippet, snippetRange) =
                     snippet(line: line, lowerLine: lower, around: range)
                 let fsName = program
@@ -189,7 +200,7 @@ enum GlobalSearchEngine {
                 } else {
                     breadcrumb = "\(url.lastPathComponent):\(lineNumber)"
                 }
-                out.append(GlobalSearchHit(
+                fileHits.append(GlobalSearchHit(
                     id: "content:\(url.path):\(lineNumber)",
                     kind: .content,
                     url: url,
@@ -200,10 +211,12 @@ enum GlobalSearchEngine {
                     bookContext: nil
                 ))
                 perFile += 1
-                contentHits += 1
-                if contentHits >= maxTotalContentHits {
-                    break contentLoop
-                }
+                return true
+            }
+            out.append(contentsOf: fileHits)
+            contentHits += fileHits.count
+            if exhausted || contentHits >= maxTotalContentHits {
+                break contentLoop
             }
         }
 

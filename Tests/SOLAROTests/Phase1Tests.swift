@@ -126,7 +126,7 @@ struct LayoutSidecarTests {
 @Suite("SourceFileState")
 struct SourceFileStateTests {
 
-    @Test func parsesValidProgram() throws {
+    @Test func parsesValidProgram() async throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": """
             (Application-Start: Entry Point) {
@@ -136,19 +136,26 @@ struct SourceFileStateTests {
             """,
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
+        // `init` no longer reads or parses (#487) — both moved into
+        // `load()` so opening a large file can't block the caller.
         let state = SourceFileState(url: tmp.appendingPathComponent("main.aro"))
+        #expect(state.program == nil)
+        #expect(!state.isLoaded)
+        await state.load()
+        #expect(state.isLoaded)
         #expect(state.program != nil)
         #expect(state.program?.featureSets.first?.name == "Application-Start")
         #expect(state.program?.featureSets.first?.businessActivity == "Entry Point")
         #expect(state.diagnostics.isEmpty)
     }
 
-    @Test func reparsesAfterEdit() throws {
+    @Test func reparsesAfterEdit() async throws {
         let tmp = try makeProjectTree(files: [
             "main.aro": "(Application-Start: x) { Return an <OK: status> for the <r>. }",
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
         let state = SourceFileState(url: tmp.appendingPathComponent("main.aro"))
+        await state.load()
         #expect(state.program != nil)
 
         state.text = "this is not valid aro syntax;;;"

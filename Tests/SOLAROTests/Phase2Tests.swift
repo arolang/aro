@@ -117,7 +117,7 @@ struct LayoutSidecarPositionTests {
         #expect(updated.edges == graph.edges)
     }
 
-    @Test func positionsRoundTripThroughDiskSidecar() throws {
+    @Test func positionsRoundTripThroughDiskSidecar() async throws {
         let tmp = NSTemporaryDirectory() + "solaro-phase2-\(UUID().uuidString).aro"
         let url = URL(fileURLWithPath: tmp)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -125,6 +125,7 @@ struct LayoutSidecarPositionTests {
             .write(to: url, atomically: true, encoding: .utf8)
 
         let state = SourceFileState(url: url)
+        await state.load()
         let fs = try #require(state.program?.featureSets.first)
         let graph = CanvasGraph.build(featureSet: fs, fileKey: url.path)
 
