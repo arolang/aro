@@ -163,10 +163,20 @@ enum SidebarTab: String, CaseIterable, Identifiable {
 struct ToolbarPill<Content: View>: View {
     @ViewBuilder let content: Content
 
+    /// Height every pill's content is pinned to. Without it each
+    /// pill sizes to whatever its tallest control naturally wants,
+    /// and the segmented pane-mode picker — the tallest of them —
+    /// made its capsule visibly deeper than the search field's
+    /// sitting right next to it. The search field frames itself to
+    /// the same constant, so the two are locked together by
+    /// construction rather than by coincidence.
+    static var contentHeight: CGFloat { 22 }
+
     var body: some View {
         HStack(spacing: 4) {
             content
         }
+        .frame(height: Self.contentHeight)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(
@@ -1275,6 +1285,11 @@ struct WorkspaceView: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
+        // A segmented picker at the default control size is taller
+        // than a rounded-border text field; `.small` brings it down
+        // to the search field's height so the two pills match.
+        .controlSize(.small)
+        .frame(height: ToolbarPill<EmptyView>.contentHeight)
         .help("Center-pane projection (Canvas / Text / Split / Map)")
     }
 
