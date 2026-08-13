@@ -276,7 +276,8 @@ struct InspectorPaneView: View {
     ) -> [OpenAPILintWarning] {
         guard
             let url = controller.currentFile,
-            let yaml = try? String(contentsOf: url, encoding: .utf8)
+            let yaml = LargeFilePolicy.isLarge(url)
+                ? nil : StreamReader(url: url).readAll()
         else { return [] }
         let graph = OpenAPIGraphBuilder.build(yaml: yaml)
         return OpenAPILinter.lint(graph: graph, document: document)

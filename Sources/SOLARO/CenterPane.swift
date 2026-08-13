@@ -55,7 +55,7 @@ struct CenterPaneView: View {
         }
         .task(id: FileLoadKey(url: controller.currentFile,
                               tick: controller.fileReloadTick)) {
-            loadCurrentFileIntoCache()
+            await loadCurrentFileIntoCache()
         }
         // "Edit Breakpoint…" sheet (#259) — opened by right-clicking a
         // gutter line. Only meaningful for a line that already carries a
@@ -104,31 +104,123 @@ struct CenterPaneView: View {
         let tick: Int
     }
 
-    /// Read the current file from disk into `fileText` once when
-    /// the active file changes. Subsequent reads in the view body
-    /// hit `fileText` instead of round-tripping through Foundation.
-    private func loadCurrentFileIntoCache() {
+    /// Load the current file into `fileText` when the active file
+    /// changes. Subsequent reads in the view body hit `fileText`
+    /// instead of round-tripping through Foundation.
+    ///
+    /// Both branches read off the main thread (#487). Small files
+    /// arrive in one hop; large ones show their head immediately and
+    /// stream the rest in batches, so the window keeps drawing and
+    /// accepting input while a multi-hundred-MB file loads. The
+    /// enclosing `.task(id:)` cancels this when the user switches
+    /// files, and the loop checks for that between batches — an
+    /// abandoned open stops reading instead of finishing in the
+    /// background.
+    private func loadCurrentFileIntoCache() async {
         guard let url = controller.currentFile else {
             fileText = ""
             fileTextURL = nil
+            streamingProgress = nil
             return
         }
         fileTextURL = url
-        let loaded = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        fileText = loaded
-        // Mirror into the controller so the AI co-pilot's context reads the
-        // live buffer for this file (see WorkspaceController.liveText).
-        controller.liveEditorText[url.standardizedFileURL] = loaded
+        let size = StreamReader.byteSize(of: url) ?? 0
+
+        // A cancelled streaming load re-keys this task; keep what
+        // was already streamed rather than starting the read again.
+        if streamingLoadCancelled {
+            streamingLoadCancelled = false
+            streamingProgress = nil
+            return
+        }
+
+        guard size >= LargeFilePolicy.parseThreshold else {
+            // Small file: one background read, no streaming ceremony.
+            let text = await Task.detached(priority: .userInitiated) {
+                StreamReader(url: url).readAll()
+            }.value
+            guard !Task.isCancelled, controller.currentFile == url else { return }
+            fileText = text
+            streamingProgress = nil
+            // Mirror into the controller so the AI co-pilot's context
+            // reads the live buffer for this file (see
+            // WorkspaceController.liveText).
+            controller.liveEditorText[url.standardizedFileURL] = text
+            return
+        }
+
+        // Large file. Drop any stale mirror first: `liveEditorText`
+        // is a second full copy of the buffer, and for a file this
+        // size that doubles peak memory for a co-pilot context we
+        // would refuse to send anyway.
+        controller.liveEditorText.removeValue(forKey: url.standardizedFileURL)
+        fileText = ""
+        streamingProgress = .init(loadedBytes: 0, totalBytes: size)
+
+        var loadedScalars = 0
+        for await batch in fileBatches(of: url) {
+            guard !Task.isCancelled, controller.currentFile == url else { return }
+            fileText += batch
+            loadedScalars += batch.unicodeScalars.count
+            streamingProgress = .init(loadedBytes: loadedScalars,
+                                      totalBytes: size)
+        }
+        guard !Task.isCancelled, controller.currentFile == url else { return }
+        streamingProgress = nil
     }
+
+    /// Batches of decoded text for `url`, produced on a background
+    /// task. Cancelling the consuming loop terminates the stream,
+    /// which cancels the producer — the reader checks between
+    /// batches and stops mid-file.
+    private func fileBatches(of url: URL) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            let task = Task.detached(priority: .userInitiated) {
+                let reader = StreamReader(url: url)
+                // The first batch is the head: small enough to
+                // decode and hand over immediately, big enough to
+                // fill any window several times.
+                reader.streamBatches(
+                    batchBytes: LargeFilePolicy.streamBatchBytes
+                ) { batch in
+                    continuation.yield(batch)
+                    return !Task.isCancelled
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Progress of an in-flight streaming load, or nil when the file
+    /// is fully present. Drives the banner over the editor.
+    struct StreamingProgress: Equatable {
+        let loadedBytes: Int
+        let totalBytes: Int
+        var fraction: Double {
+            totalBytes > 0
+                ? min(1, Double(loadedBytes) / Double(totalBytes))
+                : 0
+        }
+    }
+    @State private var streamingProgress: StreamingProgress? = nil
 
     /// Return the cached content for `url` when it matches the
     /// active file, falling back to a one-off disk read otherwise
     /// (e.g. when a closure outside the current-file flow asks
     /// for arbitrary file text — saveAndReparse's pre-write diff,
     /// the find-bar's per-file scan, …).
+    ///
+    /// The fallback goes through `StreamReader` rather than
+    /// `String(contentsOf:)` so it doesn't hold a full `Data` copy
+    /// alongside the `String`, and it refuses outright above the
+    /// large-file guard — a synchronous whole-file read of a
+    /// gigabyte from inside a view body is the freeze this issue is
+    /// about.
     private func cachedText(for url: URL) -> String {
         if fileTextURL == url { return fileText }
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        guard !LargeFilePolicy.isLarge(url) else { return "" }
+        return StreamReader(url: url).readAll()
     }
 
     // MARK: - Text
@@ -185,6 +277,7 @@ struct CenterPaneView: View {
     private func editorView(for url: URL) -> some View {
         VStack(spacing: 0) {
             conflictBanner(for: url)
+            largeFileBanner(for: url)
             editorWithGutters(for: url)
         }
         .sheet(isPresented: $showConflictResolver) {
@@ -203,6 +296,62 @@ struct CenterPaneView: View {
             )
         }
     }
+
+    /// Notice shown for files opened under the large-file guard
+    /// (#487): says why the buffer is read-only and un-highlighted,
+    /// and shows streaming progress while the rest of the file
+    /// arrives. Cancel stops the read and drops back to the head
+    /// that is already on screen.
+    @ViewBuilder
+    private func largeFileBanner(for url: URL) -> some View {
+        if LargeFilePolicy.isLarge(url) {
+            HStack(spacing: SolaroSpace.s) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Large file · \(LargeFilePolicy.describeSize(url))")
+                        .font(SolaroFont.bodyBold)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                    Text(streamingProgress == nil
+                         ? "Opened read-only. Syntax highlighting and parsing are off at this size."
+                         : "Streaming… the rest of the file is loading in the background.")
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                }
+                Spacer(minLength: 0)
+                if let progress = streamingProgress {
+                    ProgressView(value: progress.fraction)
+                        .progressViewStyle(.linear)
+                        .frame(width: 120)
+                    Button("Cancel") { cancelStreamingLoad() }
+                        .buttonStyle(.plain)
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.accent)
+                }
+            }
+            .padding(.horizontal, SolaroSpace.m)
+            .padding(.vertical, SolaroSpace.s)
+            .background(SolaroColor.surfaceRaised.opacity(0.6))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(SolaroColor.divider)
+                    .frame(height: 1)
+            }
+        }
+    }
+
+    /// Stop an in-flight streaming load. Bumping the reload tick
+    /// re-keys the `.task(id:)`, which cancels the current task; the
+    /// text already streamed in stays on screen.
+    private func cancelStreamingLoad() {
+        streamingLoadCancelled = true
+        streamingProgress = nil
+        controller.fileReloadTick &+= 1
+    }
+
+    /// Set by Cancel so the re-keyed load task knows to leave the
+    /// partial buffer alone instead of starting over.
+    @State private var streamingLoadCancelled: Bool = false
 
     @ViewBuilder
     private func conflictBanner(for url: URL) -> some View {
@@ -280,6 +429,7 @@ struct CenterPaneView: View {
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),
+                    isEditable: !LargeFilePolicy.isLarge(url),
                     onSave: { saveAndReparse(text: $0, url: url) },
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),
@@ -360,6 +510,11 @@ struct CenterPaneView: View {
     /// coloring; openapi.yaml gets the lightweight YAML pass;
     /// everything else stays uncoloured.
     private func editorLanguage(for url: URL) -> AROCodeEditor.Language {
+        // Above the parse threshold the Lexer-driven highlighter is
+        // the single most expensive thing the editor does per
+        // keystroke, and it re-lexes the whole document. Plain text
+        // keeps the pane responsive (#487).
+        guard LargeFilePolicy.shouldParse(url) else { return .plain }
         let name = url.lastPathComponent.lowercased()
         if name.hasSuffix(".aro") { return .aro }
         if name.hasSuffix(".yaml") || name.hasSuffix(".yml") { return .yaml }
@@ -487,6 +642,19 @@ struct CenterPaneView: View {
         // setter no-op → getter re-emitted the old dict and the
         // text snapped back), and `Yams.dump` re-formatted valid
         // edits (sorted keys, changed quoting).
+        // A file opened under the large-file guard gets a
+        // write-blocking binding (#487). This is not belt-and-braces
+        // on top of the read-only text view — it is load-bearing.
+        // The streaming load fills `fileText` batch by batch, and
+        // every push into the text view makes its delegate report
+        // the new contents back through this setter. With the
+        // ordinary setter that writes a *partial* buffer straight to
+        // disk, mid-stream, over the file still being read: the file
+        // ends up truncated to however much had streamed. Observed
+        // on the 1 GB fixture, which came back as 18 MB.
+        guard LargeFilePolicy.allowsWriteBack(url) else {
+            return Binding(get: { fileText }, set: { _ in })
+        }
         return Binding(
             get: { cachedText(for: url) },
             set: { newValue in
@@ -563,6 +731,9 @@ struct CenterPaneView: View {
     }
 
     private func saveAndReparse(text: String, url: URL) {
+        // Never write back a buffer that may still be streaming in
+        // (#487) — the same truncation hazard as `editableBinding`.
+        guard LargeFilePolicy.allowsWriteBack(url) else { return }
         let oldText = cachedText(for: url)
         let formatted = formatIfEnabled(text, for: url)
         try? formatted.write(to: url, atomically: true, encoding: .utf8)
@@ -750,6 +921,15 @@ struct CenterPaneView: View {
     }
 
     private func reparse(url: URL) {
+        // Skip entirely above the parse threshold: lexing a
+        // multi-MB buffer on the main thread is the freeze in #487,
+        // and the canvas/inspector that consume `programs` are not
+        // useful at that size anyway.
+        guard LargeFilePolicy.shouldParse(url) else {
+            controller.programs.removeValue(forKey: url)
+            controller.parseErrors.removeValue(forKey: url)
+            return
+        }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             controller.parseErrors[url] = "Could not read file."
             controller.programs.removeValue(forKey: url)
@@ -1311,6 +1491,7 @@ struct CenterPaneView: View {
                     pausedLine: controller.pausedLine,
                     pauseSymbols: controller.pauseSymbols,
                     language: editorLanguage(for: url),
+                    isEditable: !LargeFilePolicy.isLarge(url),
                     onSave: { saveAndReparse(text: $0, url: url) },
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),

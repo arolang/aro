@@ -584,7 +584,9 @@ struct CanvasView: View {
             }
         }
         guard let span = found,
-              let source = try? String(contentsOf: url, encoding: .utf8)
+              LargeFilePolicy.shouldParse(url),
+              case let source = StreamReader(url: url).readAll(),
+              !source.isEmpty
         else { return nil }
         let utf8 = source.utf8
         let length = utf8.count

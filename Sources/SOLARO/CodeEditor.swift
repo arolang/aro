@@ -802,6 +802,11 @@ struct AROCodeEditor: NSViewRepresentable {
     /// coloring; YAML/plain files skip ARO tokens (the Lexer would
     /// otherwise stain quotes + numbers with verb tints).
     var language: Language = .aro
+    /// False for files opened under the large-file guard (#487).
+    /// A multi-hundred-MB buffer is fine to *show* but editing it
+    /// would push the whole string through the binding on every
+    /// keystroke; the pane shows a notice instead.
+    var isEditable: Bool = true
     let onSave: (String) -> Void
     /// Fetch LSP completions at (0-based line, 0-based col). Called
     /// by AROHoverTextView after a debounced typing pause. The
@@ -890,8 +895,11 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.onGutterAltClick = { [weak coordinator = context.coordinator] line in
             coordinator?.parent.onEditBreakpoint?(line)
         }
-        // #272: ghost text plumbing.
-        textView.ghostTextEnabled = ghostTextEnabled
+        // #272: ghost text plumbing. Suppressed for read-only
+        // (large-file) buffers — completions into a buffer that
+        // can't be edited are noise, and the LSP round-trip on a
+        // huge document is exactly the stall #487 is about.
+        textView.ghostTextEnabled = ghostTextEnabled && isEditable
         textView.requestGhost = requestGhost
         textView.requestAI = requestAI
         textView.acceptGhost = acceptGhost
@@ -960,10 +968,16 @@ struct AROCodeEditor: NSViewRepresentable {
         // canvas tooltip was rendering the same data.
         context.coordinator.parent = self
 
+        // The large-file guard can flip while the same editor view
+        // is reused (switching between a small and a huge file in
+        // the same pane), so keep it in step here as well as in
+        // `configureTextView` (#487).
+        textView.isEditable = isEditable
+
         // #272: keep ghost-text flags in sync when the user
         // toggles the Settings preference at runtime.
         if let hover = textView as? AROHoverTextView {
-            hover.ghostTextEnabled = ghostTextEnabled
+            hover.ghostTextEnabled = ghostTextEnabled && isEditable
             hover.requestGhost = requestGhost
             hover.requestAI = requestAI
             hover.acceptGhost = acceptGhost
@@ -1125,6 +1139,8 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.gutterView?.areMarkersEnabled = true
         textView.isHorizontallyResizable = false        // soft-wrap
         textView.isIncrementalSearchingEnabled = true
+        textView.isEditable = isEditable
+        textView.isSelectable = true
     }
 
     /// Compute the 1-indexed line number of the caret. Returns nil

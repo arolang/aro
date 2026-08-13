@@ -33,32 +33,74 @@ final class SourceFileState: Identifiable, Equatable {
     /// Diagnostics from the last parse — empty when clean.
     private(set) var diagnostics: [Diagnostic] = []
 
+    /// True once `load()` has run. Distinguishes "empty file" from
+    /// "not read yet" for callers that show a placeholder.
+    private(set) var isLoaded: Bool = false
+
+    /// Cheap, non-blocking. The file is *not* read here (#487):
+    /// reading and parsing in an initializer meant both landed on
+    /// whichever thread constructed the state — in practice the
+    /// main one — so opening a large file froze the UI before any
+    /// of the async plumbing downstream got a say. Call `load()`.
     init(url: URL) {
         self.url = url
-        self.text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        self.text = ""
         self.layout = LayoutSidecar.load(for: url)
-        reparse()
+    }
+
+    /// Read the file off the main thread and parse it — unless it is
+    /// large enough that parsing would block, in which case the text
+    /// loads and `program` stays nil.
+    func load() async {
+        let url = self.url
+        let text = await Task.detached(priority: .userInitiated) {
+            StreamReader(url: url).readAll()
+        }.value
+        self.text = text
+        self.isLoaded = true
+        guard LargeFilePolicy.shouldParse(url) else {
+            program = nil
+            diagnostics = []
+            return
+        }
+        await reparseOffMainThread()
+    }
+
+    /// Parse on a background task and publish the result. Used by
+    /// `load()`; callers that edit the buffer can use it too rather
+    /// than paying for `reparse()` inline on every keystroke.
+    func reparseOffMainThread() async {
+        let source = text
+        let parsed = await Task.detached(priority: .utility) {
+            SourceFileState.parse(source)
+        }.value
+        self.program = parsed.program
+        self.diagnostics = parsed.diagnostics
     }
 
     /// Re-run the parser against the current `text` buffer and
-    /// refresh `program` / `diagnostics`. Cheap enough to call on
-    /// every keystroke for typical `.aro` files; Phase 2+ should
-    /// debounce.
+    /// refresh `program` / `diagnostics`. Synchronous — fine for
+    /// typical `.aro` files, but see `reparseOffMainThread()`.
     func reparse() {
-        let lexer = Lexer(source: text)
+        let parsed = Self.parse(text)
+        self.program = parsed.program
+        self.diagnostics = parsed.diagnostics
+    }
+
+    /// Pure lex + parse. Static and free of `self` so it can run on
+    /// a detached task without dragging the state object across the
+    /// concurrency boundary.
+    private static func parse(
+        _ source: String
+    ) -> (program: Program?, diagnostics: [Diagnostic]) {
+        let lexer = Lexer(source: source)
         guard let tokens = try? lexer.tokenize() else {
-            self.program = nil
-            self.diagnostics = []
-            return
+            return (nil, [])
         }
         let collector = DiagnosticCollector()
         let parser = Parser(tokens: tokens, diagnostics: collector)
-        if let parsed = try? parser.parse() {
-            self.program = parsed
-        } else {
-            self.program = nil
-        }
-        self.diagnostics = collector.diagnostics
+        let program = try? parser.parse()
+        return (program, collector.diagnostics)
     }
 
     /// Save back to disk + refresh the on-disk mirror. Errors

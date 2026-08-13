@@ -53,9 +53,7 @@ final class FindInProjectModel {
         do {
             let regexObj = try compileRegex(query: trimmed)
             for url in candidateFiles(in: model) {
-                guard let text = try? String(contentsOf: url, encoding: .utf8)
-                else { continue }
-                let matches = scan(text: text, in: url, regex: regexObj)
+                let matches = scan(url: url, regex: regexObj)
                 if !matches.isEmpty {
                     grouped.append(FindResult(file: url, matches: matches))
                     matchCount += matches.count
@@ -122,50 +120,62 @@ final class FindInProjectModel {
         return try NSRegularExpression(pattern: pattern, options: options)
     }
 
-    private func scan(text: String, in url: URL,
+    /// Scan one file for matches, streaming it line by line (#487).
+    ///
+    /// The previous version read the whole file into a `String` and
+    /// ran the regex over it, so searching a project that contained
+    /// one large file froze the UI and briefly held that file twice
+    /// over. Streaming keeps memory at one line plus the read
+    /// buffer, and the reader hands back each line's UTF-16 offset
+    /// so the document-wide ranges the replace path needs are still
+    /// exact.
+    ///
+    /// Consequence worth naming: matching is now per line, so a
+    /// pattern that spans a newline no longer matches. That is grep
+    /// semantics, and it is what makes the scan bounded.
+    private func scan(url: URL,
                       regex: NSRegularExpression) -> [FindMatch] {
-        let ns = text as NSString
-        let matches = regex.matches(in: text,
-                                    range: NSRange(location: 0, length: ns.length))
-        return matches.enumerated().map { (idx, result) in
-            let (line, column, preview) = locate(range: result.range, in: ns)
-            return FindMatch(
-                id: "\(url.path)#\(idx)#\(result.range.location)",
-                file: url,
-                line: line,
-                column: column,
-                range: result.range,
-                preview: preview
-            )
-        }
-    }
-
-    /// Map an NSRange in `text` to a 1-indexed (line, column) plus
-    /// the surrounding line as a preview.
-    private func locate(range: NSRange,
-                        in ns: NSString) -> (Int, Int, String) {
-        var line = 1
-        var lineStart = 0
-        for i in 0..<min(range.location, ns.length) {
-            if ns.character(at: i) == 0x0A {
-                line += 1
-                lineStart = i + 1
+        // Same guard as the editor and the toolbar search: streaming
+        // bounds the memory but not the time, and a multi-hundred-MB
+        // file would still stall the sheet.
+        guard !LargeFilePolicy.isLarge(url) else { return [] }
+        var out: [FindMatch] = []
+        StreamReader(url: url).forEachLineWithOffset { number, line, offset in
+            let ns = line as NSString
+            let hits = regex.matches(
+                in: line, range: NSRange(location: 0, length: ns.length))
+            guard !hits.isEmpty else { return true }
+            // CRLF files keep their `\r` in the offsets; drop it
+            // from what the user reads.
+            let preview = line.hasSuffix("\r")
+                ? String(line.dropLast()) : line
+            for hit in hits {
+                out.append(FindMatch(
+                    id: "\(url.path)#\(number)#\(offset + hit.range.location)",
+                    file: url,
+                    line: number,
+                    column: hit.range.location + 1,
+                    range: NSRange(location: offset + hit.range.location,
+                                   length: hit.range.length),
+                    preview: preview
+                ))
             }
+            // 1000 total is the caller's cap; stop a pathological
+            // single file from filling it on its own.
+            return out.count < 1000
         }
-        var lineEnd = range.location
-        while lineEnd < ns.length, ns.character(at: lineEnd) != 0x0A {
-            lineEnd += 1
-        }
-        let preview = ns.substring(with: NSRange(
-            location: lineStart, length: max(lineEnd - lineStart, 0)
-        ))
-        return (line, range.location - lineStart + 1, preview)
+        return out
     }
 
     private func applyReplacements(in url: URL,
                                    ranges: [NSRange],
                                    replacement: String) {
-        guard var text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        // Replacement needs random access, so this one genuinely
+        // wants the whole document — but through the streaming
+        // decoder, which doesn't hold a full `Data` alongside the
+        // `String` the way `String(contentsOf:)` does.
+        var text = StreamReader(url: url).readAll()
+        guard !text.isEmpty else { return }
         let ns = NSMutableString(string: text)
         for range in ranges {
             guard range.location + range.length <= ns.length else { continue }
