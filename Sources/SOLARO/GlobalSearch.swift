@@ -402,7 +402,9 @@ struct GlobalSearchField: View {
     var body: some View {
         TextField("Search", text: $controller.searchText)
             .textFieldStyle(.roundedBorder)
-            .frame(width: 260)
+            // Height is shared with every other toolbar pill so the
+            // clusters line up; see `ToolbarPill.contentHeight`.
+            .frame(width: 260, height: ToolbarPill<EmptyView>.contentHeight)
             .onChange(of: controller.searchText) { _, _ in
                 refresh()
             }
