@@ -88,6 +88,37 @@ struct FileTreeBuilderTests {
         #expect(nodes.contains { $0.kind == .aroSource && $0.name == "main.aro" })
     }
 
+    /// #488 — markdown docs are part of the project view so the
+    /// rendered inline editor is reachable without flipping the
+    /// Files tab into "All files".
+    @Test func markdownFilesAreIncluded() throws {
+        let project = try makeProject(at: tmp(), layout: [
+            "main.aro",
+            "README.md",
+            "docs/guide.markdown",
+        ])
+        let nodes = FileTreeBuilder.build(model: project)
+        #expect(nodes.contains { $0.kind == .markdown && $0.name == "README.md" })
+        let docs = try #require(nodes.first { $0.name == "docs" })
+        #expect(docs.children.contains {
+            $0.kind == .markdown && $0.name == "guide.markdown"
+        })
+    }
+
+    @Test func buildDirectoriesAreNotScannedForMarkdown() throws {
+        let root = tmp()
+        let fm = FileManager.default
+        try fm.createDirectory(at: root.appendingPathComponent(".build"),
+                               withIntermediateDirectories: true)
+        try Data().write(to: root.appendingPathComponent("main.aro"))
+        try Data().write(to: root.appendingPathComponent(".build/NOTES.md"))
+        let project = try ProjectModel.load(Project(rootPath: root))
+
+        let nodes = FileTreeBuilder.build(model: project)
+        #expect(!nodes.contains { $0.name == ".build" })
+        #expect(!nodes.contains { $0.kind == .markdown })
+    }
+
     @Test func directoriesSortBeforeFiles() throws {
         let project = try makeProject(at: tmp(), layout: [
             "z-main.aro",

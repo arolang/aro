@@ -48,6 +48,12 @@ struct LayoutSidecar: Codable, Equatable {
     /// forward without losing data.
     var breakpointConfigs: [String: BreakpointConfig] = [:]
 
+    /// Issue #488 — when true, this `.md` file opens in the plain
+    /// code editor showing raw markdown instead of the rendered
+    /// inline editor. Per-file so the choice is remembered; only
+    /// consulted for markdown files.
+    var markdownRawSource: Bool = false
+
     /// Refinement carried by a single breakpoint line (#259).
     /// `regular` breakpoints pause (unconditionally, or only when
     /// `condition` is truthy); `logpoint` breakpoints never pause —
@@ -115,6 +121,7 @@ struct LayoutSidecar: Codable, Equatable {
     // regular breakpoint," and no existing data is dropped.
     enum CodingKeys: String, CodingKey {
         case paneMode, nodes, view, breakpoints, breakpointConfigs
+        case markdownRawSource
     }
 
     init() {}
@@ -127,6 +134,8 @@ struct LayoutSidecar: Codable, Equatable {
         breakpoints = try c.decodeIfPresent(Set<Int>.self, forKey: .breakpoints) ?? []
         breakpointConfigs = try c.decodeIfPresent(
             [String: BreakpointConfig].self, forKey: .breakpointConfigs) ?? [:]
+        markdownRawSource = try c.decodeIfPresent(
+            Bool.self, forKey: .markdownRawSource) ?? false
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -136,6 +145,7 @@ struct LayoutSidecar: Codable, Equatable {
         try c.encode(view, forKey: .view)
         try c.encode(breakpoints, forKey: .breakpoints)
         try c.encode(breakpointConfigs, forKey: .breakpointConfigs)
+        try c.encode(markdownRawSource, forKey: .markdownRawSource)
     }
 
     struct NodePosition: Codable, Equatable {

@@ -1254,8 +1254,12 @@ struct WorkspaceView: View {
         }
         ToolbarItem(placement: .primaryAction) {
             ToolbarPill {
-                foldToggle
-                minimapToggle
+                if controller.currentFileIsMarkdown {
+                    markdownRenderToggle
+                } else {
+                    foldToggle
+                    minimapToggle
+                }
                 inspectorToggle
             }
             .fixedSize()
@@ -1952,6 +1956,26 @@ struct WorkspaceView: View {
             )
         }
         .help("Toggle the minimap overview on the right edge of the editor")
+    }
+
+    /// Markdown files swap the fold/minimap pair for a single
+    /// rendered ⇄ raw toggle (#488) — neither of those two applies
+    /// to a `.md` file, and the render mode is the one thing a
+    /// reader wants at hand.
+    private var markdownRenderToggle: some View {
+        Button {
+            controller.toggleMarkdownRawSource()
+        } label: {
+            Label(
+                controller.currentMarkdownShowsRawSource
+                    ? "Show rendered markdown"
+                    : "Show markdown source",
+                systemImage: controller.currentMarkdownShowsRawSource
+                    ? "doc.richtext"
+                    : "doc.plaintext"
+            )
+        }
+        .help("Toggle between rendered markdown and raw source (remembered per file)")
     }
 
     private var inspectorToggle: some View {

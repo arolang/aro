@@ -38,6 +38,10 @@ struct FileTreeNode: Identifiable, Hashable {
         /// version metadata. Gets its own icon + tint so the file
         /// tree reads it as configuration, not source.
         case projectManifest
+        /// `.md` / `.markdown` — opens in the rendered inline
+        /// markdown editor rather than the code editor (#488), so
+        /// it earns its own icon in the tree.
+        case markdown
         case other
     }
 
@@ -69,8 +73,39 @@ enum FileTreeBuilder {
         if FileManager.default.fileExists(atPath: manifest.path) {
             allFiles.append((manifest, .projectManifest))
         }
+        // Markdown docs living in the project (README.md, docs/…)
+        // are part of its shape too, and #488 gives them a real
+        // editor. Without this they'd only be reachable by flipping
+        // the Files tab into "All files".
+        for url in markdownFiles(under: model.root.rootPath) {
+            allFiles.append((url, .markdown))
+        }
 
         return groupByPath(files: allFiles, root: model.root.rootPath)
+    }
+
+    /// Every `.md` / `.markdown` file under `root`, skipping the
+    /// well-known noise directories and anything hidden.
+    private static func markdownFiles(under root: URL) -> [URL] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+
+        var found: [URL] = []
+        for entry in entries {
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey])
+                .isDirectory) == true
+            if isDir {
+                if ignoredDirs.contains(entry.lastPathComponent) { continue }
+                found.append(contentsOf: markdownFiles(under: entry))
+            } else if MarkdownFile.isMarkdown(entry) {
+                found.append(entry)
+            }
+        }
+        return found
     }
 
     /// Directory entries the "All files" view never surfaces.
@@ -172,6 +207,10 @@ enum FileTreeBuilder {
         // root) so they still render as code, not generic `other`.
         if url.pathExtension.lowercased() == "aro" {
             return .aroSource
+        }
+        // Markdown opens in the rendered inline editor (#488).
+        if MarkdownFile.isMarkdown(url) {
+            return .markdown
         }
         return .other
     }

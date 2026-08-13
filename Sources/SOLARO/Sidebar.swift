@@ -673,6 +673,7 @@ private struct FileRow: View {
         case .storeFile:       return "tray.full"
         case .openapi:         return "rectangle.connected.to.line.below"
         case .projectManifest: return "gearshape.fill"
+        case .markdown:        return "doc.richtext"
         case .other:           return "doc"
         }
     }
@@ -684,6 +685,7 @@ private struct FileRow: View {
         case .storeFile:       return SolaroColor.roleExport
         case .openapi:         return SolaroColor.roleRequest
         case .projectManifest: return SolaroColor.stateOK
+        case .markdown:        return SolaroColor.roleOwn
         case .other:           return SolaroColor.textTertiary
         }
     }
