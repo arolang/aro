@@ -85,6 +85,11 @@ struct SOLAROApp: App {
                 }
                 .keyboardShortcut("?", modifiers: [.command, .shift])
                 Button {
+                    CrashLogsWindow.show()
+                } label: {
+                    Label("View Crash Logs…", systemImage: "ant.circle")
+                }
+                Button {
                     NSWorkspace.shared.open(CrashReporter.crashesDirectory)
                 } label: {
                     Label("Reveal Crash Logs in Finder", systemImage: "doc.text.magnifyingglass")

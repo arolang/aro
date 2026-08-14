@@ -18,6 +18,10 @@ struct WelcomeView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var recents: [Project] = RecentProjects.load()
     @State private var errorText: String?
+    /// Crash logs on disk (#275). Read once on appear; the banner
+    /// below shows the newest one the user hasn't acknowledged.
+    @State private var crashes = CrashReportStore()
+    @State private var crashBannerDismissed = false
 
     var body: some View {
         ZStack {
@@ -41,6 +45,9 @@ struct WelcomeView: View {
             VStack(spacing: SolaroSpace.xxl) {
                 Spacer()
                 wordmark
+                if let crash = unseenCrash {
+                    crashBanner(crash)
+                }
                 actionTiles
                 if !recents.isEmpty {
                     recentsSection
@@ -61,6 +68,57 @@ struct WelcomeView: View {
             .padding(.horizontal, SolaroSpace.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { crashes.reload() }
+    }
+
+    // MARK: - Recent crash (#275)
+
+    /// Newest crash the user hasn't been shown yet. Goes nil once
+    /// acknowledged — a crash announces itself once, not on every
+    /// launch until someone deletes the file.
+    private var unseenCrash: CrashReport? {
+        crashBannerDismissed ? nil : crashes.unseenReport
+    }
+
+    private func crashBanner(_ report: CrashReport) -> some View {
+        HStack(spacing: SolaroSpace.s) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(SolaroColor.stateError)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SOLARO closed unexpectedly")
+                    .font(SolaroFont.bodyBold)
+                    .foregroundStyle(SolaroColor.textPrimary)
+                Text("\(report.signalName) · \(CrashReport.displayFormatter.string(from: report.date))")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+            Spacer()
+            Button("View crash log") {
+                crashes.markSeen()
+                crashBannerDismissed = true
+                CrashLogsWindow.show()
+            }
+            Button("Dismiss") {
+                // Marking it seen *is* the dismissal. The file
+                // stays on disk and stays reachable from Help →
+                // View Crash Logs — deleting someone's only record
+                // of a crash because they clicked Dismiss would be
+                // the wrong read of that button.
+                crashes.markSeen()
+                crashBannerDismissed = true
+            }
+            .buttonStyle(.plain)
+            .font(SolaroFont.caption)
+            .foregroundStyle(SolaroColor.textTertiary)
+        }
+        .padding(SolaroSpace.m)
+        .background(SolaroColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
+        .overlay(
+            RoundedRectangle(cornerRadius: SolaroRadius.m)
+                .stroke(SolaroColor.stateError.opacity(0.4), lineWidth: 1)
+        )
+        .frame(maxWidth: 560)
     }
 
     // MARK: - Wordmark
