@@ -174,5 +174,5 @@ The training corpus only covers the language up to the snapshot the model was di
 
 - **User-defined actions** (ARO-0081). A feature set whose business activity is `Action` is callable as `Application.<Name>`. If the model writes `Call the <r> via Application.MyAction with …` it is hallucinating — show it Chapter 6 of TheLanguageGuide.
 - **Native Git actions** (ARO-0080). `<Retrieve> the <status> from the <git>`, `<Stage>`, `<Commit>`, `<Push>`, etc., run via libgit2. The model may try to `<Execute>` git as a shell command — that still works but is no longer the idiomatic form.
-- **Lazy execution**. Actions return future handles and are forced on first read. The model may volunteer `await` annotations from other languages; those do not exist in ARO. Effects keep source order automatically.
+- **Ordered statements, overlapping work**. Statements are read in order and effects happen in order, but an action is only awaited where its result is read — so independent statements overlap. The model may volunteer `await` annotations or promise-chaining from other languages; neither exists in ARO, and neither is needed (ARO-0088).
 - **Piped source.** `echo '<Log> "x" to the <console>.' | aro` evaluates piped source. Handy for one-liners; the model rarely suggests it on its own.

@@ -4,6 +4,7 @@
 * Author: ARO Language Team
 * Status: **Implemented**
 * Requires: ARO-0001, ARO-0005
+* See also: ARO-0088 (Concurrency Model) — dispatch strategies, handler concurrency, quiescence
 
 ## Abstract
 
@@ -729,7 +730,7 @@ This emits **three** events:
 
 ## 7. EventBus Architecture
 
-The EventBus is the central hub for event routing in ARO applications.
+The EventBus is the central hub for event routing in ARO applications. This section covers routing; for how many handlers run at once, which of the three dispatch strategies a given emission uses, and how the runtime waits for a cascade to drain before shutdown, see ARO-0088 §6.
 
 ### 7.1 Event Flow
 

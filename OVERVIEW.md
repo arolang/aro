@@ -139,7 +139,7 @@ expected. Below is the current set, grouped by theme.
 | 0002 | Control Flow | `When` guards, `match`, iteration |
 | 0003 | Type System | Types, OpenAPI integration, schemas |
 | 0004 | Actions | Action roles, built-in actions, extensions |
-| 0005 | Application Architecture | App structure, lifecycle, concurrency |
+| 0005 | Application Architecture | App structure, lifecycle (concurrency: see 0088) |
 | 0006 | Error Philosophy | "Code is the error message" |
 | 0007 | Events & Reactive | Events, state, repositories |
 | 0008 | I/O Services | HTTP, files, sockets, system objects |
@@ -212,6 +212,7 @@ expected. Below is the current set, grouped by theme.
 | 0073 | Plugin SDK / Store Files | (two proposals reuse 0073: SDK and store-backed repositories) |
 | 0080 | Git Actions | Native Git via libgit2 — status, log, stage, commit, push, pull, clone, checkout, tag |
 | 0081 | User-Defined Actions | Define custom actions in ARO itself (proposed) |
+| 0088 | Concurrency Model | Statement overlap, force points, `parallel for each`, event dispatch, stream prefetch |
 
 See `Proposals/README.md` for the full index.
 

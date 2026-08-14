@@ -154,7 +154,8 @@
         </ol>
 
         <h3>Execution Flow</h3>
-        <p>Within a feature set, statements execute sequentially:</p>
+        <p>Within a feature set, statements are written and read in order, and every
+        effect happens in that order:</p>
 
         <pre><code><span class="code-feature">(Process Order: Order Management)</span> {
     <span class="code-comment">(* 1. Extract data *)</span>
@@ -175,6 +176,19 @@
     <span class="code-comment">(* 6. Return response *)</span>
     <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
+
+        <p>What the runtime does not promise is that each statement <em>finishes</em>
+        before the next one starts. An action begins where it is written, and the
+        program waits for it at the first read of its result — so statements that
+        need nothing from each other run at the same time. Two independent HTTP
+        requests in one feature set take about as long as one.</p>
+
+        <p>Effects never move: <code>Log</code>, <code>Store</code>, <code>Emit</code>,
+        <code>Send</code> and <code>Return</code> run at their own statement and force
+        whatever they read first, so anything you can observe still happens in the
+        order you wrote it. See
+        <a href="https://git.ausdertechnik.de/arolang/aro/-/blob/main/Proposals/ARO-0088-concurrency-model.md">ARO-0088</a>
+        for the full rule.</p>
 
         <h3>Early Returns</h3>
         <p>Use control flow to return early:</p>

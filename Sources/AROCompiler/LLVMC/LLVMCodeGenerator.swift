@@ -363,11 +363,16 @@ public final class LLVMCodeGenerator {
 
         // Normal return block
         ctx.setInsertionPoint(atEndOf: normalReturnBlock)
+        // Feature-set exit is a force point (ARO-0088 §3): anything deferred and
+        // never read still has to run, and a failure has to reach the context's
+        // error slot — the per-statement check ran while it was still in flight.
+        _ = ctx.module.insertCall(externals.contextDrainDeferred, on: [ctxParam], at: ctx.insertionPoint)
         let finalResult = ctx.module.insertLoad(ctx.ptrType, from: resultPtr, at: ctx.insertionPoint)
         ctx.module.insertReturn(finalResult, at: ctx.insertionPoint)
 
         // Error exit block
         ctx.setInsertionPoint(atEndOf: errorExitBlock)
+        _ = ctx.module.insertCall(externals.contextDrainDeferred, on: [ctxParam], at: ctx.insertionPoint)
         _ = ctx.module.insertCall(externals.contextPrintError, on: [ctxParam], at: ctx.insertionPoint)
         ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
     }

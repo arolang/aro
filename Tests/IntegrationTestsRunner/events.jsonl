@@ -1,0 +1,9 @@
+{"level":"INFO","message":"Request received","service":"api","time":45,"timestamp":"2024-01-15T10:00:00Z"}
+{"level":"ERROR","message":"Database timeout","service":"api","time":5000,"timestamp":"2024-01-15T10:00:01Z"}
+{"level":"WARN","message":"Rate limit exceeded","service":"auth","time":120,"timestamp":"2024-01-15T10:00:02Z"}
+{"level":"INFO","message":"Request completed","service":"api","time":89,"timestamp":"2024-01-15T10:00:03Z"}
+{"level":"ERROR","message":"Authentication failed","service":"auth","time":15,"timestamp":"2024-01-15T10:00:04Z"}
+{"level":"INFO","message":"Cache hit","service":"api","time":5,"timestamp":"2024-01-15T10:00:05Z"}
+{"level":"ERROR","message":"Connection refused","service":"api","time":3000,"timestamp":"2024-01-15T10:00:06Z"}
+{"level":"DEBUG","message":"Task started","service":"worker","time":0,"timestamp":"2024-01-15T10:00:07Z"}
+{"level":"INFO","message":"Task completed","service":"worker","time":250,"timestamp":"2024-01-15T10:00:08Z"}

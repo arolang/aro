@@ -258,7 +258,13 @@ ARO explicitly rejects visibility modifiers:
 
 ## 4. Concurrency Model
 
-ARO's concurrency model is **event-driven async with synchronous statement execution**.
+ARO's concurrency model is **event-driven, with demand-driven overlap inside a feature set**.
+
+> **Full specification: ARO-0088 (Concurrency Model).** This section states the
+> model at the level needed to understand the application architecture. ARO-0088
+> is the authoritative document for ordering guarantees, `parallel for each`,
+> event dispatch strategies, shared-state isolation, and the runtime's
+> configuration knobs.
 
 ### Feature Sets Are Async
 
@@ -283,9 +289,9 @@ Every feature set runs asynchronously when triggered by an event:
 
 When multiple events arrive, multiple feature sets execute simultaneously.
 
-### Statements Are Sync
+### Statements Are Ordered
 
-Inside a feature set, statements execute **synchronously** and **serially**:
+Inside a feature set, statements are written and read in order:
 
 ```aro
 (Process Order: Order API) {
@@ -298,37 +304,24 @@ Inside a feature set, statements execute **synchronously** and **serially**:
 }
 ```
 
-Each statement completes before the next one starts. No callbacks. No promises. No async/await syntax.
+Statements are written in order and read in order. What the runtime guarantees is narrower than "each one finishes before the next begins": a statement *starts* at its position, and the program *waits* for it where its result is first read. Two statements that need nothing from each other therefore overlap, and a feature set costs its critical path rather than the sum of its parts.
 
-### No Concurrency Primitives
+Effects are the part that never moves. `Log`, `Store`, `Emit`, `Send` and the rest run at their own statement and force what they read first, so anything observable happens in the order written. See ARO-0088 §2 and §3 for the full rule and the force points.
 
-ARO explicitly does **not** provide:
+### One Concurrency Construct
 
-- `async` / `await` keywords
-- Promises / Futures
-- Threads / Task spawning
-- Locks / Mutexes / Semaphores
-- Channels / Actors
-- Race / All / Any combinators
-- Parallel for loops
-
-The runtime handles concurrency. The programmer writes sequential code.
-
-### Runtime Optimization (Transparent)
-
-While code appears synchronous, the runtime executes I/O operations asynchronously:
+The language surface offers exactly one way to ask for concurrency — `parallel for each`, the concurrent form of ordinary iteration:
 
 ```aro
-(Process Config: File Handler) {
-    <Open> the <config-file> from the <path>.        (* Starts file load async *)
-    Compute the <hash> for the <request>.          (* Runs while file loads *)
-    Log "Processing..." to the <console>.          (* Runs while file loads *)
-    Parse the <config> from the <config-file>.     (* Waits for file if needed *)
-    Return an <OK: status> with <config>.
+parallel for each <url> in <urls> with <concurrency: 8> {
+    Request the <page> from <url>.
+    Store the <page> into the <page-repository>.
 }
 ```
 
-The programmer writes synchronous code. The runtime delivers async performance.
+Iterations run concurrently and complete in non-deterministic order; statements inside one iteration stay sequential. See ARO-0088 §5.
+
+Beyond that, ARO has no surface syntax for `async`/`await`, futures, thread creation, locks, channels, or race/all/any combinators. The **runtime** uses all of these internally — the event bus and repository storage are actors, action work runs on a dedicated executor — but none of it is reachable from `.aro` source. The programmer writes sequential code per feature set; the runtime runs feature sets concurrently.
 
 ### Event Emission
 

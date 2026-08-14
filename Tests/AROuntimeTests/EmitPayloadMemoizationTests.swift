@@ -3,11 +3,21 @@
 // Issue #55 follow-up — bus-side payload memoization for Emit.
 // ============================================================
 //
-// "Resolved Emit semantics" from the issue plan: payload values are
-// captured as AROFutures (not forced), so the first handler that reads
-// a field forces it; AROFuture.ResultStorage memoizes the result for
-// every other handler. These tests pin the behaviour at the EmitAction
-// + EventBus seam so a regression to eager bind would fail loudly.
+// CONTRACT CHANGED by ARO-0088 (GitLab #485). Issue #55's "Resolved Emit
+// semantics" captured payload values as unforced AROFutures so the first
+// handler to read a field forced it. Under ARO-0088 an effect forces its
+// inputs at its own statement, and `Emit` is an effect — so the payload is
+// forced at the emitting statement instead.
+//
+// The reason is containment, not tidiness. Once actions genuinely defer, an
+// unforced handle placed in a payload escapes the runtime that created it:
+// ten separate sites bind `event` into a handler context, and payloads are
+// also serialised to JSON, written to sockets, and recorded for replay. Every
+// one of those would have to learn to unwrap a handle.
+//
+// What these tests still pin is the guarantee that mattered: the producer runs
+// **exactly once** no matter how many handlers read the payload, and every
+// handler observes it.
 
 import XCTest
 @testable import ARORuntime
@@ -29,10 +39,9 @@ final class EmitPayloadMemoizationTests: XCTestCase {
         XCTAssertEqual(ctx.resolveAny("payload") as? String, "payload-value")
     }
 
-    /// EmitAction must capture the AROFuture in DomainEvent.payload, NOT the
-    /// materialized string. This is the "force at first handler read"
-    /// guarantee — without it the future would be resolved at emit time.
-    func testEmitCapturesUnforcedFutureInDomainEventPayload() async throws {
+    /// EmitAction materializes the payload at the emitting statement, so a
+    /// handler receives a value rather than a handle it would have to force.
+    func testEmitMaterializesPayloadInDomainEventPayload() async throws {
         let bus = EventBus()
         let captured = AtomicBox<DomainEvent>()
         bus.subscribe(to: DomainEvent.self) { event in
@@ -59,26 +68,30 @@ final class EmitPayloadMemoizationTests: XCTestCase {
 
         let event = captured.value
         XCTAssertNotNil(event, "DomainEvent must reach the subscriber")
-        XCTAssertTrue(
+        XCTAssertFalse(
             event?.payload["user"] is AROFuture,
-            "Emit must store the AROFuture, not its forced result"
+            "Emit must materialize the payload, not hand a handle to the bus"
         )
+        let payload = event?.payload["user"] as? [String: any Sendable]
+        XCTAssertEqual(payload?["id"] as? Int, 42)
+        XCTAssertEqual(payload?["name"] as? String, "alice")
     }
 
-    /// Emit + handler chain: the producer should run exactly once even when
-    /// many handlers extract the same payload field. AROFuture's
-    /// ResultStorage memoizes after first force.
+    /// Emit + handler chain: the producer runs exactly once no matter how many
+    /// handlers read the payload field. The mechanism moved (forced once at the
+    /// emitting statement rather than once at first handler read); the guarantee
+    /// did not.
     func testProducerRunsOnceAcrossManyHandlerForces() async throws {
         let bus = EventBus()
         let totalHandlers = 8
         let observed = AtomicCounter()
         for _ in 0..<totalHandlers {
             bus.subscribe(to: DomainEvent.self) { event in
-                guard let payloadFuture = event.payload["user"] as? AROFuture else {
-                    XCTFail("Expected AROFuture in payload, got \(type(of: event.payload["user"] as Any))")
+                guard let value = event.payload["user"] as? String else {
+                    XCTFail("Expected a materialized payload, got \(type(of: event.payload["user"] as Any))")
                     return
                 }
-                _ = try? await payloadFuture.value()
+                XCTAssertEqual(value, "alice")
                 observed.increment()
             }
         }
@@ -106,7 +119,7 @@ final class EmitPayloadMemoizationTests: XCTestCase {
 
         // publishAndTrack waits for handlers, so all forces have happened.
         XCTAssertEqual(observed.value, totalHandlers, "Every handler should have observed the payload")
-        XCTAssertEqual(runCount.value, 1, "Producer must run exactly once thanks to memoization")
+        XCTAssertEqual(runCount.value, 1, "Producer must run exactly once for the whole fan-out")
     }
 
     /// Object-literal Emit (`with { key: value }`) is unchanged: the dict is

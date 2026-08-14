@@ -9,10 +9,22 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# Arguments are passed through to run-tests.pl, so a single example can be
+# reproduced on Linux without waiting for all 106:
+#
+#   ./test-examples-in-docker.sh DirectoryReplicatorEvents
+#   ./test-examples-in-docker.sh --filter=Terminal
+#
+# The Swift build still dominates the wall clock; the saving is in the run.
+RUNNER_ARGS="$*"
+
 echo "=== Running ARO tests in Swift 6.3 Docker container ==="
+if [ -n "$RUNNER_ARGS" ]; then
+    echo "=== Restricted to: $RUNNER_ARGS ==="
+fi
 echo ""
 
-docker run --rm -v "$SCRIPT_DIR:/workspace" -w /workspace swift:6.3-jammy bash -c '
+docker run --rm -e RUNNER_ARGS="$RUNNER_ARGS" -v "$SCRIPT_DIR:/workspace" -w /workspace swift:6.3-jammy bash -c '
 set -e
 
 # Copy the workspace from the (slow, inotify-broken) host bind-mount to a
@@ -144,5 +156,5 @@ sync_results() {
 }
 trap sync_results EXIT
 
-./Tests/IntegrationTestsRunner/run-tests.pl 2>&1
+./Tests/IntegrationTestsRunner/run-tests.pl $RUNNER_ARGS 2>&1
 '

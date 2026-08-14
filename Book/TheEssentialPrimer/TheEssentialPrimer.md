@@ -296,11 +296,15 @@ This dual-mode architecture — interpreter for development, native binary for d
 
 ---
 
-## 6. Lazy Execution
+## 6. Statement Execution
 
-Action statements no longer execute when the parser reaches them. Each action call returns an `AROFuture` handle and the actual work runs on a dedicated `ActionTaskExecutor`. Values are **forced** the first time something reads them — typically a `Return`, an `Emit` payload extraction, a `When` guard, a `with`-expression argument, or an export. Sequential reads happen in source order; independent results overlap automatically. Effects (`Log`, `Store`, `Emit`, `Commit`, …) preserve source order within a feature set: the runtime forces any pending future the effect's arguments depend on before the effect runs.
+Statements are written and read in order, and every effect happens in that order. What the runtime does *not* do is finish each statement before starting the next: an action starts where it is written, and the program waits for it at the first read of its result. Independent statements therefore overlap — two 2-second requests in one feature set take about two seconds, not four.
 
-The result is a language where parallelism is the default but the syntax has no async colour. There is no `await`, no `async` keyword on feature sets, no promise-chaining. The code reads as if it were sequential; the runtime decides what can overlap.
+Effects never move. `Log`, `Store`, `Emit`, `Send` and the rest run at their own statement and force whatever they read first. Deferral covers value-producing verbs only; `Sleep` is deliberately excluded, because there the delay is the point.
+
+Underneath: a deferred action returns an `AROFuture` running on a dedicated `ActionTaskExecutor`, reads force it, and feature-set exit forces anything left so a failure nobody read is still reported — against the statement that caused it. ARO-0088 is the specification.
+
+The syntax has no async colour either way: no `await`, no `async` keyword on feature sets, no promise-chaining.
 
 ## 7. User-Defined Actions
 

@@ -21,10 +21,10 @@ final class LazyActionBindingTests: XCTestCase {
         let future = AROFuture(resolved: "hello" as String, bindingName: "greeting")
         ctx.bind("greeting", value: future)
 
-        // Sanity: the binding really does hold a future.
-        let typed = ctx.resolveTyped("greeting")
-        XCTAssertNotNil(typed)
-        XCTAssertTrue(typed?.value is AROFuture)
+        // Sanity: the binding really does hold a future. Checked through
+        // resolveAnyRaw — `resolveTyped` forces as of ARO-0088, so that a
+        // consumer inspecting `.type` never sees an unresolved handle.
+        XCTAssertTrue(ctx.resolveAnyRaw("greeting") is AROFuture)
 
         // resolveAny must auto-force.
         let resolved = ctx.resolveAny("greeting")

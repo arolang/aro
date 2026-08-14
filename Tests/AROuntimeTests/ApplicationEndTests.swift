@@ -32,11 +32,55 @@ struct ApplicationEndTests {
         return binaryPath
     }
 
-    /// Helper to create a temporary ARO file and run it with --keep-alive,
-    /// optionally sending SIGINT after a delay to trigger graceful shutdown.
+    /// Accumulates a subprocess's output off the reader thread and lets the test
+    /// wait for a marker to appear.
+    private final class OutputCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stdoutData = Data()
+        private var stderrData = Data()
+        private var marker: String?
+        private let markerSeen = DispatchSemaphore(value: 0)
+        private var signalled = false
+
+        init(waitingFor marker: String?) { self.marker = marker }
+
+        func appendStdout(_ data: Data) { append(data, to: \.stdoutData) }
+        func appendStderr(_ data: Data) { append(data, to: \.stderrData) }
+
+        private func append(_ data: Data, to keyPath: ReferenceWritableKeyPath<OutputCollector, Data>) {
+            lock.lock(); defer { lock.unlock() }
+            self[keyPath: keyPath].append(data)
+            guard let marker, !signalled else { return }
+            let combined = String(decoding: stdoutData, as: UTF8.self)
+                + String(decoding: stderrData, as: UTF8.self)
+            if combined.contains(marker) {
+                signalled = true
+                markerSeen.signal()
+            }
+        }
+
+        /// Wait for the marker, returning false on timeout.
+        func waitForMarker(timeout: TimeInterval) -> Bool {
+            markerSeen.wait(timeout: .now() + timeout) == .success
+        }
+
+        var stdout: String { lock.lock(); defer { lock.unlock() }; return String(decoding: stdoutData, as: UTF8.self) }
+        var stderr: String { lock.lock(); defer { lock.unlock() }; return String(decoding: stderrData, as: UTF8.self) }
+    }
+
+    /// Helper to create a temporary ARO file and run it with --keep-alive.
+    ///
+    /// `signalOnceOutputContains` names a marker the program prints when it is
+    /// actually up; SIGINT is sent once it appears. The previous version slept a
+    /// fixed second and signalled regardless, which is fine on an idle machine
+    /// and wrong on a loaded one: the signal arrived before the program had
+    /// started, so no handler ran and the test saw empty output. That is exactly
+    /// how it failed — intermittently, only when the example suite was running
+    /// alongside it.
     private func runAROCodeKeepAlive(
         _ aroCode: String,
-        sendSIGINTAfter signalDelay: TimeInterval? = nil
+        signalOnceOutputContains readyMarker: String? = nil,
+        readyTimeout: TimeInterval = 30
     ) async throws -> (stdout: String, stderr: String, exitCode: Int32) {
         let aroBinary = try findAroBinary()
 
@@ -71,25 +115,37 @@ struct ApplicationEndTests {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        // Drain both pipes continuously. Reading only after exit can deadlock a
+        // program that fills a pipe buffer while we wait for it.
+        let collector = OutputCollector(waitingFor: readyMarker)
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil; return }
+            collector.appendStdout(data)
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil; return }
+            collector.appendStderr(data)
+        }
+
         try process.run()
 
-        // If requested, send SIGINT after a delay to trigger graceful shutdown
-        if let delay = signalDelay {
-            let pid = process.processIdentifier
-            DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
-                kill(pid, SIGINT)
-            }
+        if readyMarker != nil {
+            // Signal only once the program says it is up. On timeout, signal
+            // anyway so the test fails on its own assertions rather than hanging.
+            _ = collector.waitForMarker(timeout: readyTimeout)
+            kill(process.processIdentifier, SIGINT)
         }
 
         process.waitUntilExit()
 
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        // Give the readers a moment to drain what was written just before exit.
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
 
-        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-
-        return (stdout: stdout, stderr: stderr, exitCode: process.terminationStatus)
+        return (stdout: collector.stdout, stderr: collector.stderr, exitCode: process.terminationStatus)
     }
 
     // MARK: - Application-End: Success
@@ -108,8 +164,8 @@ struct ApplicationEndTests {
         }
         """
 
-        // Run with --keep-alive; send SIGINT after 1 second to trigger graceful shutdown
-        let result = try await runAROCodeKeepAlive(aroCode, sendSIGINTAfter: 1.0)
+        // Signal once the program has actually started, not after a fixed delay.
+        let result = try await runAROCodeKeepAlive(aroCode, signalOnceOutputContains: "Application started")
 
         let output = result.stdout + result.stderr
 
