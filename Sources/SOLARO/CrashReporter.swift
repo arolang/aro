@@ -68,10 +68,13 @@ enum CrashReporter {
         }.first
     }
 
-    /// Open the GitHub new-issue URL with the most recent crash
-    /// log embedded in the description as a fenced block. The
-    /// public mirror at github.com/arolang/aro is where bug
-    /// reports go — the GitLab origin is private to the team.
+    /// Open the new-issue page with the most recent crash log
+    /// embedded in the description as a fenced block.
+    ///
+    /// Destination is GitLab (`origin`), not the GitHub mirror
+    /// (#275). The mirror was the earlier target on the theory
+    /// that outside reporters can reach it, but a report filed
+    /// where the work isn't tracked is a report nobody sees.
     static func openReportBugPage() {
         let url = composeReportURL()
         NSWorkspace.shared.open(url)
@@ -80,7 +83,7 @@ enum CrashReporter {
     /// Build the new-issue URL. Public so a SwiftUI button can
     /// trigger it; tests can also exercise the URL composition.
     static func composeReportURL() -> URL {
-        let base = "https://github.com/arolang/aro/issues/new"
+        let base = "https://\(CrashSubmission.host)/\(CrashSubmission.projectPath)/-/issues/new"
         var components = URLComponents(string: base)!
         var description = "**SOLARO version:** \(AROVersion.shortVersion)\n"
         description += "**Platform:** macOS\n\n"
@@ -93,12 +96,14 @@ enum CrashReporter {
             description += "<details>\n<summary>\(log.lastPathComponent)</summary>\n\n"
             description += "```\n\(text)\n```\n\n</details>\n"
         }
-        // GitHub's `new issue` form uses `title` / `body` query
-        // parameters (not GitLab's `issue[title]` / `issue[description]`).
+        // GitLab's new-issue form takes `issue[title]` /
+        // `issue[description]` — GitHub's `title` / `body` names
+        // are silently ignored here, which is how a pre-filled
+        // form arrives empty.
         components.queryItems = [
-            URLQueryItem(name: "title",
+            URLQueryItem(name: "issue[title]",
                          value: "SOLARO crash / bug report"),
-            URLQueryItem(name: "body", value: description),
+            URLQueryItem(name: "issue[description]", value: description),
         ]
         return components.url!
     }
