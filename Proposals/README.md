@@ -26,6 +26,7 @@ For newcomers to ARO, read the proposals in order:
 | 30 | [IDE Integration](ARO-0030-ide-integration.md) | Syntax highlighting, snippets |
 | 34 | [Language Server Protocol](ARO-0034-language-server-protocol.md) | LSP server, diagnostics, navigation |
 | 46 | [Typed Event Extraction](ARO-0046-typed-event-extraction.md) | Schema-validated event extraction |
+| 88 | [Concurrency Model](ARO-0088-concurrency-model.md) | What runs concurrently, ordering guarantees, `parallel for each` |
 
 ## Quick Reference
 
@@ -84,7 +85,8 @@ Proposals/
 ├── ARO-0019-standard-library.md
 ├── ARO-0030-ide-integration.md
 ├── ARO-0034-language-server-protocol.md
-└── ARO-0046-typed-event-extraction.md
+├── ARO-0046-typed-event-extraction.md
+└── ARO-0088-concurrency-model.md
 ```
 
 ---

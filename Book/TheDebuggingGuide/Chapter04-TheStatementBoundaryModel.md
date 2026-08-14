@@ -21,6 +21,11 @@ This matters for two reasons. First, the debugger never has to ask "which sub-st
 
 ## 4.2 Lazy execution: order on the page ≠ order in time
 
+> **Scope note.** A deferred action still *starts* at its own statement — only
+> the wait moves to the first read. So the divergence below is about where a slow
+> statement's cost lands, not about work happening out of order. Effects never
+> defer. ARO-0088 §2 and §3 are the specification.
+
 ARO actions are lazy by default. A non-effectful statement like
 
 ```aro

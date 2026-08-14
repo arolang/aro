@@ -3,7 +3,7 @@
 - **Status:** Draft
 - **Author:** Claude Code
 - **Created:** 2026-02-16
-- **Related:** ARO-0018 (Data Pipelines), ARO-0008 (I/O Services)
+- **Related:** ARO-0018 (Data Pipelines), ARO-0008 (I/O Services), ARO-0088 (Concurrency Model — a streaming pipeline is sequential per element)
 
 ## Abstract
 

@@ -244,12 +244,17 @@ public struct StreamAction: ActionImplementation {
             }
         }
 
+        // Overlap reading with processing (ARO-0088 §6): the next lines are read
+        // and split while the loop body is still working on the current one,
+        // bounded so a fast disk cannot outrun a slow body into memory.
+        let prefetched = stream.prefetch()
+
         if let rc = context as? RuntimeContext {
-            rc.bindLazy(result.base, stream: stream)
+            rc.bindLazy(result.base, stream: prefetched)
         } else {
-            context.bind(result.base, value: stream)
+            context.bind(result.base, value: prefetched)
         }
-        return stream
+        return prefetched
     }
     #endif
 }

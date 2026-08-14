@@ -169,6 +169,11 @@ public final class FeatureSetExecutor: Sendable {
                 }
             }
 
+            // Feature-set exit is a force point (ARO-0088 §3). Without it a
+            // deferred action nobody read would be cancelled when its handle is
+            // released, so a failing statement could leave no trace at all.
+            try drainDeferredResults(context: context)
+
             // Check for response (either from sequential or scheduled execution)
             if let response = context.getResponse() {
                 let duration = Date().timeIntervalSince(startTime) * 1000
@@ -485,8 +490,21 @@ public final class FeatureSetExecutor: Sendable {
 
     private func executeAROStatement(
         _ statement: AROStatement,
-        context: ExecutionContext
+        context outerContext: ExecutionContext
     ) async throws {
+        // Every statement gets its own scope for the `_`-prefixed framework
+        // variables below (ARO-0088 §2). A deferred action runs after later
+        // statements have rebound them, so reading them from a shared context
+        // would hand it the wrong `_with_`, `_where_value_`, or `_literal_`.
+        // Non-framework binds — including the action's own result — write
+        // through to `outerContext`, so consumers are unaffected.
+        let context: ExecutionContext
+        if let runtime = outerContext as? RuntimeContext {
+            context = runtime.createStatementScope()
+        } else {
+            context = outerContext
+        }
+
         // Clear transient bindings from previous statements
         // These are statement-local and should not persist between statements
         context.unbind("_literal_")
@@ -670,6 +688,31 @@ public final class FeatureSetExecutor: Sendable {
             context.bind("_result_expression_", value: resultValue)
         }
 
+        // Deferred execution (ARO-0088 §2): the action starts here, but the wait
+        // for its result moves to the first read of the binding. Statements that
+        // follow run while it is in flight; a read forces it.
+        let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
+        if LazyActionPolicy.deferrable(canonicalVerb),
+           statement.action.semanticRole != .response,
+           !testVerbs.contains(canonicalVerb),
+           let owner = outerContext as? RuntimeContext,
+           let scope = context as? RuntimeContext {
+            scope.markDeferredScope()
+            let future = deferredResult(
+                statement: statement,
+                verb: verb,
+                resultDescriptor: resultDescriptor,
+                objectDescriptor: objectDescriptor,
+                statementScope: context
+            )
+            owner.registerPendingFuture(future)
+
+            // Atomic: the future is already running, so the action can finish
+            // and bind its own result between any separate check and bind.
+            owner.bindDeferredPlaceholder(resultDescriptor.base, future: future)
+            return
+        }
+
         // Execute action with ARO-0008 error wrapping
         do {
             // Dispatch through the registry rather than resolving built-in and
@@ -690,26 +733,19 @@ public final class FeatureSetExecutor: Sendable {
                 // Check if this is a rebinding action (accept, update, delete, merge, etc.)
                 // Also include REQUEST actions (retrieve, fetch, etc.) since they always get fresh data
                 // and should override parent context values (fixes event handler variable shadowing)
-                let rebindingVerbs: Set<String> = [
-                    "accept", "update", "modify", "change", "set", "configure",
-                    "delete", "remove", "destroy", "clear", "show",
-                    "merge", "combine", "join", "concat"
-                ]
-                let requestVerbs: Set<String> = [
-                    "retrieve", "fetch", "load", "find", "extract", "parse", "get",
-                    "request", "probe", "receive", "read"
-                ]
-                // #316: lowercase once, not twice.
-                let lowerVerb = verb.lowercased()
-                let allowRebind = rebindingVerbs.contains(lowerVerb) ||
-                                  requestVerbs.contains(lowerVerb)
+                let allowRebind = allowsRebinding(verb)
 
                 // Only bind if variable doesn't exist LOCALLY or if this is a rebinding/request action.
                 // We check existsLocally (not exists) so event handlers can create local shadow
                 // bindings even when a parent context has already bound the same variable name.
                 // Without this, e.g. Transform/Compute in a handler would silently skip the bind
                 // if Application-Start already bound the same variable in the root context.
-                let existsLocally = (context as? RuntimeContext)?.existsLocally(resultDescriptor.base) ?? context.exists(resultDescriptor.base)
+                // Against the owning feature-set context, not the statement
+                // scope: the scope holds only framework variables, so asking it
+                // whether a result already exists always answers "no" and every
+                // rebind would trip the immutability check.
+                let existsLocally = (outerContext as? RuntimeContext)?.existsLocally(resultDescriptor.base)
+                    ?? outerContext.exists(resultDescriptor.base)
                 if allowRebind || !existsLocally {
                     context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
                 }
@@ -736,6 +772,97 @@ public final class FeatureSetExecutor: Sendable {
                 resolvedValues: gatherResolvedValues(for: statement, context: context)
             )
             throw ActionError.statementFailed(aroError)
+        }
+    }
+
+    /// Force everything still outstanding and rethrow the first failure.
+    ///
+    /// Also surfaces a failure that a read already swallowed: `resolveAny` keeps
+    /// reads total by handing back `""` when a deferred action failed, and this
+    /// is where that gets reported instead of disappearing.
+    private func drainDeferredResults(context: ExecutionContext) throws {
+        guard let runtime = context as? RuntimeContext else { return }
+        let drainError = runtime.drainPendingFutures()
+        if let observed = runtime.takeDeferredFailure() {
+            throw observed
+        }
+        if let drainError {
+            throw drainError
+        }
+    }
+
+    /// Verbs that may overwrite an existing binding rather than shadow it.
+    ///
+    /// Rebinding actions replace a value in place; REQUEST actions always
+    /// produce fresh external data and must override a parent binding so an
+    /// event handler doesn't read the value Application-Start left behind.
+    private func allowsRebinding(_ verb: String) -> Bool {
+        let rebindingVerbs: Set<String> = [
+            "accept", "update", "modify", "change", "set", "configure",
+            "delete", "remove", "destroy", "clear", "show",
+            "merge", "combine", "join", "concat"
+        ]
+        let requestVerbs: Set<String> = [
+            "retrieve", "fetch", "load", "find", "extract", "parse", "get",
+            "request", "probe", "receive", "read"
+        ]
+        let lowerVerb = verb.lowercased()
+        return rebindingVerbs.contains(lowerVerb) || requestVerbs.contains(lowerVerb)
+    }
+
+    /// Start a deferred action and hand back the handle to bind (ARO-0088 §2).
+    ///
+    /// The work begins immediately on `ActionTaskExecutor` — "eager start, lazy
+    /// join". That matters for more than throughput: a `Retrieve` reads the
+    /// repository at the point in time its statement implies, not at whatever
+    /// later moment someone happens to read the binding.
+    ///
+    /// Failures are wrapped in the same `AROError` the eager path produces, at
+    /// construction time, so the message names the statement that failed rather
+    /// than the read that observed it (ARO-0088 §4).
+    private func deferredResult(
+        statement: AROStatement,
+        verb: String,
+        resultDescriptor: ResultDescriptor,
+        objectDescriptor: ObjectDescriptor,
+        statementScope: ExecutionContext
+    ) -> AROFuture {
+        let registry = actionRegistry
+        let resultName = resultDescriptor.fullName
+        let objectName = objectDescriptor.fullName
+        let preposition = statement.object.preposition.rawValue
+        let condition = statement.statementGuard.isPresent ? "when <condition>" : nil
+        let featureSet = statementScope.featureSetName
+        let activity = statementScope.businessActivity
+        let location = "\(statement.span.start.line):\(statement.span.start.column)"
+
+        return AROFuture(bindingName: resultDescriptor.base, sourceLocation: location) {
+            do {
+                return try await registry.execute(
+                    verb: verb,
+                    result: resultDescriptor,
+                    object: objectDescriptor,
+                    context: statementScope
+                )
+            } catch let assertionError as AssertionError {
+                throw assertionError
+            } catch let templateError as TemplateError {
+                throw templateError
+            } catch let aroError as AROError {
+                throw ActionError.statementFailed(aroError)
+            } catch {
+                let aroError = AROError.fromStatement(
+                    verb: verb,
+                    result: resultName,
+                    preposition: preposition,
+                    object: objectName,
+                    condition: condition,
+                    featureSet: featureSet,
+                    businessActivity: activity,
+                    resolvedValues: [:]
+                )
+                throw ActionError.statementFailed(aroError)
+            }
         }
     }
 

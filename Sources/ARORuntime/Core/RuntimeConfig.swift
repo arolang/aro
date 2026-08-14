@@ -35,6 +35,17 @@ public enum RuntimeDefaults {
     /// purely the memory budget.
     public static let visitedURLStoreMaxSize: Int = 100_000
 
+    /// How many elements a stream's producer may run ahead of its consumer
+    /// (ARO-0088 §6). Small on purpose: the win is overlapping one element's
+    /// read/parse with the previous one's processing, and a deep buffer only
+    /// trades memory for latency the consumer cannot use. Override with
+    /// `ARO_STREAM_PREFETCH`.
+    public nonisolated(unsafe) static var streamPrefetchCapacity: Int = {
+        if let raw = ProcessInfo.processInfo.environment["ARO_STREAM_PREFETCH"],
+           let n = Int(raw), n > 0 { return n }
+        return 2
+    }()
+
     // MARK: - Observer dispatch backpressure (#227)
 
     /// When true, `Store` publishes `RepositoryChangedEvent` fire-and-forget

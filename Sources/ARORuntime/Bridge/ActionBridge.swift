@@ -177,6 +177,43 @@ private func executeAction(
     let resultDesc = toResultDescriptor(result)
     let objectDesc = toObjectDescriptor(object)
 
+    // Deferred execution in compiled binaries (ARO-0088 §2, §7).
+    //
+    // The generated code stores this call's boxed return value and reads
+    // bindings through the C accessors, both of which materialize an AROFuture
+    // on access — so handing back a handle is transparent to the caller. The
+    // per-statement error check can't see a failure that hasn't happened yet,
+    // which is what `aro_context_drain_deferred` at feature-set exit is for.
+    let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
+    if LazyActionPolicy.deferrable(canonicalVerb),
+       let runtime = ctxHandle.context as? RuntimeContext {
+        let scope = runtime.createStatementScope()
+        // Take the modifiers now: they are cleared a few lines below, long
+        // before a deferred action gets to read them.
+        runtime.copyFrameworkVariables(to: scope)
+        scope.markDeferredScope()
+
+        let future = ActionRunner.shared.executeLazy(
+            verb: verb,
+            result: resultDesc,
+            object: objectDesc,
+            context: scope
+        )
+        runtime.registerPendingFuture(future)
+
+        let semanticRole = ActionSemanticRole.classify(verb: verb)
+        if semanticRole != .response && semanticRole != .export {
+            // Same atomic placement as the interpreter: the action may already
+            // have bound its own result (a wrapped lazy stream, a handle) and
+            // that binding must win over the placeholder.
+            runtime.bindDeferredPlaceholder(resultDesc.base, future: future)
+        }
+
+        runtime.unbind("_expression_")
+        runtime.unbind("_literal_")
+        return boxResult(future)
+    }
+
     // Execute through ActionRunner with error handling
     let actionResult = ActionRunner.shared.executeSyncWithResult(
         verb: verb,

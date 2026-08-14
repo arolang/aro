@@ -269,9 +269,29 @@ integration:linux:
   # The constrained Kubernetes pod can't service that combined CPU+RAM
   # load — pipeline 17785 retry 80454 was killed with OOM (exit 137).
   # SPM plugin builds are therefore pre-warmed sequentially below, before
-  # run-tests.pl, so the tests only load pre-built libraries. Kept
-  # best-effort until a few pipelines confirm the pod copes.
-  allow_failure: true
+  # run-tests.pl, so the tests only load pre-built libraries.
+  #
+  # `allow_failure: true` accompanied that pre-warm as a temporary measure,
+  # "until a few pipelines confirm the pod copes". They have: the last ten runs
+  # on main are eight successes and two cancellations (superseded pipelines),
+  # with no OOM.
+  #
+  # It is removed because the cost showed up. A real regression — an example
+  # broken in interpreter mode — sat red across four consecutive pipelines that
+  # all reported success, and was only noticed by reading job status directly.
+  # A suite that cannot fail the build is not a gate.
+  #
+  # Infrastructure classes are retried rather than tolerated. Script failures
+  # are deliberately not retried: re-running a genuine failure costs an hour and
+  # tells you nothing. If a non-infra flake does appear here, fix it or quarantine
+  # the example — do not reinstate blanket tolerance.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+      - scheduler_failure
   # Pre-warming the plugin builds adds serial compile time on top of the
   # ~60 min the suite already needs on this pod.
   timeout: 2h

@@ -1,6 +1,6 @@
 # Chapter 39: Concurrency
 
-ARO's concurrency model is radically simple: **feature sets are async, statements are sync**. This chapter explains how ARO handles concurrent operations without requiring you to think about threads, locks, or async/await.
+ARO's concurrency model is radically simple: **feature sets are async, and statements wait only for what they read**. This chapter explains how ARO handles concurrent operations without requiring you to think about threads, locks, or async/await.
 
 ## The Philosophy
 
@@ -76,13 +76,13 @@ When multiple events arrive, multiple feature sets execute simultaneously. 100 H
   <text x="277" y="169" text-anchor="middle" font-size="9" fill="#374151">statements execute</text>
 
   <!-- Title: sequential within each -->
-  <text x="277" y="192" text-anchor="middle" font-size="9" fill="#374151" font-style="italic">sequential within each</text>
+  <text x="277" y="192" text-anchor="middle" font-size="9" fill="#374151" font-style="italic">ordered within each</text>
 </svg>
 </div>
 
-## Statements Are Sync
+## Statements Are Ordered
 
-Inside a feature set, statements execute **synchronously** and **serially**:
+Inside a feature set, statements are written and read in order:
 
 ```aro
 (Process Order: Order API) {
@@ -95,7 +95,25 @@ Inside a feature set, statements execute **synchronously** and **serially**:
 }
 ```
 
-Each statement completes before the next one starts. No callbacks. No promises. No async/await syntax. Just sequential execution.
+No callbacks. No promises. No async/await syntax.
+
+That is the order you read, and the order effects happen in. What it does *not* mean is that each statement finishes before the next one starts.
+
+A statement's action starts where it is written; the program waits for it at the **first read of its result**. So statements that need nothing from each other run at the same time:
+
+```aro
+(Report: Analytics) {
+    Read the <content> from "./big.csv".        (* starts *)
+    Compute the <token> from <seed> * 7919.     (* starts — does not wait for the read *)
+    Compute the <lines: count> from <content>.  (* waits for the read, here *)
+    Log <token> to the <console>.
+    Log <lines> to the <console>.
+}
+```
+
+Two independent 2-second HTTP requests in one feature set take about 2.1 seconds, not 4.2. You did not ask for that and there is no syntax for it — the runtime derives it from which statement reads which binding.
+
+Effects are the part that never moves. `Log`, `Store`, `Emit`, `Send` and friends run at their own statement and force whatever they read first, so anything you can observe still happens in the order you wrote it.
 
 ## Why This Model?
 
@@ -134,8 +152,8 @@ No `async`. No `await`. Just statements in order.
 Within a feature set, there's no shared mutable state problem:
 
 - Variables are scoped to the feature set
-- Statements execute serially
-- No concurrent access to the same data
+- Bindings are immutable, so overlapping statements cannot disagree about a value
+- Effects are pinned to their statements, so observable order is the written order
 
 ### Natural Event Flow
 
@@ -145,59 +163,33 @@ Events naturally express concurrency:
 - Both feature sets run concurrently
 - Each processes their own data independently
 
-## Runtime Optimization
+## Where the Concurrency Actually Is
 
-While you write synchronous-looking code, the ARO runtime executes operations **asynchronously** based on data dependencies. This is transparent to you. Lazy execution is the default — there is no opt-in flag.
+| Granularity | Concurrent? |
+|---|---|
+| Statements in one feature set | **Yes, where independent** — each waits only at the first read of its result |
+| Effects (`Log`, `Store`, `Emit`, …) | No — pinned to their own statement, in source order |
+| Iterations of `for each` | No |
+| Iterations of `parallel for each` | Yes, up to the concurrency limit |
+| Two feature sets triggered independently | Yes |
+| An `Emit` and its handlers | Yes — the emitter continues immediately |
+| A stream's producer and its consumer | Yes, bounded by the prefetch window |
 
-### How It Works
+So a feature set that makes five independent HTTP requests and reads them at the end makes them concurrently. One that reads each result before issuing the next request cannot — you have written a chain, and the runtime honours it.
 
-The runtime performs **data-flow driven execution** using lazy futures (`AROFuture`):
+### Which actions defer
 
-1. **Lazy bindings**: Most actions return a future-like handle instead of a finished value. The action's work is scheduled but the statement does not block.
-2. **Dependency tracking**: Each statement records which other handles it consumes.
-3. **Forced synchronization at use sites**: Reading a value forces it. Effectful actions — `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Store`, `Send`, `Write`, and so on — also force their inputs in declaration order, so observable side effects always appear in source order.
-4. **Auto-force on resolve**: Once a future resolves, the runtime also binds the resolved value under the plain variable name, so every later read is synchronous.
+Value-producing ones: reads (`Retrieve`, `Fetch`, `Read`, `Request`, `Extract`, `Parse`, …) and pure transformations (`Compute`, `Transform`, `Create`, `Filter`, `Map`, `Reduce`, `Sort`, `Render`, …).
 
-### Example
+Everything else runs at its statement. `Sleep` is the interesting exclusion: the delay *is* the effect, so `Sleep` followed by an unrelated `Log` still pauses. Repository writes, `Emit`, `Send`, service lifecycle and the branch consumers (`Compare`, `Validate`, `Accept`) all stay put too. The full list, with the reasoning for each exclusion, is ARO-0088 §2.
 
-```aro
-(Process Config: File Handler) {
-    Read the <config-file> from "./config.json".   (* 1. Starts file load   *)
-    Compute the <hash> for the <request>.          (* 2. Runs immediately   *)
-    Log <request> to the <console>.                (* 3. Runs immediately   *)
-    Extract the <port> from the <config-file>.     (* 4. Forces the file    *)
-    Return an <OK: status> with <port>.
-}
-```
+### When you need it off
 
-**What happens:**
+`ARO_NO_DEFER=1` runs every action at its statement, as the runtime did before this model. It exists for one purpose: if a program misbehaves in a way that looks order-related, setting it tells you in one step whether overlap is involved.
 
-- Statement 1 starts file loading and returns a future immediately
-- Statements 2 and 3 execute while the file loads in the background
-- Statement 4 reads from `<config-file>` for the first time, so the runtime forces it and waits if needed
-- You see: synchronous, source-ordered execution
-- Runtime does: parallel I/O with sequential semantics
+### Errors
 
-**Write synchronous code. Get async performance.**
-
-### What Forces a Value
-
-Most operations that *consume* a value also force it. The most common force points are:
-
-- Effectful actions: `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Store`, `Send`, `Write`, `Append`, `Notify`, `Broadcast`, and the Git mutating actions (`Commit`, `Push`, `Tag`, `Stage`).
-- Field access — `<obj: field>` and dotted paths — forces the parent value.
-- Comparisons and `when` guard evaluation force operands.
-- Iteration: `For each <x> in <list>` forces the list.
-- The end of a feature set: anything still pending is forced before the feature set returns, so handlers always reach a settled state.
-
-Pure transformations (`Compute`, `Transform`, `Map`, `Filter`, `Reduce`) propagate handles instead of forcing — they only force at the boundary where you actually consume the result.
-
-### Why This Matters
-
-Because forcing is implicit, you almost never have to think about it. The two cases worth knowing:
-
-- **Side effects appear in source order.** A series of `Log` lines or a `Log`-then-`Return` always run as written, even if the data they print was produced by a slow upstream `Request`.
-- **Errors surface where you read.** If a lazy action fails, the failure surfaces at the first force point — usually the next `Log`, `Return`, or field access. The error is reported with the source location of that read, not the original lazy statement.
+A failure is reported against the statement that caused it, not the one that noticed it. Because reads are total, a failing statement's result reads as empty and the error is raised no later than the end of the feature set — which means a `Log` sitting between the failure and the read will already have printed. That is the one place where deferral is visible in a way you have to think about.
 
 ## Event Emission
 
@@ -229,18 +221,18 @@ When `Emit` executes:
 2. Execution continues in the current feature set
 3. The target handler starts executing independently
 
-## No Concurrency Primitives
+## No Concurrency Primitives in the Language
 
-ARO explicitly does **not** provide:
+ARO's surface syntax has no:
 
 - `async` / `await` keywords
-- Promises / Futures
-- Threads / Task spawning
-- Locks / Mutexes / Semaphores
-- Channels
-- Actors
+- promises or futures
+- thread or task creation
+- locks, mutexes, semaphores
+- channels
+- race / all / any combinators
 
-These are implementation concerns. The runtime handles them. You write sequential code that responds to events.
+The runtime uses every one of these internally — that is how it runs your feature sets concurrently and keeps repositories consistent. The point is not that they don't exist; it's that they are never yours to manage. You write sequential code that responds to events, plus `parallel for each` when you explicitly want fan-out.
 
 ## Parallel For-Each Loops
 
@@ -280,21 +272,20 @@ The loop body executes **simultaneously** for all items in the collection, utili
 
 ### Execution Model
 
-Under the hood, `parallel for each` uses:
+Under the hood, `aro run` schedules iterations into a task group and keeps at most *N* in flight; a compiled binary does the same through the same runtime, with a tighter bound because compiled handlers occupy real threads while they wait. Either way:
 
-- **DispatchQueue** for thread pool management
-- **DispatchSemaphore** for concurrency limiting
-- **NSLock** for thread-safe error tracking
-- **Isolated contexts** per iteration (no shared mutable state)
+- Each iteration gets its **own child scope**, with the loop variable and index bound in it
+- A `where` filter is evaluated per item, in its own scope, before the body is scheduled
+- Nothing is shared between iterations, so there is no race to lose
 
-Each iteration gets its own execution context, preventing race conditions while maintaining ARO's immutability guarantees.
+Bindings are immutable, so an iteration cannot write to a variable in the enclosing scope. To collect results, store them into a repository — repository operations are individually atomic — and read them back after the loop.
 
 ### Concurrency Control
 
-By default, parallel loops use `System.coreCount` threads (matching your CPU's logical cores):
+By default, a parallel loop runs up to `min(item count, max(4, cores × 4))` iterations at once — a multiple of the core count, capped by how many items there are, so a ten-item loop never spawns more than ten. The multiple is deliberate: iterations usually spend their time waiting on something, not computing.
 
 ```aro
-(* Uses all available cores *)
+(* Uses the default bound *)
 parallel for each <item> in <items> {
     Compute the <result> from <item>.
 }
@@ -313,17 +304,16 @@ parallel for each <item> in <items> with <concurrency: 4> {
 
 Use `parallel for each` when:
 
-- **CPU-bound work**: Heavy computation per iteration
-- **Independence**: Iterations don't depend on each other
-- **Large collections**: Enough items to justify parallelism overhead
-- **Order doesn't matter**: Results can be processed in any order
+- **Independence**: iterations don't depend on each other
+- **I/O-bound work**: fetching twenty URLs, reading many files. Sequential statements never overlap, so this is the construct that turns twenty one-second requests into a few seconds instead of twenty
+- **CPU-bound work**: heavy computation per iteration, across cores
+- **Order doesn't matter**: completion order is not defined
 
 **Don't use it for:**
 
-- **I/O-bound work**: Network/file operations (event-driven already handles concurrency)
-- **Small collections**: Overhead exceeds benefits (< 100 items typically)
-- **Order-dependent logic**: When sequence matters
-- **Side effects**: Database writes, file modifications (use events instead)
+- **Order-dependent logic**: when one iteration's result feeds the next
+- **Small, cheap collections**: the coordination overhead outweighs the gain
+- **Rate-limited services**: or if you must, bound it with `with <concurrency: N>` set to what the service tolerates
 
 ### Thread Safety
 
@@ -475,14 +465,15 @@ The deduplication store is bounded to **100 000 URLs** (FIFO eviction) so that v
 
 | Concept | Behavior |
 |---------|----------|
-| Feature sets | Run async (triggered by events) |
-| Statements | Appear sync (serial execution) |
-| I/O operations | Async under the hood |
-| Events | Non-blocking dispatch |
-| Concurrency primitives | None needed |
+| Feature sets | Run concurrently — every trigger is an independent execution |
+| Statements | Sequential, in source order; independent statements do **not** overlap |
+| `parallel for each` | The one place you ask for concurrency; bounded, non-deterministic order |
+| Events | `Emit` does not block; handlers run on their own |
+| Shared state | Repositories and published symbols, each operation atomic |
+| Concurrency primitives | None in the language; the runtime has them all |
 | CrawlPage dedup | Automatic, bounded to 100K URLs |
 
-Write synchronous code. Get async performance. No callbacks, no promises, no await.
+Write sequential code per feature set. Let events and `parallel for each` provide the concurrency. The full specification is ARO-0088.
 
 ---
 

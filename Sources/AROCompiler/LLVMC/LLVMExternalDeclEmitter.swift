@@ -35,6 +35,7 @@ public final class LLVMExternalDeclEmitter {
     private var _contextPrintResponse: Function?
     private var _contextHasError: Function?
     private var _contextPrintError: Function?
+    private var _contextDrainDeferred: Function?
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
     private var _setEmbeddedTemplates: Function?
@@ -238,6 +239,12 @@ public final class LLVMExternalDeclEmitter {
         // void @aro_context_print_error(ptr)
         _contextPrintError = ctx.module.declareFunction(
             "aro_context_print_error",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_context_drain_deferred(ptr) — ARO-0088 §3 feature-set exit
+        _contextDrainDeferred = ctx.module.declareFunction(
+            "aro_context_drain_deferred",
             types.voidFunctionType(parameters: [ptr])
         )
 
@@ -578,6 +585,7 @@ public final class LLVMExternalDeclEmitter {
     public var contextPrintResponse: Function { _contextPrintResponse! }
     public var contextHasError: Function { _contextHasError! }
     public var contextPrintError: Function { _contextPrintError! }
+    public var contextDrainDeferred: Function { _contextDrainDeferred! }
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
     public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }

@@ -20,6 +20,11 @@ When you type `step` in `aro debug`, the runtime advances exactly one statement.
 
 ## 1.2 Lazy execution makes the debugger interesting
 
+> **Scope note.** Deferral applies to value-producing actions — reads and pure
+> transformations. Effects (`Log`, `Store`, `Emit`, `Send`, `Return`) run at
+> their own statement, so a breakpoint on one always pauses where you expect.
+> ARO-0088 §2 lists exactly which verbs defer.
+
 The simple grammar would be reason enough on its own, but ARO has a second design choice that makes the debugger genuinely useful: **actions are lazy**. A statement like
 
 ```aro

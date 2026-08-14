@@ -357,11 +357,9 @@ The recording mechanism is transparent to your ARO code. You do not need to modi
 
 ---
 
-## 13.13 Lazy Execution and Effect Ordering
+## 13.13 Effect Ordering
 
-Most ARO actions are evaluated lazily under the hood. When you write `Compute the <discount> from <price> * 0.10`, the runtime does not necessarily run that multiplication right then—it returns a future that the next consuming action transparently forces. Laziness lets the runtime batch work, parallelise independent computations, and avoid wasting cycles on values nothing reads.
-
-You almost never need to think about this. The places where it would matter—observable side effects—are handled by the **effect-ordering rule**: every effectful action implicitly forces its inputs at the call site, so output happens in the order you wrote it.
+Actions that produce a value may run concurrently with the statements after them; the program waits for one at the first read of its result (ARO-0088 §2). Effects are the exception, and the reason ordering still works: an effectful action runs at its own statement and forces its inputs before it does, so output lands in the order you wrote it regardless of what is still in flight.
 
 The effectful actions are:
 

@@ -41,9 +41,43 @@ public actor RuntimeContext: ExecutionContext {
     /// Variable storage (now using TypedValue for type preservation)
     nonisolated(unsafe) private var variables: [String: TypedValue] = [:]
 
+    /// Guards `variables` and `immutableVariables`. See `withExclusiveMutation`.
+    private nonisolated let storageLock = NSRecursiveLock()
+
     /// Track which variables are user-defined (immutable) vs framework-internal (mutable)
     /// Only user variables enforce immutability; framework variables can be rebound
     nonisolated(unsafe) private var immutableVariables: Set<String> = []
+
+    /// Statement-scope marker (ARO-0088 §2).
+    ///
+    /// A deferred statement runs after later statements have already rebound the
+    /// framework variables (`_with_`, `_where_value_`, `_literal_`, …) it reads,
+    /// so each statement gets its own scope holding private copies of those. Any
+    /// *other* binding an action makes — including its own result and any
+    /// auxiliary names — writes through to the owning feature-set context, which
+    /// is where consumers look for it.
+    nonisolated(unsafe) private var _isStatementScope: Bool = false
+
+    /// True when this scope is running a *deferred* action's body.
+    ///
+    /// A lookup that misses inside deferred work must not fall back to draining
+    /// pending futures: the future being computed is itself in that set, so the
+    /// drain would wait on the work that is doing the waiting. `RequestAction`
+    /// finds this immediately — its config lookup misses on a normal program and
+    /// the fallback deadlocked the process against itself.
+    nonisolated(unsafe) private var _isDeferredScope: Bool = false
+
+    /// Re-entrancy guard for `drainPendingFutures()`. Forcing a future can run
+    /// code that reads another binding, which can miss, which would drain again.
+    nonisolated(unsafe) private var _isDraining: Bool = false
+
+    /// Deferred action results bound in this context that have not been forced.
+    ///
+    /// A deferred action may bind names beyond its declared result (Split binding
+    /// a count, Stream binding its handle). Those names do not exist until the
+    /// action runs, so a lookup that misses drains this set and retries once
+    /// before reporting the variable as undefined. See `drainPendingFutures()`.
+    nonisolated(unsafe) private var pendingFutures: [AROFuture] = []
 
     /// Service registry
     nonisolated(unsafe) private var services: [ObjectIdentifier: any Sendable] = [:]
@@ -206,27 +240,61 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Variable Management
 
     public nonisolated func resolve<T: Sendable>(_ name: String) -> T? {
-        if let typedValue = variables[name] {
-            // Issue #55, Phase 2: auto-force AROFuture so existing typed
-            // readers see the concrete value transparently.
+        // A miss does NOT fall back to draining pending work.
+        //
+        // That fallback was tried and removed: lookups miss constantly (magic
+        // names, optional modifiers, shadowed bindings), so every miss forced
+        // everything outstanding and deferral collapsed back to sequential —
+        // measurably so, 4s of overlap turning into 4s of waiting. A deferred
+        // action's declared result is bound as a handle the moment the statement
+        // runs, so the ordinary case never needs this; anything an action binds
+        // *beyond* its declared result appears once that result is read, or at
+        // feature-set exit (ARO-0088 §3).
+        resolveWithoutDraining(name)
+    }
+
+    nonisolated func resolveWithoutDraining<T: Sendable>(_ name: String) -> T? {
+        if let typedValue = localVariable(name) {
+            // Reading a deferred result is a force point (ARO-0088 §3): block
+            // here until the action that produces it has finished.
             if let future = typedValue.value as? AROFuture {
-                if let forced = try? future.force(), let typed = forced as? T {
-                    return typed
+                do {
+                    let forced = try future.force()
+                    if let bound = bindingProducedWhileForcing(name) { return bound as? T }
+                    return forced as? T
+                } catch {
+                    // Record the failure so feature-set exit reports it with both
+                    // spans rather than letting a typed read swallow it as nil.
+                    recordDeferredFailure(error, binding: name)
+                    return nil
                 }
-                return nil
             }
             if let value = typedValue.value as? T {
                 return value
             }
         }
-        // Try parent context
+        // Recurse without the drain fallback: the decision to drain is taken
+        // once, by the context the read entered on. Re-deciding it per ancestor
+        // reintroduces the self-deadlock the `isInsideDeferredWork` guard exists
+        // to prevent, because an ancestor is not itself "inside" deferred work.
+        if let runtimeParent = parent as? RuntimeContext {
+            return runtimeParent.resolveWithoutDraining(name)
+        }
         return parent?.resolve(name)
     }
 
     public nonisolated func resolveAny(_ name: String) -> (any Sendable)? {
+        // No drain-on-miss — see `resolve(_:)`.
+        resolveAnyWithoutDraining(name)
+    }
+
+    nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
         // Magic variable: <now> returns current date/time
         if name == "now" {
-            let dateService = services[ObjectIdentifier(DateService.self)] as? DateService ?? DefaultDateService()
+            // Through `service(_:)`, not the local dictionary: services are
+            // registered on the root context, and a statement scope has none of
+            // its own (ARO-0088 §2).
+            let dateService = service(DateService.self) ?? DefaultDateService()
             return dateService.now(timezone: nil)
         }
 
@@ -256,18 +324,32 @@ public actor RuntimeContext: ExecutionContext {
             return ["type": "application"] as [String: any Sendable]
         }
 
-        if let typedValue = variables[name] {
+        if let typedValue = localVariable(name) {
             // Issue #55, Phase 2: a binding may hold an AROFuture under lazy mode.
             // Synchronous resolve callers expect a concrete value, so we force
             // here. This is a force-point that converts the consumer-of-binding
             // pattern into a sync wait. Async-aware callers should use
             // `resolveAnyAsync(_:)` to await without blocking a pthread.
             if let future = typedValue.value as? AROFuture {
-                return (try? future.force()) ?? ""
+                do {
+                    let forced = try future.force()
+                    if let bound = bindingProducedWhileForcing(name) { return bound }
+                    return forced
+                } catch {
+                    // Previously this returned "" — a failed action became an
+                    // empty string at the read site with nothing reported. Keep
+                    // the read total, but remember the failure so feature-set
+                    // exit can surface it (ARO-0088 §4).
+                    recordDeferredFailure(error, binding: name)
+                    return ""
+                }
             }
             return typedValue.value
         }
-        // Try parent context
+        // Recurse without the drain fallback — see `resolveWithoutDraining`.
+        if let runtimeParent = parent as? RuntimeContext {
+            return runtimeParent.resolveAnyWithoutDraining(name)
+        }
         return parent?.resolveAny(name)
     }
 
@@ -287,7 +369,7 @@ public actor RuntimeContext: ExecutionContext {
             || name == "metrics" || name == "application" {
             return resolveAny(name)
         }
-        if let typedValue = variables[name] {
+        if let typedValue = localVariable(name) {
             return typedValue.value
         }
         if let runtimeParent = parent as? RuntimeContext {
@@ -310,9 +392,14 @@ public actor RuntimeContext: ExecutionContext {
             || name == "metrics" || name == "application" {
             return resolveAny(name)
         }
-        if let typedValue = variables[name] {
+        if let typedValue = localVariable(name) {
             if let future = typedValue.value as? AROFuture {
-                return try? await future.value()
+                do {
+                    return try await future.value()
+                } catch {
+                    recordDeferredFailure(error, binding: name)
+                    return ""
+                }
             }
             return typedValue.value
         }
@@ -324,7 +411,18 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Resolve a variable returning the full TypedValue (type + value)
     public nonisolated func resolveTyped(_ name: String) -> TypedValue? {
-        if let typedValue = variables[name] {
+        if let typedValue = localVariable(name) {
+            // Force here too: a TypedValue wrapping an unforced handle would
+            // leak an AROFuture into every consumer that inspects `.type`
+            // or `.value` directly (ARO-0088 §3).
+            if let future = typedValue.value as? AROFuture {
+                do {
+                    return TypedValue.infer(try future.force())
+                } catch {
+                    recordDeferredFailure(error, binding: name)
+                    return TypedValue.infer("")
+                }
+            }
             return typedValue
         }
         // Try parent context (if it's a RuntimeContext)
@@ -340,7 +438,7 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Get the type of a variable without retrieving its value
     public nonisolated func typeOf(_ name: String) -> DataType? {
-        if let typedValue = variables[name] {
+        if let typedValue = localVariable(name) {
             return typedValue.type
         }
         // Try parent context
@@ -352,7 +450,9 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Build the Contract magic object from OpenAPI spec service
     private nonisolated func buildContractObject() -> Contract? {
-        guard let specService = services[ObjectIdentifier(OpenAPISpecService.self)] as? OpenAPISpecService else {
+        // Parent-walking lookup: reading `services` directly made `<contract>`
+        // undefined inside a statement scope, which broke every HTTP example.
+        guard let specService = service(OpenAPISpecService.self) else {
             return nil
         }
 
@@ -397,7 +497,27 @@ public actor RuntimeContext: ExecutionContext {
         // Check immutability: framework variables (_prefix) can be rebound
         let isFrameworkVariable = name.hasPrefix("_")
 
-        if !isFrameworkVariable && !allowRebind && mutableScopeDepth == 0 && immutableVariables.contains(name) {
+        // Statement scopes keep only the framework variables private; everything
+        // an action binds belongs to the feature set, not to the statement that
+        // happened to produce it (ARO-0088 §2).
+        if _isStatementScope, !isFrameworkVariable,
+           let owner = parent as? RuntimeContext {
+            owner.bindTyped(name, value: value, allowRebind: allowRebind)
+            return
+        }
+
+        let alreadyImmutable = withExclusiveMutation { immutableVariables.contains(name) }
+
+        // A binding that currently holds a *pending* result accepts one more
+        // write: the action that produces it binds its own value when it
+        // finishes, and that is the same binding being completed, not a second
+        // one (ARO-0088 §2). Without this, deferral turns every action that
+        // binds its own result — Split, Group, Merge, Stream, … — into an
+        // immutable-rebind trap.
+        let holdsPendingResult = localVariable(name)?.value is AROFuture
+
+        if !isFrameworkVariable && !allowRebind && !holdsPendingResult
+            && mutableScopeDepth == 0 && alreadyImmutable {
             fatalError("""
                 Runtime Error: Cannot rebind immutable variable '\(name)'
                 Feature: \(featureSetName)
@@ -411,11 +531,23 @@ public actor RuntimeContext: ExecutionContext {
                 """)
         }
 
+        // A pending result is a placeholder, not yet a user-visible binding, so
+        // it does not make the name immutable — the value that lands does.
+        //
+        // Marking it at placeholder time is subtly wrong and fails in a way that
+        // depends on interleaving: the producing action binds its own result
+        // when it finishes, and an effect may legitimately rebind after that
+        // (`Store` writes back generated ids). Both were fine when an action
+        // bound exactly once at its statement. With deferral they raced, and
+        // DirectoryReplicatorEvents trapped on Linux — passing on macOS, which
+        // is exactly the signature of an ordering-dependent rule.
+        let isPendingPlaceholder = value.value is AROFuture
+
         withExclusiveMutation {
             variables[name] = value
 
             // Mark user variables as immutable (framework variables stay mutable)
-            if !isFrameworkVariable {
+            if !isFrameworkVariable && !isPendingPlaceholder {
                 immutableVariables.insert(name)
             }
         }
@@ -441,13 +573,13 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func exists(_ name: String) -> Bool {
-        return variables[name] != nil || (parent?.exists(name) ?? false)
+        return localVariable(name) != nil || (parent?.exists(name) ?? false)
     }
 
     /// Check if a variable is bound in THIS context only (ignoring parent contexts).
     /// Used by FeatureSetExecutor to decide whether to create a local shadow binding.
     public nonisolated func existsLocally(_ name: String) -> Bool {
-        return variables[name] != nil
+        return localVariable(name) != nil
     }
 
     public nonisolated var variableNames: Set<String> {
@@ -462,26 +594,42 @@ public actor RuntimeContext: ExecutionContext {
 
     public nonisolated func service<S>(_ type: S.Type) -> S? {
         let id = ObjectIdentifier(type)
-        if let service = services[id] as? S {
-            return service
+        if let found = withExclusiveMutation({ services[id] }) as? S {
+            return found
         }
         // Try parent context
         return parent?.service(type)
     }
 
+    /// Register a service.
+    ///
+    /// Forwarded to the owning context from a statement scope, for the same
+    /// reason bindings are: a service an action registers belongs to the feature
+    /// set, not to the statement that happened to create it. `Connect` registers
+    /// its socket client this way, and registering it on a scope that is
+    /// discarded at the end of the statement left inbound packets with nowhere
+    /// to go — the handler simply never fired (ARO-0088 §2).
     public nonisolated func register<S: Sendable>(_ service: S) {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.register(service)
+            return
+        }
         withExclusiveMutation { services[ObjectIdentifier(S.self)] = service }
     }
 
     /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
     public nonisolated func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable) {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.registerWithTypeId(typeId, service: service)
+            return
+        }
         withExclusiveMutation { services[typeId] = service }
     }
 
     // MARK: - Repository Access
 
     public nonisolated func repository<T: Sendable>(named name: String) -> (any Repository<T>)? {
-        if let repo = repositories[name] as? any Repository<T> {
+        if let repo = withExclusiveMutation({ repositories[name] }) as? any Repository<T> {
             return repo
         }
         // Try parent context
@@ -489,16 +637,33 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func registerRepository<T: Sendable>(name: String, repository: any Repository<T>) {
+        // Same reasoning as `register(_:)`: a repository belongs to the feature
+        // set, not the statement.
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.registerRepository(name: name, repository: repository)
+            return
+        }
         withExclusiveMutation { repositories[name] = repository }
     }
 
     // MARK: - Response Management
 
     public nonisolated func setResponse(_ response: Response) {
+        // The response belongs to the feature set, not to the statement that
+        // produced it. Without this, `Return` inside a statement scope would set
+        // it somewhere the executor never looks, and every feature set would
+        // fall through to the default response (ARO-0088 §2).
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.setResponse(response)
+            return
+        }
         withExclusiveMutation { _response = response }
     }
 
     public nonisolated func getResponse() -> Response? {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.getResponse()
+        }
         return _response
     }
 
@@ -506,6 +671,10 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Set an execution error (e.g., from action failures)
     public nonisolated func setExecutionError(_ error: Error) {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.setExecutionError(error)
+            return
+        }
         withExclusiveMutation {
             if _executionError == nil {
                 _executionError = error
@@ -515,11 +684,17 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Get the execution error if one occurred
     public nonisolated func getExecutionError() -> Error? {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.getExecutionError()
+        }
         return _executionError
     }
 
     /// Check if an execution error occurred
     public nonisolated func hasExecutionError() -> Bool {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.hasExecutionError()
+        }
         return _executionError != nil
     }
 
@@ -527,6 +702,211 @@ public actor RuntimeContext: ExecutionContext {
 
     public nonisolated func emit(_ event: any RuntimeEvent) {
         eventBus?.publish(event)
+    }
+
+    // MARK: - Statement Scope and Deferred Results (ARO-0088)
+
+    /// Create the per-statement scope a statement's framework variables live in.
+    ///
+    /// Reads fall through to this context; writes fall through too, except for
+    /// `_`-prefixed framework variables, which stay private so a deferred action
+    /// still sees the modifiers written next to it rather than the next
+    /// statement's.
+    public nonisolated func createStatementScope() -> RuntimeContext {
+        let scope = RuntimeContext(
+            featureSetName: featureSetName,
+            businessActivity: businessActivity,
+            outputContext: _outputContext,
+            eventBus: eventBus,
+            container: container,
+            parent: self,
+            isCompiled: _isCompiled,
+            isTemplateContext: _isTemplateContext,
+            driverChannel: driverChannel,
+            suppressLogPrefix: _suppressLogPrefix
+        )
+        scope._isStatementScope = true
+        return scope
+    }
+
+    /// Mark this scope as the body of a deferred action. See `_isDeferredScope`.
+    public nonisolated func markDeferredScope() {
+        _isDeferredScope = true
+    }
+
+    /// Copy this context's framework variables (`_`-prefixed) into `scope`.
+    ///
+    /// The interpreter builds a statement's modifiers directly in its scope, so
+    /// it needs nothing here. The compiled bridge is handed a context that
+    /// already holds them and then clears them right after dispatch, so a
+    /// deferred action has to take its own copy before that happens.
+    public nonisolated func copyFrameworkVariables(to scope: RuntimeContext) {
+        let snapshot = withExclusiveMutation { variables.filter { $0.key.hasPrefix("_") } }
+        for (name, value) in snapshot {
+            scope.bindTyped(name, value: value, allowRebind: true)
+        }
+    }
+
+    /// Whether execution is currently inside a deferred action's body, here or
+    /// in any enclosing scope.
+    public nonisolated var isInsideDeferredWork: Bool {
+        if _isDeferredScope { return true }
+        if let runtimeParent = parent as? RuntimeContext { return runtimeParent.isInsideDeferredWork }
+        return false
+    }
+
+    /// Record a deferred action result so an unresolved lookup can fall back to
+    /// forcing it. Registered on the feature-set context, not the statement scope.
+    public nonisolated func registerPendingFuture(_ future: AROFuture) {
+        withExclusiveMutation {
+            pendingFutures.append(future)
+        }
+    }
+
+    /// The first failure observed while forcing a deferred result, if any.
+    ///
+    /// Reads are total — `resolveAny` still hands back `""` so a downstream
+    /// action fails on its own terms — but the original error is kept here so
+    /// feature-set exit can report the statement that actually broke rather than
+    /// the one that noticed. See `takeDeferredFailure()`.
+    nonisolated(unsafe) private var _deferredFailure: Error?
+
+    nonisolated func recordDeferredFailure(_ error: Error, binding: String) {
+        let owner = statementScopeOwner
+        if owner !== self {
+            owner.recordDeferredFailure(error, binding: binding)
+            return
+        }
+        // Reads are total, so the caller is about to receive an empty value.
+        // Say so: a silently-empty binding is exactly the kind of failure that
+        // is impossible to trace back to its cause later.
+        FileHandle.standardError.write(Data(
+            "[ARO] Deferred action for '\(binding)' failed: \(error)\n".utf8))
+        withExclusiveMutation {
+            if _deferredFailure == nil { _deferredFailure = error }
+        }
+    }
+
+    /// Consume the recorded deferred failure, if one was observed.
+    public nonisolated func takeDeferredFailure() -> Error? {
+        withExclusiveMutation {
+            let error = _deferredFailure
+            _deferredFailure = nil
+            return error
+        }
+    }
+
+    /// The context that owns feature-set-level state — a statement scope defers
+    /// to the context it was created from.
+    private nonisolated var statementScopeOwner: RuntimeContext {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.statementScopeOwner
+        }
+        return self
+    }
+
+    /// Force every deferred result bound in this context.
+    ///
+    /// Two callers: a lookup that missed (a deferred action may bind names beyond
+    /// its declared result), and feature-set exit, where forcing is what stops an
+    /// unread failure from being silently discarded. Returns the first error
+    /// encountered so the caller can decide whether to surface it.
+    @discardableResult
+    public nonisolated func drainPendingFutures() -> Error? {
+        if _isDraining { return nil }
+        let pending: [AROFuture] = withExclusiveMutation {
+            _isDraining = true
+            let snapshot = pendingFutures
+            pendingFutures.removeAll()
+            return snapshot
+        }
+        defer { _isDraining = false }
+        var firstError: Error?
+        for future in pending {
+            do {
+                _ = try future.force()
+            } catch {
+                // Record as well as return. A drain triggered by a lookup miss
+                // discards the return value, and it has already emptied the
+                // list — so without recording here, the failure would be gone
+                // by the time feature-set exit drains again.
+                recordDeferredFailure(error, binding: future.bindingName)
+                if firstError == nil { firstError = error }
+            }
+        }
+        return firstError
+    }
+
+    /// The value an action bound for `name` while it was running, if it differs
+    /// from the handle that is being forced.
+    ///
+    /// An action's return value and the binding it makes for itself are not
+    /// always the same object: `Filter` and `Stream` return a raw `AROStream`
+    /// but bind an `AnyStreamingValue` wrapper, and only the wrapper is
+    /// something `Compute … length` can consume. The eager path never had to
+    /// choose — the executor skipped its own bind when the action had already
+    /// bound one. Forcing a handle has the same choice to make, and the same
+    /// answer: the action's binding wins.
+    ///
+    /// Without this, which one a reader saw depended on whether the action had
+    /// finished yet. DirectoryReplicatorEvents printed
+    /// "Found AROStream<…> directories" on Linux and "Found 3 directories" on
+    /// macOS, from identical source.
+    private nonisolated func bindingProducedWhileForcing(_ name: String) -> (any Sendable)? {
+        guard let current = localVariable(name), !(current.value is AROFuture) else { return nil }
+        return current.value
+    }
+
+    /// Place a deferred result's handle under `name`, unless the action has
+    /// already bound its own result there.
+    ///
+    /// Check and write happen under one lock hold, and that is the entire point.
+    /// `AROFuture` starts its task in `init`, so between "is anything there
+    /// yet?" and "put the handle there" the action can finish and bind — and the
+    /// handle would then overwrite the real result. `Filter` binds a wrapped
+    /// lazy stream and *returns* a raw one, so losing its binding downgraded
+    /// `<directories>` to something `Compute … length` cannot consume, and the
+    /// program printed "Found AROStream<…> directories". Linux won that window
+    /// every time; macOS never did.
+    ///
+    /// A placeholder never marks the name immutable — the value that lands does.
+    public nonisolated func bindDeferredPlaceholder(_ name: String, future: AROFuture) {
+        withExclusiveMutation {
+            if let existing = variables[name], !(existing.value is AROFuture) { return }
+            variables[name] = TypedValue.infer(future)
+        }
+    }
+
+    /// True when this context holds `name` locally with a real value rather than
+    /// a still-pending handle.
+    ///
+    /// Used to close a race in the deferred path: the future starts running the
+    /// moment it is created, so a fast action can bind its own result before the
+    /// executor gets to bind the placeholder. Overwriting a materialized value
+    /// with a handle is pointless at best; binding over it trapped the
+    /// immutability backstop outright.
+    public nonisolated func holdsMaterializedValue(_ name: String) -> Bool {
+        guard let typed = localVariable(name) else { return false }
+        return !(typed.value is AROFuture)
+    }
+
+    /// Whether any deferred result is still outstanding here or in a parent.
+    public nonisolated var hasPendingFutures: Bool {
+        if !pendingFutures.isEmpty { return true }
+        if let runtimeParent = parent as? RuntimeContext { return runtimeParent.hasPendingFutures }
+        return false
+    }
+
+    /// Drain this context and every ancestor. A statement scope registers nothing
+    /// itself, so a miss inside one has to reach the feature-set context.
+    @discardableResult
+    public nonisolated func drainPendingFuturesUpChain() -> Error? {
+        let local = drainPendingFutures()
+        if let runtimeParent = parent as? RuntimeContext {
+            let inherited = runtimeParent.drainPendingFuturesUpChain()
+            return local ?? inherited
+        }
+        return local
     }
 
     // MARK: - Child Context
@@ -633,6 +1013,12 @@ public actor RuntimeContext: ExecutionContext {
     // MARK: - Template Buffer (ARO-0050)
 
     public nonisolated func appendToTemplateBuffer(_ value: String) {
+        // The render buffer belongs to the template context, not to the
+        // statement that printed into it — the engine flushes the former.
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            owner.appendToTemplateBuffer(value)
+            return
+        }
         withExclusiveMutation {
             // #317: soft cap. Check current size + incoming bytes before
             // committing the append. UTF-8 byte counts are O(1) on Swift
@@ -655,6 +1041,9 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func flushTemplateBuffer() -> String {
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.flushTemplateBuffer()
+        }
         return withExclusiveMutation {
             let result = _templateBuffer
             _templateBuffer = ""
@@ -665,7 +1054,12 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated var isTemplateContext: Bool {
-        _isTemplateContext
+        if _isTemplateContext { return true }
+        // A statement inside a template render is still inside that render.
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.isTemplateContext
+        }
+        return false
     }
 
     /// How values printed into the template buffer are escaped (GitLab #476).
@@ -891,14 +1285,29 @@ extension RuntimeContext {
     /// entry from another thread — the actual data race the contract forbids
     /// — trips the assertion.
     @inline(__always)
+    /// Serialize access to this context's mutable storage.
+    ///
+    /// This used to be a DEBUG-only *detector* for concurrent mutation, resting
+    /// on the invariant that exactly one flow drives a context at a time. Under
+    /// ARO-0088 that invariant no longer holds: deferred actions run
+    /// concurrently and write their results through to the feature-set context
+    /// they belong to, so two of them can bind at the same moment. Two
+    /// concurrent `Compute`s corrupting the variables dictionary is how this was
+    /// found — the detector could only have reported the race, not prevented it.
+    ///
+    /// Recursive because binding can re-enter (write-through from a statement
+    /// scope takes the owner's lock while holding its own).
     fileprivate nonisolated func withExclusiveMutation<T>(_ body: () throws -> T) rethrows -> T {
-        #if DEBUG
-        exclusivity.enter(featureSetName: featureSetName, executionId: executionId)
-        defer { exclusivity.leave() }
+        storageLock.lock()
+        defer { storageLock.unlock() }
         return try body()
-        #else
-        return try body()
-        #endif
+    }
+
+    /// Read a binding from this context's own storage under the lock.
+    private nonisolated func localVariable(_ name: String) -> TypedValue? {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        return variables[name]
     }
 }
 

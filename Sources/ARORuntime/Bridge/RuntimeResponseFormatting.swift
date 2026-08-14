@@ -39,6 +39,29 @@ public func aro_context_has_error(_ contextPtr: UnsafeMutableRawPointer?) -> Int
     return contextHandle.context.hasExecutionError() ? 1 : 0
 }
 
+/// Force every deferred action still outstanding on this context (ARO-0088 §3).
+///
+/// Emitted by the code generator at each feature set's exit, before the result
+/// is loaded. Deferred work that nobody read must still run — and if it failed,
+/// the failure has to reach the context's error slot here, because the
+/// per-statement `aro_context_has_error` check ran while the action was still
+/// in flight and saw nothing.
+/// - Parameter contextPtr: Context handle
+@_cdecl("aro_context_drain_deferred")
+public func aro_context_drain_deferred(_ contextPtr: UnsafeMutableRawPointer?) {
+    guard let ptr = contextPtr else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    guard let runtime = contextHandle.context as? RuntimeContext else { return }
+
+    let drainError = runtime.drainPendingFutures()
+    if let observed = runtime.takeDeferredFailure() {
+        runtime.setExecutionError(observed)
+    } else if let drainError {
+        runtime.setExecutionError(drainError)
+    }
+}
+
 /// Print the execution error from the context (for compiled binaries)
 /// - Parameter contextPtr: Context handle
 @_cdecl("aro_context_print_error")

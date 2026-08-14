@@ -181,7 +181,20 @@ sub run_single_mode_test {
             };
         } else {
             my $error_msg = "Test script failed (exit $exit_code)" . ($test_err ? ": $test_err" : "");
-            write_testrun_log($example_name, $mode, 'TEST_SCRIPT_FAILURE', $error_msg, $hints->{'test-script'}, $exit_code);
+            # Include what the program actually printed. A test-script checks
+            # side effects, so when it fails the program's own output is the
+            # only evidence of why — and discarding it meant a CI-only failure
+            # produced an artifact that said nothing but "exit 1".
+            my $diagnostic = $error_msg
+                . "\nScript stdout:\n" . ($test_out // '')
+                . "\nProgram output:\n" . ($output // '');
+            write_testrun_log($example_name, $mode, 'TEST_SCRIPT_FAILURE', $diagnostic, $hints->{'test-script'}, $exit_code);
+            if ($is_linux) {
+                say "  [Linux Debug] Test script failed; program output was:";
+                for my $line (split /\n/, ($output // '')) {
+                    say "    | $line";
+                }
+            }
             return {
                 name => $example_name,
                 type => $type,

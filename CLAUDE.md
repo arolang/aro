@@ -215,20 +215,31 @@ Actions are classified by data flow direction:
 - **RESPONSE** (Return, Throw): Internal → External
 - **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
 
-### Lazy Execution (Default)
+### Statement Execution (ARO-0088)
 
-Actions return an `AROFuture` handle rather than the resolved value. Work runs
-on a dedicated `ActionTaskExecutor` and is **forced** the first time something
-reads the value — typically a Return, an Emit payload extraction, a When
-guard, a `with` expression, or an export. Sequential reads happen in source
-order; independent results overlap. The eager path and `ARO_LAZY_ACTIONS` flag
-have been removed — lazy is the only model.
+Statements start in source order; the program waits for one at the **first read
+of its result**. Independent statements therefore overlap: two 2-second requests
+in one feature set take ~2.1s interpreted (~2.8s compiled), not 4.2s.
 
-Effects (Log, Store, Emit, Commit, Send, Push, Stage, …) keep source order
-within a feature set: the runtime forces any pending future its arguments
-depend on before the effect runs. Slow-force diagnostics surface when a
-read blocks on a future for longer than the configured threshold (see
-`AROFuture` / `ActionTaskExecutor` in `ARORuntime/Core/`).
+Effects (`Log`, `Store`, `Emit`, `Send`, `Publish`, `Return`, …) never defer —
+they run at their own statement and force what they read first, so observable
+output stays in source order. Deferral is an allowlist of value-producing verbs
+(`LazyActionPolicy.deferrableVerbs`); `Sleep` is deliberately excluded because
+the delay *is* the effect.
+
+Mechanics: a deferred action returns an `AROFuture` running on
+`ActionTaskExecutor` (GCD's elastic queue, so blocked forcers can't starve the
+work that would unblock them). Each statement gets its own scope for framework
+variables (`_with_`, `_literal_`, …) — otherwise a deferred action would read
+the next statement's modifiers. Feature-set exit forces whatever is outstanding,
+so a failure nobody read is still reported, attributed to the statement that
+caused it. Slow-force warnings fire after `ARO_FORCE_WARN_SECONDS` (default 5s).
+
+Streams pipeline the same way: the producer runs ahead of the consumer by
+`ARO_STREAM_PREFETCH` elements (default 2) through a bounded channel.
+
+`ARO_NO_DEFER=1` disables deferral entirely — the fastest way to find out
+whether a suspected bug is order-related.
 
 ### User-Defined Actions (ARO-0081)
 
@@ -692,7 +703,8 @@ Proposals/              # Language specifications
 ├── ARO-0084-local-llm.md
 ├── ARO-0085-terminal-shadow-buffer.md
 ├── ARO-0086-automatic-pipeline-detection.md
-└── ARO-0087-plugin-sdk.md
+├── ARO-0087-plugin-sdk.md
+└── ARO-0088-concurrency-model.md
 ```
 
 ## Language Proposals
@@ -745,6 +757,7 @@ The `Proposals/` directory contains language specifications:
 | **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
+| **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab
