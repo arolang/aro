@@ -44,6 +44,8 @@ Sources/
 │   ├── ProjectMap.swift          ← feature-set graph data model (note 8519)
 │   ├── ProjectMapView.swift      ← domain columns + emit/call wires
 │   ├── Inspector.swift           ← right rail (file header + AST tree + deploy rail)
+│   ├── SnippetLibrary.swift      ← built-in + .solaro/snippets patterns (#242)
+│   ├── SnippetsListView.swift    ← right-rail Snippets tab (drag / Tab-trigger)
 │   ├── StatusBar.swift           ← bottom bar (path / parse / palette / time travel / runtime)
 │   ├── OpenAPIEndpoints.swift    ← openapi.yaml discovery (pure logic)
 │   ├── OpenAPIPaletteView.swift  ← ⌘K palette sheet (note 8467 fig 10)

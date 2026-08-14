@@ -111,6 +111,9 @@ enum BottomTab: String, CaseIterable, Identifiable {
 enum RightPaneMode: String, CaseIterable, Identifiable {
     case inspector
     case actions
+    // Sits next to Actions on purpose (#242): Actions drags one
+    // statement, Snippets drags the multi-line pattern around it.
+    case snippets
     case metrics
     case coPilot
 
@@ -120,6 +123,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
         switch self {
         case .inspector: return "Inspector"
         case .actions:   return "Actions"
+        case .snippets:  return "Snippets"
         case .metrics:   return "Metrics"
         case .coPilot:   return "Ask"
         }
@@ -129,6 +133,7 @@ enum RightPaneMode: String, CaseIterable, Identifiable {
         switch self {
         case .inspector: return "sidebar.right"
         case .actions:   return "puzzlepiece.fill"
+        case .snippets:  return "curlybraces"
         case .metrics:   return "chart.line.uptrend.xyaxis"
         case .coPilot:   return "sparkles"
         }
@@ -1152,6 +1157,11 @@ struct WorkspaceView: View {
                 ActionsListView(
                     registry: controller.actionsRegistry,
                     controller: controller)
+            case .snippets:
+                SnippetsListView(
+                    library: controller.snippets,
+                    projectRoot: project.rootPath,
+                    insertAtCaret: controller.insertSnippetAtCaret)
             case .metrics:
                 // Raw AppKit panel — the SwiftUI version crashes on
                 // macOS 26 because each snapshot re-renders the

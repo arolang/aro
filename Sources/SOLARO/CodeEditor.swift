@@ -83,6 +83,12 @@ final class AROHoverTextView: STTextView {
     /// the buffer, the binding, and disk all see the same text.
     var requestReformat: (() -> Void)?
 
+    /// Tab-trigger snippet expansion (#242). Called with the word
+    /// immediately before the caret; returns true when that word
+    /// named a snippet and the wrapper spliced it in. Returning
+    /// false leaves the keystroke alone so Tab keeps indenting.
+    var expandSnippet: ((String) -> Bool)?
+
     private lazy var ghostPopover: NSPopover = {
         let p = NSPopover()
         // `.applicationDefined`: we own the lifecycle. `.transient`
@@ -608,6 +614,20 @@ final class AROHoverTextView: STTextView {
     /// Up/Down/Enter navigate + accept; any other key dismisses and
     /// falls through to normal editing.
     override func keyDown(with event: NSEvent) {
+        // Tab with no completion popover open: try a snippet
+        // trigger first (#242). The expansion only claims the
+        // keystroke when the word before the caret actually names a
+        // snippet, so Tab keeps its normal behaviour everywhere
+        // else — including inside the popover, which owns Tab and
+        // is handled below.
+        if event.keyCode == 48, ghostState.items.isEmpty,
+           let (line, column) = caretLineColumn()
+        {
+            let trigger = currentLineWordPrefix(line: line, column: column)
+            if !trigger.isEmpty, expandSnippet?(trigger) == true {
+                return
+            }
+        }
         guard !ghostState.items.isEmpty else {
             super.keyDown(with: event)
             return
@@ -822,6 +842,10 @@ struct AROCodeEditor: NSViewRepresentable {
     /// reparse + cursor positioning (places the caret after the
     /// inserted text).
     var acceptGhost: ((String) -> Void)? = nil
+    /// Expand a snippet whose trigger word sits before the caret
+    /// (#242). Returns true when it matched and spliced; false lets
+    /// Tab fall through to normal indentation.
+    var expandSnippet: ((String) -> Bool)? = nil
     /// Generation counter bumped by callers that want the editor to
     /// reposition the caret to `(currentLine, currentColumn)` even
     /// when the line hasn't changed. Used by the ghost popover's
@@ -903,6 +927,7 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.requestGhost = requestGhost
         textView.requestAI = requestAI
         textView.acceptGhost = acceptGhost
+        textView.expandSnippet = expandSnippet
         textView.requestReformat = { [weak coordinator = context.coordinator,
                                       weak textView] in
             guard let textView else { return }
@@ -981,6 +1006,7 @@ struct AROCodeEditor: NSViewRepresentable {
             hover.requestGhost = requestGhost
             hover.requestAI = requestAI
             hover.acceptGhost = acceptGhost
+            hover.expandSnippet = expandSnippet
             hover.requestReformat = { [weak coordinator = context.coordinator,
                                        weak hover] in
                 guard let hover else { return }
