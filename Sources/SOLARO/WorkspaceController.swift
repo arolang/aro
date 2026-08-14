@@ -339,6 +339,17 @@ final class WorkspaceController {
     /// and reused by the right-rail Actions tab.
     let actionsRegistry = ActionsRegistry()
 
+    /// Built-in + project-defined ARO patterns for the right-rail
+    /// Snippets tab (#242). Custom entries come from
+    /// `.solaro/snippets/*.yaml` and are re-read on project load.
+    let snippets = SnippetLibrary()
+
+    /// Splices a snippet in at the editor caret. Owned by
+    /// CenterPane (it has the buffer, the caret, and the reparse
+    /// path); set on appear, the same way `nodeEditApply` is. Nil
+    /// until a file is open, which is what disables the row button.
+    var insertSnippetAtCaret: ((AROSnippet) -> Void)?
+
     /// Git status of the project root. Populated on project load
     /// + after every file save. Feeds the sidebar file-tree
     /// indicators and the status bar's branch chip.
@@ -491,6 +502,7 @@ final class WorkspaceController {
         // so behaviour outside of programs is unchanged.
         lsp.start(project: project)
         actionsRegistry.reload(for: project)
+        snippets.reload(projectRoot: project.rootPath)
         gitMonitor.refresh(for: project)
         for url in loaded.sourceFiles {
             if let text = try? String(contentsOf: url, encoding: .utf8) {

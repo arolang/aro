@@ -45,6 +45,18 @@ struct CenterPaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SolaroColor.backdrop)
+        // Hand the Snippets panel a way into the editor buffer
+        // (#242). Same shape as `nodeEditApply` below: the panel
+        // lives in the right rail and has no access to the caret,
+        // so the pane that owns it publishes the insert.
+        .onAppear {
+            controller.insertSnippetAtCaret = { [controller = controller] snippet in
+                guard let url = controller.currentFile else { return }
+                CenterPaneView.insertSnippet(
+                    snippet, into: url, replacingTrigger: nil,
+                    controller: controller)
+            }
+        }
         // Run → Auto Layout Canvas menu item posts this so we can
         // wipe the saved positions in the project's layout store
         // from outside the canvas's right-click context menu.
@@ -461,6 +473,7 @@ struct CenterPaneView: View {
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
+                    expandSnippet: snippetExpand(for: url),
                     caretMoveTick: controller.caretMoveTick,
                     findSelection: controller.editorFindSelection,
                     findSelectionTick: controller.editorFindSelectionTick,
@@ -858,6 +871,74 @@ struct CenterPaneView: View {
     /// Splices the accepted text at the current caret position and
     /// writes the buffer back through the save-and-reparse path so
     /// the canvas + LSP both see the change.
+    /// Tab-trigger snippet expansion (#242). Handed to the editor,
+    /// which calls it with the word before the caret; returning
+    /// false leaves Tab alone.
+    private func snippetExpand(for url: URL) -> ((String) -> Bool) {
+        { [controller = controller] trigger in
+            guard let snippet = controller.snippets.snippet(forTrigger: trigger)
+            else { return false }
+            return CenterPaneView.insertSnippet(
+                snippet, into: url, replacingTrigger: trigger,
+                controller: controller)
+        }
+    }
+
+    /// Splice a snippet into `url` at the caret and select its first
+    /// placeholder. Shared by the Tab trigger and the Snippets
+    /// panel's insert button — both want the same indentation,
+    /// reparse, and cursor behaviour.
+    ///
+    /// Static because both callers are escaping closures that should
+    /// capture the controller, not a copy of the whole view.
+    @discardableResult
+    static func insertSnippet(
+        _ snippet: AROSnippet,
+        into url: URL,
+        replacingTrigger trigger: String?,
+        controller: WorkspaceController
+    ) -> Bool {
+        guard
+            let source = try? String(contentsOf: url, encoding: .utf8),
+            let line = controller.currentLine,
+            let result = SnippetSplice.apply(
+                body: snippet.body,
+                to: source,
+                line: line,
+                column: controller.currentColumn ?? 0,
+                replacingTrigger: trigger)
+        else { return false }
+
+        do {
+            try result.text.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            return false
+        }
+        controller.lsp.didChange(url: url, text: result.text)
+        controller.openFile(url)
+
+        // Placeholder → select it so the first thing the user types
+        // replaces the label. No placeholder → park the caret just
+        // past what we inserted.
+        if let selection = result.selection {
+            controller.requestEditorFindSelection(selection)
+        } else {
+            let ns = result.text as NSString
+            var lineNumber = 1
+            var lastNewline = -1
+            for i in 0..<min(result.caretOffset, ns.length)
+                where ns.character(at: i) == 0x0A
+            {
+                lineNumber += 1
+                lastNewline = i
+            }
+            controller.requestCaretMove(
+                line: lineNumber,
+                column: result.caretOffset - lastNewline - 1)
+        }
+        return true
+    }
+
     private func ghostAccept(for url: URL) -> ((String) -> Void) {
         { [controller = controller] text in
             guard
@@ -1143,8 +1224,26 @@ struct CenterPaneView: View {
         }
         if insertAt > 0 { insertAt -= 1 }  // sit just before the `}`
 
+        // A dropped payload that declares its own feature sets (a
+        // Snippets-tab pattern, #242) can't go *inside* one —
+        // append it at the end of the file instead.
+        if declaresFeatureSet(template) {
+            var appended = text
+            if !appended.hasSuffix("\n") { appended += "\n" }
+            appended += "\n" + template
+            if !appended.hasSuffix("\n") { appended += "\n" }
+            try? appended.write(to: url, atomically: true, encoding: .utf8)
+            reparse(url: url)
+            return
+        }
+
         let indent = inferIndent(in: nsText, around: insertAt)
-        var snippet = indent + template
+        // Indent every line, not just the first: the Snippets tab
+        // drops multi-line statement groups through this same path.
+        var snippet = template
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map { $0.isEmpty ? "" : indent + $0 }
+            .joined(separator: "\n")
         if !snippet.hasSuffix("\n") { snippet += "\n" }
 
         let updated = nsText.replacingCharacters(
@@ -1153,6 +1252,19 @@ struct CenterPaneView: View {
         )
         try? updated.write(to: url, atomically: true, encoding: .utf8)
         reparse(url: url)
+    }
+
+    /// True when a dropped payload opens a feature set of its own —
+    /// `(Name: Business Activity) {` at the start of some line.
+    private func declaresFeatureSet(_ text: String) -> Bool {
+        text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
+            .contains { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("("), trimmed.hasSuffix("{"),
+                      let close = trimmed.firstIndex(of: ")")
+                else { return false }
+                return trimmed[trimmed.startIndex..<close].contains(":")
+            }
     }
 
     /// Find the feature set whose laid-out node bounding box
@@ -1523,6 +1635,7 @@ struct CenterPaneView: View {
                     requestGhost: ghostRequest(for: url),
                     requestAI: aiRequest(for: url),
                     acceptGhost: ghostAccept(for: url),
+                    expandSnippet: snippetExpand(for: url),
                     caretMoveTick: controller.caretMoveTick,
                     findSelection: controller.editorFindSelection,
                     findSelectionTick: controller.editorFindSelectionTick,
