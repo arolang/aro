@@ -211,6 +211,12 @@ public struct ExpressionEvaluator: Sendable {
             let value = try await evaluate(typeCheck.expression, context: context)
             return checkType(value, typeName: typeCheck.typeName)
 
+        // `is empty` / `is not empty` (GitLab #463)
+        case let emptiness as EmptinessCheckExpression:
+            let value = try await evaluate(emptiness.expression, context: context)
+            let empty = Self.isEmptyValue(value)
+            return emptiness.negated ? !empty : empty
+
         // Interpolated string
         case let interp as InterpolatedStringExpression:
             return try await evaluateInterpolatedString(interp, context: context)
@@ -218,6 +224,23 @@ public struct ExpressionEvaluator: Sendable {
         default:
             throw ExpressionError.unsupportedExpression(String(describing: type(of: expression)))
         }
+    }
+
+    /// Emptiness across the types a guard actually meets.
+    ///
+    /// Nil counts as empty: `when <username> is empty` is asking
+    /// "is there nothing here", and an unset binding is the most
+    /// literal form of nothing. A number is never empty — there is
+    /// no reading of `0 is empty` that helps anyone.
+    static func isEmptyValue(_ value: any Sendable) -> Bool {
+        if value is NullValue { return true }
+        if let text = value as? String { return text.isEmpty }
+        if let list = value as? [any Sendable] { return list.isEmpty }
+        if let object = value as? [String: any Sendable] { return object.isEmpty }
+        // Foundation-bridged shapes reach here from JSON payloads.
+        if let list = value as? [Any] { return list.isEmpty }
+        if let object = value as? [String: Any] { return object.isEmpty }
+        return false
     }
 
     // MARK: - Literal Evaluation

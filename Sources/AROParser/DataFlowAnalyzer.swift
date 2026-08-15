@@ -895,6 +895,10 @@ public struct DataFlowAnalyzer {
             node.expression.accept(self)
         }
 
+        func visit(_ node: EmptinessCheckExpression) -> Set<String> {
+            node.expression.accept(self)
+        }
+
         func visit(_ node: ArrayLiteralExpression) -> Set<String> {
             var vars: Set<String> = []
             for element in node.elements {

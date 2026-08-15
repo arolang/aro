@@ -2090,6 +2090,21 @@ extension Parser {
                     break
                 }
 
+                // `is empty` / `is not empty` (ARO-0002, GitLab #463).
+                // Must come before the type-name path: `empty` is its
+                // own keyword token, so `expectIdentifier` rejected it
+                // with "Expected type name, but got empty" — the
+                // documented spelling of a very common guard didn't
+                // parse at all.
+                if check(.empty) {
+                    let emptyToken = advance()
+                    let span = left.span.merged(with: emptyToken.span)
+                    return EmptinessCheckExpression(
+                        expression: left,
+                        negated: actualOp == .isNot,
+                        span: span)
+                }
+
                 // Handle type check: <expr> is [a/an] TypeName
                 // Skip optional article
                 var hasArticle = false

@@ -1404,6 +1404,34 @@ public struct ExistenceExpression: Expression {
 }
 
 /// Type check expression: <x> is a Number
+/// `<collection> is empty` / `<collection> is not empty` (ARO-0002).
+///
+/// Kept as its own node rather than desugared to a length
+/// comparison: emptiness is defined across strings, lists and
+/// objects, and `length == 0` would have to pick one meaning for
+/// a nil value. Here nil *is* empty, which is what the guard in
+/// `when <username> is empty` is asking about.
+public struct EmptinessCheckExpression: Expression {
+    public let expression: any Expression
+    /// True for `is not empty`.
+    public let negated: Bool
+    public let span: SourceSpan
+
+    public init(expression: any Expression, negated: Bool, span: SourceSpan) {
+        self.expression = expression
+        self.negated = negated
+        self.span = span
+    }
+
+    public var description: String {
+        "\(expression.description) is \(negated ? "not " : "")empty"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 public struct TypeCheckExpression: Expression {
     public let expression: any Expression
     public let typeName: String
@@ -1569,6 +1597,7 @@ public protocol ExpressionVisitor {
     func visit(_ node: GroupedExpression) -> Result
     func visit(_ node: ExistenceExpression) -> Result
     func visit(_ node: TypeCheckExpression) -> Result
+    func visit(_ node: EmptinessCheckExpression) -> Result
     func visit(_ node: InterpolatedStringExpression) -> Result
 }
 
@@ -1603,6 +1632,9 @@ public extension ExistenceExpression {
     func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension TypeCheckExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension EmptinessCheckExpression {
     func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension InterpolatedStringExpression {
@@ -1641,6 +1673,7 @@ public protocol ASTVisitor {
     func visit(_ node: GroupedExpression) throws -> Result
     func visit(_ node: ExistenceExpression) throws -> Result
     func visit(_ node: TypeCheckExpression) throws -> Result
+    func visit(_ node: EmptinessCheckExpression) throws -> Result
     func visit(_ node: InterpolatedStringExpression) throws -> Result
 }
 
@@ -1740,6 +1773,9 @@ public extension ASTVisitor where Result == Void {
         try node.expression.accept(self)
     }
     func visit(_ node: TypeCheckExpression) throws {
+        try node.expression.accept(self)
+    }
+    func visit(_ node: EmptinessCheckExpression) throws {
         try node.expression.accept(self)
     }
     func visit(_ node: InterpolatedStringExpression) throws {
@@ -2005,6 +2041,14 @@ public struct ASTPrinter: ASTVisitor {
 
     public func visit(_ node: TypeCheckExpression) -> String {
         var result = "\(indentation())TypeCheck: \(node.typeName)\n"
+        var printer = self
+        printer.indent += 1
+        result += (try? node.expression.accept(printer)) ?? ""
+        return result
+    }
+
+    public func visit(_ node: EmptinessCheckExpression) -> String {
+        var result = "\(indentation())EmptinessCheck\(node.negated ? " (not)" : "")\n"
         var printer = self
         printer.indent += 1
         result += (try? node.expression.accept(printer)) ?? ""
