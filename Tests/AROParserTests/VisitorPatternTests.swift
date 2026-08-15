@@ -138,6 +138,10 @@ struct NodeCounterVisitor: ASTVisitor {
         1
     }
 
+    func visit(_ node: EmptinessCheckExpression) throws -> Int {
+        1
+    }
+
     func visit(_ node: InterpolatedStringExpression) throws -> Int {
         1
     }
@@ -291,6 +295,12 @@ struct VariableCollectorVisitor: ASTVisitor {
 
     func visit(_ node: TypeCheckExpression) throws -> Set<String> {
         []  // Just checks type, doesn't reference variable
+    }
+
+    func visit(_ node: EmptinessCheckExpression) throws -> Set<String> {
+        // Emptiness is a property of the subject expression, so any
+        // variables it references are collected by visiting it.
+        try node.expression.accept(self)
     }
 
     func visit(_ node: InterpolatedStringExpression) throws -> Set<String> {
