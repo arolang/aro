@@ -54,6 +54,8 @@ struct SettingsView: View {
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
             BooksSettingsTab()
                 .tabItem { Label("Books", systemImage: "books.vertical") }
+            SigningSettingsTab()
+                .tabItem { Label("Signing", systemImage: "signature") }
             privacyTab
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
@@ -273,6 +275,11 @@ enum SolaroPrefs: String {
     case runtimeBackend   = "solaro.runtimeBackend"
     case filesTabMode     = "solaro.filesTabMode"
     case metricsHistoryDepth = "solaro.metrics.historyDepth"
+    // Release signing (#268). The Team ID is what notarytool and
+    // the DMG packaging script need; the identity SHA-1 just lets
+    // the picker re-select the same certificate after a rescan.
+    case signingTeamID    = "solaro.signing.teamID"
+    case signingIdentity  = "solaro.signing.identitySHA1"
 }
 
 /// Which runtime drives the green Play button. The embedded path

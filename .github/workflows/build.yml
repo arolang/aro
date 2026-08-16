@@ -703,6 +703,10 @@ jobs:
           # an unsigned app to the notary returns Invalid, after which
           # `stapler staple` fails the whole job with error 65.
           echo "SOLARO_SIGNED=1" >> "$GITHUB_ENV"
+          # The DMG has to carry the same signature as the app inside
+          # it — Gatekeeper checks the disk image the user downloads,
+          # not just its payload (#268). Hand the identity forward.
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Notarize Solaro.app (tags only)
         # Only notarize a bundle that was actually signed above.
@@ -742,15 +746,25 @@ jobs:
           rm -f solaro-dist/Solaro.app.zip
 
       - name: Package Solaro.dmg
+        env:
+          # Exported by the signing step above when a certificate was
+          # imported; empty on non-tag builds, where the script
+          # produces an unsigned DMG rather than failing.
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          # Simple folder-style .dmg for now; the Phase 4 distribution
-          # work (#228) replaces this with a proper background-image
-          # disk image.
-          hdiutil create -volname Solaro \
-            -srcfolder solaro-dist \
-            -ov -format UDZO \
-            solaro-macos-arm64.dmg
-          ls -lh solaro-macos-arm64.dmg
+          # One script for CI and for developers (#268) — a release
+          # path that only exists inside a YAML file is one nobody
+          # can debug locally. The app is already signed, notarized
+          # and stapled by the steps above, so this only builds the
+          # image, adds the /Applications symlink, and signs +
+          # notarizes the DMG itself.
+          Scripts/package-solaro-dmg.sh \
+            --app solaro-dist/Solaro.app \
+            --out solaro-macos-arm64.dmg \
+            --version "${VERSION:-dev}" \
+            --skip-app-signing
 
       - name: Upload Solaro macOS artifact
         uses: actions/upload-artifact@v4
@@ -758,6 +772,34 @@ jobs:
           name: solaro-macos-arm64
           path: solaro-macos-arm64.dmg
           retention-days: 30
+
+      - name: Publish Solaro.dmg to the GitLab release (tags only)
+        if: github.ref_type == 'tag'
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_RELEASE_TOKEN }}
+          GITLAB_PROJECT_URL: ${{ vars.GITLAB_PROJECT_API_URL }}
+        run: |
+          # GitLab is the canonical remote, but only GitHub has a
+          # macOS runner — so the DMG is built here and pushed into
+          # GitLab's generic package registry, where the release job
+          # in .gitlab-ci.yml links it as a release asset (#268).
+          if [ -z "$GITLAB_TOKEN" ] || [ -z "$GITLAB_PROJECT_URL" ]; then
+            echo "::warning::GITLAB_RELEASE_TOKEN / GITLAB_PROJECT_API_URL not set — DMG not published to the GitLab release."
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARGET="$GITLAB_PROJECT_URL/packages/generic/solaro/$VERSION/solaro-macos-arm64.dmg"
+          echo "Uploading to $TARGET"
+          HTTP_CODE=$(curl --silent --show-error \
+            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            --upload-file solaro-macos-arm64.dmg \
+            --write-out '%{http_code}' --output /tmp/gitlab-upload.log \
+            "$TARGET") || true
+          cat /tmp/gitlab-upload.log || true
+          case "$HTTP_CODE" in
+            20*) echo "Published solaro-macos-arm64.dmg $VERSION." ;;
+            *)   echo "::warning::GitLab upload returned HTTP $HTTP_CODE — the release will have no macOS asset." ;;
+          esac
 
   # ===========================================================================
   # Windows Build & Test (temporarily disabled)

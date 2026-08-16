@@ -18,6 +18,10 @@ struct WelcomeView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var recents: [Project] = RecentProjects.load()
     @State private var errorText: String?
+    /// Update-feed poll (#268). Never fires on its own — the user
+    /// clicks, we fetch one JSON file, and any download happens in
+    /// their browser.
+    @State private var updates = UpdateChecker()
     /// Crash logs on disk (#275). Read once on appear; the banner
     /// below shows the newest one the user hasn't acknowledged.
     @State private var crashes = CrashReportStore()
@@ -59,10 +63,13 @@ struct WelcomeView: View {
                         .foregroundStyle(SolaroColor.stateError)
                         .padding(.bottom, SolaroSpace.m)
                 }
-                Text("v\(runtimeVersion)  ·  ARO runtime embedded")
-                    .font(SolaroFont.caption)
-                    .foregroundStyle(SolaroColor.textTertiary)
-                    .padding(.bottom, SolaroSpace.l)
+                VStack(spacing: SolaroSpace.xs) {
+                    Text("v\(runtimeVersion)  ·  ARO runtime embedded")
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                    updateFooter
+                }
+                .padding(.bottom, SolaroSpace.l)
             }
             .frame(maxWidth: 760)
             .padding(.horizontal, SolaroSpace.xl)
@@ -119,6 +126,78 @@ struct WelcomeView: View {
                 .stroke(SolaroColor.stateError.opacity(0.4), lineWidth: 1)
         )
         .frame(maxWidth: 560)
+    }
+
+    // MARK: - Update check (#268)
+
+    /// One line under the version string. Idle shows a plain link;
+    /// a hit shows the new version, its notes, and a button that
+    /// opens the DMG in the browser. We never download anything
+    /// ourselves — that stays the user's click, in their browser,
+    /// against a notarized artifact they can inspect.
+    @ViewBuilder
+    private var updateFooter: some View {
+        switch updates.state {
+        case .idle:
+            Button("Check for updates") {
+                Task { await updates.check() }
+            }
+            .buttonStyle(.plain)
+            .font(SolaroFont.caption)
+            .foregroundStyle(SolaroColor.textTertiary)
+
+        case .checking:
+            HStack(spacing: SolaroSpace.xs) {
+                ProgressView().controlSize(.mini)
+                Text("Checking for updates…")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+
+        case .upToDate:
+            Text("Up to date.")
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.textTertiary)
+
+        case .available(let update):
+            VStack(spacing: 2) {
+                HStack(spacing: SolaroSpace.xs) {
+                    Text("Version \(update.version) is available.")
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                    Button("Download") {
+                        if let url = URL(string: update.dmgURL) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.accent)
+                }
+                if let notes = update.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+            }
+
+        case .failed(let message):
+            HStack(spacing: SolaroSpace.xs) {
+                Text(message)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Button("Retry") {
+                    Task { await updates.check() }
+                }
+                .buttonStyle(.plain)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.accent)
+            }
+        }
     }
 
     // MARK: - Wordmark
