@@ -70,6 +70,47 @@ Compute the <total> from <price> * <quantity>.
 
 Here, the expression `<price> * <quantity>` is the actual computation. The result binds to `total`. This is identity in action—the expression's result passes through unchanged.
 
+### Collections and Text
+
+Aggregating a list, deduplicating it, or counting the lines of a file are things every program does, and each used to be a multi-statement idiom. These qualifiers absorb them:
+
+| Qualifier | Purpose | Example |
+|-----------|---------|---------|
+| `lines` | Split text into a list of lines | `Compute the <ls: lines> from <content>.` |
+| `join` | Join a collection into a string | `Compute the <csv: join> from <items> with { separator: ", " }.` |
+| `sum` | Total of a numeric collection | `Compute the <total: sum> from <amounts>.` |
+| `avg` / `average` | Arithmetic mean | `Compute the <mean: avg> from <scores>.` |
+| `unique` | Remove duplicates, first occurrence wins | `Compute the <tags: unique> from <all-tags>.` |
+| `random` | A random element, or a random Int below a bound | `Compute the <pick: random> from <options>.` |
+| `sha256` | SHA-256 digest, hex-encoded (alias of `hash`) | `Compute the <digest: sha256> from <payload>.` |
+
+Counting the lines of a file is `lines` then `length`:
+
+```aro
+Read the <content: raw> from "./sample.txt".
+Compute the <line-list: lines> from the <content>.
+Compute the <total-lines: length> from the <line-list>.
+```
+
+`lines` does not emit a phantom empty element for the trailing newline, and it treats `\r\n` as one terminator. Both matter: the hand-rolled alternative—trim, split, count—answers 4 for a three-line file if you forget the trim. That off-by-one is precisely what a primitive should absorb rather than leave to each caller.
+
+Numeric results keep their type. `sum` of a list of integers is an integer, so it logs as `6` rather than `6.0`. `avg` is always a Float, because averaging integers rarely yields one and silently truncating would be worse than a decimal point. `sum` of an empty collection is `0`; `avg` and `random` of nothing are runtime errors, since neither has a defensible answer.
+
+There are also qualifiers for encoding and escaping—`html-escape`, `url-encode`, `base64-encode`, `json-escape` and their inverses. See ARO-0019 §3.1 for the full set, and always `html-escape` untrusted values before rendering them into a template.
+
+### The Qualifier Namespace Is Closed
+
+A Compute qualifier must resolve to one of exactly four things: a built-in from the tables above, a registered plugin qualifier written `handle.qualifier`, a chain of those written `a|b`, or a date offset written `-7d`. **Anything else is a runtime error.**
+
+This is worth stating plainly because the old behaviour was the opposite, and it was dangerous. An unrecognised qualifier used to return its input unchanged, so a misspelling produced a program that compiled, passed `aro check`, exited `[OK]`, and printed the wrong value:
+
+```aro
+(* Returned the whole file. Now: "Unknown Compute qualifier: 'linecount'" *)
+Compute the <total: linecount> from the <content>.
+```
+
+The error names the qualifier and suggests the closest registered one, so a typo is recoverable without consulting a table. To see the live set, run `aro actions --qualifiers`.
+
 ---
 
 ## 9.3 Expressions and Operators

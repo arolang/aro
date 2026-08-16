@@ -75,7 +75,12 @@ struct ListActions: AsyncParsableCommand {
         }
 
         if asJSON {
-            printJSON(builtIns: builtIns, pluginActions: pluginActions)
+            printJSON(
+                builtIns: builtIns,
+                pluginActions: pluginActions,
+                qualifierRegistrations: qualifiers
+                    ? QualifierRegistry.shared.allRegistrations() : []
+            )
             return
         }
 
@@ -184,7 +189,8 @@ struct ListActions: AsyncParsableCommand {
     /// one source instead of each maintaining a partial mirror.
     private func printJSON(
         builtIns: [ActionRegistry.BuiltInActionInfo],
-        pluginActions: [ActionRegistry.PluginActionInfo]
+        pluginActions: [ActionRegistry.PluginActionInfo],
+        qualifierRegistrations: [QualifierRegistration] = []
     ) {
         var payload: [String: Any] = [:]
         payload["builtin"] = builtIns.map { action in
@@ -200,6 +206,36 @@ struct ListActions: AsyncParsableCommand {
                 "verb": entry.verb,
                 "plugin": entry.pluginName ?? ""
             ] as [String: Any]
+        }
+        // GitLab #486: `--qualifiers --format json` used to drop the
+        // qualifier section silently — the payload only ever carried
+        // actions. Anything generating a catalog from this command
+        // therefore had no way to learn what qualifiers exist, which
+        // is why the training pipeline never gained the gate that
+        // actions already had.
+        if !qualifierRegistrations.isEmpty {
+            payload["qualifiers"] = qualifierRegistrations
+                .sorted { lhs, rhs in
+                    if lhs.namespace != rhs.namespace {
+                        // Built-ins first, then plugin namespaces.
+                        if lhs.namespace == "_builtin" { return true }
+                        if rhs.namespace == "_builtin" { return false }
+                        return lhs.namespace < rhs.namespace
+                    }
+                    return lhs.qualifier < rhs.qualifier
+                }
+                .map { reg in
+                    [
+                        "name": reg.qualifier,
+                        "namespace": reg.namespace,
+                        "qualified": "\(reg.namespace).\(reg.qualifier)",
+                        "builtin": reg.namespace == "_builtin",
+                        "plugin": reg.pluginName,
+                        "inputTypes": reg.inputTypes.map(\.rawValue).sorted(),
+                        "acceptsParameters": reg.acceptsParameters,
+                        "description": reg.description ?? ""
+                    ] as [String: Any]
+                }
         }
 
         guard let data = try? JSONSerialization.data(

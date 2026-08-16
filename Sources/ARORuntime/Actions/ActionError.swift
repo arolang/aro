@@ -57,13 +57,20 @@ public struct AROError: Error, Sendable {
         condition: String? = nil,
         featureSet: String,
         businessActivity: String,
-        resolvedValues: [String: String] = [:]
+        resolvedValues: [String: String] = [:],
+        hint: String? = nil
     ) -> AROError {
         var msg = "Cannot \(verb.lowercased()) the \(result) \(preposition) the \(object)"
         if let cond = condition {
             msg += " \(cond)"
         }
         msg += "."
+        // ARO-0006 says the statement *is* the message, and for
+        // nearly every failure it is. An unknown qualifier is the
+        // exception: the statement reads perfectly well and gives no
+        // clue that the name doesn't exist, so that one gets a
+        // sentence of its own (GitLab #486).
+        if let hint { msg += " \(hint)" }
 
         // Substitute resolved values
         var finalMsg = msg
@@ -138,6 +145,12 @@ public enum ActionError: Error, Sendable {
 
     /// Action not found for verb
     case unknownAction(String)
+
+    /// A Compute qualifier that resolves to no built-in, no
+    /// registered plugin qualifier and no date offset (GitLab #486).
+    /// Carries the known names so the message can suggest the
+    /// closest one.
+    case unknownComputation(name: String, known: Set<String>)
 
     /// Validation failure
     case validationFailed(String)
@@ -216,6 +229,12 @@ extension ActionError: CustomStringConvertible {
             return "\(type) in \(context): \(reason)"
         case .unknownAction(let verb):
             return "Unknown action verb: '\(verb)'"
+        case .unknownComputation(let name, let known):
+            var message = "Unknown Compute qualifier: '\(name)'"
+            if let suggestion = ActionError.closestName(to: name, in: known) {
+                message += " — did you mean '\(suggestion)'?"
+            }
+            return message
         case .validationFailed(let reason):
             return "Validation failed: \(reason)"
         case .comparisonFailed(let reason):
@@ -255,6 +274,49 @@ extension ActionError: CustomStringConvertible {
         case .runtimeError(let msg):
             return "Runtime error: \(msg)"
         }
+    }
+}
+
+// MARK: - Suggestions
+
+extension ActionError {
+    /// Closest name in `candidates` by edit distance, or nil when
+    /// nothing is near enough to be worth suggesting. The threshold
+    /// scales with the typo's length so `sum` doesn't get matched to
+    /// every three-letter name, while `uppercse` still finds
+    /// `uppercase`.
+    static func closestName(to name: String, in candidates: Set<String>) -> String? {
+        let needle = name.lowercased()
+        var best: (name: String, distance: Int)? = nil
+        for candidate in candidates {
+            let distance = editDistance(needle, candidate.lowercased())
+            if best == nil || distance < best!.distance {
+                best = (candidate, distance)
+            }
+        }
+        guard let best else { return nil }
+        let budget = max(1, needle.count / 3)
+        return best.distance <= budget ? best.name : nil
+    }
+
+    /// Levenshtein distance, two-row variant.
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let lhs = Array(a), rhs = Array(b)
+        if lhs.isEmpty { return rhs.count }
+        if rhs.isEmpty { return lhs.count }
+        var previous = Array(0...rhs.count)
+        var current = [Int](repeating: 0, count: rhs.count + 1)
+        for i in 1...lhs.count {
+            current[0] = i
+            for j in 1...rhs.count {
+                let cost = lhs[i - 1] == rhs[j - 1] ? 0 : 1
+                current[j] = min(previous[j] + 1,
+                                 current[j - 1] + 1,
+                                 previous[j - 1] + cost)
+            }
+            swap(&previous, &current)
+        }
+        return previous[rhs.count]
     }
 }
 

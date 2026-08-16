@@ -1640,7 +1640,63 @@ def paraphrase_consistency_check(source_text, instruction, chat_fn, max_tokens=1
 # instructions legitimately quote wrong code ("Fix this: …"), and blocks that
 # an answer explicitly labels as wrong/negative examples are skipped.
 
+# GitLab #486 — qualifier existence. Unlike every other rule here, this one
+# can't be a literal pattern: the set of legal names is whatever the runtime
+# registers, and the whole failure mode was that nobody was checking against
+# it. `_COMPUTE_QUALIFIER_RE` finds the candidates; the catalog decides.
+_COMPUTE_QUALIFIER_RE = _re.compile(
+    r'\bComput\w*\s+(?:the\s+|an?\s+)?<\s*[\w-]+\s*:\s*([\w.\-|+]+)\s*>')
+
+
+def _unknown_compute_qualifier(code):
+    """First Compute qualifier in `code` that the runtime cannot resolve.
+
+    Returns the matched text, or None when every qualifier resolves. Plugin
+    namespacing, chains and date offsets are all legal without being catalog
+    entries — `is_known` handles those three, and they are what keeps the
+    false-positive rate at zero on the existing corpus.
+    """
+    catalog = _qualifier_catalog()
+    if not catalog:
+        # No catalog on this host: stay silent rather than reject every
+        # sample. A gate that can't tell right from wrong must not guess.
+        return None
+    for m in _COMPUTE_QUALIFIER_RE.finditer(code):
+        name = m.group(1)
+        if not _qualifier_is_known(name, catalog):
+            return m.group(0)
+    return None
+
+
+def _qualifier_catalog():
+    """Cached qualifier catalog, or {} when it can't be loaded."""
+    cached = globals().get('_QUALIFIER_CATALOG_CACHE')
+    if cached is not None:
+        return cached
+    try:
+        from extract_qualifier_catalog import load as _load_qualifiers
+        catalog = _load_qualifiers()
+    except Exception:
+        catalog = {}
+    globals()['_QUALIFIER_CATALOG_CACHE'] = catalog
+    return catalog
+
+
+def _qualifier_is_known(name, catalog):
+    try:
+        from extract_qualifier_catalog import is_known
+    except Exception:
+        return True
+    return is_known(name, catalog)
+
+
 FIXTRAIN_RULES = [
+    {
+        'name': 'unknown-compute-qualifier', 'severity': 'error',
+        'message': 'Compute qualifier is not registered in the runtime — see '
+                   'aro_qualifier_catalog.json (GitLab #486)',
+        'check': _unknown_compute_qualifier,
+    },
     {
         'name': 'string-concat-plus', 'severity': 'error',
         'message': 'string concatenation must use `++`, not `+` '
@@ -1813,14 +1869,25 @@ def check_fixtrain_issues(code, include_warnings=False):
     for rule in FIXTRAIN_RULES:
         if rule['severity'] == 'warn' and not include_warnings:
             continue
-        m = rule['pattern'].search(stripped)
-        if m:
-            violations.append({
-                'rule':     rule['name'],
-                'severity': rule['severity'],
-                'message':  rule['message'],
-                'match':    stripped[m.start():m.end()][:80].strip(),
-            })
+        # A rule is either a literal pattern or a callable that returns the
+        # offending text. Callables exist for checks whose answer depends on
+        # generated data (the qualifier catalog) rather than on a fixed shape.
+        check = rule.get('check')
+        if check is not None:
+            match = check(stripped)
+            if not match:
+                continue
+        else:
+            m = rule['pattern'].search(stripped)
+            if not m:
+                continue
+            match = stripped[m.start():m.end()]
+        violations.append({
+            'rule':     rule['name'],
+            'severity': rule['severity'],
+            'message':  rule['message'],
+            'match':    match[:80].strip(),
+        })
     return violations
 
 

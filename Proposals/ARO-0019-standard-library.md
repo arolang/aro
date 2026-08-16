@@ -165,6 +165,75 @@ following the happy-case philosophy. `base64-decode` and `base64url-decode`
 raise a runtime error, because there is no meaningful pass-through for input
 that is not valid Base64 UTF-8.
 
+### 3.2 Collections and Text
+
+Aggregating a list, deduplicating it, or counting the lines of a file are
+things every program does, and until GitLab #486 each of them was a
+multi-statement idiom. That had a cost beyond verbosity: `aro ask` invented
+`sum`, `avg`, `unique`, `lines`, `join`, `random` and `sha256` as qualifiers
+2,652 times across the training corpus, because the names are the obvious ones
+and the real spelling was three statements long. A primitive people keep
+reaching for is a primitive the language is missing.
+
+| Qualifier | Purpose | Example |
+|-----------|---------|---------|
+| `lines` | Split text into a list of lines | `Compute the <ls: lines> from <content>.` |
+| `join` | Join a collection into a string | `Compute the <csv: join> from <items> with { separator: ", " }.` |
+| `sum` | Total of a numeric collection | `Compute the <total: sum> from <amounts>.` |
+| `avg` / `average` | Arithmetic mean | `Compute the <mean: avg> from <scores>.` |
+| `unique` | Remove duplicates, first occurrence wins | `Compute the <tags: unique> from <all-tags>.` |
+| `random` | A random element, or a random Int below a bound | `Compute the <pick: random> from <options>.` |
+| `sha256` | SHA-256 digest, hex-encoded (alias of `hash`) | `Compute the <digest: sha256> from <payload>.` |
+
+**Counting lines** is `lines` then `length`:
+
+```aro
+(Application-Start: Line Count) {
+    Read the <content: raw> from "./sample.txt".
+    Compute the <line-list: lines> from the <content>.
+    Compute the <total-lines: length> from the <line-list>.
+    Log <total-lines> to the <console>.
+    Return an <OK: status> for the <run>.
+}
+```
+
+`lines` does not emit a phantom empty element for the trailing newline, and it
+treats `\r\n` as one terminator. Both are deliberate: the hand-rolled
+`trim` → `Split` → `length` idiom this replaces answers 4 for a 3-line file if
+the `trim` is forgotten, which is exactly the kind of off-by-one a primitive
+should absorb rather than delegate.
+
+**Numeric results keep their type**: `sum` of a list of integers is an integer,
+so it logs as `6` rather than `6.0`. `avg` is always a Float — averaging
+integers rarely yields one, and truncating silently would be worse than a
+decimal point.
+
+**Empty collections**: `sum` of nothing is `0`. `avg` and `random` of nothing
+are runtime errors, because neither has a defensible answer.
+
+### 3.3 The Qualifier Namespace Is Closed
+
+A Compute qualifier resolves to exactly one of:
+
+1. a built-in from the table above and §3.1,
+2. a registered plugin qualifier, written `handle.qualifier`,
+3. a chain of the above, written `a|b`,
+4. a date offset, written `-7d` / `+24h`.
+
+Anything else is a **runtime error**. It used to return the input unchanged,
+which meant every misspelled or invented qualifier produced a program that
+compiled, passed `aro check`, exited `[OK]`, and printed the wrong value:
+
+```aro
+(* Before #486: logged the whole file. After: "Unknown Compute qualifier:
+   'linecount'". *)
+Compute the <total: linecount> from the <content>.
+```
+
+The error names the qualifier and suggests the closest registered one, so a
+typo is recoverable without consulting the table. `aro actions --qualifiers`
+lists the live set; `--format json` emits it for tooling.
+
 ```aro
 (searchProducts: Product API) {
     Extract the <q> from the <queryParameters: q>.
@@ -279,3 +348,4 @@ Primitive types are handled throughout the runtime:
 | 1.0 | 2024-01 | Initial specification |
 | 1.1 | 2024-12 | Simplified to core primitives (Integer, Float, String, Boolean, DateTime), removed Result type, added ARO examples |
 | 1.2 | 2026-08 | Added §3.1 Encoding and Escaping: html-escape, url-encode/decode, base64(url)-encode/decode, json-escape, trim, replace (GitLab #482) |
+| 1.3 | 2026-08 | Added §3.2 Collections and Text: lines, join, sum, avg/average, unique, random, sha256; §3.3 declares the qualifier namespace closed — an unregistered qualifier is now an error instead of a silent identity (GitLab #486) |

@@ -79,6 +79,36 @@
     Log "Number of items: " to the <console>.
     Log <item-count> to the <console>.
 
+    (* --------------------------------------------------------
+       Collection & text qualifiers (GitLab #486)
+       -------------------------------------------------------- *)
+    Create the <amounts> with [10, 20, 12].
+    Compute the <total-amount: sum> from the <amounts>.
+    Log "Sum of amounts: " to the <console>.
+    Log <total-amount> to the <console>.
+
+    Compute the <mean-amount: avg> from the <amounts>.
+    Log "Average amount: " to the <console>.
+    Log <mean-amount> to the <console>.
+
+    Create the <tags> with ["aro", "dsl", "aro", "runtime", "dsl"].
+    Compute the <distinct-tags: unique> from the <tags>.
+    Log "Distinct tags: " to the <console>.
+    Compute the <tag-line: join> from the <distinct-tags> with { separator: ", " }.
+    Log <tag-line> to the <console>.
+
+    (* `lines` drops the trailing newline's phantom element, so the
+       count is 3 rather than 4 — no `trim` needed first. *)
+    Create the <document> with "first\nsecond\nthird\n".
+    Compute the <document-lines: lines> from the <document>.
+    Compute the <line-count: length> from the <document-lines>.
+    Log "Line count: " to the <console>.
+    Log <line-count> to the <console>.
+
+    Compute the <digest: sha256> from "abc".
+    Log "SHA-256 of abc: " to the <console>.
+    Log <digest> to the <console>.
+
     Log "=== Demo Complete ===" to the <console>.
 
     Return an <OK: status> for the <demo>.
