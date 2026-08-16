@@ -32,6 +32,8 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
+aro diff --graph main..my-branch          # Feature-set/statement diff between revisions
+aro diff --graph main..my-branch --html report.html   # Same comparison as a standalone report
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linux: Foundation still dynamic.)

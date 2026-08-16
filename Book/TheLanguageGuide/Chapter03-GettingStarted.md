@@ -111,6 +111,26 @@ The `aro build` command compiles an application to a native binary. Unlike inter
 
 Native compilation is particularly useful for deployment. The resulting binaries start almost instantaneously because there is no parsing or compilation at runtime. The optimize flag enables compiler optimizations that can significantly improve performance for compute-intensive applications.
 
+The `aro diff --graph` command compares two revisions at the level ARO is written in. A textual diff answers *which lines changed*; reviewing an ARO change, the question you actually have is *which feature sets changed, and what happened inside them* — and the two answers disagree in ways that matter. A statement that moved down because something was inserted above it is noise. A `Retrieve` whose repository changed is not a deletion plus an insertion; it is one edited step.
+
+```bash
+aro diff --graph main..my-branch
+aro diff --graph main..my-branch --html report.html
+```
+
+Feature sets are matched by name, so moving one within a file is not a change, and re-indentation does not register. The output reports each touched feature set with its added, removed and modified statements:
+
+```
+main.aro  —  2 feature sets touched · +3 −0 ~1
+  ~ (listUsers: User API)
+      ~ <Retrieve> the <users> from the <user-repository>.
+        → <Retrieve> the <users> from the <account-repository>.
+      + <Log> "listed" to the <console>.
+  + (getUser: User API)
+```
+
+A bare revision (`aro diff --graph main`) compares against the working tree. The `--html` flag writes a self-contained report — no external stylesheets or scripts — so a merge request can link it or CI can keep it as an artifact.
+
 ---
 
 ## 3.5 Development Workflow

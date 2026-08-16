@@ -116,6 +116,7 @@ struct ARO: AsyncParsableCommand {
             BuildCommand.self,
             CompileCommand.self,
             CheckCommand.self,
+            DiffCommand.self,
             TestCommand.self,
             ReplCommand.self,
             NewCommand.self,
