@@ -375,6 +375,21 @@ ISSUES = [
         "Return is not valid.",
         "Compute the <sum> from <a> + <b>.\nReturn an <OK: status> with <sum>.",
     ),
+    (
+        "045",
+        "Read the <content> from the <file: \"./sample.txt\">.\n"
+        "Compute the <total-lines: linecount> from the <content>.",
+        "Two errors. The literal-path read form is `Read the <content> from \"./sample.txt\".` — "
+        "`<file: x>` takes a *variable* holding a path, so as written `content` binds to an "
+        "empty object. And `linecount` is not a Compute qualifier: the runtime resolves a "
+        "closed set (see `aro actions --qualifiers`), and an unregistered name is an error, "
+        "not a no-op. Counting lines is `lines` (which yields the list of lines, without a "
+        "phantom empty element for the trailing newline) followed by `length`.",
+        "Read the <content: raw> from \"./sample.txt\".\n"
+        "Compute the <line-list: lines> from the <content>.\n"
+        "Compute the <total-lines: length> from the <line-list>.\n"
+        "Log <total-lines> to the <console>.",
+    ),
 ]
 
 

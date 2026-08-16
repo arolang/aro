@@ -1,0 +1,359 @@
+{
+ "average": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List"
+  ],
+  "accepts_parameters": false,
+  "description": "Arithmetic mean (alias of avg)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "avg": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List"
+  ],
+  "accepts_parameters": false,
+  "description": "Arithmetic mean of a numeric collection",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "base64-decode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Standard Base64 decode",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "base64-encode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Standard Base64 encode",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "base64url-decode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "URL-safe Base64 decode",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "base64url-encode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "URL-safe Base64 encode (JWTs)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "clip": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Truncate string to width",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "count": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Count elements or characters (alias of length)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "date": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Parse ISO 8601 string to date",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "difference": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object"
+  ],
+  "accepts_parameters": true,
+  "description": "Set difference",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "distance": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Date distance between two dates",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "format": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Format date with pattern",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "hash": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "Bool",
+   "Double",
+   "Int",
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "SHA-256 digest, hex-encoded",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "html-escape": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Escape & < > \" ' for HTML",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "identity": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "Bool",
+   "Double",
+   "Int",
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Pass-through (no-op)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "intersect": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object"
+  ],
+  "accepts_parameters": true,
+  "description": "Set intersection",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "join": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List"
+  ],
+  "accepts_parameters": true,
+  "description": "Join a collection into a string; with { separator: \", \" }",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "json-escape": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Escape for a JSON string literal",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "length": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Count elements or characters",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "lines": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Split text into a list of lines (no phantom trailing element)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "lowercase": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Convert to lowercase",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "markdown": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Render markdown to HTML",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "random": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "Double",
+   "Int",
+   "List",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "A random element, or a random Int below a bound",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "replace": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Substring replacement",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "sha256": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "Bool",
+   "Double",
+   "Int",
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "SHA-256 digest, hex-encoded (alias of hash)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "sum": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List"
+  ],
+  "accepts_parameters": false,
+  "description": "Total of a numeric collection",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "take": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "First N elements",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "trim": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Strip leading and trailing whitespace",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "union": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object"
+  ],
+  "accepts_parameters": true,
+  "description": "Set union",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "unique": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Remove duplicates, preserving first-seen order",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "uppercase": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Convert to UPPERCASE",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "url-decode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Decode a percent-encoded value",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "url-encode": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Percent-encode a query value",
+  "source": "aro actions --qualifiers --format json"
+ }
+}

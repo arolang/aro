@@ -145,36 +145,26 @@ public final class QualifierRegistry: @unchecked Sendable {
     /// execution context), but they are registered here for discovery/listing.
     private func registerBuiltIns() {
         let host = BuiltInQualifierHost()
-        let builtIns: [(String, Set<QualifierInputType>, Bool, String?)] = [
-            ("hash", Set(QualifierInputType.allCases), false, "Compute SHA-256 hash"),
-            ("length", [.string, .list, .object], false, "Count elements or characters"),
-            ("count", [.string, .list, .object], false, "Count elements or characters"),
-            ("uppercase", [.string], false, "Convert to UPPERCASE"),
-            ("lowercase", [.string], false, "Convert to lowercase"),
-            ("trim", [.string], false, "Strip leading and trailing whitespace"),
-            ("identity", Set(QualifierInputType.allCases), false, "Pass-through (no-op)"),
-            ("clip", [.string], true, "Truncate string to width"),
-            ("take", [.string, .list], true, "First N elements"),
-            ("date", [.string], false, "Parse ISO 8601 string to date"),
-            ("format", [.string], true, "Format date with pattern"),
-            ("distance", [.string], true, "Date distance between two dates"),
-            ("intersect", [.list, .object], true, "Set intersection"),
-            ("difference", [.list, .object], true, "Set difference"),
-            ("union", [.list, .object], true, "Set union"),
-        ]
-
-        for (name, types, acceptsParams, description) in builtIns {
+        // Derived from `ComputeAction.builtInQualifiers` rather than
+        // re-listed here (GitLab #486). The hand-written copy that
+        // used to live in this method drifted to 15 entries while the
+        // runtime grew to 33, so `aro actions --qualifiers`
+        // under-reported what actually exists — and any catalog
+        // generated from it inherited the same blind spot, which is
+        // how 202 invented qualifier names went unnoticed.
+        for builtIn in ComputeAction.builtInQualifiers {
             let reg = QualifierRegistration(
-                qualifier: name,
-                inputTypes: types,
+                qualifier: builtIn.name,
+                inputTypes: builtIn.inputTypes,
                 pluginName: "_builtin",
                 namespace: "_builtin",
-                description: description,
-                acceptsParameters: acceptsParams,
+                description: builtIn.summary,
+                acceptsParameters: builtIn.acceptsParameters,
                 pluginHost: host
             )
-            // Register only under _builtin.name -- the actual execution still happens
-            // inline in ComputeAction. This registration is for discovery/listing only.
+            // Registered only under `_builtin.name` — execution still
+            // happens inline in ComputeAction; this is for discovery
+            // and listing.
             qualifiers["\(reg.namespace).\(reg.qualifier)"] = reg
         }
     }

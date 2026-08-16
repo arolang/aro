@@ -1,4 +1,4 @@
-# Generated: Sat Jan 10 10:44:39 2026
+# Generated: Thu Aug 13 16:44:15 2026
 # Type: console
 # Command: aro run ./Examples/Computations
 ---
@@ -29,6 +29,16 @@ Total:
 324
 Number of items:
 4
+Sum of amounts:
+42
+Average amount:
+14
+Distinct tags:
+aro, dsl, runtime
+Line count:
+3
+SHA-256 of abc:
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
 === Demo Complete ===
 demo
-  value: Hello, World!
+value: Hello, World!

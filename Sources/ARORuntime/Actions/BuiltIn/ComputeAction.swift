@@ -76,39 +76,116 @@ public struct ComputeAction: SynchronousAction {
 
     typealias ComputeOp = @Sendable (any Sendable, any ExecutionContext) throws -> any Sendable
 
-    /// Canonical computation name → implementation. `length` and
-    /// `count` share an entry (both resolve to `opLength`); the set
-    /// used for `knownComputations` is derived from this registry's
-    /// keys. The `@Sendable` on `ComputeOp` makes the dictionary
-    /// itself `Sendable`, so no `nonisolated(unsafe)` is needed.
-    private static let computations: [String: ComputeOp] = [
-        "hash":       Self.opHash,
-        "length":     Self.opLength,
-        "count":      Self.opLength,
-        "uppercase":  Self.opUppercase,
-        "lowercase":  Self.opLowercase,
-        "trim":       Self.opTrim,
-        "identity":   Self.opIdentity,
-        "clip":       Self.opClip,
-        "take":       Self.opTake,
-        "date":       Self.opDate,
-        "format":     Self.opFormat,
-        "distance":   Self.opDistance,
-        "intersect":  Self.opIntersect,
-        "difference": Self.opDifference,
-        "union":      Self.opUnion,
-        "markdown":   Self.opMarkdown,
+    /// One built-in qualifier: how to run it, and what to say about
+    /// it when something asks what exists.
+    ///
+    /// The metadata rides along with the implementation on purpose
+    /// (GitLab #486). It used to live in a hand-written list inside
+    /// `QualifierRegistry`, which drifted to 15 entries while this
+    /// table grew to 25 — so `aro actions --qualifiers` under-reported
+    /// the runtime, and any catalog generated from it inherited the
+    /// gap. One table, one truth.
+    public struct BuiltInQualifier: Sendable {
+        public let name: String
+        public let inputTypes: Set<QualifierInputType>
+        public let acceptsParameters: Bool
+        public let summary: String
+        let op: ComputeOp
+    }
+
+    /// Every built-in Compute qualifier, in documentation order.
+    static let builtInQualifiers: [BuiltInQualifier] = [
+        .init(name: "hash", inputTypes: Set(QualifierInputType.allCases),
+              acceptsParameters: false,
+              summary: "SHA-256 digest, hex-encoded", op: Self.opHash),
+        .init(name: "sha256", inputTypes: Set(QualifierInputType.allCases),
+              acceptsParameters: false,
+              summary: "SHA-256 digest, hex-encoded (alias of hash)",
+              op: Self.opHash),
+        .init(name: "length", inputTypes: [.string, .list, .object],
+              acceptsParameters: false,
+              summary: "Count elements or characters", op: Self.opLength),
+        .init(name: "count", inputTypes: [.string, .list, .object],
+              acceptsParameters: false,
+              summary: "Count elements or characters (alias of length)",
+              op: Self.opLength),
+        .init(name: "uppercase", inputTypes: [.string], acceptsParameters: false,
+              summary: "Convert to UPPERCASE", op: Self.opUppercase),
+        .init(name: "lowercase", inputTypes: [.string], acceptsParameters: false,
+              summary: "Convert to lowercase", op: Self.opLowercase),
+        .init(name: "trim", inputTypes: [.string], acceptsParameters: false,
+              summary: "Strip leading and trailing whitespace", op: Self.opTrim),
+        .init(name: "identity", inputTypes: Set(QualifierInputType.allCases),
+              acceptsParameters: false,
+              summary: "Pass-through (no-op)", op: Self.opIdentity),
+        .init(name: "clip", inputTypes: [.string], acceptsParameters: true,
+              summary: "Truncate string to width", op: Self.opClip),
+        .init(name: "take", inputTypes: [.string, .list], acceptsParameters: true,
+              summary: "First N elements", op: Self.opTake),
+        .init(name: "date", inputTypes: [.string], acceptsParameters: false,
+              summary: "Parse ISO 8601 string to date", op: Self.opDate),
+        .init(name: "format", inputTypes: [.string], acceptsParameters: true,
+              summary: "Format date with pattern", op: Self.opFormat),
+        .init(name: "distance", inputTypes: [.string], acceptsParameters: true,
+              summary: "Date distance between two dates", op: Self.opDistance),
+        .init(name: "intersect", inputTypes: [.list, .object], acceptsParameters: true,
+              summary: "Set intersection", op: Self.opIntersect),
+        .init(name: "difference", inputTypes: [.list, .object], acceptsParameters: true,
+              summary: "Set difference", op: Self.opDifference),
+        .init(name: "union", inputTypes: [.list, .object], acceptsParameters: true,
+              summary: "Set union", op: Self.opUnion),
+        .init(name: "markdown", inputTypes: [.string], acceptsParameters: false,
+              summary: "Render markdown to HTML", op: Self.opMarkdown),
         // Encoding / escaping primitives (GitLab #482)
-        "html-escape":       Self.opHTMLEscape,
-        "url-encode":        Self.opURLEncode,
-        "url-decode":        Self.opURLDecode,
-        "base64-encode":     Self.opBase64Encode,
-        "base64-decode":     Self.opBase64Decode,
-        "base64url-encode":  Self.opBase64URLEncode,
-        "base64url-decode":  Self.opBase64URLDecode,
-        "json-escape":       Self.opJSONEscape,
-        "replace":           Self.opReplace,
+        .init(name: "html-escape", inputTypes: [.string], acceptsParameters: false,
+              summary: "Escape & < > \" ' for HTML", op: Self.opHTMLEscape),
+        .init(name: "url-encode", inputTypes: [.string], acceptsParameters: false,
+              summary: "Percent-encode a query value", op: Self.opURLEncode),
+        .init(name: "url-decode", inputTypes: [.string], acceptsParameters: false,
+              summary: "Decode a percent-encoded value", op: Self.opURLDecode),
+        .init(name: "base64-encode", inputTypes: [.string], acceptsParameters: false,
+              summary: "Standard Base64 encode", op: Self.opBase64Encode),
+        .init(name: "base64-decode", inputTypes: [.string], acceptsParameters: false,
+              summary: "Standard Base64 decode", op: Self.opBase64Decode),
+        .init(name: "base64url-encode", inputTypes: [.string], acceptsParameters: false,
+              summary: "URL-safe Base64 encode (JWTs)", op: Self.opBase64URLEncode),
+        .init(name: "base64url-decode", inputTypes: [.string], acceptsParameters: false,
+              summary: "URL-safe Base64 decode", op: Self.opBase64URLDecode),
+        .init(name: "json-escape", inputTypes: [.string], acceptsParameters: false,
+              summary: "Escape for a JSON string literal", op: Self.opJSONEscape),
+        .init(name: "replace", inputTypes: [.string], acceptsParameters: true,
+              summary: "Substring replacement", op: Self.opReplace),
+        // Collection / text primitives (GitLab #486). Each of these
+        // was among the names `aro ask` invented most often, which is
+        // the strongest evidence there is that the gap was real: the
+        // model reached for them because the idiom they replace runs
+        // to three statements.
+        .init(name: "lines", inputTypes: [.string], acceptsParameters: false,
+              summary: "Split text into a list of lines (no phantom "
+                     + "trailing element)", op: Self.opLines),
+        .init(name: "join", inputTypes: [.list], acceptsParameters: true,
+              summary: "Join a collection into a string; "
+                     + "with { separator: \", \" }", op: Self.opJoin),
+        .init(name: "sum", inputTypes: [.list], acceptsParameters: false,
+              summary: "Total of a numeric collection", op: Self.opSum),
+        .init(name: "avg", inputTypes: [.list], acceptsParameters: false,
+              summary: "Arithmetic mean of a numeric collection", op: Self.opAverage),
+        .init(name: "average", inputTypes: [.list], acceptsParameters: false,
+              summary: "Arithmetic mean (alias of avg)", op: Self.opAverage),
+        .init(name: "unique", inputTypes: [.string, .list], acceptsParameters: false,
+              summary: "Remove duplicates, preserving first-seen order",
+              op: Self.opUnique),
+        .init(name: "random", inputTypes: [.string, .list, .int, .double],
+              acceptsParameters: false,
+              summary: "A random element, or a random Int below a bound",
+              op: Self.opRandom),
     ]
+
+    /// Canonical computation name → implementation, derived from
+    /// `builtInQualifiers` so the two can never disagree.
+    private static let computations: [String: ComputeOp] = Dictionary(
+        uniqueKeysWithValues: builtInQualifiers.map { ($0.name, $0.op) }
+    )
 
     /// Names recognised by the fast-path resolver. Derived from the
     /// registry plus the synonym for `count` (which `computations`
@@ -174,6 +251,24 @@ public struct ComputeAction: SynchronousAction {
             // FeatureSetExecutor; this covers the operation paths, e.g.
             // `Compute the <n: length> as Float from <s>.`
             return ResultTypeCoercion.coerce(try op(input, context), to: result.asType)
+        }
+
+        // GitLab #486: an explicit qualifier that resolves to nothing
+        // is a bug, and until now it silently returned the input
+        // unchanged. That made every hallucinated qualifier —
+        // `<total: lines>`, `<n: sum>`, 202 distinct names across the
+        // training corpus — compile, check clean, run green, and
+        // print the wrong answer. The namespace is closed (built-ins
+        // + registered plugin qualifiers + date offsets), so there is
+        // no case where an unrecognised name is correct.
+        //
+        // Only *explicit* qualifiers reach here. A result with no
+        // specifiers resolves to `identity`, which is registered, so
+        // plain `Compute the <total> from <a> + <b>` is untouched.
+        if !result.specifiers.isEmpty {
+            throw ActionError.unknownComputation(
+                name: computationName,
+                known: Self.knownComputationNames)
         }
         return ResultTypeCoercion.coerce(input, to: result.asType)
     }
@@ -301,6 +396,193 @@ public struct ComputeAction: SynchronousAction {
         }
         let replacement = config["replace"] as? String ?? ""
         return text.replacingOccurrences(of: find, with: replacement)
+    }
+
+    // MARK: - Collection / text primitives (GitLab #486)
+
+    /// Numeric value of one element, for the aggregate operations.
+    /// Accepts the numeric types the runtime actually produces plus
+    /// numeric strings, so `sum` works on a list parsed out of CSV
+    /// without a conversion step first.
+    private static func numeric(_ value: any Sendable) -> Double? {
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        if let f = value as? Float { return Double(f) }
+        if let s = value as? String { return Double(s) }
+        return nil
+    }
+
+    /// Every element of `input` as a list, for the collection ops.
+    /// A bare scalar counts as a one-element list — `sum` of a single
+    /// number is that number, which is less surprising than an error.
+    private static func elements(_ input: any Sendable) -> [any Sendable] {
+        if let arr = input as? [any Sendable] { return arr }
+        if let arr = input as? [Int] { return arr }
+        if let arr = input as? [Double] { return arr }
+        if let arr = input as? [String] { return arr }
+        return [input]
+    }
+
+    /// Total of a numeric collection. Returns an `Int` when every
+    /// element was integral, so `sum` of `[1, 2, 3]` logs as `6`
+    /// rather than `6.0`.
+    private static func opSum(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        let items = elements(input)
+        guard !items.isEmpty else { return 0 }
+        var total = 0.0
+        var allIntegral = true
+        for item in items {
+            guard let value = numeric(item) else {
+                throw ActionError.typeMismatch(
+                    expected: "Number",
+                    actual: String(describing: type(of: item)),
+                    variable: "sum")
+            }
+            if !(item is Int) { allIntegral = false }
+            total += value
+        }
+        return allIntegral ? Int(total) : total
+    }
+
+    /// Arithmetic mean. Always a `Double` — averaging integers rarely
+    /// gives an integer, and silently truncating would be worse than
+    /// a decimal point.
+    private static func opAverage(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        let items = elements(input)
+        guard !items.isEmpty else {
+            throw ActionError.validationFailed("avg of an empty collection is undefined")
+        }
+        var total = 0.0
+        for item in items {
+            guard let value = numeric(item) else {
+                throw ActionError.typeMismatch(
+                    expected: "Number",
+                    actual: String(describing: type(of: item)),
+                    variable: "avg")
+            }
+            total += value
+        }
+        return total / Double(items.count)
+    }
+
+    /// Duplicates removed, first occurrence wins so the original
+    /// order survives. On a string this dedupes characters.
+    private static func opUnique(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        if let str = input as? String {
+            var seen = Set<Character>()
+            return String(str.filter { seen.insert($0).inserted })
+        }
+        guard let items = input as? [any Sendable] else { return input }
+        var seen = Set<String>()
+        var out: [any Sendable] = []
+        for item in items {
+            // Key on the rendered form: the element type is `any
+            // Sendable`, which is not Hashable, and every value the
+            // runtime carries renders stably.
+            let key = identityKey(item)
+            if seen.insert(key).inserted { out.append(item) }
+        }
+        return out
+    }
+
+    /// Stable string key for an arbitrary runtime value.
+    private static func identityKey(_ value: any Sendable) -> String {
+        if let str = value as? String { return "s:\(str)" }
+        if let int = value as? Int { return "n:\(Double(int))" }
+        if let dbl = value as? Double { return "n:\(dbl)" }
+        if let bool = value as? Bool { return "b:\(bool)" }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value,
+                                                  options: [.sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            return "j:\(json)"
+        }
+        return "d:\(String(describing: value))"
+    }
+
+    /// The lines of a text, as a list.
+    ///
+    /// The trailing newline does *not* produce a phantom empty last
+    /// element — that subtlety is exactly what made the hand-rolled
+    /// `trim` → `Split` → `length` idiom easy to get wrong (it
+    /// answers 4 for a 3-line file if you forget the trim). Counting
+    /// lines is `lines` then `length`.
+    ///
+    /// `\r\n` is treated as one terminator, so a CRLF file counts the
+    /// same as a LF one and no line comes back with a stray `\r`.
+    ///
+    /// The split is over `Character`s, not over the `"\n"` substring.
+    /// Swift treats `\r\n` as a single grapheme cluster, and
+    /// `components(separatedBy: "\n")` is grapheme-aware on
+    /// swift-corelibs-foundation — it finds no separator at all inside
+    /// a CRLF document and hands back the whole text as one line. On
+    /// Darwin the same call bridges to NSString and splits on UTF-16
+    /// units, so it does the expected thing. That divergence is why
+    /// this passed locally and failed on the Linux runner.
+    /// `Character.isNewline` matches `\n`, `\r`, `\r\n` and the
+    /// Unicode line/paragraph separators identically on both.
+    private static func opLines(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        guard !text.isEmpty else { return [any Sendable]() }
+        var lines = text.split(omittingEmptySubsequences: false,
+                               whereSeparator: \.isNewline).map(String.init)
+        if lines.last == "" { lines.removeLast() }
+        return lines.map { $0 as any Sendable }
+    }
+
+    /// Collection → string. `with { separator: ", " }` interleaves;
+    /// without it the elements are concatenated.
+    private static func opJoin(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        var separator = ""
+        if let config = context.resolveAny("_with_") as? [String: any Sendable],
+           let value = config["separator"] as? String {
+            separator = value
+        } else if let value = context.resolveAny("_with_") as? String {
+            // `with ", "` — the bare form reads fine for a single
+            // obvious parameter, so accept it too.
+            separator = value
+        }
+        return elements(input).map { asText($0) }.joined(separator: separator)
+    }
+
+    /// One element picked at random.
+    ///
+    /// On a collection: a random element. On a whole number `n`: a
+    /// random integer in `0..<n`, which is what "random" means when
+    /// there is nothing to pick *from*. Empty collections have no
+    /// element to return, so they are an error rather than a silent
+    /// nil.
+    private static func opRandom(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        if input is AnyStreamingValue { throw NeedsAsyncExecution() }
+        if let items = input as? [any Sendable] {
+            guard let pick = items.randomElement() else {
+                throw ActionError.validationFailed("random of an empty collection")
+            }
+            return pick
+        }
+        if let str = input as? String {
+            guard let pick = str.randomElement() else {
+                throw ActionError.validationFailed("random of an empty string")
+            }
+            return String(pick)
+        }
+        if let bound = input as? Int {
+            guard bound > 0 else {
+                throw ActionError.validationFailed("random requires a positive bound")
+            }
+            return Int.random(in: 0..<bound)
+        }
+        if let bound = input as? Double, bound > 0 {
+            return Double.random(in: 0..<bound)
+        }
+        throw ActionError.typeMismatch(
+            expected: "List, String, or positive Number",
+            actual: String(describing: type(of: input)),
+            variable: "random")
     }
 
     private static func opClip(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {

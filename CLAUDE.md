@@ -431,11 +431,26 @@ The Compute action transforms data using built-in operations:
 | `base64-encode` / `base64-decode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
 | `base64url-encode` / `base64url-decode` | URL-safe Base64 (JWTs) | `Compute the <tok: base64url-encode> from <payload>.` |
 | `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |
+| `lines` | Split text into a list of lines | `Compute the <ls: lines> from <content>.` |
+| `join` | Join a collection into a string | `Compute the <csv: join> from <items> with { separator: ", " }.` |
+| `sum` | Total of a numeric collection | `Compute the <total: sum> from <amounts>.` |
+| `avg` / `average` | Arithmetic mean | `Compute the <mean: avg> from <scores>.` |
+| `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
+| `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
+| `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
-Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1.
-Always `html-escape` untrusted values before rendering them into an HTML template —
-the template engine does not escape for you.
+Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
+collection/text qualifiers in §3.2. Always `html-escape` untrusted values before
+rendering them into an HTML template — the template engine does not escape for you.
+
+**The qualifier namespace is closed** (§3.3, GitLab #486). A Compute qualifier must
+resolve to a built-in, a plugin qualifier (`handle.qualifier`), a chain (`a|b`), or a
+date offset (`-7d`); anything else is a runtime error naming the closest match. It
+used to return the input unchanged, so an invented qualifier compiled, passed
+`aro check`, exited `[OK]`, and printed the wrong value. Counting lines is
+`lines` then `length` — `lines` already drops the trailing newline's phantom
+element. Run `aro actions --qualifiers` for the live set.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 

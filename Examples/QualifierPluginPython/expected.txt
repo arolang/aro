@@ -1,6 +1,8 @@
 # Type: console
 # Command: aro run ./Examples/QualifierPluginPython
-# Note: occurrence-check — qualifier results vary by SDK availability
+# Note: occurrence-check. Requires the Python plugin SDK — since GitLab #486
+# closed the qualifier namespace, an unresolved `stats.*` is a hard error, not
+# a silent pass-through, so this example no longer "passes" without the plugin.
 ---
 Original list:
 [5, 2, 8, 1, 9, 3]

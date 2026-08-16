@@ -769,10 +769,20 @@ public final class FeatureSetExecutor: Sendable {
                 condition: statement.statementGuard.isPresent ? "when <condition>" : nil,
                 featureSet: context.featureSetName,
                 businessActivity: context.businessActivity,
-                resolvedValues: gatherResolvedValues(for: statement, context: context)
+                resolvedValues: gatherResolvedValues(for: statement, context: context),
+                hint: Self.statementHint(for: error)
             )
             throw ActionError.statementFailed(aroError)
         }
+    }
+
+    /// Extra sentence appended to a statement-shaped error when the
+    /// statement alone can't convey what went wrong (GitLab #486).
+    private static func statementHint(for error: any Error) -> String? {
+        guard let actionError = error as? ActionError,
+              case .unknownComputation = actionError
+        else { return nil }
+        return actionError.description
     }
 
     /// Force everything still outstanding and rethrow the first failure.
@@ -859,7 +869,12 @@ public final class FeatureSetExecutor: Sendable {
                     condition: condition,
                     featureSet: featureSet,
                     businessActivity: activity,
-                    resolvedValues: [:]
+                    resolvedValues: [:],
+                    // Lazy actions fail here rather than in the
+                    // synchronous path above, so the unknown-qualifier
+                    // sentence has to be attached in both places or the
+                    // message depends on which path ran (#486 × ARO-0088).
+                    hint: Self.statementHint(for: error)
                 )
                 throw ActionError.statementFailed(aroError)
             }
