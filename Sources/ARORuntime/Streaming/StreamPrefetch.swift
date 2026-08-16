@@ -18,6 +18,11 @@ import Foundation
 /// This channel makes the producer wait instead: `send` suspends while the
 /// buffer is full and resumes when the consumer takes an element. Capacity is
 /// the number of elements the producer may run ahead by.
+/// Allocation whose address identifies one channel to the
+/// backpressure monitor. An actor can't take `ObjectIdentifier` of
+/// `self` before `init` completes, so identity comes from this.
+private final class BoundedChannelToken: Sendable {}
+
 actor BoundedChannel<Element: Sendable> {
     private var buffer: [Element] = []
     private var finished = false
@@ -27,9 +32,27 @@ actor BoundedChannel<Element: Sendable> {
     private var producers: [CheckedContinuation<Void, Never>] = []
 
     private let capacity: Int
+    /// Identity under which this channel reports occupancy
+    /// (GitLab #444). Backpressure happening here is the mechanism
+    /// working correctly, and completely invisible without this.
+    /// Held for the channel's lifetime — the monitor keys on this
+    /// object's address, so letting it deallocate would let a later
+    /// allocation reuse the address and collide with this entry.
+    private nonisolated let monitorAnchor = BoundedChannelToken()
+    private nonisolated var monitorToken: ObjectIdentifier {
+        ObjectIdentifier(monitorAnchor)
+    }
+    private let monitorLabel: String
 
-    init(capacity: Int) {
+    init(capacity: Int, label: String = "stream") {
         self.capacity = max(1, capacity)
+        self.monitorLabel = label
+        BackpressureMonitor.shared.register(
+            ObjectIdentifier(monitorAnchor), label: label, capacity: self.capacity)
+    }
+
+    deinit {
+        BackpressureMonitor.shared.unregister(monitorToken)
     }
 
     /// Offer an element, suspending while the buffer is full.
@@ -44,12 +67,20 @@ actor BoundedChannel<Element: Sendable> {
             return
         }
         while buffer.count >= capacity && !finished {
+            // This suspension *is* the backpressure. Time it, so a
+            // canvas can show which stage is holding its producer
+            // back rather than leaving the stall invisible (#444).
+            let parkedAt = DispatchTime.now().uptimeNanoseconds
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 producers.append(continuation)
             }
+            let elapsed = DispatchTime.now().uptimeNanoseconds &- parkedAt
+            BackpressureMonitor.shared.recordStall(
+                monitorToken, seconds: Double(elapsed) / 1_000_000_000)
         }
         guard !finished else { return }
         buffer.append(element)
+        BackpressureMonitor.shared.recordDepth(monitorToken, depth: buffer.count)
 
         // Wake a parked consumer with the *head* of the buffer, not the element
         // just appended — order matters, and a consumer can be parked while the
@@ -89,6 +120,7 @@ actor BoundedChannel<Element: Sendable> {
     func next() async throws -> Element? {
         if !buffer.isEmpty {
             let element = buffer.removeFirst()
+            BackpressureMonitor.shared.recordDepth(monitorToken, depth: buffer.count)
             if let producer = producers.first {
                 producers.removeFirst()
                 producer.resume()
@@ -115,11 +147,15 @@ public extension AROStream {
     /// already being read or parsed while the current one is still being
     /// processed — and `capacity` bounds how far ahead that can get, so memory
     /// stays O(capacity) rather than O(input).
-    func prefetch(_ capacity: Int = RuntimeDefaults.streamPrefetchCapacity) -> AROStream<Element> {
+    /// `label` names the channel in backpressure readings (#444) —
+    /// pass the binding the elements flow through so a canvas wire
+    /// can be matched to its buffer.
+    func prefetch(_ capacity: Int = RuntimeDefaults.streamPrefetchCapacity,
+                  label: String = "stream") -> AROStream<Element> {
         let upstream = self
         return AROStream {
             AsyncThrowingStream { continuation in
-                let channel = BoundedChannel<Element>(capacity: capacity)
+                let channel = BoundedChannel<Element>(capacity: capacity, label: label)
 
                 // Producer: pull from upstream into the bounded channel.
                 let producer = Task {

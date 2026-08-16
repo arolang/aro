@@ -18,6 +18,9 @@
 
 import SwiftUI
 import AROParser
+// BackpressureSample — live stream-buffer occupancy read straight
+// from the in-process runtime (#444).
+import ARORuntime
 
 /// Right-click context-menu choices on a canvas node card.
 enum CanvasNodeContextAction {
@@ -798,6 +801,17 @@ struct WiresLayer: View {
     let nodeHeight: CGFloat
     let repoWidth: CGFloat
     let repoHeight: CGFloat
+    /// Live stream-buffer occupancy (#444). A data-flow wire
+    /// carries the producer's result binding, so that name is the
+    /// join key against the runtime's channel readings.
+    var backpressure: BackpressureIndex?
+
+    /// Reading for the value this edge carries, if any.
+    private func pressure(for edge: CanvasEdge) -> BackpressureSample? {
+        guard let backpressure, edge.kind == .dataFlow else { return nil }
+        let binding = graph.nodes.first { $0.id == edge.fromNodeID }?.resultName
+        return backpressure.sample(forBinding: binding)
+    }
 
     var body: some View {
         Canvas { ctx, _ in
@@ -924,13 +938,22 @@ struct WiresLayer: View {
         var path = Path()
         path.move(to: start)
         path.addCurve(to: end, control1: c1, control2: c2)
-        let color = SolaroColor.wireColor(forPreposition: edge.preposition)
+        // A wire whose stream buffer is filling gets thicker, and
+        // goes amber once that stage is actually parking its
+        // producer (#444). A buffer that merely filled and drained
+        // keeps its normal colour — otherwise every fast pipeline
+        // would look like a problem and the signal would be worth
+        // nothing.
+        let sample = pressure(for: edge)
+        let color = sample.map(BackpressureStyle.color(for:))
+            ?? SolaroColor.wireColor(forPreposition: edge.preposition)
+        let extra = sample.map(BackpressureStyle.extraWidth(for:)) ?? 0
         ctx.stroke(path,
                    with: .color(color.opacity(0.20)),
-                   style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                   style: StrokeStyle(lineWidth: 5 + extra, lineCap: .round))
         ctx.stroke(path,
                    with: .color(color.opacity(0.92)),
-                   style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                   style: StrokeStyle(lineWidth: 1.6 + extra, lineCap: .round))
         let dotRect = CGRect(x: end.x - 3, y: end.y - 3,
                              width: 6, height: 6)
         ctx.fill(Path(ellipseIn: dotRect), with: .color(color))
