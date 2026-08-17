@@ -400,6 +400,20 @@ extension ActionRunner {
             return syncResult
         }
 
+        // Dynamic handlers that declared themselves synchronous run inline too.
+        // A user-defined action in a compiled binary is the case that matters:
+        // routing it through the future below blocks one GCD worker per nesting
+        // level, and a recursion 200 deep exhausted the pool and hung for good
+        // (GitLab #473).
+        if !registry.hasMiddleware,
+           let syncHandler = registry.synchronousDynamicHandler(for: verb) {
+            do {
+                return .success(try syncHandler(result, object, context))
+            } catch {
+                return .failure(String(describing: error))
+            }
+        }
+
         // Async actions run as an AROFuture on ActionTaskExecutor (elastic
         // GCD). The C-bridge pthread blocks via AROFuture.force() — action
         // work cannot starve the cooperative pool, so cascading-emit chains

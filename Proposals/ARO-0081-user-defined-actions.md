@@ -144,7 +144,7 @@ Inside an `Action` feature set:
 | Capability | Allowed? | Notes |
 |-----------|----------|-------|
 | Emit events | Yes | `Emit a <X: event> with <data>.` works as in any feature set. |
-| Call other actions (built-in, plugin, user-defined) | Yes | Including recursion. No tail-call optimization is promised. |
+| Call other actions (built-in, plugin, user-defined) | Yes | Including recursion — see §9. |
 | Read repositories, call HTTP, do file I/O | Yes | All non-framework actions are available. |
 | Access framework variables (`request`, `response`, `event`, `pathParameters`, `queryParameters`) | **No** | Compile error. Actions are not event handlers; they have no event/request context. |
 | Use `Publish as` to expose globals | Yes | Same scoping rules as any feature set. |
@@ -157,12 +157,79 @@ Because all `.aro` files are discovered and parsed before execution (see `Applic
 - Duplicate action names → compile error citing both definitions.
 - Use of `from <value>` against an action without a `takes` clause → compile error suggesting `with { ... }`.
 - Reference to a framework variable inside an `Action` body → compile error.
+- A recursion that can never reach a base case → warning (see §9.4).
 
 ### 8. Discovery and registration
 
 User-defined actions are discovered by the same mechanism that discovers feature sets today — every `.aro` file in the application directory and its subdirectories is scanned. Any feature set whose activity is `Action` is registered with the `ActionRegistry` under the `Application` handle before `Application-Start` executes.
 
 No imports, no manifests, no aro.yaml entries are required. This matches how event handlers and HTTP routes are wired up.
+
+### 9. Recursion
+
+Recursion is a normal way to write an action — tree walks, retries, accumulators.
+It has **no depth limit**. What it costs depends on the shape you write.
+
+#### 9.1 Tail position: constant space, no ceiling
+
+An action whose last two statements are a call and a `Return` that forwards its
+result reuses its own frame instead of nesting a new one:
+
+```aro
+(Countdown: Action takes <n>) {
+    Extract the <v> from the <input: n>.
+    Return an <OK: status> with { depth: <v> } when <v> <= 0.
+    Compute the <next> from <v> - 1.
+    Application.Countdown the <r> from <next>.   (* tail call *)
+    Return an <OK: status> with <r>.             (* forwards <r> untouched *)
+}
+```
+
+The frame has nothing left to do once the callee returns, so the runtime parks
+the call and loops rather than nesting. A million frames deep costs the same
+memory as one. This applies to mutual recursion too — the parked call names its
+target, whatever it is.
+
+The shape is recognised exactly, not approximately. The forwarding `Return` must
+be the final statement, be unguarded, and hand back the call's result variable
+with nothing done to it. `Extract the <d> from the <r: depth>.` in between is
+work after the call, so the frame is still needed and the call nests.
+
+#### 9.2 Everything else: bounded by memory
+
+A recursion that must keep its frames — because it inspects the result, sums it,
+or calls twice — keeps them on the heap, so depth is limited by memory rather
+than by any stack. Frames are roughly tens of KB each; 200 000 deep runs, and
+what runs out is RAM, which the operating system pages like any other
+allocation. Lookup cost inside a frame does not grow with depth: a callee sees
+its own bindings and application-level ones, never the caller's locals (`input`
+is the only channel between them — §4).
+
+#### 9.3 The call-depth budget
+
+Because "bounded by memory" is only a good answer if reaching the bound is
+legible, the runtime stops at `ARO_MAX_CALL_DEPTH` live frames (default 50 000)
+with an error naming the call chain:
+
+```
+Runtime Error: Cannot call Application.Recurse — 50001 frames are live, above the call-depth budget of 50000
+  Call chain: … → Recurse → Recurse → Recurse → Recurse (50001 frames)
+  hint: a recursion with no base case never returns — add a `when` guard that returns without calling again
+  hint: an action that ends with `Return … with <r>.` immediately after the call reuses its frame, and has no depth budget at all
+  hint: raise or remove the budget with ARO_MAX_CALL_DEPTH=<frames> (0 = unlimited)
+```
+
+This is a diagnostic, not the model: `ARO_MAX_CALL_DEPTH=0` removes it, and tail
+calls never count against it. Its purpose is to make a runaway recursion say so
+instead of being killed by the OS.
+
+#### 9.4 Static detection
+
+`aro check` warns when an action's every path reaches a call before it can reach
+a `Return` — direct (`A → A`) or mutual (`A → B → A`). Such a recursion cannot
+terminate regardless of input. The check is conservative: a guarded return, a
+match, or a loop anywhere before the call means a base case may exist and
+nothing is reported.
 
 ---
 

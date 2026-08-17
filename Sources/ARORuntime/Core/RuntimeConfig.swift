@@ -46,6 +46,24 @@ public enum RuntimeDefaults {
         return 2
     }()
 
+    /// How many user-defined action frames may be live at once before the
+    /// runtime stops and says so (ARO-0081, GitLab #473).
+    ///
+    /// This is a diagnostic backstop, not the recursion model. Recursion in
+    /// tail position reuses its frame and is not counted here at all, so it has
+    /// no ceiling; recursion that must keep its frames is bounded by memory,
+    /// and this budget exists so that hitting that bound produces an ARO error
+    /// naming the call chain instead of an OOM kill or a `SIGSEGV` with no
+    /// output. The default is far above any legitimate call depth and roughly
+    /// an order of magnitude below what exhausts a developer machine.
+    ///
+    /// Override with `ARO_MAX_CALL_DEPTH`; `0` disables the check entirely.
+    public nonisolated(unsafe) static var maxUserActionDepth: Int = {
+        if let raw = ProcessInfo.processInfo.environment["ARO_MAX_CALL_DEPTH"],
+           let n = Int(raw), n >= 0 { return n }
+        return 50_000
+    }()
+
     // MARK: - Observer dispatch backpressure (#227)
 
     /// When true, `Store` publishes `RepositoryChangedEvent` fire-and-forget

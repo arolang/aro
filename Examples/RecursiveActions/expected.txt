@@ -1,0 +1,8 @@
+# Type: console
+# Command: aro run ./Examples/RecursiveActions
+---
+=== Recursion in User-Defined Actions (ARO-0081) ===
+3628800
+50005000
+no
+startup

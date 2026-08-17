@@ -176,6 +176,7 @@ core.[0-9]*
 /Examples/GroupDemo/GroupDemo
 /Examples/StoreFileDemo/StoreFileDemo
 /Examples/UserDefinedActions/UserDefinedActions
+/Examples/RecursiveActions/RecursiveActions
 
 # aro ask session state — per-directory conversation cache
 .context

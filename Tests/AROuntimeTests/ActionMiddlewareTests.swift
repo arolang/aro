@@ -321,10 +321,16 @@ struct ActionMiddlewareTests {
         let recorder = Recorder()
 
         // Deliberately unscoped: this hook only records and forwards, so it is
-        // harmless to other suites, and scoping it would make the assertion below
-        // pass for the wrong reason.
-        ActionRegistry.shared.addMiddleware { _, _, next in
-            recorder.record("ran")
+        // harmless to other suites, and scoping it to the test activity would
+        // make the assertion below pass for the wrong reason — the unknown-verb
+        // call below runs on a context with no business activity at all.
+        //
+        // It records the verb rather than a counter because unscoped means it
+        // also sees whatever other suites dispatch against this process-wide
+        // registry while it is registered. Counting calls made the assertion a
+        // race that a long-running suite elsewhere loses.
+        ActionRegistry.shared.addMiddleware { invocation, _, next in
+            recorder.record(invocation.verb)
             return try await next()
         }
 
@@ -339,8 +345,9 @@ struct ActionMiddlewareTests {
                 verb: "no-such-verb-107", result: result, object: object, context: context
             )
         }
-        // The target is resolved before the chain is built, so no hook ran.
-        #expect(recorder.count == 0)
+        // The target is resolved before the chain is built, so no hook ran for
+        // this verb. Anything else in `recorder.all` belongs to another suite.
+        #expect(!recorder.all.contains("no-such-verb-107"))
     }
 
     // MARK: - Zero Impact When Unused

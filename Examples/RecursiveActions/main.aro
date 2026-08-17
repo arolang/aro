@@ -1,0 +1,80 @@
+(* RecursiveActions — Recursion in user-defined actions (ARO-0081 §9)
+ *
+ * Recursion has no depth limit in ARO. What it costs depends on the shape
+ * you write:
+ *
+ *   - A call in tail position — the last statement hands the callee's result
+ *     straight back — reuses the frame it is already in, so depth costs
+ *     nothing at all.
+ *   - Any other recursion keeps its frames on the heap, so depth is bounded
+ *     by memory rather than by a stack.
+ *
+ * Both appear below. See ARO-0081 §9 for the full model.
+ *)
+
+(* Factorial — NOT a tail call: the frame still has to multiply the callee's
+ * result, so each level stays live until the one below it returns.
+ *)
+(Factorial: Action takes <n>) {
+    Extract the <v> from the <input: n>.
+    Return an <OK: status> with { value: 1 } when <v> <= 1.
+
+    Compute the <next> from <v> - 1.
+    Application.Factorial the <inner> from <next>.
+    Extract the <sub> from the <inner: value>.
+    Compute the <value> from <v> * <sub>.
+    Return an <OK: status> with { value: <value> }.
+}
+
+(* SumTo — a tail call. The recursive call's result is returned untouched,
+ * so the runtime reuses this frame instead of nesting a new one. Written
+ * with an accumulator, which is what makes the forwarding shape possible.
+ *)
+(SumTo: Action) {
+    Extract the <n> from the <input: n>.
+    Extract the <acc> from the <input: acc>.
+    Return an <OK: status> with { total: <acc> } when <n> <= 0.
+
+    Compute the <next> from <n> - 1.
+    Compute the <running> from <acc> + <n>.
+    Application.SumTo the <r> with { n: <next>, acc: <running> }.
+    Return an <OK: status> with <r>.
+}
+
+(* Mutual recursion terminates the same way — on a base case. *)
+(IsEven: Action takes <n>) {
+    Extract the <v> from the <input: n>.
+    Return an <OK: status> with { answer: "yes" } when <v> == 0.
+    Compute the <next> from <v> - 1.
+    Application.IsOdd the <r> from <next>.
+    Return an <OK: status> with <r>.
+}
+
+(IsOdd: Action takes <n>) {
+    Extract the <v> from the <input: n>.
+    Return an <OK: status> with { answer: "no" } when <v> == 0.
+    Compute the <next> from <v> - 1.
+    Application.IsEven the <r> from <next>.
+    Return an <OK: status> with <r>.
+}
+
+(Application-Start: Recursion Demo) {
+    Log "=== Recursion in User-Defined Actions (ARO-0081) ===" to the <console>.
+
+    (* Nested frames: ten levels, each waiting on the one below it. *)
+    Application.Factorial the <f> from 10.
+    Extract the <factorial> from the <f: value>.
+    Log <factorial> to the <console>.        (* prints 3628800 *)
+
+    (* Tail calls: 10 000 levels deep in the space of one frame. *)
+    Application.SumTo the <s> with { n: 10000, acc: 0 }.
+    Extract the <total> from the <s: total>.
+    Log <total> to the <console>.            (* prints 50005000 *)
+
+    (* Mutual recursion, 501 hops. *)
+    Application.IsEven the <e> from 501.
+    Extract the <answer> from the <e: answer>.
+    Log <answer> to the <console>.           (* prints no *)
+
+    Return an <OK: status> for the <startup>.
+}

@@ -339,6 +339,11 @@ public final class LLVMCodeGenerator {
         let normalReturnBlock = ctx.module.appendBlock(named: "normal_return", to: function)
         let errorExitBlock = ctx.module.appendBlock(named: "error_exit", to: function)
 
+        // A `Return` ends the feature set here, exactly as it does in the
+        // interpreter — see `currentEarlyReturnBlock`.
+        ctx.currentEarlyReturnBlock = normalReturnBlock
+        defer { ctx.currentEarlyReturnBlock = nil }
+
         // Generate statements
         for (index, statement) in fs.statements.enumerated() {
             ctx.currentSourceSpan = statement.span
@@ -637,11 +642,38 @@ public final class LLVMCodeGenerator {
 
         ctx.setInsertionPoint(atEndOf: continueBlock)
 
+        // `Return` ends the feature set. The interpreter stops at the first
+        // response it sees; a compiled binary used to run every remaining
+        // statement, so a guarded base case like
+        // `Return … with { depth: <v> } when <v> <= 0.` set the response and
+        // then fell through into the recursive call below it — which is why a
+        // recursive action never terminated in a binary (GitLab #473).
+        if isFeatureSetTerminator(statement), let earlyReturn = ctx.currentEarlyReturnBlock {
+            ctx.module.insertBr(to: earlyReturn, at: ctx.insertionPoint)
+
+            // Guarded: carry on in the merge block, which the skip path reaches
+            // when the guard does not fire. Unguarded: whatever follows is dead
+            // code, but it still has to land in a block with no terminator.
+            let continuation = guardMergeBlock
+                ?? ctx.module.appendBlock(named: "\(prefix)_after_return", to: ctx.currentFunction!)
+            ctx.setInsertionPoint(atEndOf: continuation)
+            return
+        }
+
         // If we had a when guard, branch to merge block and continue from there
         if let mergeBlock = guardMergeBlock {
             ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
             ctx.setInsertionPoint(atEndOf: mergeBlock)
         }
+    }
+
+    /// Whether this statement ends the feature set when it executes.
+    ///
+    /// `Return` only — `Throw` already routes through the error path, and the
+    /// other verbs `ActionSemanticRole` files under `.response` (`Render`,
+    /// `Repaint`) paint a terminal and carry on.
+    private func isFeatureSetTerminator(_ statement: AROStatement) -> Bool {
+        statement.action.verb.lowercased() == "return"
     }
 
     // MARK: - Control Flow (Stubs)
@@ -1013,6 +1045,10 @@ public final class LLVMCodeGenerator {
         let outerContextVar = ctx.currentContextVar
         let outerResultPtr  = ctx.currentResultPtr
         let outerIP         = ctx.currentInsertionPoint
+        // The body is its own function: an early-return block belonging to the
+        // enclosing feature set is not a valid branch target from here.
+        let outerEarlyReturn = ctx.currentEarlyReturnBlock
+        ctx.currentEarlyReturnBlock = nil
 
         // Switch to body function
         ctx.currentFunction = bodyFunc
@@ -1088,6 +1124,7 @@ public final class LLVMCodeGenerator {
         ctx.currentContextVar  = outerContextVar
         ctx.currentResultPtr   = outerResultPtr
         ctx.currentInsertionPoint = outerIP
+        ctx.currentEarlyReturnBlock = outerEarlyReturn
 
         // --- Call aro_runtime_foreach_stream in the outer function ---
         let collVarName = ctx.stringConstant(loop.collection.base)

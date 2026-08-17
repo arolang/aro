@@ -45,6 +45,10 @@ public final class ActionRegistry: @unchecked Sendable {
     /// Dynamic action handlers for plugin-provided actions
     private var dynamicHandlers: [String: DynamicActionHandler] = [:]
 
+    /// Dynamic handlers whose work is synchronous and may run on the calling
+    /// thread. See `registerDynamicSynchronous(verb:handler:pluginName:)`.
+    private var synchronousDynamicHandlers: [String: SynchronousDynamicActionHandler] = [:]
+
     /// Metadata for dynamic plugin actions, keyed by normalised verb.
     private var dynamicMetadata: [String: PluginActionMetadata] = [:]
 
@@ -168,6 +172,13 @@ public final class ActionRegistry: @unchecked Sendable {
         ExecutionContext
     ) async throws -> any Sendable
 
+    /// A dynamic handler that does its work synchronously.
+    public typealias SynchronousDynamicActionHandler = @Sendable (
+        ResultDescriptor,
+        ObjectDescriptor,
+        ExecutionContext
+    ) throws -> any Sendable
+
     /// Rich metadata for a plugin-provided action.
     public struct PluginActionMetadata: Sendable {
         public let role: ActionRole
@@ -218,13 +229,68 @@ public final class ActionRegistry: @unchecked Sendable {
         }
     }
 
+    /// Register a dynamic action whose handler is synchronous.
+    ///
+    /// The async form runs its handler as an `AROFuture` on `ActionTaskExecutor`
+    /// while the caller blocks in `force()`, which costs one blocked thread per
+    /// nesting level. That is fine for a plugin call and fatal for recursion: a
+    /// compiled binary calling a user-defined action 200 deep exhausted GCD's
+    /// worker pool and every level waited forever (GitLab #473). A handler
+    /// registered here runs inline on the calling thread instead, so nesting
+    /// costs stack rather than threads.
+    ///
+    /// The verb is registered in both tables: middleware and any async caller
+    /// still see a normal dynamic handler.
+    public func registerDynamicSynchronous(
+        verb: String,
+        handler: @escaping SynchronousDynamicActionHandler,
+        pluginName: String? = nil,
+        metadata: PluginActionMetadata? = nil
+    ) {
+        lock.lock(); defer { lock.unlock() }
+        let key = normalizeActionNameLocked(verb)
+        synchronousDynamicHandlers[key] = handler
+        dynamicHandlers[key] = { result, object, context in
+            try handler(result, object, context)
+        }
+        if let metadata = metadata {
+            dynamicMetadata[key] = metadata
+        }
+        if let name = pluginName {
+            pluginVerbs[name, default: []].insert(key)
+        }
+    }
+
     /// Unregister all dynamic actions registered by a specific plugin.
     public func unregisterPlugin(_ pluginName: String) {
         lock.lock(); defer { lock.unlock() }
         guard let verbs = pluginVerbs.removeValue(forKey: pluginName) else { return }
         for verb in verbs {
             dynamicHandlers.removeValue(forKey: verb)
+            synchronousDynamicHandlers.removeValue(forKey: verb)
             dynamicMetadata.removeValue(forKey: verb)
+        }
+    }
+
+    /// Unregister specific dynamic verbs.
+    ///
+    /// Narrower than `unregisterPlugin(_:)`, which clears everything registered
+    /// under one plugin name. All user-defined actions share a single plugin
+    /// name, so tearing down by plugin removes actions belonging to whatever
+    /// else is running — which is exactly what happened between two test suites
+    /// sharing this process-wide registry.
+    public func unregisterDynamic(verbs: [String]) {
+        lock.lock(); defer { lock.unlock() }
+        for verb in verbs {
+            let key = normalizeActionNameLocked(verb)
+            dynamicHandlers.removeValue(forKey: key)
+            synchronousDynamicHandlers.removeValue(forKey: key)
+            dynamicMetadata.removeValue(forKey: key)
+            for (plugin, keys) in pluginVerbs where keys.contains(key) {
+                var remaining = keys
+                remaining.remove(key)
+                pluginVerbs[plugin] = remaining.isEmpty ? nil : remaining
+            }
         }
     }
 
@@ -232,6 +298,12 @@ public final class ActionRegistry: @unchecked Sendable {
     public func dynamicHandler(for verb: String) -> DynamicActionHandler? {
         lock.lock(); defer { lock.unlock() }
         return dynamicHandlers[normalizeActionNameLocked(verb)]
+    }
+
+    /// Get a synchronous dynamic action handler, if the verb has one.
+    public func synchronousDynamicHandler(for verb: String) -> SynchronousDynamicActionHandler? {
+        lock.lock(); defer { lock.unlock() }
+        return synchronousDynamicHandlers[normalizeActionNameLocked(verb)]
     }
 
     // MARK: - Lookup
