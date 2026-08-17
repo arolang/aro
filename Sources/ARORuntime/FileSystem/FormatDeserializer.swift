@@ -45,7 +45,16 @@ public struct FormatDeserializer: Sendable {
             let quoteChar = (options["quote"] as? String) ?? "\""
             return deserializeCSV(content, delimiter: delimiter, hasHeader: hasHeader, quoteChar: quoteChar)
         case .text:
-            return deserializeText(content)
+            // `.txt` is raw text (GitLab #468). It used to be parsed
+            // as a key=value properties file, so a plain text file —
+            // no `=` on any line — had every line skipped and came
+            // back as an empty dictionary. Reading a text file
+            // silently produced nothing, and the `Split` that
+            // followed then failed on `[:]`.
+            //
+            // `.env` is the format that means key=value, and it has
+            // its own deserializer right below. `.txt` means text.
+            return content
         case .env:
             return deserializeEnv(content)
         case .markdown, .html, .sql, .log, .binary:
@@ -955,6 +964,12 @@ public struct FormatDeserializer: Sendable {
     }
 
     // MARK: - Plain Text Deserialization
+    //
+    // No longer reached from `deserialize` (GitLab #468): `.txt`
+    // returns its bytes. Kept because it is what `.env` parsing is
+    // built on and because a future `.properties` format would want
+    // exactly this — but nothing routes `.txt` here again without a
+    // deliberate decision.
 
     private static func deserializeText(_ content: String) -> any Sendable {
         var result: [String: any Sendable] = [:]
