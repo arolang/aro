@@ -160,8 +160,29 @@ public final class FeatureSetExecutor: Sendable {
         // that the next consumer forces, so the runtime parallelises at
         // the action level without a separate scheduler.
         do {
-            for statement in featureSet.statements {
+            // A frame with a tail-call slot is a user-defined action being run
+            // by `UserDefinedActionHost`'s trampoline. When the statement in
+            // tail position dispatches, it parks the next call instead of
+            // nesting one, and this loop stops so the host can reuse the frame
+            // (ARO-0081, GitLab #473).
+            let frame = context as? RuntimeContext
+            let tailCallIndex = frame?.enclosingTailCallSlot == nil
+                ? nil
+                : TailCallAnalysis.tailCallStatementIndex(of: featureSet)
+
+            for (index, statement) in featureSet.statements.enumerated() {
+                if index == tailCallIndex {
+                    frame?.setExecutingTailCallStatement(true)
+                }
+                defer { frame?.setExecutingTailCallStatement(false) }
+
                 try await executeStatement(statement, context: context)
+
+                // A parked tail call replaces both the rest of this frame and
+                // the frame itself — there is nothing left to run here.
+                if frame?.enclosingTailCallSlot?.isParked == true {
+                    break
+                }
 
                 // Check if we have a response (Return was called)
                 if context.getResponse() != nil {
@@ -759,6 +780,11 @@ public final class FeatureSetExecutor: Sendable {
         } catch let aroError as AROError {
             // Already an AROError, re-throw
             throw ActionError.statementFailed(aroError)
+        } catch ActionError.callDepthExceeded(let message) {
+            // Runaway recursion: every frame on the way out is a call site of
+            // the same recursion, so wrapping it here would report the last
+            // statement that noticed instead of what happened (GitLab #473).
+            throw ActionError.callDepthExceeded(message)
         } catch {
             // Wrap other errors with statement context (ARO-0008: Code Is The Error Message)
             let aroError = AROError.fromStatement(

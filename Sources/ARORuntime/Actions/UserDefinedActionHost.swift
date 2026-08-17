@@ -69,7 +69,26 @@ public final class UserDefinedActionHost: @unchecked Sendable {
             actionRegistryRef.registerDynamic(
                 verb: verb,
                 handler: { result, object, context in
-                    try await capturedHost.invoke(
+                    // Tail position: the calling frame has nothing left to do
+                    // once this call returns, so park the call and let the
+                    // trampoline in `invoke` reuse that frame instead of
+                    // stacking a new one (ARO-0081, GitLab #473).
+                    if let runtimeContext = context as? RuntimeContext,
+                       runtimeContext.isExecutingTailCallStatement,
+                       let slot = runtimeContext.enclosingTailCallSlot {
+                        slot.park(
+                            actionName: captured.featureSet.name,
+                            input: capturedHost.buildInput(
+                                featureSet: captured.featureSet,
+                                object: object,
+                                context: context
+                            )
+                        )
+                        // The frame is about to be discarded; nothing reads this.
+                        return [String: any Sendable]()
+                    }
+
+                    return try await capturedHost.invoke(
                         analyzed: captured,
                         result: result,
                         object: object,
@@ -81,54 +100,105 @@ public final class UserDefinedActionHost: @unchecked Sendable {
         }
     }
 
-    /// Unregister every user-defined action. Used when reloading a program
-    /// (currently only by tests) so a stale handler can't outlive its program.
+    /// Unregister the actions *this host* registered, so a stale handler can't
+    /// outlive its program. Used when reloading a program (currently only by
+    /// tests).
+    ///
+    /// By verb, not by plugin name: every user-defined action in the process
+    /// shares one plugin name, so clearing that bucket would also unregister
+    /// the actions of any other program running against the same registry.
     public func unregister() async {
-        actionRegistryRef.unregisterPlugin(Self.pluginName)
+        actionRegistryRef.unregisterDynamic(
+            verbs: actionNames.map { "\(UserActionVerb.prefix)\($0)" }
+        )
     }
 
     // MARK: - Invocation
 
     /// Run a user-defined action. Public so tests can drive it directly.
+    ///
+    /// Runs as a trampoline: an action that ends by forwarding another action's
+    /// result (`Application.X the <r> …` / `Return … with <r>.`) parks that call
+    /// instead of nesting it, and this loop picks it up with the previous
+    /// frame's storage already released. Tail recursion therefore runs in
+    /// constant space and constant stack, however deep it goes (ARO-0081,
+    /// GitLab #473).
     public func invoke(
         analyzed: AnalyzedFeatureSet,
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        let input = buildInput(
+        var currentAnalyzed = analyzed
+        var currentInput = buildInput(
             featureSet: analyzed.featureSet,
             object: object,
             context: context
         )
 
-        // Spawn a child context for the callee. Parenting to the caller keeps
-        // services and published globals accessible. We deliberately do NOT
-        // copy framework variables (event/request/pathParameters) — actions
-        // are synchronous transformations with no event/request context.
-        let childContext = RuntimeContext(
-            featureSetName: analyzed.featureSet.name,
-            businessActivity: analyzed.featureSet.businessActivity,
-            parent: context
-        )
-
-        // Bind the input object so the action body can `Extract the <field>
-        // from the <input: field>` exactly like a plugin/event handler.
-        childContext.bind("input", value: input)
-
-        // Run the action body. Reuse the same actionRegistry/eventBus/globalSymbols
-        // the host was constructed with so `Publish` and event emission stay
-        // visible application-wide.
+        // Reuse the same actionRegistry/eventBus/globalSymbols the host was
+        // constructed with so `Publish` and event emission stay visible
+        // application-wide.
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistryRef,
             eventBus: eventBusRef,
             globalSymbols: globalSymbols
         )
-        let response = try await executor.execute(analyzed, context: childContext)
 
-        // Flatten the response so callers extract fields from the result
-        // variable directly (same shape plugin actions return).
-        return flatten(response: response)
+        while true {
+            // Spawn a child context for the callee. Parenting to the caller keeps
+            // services and published globals accessible. We deliberately do NOT
+            // copy framework variables (event/request/pathParameters) — actions
+            // are synchronous transformations with no event/request context.
+            //
+            // Note the parent is the original `context` on every hop: a tail
+            // call replaces the current frame rather than extending the chain.
+            let childContext = RuntimeContext(
+                featureSetName: currentAnalyzed.featureSet.name,
+                businessActivity: currentAnalyzed.featureSet.businessActivity,
+                parent: context
+            )
+
+            // Mark the callee's own frame. Variable lookups inside it consult the
+            // frame and then the application root, skipping the caller's locals —
+            // which `input` already makes unnecessary, and which is what keeps the
+            // cost of a lookup independent of how many calls are live (GitLab #473).
+            childContext.markCallFrameRoot()
+
+            // Depth is bounded by memory, not by a limit — but the point where
+            // memory runs out should be an ARO error, not an OOM kill
+            // (GitLab #473).
+            try CallDepthBudget.check(
+                frame: childContext,
+                actionName: currentAnalyzed.featureSet.name
+            )
+
+            // Bind the input object so the action body can `Extract the <field>
+            // from the <input: field>` exactly like a plugin/event handler.
+            childContext.bind("input", value: currentInput)
+
+            let slot = TailCallSlot()
+            childContext.installTailCallSlot(slot)
+
+            let response = try await executor.execute(currentAnalyzed, context: childContext)
+
+            guard let parked = slot.take() else {
+                // Flatten the response so callers extract fields from the result
+                // variable directly (same shape plugin actions return).
+                return flatten(response: response)
+            }
+
+            guard let next = actionsByName[parked.actionName] else {
+                // Registration and this table are built from the same program,
+                // so a miss is a runtime bug rather than a user error.
+                throw ActionError.featureSetNotFound(
+                    "\(UserActionVerb.prefix)\(parked.actionName)"
+                )
+            }
+
+            currentAnalyzed = next
+            currentInput = parked.input
+        }
     }
 
     // MARK: - Input Construction

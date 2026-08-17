@@ -156,7 +156,12 @@ public func aro_register_user_action(
     let bodyAddress = Int(bitPattern: bodyFuncPtr)
     let verb = "Application.\(name)"
 
-    ActionRegistry.shared.registerDynamic(
+    // Registered as *synchronous*: the body is a compiled C function called on
+    // the calling thread. Running it through the async future path instead
+    // parked one GCD worker per nesting level, so recursion past ~50 frames
+    // exhausted the pool and every level waited on a thread that would never
+    // come (GitLab #473).
+    ActionRegistry.shared.registerDynamicSynchronous(
         verb: verb,
         handler: { result, object, context in
             // Build the <input> dict the same way UserDefinedActionHost
@@ -175,6 +180,12 @@ public func aro_register_user_action(
                 businessActivity: "Action",
                 parent: context
             )
+            // Same call-frame marking the interpreter does: lookups inside the
+            // callee see its own frame and the application root, never the
+            // caller's locals, so their cost does not grow with how many calls
+            // are live (GitLab #473).
+            childContext.markCallFrameRoot()
+            try CallDepthBudget.check(frame: childContext, actionName: name)
             childContext.bind("input", value: input)
 
             // Wrap the child context as an AROCContextHandle so the
@@ -188,9 +199,19 @@ public func aro_register_user_action(
                 throw ActionError.unknownAction("Application.\(name) — invalid body pointer")
             }
             typealias BodyFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
-            let body = unsafeBitCast(bodyPtrReconstructed, to: BodyFunc.self)
-            let returned = body(childPtr)
-            if let r = returned { aro_value_free(r) }
+            // Each nested body costs native stack. `DeepCallStack` moves to a
+            // fresh large-stack thread every so many levels so recursion is
+            // bounded by memory rather than by one thread's 8 MB (GitLab #473).
+            // Pointers cross that boundary as addresses: the borrow is strictly
+            // scoped to the call, which blocks until the body returns.
+            let childAddress = Int(bitPattern: childPtr)
+            let returnedAddress = try DeepCallStack.run { () -> Int in
+                guard let bodyPtr = UnsafeMutableRawPointer(bitPattern: bodyAddress) else { return 0 }
+                let body = unsafeBitCast(bodyPtr, to: BodyFunc.self)
+                let out = body(UnsafeMutableRawPointer(bitPattern: childAddress))
+                return Int(bitPattern: out)
+            }
+            if let r = UnsafeMutableRawPointer(bitPattern: returnedAddress) { aro_value_free(r) }
 
             // Read the response the body produced and flatten it into the
             // dict shape callers see from plugin actions: `status`, optional

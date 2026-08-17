@@ -139,6 +139,111 @@ public final class UserActionAnalyzer {
         }
     }
 
+    // MARK: - Unavoidable Recursion (GitLab #473)
+
+    /// Warn about a recursion that can never reach a base case.
+    ///
+    /// The runtime no longer dies on a missing base case — it runs until the
+    /// call-depth budget stops it, and a tail-recursive one runs forever in
+    /// constant space. Either way the program is wrong, and both are cheaper to
+    /// find here: the shape being caught is an action whose *every* path
+    /// reaches a call before it can reach a `Return`.
+    ///
+    /// Direct and mutual cycles both. Deliberately conservative: anything that
+    /// could branch before the call — a guarded statement, a match, a loop —
+    /// means a base case might exist, and nothing is reported.
+    public func detectUnavoidableRecursion(in featureSets: [FeatureSet], registry: UserActionRegistry) {
+        // Each action's first unavoidable call, if it has one. At most one edge
+        // per node, so cycle detection is a walk.
+        var edges: [String: (callee: String, span: SourceSpan)] = [:]
+        for fs in featureSets where fs.isUserAction {
+            if let call = firstUnavoidableCall(in: fs, registry: registry) {
+                edges[fs.name] = call
+            }
+        }
+
+        var reported = Set<String>()
+        for start in edges.keys.sorted() {
+            guard !reported.contains(start) else { continue }
+
+            // Walk the chain from `start`; a name seen twice on this walk is a
+            // cycle. Names on the way in that are not part of the cycle still
+            // reach it, but reporting the cycle itself is the useful message.
+            var path: [String] = []
+            var seen: [String: Int] = [:]
+            var current = start
+            while let edge = edges[current] {
+                if let cycleStart = seen[current] {
+                    let cycle = Array(path[cycleStart...])
+                    report(cycle: cycle, edges: edges, reported: &reported)
+                    break
+                }
+                seen[current] = path.count
+                path.append(current)
+                current = edge.callee
+            }
+        }
+    }
+
+    private func report(
+        cycle: [String],
+        edges: [String: (callee: String, span: SourceSpan)],
+        reported: inout Set<String>
+    ) {
+        for name in cycle where !reported.contains(name) {
+            reported.insert(name)
+            guard let edge = edges[name] else { continue }
+
+            let isDirect = cycle.count == 1
+            let chain = (cycle + [cycle[0]]).joined(separator: " → ")
+            let message = isDirect
+                ? "Action '\(name)' always calls itself — this recursion has no base case"
+                : "Action '\(name)' always reaches itself again — this recursion has no base case (\(chain))"
+
+            diagnostics.warning(
+                message,
+                at: edge.span.start,
+                hints: [
+                    "Every path through '\(name)' reaches `Application.\(edge.callee)` before it can reach a `Return`",
+                    "Add a guarded return that runs first, e.g. `Return an <OK: status> with <value> when <n> <= 0.`",
+                ]
+            )
+        }
+    }
+
+    /// The first call this action makes that nothing can prevent it from
+    /// making, or `nil` if some path could return first.
+    private func firstUnavoidableCall(
+        in featureSet: FeatureSet,
+        registry: UserActionRegistry
+    ) -> (callee: String, span: SourceSpan)? {
+        for statement in featureSet.statements {
+            // Anything other than a plain statement introduces control flow this
+            // pass does not model — a match arm or loop body may well return.
+            guard let aro = statement as? AROStatement else { return nil }
+
+            let verb = aro.action.verb.lowercased()
+
+            if aro.statementGuard.isPresent {
+                // A guarded return is exactly the base case being looked for.
+                if verb == "return" || verb == "throw" { return nil }
+                // Any other guarded statement is harmless: it either runs or
+                // doesn't, and execution continues either way. A guarded *call*
+                // is not unavoidable, so it is skipped rather than reported.
+                continue
+            }
+
+            // An unguarded return ends the action before any call below it.
+            if verb == "return" || verb == "throw" { return nil }
+
+            if let callee = UserActionRegistry.actionName(fromCallVerb: aro.action.verb),
+               registry.info(for: callee) != nil {
+                return (callee, aro.action.span)
+            }
+        }
+        return nil
+    }
+
     /// Reject references to framework variables inside an `Action` body.
     /// Framework variables are bound only by HTTP routes, event handlers, and
     /// lifecycle feature sets — they have no value here.

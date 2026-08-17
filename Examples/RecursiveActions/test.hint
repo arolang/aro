@@ -1,0 +1,7 @@
+# Test hints for RecursiveActions
+# Covers ARO-0081 §9: nested-frame recursion (Factorial), tail-call
+# recursion that reuses its frame (SumTo, 10 000 deep), and mutual
+# recursion (IsEven/IsOdd). Runs in both interpreted and compiled mode;
+# compiled mode nests every frame, which is why the depths here stay
+# modest enough to run quickly in CI.
+type: console

@@ -96,6 +96,18 @@ public final class LLVMCodeGenContext {
     /// The result storage variable (%__result)
     public var currentResultPtr: IRValue?
 
+    /// Block a `Return` statement branches to, ending the feature set.
+    ///
+    /// Without it, a compiled feature set ran *every* statement even after a
+    /// `Return` fired: `Return … when <v> <= 0.` set the response and execution
+    /// carried straight on into the statements below it. The interpreter stops
+    /// at the first response (`FeatureSetExecutor.execute`), so the same source
+    /// took two different paths — a recursive action's base case never ended
+    /// the recursion in a binary, and the program hung (GitLab #473).
+    ///
+    /// `nil` inside generated loop-body functions, which return on their own.
+    public var currentEarlyReturnBlock: BasicBlock?
+
     // MARK: - Source Location Tracking
 
     /// Current source span for error reporting

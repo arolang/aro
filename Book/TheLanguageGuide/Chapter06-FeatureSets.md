@@ -129,7 +129,44 @@ Actions can call other actions (built-in, plugin, or user-defined), including th
 - using `from <value>` against an action without a `takes` clause is an error;
 - referencing framework variables inside an Action body is an error.
 
-> **See `Examples/UserDefinedActions/`** for a runnable demo. **See ARO-0081** in `Proposals/` for the full specification.
+### Recursion
+
+An action may call itself, and there is no depth limit. What recursion costs
+depends on how you write it.
+
+When the last statement hands the recursive call's result straight back, the
+frame has nothing left to do, so the runtime reuses it instead of nesting a new
+one. Depth then costs nothing — a million levels use the memory of one:
+
+```aro
+(SumTo: Action) {
+    Extract the <n> from the <input: n>.
+    Extract the <acc> from the <input: acc>.
+    Return an <OK: status> with { total: <acc> } when <n> <= 0.
+
+    Compute the <next> from <n> - 1.
+    Compute the <running> from <acc> + <n>.
+    Application.SumTo the <r> with { n: <next>, acc: <running> }.
+    Return an <OK: status> with <r>.    (* forwards <r> untouched — frame reused *)
+}
+```
+
+The forwarding `Return` has to be the final statement, unguarded, and hand back
+the call's result with nothing done to it. Reading a field out of it first —
+`Extract the <sub> from the <r: value>.` — is work after the call, so the frame
+stays live and the call nests. That is fine, and often what you want: nested
+frames live on the heap, so depth is bounded by memory rather than by a stack.
+
+Two things catch a recursion that can never stop. `aro check` warns when every
+path through an action reaches a call before it can reach a `Return` — directly
+or through a cycle of actions. At runtime, a recursion that keeps nesting stops
+at the call-depth budget (`ARO_MAX_CALL_DEPTH`, default 50 000, `0` to disable)
+with an error naming the call chain, rather than being killed by the operating
+system.
+
+> **See `Examples/UserDefinedActions/`** for a runnable demo and
+> **`Examples/RecursiveActions/`** for both recursion shapes. **See ARO-0081** in
+> `Proposals/` for the full specification.
 
 ---
 

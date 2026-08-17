@@ -330,6 +330,10 @@ public final class SemanticAnalyzer {
         // emitted by `buildRegistry` come before call-site diagnostics.
         userActionAnalyzer.validateCalls(in: program.featureSets, registry: userActions)
 
+        // ARO-0081: a recursion that can never reach a base case is always a
+        // bug, and cheaper to find here than at runtime (GitLab #473).
+        userActionAnalyzer.detectUnavoidableRecursion(in: program.featureSets, registry: userActions)
+
         return AnalyzedProgram(
             program: program,
             featureSets: analyzedSets,

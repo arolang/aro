@@ -6,6 +6,32 @@
 import Foundation
 import AROParser
 
+/// Monotonic counter bumped whenever any context registers a service or a
+/// repository.
+///
+/// `RuntimeContext.service(_:)` / `repository(named:)` memoize their ancestor
+/// walk against this value, so a registration anywhere invalidates every cached
+/// answer without having to know which contexts cached what. Registrations are
+/// rare (startup, `Connect`, `Store` creating a repository on demand); lookups
+/// are not, and they are the walks that used to cost O(chain depth) each
+/// (GitLab #473).
+enum ServiceRegistrationClock {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var _value: UInt64 = 0
+
+    static var current: UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+
+    static func bump() {
+        lock.lock()
+        _value &+= 1
+        lock.unlock()
+    }
+}
+
 /// Concrete implementation of ExecutionContext
 ///
 /// ## Sendable-safety of the `nonisolated(unsafe)` storage
@@ -71,6 +97,44 @@ public actor RuntimeContext: ExecutionContext {
     /// code that reads another binding, which can miss, which would drain again.
     nonisolated(unsafe) private var _isDraining: Bool = false
 
+    /// Call-frame marker for user-defined actions (ARO-0081).
+    ///
+    /// A variable lookup that reaches a call-frame root jumps straight to the
+    /// application root instead of continuing through the caller: a callee sees
+    /// its own bindings and application-level ones, never the locals of whatever
+    /// feature set happened to call it. `input` is the only channel between
+    /// caller and callee, which is what ARO-0081 already specifies and what
+    /// `UserDefinedActionHost.buildInput` already works to enforce.
+    ///
+    /// It is also what keeps recursion linear. Each call parents its callee to
+    /// the caller, so without the jump every lookup walked one link per live
+    /// call — and `FeatureSetExecutor.execute` probes each published symbol on
+    /// entry, so a 20 000-deep recursion spent 60 s walking chains (GitLab #473).
+    nonisolated(unsafe) private var _isCallFrameRoot: Bool = false
+
+    /// Cached application root of this chain, resolved once at init. `nil` means
+    /// this context *is* the root. See `rootRuntimeContext`.
+    private nonisolated let _inheritedRoot: RuntimeContext?
+
+    /// Where a tail call parks itself instead of nesting a frame (ARO-0081).
+    /// Installed by `UserDefinedActionHost` on the frame it is about to run.
+    nonisolated(unsafe) private var _tailCallSlot: TailCallSlot?
+
+    /// True while the executor runs a statement it has identified as a tail
+    /// call. Read by the user-action dispatch handler, which parks instead of
+    /// recursing. Lives on the frame; statement scopes ask their parent.
+    nonisolated(unsafe) private var _isExecutingTailCallStatement: Bool = false
+
+    /// How many user-action frames are live below this one, this one included.
+    /// Computed once, at `markCallFrameRoot()`. Tail calls reuse a frame, so
+    /// they do not increase it.
+    nonisolated(unsafe) private var _callDepth: Int = 0
+
+    /// The tail of the call chain that led here — most recent last, bounded so
+    /// a deep recursion doesn't carry a deep array on every frame. Used only to
+    /// make the runaway-recursion error name the actions involved.
+    nonisolated(unsafe) private var _callChainTail: [String] = []
+
     /// Deferred action results bound in this context that have not been forced.
     ///
     /// A deferred action may bind names beyond its declared result (Split binding
@@ -84,6 +148,15 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Repository registry
     nonisolated(unsafe) private var repositories: [String: Any] = [:]
+
+    /// Memoized ancestor-walk results for `service(_:)`, including misses.
+    /// Stamped with `ServiceRegistrationClock` so any registration anywhere
+    /// invalidates the whole cache. See `service(_:)` for the rationale.
+    nonisolated(unsafe) private var serviceCache: [ObjectIdentifier: (generation: UInt64, value: (any Sendable)?)] = [:]
+
+    /// Memoized ancestor-walk results for `repository(named:)`. Same stamping
+    /// scheme as `serviceCache`.
+    nonisolated(unsafe) private var repositoryCache: [String: (generation: UInt64, value: Any?)] = [:]
 
     /// Current response
     nonisolated(unsafe) private var _response: Response?
@@ -222,6 +295,14 @@ public actor RuntimeContext: ExecutionContext {
         self.driverChannel = driverChannel
         self.parent = parent
 
+        // Resolve the chain root once, so a call-frame jump costs nothing at
+        // lookup time (see `_isCallFrameRoot`).
+        if let parentCtx = parent as? RuntimeContext {
+            self._inheritedRoot = parentCtx._inheritedRoot ?? parentCtx
+        } else {
+            self._inheritedRoot = nil
+        }
+
         // Container resolution order: explicit > inherit from parent > global default
         let resolvedContainer: RuntimeContainer
         if let c = container {
@@ -254,33 +335,179 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     nonisolated func resolveWithoutDraining<T: Sendable>(_ name: String) -> T? {
-        if let typedValue = localVariable(name) {
-            // Reading a deferred result is a force point (ARO-0088 §3): block
-            // here until the action that produces it has finished.
-            if let future = typedValue.value as? AROFuture {
-                do {
-                    let forced = try future.force()
-                    if let bound = bindingProducedWhileForcing(name) { return bound as? T }
-                    return forced as? T
-                } catch {
-                    // Record the failure so feature-set exit reports it with both
-                    // spans rather than letting a typed read swallow it as nil.
-                    recordDeferredFailure(error, binding: name)
-                    return nil
+        // Iterative parent walk — see `ancestorHolding(_:)` for why the walk is
+        // a loop rather than recursion (GitLab #473). A local binding whose
+        // value does not cast to `T` keeps the walk going, exactly as the
+        // recursive version's fall-through did: a shadowing binding of the
+        // wrong type must not hide a usable one further up.
+        var current: RuntimeContext = self
+        while true {
+            if let typedValue = current.localVariable(name) {
+                // Reading a deferred result is a force point (ARO-0088 §3):
+                // block here until the action that produces it has finished.
+                if let future = typedValue.value as? AROFuture {
+                    do {
+                        let forced = try future.force()
+                        if let bound = current.bindingProducedWhileForcing(name) { return bound as? T }
+                        return forced as? T
+                    } catch {
+                        // Record the failure so feature-set exit reports it with
+                        // both spans rather than letting a typed read swallow it
+                        // as nil.
+                        current.recordDeferredFailure(error, binding: name)
+                        return nil
+                    }
+                }
+                if let value = typedValue.value as? T {
+                    return value
                 }
             }
-            if let value = typedValue.value as? T {
-                return value
+            // Walk on without the drain fallback: the decision to drain is taken
+            // once, by the context the read entered on. Re-deciding it per
+            // ancestor reintroduces the self-deadlock the `isInsideDeferredWork`
+            // guard exists to prevent, because an ancestor is not itself
+            // "inside" deferred work.
+            switch Self.nextVariableScope(after: current) {
+            case .scope(let next):
+                current = next
+            case .foreign(let foreign):
+                return foreign.resolve(name)
+            case .end:
+                return nil
             }
         }
-        // Recurse without the drain fallback: the decision to drain is taken
-        // once, by the context the read entered on. Re-deciding it per ancestor
-        // reintroduces the self-deadlock the `isInsideDeferredWork` guard exists
-        // to prevent, because an ancestor is not itself "inside" deferred work.
-        if let runtimeParent = parent as? RuntimeContext {
-            return runtimeParent.resolveWithoutDraining(name)
+    }
+
+    /// The nearest context in this chain (starting with `self`) whose own
+    /// storage holds `name`.
+    ///
+    /// Returns `(nil, foreignParent)` when the walk fell off the end of the
+    /// `RuntimeContext` chain without a hit: the caller hands off to the
+    /// protocol-typed ancestor, which only synthetic test contexts ever are.
+    ///
+    /// **Why this is a loop.** Every lookup used to recurse into `parent`, one
+    /// native stack frame per level. `UserDefinedActionHost` parents each callee
+    /// to its caller, so chain depth equals ARO recursion depth — meaning a
+    /// recursive program paid `depth` native frames on *every* variable and
+    /// service lookup. That, not the ARO call frames (which are `async` and
+    /// therefore heap-allocated), is what killed a recursive program with
+    /// SIGBUS at ~1300 frames on the 512 KB cooperative-pool stack: the crash
+    /// report's faulting thread was a stack of `RuntimeContext.service<A>(_:)`
+    /// frames. Iterating costs one frame regardless of depth (GitLab #473).
+    private nonisolated func ancestorHolding(
+        _ name: String
+    ) -> (owner: RuntimeContext?, foreignParent: ExecutionContext?) {
+        var current: RuntimeContext = self
+        while true {
+            if current.localVariable(name) != nil { return (current, nil) }
+            switch Self.nextVariableScope(after: current) {
+            case .scope(let next):
+                current = next
+            case .foreign(let foreign):
+                return (nil, foreign)
+            case .end:
+                return (nil, nil)
+            }
         }
-        return parent?.resolve(name)
+    }
+
+    /// Where a *variable* lookup goes after `ctx`.
+    enum VariableScopeStep {
+        /// Another `RuntimeContext` to consult.
+        case scope(RuntimeContext)
+        /// A protocol-typed ancestor — hand the lookup to it (test contexts only).
+        case foreign(ExecutionContext)
+        /// End of the chain.
+        case end
+    }
+
+    /// The application root of this chain (itself, if this is the root).
+    nonisolated var rootRuntimeContext: RuntimeContext { _inheritedRoot ?? self }
+
+    /// Ordinary scopes chain to their parent; a call-frame root jumps to the
+    /// application root, skipping the caller's locals entirely. See
+    /// `_isCallFrameRoot` for why.
+    static func nextVariableScope(after ctx: RuntimeContext) -> VariableScopeStep {
+        if ctx._isCallFrameRoot {
+            let root = ctx.rootRuntimeContext
+            return root === ctx ? .end : .scope(root)
+        }
+        guard let parent = ctx.parent else { return .end }
+        guard let runtimeParent = parent as? RuntimeContext else { return .foreign(parent) }
+        return .scope(runtimeParent)
+    }
+
+    /// Mark this context as a user-defined action's own frame (ARO-0081).
+    ///
+    /// Called by `UserDefinedActionHost` right after it spawns the callee
+    /// context. Inside deferred work the marker also has to carry the deferred
+    /// flag across the jump: the callee genuinely *is* running inside the
+    /// caller's deferred statement, and the lookup chain no longer passes
+    /// through the scope that says so.
+    // MARK: - Tail Calls (ARO-0081)
+
+    /// Install the slot a tail call in this frame parks itself in.
+    public nonisolated func installTailCallSlot(_ slot: TailCallSlot) {
+        _tailCallSlot = slot
+    }
+
+    /// The tail-call slot governing the frame this context belongs to.
+    /// A statement scope finds its frame one link up; nothing crosses a call
+    /// boundary, so a nested call can never park in its caller's slot.
+    public nonisolated var enclosingTailCallSlot: TailCallSlot? {
+        if let slot = _tailCallSlot { return slot }
+        guard !_isCallFrameRoot, let runtimeParent = parent as? RuntimeContext else { return nil }
+        return runtimeParent._tailCallSlot
+    }
+
+    /// Mark/unmark the statement currently executing in this frame as a tail call.
+    public nonisolated func setExecutingTailCallStatement(_ value: Bool) {
+        _isExecutingTailCallStatement = value
+    }
+
+    /// Whether the statement being executed in the enclosing frame is a tail call.
+    public nonisolated var isExecutingTailCallStatement: Bool {
+        if _isExecutingTailCallStatement { return true }
+        guard !_isCallFrameRoot, let runtimeParent = parent as? RuntimeContext else { return false }
+        return runtimeParent._isExecutingTailCallStatement
+    }
+
+    public nonisolated func markCallFrameRoot() {
+        _isCallFrameRoot = true
+        if let runtimeParent = parent as? RuntimeContext {
+            if runtimeParent.isInsideDeferredWork {
+                _isDeferredScope = true
+            }
+            let caller = runtimeParent.enclosingCallFrame
+            _callDepth = (caller?._callDepth ?? 0) + 1
+            var chain = caller?._callChainTail ?? []
+            chain.append(featureSetName)
+            if chain.count > Self.callChainTailLimit {
+                chain.removeFirst(chain.count - Self.callChainTailLimit)
+            }
+            _callChainTail = chain
+        } else {
+            _callDepth = 1
+            _callChainTail = [featureSetName]
+        }
+    }
+
+    /// How many user-action frames are live, this one included.
+    public nonisolated var callDepth: Int { _callDepth }
+
+    /// The last few actions on the way here, most recent last.
+    public nonisolated var callChainTail: [String] { _callChainTail }
+
+    private static let callChainTailLimit = 4
+
+    /// The nearest enclosing user-action frame, if execution is inside one.
+    private nonisolated var enclosingCallFrame: RuntimeContext? {
+        var current: RuntimeContext = self
+        while true {
+            if current._isCallFrameRoot { return current }
+            guard let runtimeParent = current.parent as? RuntimeContext else { return nil }
+            current = runtimeParent
+        }
     }
 
     public nonisolated func resolveAny(_ name: String) -> (any Sendable)? {
@@ -324,33 +551,32 @@ public actor RuntimeContext: ExecutionContext {
             return ["type": "application"] as [String: any Sendable]
         }
 
-        if let typedValue = localVariable(name) {
-            // Issue #55, Phase 2: a binding may hold an AROFuture under lazy mode.
-            // Synchronous resolve callers expect a concrete value, so we force
-            // here. This is a force-point that converts the consumer-of-binding
-            // pattern into a sync wait. Async-aware callers should use
-            // `resolveAnyAsync(_:)` to await without blocking a pthread.
-            if let future = typedValue.value as? AROFuture {
-                do {
-                    let forced = try future.force()
-                    if let bound = bindingProducedWhileForcing(name) { return bound }
-                    return forced
-                } catch {
-                    // Previously this returned "" — a failed action became an
-                    // empty string at the read site with nothing reported. Keep
-                    // the read total, but remember the failure so feature-set
-                    // exit can surface it (ARO-0088 §4).
-                    recordDeferredFailure(error, binding: name)
-                    return ""
-                }
+        // Iterative walk without the drain fallback — see `resolveWithoutDraining`
+        // for the drain reasoning and `ancestorHolding` for why it is a loop.
+        let (owner, foreignParent) = ancestorHolding(name)
+        guard let ctx = owner else { return foreignParent?.resolveAny(name) }
+        guard let typedValue = ctx.localVariable(name) else { return nil }
+
+        // Issue #55, Phase 2: a binding may hold an AROFuture under lazy mode.
+        // Synchronous resolve callers expect a concrete value, so we force
+        // here. This is a force-point that converts the consumer-of-binding
+        // pattern into a sync wait. Async-aware callers should use
+        // `resolveAnyAsync(_:)` to await without blocking a pthread.
+        if let future = typedValue.value as? AROFuture {
+            do {
+                let forced = try future.force()
+                if let bound = ctx.bindingProducedWhileForcing(name) { return bound }
+                return forced
+            } catch {
+                // Previously this returned "" — a failed action became an
+                // empty string at the read site with nothing reported. Keep
+                // the read total, but remember the failure so feature-set
+                // exit can surface it (ARO-0088 §4).
+                ctx.recordDeferredFailure(error, binding: name)
+                return ""
             }
-            return typedValue.value
         }
-        // Recurse without the drain fallback — see `resolveWithoutDraining`.
-        if let runtimeParent = parent as? RuntimeContext {
-            return runtimeParent.resolveAnyWithoutDraining(name)
-        }
-        return parent?.resolveAny(name)
+        return typedValue.value
     }
 
     /// Resolve a binding without forcing an AROFuture. Returns the AROFuture
@@ -369,13 +595,9 @@ public actor RuntimeContext: ExecutionContext {
             || name == "metrics" || name == "application" {
             return resolveAny(name)
         }
-        if let typedValue = localVariable(name) {
-            return typedValue.value
-        }
-        if let runtimeParent = parent as? RuntimeContext {
-            return runtimeParent.resolveAnyRaw(name)
-        }
-        return parent?.resolveAny(name)
+        let (owner, foreignParent) = ancestorHolding(name)
+        guard let ctx = owner else { return foreignParent?.resolveAny(name) }
+        return ctx.localVariable(name)?.value
     }
 
     /// Async variant of `resolveAny(_:)` that awaits AROFuture bindings via
@@ -392,60 +614,52 @@ public actor RuntimeContext: ExecutionContext {
             || name == "metrics" || name == "application" {
             return resolveAny(name)
         }
-        if let typedValue = localVariable(name) {
-            if let future = typedValue.value as? AROFuture {
-                do {
-                    return try await future.value()
-                } catch {
-                    recordDeferredFailure(error, binding: name)
-                    return ""
-                }
+        let (owner, foreignParent) = ancestorHolding(name)
+        guard let ctx = owner else { return foreignParent?.resolveAny(name) }
+        guard let typedValue = ctx.localVariable(name) else { return nil }
+        if let future = typedValue.value as? AROFuture {
+            do {
+                return try await future.value()
+            } catch {
+                ctx.recordDeferredFailure(error, binding: name)
+                return ""
             }
-            return typedValue.value
         }
-        if let runtimeParent = parent as? RuntimeContext {
-            return await runtimeParent.resolveAnyAsync(name)
-        }
-        return parent?.resolveAny(name)
+        return typedValue.value
     }
 
     /// Resolve a variable returning the full TypedValue (type + value)
     public nonisolated func resolveTyped(_ name: String) -> TypedValue? {
-        if let typedValue = localVariable(name) {
-            // Force here too: a TypedValue wrapping an unforced handle would
-            // leak an AROFuture into every consumer that inspects `.type`
-            // or `.value` directly (ARO-0088 §3).
-            if let future = typedValue.value as? AROFuture {
-                do {
-                    return TypedValue.infer(try future.force())
-                } catch {
-                    recordDeferredFailure(error, binding: name)
-                    return TypedValue.infer("")
-                }
+        let (owner, foreignParent) = ancestorHolding(name)
+        guard let ctx = owner else {
+            // Fall back to resolveAny on the protocol-typed ancestor and wrap
+            // with unknown type.
+            if let value = foreignParent?.resolveAny(name) {
+                return TypedValue(value, type: .unknown)
             }
-            return typedValue
+            return nil
         }
-        // Try parent context (if it's a RuntimeContext)
-        if let parentRuntime = parent as? RuntimeContext {
-            return parentRuntime.resolveTyped(name)
+        guard let typedValue = ctx.localVariable(name) else { return nil }
+        // Force here too: a TypedValue wrapping an unforced handle would
+        // leak an AROFuture into every consumer that inspects `.type`
+        // or `.value` directly (ARO-0088 §3).
+        if let future = typedValue.value as? AROFuture {
+            do {
+                return TypedValue.infer(try future.force())
+            } catch {
+                ctx.recordDeferredFailure(error, binding: name)
+                return TypedValue.infer("")
+            }
         }
-        // Fall back to resolveAny and wrap with unknown type
-        if let value = parent?.resolveAny(name) {
-            return TypedValue(value, type: .unknown)
-        }
-        return nil
+        return typedValue
     }
 
     /// Get the type of a variable without retrieving its value
     public nonisolated func typeOf(_ name: String) -> DataType? {
-        if let typedValue = localVariable(name) {
-            return typedValue.type
-        }
-        // Try parent context
-        if let parentRuntime = parent as? RuntimeContext {
-            return parentRuntime.typeOf(name)
-        }
-        return nil
+        // Only `RuntimeContext` ancestors carry type information, so a walk that
+        // falls off the chain reports nothing — same as the recursive version.
+        let (owner, _) = ancestorHolding(name)
+        return owner?.localVariable(name)?.type
     }
 
     /// Build the Contract magic object from OpenAPI spec service
@@ -573,7 +787,9 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated func exists(_ name: String) -> Bool {
-        return localVariable(name) != nil || (parent?.exists(name) ?? false)
+        let (owner, foreignParent) = ancestorHolding(name)
+        if owner != nil { return true }
+        return foreignParent?.exists(name) ?? false
     }
 
     /// Check if a variable is bound in THIS context only (ignoring parent contexts).
@@ -583,22 +799,68 @@ public actor RuntimeContext: ExecutionContext {
     }
 
     public nonisolated var variableNames: Set<String> {
-        var names = Set(variables.keys)
-        if let parentNames = parent?.variableNames {
-            names.formUnion(parentNames)
+        var names = Set<String>()
+        var current: RuntimeContext = self
+        while true {
+            names.formUnion(current.withExclusiveMutation { Set(current.variables.keys) })
+            switch Self.nextVariableScope(after: current) {
+            case .scope(let next):
+                current = next
+            case .foreign(let foreign):
+                names.formUnion(foreign.variableNames)
+                return names
+            case .end:
+                return names
+            }
         }
-        return names
     }
 
     // MARK: - Service Access
 
+    /// Look up a service, walking ancestors when this context has none of its own.
+    ///
+    /// Memoized against `ServiceRegistrationClock`, including misses. Without the
+    /// memo the walk is O(chain depth) on every call, and chain depth equals ARO
+    /// recursion depth — so a recursive program spent quadratic time in service
+    /// lookups even once the walk stopped overflowing the stack (GitLab #473).
+    /// Registrations are rare and bump the clock, which invalidates every cached
+    /// answer at once; over-invalidation just costs one more walk.
     public nonisolated func service<S>(_ type: S.Type) -> S? {
         let id = ObjectIdentifier(type)
-        if let found = withExclusiveMutation({ services[id] }) as? S {
-            return found
+        let generation = ServiceRegistrationClock.current
+
+        var current: RuntimeContext = self
+        while true {
+            // A warm ancestor cache ends the walk: it already holds the answer
+            // for the rest of the chain above it. This is what makes the walk
+            // O(1) amortized in a deep recursion — the caller's frame resolved
+            // the same services one call earlier, so a fresh frame stops after a
+            // single link instead of walking every live call (GitLab #473).
+            if let cached = current.withExclusiveMutation({ current.serviceCache[id] }),
+               cached.generation == generation {
+                if current !== self {
+                    withExclusiveMutation { serviceCache[id] = cached }
+                }
+                return cached.value as? S
+            }
+            if let found = current.withExclusiveMutation({ current.services[id] }) {
+                withExclusiveMutation { serviceCache[id] = (generation, found) }
+                return found as? S
+            }
+            guard let runtimeParent = current.parent as? RuntimeContext else {
+                guard let foreignParent = current.parent else {
+                    // Walked the whole chain with no hit — memoize the miss so a
+                    // repeated lookup of an absent service stays O(1) too.
+                    withExclusiveMutation { serviceCache[id] = (generation, nil) }
+                    return nil
+                }
+                // A protocol-typed ancestor owns its own storage and never bumps
+                // our clock, so its answer is deliberately not memoized. Only
+                // synthetic test contexts take this path.
+                return foreignParent.service(type)
+            }
+            current = runtimeParent
         }
-        // Try parent context
-        return parent?.service(type)
     }
 
     /// Register a service.
@@ -615,6 +877,7 @@ public actor RuntimeContext: ExecutionContext {
             return
         }
         withExclusiveMutation { services[ObjectIdentifier(S.self)] = service }
+        ServiceRegistrationClock.bump()
     }
 
     /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
@@ -624,16 +887,39 @@ public actor RuntimeContext: ExecutionContext {
             return
         }
         withExclusiveMutation { services[typeId] = service }
+        ServiceRegistrationClock.bump()
     }
 
     // MARK: - Repository Access
 
+    /// Look up a repository by name. Iterative and memoized for the same reason
+    /// as `service(_:)` — see its documentation (GitLab #473).
     public nonisolated func repository<T: Sendable>(named name: String) -> (any Repository<T>)? {
-        if let repo = withExclusiveMutation({ repositories[name] }) as? any Repository<T> {
-            return repo
+        let generation = ServiceRegistrationClock.current
+
+        var current: RuntimeContext = self
+        while true {
+            // Warm ancestor cache ends the walk — see `service(_:)`.
+            if let cached = current.withExclusiveMutation({ current.repositoryCache[name] }),
+               cached.generation == generation {
+                if current !== self {
+                    withExclusiveMutation { repositoryCache[name] = cached }
+                }
+                return cached.value as? any Repository<T>
+            }
+            if let repo = current.withExclusiveMutation({ current.repositories[name] }) {
+                withExclusiveMutation { repositoryCache[name] = (generation, repo) }
+                return repo as? any Repository<T>
+            }
+            guard let runtimeParent = current.parent as? RuntimeContext else {
+                guard let foreignParent = current.parent else {
+                    withExclusiveMutation { repositoryCache[name] = (generation, nil) }
+                    return nil
+                }
+                return foreignParent.repository(named: name)
+            }
+            current = runtimeParent
         }
-        // Try parent context
-        return parent?.repository(named: name)
     }
 
     public nonisolated func registerRepository<T: Sendable>(name: String, repository: any Repository<T>) {
@@ -644,6 +930,7 @@ public actor RuntimeContext: ExecutionContext {
             return
         }
         withExclusiveMutation { repositories[name] = repository }
+        ServiceRegistrationClock.bump()
     }
 
     // MARK: - Response Management
@@ -750,9 +1037,16 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether execution is currently inside a deferred action's body, here or
     /// in any enclosing scope.
     public nonisolated var isInsideDeferredWork: Bool {
-        if _isDeferredScope { return true }
-        if let runtimeParent = parent as? RuntimeContext { return runtimeParent.isInsideDeferredWork }
-        return false
+        var current: RuntimeContext = self
+        while true {
+            if current._isDeferredScope { return true }
+            // A call frame answers for itself: `markCallFrameRoot()` copies the
+            // caller's answer in at creation time, so the walk never has to
+            // cross a call boundary.
+            guard !current._isCallFrameRoot,
+                  let runtimeParent = current.parent as? RuntimeContext else { return false }
+            current = runtimeParent
+        }
     }
 
     /// Record a deferred action result so an unresolved lookup can fall back to
@@ -799,10 +1093,11 @@ public actor RuntimeContext: ExecutionContext {
     /// The context that owns feature-set-level state — a statement scope defers
     /// to the context it was created from.
     private nonisolated var statementScopeOwner: RuntimeContext {
-        if _isStatementScope, let owner = parent as? RuntimeContext {
-            return owner.statementScopeOwner
+        var current: RuntimeContext = self
+        while current._isStatementScope, let owner = current.parent as? RuntimeContext {
+            current = owner
         }
-        return self
+        return current
     }
 
     /// Force every deferred result bound in this context.
@@ -892,21 +1187,34 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Whether any deferred result is still outstanding here or in a parent.
     public nonisolated var hasPendingFutures: Bool {
-        if !pendingFutures.isEmpty { return true }
-        if let runtimeParent = parent as? RuntimeContext { return runtimeParent.hasPendingFutures }
-        return false
+        var current: RuntimeContext = self
+        while true {
+            if !current.pendingFutures.isEmpty { return true }
+            guard !current._isCallFrameRoot,
+                  let runtimeParent = current.parent as? RuntimeContext else { return false }
+            current = runtimeParent
+        }
     }
 
     /// Drain this context and every ancestor. A statement scope registers nothing
     /// itself, so a miss inside one has to reach the feature-set context.
     @discardableResult
     public nonisolated func drainPendingFuturesUpChain() -> Error? {
-        let local = drainPendingFutures()
-        if let runtimeParent = parent as? RuntimeContext {
-            let inherited = runtimeParent.drainPendingFuturesUpChain()
-            return local ?? inherited
+        var firstError: Error?
+        var current: RuntimeContext = self
+        while true {
+            if let error = current.drainPendingFutures(), firstError == nil {
+                firstError = error
+            }
+            // Stop at a call frame. A callee draining its caller's outstanding
+            // work would force statements the caller has not read yet, which is
+            // the opposite of what ARO-0088 promises — and it made the walk
+            // O(live calls) on top of that. The caller drains its own chain when
+            // it exits.
+            guard !current._isCallFrameRoot,
+                  let runtimeParent = current.parent as? RuntimeContext else { return firstError }
+            current = runtimeParent
         }
-        return local
     }
 
     // MARK: - Child Context

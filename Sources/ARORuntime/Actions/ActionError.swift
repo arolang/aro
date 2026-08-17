@@ -146,6 +146,15 @@ public enum ActionError: Error, Sendable {
     /// Action not found for verb
     case unknownAction(String)
 
+    /// A user-defined action recursed past the call-depth budget (GitLab #473).
+    ///
+    /// Its own case, not a `statementFailed`, so the statement-shaped wrapping
+    /// in `FeatureSetExecutor` lets it through: every frame on the way out is a
+    /// call site of the same recursion, and rewrapping at each one would
+    /// replace the message that says what actually happened with the last
+    /// statement that noticed.
+    case callDepthExceeded(String)
+
     /// A Compute qualifier that resolves to no built-in, no
     /// registered plugin qualifier and no date offset (GitLab #486).
     /// Carries the known names so the message can suggest the
@@ -229,6 +238,8 @@ extension ActionError: CustomStringConvertible {
             return "\(type) in \(context): \(reason)"
         case .unknownAction(let verb):
             return "Unknown action verb: '\(verb)'"
+        case .callDepthExceeded(let message):
+            return "Runtime Error: \(message)"
         case .unknownComputation(let name, let known):
             var message = "Unknown Compute qualifier: '\(name)'"
             if let suggestion = ActionError.closestName(to: name, in: known) {

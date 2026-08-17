@@ -275,6 +275,16 @@ Application.SumAndDouble the <res> from { a: 3, b: 4 }.
 The return value follows the standard Return action shape; the caller pulls
 named fields off it the same way they would for any other record.
 
+**Recursion has no depth limit** (ARO-0081 §9). A call in tail position — the
+final statement is an unguarded `Return … with <r>.` forwarding the call's
+result untouched — reuses its frame, so depth costs nothing. Any other
+recursion keeps its frames on the heap and is bounded by memory. A callee sees
+its own bindings and application-level ones, never the caller's locals, so
+lookup cost doesn't grow with depth. `aro check` warns when every path through
+an action reaches a call before a `Return` (direct or mutual cycle), and a
+runaway recursion stops at `ARO_MAX_CALL_DEPTH` (default 50 000, `0` disables)
+with an error naming the call chain instead of an OOM kill.
+
 ## Services
 
 Built-in services available at runtime:
@@ -608,6 +618,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 ├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
 ├── UserDefinedActions/ # Application.<Name> callable actions (ARO-0081)
+├── RecursiveActions/   # Recursion shapes: nested frames, tail calls, mutual (ARO-0081 §9)
 │
 │   # Events & Lifecycle
 ├── EventExample/       # Custom event emission and handling

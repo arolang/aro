@@ -408,7 +408,7 @@ public final class Parser {
         let action = try parseActionVerb()
 
         // 2. Result (sink syntax or standard <result>)
-        let (result, resultExpression) = try parseAROResult(action: action)
+        var (result, resultExpression) = try parseAROResult(action: action)
 
         // 3. Preposition
         let prep = try parsePreposition()
@@ -417,7 +417,9 @@ public final class Parser {
         var (objectNoun, expression) = try parseAROObject(preposition: prep)
 
         // 5. Optional trailing clauses
-        let clauses = try parseOptionalClauses(objectNoun: &objectNoun, expression: &expression)
+        let clauses = try parseOptionalClauses(
+            objectNoun: &objectNoun, expression: &expression,
+            result: &result, verb: action.verb)
 
         // 6. Terminating dot
         let endToken: Token
@@ -632,7 +634,9 @@ public final class Parser {
     /// Parses optional trailing clauses: with, to, where, by, default, when
     private func parseOptionalClauses(
         objectNoun: inout QualifiedNoun,
-        expression: inout (any Expression)?
+        expression: inout (any Expression)?,
+        result: inout QualifiedNoun,
+        verb: String
     ) throws -> AROClauses {
         var aggregation: AggregationClause? = nil
         var withExpression: (any Expression)? = nil
@@ -641,6 +645,31 @@ public final class Parser {
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
         var whenCondition: (any Expression)? = nil
+
+        // `Map the <names> from the <users> with name.` — the field
+        // projection spelling documented in ARO-0019 §2.1, and used
+        // again in ARO-0051 and ARO-0086 (GitLab #465). It did not
+        // parse at all: a bare identifier is not an expression start,
+        // so the with-clause fell through and the statement died on
+        // "Expected '.', but got identifier(name)".
+        //
+        // Desugared into the specifier form that already works —
+        // `Map the <names: name> from the <users>.` — so MapAction
+        // needs no change and the two spellings cannot drift apart.
+        // Scoped to Map by verb: a bare identifier after `with` is a
+        // parse error for every other verb and stays one.
+        if verb.lowercased() == "map",
+           case .preposition(.with) = peek().kind,
+           let next = peekAt(1), case .identifier = next.kind,
+           !isExpressionStart(next)
+        {
+            advance()
+            let fieldToken = advance()
+            result = QualifiedNoun(
+                base: result.base,
+                typeAnnotation: fieldToken.lexeme,
+                span: result.span.merged(with: fieldToken.span))
+        }
 
         // with clause (ARO-0042)
         if case .preposition(.with) = peek().kind {
