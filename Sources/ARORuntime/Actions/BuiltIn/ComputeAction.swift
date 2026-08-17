@@ -1648,23 +1648,119 @@ public struct SortAction: ActionImplementation {
         let order = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
         let ascending = order.lowercased() != "descending"
 
-        // Handle string array sorting
+        // `Array(...)` around the descending branch is load-bearing
+        // (GitLab #466): `sorted().reversed()` is a lazy
+        // `ReversedCollection`, and binding it meant `Log` printed
+        // `ReversedCollection<Array<Int>>(_base: [1, 2, 3])` — a
+        // Swift internal leaking into user-facing output where a
+        // list belonged.
         if let array = collection as? [String] {
-            return ascending ? array.sorted() : array.sorted().reversed()
+            return ascending ? array.sorted() : Array(array.sorted().reversed())
         }
 
-        // Handle int array sorting
         if let array = collection as? [Int] {
-            return ascending ? array.sorted() : array.sorted().reversed()
+            return ascending ? array.sorted() : Array(array.sorted().reversed())
         }
 
-        // Handle double array sorting
         if let array = collection as? [Double] {
-            return ascending ? array.sorted() : array.sorted().reversed()
+            return ascending ? array.sorted() : Array(array.sorted().reversed())
+        }
+
+        // A list built by ARO literal syntax arrives as
+        // `[any Sendable]`, which none of the casts above match —
+        // so the most common shape in real code was silently
+        // returned unsorted. Sort it when the elements are
+        // uniformly comparable.
+        if let array = collection as? [any Sendable] {
+            if let strings = array as? [String] {
+                return ascending ? strings.sorted() : Array(strings.sorted().reversed())
+            }
+            if let ints = array.asHomogeneousInts() {
+                let sorted = ints.sorted()
+                return (ascending ? sorted : Array(sorted.reversed()))
+                    .map { $0 as any Sendable }
+            }
+            if let doubles = array.asHomogeneousDoubles() {
+                let sorted = doubles.sorted()
+                return (ascending ? sorted : Array(sorted.reversed()))
+                    .map { $0 as any Sendable }
+            }
         }
 
         // Return original if not sortable
         return collection
+    }
+}
+
+private extension Array where Element == any Sendable {
+    /// The elements as Ints, or nil when any element isn't one.
+    func asHomogeneousInts() -> [Int]? {
+        var out: [Int] = []
+        out.reserveCapacity(count)
+        for element in self {
+            guard let value = element as? Int else { return nil }
+            out.append(value)
+        }
+        return out
+    }
+
+    /// The elements as Doubles, accepting Ints so a mixed numeric
+    /// list still sorts rather than silently coming back untouched.
+    func asHomogeneousDoubles() -> [Double]? {
+        var out: [Double] = []
+        out.reserveCapacity(count)
+        for element in self {
+            if let value = element as? Double { out.append(value) }
+            else if let value = element as? Int { out.append(Double(value)) }
+            else { return nil }
+        }
+        return out
+    }
+}
+
+/// Reverses a collection or string (GitLab #466).
+///
+/// Distinct from `Sort … descending`, which the issue's repro
+/// reached for as a substitute: sorting descending orders the
+/// elements, reversing preserves the order they were in and flips
+/// it. `[3, 1, 2]` reversed is `[2, 1, 3]`, not `[3, 2, 1]`.
+public struct ReverseAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["reverse", "flip"]
+    public static let validPrepositions: Set<Preposition> = [.for, .from, .with]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        guard let value = context.resolveAny(object.base) else {
+            throw ActionError.undefinedVariable(object.base)
+        }
+
+        let reversed: any Sendable
+        if let text = value as? String {
+            reversed = String(text.reversed())
+        } else if let array = value as? [any Sendable] {
+            reversed = Array(array.reversed())
+        } else if let array = value as? [String] {
+            reversed = Array(array.reversed())
+        } else if let array = value as? [Int] {
+            reversed = Array(array.reversed())
+        } else if let array = value as? [Double] {
+            reversed = Array(array.reversed())
+        } else {
+            throw ActionError.typeMismatch(
+                expected: "List or String",
+                actual: String(describing: type(of: value)))
+        }
+
+        context.bind(result.base, value: reversed)
+        return reversed
     }
 }
 

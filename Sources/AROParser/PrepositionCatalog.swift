@@ -155,6 +155,10 @@ public enum PrepositionCatalog {
         "signal": [.`for`, .to, .with],
         "sleep": [.`for`, .with],
         "sort": [.`for`, .with],
+        // Reverse is not "sort descending" — it flips the order the
+        // elements are already in (GitLab #466).
+        "reverse": [.`for`, .from, .with],
+        "flip": [.`for`, .from, .with],
         "split": [.from],
         "stage": [.`for`, .to],
         "start": [.with],
