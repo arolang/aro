@@ -410,18 +410,16 @@ final class FormatDeserializerTests: XCTestCase {
     // MARK: - Text Deserialization Tests
 
     func testDeserializeText() {
+        // `.text` is raw text (GitLab #468) — even lines that look
+        // like key=value pairs come back verbatim. `.env` is the
+        // format that means properties; see testDeserializeEnvBasic.
         let text = """
         id=1
         name=Alice
         """
         let result = FormatDeserializer.deserialize(text, format: .text)
 
-        guard let dict = result as? [String: any Sendable] else {
-            XCTFail("Expected dictionary")
-            return
-        }
-        XCTAssertEqual(dict["id"] as? Int, 1)
-        XCTAssertEqual(dict["name"] as? String, "Alice")
+        XCTAssertEqual(result as? String, text)
     }
 
     // MARK: - Non-Deserializable Formats
