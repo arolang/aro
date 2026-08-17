@@ -585,7 +585,57 @@ public final class Parser {
 
     /// Parses the object position: expression or standard `[article] <object>`
     /// Returns the object noun and an optional expression
+    /// HTTP methods accepted between `via` and the object
+    /// (ARO-0008 §3.3).
+    private static let httpMethodWords: Set<String> = [
+        "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS",
+    ]
+
     private func parseAROObject(preposition prep: Preposition) throws -> (QualifiedNoun, (any Expression)?) {
+        // `Request the <result> via PUT the <url> with <data>.`
+        // (ARO-0008 §3.3, GitLab #464). The method is a bare word
+        // between the preposition and the object, so without this
+        // `PUT` was consumed *as* the object and the statement died
+        // on the article that followed it.
+        //
+        // It lands in the object's specifiers because that is where
+        // `RequestAction` already looks — `case .via:
+        // object.specifiers.first` has been there all along. Only
+        // the syntax was missing.
+        if prep == .via,
+           case .identifier(let word) = peek().kind,
+           Self.httpMethodWords.contains(word.uppercased()),
+           let next = peekAt(1),
+           next.kind.isArticle || next.kind == .leftAngle
+        {
+            let methodToken = advance()
+            if case .article = peek().kind { advance() }
+            if check(.leftAngle) {
+                advance()
+                let noun = try parseQualifiedNoun()
+                let close = try expect(.rightAngle, message: "'>'")
+                return (
+                    QualifiedNoun(
+                        base: noun.base,
+                        // Method first: the runtime reads
+                        // `specifiers.first`, and a qualifier the
+                        // author wrote on the object still follows.
+                        specifiers: [methodToken.lexeme.uppercased()] + noun.specifiers,
+                        span: methodToken.span.merged(with: close.span)),
+                    nil
+                )
+            }
+            let startSpan = peek().span
+            let base = try parseCompoundIdentifier()
+            return (
+                QualifiedNoun(
+                    base: base,
+                    specifiers: [methodToken.lexeme.uppercased()],
+                    span: startSpan.merged(with: previous().span)),
+                nil
+            )
+        }
+
         let shouldParseExpression = (prep == .to || prep == .from || prep == .with || prep == .for) && isExpressionStart(peek())
 
         if shouldParseExpression && !isObjectPattern() {
