@@ -568,12 +568,19 @@ public struct RangeModifiers: Sendable, CustomStringConvertible {
     /// Set operation operand: `from <a> with <b>`
     public let withClause: (any Expression)?
 
+    /// Comparison right-hand operand: `from <a> against <b>`
+    /// (GitLab #469). Separate from `withClause` because a
+    /// statement can carry both — `Compare` reads this one.
+    public let againstClause: (any Expression)?
+
     public init(
         toClause: (any Expression)? = nil,
-        withClause: (any Expression)? = nil
+        withClause: (any Expression)? = nil,
+        againstClause: (any Expression)? = nil
     ) {
         self.toClause = toClause
         self.withClause = withClause
+        self.againstClause = againstClause
     }
 
     /// Empty range modifiers

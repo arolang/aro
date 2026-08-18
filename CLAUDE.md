@@ -475,8 +475,15 @@ Compute the <first-length: length> from the <first-message>.
 Compute the <second-length: length> from the <second-message>.
 
 (* Now both values are available *)
-Compare the <first-length> against the <second-length>.
+Compare the <same-length> from the <first-length> against the <second-length>.
+Return an <OK: status> for the <check> when <same-length: matches>.
 ```
+
+`Compare` takes both operands as inputs and binds a fresh result
+(GitLab #469) — `<result: matches>` is the boolean, `<result: result>`
+is `equal` / `less` / `greater`. The older two-operand spelling
+(`Compare the <a> against the <b>.`) tried to rebind its own first
+operand and could never run under immutability.
 
 See `Proposals/ARO-0001-language-fundamentals.md` for the full specification.
 

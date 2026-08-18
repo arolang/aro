@@ -543,6 +543,7 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_default_value_")
         context.unbind("_to_")
         context.unbind("_with_")
+        context.unbind("_against_")
 
         // ARO-0004: Evaluate when condition before processing statement
         // If condition is present and evaluates to false, skip this statement entirely
@@ -700,6 +701,12 @@ public final class FeatureSetExecutor: Sendable {
         if let withClause = statement.rangeModifiers.withClause {
             let withValue = try await expressionEvaluator.evaluate(withClause, context: context)
             context.bind("_with_", value: withValue)
+        }
+
+        // GitLab #469: Compare's right-hand operand.
+        if let againstClause = statement.rangeModifiers.againstClause {
+            let againstValue = try await expressionEvaluator.evaluate(againstClause, context: context)
+            context.bind("_against_", value: againstValue)
         }
 
         // ARO-0043: Evaluate result expression if present (for sink syntax)

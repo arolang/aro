@@ -267,18 +267,24 @@ section("Compare Action");
 test('Set the <val1> to 100.', "Set val1", sub { shift =~ /OK/ });
 test('Set the <val2> to 100.', "Set val2", sub { shift =~ /OK/ });
 
-# Compare uses the result base as the LHS (must already exist)
-# and stores the comparison result there
-test('Compare the <val1> against <val2>.', "Compare equal values", sub {
+# GitLab #469: both operands are inputs and the result is a fresh
+# binding. The old spelling put the left operand in the result slot,
+# which no longer runs — it would rebind an immutable variable.
+test('Compare the <verdict> from the <val1> against the <val2>.', "Compare equal values", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('Log <val1> to the <console>.', "Log comparison result", sub {
+test('Log <verdict> to the <console>.', "Log comparison result", sub {
     my $output = shift;
-    # Compare returns comparison result but val1 keeps original value
-    # Test passes if we see the original value or any comparison-related output
-    return $output =~ /100/ || $output =~ /equal/i || $output =~ /match/i || $output =~ /true/i;
+    # The result is a dictionary: `matches` is the boolean, `result` is
+    # equal / less / greater.
+    return $output =~ /equal/i && $output =~ /true/i;
+});
+
+test('Log <val1> to the <console>.', "Operand keeps its value", sub {
+    my $output = shift;
+    return $output =~ /100/;
 });
 
 # ============================================================

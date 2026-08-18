@@ -658,13 +658,17 @@ struct CompareActionTests {
         let context = RuntimeContext(featureSetName: "Test")
         context.bind("a", value: 42)
         context.bind("b", value: 42)
+        // #469: both operands are inputs — `a` is the object, the
+        // right-hand side arrives as `_against_`, and the result is
+        // a fresh binding.
+        context.bind("_against_", value: 42)
 
-        let (result, object) = createDescriptors(resultBase: "a", objectBase: "b")
+        let (result, object) = createDescriptors(resultBase: "same", objectBase: "a")
         let value = try await action.execute(result: result, object: object, context: context)
 
-        let comparisonResult = value as? ARORuntime.ComparisonResult
-        #expect(comparisonResult?.matches == true)
-        #expect(comparisonResult?.result == .equal)
+        let comparison = value as? [String: any Sendable]
+        #expect(comparison?["matches"] as? Bool == true)
+        #expect(comparison?["result"] as? String == "equal")
     }
 
     @Test("Compare unequal integers")
@@ -672,14 +676,14 @@ struct CompareActionTests {
         let action = CompareAction()
         let context = RuntimeContext(featureSetName: "Test")
         context.bind("a", value: 10)
-        context.bind("b", value: 20)
+        context.bind("_against_", value: 20)
 
-        let (result, object) = createDescriptors(resultBase: "a", objectBase: "b")
+        let (result, object) = createDescriptors(resultBase: "same", objectBase: "a")
         let value = try await action.execute(result: result, object: object, context: context)
 
-        let comparisonResult = value as? ARORuntime.ComparisonResult
-        #expect(comparisonResult?.matches == false)
-        #expect(comparisonResult?.result == .less)
+        let comparison = value as? [String: any Sendable]
+        #expect(comparison?["matches"] as? Bool == false)
+        #expect(comparison?["result"] as? String == "less")
     }
 
     @Test("Compare equal strings")
@@ -687,13 +691,13 @@ struct CompareActionTests {
         let action = CompareAction()
         let context = RuntimeContext(featureSetName: "Test")
         context.bind("a", value: "hello")
-        context.bind("b", value: "hello")
+        context.bind("_against_", value: "hello")
 
-        let (result, object) = createDescriptors(resultBase: "a", objectBase: "b")
+        let (result, object) = createDescriptors(resultBase: "same", objectBase: "a")
         let value = try await action.execute(result: result, object: object, context: context)
 
-        let comparisonResult = value as? ARORuntime.ComparisonResult
-        #expect(comparisonResult?.matches == true)
+        let comparison = value as? [String: any Sendable]
+        #expect(comparison?["matches"] as? Bool == true)
     }
 }
 

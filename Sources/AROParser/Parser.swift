@@ -691,6 +691,7 @@ public final class Parser {
         var aggregation: AggregationClause? = nil
         var withExpression: (any Expression)? = nil
         var toExpression: (any Expression)? = nil
+        var againstExpression: (any Expression)? = nil
         var whereClause: WhereClause? = nil
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
@@ -738,6 +739,18 @@ public final class Parser {
         if case .preposition(let p) = peek().kind, p == .to {
             advance()
             toExpression = try parseExpression()
+        }
+
+        // against clause (GitLab #469) — Compare's right-hand
+        // operand, so `Compare the <same> from the <a> against the
+        // <b>.` can bind a fresh result instead of trying to
+        // rebind its own first operand.
+        if case .preposition(.against) = peek().kind {
+            advance()
+            // Articles are optional everywhere else in ARO, and
+            // every documented Compare writes `against the <b>`.
+            if case .article = peek().kind { advance() }
+            againstExpression = try parseExpression()
         }
 
         // where clause (ARO-0018)
@@ -796,7 +809,8 @@ public final class Parser {
             ),
             rangeModifiers: RangeModifiers(
                 toClause: toExpression,
-                withClause: withExpression
+                withClause: withExpression,
+                againstClause: againstExpression
             ),
             guard_: StatementGuard(condition: whenCondition)
         )
@@ -1527,6 +1541,15 @@ public final class Parser {
         // Check for numeric range specifier (ARO-0038): 0, 0-19, 0,3,7
         if case .intLiteral(let startValue) = peek().kind, startValue >= 0 {
             return try parseNumericSpecifier()
+        }
+
+        // `matches` is the regex comparison keyword, but it is also
+        // the natural name for Compare's boolean field, and a
+        // keyword in qualifier position is unambiguous — nothing
+        // else can appear after the colon (GitLab #469).
+        if check(.matches) {
+            advance()
+            return "matches"
         }
 
         // Parse compound identifier (may contain hyphens like "password-hash")

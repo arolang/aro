@@ -682,7 +682,7 @@ prepositions each one declares.
 | 6 | Clear | own | clear | for |
 | 7 | Clone | request | clone | from, to, with |
 | 8 | Close | server | close, disconnect, terminate | from, with |
-| 9 | Compare | own | compare, match | against, to, with |
+| 9 | Compare | own | compare, match | against, from, to, with |
 | 10 | Compute | own | calculate, compute, derive | for, from, with |
 | 11 | Connect | server | connect | to, with |
 | 12 | Copy | server | copy | to |

@@ -831,7 +831,7 @@ Compute the <first-len: length> from the <first-message>.
 Compute the <second-len: length> from the <second-message>.
 
 (* Both values available for comparison *)
-Compare the <first-len> against the <second-len>.
+Compare the <same-length> from the <first-len> against the <second-len>.
 ```
 
 ### Backward Compatibility
@@ -896,7 +896,7 @@ SHA256 without salt and key stretching is vulnerable to rainbow table and brute 
     Compute the <actual-checksum: hash> from the <content>.
 
     // Compare checksums
-    Compare the <actual-checksum> against the <expected-checksum>.
+    Compare the <checksum-match> from the <actual-checksum> against the <expected-checksum>.
 
     // Validate and respond
     Validate the <integrity> for the <comparison>.

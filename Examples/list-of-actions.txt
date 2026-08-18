@@ -19,7 +19,7 @@ OWN actions (data stays inside the feature set, transforms or decisions)
 ------------------------------------------------------------------------
 Compute the <total> from <price> * <quantity>.
 Validate the <valid> for the <email-address>.
-Compare the <match> against the <expected-hash>.
+Compare the <verdict> from the <match> against the <expected-hash>.
 Transform the <upper: uppercase> from the <message>.
 Create the <user> with <registration-data>.
 Update the <profile> with <changes>.

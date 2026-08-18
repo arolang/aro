@@ -1459,7 +1459,7 @@ Plugins should also include `.aro` test files that test the plugin through the A
     (* Test 1: Hash produces consistent results *)
     Hash the <hash1: sha256> from "hello".
     Hash the <hash2: sha256> from "hello".
-    Compare the <hash1> against the <hash2>.
+    Compare the <same-hash> from the <hash1> against the <hash2>.
     When <comparison: not-equal> {
         Log "FAIL: Hash not deterministic" to the <console>.
         Return an <Error: status> for the <test>.

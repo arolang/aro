@@ -1095,7 +1095,10 @@ public struct ValidateAction: ActionImplementation {
 public struct CompareAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["compare", "match"]
-    public static let validPrepositions: Set<Preposition> = [.against, .with, .to]
+    // `from` is the operand slot in the #469 shape; `against` stays
+    // valid so the old spelling still parses and gets a message
+    // that names the new one rather than a rebind error.
+    public static let validPrepositions: Set<Preposition> = [.from, .against, .with, .to]
 
     public init() {}
 
@@ -1106,23 +1109,37 @@ public struct CompareAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get the value to compare (from result base)
-        guard let lhs = context.resolveAny(result.base) else {
-            throw ActionError.undefinedVariable(result.base)
-        }
-
-        // Get the value to compare against (from object)
-        guard let rhs = context.resolveAny(object.base) else {
+        // `Compare the <same> from the <a> against the <b>.`
+        // (GitLab #469). The old shape read its left operand out of
+        // the *result* slot, so the statement both read and wrote
+        // the same immutable binding and every documented example
+        // died on "Cannot rebind variable 'a'" before it ever ran.
+        //
+        // Operands are now both inputs and the result is a fresh
+        // binding, which is the only shape immutability allows.
+        guard let lhs = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Perform comparison
-        let comparisonResult = compare(lhs, rhs)
+        guard let rhs = context.resolveAny("_against_") else {
+            throw ActionError.missingRequiredField(
+                "against <value> — Compare takes both operands as inputs: "
+                + "`Compare the <\(result.base)> from the <\(object.base)> "
+                + "against the <other>.`")
+        }
 
-        return ComparisonResult(
-            matches: comparisonResult == .equal,
-            result: comparisonResult
-        )
+        let outcome = compare(lhs, rhs)
+
+        // A dictionary rather than an opaque struct so the outcome
+        // is actually readable: `<same: matches>` / `<same: result>`.
+        // Nothing in the codebase consumed the old `ComparisonResult`
+        // — there was no way to get at it.
+        let value: [String: any Sendable] = [
+            "matches": outcome == .equal,
+            "result": outcome.rawValue,
+        ]
+        context.bind(result.base, value: value)
+        return value
     }
 
     private func compare(_ lhs: Any, _ rhs: Any) -> ComparisonOutcome {
