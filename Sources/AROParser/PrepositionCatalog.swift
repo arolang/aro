@@ -69,7 +69,7 @@ public enum PrepositionCatalog {
         "close": [.from, .with],
         "combine": [.from, .with],
         "commit": [.to, .with],
-        "compare": [.against, .to, .with],
+        "compare": [.against, .from, .to, .with],
         "compute": [.`for`, .from, .with],
         "configure": [.`for`, .from, .to, .with],
         "connect": [.to, .with],
@@ -112,7 +112,7 @@ public enum PrepositionCatalog {
         "log": [.`for`, .to, .with],
         "make": [.at, .`for`, .to],
         "map": [.from, .into, .to],  // union: MapAction + TransformAction
-        "match": [.against, .to, .with],
+        "match": [.against, .from, .to, .with],
         "merge": [.from, .with],
         "mkdir": [.at, .`for`, .to],
         "modify": [.`for`, .from, .to, .with],
