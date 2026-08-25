@@ -1,5 +1,16 @@
 # Type: console
 # Command: aro run ./Examples/GreetingPlugin
-# Note: occurrence-check — plugin may not load if dylib not built
+# Note: occurrence-check — lines may be interleaved with plugin load output.
+#
+# The plugin's output is asserted, not just the banner. It used to assert
+# only "=== Greeting Plugin Demo ===", which the example prints *before*
+# the plugin is ever called — so the test stayed green for several
+# releases while both actions returned the wrong field and the example
+# printed two blank lines and two extraction errors. Both CI pipelines
+# pre-build the plugin with `swift build -c release`, so these lines are
+# there to be matched.
 ---
 === Greeting Plugin Demo ===
+Hello, ARO Developer!
+Goodbye, ARO Developer!
+Plugin demo completed!
