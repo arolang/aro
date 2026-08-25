@@ -70,14 +70,36 @@ Transforms a collection to a different OpenAPI-defined type. The runtime automat
 Map the <summaries: List<UserSummary>> from the <users>.
 ```
 
+A single field is projected out by naming it, either on the result or after
+`with` — the two spellings are the same statement (ARO-0019 §2.1):
+
+```aro
+Map the <names: name> from the <users>.
+Map the <names> from the <users> with name.
+```
+
 **Requirements:**
 - Target type must be defined in `openapi.yaml` components/schemas
 - Runtime maps fields with matching names from source to target
 - Missing fields in target are omitted (if optional) or error (if required)
 
+**Map takes a field name, not a value.** There is no per-element binding, so an
+expression after `with` has nothing to range over. `Map the <d> from the <x>
+with <item> * 0.9.` used to parse and then die on `Undefined variable: item`,
+and `with 3` was discarded without a word; both are now rejected by `aro check`
+(GitLab #465). To compute per element, iterate:
+
+```aro
+for each <item> in <prices> {
+    Compute the <discounted> from <item> * 0.9.
+    Store the <discounted> into the <sale-prices>.
+}
+```
+
 **Syntax:**
 ```ebnf
-map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source , "." ;
+map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source ,
+                [ "with" , field_name ] , "." ;
 ```
 
 ### 1.4 Group
@@ -230,8 +252,9 @@ fetch_statement = "<Fetch>" , "the" , typed_result , "from" , "the" , source ,
 filter_statement = "<Filter>" , "the" , typed_result , "from" , "the" , source ,
                    where_clause , "." ;
 
-(* Map *)
-map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source , "." ;
+(* Map — the optional with-clause names a field, never a value *)
+map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source ,
+                [ "with" , field_name ] , "." ;
 
 (* Group *)
 group_statement = "<Group>" , "the" , result , "from" , "the" , source ,
@@ -374,3 +397,4 @@ components:
 | 1.0 | 2024-01 | Initial specification (SQL-like) |
 | 2.0 | 2025-12 | Simplified to map/reduce style. Removed JOINs, subqueries, CTEs, set operations. Results typed via OpenAPI. |
 | 2.1 | 2026-04-02 | Added Group action for partitioning collections by field value. |
+| 2.2 | 2026-08 | §1.3: documents the `with <field>` projection spelling and states that Map has no per-element binding — a `with` expression is a check-time error (GitLab #465). |

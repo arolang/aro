@@ -427,7 +427,7 @@ The scanner's `scanTripleQuotedString()` function handles `"""..."""`, allowing 
 Raw string literals disable escape processing entirely:
 
 ```aro
-Compute the <pattern: regex> with r"\.aro$".
+Create the <pattern> with r"\.aro$".
 ```
 
 The `r` prefix signals `scanRawString()`, which emits the content verbatim. This is especially useful for regex patterns where backslashes are everywhere — without raw strings, `\.aro$` would require `\\.aro$`, which is unpleasant to read.

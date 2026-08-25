@@ -329,6 +329,20 @@ struct ComputeQualifierTests {
         #expect(implemented.count >= 33)
     }
 
+    @Test("The parser's catalog and the runtime's table are the same set")
+    func parserCatalogMatchesRuntime() {
+        // GitLab #465. `aro check` never loads the runtime, so the
+        // names it validates against live in AROParser while the
+        // implementations live here. Two lists is exactly the drift
+        // that produced #486's blind spot, so the invariant is a
+        // test: add a qualifier here without listing it in
+        // `ComputeQualifierCatalog.builtIns` and the analyser starts
+        // rejecting a qualifier that works — the failure this change
+        // exists to prevent, in the opposite direction.
+        let implemented = Set(ComputeAction.builtInQualifiers.map { $0.name.lowercased() })
+        #expect(ComputeQualifierCatalog.builtIns == implemented)
+    }
+
     @Test("Every catalogued qualifier actually resolves",
           arguments: ComputeAction.builtInQualifiers.map(\.name))
     func everyCatalogEntryResolves(name: String) async throws {

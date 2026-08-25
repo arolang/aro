@@ -288,6 +288,7 @@ public final class SemanticAnalyzer {
     public func analyze(_ program: Program) -> AnalyzedProgram {
         let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
+        let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
         let events = EventAnalyzer(diagnostics: diagnostics)
         let userActionAnalyzer = UserActionAnalyzer(diagnostics: diagnostics)
 
@@ -307,6 +308,11 @@ public final class SemanticAnalyzer {
 
             // Code quality check
             codeQuality.validate(featureSet)
+
+            // GitLab #465: collection statements that check clean and
+            // then no-op or crash. Decidable from the AST, so decided
+            // before the program is allowed to run.
+            collectionOps.validate(featureSet)
 
             // Register published symbols
             for symbol in analyzed.symbolTable.publishedSymbols.values {

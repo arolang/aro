@@ -1009,8 +1009,8 @@ Log <user: name> to the <console>.           (* Property access *)
 Compute the <len: length> from the <text>.   (* Length qualifier *)
 
 (* Plugin-provided qualifiers *)
-Compute the <item: pick-random> from the <list>.  (* Random selection *)
-Log <numbers: reverse> to the <console>.          (* Reversed list *)
+Compute the <item: Collections.pick-random> from the <list>.  (* Random selection *)
+Log <numbers: Collections.reverse> to the <console>.  (* Reversed list *)
 Compute the <total: sum> from the <values>.       (* Sum of numbers *)
 ```
 
@@ -1270,15 +1270,15 @@ Once registered, qualifiers work in two contexts:
 
 **1. In Compute Action (Result Specifier):**
 ```aro
-Compute the <random-item: pick-random> from the <list>.
-Compute the <sorted-list: sort> from the <numbers>.
-Compute the <total: sum> from the <values>.
+Compute the <random-item: Collections.pick-random> from the <list>.
+Compute the <sorted-list: Collections.sort> from the <numbers>.
+Compute the <total: sum> from the <values>.        (* built-in, unnamespaced *)
 ```
 
 **2. In Expressions (Variable Specifier):**
 ```aro
-Log <list: reverse> to the <console>.
-Log "Has negative numbers" to the <console> when <numbers: min> < 0.
+Log <list: Collections.reverse> to the <console>.
+Log "Has negative numbers" to the <console> when <numbers: Stats.min> < 0.
 ```
 
 ### Qualifier vs Action: When to Use Each
@@ -1315,6 +1315,7 @@ Error: Qualifier 'sum' expects [List] but received String
 name: plugin-collection
 version: 1.0.0
 description: Collection qualifiers for ARO
+handle: Collections        # qualifiers resolve as Collections.<name>
 
 provides:
   - type: swift-plugin
@@ -1353,15 +1354,15 @@ public func aroPluginQualifier(
     Create the <numbers> with [1, 2, 3, 4, 5].
 
     (* Pick a random element *)
-    Compute the <lucky: pick-random> from the <numbers>.
+    Compute the <lucky: Collections.pick-random> from the <numbers>.
     Log "Lucky number: " ++ <lucky> to the <console>.
 
     (* Shuffle the list *)
-    Compute the <shuffled: shuffle> from the <numbers>.
+    Compute the <shuffled: Collections.shuffle> from the <numbers>.
     Log "Shuffled: " ++ <shuffled> to the <console>.
 
     (* Reverse inline in expression *)
-    Log "Reversed: " ++ <numbers: reverse> to the <console>.
+    Log "Reversed: " ++ <numbers: Collections.reverse> to the <console>.
 
     Return an <OK: status> for the <demo>.
 }
