@@ -131,9 +131,31 @@ Provide outline view:
 
 | Feature | Description |
 |---------|-------------|
+| `textDocument/inlayHint` | Inferred types, and the request-body limit at the statement that reads it |
 | `workspace/symbol` | Search symbols across workspace |
 | `textDocument/formatting` | Format ARO code |
 | `textDocument/rename` | Rename symbols across files |
+
+#### Inlay Hints (textDocument/inlayHint)
+
+Two kinds, both facts the editor can show without the programmer asking:
+
+- **Inferred type** after a result binding, when the symbol table knows it.
+- **Request-body limit** at the statement that turns a body into a value
+  (GitLab #477, ARO-0090): `reads body ≤ 256KB`, with a tooltip naming the
+  route and where the number came from.
+
+The second one exists because that statement's cost is otherwise invisible.
+A feature set that only moves its body has no limit at all; one that reads a
+field out of it holds up to `x-aro-max-body` in memory per concurrent request,
+and the line responsible looks exactly like the line that doesn't. Nothing is
+shown for a feature set that streams, or for one with no body — an inlay hint
+on every statement is noise, and the interesting statement is the one with a
+ceiling.
+
+The route's limit is read from the contract nearest the file being edited,
+falling back to the workspace roots, so the hint shows the number that will
+actually apply.
 
 ---
 

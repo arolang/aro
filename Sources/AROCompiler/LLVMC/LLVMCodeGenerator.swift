@@ -1538,6 +1538,9 @@ public final class LLVMCodeGenerator {
         // Phase 1: embed OpenAPI spec + templates metadata into the runtime.
         emitRuntimeMetadataSetup(openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, at: ip)
 
+        // Phase 1b: bake in each route's request-body policy (GitLab #477).
+        emitBodyPolicies(program: program, openAPISpecJSON: openAPISpecJSON, at: ip)
+
         // Phase 2: register embedded / static / Python / precompiled plugins.
         emitPluginRegistration(embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle, at: ip)
 
@@ -1568,6 +1571,54 @@ public final class LLVMCodeGenerator {
         if let templates = templatesJSON {
             let templatesStr = ctx.stringConstant(templates)
             _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
+        }
+    }
+
+    /// Phase 1b — bake in each route's request-body policy (GitLab #477).
+    ///
+    /// A compiled binary has no AST at startup, so the answer to "does this
+    /// route read its body?" has to travel with it. It is computed here, from
+    /// the same `BodyMaterializationAnalyzer` the interpreter uses, and paired
+    /// with the route's declared `x-aro-max-body` — copied through as written,
+    /// so the size is parsed in exactly one place at runtime.
+    ///
+    /// Without this the two modes would disagree about the same program, which
+    /// is the failure ARO-0009's dual-mode parity exists to prevent.
+    private func emitBodyPolicies(program: AnalyzedProgram, openAPISpecJSON: String?, at ip: InsertionPoint) {
+        guard let json = openAPISpecJSON,
+              let data = json.data(using: .utf8),
+              let spec = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let paths = spec["paths"] as? [String: Any] else { return }
+
+        let summaries = BodyMaterializationAnalyzer.analyze(program.featureSets.map(\.featureSet))
+
+        for (_, pathItem) in paths.sorted(by: { $0.key < $1.key }) {
+            guard let operations = pathItem as? [String: Any] else { continue }
+            for (_, operation) in operations.sorted(by: { $0.key < $1.key }) {
+                guard let op = operation as? [String: Any],
+                      let operationId = op["operationId"] as? String else { continue }
+
+                // Unknown operations count as reading, the same way the
+                // analysis treats anything it cannot see through.
+                let streams = summaries[operationId].map { !$0.materializes } ?? false
+
+                let declared: String
+                if let text = op["x-aro-max-body"] as? String {
+                    declared = text
+                } else if let number = op["x-aro-max-body"] as? Int {
+                    declared = String(number)
+                } else {
+                    declared = ""
+                }
+
+                let idStr = ctx.stringConstant(operationId)
+                let limitStr = ctx.stringConstant(declared)
+                _ = ctx.module.insertCall(
+                    externals.httpSetBodyPolicy,
+                    on: [idStr, ctx.i32Type.constant(streams ? 1 : 0), limitStr],
+                    at: ip
+                )
+            }
         }
     }
 

@@ -716,6 +716,19 @@ public final class FeatureSetExecutor: Sendable {
             context.bind("_result_expression_", value: resultValue)
         }
 
+        // An unread request body reaching a verb that needs a value (GitLab
+        // #477). Extract, Write, Send and Return take the stream as it is;
+        // anything else has to look inside, so the body is read here — bounded
+        // by the route's limit, and reported against the statement that asked.
+        // The materialization analysis normally prevents a streamed route from
+        // ever reaching this, so it is the safety net rather than the path.
+        try await materializeRequestBodyIfNeeded(
+            statement: statement,
+            verb: verb,
+            objectDescriptor: objectDescriptor,
+            context: context
+        )
+
         // Deferred execution (ARO-0088 §2): the action starts here, but the wait
         // for its result moves to the first read of the binding. Statements that
         // follow run while it is in flight; a read forces it.
@@ -955,8 +968,19 @@ public final class FeatureSetExecutor: Sendable {
         context: ExecutionContext
     ) async throws {
         // Get the internal value
-        guard let value = context.resolveAny(statement.internalVariable) else {
+        guard var value = context.resolveAny(statement.internalVariable) else {
             throw ActionError.undefinedVariable(statement.internalVariable)
+        }
+
+        // A published binding outlives the feature set that made it, so an
+        // unread request body has to be anchored on the way out (GitLab #477):
+        // drained to a file a chunk at a time, readable afterwards by anyone
+        // who looks the name up. Publishing the live stream would hand out a
+        // handle to a connection that is about to close.
+        if let body = value as? RequestBodyValue {
+            let statementText = "Publish as <\(statement.externalName)> <\(statement.internalVariable)>"
+            value = try await AnchoredBody.anchor(body, statement: statementText)
+            context.bind(statement.internalVariable, value: value, allowRebind: true)
         }
 
         // Publish to global symbols with business activity and execution owner
@@ -1201,6 +1225,42 @@ public final class FeatureSetExecutor: Sendable {
         }
 
         throw ActionError.propertyNotFound(property: property, on: String(describing: type(of: value)))
+    }
+
+    // MARK: - Request body materialization (GitLab #477)
+
+    /// Read an unread request body when the statement about to run needs it as
+    /// a value.
+    ///
+    /// The classification is `StreamConsumptionPolicy`, the same table the
+    /// compile-time analysis uses — one source of truth, so what the analyzer
+    /// predicts and what the runtime does cannot drift apart.
+    private func materializeRequestBodyIfNeeded(
+        statement: AROStatement,
+        verb: String,
+        objectDescriptor: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws {
+        let consumption = StreamConsumptionPolicy.consumption(
+            ofVerb: verb,
+            resultQualifiers: statement.result.specifiers
+        )
+        let description = "\(statement.action.verb) the <\(statement.result.base)> "
+            + "\(objectDescriptor.preposition.rawValue) the <\(objectDescriptor.fullName)>"
+
+        // The body can be in either slot: `Compute … from <upload>` puts it in
+        // the object, `Log <upload> to the <console>` in the result.
+        if let body = context.resolveAny(objectDescriptor.base) as? any UnreadBody,
+           !objectDescriptor.specifiers.isEmpty || consumption == .wholeValue {
+            let value = try await body.materializedValue(statement: description)
+            context.bind(objectDescriptor.base, value: value, allowRebind: true)
+        }
+
+        if let body = context.resolveAny(statement.result.base) as? any UnreadBody,
+           !statement.result.specifiers.isEmpty || consumption == .wholeValue {
+            let value = try await body.materializedValue(statement: description)
+            context.bind(statement.result.base, value: value, allowRebind: true)
+        }
     }
 
     // MARK: - Range Loop Execution (ARO-0072)

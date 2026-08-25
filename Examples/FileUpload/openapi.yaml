@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: File Upload
+  version: 1.0.0
+  description: |
+    Two routes that differ only in what they do with the body, which is the
+    whole point: `uploadDocument` moves it to a file and is not limited by
+    memory, `createNote` reads a field out of it and is.
+paths:
+  /documents/{name}:
+    post:
+      operationId: uploadDocument
+      summary: Store an upload of any size
+      # Declared, and deliberately unused: this route streams, so nothing
+      # accumulates and the limit never applies. `aro check` says so.
+      x-aro-max-body: 4KB
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Stored
+  /notes:
+    post:
+      operationId: createNote
+      summary: Read a field out of a small JSON body
+      x-aro-max-body: 1KB
+      responses:
+        '201':
+          description: Created
+  /archive/{name}:
+    post:
+      operationId: archiveDocument
+      summary: Hand the body to an event handler
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Accepted
+  /digest:
+    post:
+      operationId: digestBody
+      summary: Hash an upload of any size without holding it
+      responses:
+        '200':
+          description: The digest
+  /echo:
+    post:
+      operationId: echoBody
+      summary: Write the body straight back out, chunk by chunk
+      responses:
+        '200':
+          description: Echoed

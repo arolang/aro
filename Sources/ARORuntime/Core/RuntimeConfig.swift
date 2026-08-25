@@ -102,4 +102,35 @@ public enum RuntimeDefaults {
            let n = Int(raw), n > 0 { return n }
         return 4096
     }()
+
+    // MARK: - Request body limits (GitLab #477)
+
+    /// How many bytes of a request body may become a value in memory.
+    ///
+    /// This is a *materialization* limit, not a transport limit: a route whose
+    /// feature set only moves its body (to a file, a socket, the response) is
+    /// not bounded by it, because nothing accumulates. It applies wherever a
+    /// body has to exist as a whole — a field access, a parse, a repository
+    /// store — and it exists because before #477 the server accumulated an
+    /// entire body with no ceiling at all, so one connection could exhaust the
+    /// process.
+    ///
+    /// A route may raise or lower it in the contract with `x-aro-max-body`.
+    /// This is the default for routes that declare nothing. Override the
+    /// default with `ARO_MAX_BODY` (`1MB`, `512KB`, `2097152`) or, from ARO,
+    /// `Configure the <http-server: max-body> with "1MB".`
+    public nonisolated(unsafe) static var maxMaterializedBody: Int = {
+        if let raw = ProcessInfo.processInfo.environment["ARO_MAX_BODY"],
+           let n = ByteSize.parse(raw), n > 0 { return n }
+        return 1_000_000
+    }()
+
+    /// Chunk size for streamed request bodies and streamed file writes.
+    /// Matches `AROFileSystemService.readChunks`, so a body streamed from a
+    /// socket to a file moves in one buffer size end to end.
+    public nonisolated(unsafe) static var bodyChunkSize: Int = {
+        if let raw = ProcessInfo.processInfo.environment["ARO_BODY_CHUNK_SIZE"],
+           let n = ByteSize.parse(raw), n > 0 { return n }
+        return 65_536
+    }()
 }

@@ -237,6 +237,33 @@ public struct Operation: Sendable, Codable {
     /// available for documentation and future proxy support.
     public let servers: [Server]?
 
+    /// `x-aro-max-body` — how much of this operation's request body may become
+    /// a value in memory (GitLab #477).
+    ///
+    /// Written the way a human writes a size: `256KB`, `10MB`, or a plain byte
+    /// count. Absent means the runtime default (`RuntimeDefaults
+    /// .maxMaterializedBody`). It bounds *materialization*, not transport: an
+    /// operation whose feature set only moves its body is not limited by it,
+    /// because nothing accumulates.
+    ///
+    /// It lives in the contract rather than only in a global setting because a
+    /// route's body is part of the route's shape — the same place its
+    /// parameters and schemas are declared, and the place a reviewer looks.
+    public let xAroMaxBody: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case operationId, summary, description, tags, parameters, requestBody
+        case responses, deprecated, security, callbacks, externalDocs, servers
+        case xAroMaxBody = "x-aro-max-body"
+    }
+
+    /// The declared limit in bytes, or `nil` when the operation declares none
+    /// or declares something unparseable. An unparseable value is reported by
+    /// `ContractValidator`; here it simply doesn't override the default.
+    public var maxBodyBytes: Int? {
+        xAroMaxBody.flatMap { ByteSize.parse($0) }
+    }
+
     public init(
         operationId: String? = nil,
         summary: String? = nil,
@@ -249,7 +276,8 @@ public struct Operation: Sendable, Codable {
         security: [[String: [String]]]? = nil,
         callbacks: [String: Callback]? = nil,
         externalDocs: ExternalDocumentation? = nil,
-        servers: [Server]? = nil
+        servers: [Server]? = nil,
+        xAroMaxBody: String? = nil
     ) {
         self.operationId = operationId
         self.summary = summary
@@ -263,6 +291,34 @@ public struct Operation: Sendable, Codable {
         self.callbacks = callbacks
         self.externalDocs = externalDocs
         self.servers = servers
+        self.xAroMaxBody = xAroMaxBody
+    }
+
+    /// Hand-written because `x-aro-max-body` is legitimately either a string
+    /// (`10MB`) or a number (`10000000`) in YAML, and the synthesized decoder
+    /// would fail the whole document on the second spelling.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        operationId = try container.decodeIfPresent(String.self, forKey: .operationId)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags)
+        parameters = try container.decodeIfPresent([Parameter].self, forKey: .parameters)
+        requestBody = try container.decodeIfPresent(RequestBody.self, forKey: .requestBody)
+        responses = try container.decodeIfPresent([String: OpenAPIResponse].self, forKey: .responses) ?? [:]
+        deprecated = try container.decodeIfPresent(Bool.self, forKey: .deprecated)
+        security = try container.decodeIfPresent([[String: [String]]].self, forKey: .security)
+        callbacks = try container.decodeIfPresent([String: Callback].self, forKey: .callbacks)
+        externalDocs = try container.decodeIfPresent(ExternalDocumentation.self, forKey: .externalDocs)
+        servers = try container.decodeIfPresent([Server].self, forKey: .servers)
+
+        if let text = try? container.decodeIfPresent(String.self, forKey: .xAroMaxBody) {
+            xAroMaxBody = text
+        } else if let number = try? container.decodeIfPresent(Int.self, forKey: .xAroMaxBody) {
+            xAroMaxBody = String(number)
+        } else {
+            xAroMaxBody = nil
+        }
     }
 }
 

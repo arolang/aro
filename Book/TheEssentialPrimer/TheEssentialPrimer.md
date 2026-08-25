@@ -306,6 +306,12 @@ Underneath: a deferred action returns an `AROFuture` running on a dedicated `Act
 
 The syntax has no async colour either way: no `await`, no `async` keyword on feature sets, no promise-chaining.
 
+### Request bodies
+
+The same idea, applied to data arriving from outside: **streams don't have a size, values do**. A feature set that only *moves* its request body — writes it to a file, sends it on, returns it, hands it to an event — never builds it in memory, so its size is bounded by wherever it is going. A feature set that *reads* it, with a field access or a computation or a guard, turns it into a value, and that is the only thing with a limit: `x-aro-max-body` on the route, 1 MB by default, refused with `413` before a byte is read.
+
+Nothing in the program says which is which. `Write the <upload> to the <file: target>.` and `Extract the <text> from the <note: text>.` are ordinary statements; the difference between a four-gigabyte upload and a bounded JSON document is what the code does with the data, which is the difference the programmer already meant. `aro check` reports the answer per route, because it is a property of the source rather than a runtime surprise. ARO-0090 is the specification.
+
 ## 7. User-Defined Actions
 
 A feature set whose business activity is exactly `Action` becomes a **user-defined action** (ARO-0081), callable application-wide as `Application.<Name>`:

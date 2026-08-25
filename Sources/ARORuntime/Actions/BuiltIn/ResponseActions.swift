@@ -67,6 +67,16 @@ public struct ReturnAction: SynchronousAction {
                     // Plain string value
                     data["value"] = AnySendable(str)
                 }
+            } else if let body = expr as? RequestBodyValue {  // live body: streams back out
+                // Returning an unread request body writes it straight back to
+                // the client, chunk by chunk (GitLab #477). Carried through the
+                // response as itself; `Application.convertToHTTPResponse` turns
+                // it into a chunked body without ever holding the whole.
+                data["value"] = AnySendable(body)
+            } else if let anchored = expr as? AnchoredBody {
+                // Same for a body that has been anchored: the response is
+                // written from the file rather than from memory.
+                data["value"] = AnySendable(anchored)
             } else if let int = expr as? Int {
                 data["value"] = AnySendable(int)
             } else if let double = expr as? Double {
@@ -785,6 +795,21 @@ public struct WriteAction: ActionImplementation {
             path = object.base
         }
 
+        // An unread request body goes to the file chunk by chunk (GitLab #477):
+        // the size of the upload never becomes the size of a buffer, and the
+        // destination appears only once the last chunk has landed.
+        if let body = context.resolveAny(result.base) as? any UnreadBody {
+            let statement = "Write the <\(result.base)> to the <\(object.fullName)>"
+            let chunks = try body.chunkStream(consumer: statement)
+            let written = try await StreamingFileWriter.write(chunks, to: path)
+            MetricsCollector.shared.recordBodyStreamed(bytes: written)
+            return [
+                "path": path,
+                "bytes": written,
+                "streamed": true,
+            ] as [String: any Sendable]
+        }
+
         // Resolve format: explicit qualifier wins over extension detection,
         // and `raw` forces a string pass-through (issue #197).
         let isRaw = result.specifiers.contains(where: { FileFormat.isRawQualifier($0) })
@@ -1302,6 +1327,17 @@ public struct EmitAction: ActionImplementation {
             // Named variable payload - wrap with the payload key
             // This allows handlers to extract with: <Extract> the <user> from the <event: user>
             payload[payloadKey] = payloadValue
+        }
+
+        // A body handed to an event outlives the request it arrived on, so it
+        // is anchored first (GitLab #477): drained to a file one chunk at a
+        // time and passed on as a value any number of handlers can read. The
+        // alternative is a stream tied to a connection that will be closed
+        // before the handlers run, which is not a value at all.
+        for (key, value) in payload {
+            guard let body = value as? RequestBodyValue else { continue }
+            let statement = "Emit a <\(eventType): event> with <\(key)>"
+            payload[key] = try await AnchoredBody.anchor(body, statement: statement)
         }
 
         // Create and emit the domain event.

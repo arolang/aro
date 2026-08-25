@@ -84,6 +84,8 @@ Chapter numbers in this file match the file names in `Book/TheLanguageGuide/`.
 46. **Streaming Execution** — Process large datasets with constant memory
 47. **Terminal UI** — Interactive terminal applications, section compositor, keyboard handlers
 48. **Git Actions** — Native Git via libgit2: status, log, stage, commit, push/pull, clone, checkout, tag, and Git events
+49. **Local LLM** — `aro ask`, the assistant that lives beside the code
+50. **Request Bodies** — Streams don't have a size, values do: `x-aro-max-body`, streamed uploads, anchoring
 
 ---
 

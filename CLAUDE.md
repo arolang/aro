@@ -243,6 +243,50 @@ Streams pipeline the same way: the producer runs ahead of the consumer by
 `ARO_NO_DEFER=1` disables deferral entirely — the fastest way to find out
 whether a suspected bug is order-related.
 
+### Request Bodies (ARO-0090)
+
+**Streams don't have a size. Values do.** A feature set that only *moves* its
+request body — `Write … to the <file: …>`, `Send`, `Return`, `Emit`, `for each`
+— never builds it in memory, so its size is bounded by the sink and no limit
+applies. A feature set that *reads* it — a field access, `Compute`, `Store`,
+`Log`, or a `when` guard — turns it into a value, and that is what is bounded.
+
+```aro
+(uploadDocument: Files API) {
+    Extract the <upload> from the <request: body>.   (* binds — reads nothing *)
+    Write the <upload> to the <file: target>.        (* streams; 4 GB is fine *)
+    Return a <Created: status> with <name>.
+}
+```
+
+The limit is declared per route in the contract and defaults to 1 MB:
+
+```yaml
+paths:
+  /notes:
+    post:
+      operationId: createNote
+      x-aro-max-body: 256KB
+```
+
+`Configure the <http-server: max-body> with "1MB".` (or `ARO_MAX_BODY`) sets the
+default; the route's own declaration wins. A body over the limit is answered
+`413` before it is read — from `Content-Length` at the request head where the
+client declared one, incrementally otherwise.
+
+Which of the two a route is, is computed from the source before the server
+binds a port (`BodyMaterializationAnalyzer`, verb table in
+`StreamConsumptionPolicy`), so `aro check` reports it per route. Anything the
+analysis cannot see through — a plugin action, an unknown verb — counts as
+reading. A body arrives once and can be consumed once. `Emit`/`Publish` of a
+body *anchors* it: drained to a temp file a chunk at a time so handlers that
+outlive the request can each read it, deleted when the last reference goes.
+Folding qualifiers (`sha256`, `length`, `lines`) consume the body chunk by
+chunk, so hashing a 4 GB upload costs a chunk too — and hashes the upload's
+bytes rather than a rendering of its parsed form. `aro run` and `aro build`
+agree: the analysis is baked into the binary at build time, and the compiled
+server enforces the same limits and streams the same bodies.
+
 ### User-Defined Actions (ARO-0081)
 
 A feature set whose business activity is `Action` becomes callable
@@ -636,6 +680,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │
 │   # HTTP & WebSocket
 ├── HTTPServer/         # HTTP server with Keepalive
+├── FileUpload/         # Streamed uploads, per-route body limits (ARO-0090)
 ├── HTTPClient/         # HTTP client requests
 ├── WeatherClient/      # Request action fetching live external API data
 ├── UserService/        # Multi-file REST API application
@@ -739,7 +784,8 @@ Proposals/              # Language specifications
 ├── ARO-0085-terminal-shadow-buffer.md
 ├── ARO-0086-automatic-pipeline-detection.md
 ├── ARO-0087-plugin-sdk.md
-└── ARO-0088-concurrency-model.md
+├── ARO-0088-concurrency-model.md
+└── ARO-0090-streaming-io-and-materialization.md
 ```
 
 ## Language Proposals
@@ -793,6 +839,7 @@ The `Proposals/` directory contains language specifications:
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
 | **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
+| **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab

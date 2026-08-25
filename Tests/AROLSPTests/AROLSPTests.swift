@@ -5,8 +5,10 @@
 
 #if !os(Windows)
 import Testing
+import Foundation
 @testable import AROLSP
 @testable import AROParser
+import ARORuntime
 import LanguageServerProtocol
 
 // MARK: - Position Converter Tests
@@ -742,6 +744,135 @@ struct CodeActionHandlerTests {
 
 @Suite("Inlay Hint Handler Tests")
 struct InlayHintHandlerTests {
+
+    // MARK: - Request body hints (GitLab #477)
+
+    @Test("The statement that reads the request body is hinted with its limit")
+    func testBodyMaterializationHint() {
+        let source = """
+        (createNote: Notes) {
+            Extract the <note> from the <request: body>.
+            Extract the <text> from the <note: text>.
+            Return a <Created: status> with <text>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let hints = handler.handle(
+            compilationResult: compilationResult,
+            startLine: 0,
+            endLine: 20
+        ) ?? []
+
+        let bodyHints = hints.filter { ($0["label"] as? String)?.contains("reads body") == true }
+        #expect(bodyHints.count == 1, "exactly one hint, at the statement that reads it")
+
+        guard let hint = bodyHints.first else { return }
+        let position = hint["position"] as? [String: Int]
+        // Line 3 of the source (1-based) is the field access; hints are 0-based.
+        #expect(position?["line"] == 2)
+        #expect((hint["label"] as? String)?.contains("1MB") == true, "the default limit when no contract declares one")
+
+        let tooltip = hint["tooltip"] as? [String: Any]
+        #expect((tooltip?["value"] as? String)?.contains("ARO-0090") == true)
+    }
+
+    @Test("A feature set that only moves its body is not hinted")
+    func testStreamingFeatureSetHasNoBodyHint() {
+        let source = """
+        (uploadDocument: Files) {
+            Extract the <name> from the <pathParameters: name>.
+            Extract the <upload> from the <request: body>.
+            Write the <upload> to the <file: name>.
+            Return a <Created: status> with <name>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let hints = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 20) ?? []
+        #expect(!hints.contains { ($0["label"] as? String)?.contains("reads body") == true })
+    }
+
+    @Test("A feature set that never touches a body is not hinted")
+    func testNoBodyNoHint() {
+        let source = """
+        (listNotes: Notes) {
+            Retrieve the <notes> from the <note-repository>.
+            Return an <OK: status> with <notes>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let hints = handler.handle(compilationResult: compilationResult, startLine: 0, endLine: 20) ?? []
+        #expect(!hints.contains { ($0["label"] as? String)?.contains("reads body") == true })
+    }
+
+    @Test("A hint outside the requested range is not returned")
+    func testBodyHintRespectsRange() {
+        let source = """
+        (createNote: Notes) {
+            Extract the <note> from the <request: body>.
+            Extract the <text> from the <note: text>.
+            Return a <Created: status> with <text>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+        let handler = InlayHintHandler()
+
+        let hints = handler.handle(compilationResult: compilationResult, startLine: 10, endLine: 20) ?? []
+        #expect(!hints.contains { ($0["label"] as? String)?.contains("reads body") == true })
+    }
+
+    @Test("A declared x-aro-max-body is the number the hint shows")
+    func testDeclaredLimitInHint() throws {
+        let yaml = """
+        openapi: 3.0.3
+        info:
+          title: T
+          version: 1.0.0
+        paths:
+          /notes:
+            post:
+              operationId: createNote
+              x-aro-max-body: 256KB
+              responses:
+                '200':
+                  description: ok
+        """
+        let spec = try OpenAPILoader.parse(data: Data(yaml.utf8), filename: "openapi.yaml")
+        let limits = RouteBodyLimits.from(spec: spec)
+
+        #expect(limits.route(forOperation: "createNote") == "POST /notes")
+        #expect(limits.limit(forOperation: "createNote").bytes == 256_000)
+        #expect(limits.limit(forOperation: "createNote").declared)
+        // A route the contract doesn't mention still has the runtime default.
+        #expect(!limits.limit(forOperation: "somethingElse").declared)
+
+        let source = """
+        (createNote: Notes) {
+            Extract the <note> from the <request: body>.
+            Extract the <text> from the <note: text>.
+            Return a <Created: status> with <text>.
+        }
+        """
+        let handler = InlayHintHandler()
+        let hints = handler.handle(
+            compilationResult: Compiler.compile(source),
+            startLine: 0,
+            endLine: 20,
+            bodyLimits: limits
+        ) ?? []
+
+        let label = hints.compactMap { $0["label"] as? String }.first { $0.contains("reads body") }
+        #expect(label == "reads body ≤ 256KB")
+
+        let tooltip = hints
+            .first { ($0["label"] as? String)?.contains("reads body") == true }?["tooltip"] as? [String: Any]
+        #expect((tooltip?["value"] as? String)?.contains("POST /notes") == true)
+    }
 
     @Test("Returns nil for empty compilation result")
     func testNilForEmptyResult() {

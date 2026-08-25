@@ -309,6 +309,61 @@ Collect all emitted event names. Collect all handled event names (from feature s
 
 ---
 
+## Materialization Analysis: A Compile-Time Answer to a Runtime Security Question
+
+The most interesting thing the analyzer computes is not a diagnostic at all. It
+is an input to the HTTP server's memory budget.
+
+An HTTP server has to decide how much of a request body it will accumulate.
+Accumulate without a ceiling and one connection can exhaust the process;
+accumulate with a low ceiling and file uploads become impossible. Every
+framework picks a number and lives with the trade — because at the point the
+decision has to be made, the server has no idea what the application intends to
+do with the bytes.
+
+ARO does. A feature set is a fixed list of statements over named bindings, with
+no dynamic dispatch on data, so "does this route ever need its body as a value?"
+is answerable by looking at it. `BodyMaterializationAnalyzer` answers it as a
+taint analysis:
+
+```
+source:      <request: body>, <body>
+propagate:   pass-through verbs (Extract naming no field) taint their result
+answer:      the first whole-value read of a tainted binding
+```
+
+Verbs are classified by `StreamConsumptionPolicy`, an allowlist deliberately
+shaped like ARO-0088's `LazyActionPolicy.deferrableVerbs`. Semantic role is too
+coarse to decide this: `Log` and `Write` are both EXPORT actions, but one
+renders a value for a human — which needs the value — and the other copies
+bytes to a file, which does not.
+
+Three rules make it sound rather than merely plausible:
+
+1. **A guard reads.** `… when <upload> is not empty` asks a question about the
+   body, so the body has to exist, even though the statement it guards would
+   only have moved it.
+2. **Calls propagate.** `Application.<Name>` resolves to the callee's own
+   summary, computed to a fixpoint over the call graph so mutual recursion
+   terminates rather than spinning.
+3. **Unknown is reading.** A plugin action, an unrecognised verb, a route whose
+   source is unavailable: all count as reading. The analysis is allowed to be
+   pessimistic, never optimistic — being wrong in one direction costs a
+   buffered request, being wrong in the other costs the process.
+
+The result reaches the server as a `BodyPolicy` before it binds a port, and the
+two paths that follow have nothing in common: a reading route buffers under its
+limit and refuses an oversized `Content-Length` at the request head; a moving
+route allocates nothing and lets backpressure bound the flow.
+
+What makes this worth studying is the shape of the answer rather than its
+mechanics. The same question — *how much memory may this endpoint use?* — is
+usually answered by a configuration value chosen pessimistically by an operator
+who cannot see the code. Here it is answered by the code, checked before the
+program runs, and reported by `aro check` alongside the source that decided it.
+
+---
+
 ## Multi-Pass Architecture
 
 The four passes serve specific purposes:

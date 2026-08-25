@@ -1,0 +1,5 @@
+# Example: FileUpload
+# Type: http
+# NOTE: This example uses test-script for verification (./Examples/FileUpload/test.sh)
+---
+FileUpload: all checks passed

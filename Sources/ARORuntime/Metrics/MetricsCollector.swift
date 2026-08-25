@@ -312,6 +312,28 @@ public struct ProcessMetrics: Sendable {
 }
 
 /// Snapshot of all metrics at a point in time
+/// Request-body accounting (GitLab #477).
+///
+/// The two byte counters answer the question a body limit raises and nothing
+/// else does: how much of the traffic this process handles becomes a value in
+/// memory, and how much only passes through. A route that was expected to
+/// stream but shows up in `materializedBytes` is a route whose code reads its
+/// body, which is exactly the thing to notice before it is a memory incident.
+public struct BodyMetrics: Sendable, Equatable {
+    /// Bytes of request bodies that became values in memory.
+    public var materializedBytes: Int = 0
+    /// Bytes of request bodies that flowed through without being buffered.
+    public var streamedBytes: Int = 0
+    /// Bytes of response bodies written chunk by chunk.
+    public var responseStreamedBytes: Int = 0
+    /// Requests refused with 413.
+    public var rejectedCount: Int = 0
+    /// Routes that have been refused at least once, as `METHOD path`.
+    public var rejectedRoutes: [String: Int] = [:]
+
+    public init() {}
+}
+
 public struct MetricsSnapshot: Sendable {
     /// Metrics for all feature sets
     public let featureSets: [FeatureSetMetrics]
@@ -324,6 +346,9 @@ public struct MetricsSnapshot: Sendable {
 
     /// When the application started
     public let applicationStartTime: Date
+
+    /// Request-body accounting (GitLab #477)
+    public let bodyMetrics: BodyMetrics
 
     /// Total executions across all feature sets
     public var totalExecutions: Int {
@@ -361,12 +386,14 @@ public struct MetricsSnapshot: Sendable {
         featureSets: [FeatureSetMetrics],
         processMetrics: ProcessMetrics,
         collectedAt: Date,
-        applicationStartTime: Date
+        applicationStartTime: Date,
+        bodyMetrics: BodyMetrics = BodyMetrics()
     ) {
         self.featureSets = featureSets
         self.processMetrics = processMetrics
         self.collectedAt = collectedAt
         self.applicationStartTime = applicationStartTime
+        self.bodyMetrics = bodyMetrics
     }
 }
 
@@ -389,6 +416,9 @@ public final class MetricsCollector: @unchecked Sendable {
 
     /// Per-feature-set metrics storage
     private var metrics: [String: FeatureSetMetrics] = [:]
+
+    /// Request-body accounting (GitLab #477)
+    private var bodyMetrics = BodyMetrics()
 
     /// When the collector started (application start time)
     private let startTime: Date
@@ -446,6 +476,31 @@ public final class MetricsCollector: @unchecked Sendable {
         }
     }
 
+    // MARK: - Request body accounting (GitLab #477)
+
+    /// Record a request body that became a value in memory.
+    public func recordBodyMaterialized(bytes: Int) {
+        withLock { bodyMetrics.materializedBytes += bytes }
+    }
+
+    /// Record a request body that flowed through without being buffered.
+    public func recordBodyStreamed(bytes: Int) {
+        withLock { bodyMetrics.streamedBytes += bytes }
+    }
+
+    /// Record a response body written chunk by chunk.
+    public func recordResponseStreamed(bytes: Int) {
+        withLock { bodyMetrics.responseStreamedBytes += bytes }
+    }
+
+    /// Record a request refused with 413.
+    public func recordBodyRejected(method: String, path: String) {
+        withLock {
+            bodyMetrics.rejectedCount += 1
+            bodyMetrics.rejectedRoutes["\(method) \(path)", default: 0] += 1
+        }
+    }
+
     /// Get a snapshot of current metrics
     /// - Returns: Immutable snapshot of all collected metrics
     public func snapshot() -> MetricsSnapshot {
@@ -457,7 +512,8 @@ public final class MetricsCollector: @unchecked Sendable {
                 featureSets: sortedMetrics,
                 processMetrics: ProcessMetrics.collect(),
                 collectedAt: Date(),
-                applicationStartTime: startTime
+                applicationStartTime: startTime,
+                bodyMetrics: bodyMetrics
             )
         }
     }
@@ -466,6 +522,7 @@ public final class MetricsCollector: @unchecked Sendable {
     public func reset() {
         withLock {
             metrics.removeAll()
+            bodyMetrics = BodyMetrics()
         }
     }
 

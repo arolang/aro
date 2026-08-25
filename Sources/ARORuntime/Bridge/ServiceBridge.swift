@@ -33,8 +33,176 @@ import Glibc
 
 // MARK: - Native HTTP Server (BSD Sockets)
 
+/// A request body as the native server hands it over (GitLab #477).
+///
+/// Same distinction the NIO server makes: a route whose feature set reads its
+/// body gets the bytes, a route that only moves them gets the stream. Compiled
+/// and interpreted binaries answer an upload the same way because both decide
+/// it from the same analysis.
+public enum NativeRequestBody: Sendable {
+    case buffered(Data?)
+    case streaming(RequestBodyStream)
+
+    /// The bytes, when they were read. Nil on the streaming path, where
+    /// reading them is the thing being avoided.
+    public var data: Data? {
+        if case .buffered(let data) = self { return data }
+        return nil
+    }
+}
+
+/// What a handler answers with. `stream` is set instead of `body` when the
+/// response is written as it is produced (chunked, no Content-Length).
+public struct NativeHTTPResponse: Sendable {
+    public let status: Int
+    public let headers: [String: String]
+    public let body: Data?
+    public let stream: AROStream<Data>?
+
+    public init(_ tuple: (Int, [String: String], Data?)) {
+        self.init(status: tuple.0, headers: tuple.1, body: tuple.2)
+    }
+
+    public init(status: Int, headers: [String: String], body: Data?) {
+        self.status = status
+        self.headers = headers
+        self.body = body
+        self.stream = nil
+    }
+
+    public init(status: Int, headers: [String: String], stream: AROStream<Data>) {
+        self.status = status
+        self.headers = headers
+        self.body = nil
+        self.stream = stream
+    }
+}
+
 /// Request handler type for native HTTP server
-public typealias NativeHTTPRequestHandler = (String, String, [String: String], Data?) -> (Int, [String: String], Data?)
+public typealias NativeHTTPRequestHandler = (String, String, [String: String], NativeRequestBody) -> NativeHTTPResponse
+
+/// Counts bytes written from inside a Task without capturing a `var`.
+final class StreamedByteCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func add(_ count: Int) { lock.lock(); value += count; lock.unlock() }
+    var total: Int { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+/// Reads a request body off the socket on its own thread and hands it over a
+/// bounded channel (GitLab #477).
+///
+/// The thread is the point. In a compiled binary the connection thread runs the
+/// feature set, and the feature set is the consumer — if it also had to produce,
+/// the first chunk it waited for would be one it was supposed to read next.
+/// The channel bounds how far the reader may run ahead, so a slow sink leaves
+/// the bytes in the socket buffer and TCP throttles the client.
+final class NativeBodyProducer: @unchecked Sendable {
+    private let fd: Int32
+    private let prefix: Data
+    private let contentLength: Int
+    private let waitForData: @Sendable () -> Bool
+    private let channel: BoundedChannel<Data>
+    private let stateLock = NSLock()
+    private var cancelled = false
+    private let completed = DispatchSemaphore(value: 0)
+    private var started = false
+
+    init(fd: Int32, prefix: Data, contentLength: Int, waitForData: @escaping @Sendable () -> Bool) {
+        self.fd = fd
+        self.prefix = prefix
+        self.contentLength = contentLength
+        self.waitForData = waitForData
+        self.channel = BoundedChannel<Data>(
+            capacity: max(1, RuntimeDefaults.streamPrefetchCapacity),
+            label: "http-body-native"
+        )
+    }
+
+    func stream() -> AROStream<Data> {
+        let channel = self.channel
+        return AROStream<Data> {
+            AsyncThrowingStream { continuation in
+                Task {
+                    do {
+                        while let chunk = try await channel.next() {
+                            continuation.yield(chunk)
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+            }
+        }
+    }
+
+    func start() {
+        stateLock.lock()
+        guard !started else { stateLock.unlock(); return }
+        started = true
+        stateLock.unlock()
+
+        let thread = Thread { [self] in
+            var delivered = 0
+            if !prefix.isEmpty {
+                deliver(prefix)
+                delivered += prefix.count
+            }
+
+            var buffer = [UInt8](repeating: 0, count: RuntimeDefaults.bodyChunkSize)
+            while delivered < contentLength, !isCancelled {
+                guard waitForData() else { break }
+                let want = min(buffer.count, contentLength - delivered)
+                let read = recv(fd, &buffer, want, 0)
+                if read <= 0 { break }
+                deliver(Data(buffer[0..<read]))
+                delivered += read
+            }
+
+            MetricsCollector.shared.recordBodyStreamed(bytes: delivered)
+            finishChannel()
+            completed.signal()
+        }
+        thread.name = "aro.http.body"
+        thread.start()
+    }
+
+    /// Stop reading and release anyone waiting on the channel. Called once the
+    /// handler has returned, before the socket is closed underneath us.
+    func finish() {
+        stateLock.lock()
+        let wasStarted = started
+        cancelled = true
+        stateLock.unlock()
+        guard wasStarted else { return }
+
+        finishChannel()
+        // Give the reader a moment to notice; it is about to lose its socket.
+        _ = completed.wait(timeout: .now() + 5)
+    }
+
+    private var isCancelled: Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return cancelled
+    }
+
+    private func finishChannel() {
+        let channel = self.channel
+        let done = DispatchSemaphore(value: 0)
+        Task { await channel.finish(); done.signal() }
+        _ = done.wait(timeout: .now() + 5)
+    }
+
+    /// Hand one chunk to the channel, waiting while it is full — the
+    /// backpressure that keeps memory at the window rather than the body.
+    private func deliver(_ chunk: Data) {
+        let channel = self.channel
+        let done = DispatchSemaphore(value: 0)
+        Task { await channel.send(chunk); done.signal() }
+        done.wait()
+    }
+}
 
 /// Native HTTP Server using BSD sockets
 /// This provides a working HTTP server for compiled binaries with WebSocket support
@@ -51,6 +219,10 @@ public final class NativeHTTPServer: @unchecked Sendable {
     private var isRunning = false
     private let lock = NSLock()
     private var requestHandler: NativeHTTPRequestHandler?
+
+    /// Per-route body policy (GitLab #477). Installed from the contract and
+    /// the materialization analysis, both baked into the binary at build time.
+    private var bodyPolicyResolver: BodyPolicyResolver?
 
     /// WebSocket connection storage
     private var wsConnections: [String: Int32] = [:]
@@ -92,6 +264,11 @@ public final class NativeHTTPServer: @unchecked Sendable {
     /// Set request handler
     public func onRequest(_ handler: @escaping NativeHTTPRequestHandler) {
         requestHandler = handler
+    }
+
+    /// Set the per-route body policy resolver (GitLab #477).
+    public func onBodyPolicy(_ resolver: @escaping BodyPolicyResolver) {
+        bodyPolicyResolver = resolver
     }
 
     /// Wait for data to be available on the socket using select()
@@ -293,52 +470,100 @@ public final class NativeHTTPServer: @unchecked Sendable {
             return
         }
 
-        // Find body using byte-level extraction based on Content-Length
-        // This is more reliable than string-based parsing
-        var body: Data? = nil
+        // Body policy for this route (GitLab #477). Resolved before a body
+        // byte is read, so a declared length over the limit is refused without
+        // allocating anything — the same order the NIO server uses.
+        let pathWithoutQuery = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
+        let policy = bodyPolicyResolver?(method, pathWithoutQuery) ?? .default
+        let declaredLength = (headers["Content-Length"] ?? headers["content-length"]).flatMap { Int($0) }
+
+        if let limit = policy.limit, let declared = declaredLength, declared > limit {
+            sendOversizedBodyResponse(fd: fd, method: method, path: pathWithoutQuery, limit: limit, observed: declared)
+            _ = shutdown(fd, Int32(SHUT_WR))
+            _ = systemClose(fd)
+            return
+        }
 
         // Find where body starts (after \r\n\r\n) in byte data
+        var requestBody: NativeRequestBody = .buffered(nil)
+        var bodyProducer: NativeBodyProducer? = nil
         let headerSeparator = Data("\r\n\r\n".utf8)
         if let separatorRange = totalData.range(of: headerSeparator) {
             let bodyStartIndex = separatorRange.upperBound
+            let prefix = totalData.count > bodyStartIndex
+                ? totalData.subdata(in: bodyStartIndex..<totalData.count)
+                : Data()
 
-            // Check Content-Length and read remaining body if needed
-            if let contentLengthStr = headers["Content-Length"] ?? headers["content-length"],
-               let contentLength = Int(contentLengthStr), contentLength > 0 {
+            switch policy.mode {
+            case .streamed where (declaredLength ?? 0) > 0:
+                // Nothing accumulates: a producer thread reads the socket and
+                // hands chunks over a bounded channel, so the feature set can
+                // consume them while the client is still sending. It has to be
+                // a separate thread — this one is about to run the feature set,
+                // and a consumer waiting on its own producer never finishes.
+                let producer = NativeBodyProducer(
+                    fd: fd,
+                    prefix: prefix,
+                    contentLength: declaredLength ?? 0,
+                    waitForData: { [weak self] in self?.waitForData(fd: fd, timeoutMs: 5000) ?? false }
+                )
+                bodyProducer = producer
+                requestBody = .streaming(RequestBodyStream(
+                    chunks: producer.stream(),
+                    declaredLength: declaredLength,
+                    limit: policy.materializationLimit
+                ))
+                producer.start()
 
-                let currentBodyLength = totalData.count - bodyStartIndex
+            default:
+                // Buffered: read to the declared length, checking the limit
+                // before each append so the memory over it is never allocated.
+                var accumulated = prefix
+                if let contentLength = declaredLength, contentLength > 0 {
+                    var remainingToRead = contentLength - accumulated.count
+                    while remainingToRead > 0 {
+                        // Wait for data with select() before reading
+                        // This is critical on Linux where TCP fragmentation may cause
+                        // headers and body to arrive in separate packets
+                        if !waitForData(fd: fd, timeoutMs: 5000) {
+                            break // Timeout or error waiting for data
+                        }
 
-                // Read more data if we don't have the full body yet
-                var remainingToRead = contentLength - currentBodyLength
-                while remainingToRead > 0 {
-                    // Wait for data with select() before reading
-                    // This is critical on Linux where TCP fragmentation may cause
-                    // headers and body to arrive in separate packets
-                    if !waitForData(fd: fd, timeoutMs: 5000) {
-                        break // Timeout or error waiting for data
+                        let bytesToRead = min(buffer.count, remainingToRead)
+                        let additionalBytesRead = recv(fd, &buffer, bytesToRead, 0)
+                        if additionalBytesRead <= 0 {
+                            break // Connection closed or error
+                        }
+                        if let limit = policy.limit, accumulated.count + additionalBytesRead > limit {
+                            sendOversizedBodyResponse(fd: fd, method: method, path: pathWithoutQuery, limit: limit, observed: nil)
+                            _ = shutdown(fd, Int32(SHUT_WR))
+                            _ = systemClose(fd)
+                            return
+                        }
+                        accumulated.append(contentsOf: buffer[0..<additionalBytesRead])
+                        remainingToRead -= additionalBytesRead
                     }
-
-                    let bytesToRead = min(buffer.count, remainingToRead)
-                    let additionalBytesRead = recv(fd, &buffer, bytesToRead, 0)
-                    if additionalBytesRead <= 0 {
-                        break // Connection closed or error
-                    }
-                    totalData.append(contentsOf: buffer[0..<additionalBytesRead])
-                    remainingToRead -= additionalBytesRead
                 }
-            }
-
-            // Extract body as raw bytes (not through string conversion)
-            if totalData.count > bodyStartIndex {
-                body = totalData.subdata(in: bodyStartIndex..<totalData.count)
+                if !accumulated.isEmpty {
+                    MetricsCollector.shared.recordBodyMaterialized(bytes: accumulated.count)
+                    requestBody = .buffered(accumulated)
+                }
             }
         }
 
         // Call request handler
         if let handler = requestHandler {
-            let (statusCode, responseHeaders, responseBody) = handler(method, path, headers, body)
-            sendResponse(fd: fd, statusCode: statusCode, headers: responseHeaders, bodyData: responseBody)
+            let response = handler(method, path, headers, requestBody)
+            // The producer is done either way once the handler has returned:
+            // whatever it did or didn't read, nothing else will.
+            bodyProducer?.finish()
+            if let stream = response.stream {
+                sendStreamedResponse(fd: fd, statusCode: response.status, headers: response.headers, stream: stream)
+            } else {
+                sendResponse(fd: fd, statusCode: response.status, headers: response.headers, bodyData: response.body)
+            }
         } else {
+            bodyProducer?.finish()
             // Default response
             sendResponse(fd: fd, statusCode: 200, body: "{\"status\":\"ok\"}")
         }
@@ -350,6 +575,100 @@ public final class NativeHTTPServer: @unchecked Sendable {
         var drainBuf = [UInt8](repeating: 0, count: 64)
         _ = recv(fd, &drainBuf, drainBuf.count, Int32(MSG_DONTWAIT))
         _ = systemClose(fd)
+    }
+
+    /// 413, worded exactly as the NIO server words it, because a client should
+    /// not be able to tell which server refused it.
+    private func sendOversizedBodyResponse(
+        fd: Int32,
+        method: String,
+        path: String,
+        limit: Int,
+        observed: Int?
+    ) {
+        let size = observed.map { "it is \(ByteSize.describe($0))" } ?? "it is larger"
+        let message = "Cannot read the request body for \(method) \(path): "
+            + "\(size), above this route's \(ByteSize.describe(limit)) limit. "
+            + "Raise x-aro-max-body for this operation, or stream the body instead of reading it."
+        MetricsCollector.shared.recordBodyRejected(method: method, path: path)
+        let payload = "{\"error\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+        sendResponse(
+            fd: fd,
+            statusCode: 413,
+            headers: ["Content-Type": "application/json"],
+            bodyData: Data(payload.utf8)
+        )
+    }
+
+    /// Write a response body as it is produced, chunk by chunk (GitLab #477).
+    ///
+    /// Chunked transfer encoding, because the length is not known when the head
+    /// goes out — which is the whole reason this path exists.
+    private func sendStreamedResponse(
+        fd: Int32,
+        statusCode: Int,
+        headers: [String: String],
+        stream: AROStream<Data>
+    ) {
+        var head = "HTTP/1.1 \(statusCode) \(Self.statusText(statusCode))\r\n"
+        var finalHeaders = headers
+        if finalHeaders["Content-Type"] == nil {
+            finalHeaders["Content-Type"] = "application/octet-stream"
+        }
+        finalHeaders["Transfer-Encoding"] = "chunked"
+        finalHeaders["Connection"] = "close"
+        for (name, value) in finalHeaders {
+            head += "\(name): \(value)\r\n"
+        }
+        head += "\r\n"
+        let headData = Data(head.utf8)
+        headData.withUnsafeBytes { buffer in
+            _ = systemSend(fd, buffer.baseAddress!, headData.count, 0)
+        }
+
+        // Drain on this thread: the connection is ours until the response is
+        // complete, and the producer is somewhere else.
+        let done = DispatchSemaphore(value: 0)
+        let counter = StreamedByteCounter()
+        Task {
+            do {
+                for try await chunk in stream.stream {
+                    var frame = Data("\(String(chunk.count, radix: 16))\r\n".utf8)
+                    frame.append(chunk)
+                    frame.append(Data("\r\n".utf8))
+                    frame.withUnsafeBytes { buffer in
+                        _ = systemSend(fd, buffer.baseAddress!, frame.count, 0)
+                    }
+                    counter.add(chunk.count)
+                }
+            } catch {
+                // The head is already on the wire; a truncated chunked body is
+                // what a client sees, which is the honest signal.
+            }
+            done.signal()
+        }
+        done.wait()
+
+        let terminator = Data("0\r\n\r\n".utf8)
+        terminator.withUnsafeBytes { buffer in
+            _ = systemSend(fd, buffer.baseAddress!, terminator.count, 0)
+        }
+        MetricsCollector.shared.recordResponseStreamed(bytes: counter.total)
+    }
+
+    private static func statusText(_ statusCode: Int) -> String {
+        switch statusCode {
+        case 200: return "OK"
+        case 201: return "Created"
+        case 202: return "Accepted"
+        case 204: return "No Content"
+        case 400: return "Bad Request"
+        case 404: return "Not Found"
+        case 413: return "Payload Too Large"
+        case 500: return "Internal Server Error"
+        case 501: return "Not Implemented"
+        default: return "Unknown"
+        }
     }
 
     private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], body: String) {
@@ -961,6 +1280,38 @@ public func aro_http_register_route(
     httpServerLock.unlock()
 }
 
+/// Per-route body policy, baked in at build time (GitLab #477).
+///
+/// The compiled binary has no AST to analyse at startup, so the answer travels
+/// with it: `aro build` runs the materialization analysis, reads the route's
+/// `x-aro-max-body`, and emits one of these calls per operation into `main`.
+/// The interpreter computes the same two facts from the same analysis when it
+/// installs its resolver — one analysis, two front ends, same behaviour.
+nonisolated(unsafe) private var httpBodyPolicies: [String: BodyPolicy] = [:]
+
+/// Register the body policy for one operation.
+/// - Parameters:
+///   - operationId: the operation the policy applies to
+///   - streams: 1 when the feature set only moves its body, 0 when it reads it
+///   - limit: `x-aro-max-body` as written (`256KB`), or empty for the default
+@_cdecl("aro_http_set_body_policy")
+public func aro_http_set_body_policy(
+    _ operationId: UnsafePointer<CChar>?,
+    _ streams: Int32,
+    _ limit: UnsafePointer<CChar>?
+) {
+    guard let opId = operationId.map({ String(cString: $0) }), !opId.isEmpty else { return }
+    let declaredText = limit.map { String(cString: $0) } ?? ""
+    let declared = declaredText.isEmpty ? nil : ByteSize.parse(declaredText)
+    let ceiling = declared ?? RuntimeDefaults.maxMaterializedBody
+
+    httpServerLock.lock()
+    httpBodyPolicies[opId] = streams != 0
+        ? .streamed(materializationLimit: ceiling)
+        : .buffered(limit: ceiling)
+    httpServerLock.unlock()
+}
+
 /// Start native HTTP server
 @_cdecl("aro_native_http_server_start")
 public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
@@ -984,6 +1335,17 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
         // Subscribe to WebSocket broadcast events
         eventBus.subscribe(to: WebSocketBroadcastRequestedEvent.self) { event in
             _ = nativeHTTPServer?.broadcastWebSocket(message: event.message)
+        }
+
+        // Per-route body policy (GitLab #477), from the calls the generated
+        // `main` made before starting the server.
+        nativeHTTPServer?.onBodyPolicy { method, path in
+            for route in httpRoutes where route.method == method {
+                if matchPath(pattern: route.path, actual: path) != nil {
+                    return httpBodyPolicies[route.operationId] ?? .default
+                }
+            }
+            return .default
         }
 
         // Set up request handler
@@ -1020,6 +1382,38 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                         break
                     }
                 }
+            }
+
+            /// A `Return` of an unread body writes it straight back out, chunk
+            /// by chunk (GitLab #477) — the same answer the interpreter gives,
+            /// so an echo or a proxy costs a chunk in either mode.
+            func streamedResponse(_ ctxPtr: UnsafeMutableRawPointer?) -> NativeHTTPResponse? {
+                guard let ptr = ctxPtr else { return nil }
+                let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+                guard ctxHandle.context.getExecutionError() == nil,
+                      let response = ctxHandle.context.getResponse() else { return nil }
+
+                for value in response.data.values {
+                    let body: (any UnreadBody)? = (value.get() as RequestBodyValue?)
+                        ?? (value.get() as AnchoredBody?)
+                    guard let body else { continue }
+                    let statement = "Return a <\(response.status): status> with the request body"
+                    // try? is acceptable: a body already consumed by an earlier
+                    // statement cannot be streamed again, and that case belongs
+                    // to the normal response path — which reports it as the
+                    // consumed-twice error rather than swallowing it here.
+                    guard let chunks = try? body.chunkStream(consumer: statement) else { continue }
+                    let statusLower = response.status.lowercased()
+                    let statusCode = statusLower == "created" ? 201 :
+                                     statusLower == "accepted" ? 202 :
+                                     statusLower == "error" ? 400 : 200
+                    return NativeHTTPResponse(
+                        status: statusCode,
+                        headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
+                        stream: chunks
+                    )
+                }
+                return nil
             }
 
             // Helper function to extract response from context and serialize appropriately
@@ -1059,6 +1453,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     let statusLower = response.status.lowercased()
                     let statusCode = statusLower == "ok" ? 200 :
                                    statusLower == "created" ? 201 :
+                                   statusLower == "accepted" ? 202 :
                                    statusLower == "nocontent" ? 204 :
                                    statusLower == "error" ? 400 : 200
 
@@ -1163,18 +1558,32 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
             }
 
             // Helper to bind request data to context
-            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String, queryParams: [String: String], pathParams: [String: String]) {
+            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: NativeRequestBody, headers: [String: String], path: String, queryParams: [String: String], pathParams: [String: String]) {
                 guard let ptr = ctxPtr else { return }
                 let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
                 // Bind request as a dictionary with body, headers, etc.
                 var requestDict: [String: any Sendable] = [:]
 
+                // A body that has not been read binds as itself (GitLab #477).
+                // The actions resolve it out of this same context, so a stream
+                // never has to cross the C ABI — only the descriptors do.
+                if case .streaming(let source) = body {
+                    let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
+                    let unread = RequestBodyValue(
+                        source: source,
+                        contentType: contentType,
+                        route: "\(headers["X-ARO-Method"] ?? "POST") \(path)"
+                    )
+                    requestDict["body"] = unread
+                    ctxHandle.context.bind("body", value: unread)
+                }
+
                 // Parse body as JSON if possible, otherwise as string.
                 // try? is acceptable: request bodies are legitimately either JSON
                 // or plain text/form data, so a parse failure is expected content
                 // negotiation — the body is bound as a raw string instead, no loss.
-                if let bodyData = body {
+                if let bodyData = body.data {
                     if let json = try? JSONSerialization.jsonObject(with: bodyData),
                        let dict = json as? [String: Any] {
                         // Body is JSON - convert to Sendable dict
@@ -1229,12 +1638,18 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {
                     _ = handler(requestContext)
+                    if let streamed = streamedResponse(requestContext) {
+                        if contextPtr == nil, let ctx = requestContext {
+                            aro_context_destroy(ctx)
+                        }
+                        return streamed
+                    }
                     let response = getContextResponse(requestContext, operationId: opId, requestPath: pathWithoutQuery)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
                     }
-                    return response
+                    return NativeHTTPResponse(response)
                 }
 
                 // Try to find the compiled feature set function via dlsym
@@ -1248,12 +1663,18 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     typealias FSFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                     let function = unsafeBitCast(sym, to: FSFunction.self)
                     _ = function(requestContext)
+                    if let streamed = streamedResponse(requestContext) {
+                        if contextPtr == nil, let ctx = requestContext {
+                            aro_context_destroy(ctx)
+                        }
+                        return streamed
+                    }
                     let response = getContextResponse(requestContext, operationId: opId, requestPath: pathWithoutQuery)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
                     }
-                    return response
+                    return NativeHTTPResponse(response)
                 }
 
                 // Clean up if we created the context but didn't find handler
@@ -1262,11 +1683,11 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
 
                 // Route matched but no handler - return 501 Not Implemented (matches interpreter behavior)
-                return (501, ["Content-Type": "application/json"], "{\"error\":\"Not Implemented\",\"operationId\":\"\(opId)\"}".data(using: .utf8))
+                return NativeHTTPResponse((501, ["Content-Type": "application/json"], "{\"error\":\"Not Implemented\",\"operationId\":\"\(opId)\"}".data(using: .utf8)))
             }
 
             // Default: Not found
-            return (404, ["Content-Type": "application/json"], "{\"error\":\"Not Found\"}".data(using: .utf8))
+            return NativeHTTPResponse((404, ["Content-Type": "application/json"], "{\"error\":\"Not Found\"}".data(using: .utf8)))
         }
     }
 
@@ -1586,6 +2007,17 @@ public func aro_http_register_route(
     _ operationId: UnsafePointer<CChar>?
 ) {
     // No-op on Windows
+}
+
+/// Register a route's body policy (Windows stub, GitLab #477)
+@_cdecl("aro_http_set_body_policy")
+public func aro_http_set_body_policy(
+    _ operationId: UnsafePointer<CChar>?,
+    _ streams: Int32,
+    _ limit: UnsafePointer<CChar>?
+) {
+    // No-op on Windows: the FlyingFox path has no streaming body to police,
+    // and its cap is applied in WindowsHTTPServer.
 }
 
 /// Set the embedded OpenAPI spec (Windows stub)

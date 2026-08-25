@@ -58,6 +58,21 @@ public struct ExtractAction: SynchronousAction {
             throw ActionError.undefinedVariable(object.base)
         }
 
+        // An unread request body (GitLab #477). Extracting the body itself is
+        // a rebinding — it moves the stream to another name and reads nothing.
+        // Extracting something *inside* it needs the body to exist as a value,
+        // which is a materialization and has to happen asynchronously.
+        if source is any UnreadBody {
+            if object.specifiers.isEmpty { return source }
+            throw NeedsAsyncExecution()
+        }
+        if let dictionary = source as? [String: any Sendable],
+           let first = object.specifiers.first,
+           dictionary[first] is any UnreadBody {
+            if object.specifiers.count == 1 { return dictionary[first]! }
+            throw NeedsAsyncExecution()
+        }
+
         // First, apply any object specifiers for nested property access
         var resolvedSource = source
         if !object.specifiers.isEmpty {
@@ -586,6 +601,53 @@ public struct ExtractAction: SynchronousAction {
             }
         }
         return nil
+    }
+
+    /// Async path for reading inside an unread request body (GitLab #477).
+    ///
+    /// The synchronous path signals `NeedsAsyncExecution` when a statement
+    /// names a field inside a body that has not arrived yet. Reading it is a
+    /// materialization: bounded by the route's limit, and reported with the
+    /// statement that asked when it doesn't fit.
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        do {
+            return try executeSynchronously(result: result, object: object, context: context)
+        } catch is NeedsAsyncExecution {
+            try await Self.materializeRequestBody(result: result, object: object, context: context)
+            return try executeSynchronously(result: result, object: object, context: context)
+        }
+    }
+
+    /// Replace the unread body with its value, in place, so the synchronous
+    /// path can run again against an ordinary dictionary.
+    static func materializeRequestBody(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws {
+        let statement = "Extract the <\(result.base)> from the <\(object.fullName)>"
+
+        guard let source = context.resolveAny(object.base) else {
+            throw ActionError.undefinedVariable(object.base)
+        }
+
+        if let body = source as? any UnreadBody {
+            let value = try await body.materializedValue(statement: statement)
+            context.bind(object.base, value: value, allowRebind: true)
+            return
+        }
+
+        if var dictionary = source as? [String: any Sendable],
+           let key = object.specifiers.first,
+           let body = dictionary[key] as? any UnreadBody {
+            let value = try await body.materializedValue(statement: statement)
+            dictionary[key] = value
+            context.bind(object.base, value: dictionary, allowRebind: true)
+        }
     }
 }
 

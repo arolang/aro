@@ -344,6 +344,37 @@ public struct MetricsFormatter: Sendable {
         lines.append("aro_application_uptime_seconds \(String(format: "%.2f", snapshot.uptimeSeconds))")
         lines.append("")
 
+        // Request bodies (GitLab #477). The split between the two counters is
+        // the question a body limit raises: how much of the traffic becomes a
+        // value in memory, and how much only passes through.
+        let body = snapshot.bodyMetrics
+
+        lines.append("# HELP aro_request_body_materialized_bytes_total Request body bytes that became values in memory")
+        lines.append("# TYPE aro_request_body_materialized_bytes_total counter")
+        lines.append("aro_request_body_materialized_bytes_total \(body.materializedBytes)")
+        lines.append("")
+
+        lines.append("# HELP aro_request_body_streamed_bytes_total Request body bytes that flowed through without being buffered")
+        lines.append("# TYPE aro_request_body_streamed_bytes_total counter")
+        lines.append("aro_request_body_streamed_bytes_total \(body.streamedBytes)")
+        lines.append("")
+
+        lines.append("# HELP aro_response_body_streamed_bytes_total Response body bytes written chunk by chunk")
+        lines.append("# TYPE aro_response_body_streamed_bytes_total counter")
+        lines.append("aro_response_body_streamed_bytes_total \(body.responseStreamedBytes)")
+        lines.append("")
+
+        lines.append("# HELP aro_request_body_rejected_total Requests refused with 413 for exceeding their body limit")
+        lines.append("# TYPE aro_request_body_rejected_total counter")
+        if body.rejectedRoutes.isEmpty {
+            lines.append("aro_request_body_rejected_total \(body.rejectedCount)")
+        } else {
+            for (route, count) in body.rejectedRoutes.sorted(by: { $0.key < $1.key }) {
+                lines.append("aro_request_body_rejected_total{route=\"\(route)\"} \(count)")
+            }
+        }
+        lines.append("")
+
         // Process/System metrics
         let pm = snapshot.processMetrics
 

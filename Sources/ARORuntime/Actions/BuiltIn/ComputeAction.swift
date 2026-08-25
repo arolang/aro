@@ -237,6 +237,14 @@ public struct ComputeAction: SynchronousAction {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)
         }
 
+        // An unread request body (GitLab #477). A folding qualifier answers
+        // its question while the bytes go past and needs the async path;
+        // anything else needs the body as a value, which the executor has
+        // already materialized before getting here.
+        if input is any UnreadBody, BodyFold.forQualifier(computationName) != nil {
+            throw NeedsAsyncExecution()
+        }
+
         // Built-in computations — all synchronous except "count" on
         // streaming input, which throws NeedsAsyncExecution from the
         // length op. Markdown is the one entry not in
@@ -684,6 +692,21 @@ public struct ComputeAction: SynchronousAction {
         guard let input = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
+        // Fold over an unread body without building it (GitLab #477).
+        // The bytes go past once; the digest, the count or the lines come out
+        // the other side, and the body's size never becomes the process's.
+        let asyncComputationName = resolveOperationName(
+            from: result,
+            knownOperations: Self.knownComputationNames,
+            fallback: "identity"
+        )
+        if let body = input as? any UnreadBody,
+           let fold = BodyFold.forQualifier(asyncComputationName) {
+            let statement = "Compute the <\(result.fullName)> from the <\(object.fullName)>"
+            let chunks = try body.chunkStream(consumer: statement)
+            return try await fold.apply(to: chunks)
+        }
+
         // ARO-0051: Streaming count — materialize and rebind
         if let anyStreaming = input as? AnyStreamingValue {
             let materialized = try await anyStreaming.materialize()
@@ -1439,6 +1462,30 @@ public struct UpdateAction: SynchronousAction {
             throw NeedsAsyncExecution()
         }
 
+        // `Configure the <http-server: max-body> with "1MB".` (ARO-0035,
+        // GitLab #477). The default ceiling for routes whose contract declares
+        // no `x-aro-max-body`; a route's own declaration still wins, because a
+        // limit belongs with the route it protects.
+        if result.base == "http-server", let setting = result.specifiers.first {
+            let raw = context.resolveAny("_literal_")
+                ?? context.resolveAny(object.base)
+                ?? object.base
+            if let bytes = Self.bodyLimitBytes(from: raw) {
+                switch setting {
+                case "max-body", "max-request-body", "maxBody":
+                    RuntimeDefaults.maxMaterializedBody = bytes
+                    return ["max-body": bytes] as [String: any Sendable]
+                default:
+                    break
+                }
+            } else if setting.hasPrefix("max-body") || setting == "max-request-body" {
+                throw ActionError.invalidInput(
+                    "Configure the <http-server: \(setting)>: a size like \"1MB\", "
+                    + "\"512KB\", or a byte count",
+                    received: String(describing: raw))
+            }
+        }
+
         // For "configure" verb, allow creating new configuration if it doesn't exist
         // This enables: <Configure> the <validation: timeout> with <value>.
         let entity: any Sendable
@@ -1582,6 +1629,14 @@ public struct UpdateAction: SynchronousAction {
 
     private func convertToSendable(_ value: Any) -> any Sendable {
         SendableConverter.fromJSON(value)
+    }
+
+    /// A body limit written as `"1MB"`, `"512KB"` or a plain byte count.
+    static func bodyLimitBytes(from value: any Sendable) -> Int? {
+        if let text = value as? String { return ByteSize.parse(text) }
+        if let number = value as? Int, number > 0 { return number }
+        if let number = value as? Double, number > 0 { return Int(number) }
+        return nil
     }
 }
 

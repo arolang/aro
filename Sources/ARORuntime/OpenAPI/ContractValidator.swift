@@ -59,6 +59,48 @@ public struct ContractValidator {
         if !missingHandlers.isEmpty {
             throw ContractValidationError.missingHandlers(missingHandlers)
         }
+
+        try validateBodyLimits(spec: spec, featureSets: featureSets)
+    }
+
+    /// Check `x-aro-max-body` against what the code does with the body
+    /// (GitLab #477).
+    ///
+    /// A declared size that isn't a size is an error, because the alternative
+    /// is a limit that silently isn't the one written down. A large limit on a
+    /// route that reads its body is a warning, because that many bytes are
+    /// held per concurrent request — a fact worth stating where the contract
+    /// declares it rather than where the memory runs out.
+    public static func validateBodyLimits(
+        spec: OpenAPISpec,
+        featureSets: [AnalyzedFeatureSet]
+    ) throws {
+        let summaries = BodyMaterializationAnalyzer.analyze(featureSets.map(\.featureSet))
+
+        for (path, pathItem) in spec.paths {
+            for (method, operation) in pathItem.allOperations {
+                guard let declared = operation.xAroMaxBody else { continue }
+                guard let operationId = operation.operationId else { continue }
+
+                guard let bytes = ByteSize.parse(declared) else {
+                    throw ContractValidationError.invalidBodyLimit(
+                        operationId: operationId,
+                        path: path,
+                        method: method.uppercased(),
+                        value: declared
+                    )
+                }
+
+                guard let summary = summaries[operationId], summary.materializes else { continue }
+                if bytes > 10_000_000 {
+                    let where_ = summary.statement.map { " (\($0))" } ?? ""
+                    FileHandle.standardError.write(Data(
+                        ("[Contract] \(method.uppercased()) \(path) declares x-aro-max-body: \(declared), "
+                         + "and its feature set reads the body\(where_), so that much is held in "
+                         + "memory per concurrent request. Stream it, or lower the limit.\n").utf8))
+                }
+            }
+        }
     }
 
     /// Validate an OpenAPI spec for internal consistency
@@ -264,6 +306,9 @@ public enum ContractValidationError: Error, Sendable {
         second: (path: String, method: String)
     )
 
+    /// `x-aro-max-body` is present but not a size (GitLab #477)
+    case invalidBodyLimit(operationId: String, path: String, method: String, value: String)
+
     /// Invalid schema $ref reference
     case invalidSchemaReference(ref: String, availableSchemas: [String])
 
@@ -290,6 +335,10 @@ extension ContractValidationError: CustomStringConvertible {
 
         case .duplicateOperationId(let operationId, let first, let second):
             return "Duplicate operationId '\(operationId)' found:\n  - \(first.1) \(first.0)\n  - \(second.1) \(second.0)"
+
+        case .invalidBodyLimit(let operationId, let path, let method, let value):
+            return "\(method) \(path) (\(operationId)) declares x-aro-max-body: \(value), "
+                + "which is not a size. Write it as 1MB, 512KB, or a byte count."
 
         case .invalidSchemaReference(let ref, let availableSchemas):
             var message = "Invalid schema reference: \(ref)"

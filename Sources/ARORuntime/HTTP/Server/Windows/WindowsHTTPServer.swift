@@ -27,6 +27,10 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
     /// Request handler for processing requests through feature sets
     private var requestHandler: HTTPRequestHandler?
 
+    /// Per-route body policy (GitLab #477). Same contract as the NIO server;
+    /// see `setBodyPolicyResolver`.
+    private var bodyPolicyResolver: BodyPolicyResolver?
+
     /// Current port the server is listening on
     public private(set) var port: Int = 0
 
@@ -56,6 +60,13 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
         withLock {
             self.requestHandler = handler
         }
+    }
+
+    /// Set the per-route body policy resolver (GitLab #477).
+    public func setBodyPolicyResolver(_ resolver: @escaping BodyPolicyResolver) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.bodyPolicyResolver = resolver
     }
 
     // MARK: - HTTPServerService
@@ -112,6 +123,29 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
         }
     }
 
+    /// 413 with the message the NIO path uses, so the two servers answer an
+    /// oversized body identically.
+    private func oversizedBodyResponse(
+        method: String,
+        path: String,
+        limit: Int,
+        observed: Int
+    ) -> FlyingFox.HTTPResponse {
+        let message = "Cannot read the request body for \(method) \(path): "
+            + "it is \(ByteSize.describe(observed)), above this route's \(ByteSize.describe(limit)) limit. "
+            + "Raise x-aro-max-body for this operation, or stream the body instead of reading it."
+        MetricsCollector.shared.recordBodyRejected(method: method, path: path)
+        let payload = "{\"error\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+        var foxHeaders = HTTPHeaders()
+        foxHeaders[HTTPHeader("Content-Type")] = "application/json"
+        foxHeaders[HTTPHeader("Connection")] = "close"
+        return FlyingFox.HTTPResponse(
+            statusCode: statusCodeToHTTPStatusCode(413),
+            headers: foxHeaders,
+            body: Data(payload.utf8)
+        )
+    }
+
     // MARK: - Request Handling
 
     private func handleRequest(
@@ -143,8 +177,26 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
             headers[header.rawValue] = value
         }
 
+        // Body limit (GitLab #477). FlyingFox hands the body over as one
+        // `Data`, so the honest enforcement point here is the declared length:
+        // an oversized `Content-Length` is refused before the body is touched.
+        // A chunked body without a declared length is still read whole by
+        // FlyingFox before this runs, so it is checked afterwards and refused
+        // — bounded by FlyingFox rather than by ARO, which is the residual gap
+        // recorded in the Platform Support table.
+        let policy = withLock { bodyPolicyResolver }?(foxRequest.method.rawValue, path) ?? .default
+        if let limit = policy.limit,
+           let declared = headers.first(where: { $0.key.lowercased() == "content-length" })?.value,
+           let declaredBytes = Int(declared),
+           declaredBytes > limit {
+            return oversizedBodyResponse(method: foxRequest.method.rawValue, path: path, limit: limit, observed: declaredBytes)
+        }
+
         // Create ARO request
         let bodyData = try? await foxRequest.bodyData
+        if let limit = policy.limit, let bodyData, bodyData.count > limit {
+            return oversizedBodyResponse(method: foxRequest.method.rawValue, path: path, limit: limit, observed: bodyData.count)
+        }
         let aroRequest = HTTPRequest(
             id: requestId,
             method: foxRequest.method.rawValue,
@@ -220,6 +272,7 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
         case 404: return .notFound
         case 405: return .methodNotAllowed
         case 409: return .conflict
+        case 413: return HTTPStatusCode(413, phrase: "Payload Too Large")
         case 500: return .internalServerError
         case 501: return .notImplemented
         case 502: return .badGateway

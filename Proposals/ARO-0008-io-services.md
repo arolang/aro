@@ -275,6 +275,43 @@ paths:
           description: Success
 ```
 
+### 2.2.1 Request Bodies
+
+A request body reaches a feature set as `<request: body>` (also bound as
+`<body>`). What happens to it depends on what the feature set does with it,
+and on nothing the program has to declare (ARO-0090):
+
+```aro
+(* Moves it: streams from the socket to the file. Any size. *)
+(uploadDocument: Files API) {
+    Extract the <name> from the <pathParameters: name>.
+    Extract the <upload> from the <request: body>.
+    Write the <upload> to the <file: name>.
+    Return a <Created: status> with <name>.
+}
+
+(* Reads it: the body becomes a value, bounded by the route's limit. *)
+(createNote: Notes API) {
+    Extract the <note> from the <request: body>.
+    Extract the <text> from the <note: text>.
+    Return a <Created: status> with <text>.
+}
+```
+
+The limit is declared with the route, and defaults to 1 MB:
+
+```yaml
+paths:
+  /notes:
+    post:
+      operationId: createNote
+      x-aro-max-body: 256KB
+```
+
+A body over the limit is answered with `413` before it is read. A route that
+only moves its body has no limit, because nothing accumulates. `aro check`
+reports which routes are which. See ARO-0090 for the full rules.
+
 ### 2.3 Feature Set Naming
 
 Feature sets **must be named after the `operationId`** from the OpenAPI spec:
