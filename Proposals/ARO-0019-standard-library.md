@@ -220,19 +220,42 @@ A Compute qualifier resolves to exactly one of:
 3. a chain of the above, written `a|b`,
 4. a date offset, written `-7d` / `+24h`.
 
-Anything else is a **runtime error**. It used to return the input unchanged,
-which meant every misspelled or invented qualifier produced a program that
-compiled, passed `aro check`, exited `[OK]`, and printed the wrong value:
+Anything else is an error, and `aro check` reports it — the program never gets
+as far as running. It used to return the input unchanged, which meant every
+misspelled or invented qualifier produced a program that compiled, passed
+`aro check`, exited `[OK]`, and printed the wrong value:
 
 ```aro
-(* Before #486: logged the whole file. After: "Unknown Compute qualifier:
-   'linecount'". *)
+(* Before #486: logged the whole file. After: "Unknown Compute qualifier
+   'linecount'", at check time. *)
 Compute the <total: linecount> from the <content>.
 ```
 
-The error names the qualifier and suggests the closest registered one, so a
-typo is recoverable without consulting the table. `aro actions --qualifiers`
+The diagnostic names the qualifier and suggests the closest registered one, so
+a typo is recoverable without consulting the table. `aro actions --qualifiers`
 lists the live set; `--format json` emits it for tooling.
+
+Cases 2 and 3 cannot be judged without loading plugins, which `aro check` does
+not do, so a namespaced name and any chain mentioning one are accepted at check
+time and resolved at run time. Everything else is decided statically (GitLab
+#465) — a green `aro check` is only worth something if it means the qualifier
+exists.
+
+Two spellings are commonly confused with a qualifier, and the diagnostic names
+both. Sorting, reversing and element access are *actions*, not qualifiers:
+
+```aro
+Sort the <sorted> for the <numbers>.          (* not <sorted: sort> *)
+Reverse the <flipped> for the <numbers>.      (* not <flipped: reverse> *)
+Extract the <head: first> from the <numbers>. (* the qualifier goes on Extract *)
+```
+
+And a result *type* is requested with `as`, never in the qualifier slot, which
+selects an operation (GitLab #475):
+
+```aro
+Compute the <shipping-cost> as Money from { weight: <w>, zone: <z> }.
+```
 
 ```aro
 (searchProducts: Product API) {
@@ -260,7 +283,7 @@ DateTime operations for temporal logic.
 ```aro
 (Schedule Event: DateTime Operations) {
     Create the <start-time> with now.
-    Compute the <end-time: add> from the <start-time> with "1 hour".
+    Compute the <end-time: +1h> from the <start-time>.
     Log <start-time> to the <console>.
     Return an <OK: status> for the <schedule>.
 }
@@ -349,3 +372,4 @@ Primitive types are handled throughout the runtime:
 | 1.1 | 2024-12 | Simplified to core primitives (Integer, Float, String, Boolean, DateTime), removed Result type, added ARO examples |
 | 1.2 | 2026-08 | Added §3.1 Encoding and Escaping: html-escape, url-encode/decode, base64(url)-encode/decode, json-escape, trim, replace (GitLab #482) |
 | 1.3 | 2026-08 | Added §3.2 Collections and Text: lines, join, sum, avg/average, unique, random, sha256; §3.3 declares the qualifier namespace closed — an unregistered qualifier is now an error instead of a silent identity (GitLab #486) |
+| 1.4 | 2026-08 | §3.3: the closed namespace is enforced at check time, not only at run time; documents the action forms (Sort/Reverse/Extract) and the `as Type` spelling that are mistaken for qualifiers (GitLab #465) |

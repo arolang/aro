@@ -285,7 +285,7 @@ components:
     Update the <order: items> with <item>.
 
     (* Recalculate totals *)
-    Compute the <new-totals: OrderTotals> from the <order: items>.
+    Compute the <new-totals> as OrderTotals from the <order: items>.
     Update the <order: totals> with <new-totals>.
 
     (* Persist entire aggregate *)
@@ -504,7 +504,7 @@ Feature sets naturally serve as domain services:
     (* Business logic spanning multiple entities *)
     Compute the <weight> from the <order: items>.
     Compute the <zone> from the <destination>.
-    Compute the <shipping-cost: Money> from {
+    Compute the <shipping-cost> as Money from {
         weight: <weight>,
         zone: <zone>
     }.
@@ -524,7 +524,7 @@ Feature sets naturally serve as domain services:
     Compute the <loyalty-discount> from the <customer: tier>
         where tier is "gold".
 
-    Compute the <total-discount: Money> from {
+    Compute the <total-discount> as Money from {
         volume: <volume-discount>,
         loyalty: <loyalty-discount>
     }.
@@ -568,7 +568,7 @@ Feature sets that create objects serve as factories:
     }.
 
     (* Calculate totals *)
-    Compute the <totals: OrderTotals> from the <order: items>.
+    Compute the <totals> as OrderTotals from the <order: items>.
     Update the <order: totals> with <totals>.
 
     Store the <order> into the <order-repository>.

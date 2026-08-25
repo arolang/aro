@@ -152,7 +152,7 @@ A few more validated one-liners, to show the range:
 | `REPL: sort [3, 1, 2] ascending` | `Create the <x> with [3,1,2]. Sort the <s> for the <x>. Log <s> to the <console>.` → `[1, 2, 3]` |
 | `REPL: first element of [10, 20, 30]` | `Create the <x> with [10,20,30]. Extract the <f: first> from the <x>. Log <f> to the <console>.` → `10` |
 
-Two rules keep one-liners working. End with a `Log ... to the <console>.` so the value prints — bare statements in a piped script do not auto-echo the way a full REPL session does. And remember which forms are actions rather than qualifiers: sorting is `Sort the <s> for the <x>.`, not a `Compute` qualifier; first and last are `Extract the <f: first> from the <x>.`, with the qualifier on the result. If the model hands you `Compute the <s: sort> ...`, it will pass `aro check` and quietly return the list unsorted — tell it to use the `Sort` action instead.
+Two rules keep one-liners working. End with a `Log ... to the <console>.` so the value prints — bare statements in a piped script do not auto-echo the way a full REPL session does. And remember which forms are actions rather than qualifiers: sorting is `Sort the <s> for the <x>.`, not a `Compute` qualifier; first and last are `Extract the <f: first> from the <x>.`, with the qualifier on the result. If the model hands you `Compute the <s: sort> ...`, `aro check` now rejects it and names the action to use instead (GitLab #465) — for a while it passed and quietly returned the list unsorted, which is why the check exists.
 
 ## 8.8 Performance Tips
 

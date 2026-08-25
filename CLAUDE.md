@@ -502,11 +502,30 @@ rendering them into an HTML template — the template engine does not escape for
 
 **The qualifier namespace is closed** (§3.3, GitLab #486). A Compute qualifier must
 resolve to a built-in, a plugin qualifier (`handle.qualifier`), a chain (`a|b`), or a
-date offset (`-7d`); anything else is a runtime error naming the closest match. It
+date offset (`-7d`); anything else is an error naming the closest match. It
 used to return the input unchanged, so an invented qualifier compiled, passed
 `aro check`, exited `[OK]`, and printed the wrong value. Counting lines is
 `lines` then `length` — `lines` already drops the trailing newline's phantom
 element. Run `aro actions --qualifiers` for the live set.
+
+`aro check` rejects unknown qualifiers too (GitLab #465), so a green check means
+the qualifier exists. The names live in `ComputeQualifierCatalog` (AROParser,
+because the check path never loads the runtime) and a runtime test asserts they
+match `ComputeAction.builtInQualifiers` — add a qualifier to one and the suite
+fails until you add it to the other. Namespaced names and chains are accepted at
+check time and resolved at run time, since `aro check` does not load plugins.
+
+Two forms are commonly mistaken for qualifiers, and the diagnostic names both:
+sorting/reversing/element access are actions (`Sort the <s> for the <x>.`,
+`Reverse the <r> for the <x>.`, `Extract the <f: first> from the <x>.`), and a
+result *type* uses `as` (`Compute the <n> as Float from <s>.`) because the
+qualifier slot selects an operation.
+
+**`Map` takes a field name, not a value.** `Map the <ns> from the <us> with name.`
+and `Map the <ns: name> from the <us>.` are the same statement. There is no
+per-element binding, so `with <item> * 0.9` has nothing to range over — it used
+to parse and die on `Undefined variable: item`, and `with 3` was discarded
+silently; both are check-time errors now. Use `for each` to compute per element.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 

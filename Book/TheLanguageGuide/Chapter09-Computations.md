@@ -105,11 +105,25 @@ A Compute qualifier must resolve to one of exactly four things: a built-in from 
 This is worth stating plainly because the old behaviour was the opposite, and it was dangerous. An unrecognised qualifier used to return its input unchanged, so a misspelling produced a program that compiled, passed `aro check`, exited `[OK]`, and printed the wrong value:
 
 ```aro
-(* Returned the whole file. Now: "Unknown Compute qualifier: 'linecount'" *)
+(* Returned the whole file. Now: "Unknown Compute qualifier 'linecount'" *)
 Compute the <total: linecount> from the <content>.
 ```
 
-The error names the qualifier and suggests the closest registered one, so a typo is recoverable without consulting a table. To see the live set, run `aro actions --qualifiers`.
+`aro check` reports it too, so the program never gets as far as running (GitLab #465). The diagnostic names the qualifier and suggests the closest registered one, so a typo is recoverable without consulting a table. To see the live set, run `aro actions --qualifiers`.
+
+Two things are commonly mistaken for qualifiers. Sorting, reversing and element access are **actions**:
+
+```aro
+Sort the <sorted> for the <numbers>.          (* not <sorted: sort> *)
+Reverse the <flipped> for the <numbers>.      (* not <flipped: reverse> *)
+Extract the <head: first> from the <numbers>. (* the qualifier goes on Extract *)
+```
+
+And a result **type** is requested with `as`. The qualifier slot selects an operation, so putting a type there asks for an operation by that name and gets the error above:
+
+```aro
+Compute the <count> as Float from the <items>.   (* not <count: Float> *)
+```
 
 ---
 
@@ -443,21 +457,21 @@ public protocol ComputationService: Sendable {
 
 When the Compute action executes, it first checks for a registered computation service. If one exists, it delegates to the plugin. This allows plugins to provide operations like cryptographic hashes, custom string transformations, or domain-specific calculations.
 
-A cryptography plugin might provide:
+A cryptography plugin declaring `handle: Crypto` might provide:
 
 ```aro
-Compute the <password-hash: sha256> from the <password>.
-Compute the <signature: hmac> from the <message>.
+Compute the <signature: Crypto.hmac> from the <message>.
+Compute the <token: Crypto.jwt> from the <claims>.
 ```
 
-A formatting plugin might provide:
+A formatting plugin declaring `handle: Format` might provide:
 
 ```aro
-Compute the <formatted-date: iso8601> from the <timestamp>.
-Compute the <money-display: currency> from the <amount>.
+Compute the <formatted-date: Format.iso8601> from the <timestamp>.
+Compute the <money-display: Format.currency> from the <amount>.
 ```
 
-The syntax remains consistent regardless of whether the operation is built-in or plugin-provided. This uniformity means you can start with built-in operations and add plugins later without changing how your code reads.
+The shape of the statement is the same whether the operation is built-in or plugin-provided, so you can start with built-in operations and add plugins later without changing how your code reads. The one difference is the namespace: plugin qualifiers are always written `handle.qualifier`, which is what keeps two plugins from claiming the same name — and what lets `aro check` tell "this qualifier does not exist" apart from "this qualifier comes from a plugin I have not loaded".
 
 See Chapter 20 for the full plugin development guide.
 
