@@ -27,6 +27,7 @@ For newcomers to ARO, read the proposals in order:
 | 34 | [Language Server Protocol](ARO-0034-language-server-protocol.md) | LSP server, diagnostics, navigation |
 | 46 | [Typed Event Extraction](ARO-0046-typed-event-extraction.md) | Schema-validated event extraction |
 | 88 | [Concurrency Model](ARO-0088-concurrency-model.md) | What runs concurrently, ordering guarantees, `parallel for each` |
+| 90 | [Streaming I/O and Materialization](ARO-0090-streaming-io-and-materialization.md) | Request bodies that stream vs. bodies that become values, `x-aro-max-body` |
 
 ## Quick Reference
 
@@ -86,13 +87,14 @@ Proposals/
 ├── ARO-0030-ide-integration.md
 ├── ARO-0034-language-server-protocol.md
 ├── ARO-0046-typed-event-extraction.md
-└── ARO-0088-concurrency-model.md
+├── ARO-0088-concurrency-model.md
+└── ARO-0090-streaming-io-and-materialization.md
 ```
 
 ---
 
 > **Note:** the listing above is a curated subset and is not kept in sync with the
-> directory — there are 63 proposals on disk. The authoritative list is
+> directory — there are 65 proposals on disk. The authoritative list is
 > `Proposals/` itself; `Scripts/check-proposals.py` (run in CI) enforces that every
 > identifier is unique and that every `ARO-NNNN` reference resolves. Regenerating
 > this document's narrative from the directory is tracked separately (GitLab #481).

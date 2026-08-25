@@ -96,8 +96,24 @@ Create the <effective-timeout> with <timeout> when <timeout> != nil.
 |----------|----------|-------------|
 | `validation` | `timeout` | Validation timeout in seconds |
 | `http-client` | `timeout`, `retries` | HTTP client settings |
-| `http-server` | `port`, `host` | HTTP server settings |
+| `http-server` | `port`, `host`, `max-body` | HTTP server settings |
 | `batch` | `size`, `concurrency` | Batch processing settings |
+
+### 4.1 `http-server: max-body`
+
+The default ceiling on how much of a request body may become a value in memory
+(ARO-0090, GitLab #477):
+
+```aro
+Configure the <http-server: max-body> with "1MB".
+```
+
+Accepts `256KB`, `10MB`, `1.5GB`, `1MiB`, or a plain byte count; `ARO_MAX_BODY`
+sets the same default from the environment. It is a *materialization* limit,
+not a transport limit: a route whose feature set only moves its body is not
+bounded by it, because nothing accumulates. A route may override it in the
+contract with `x-aro-max-body`, and the route's own declaration wins — a limit
+belongs with the route it protects.
 
 ---
 

@@ -17,6 +17,10 @@ import LanguageServerProtocol
 /// - After the result variable of REQUEST/OWN statements: shows the data type
 ///   when it can be inferred from the symbol table.
 /// - After a qualifier annotation: shows what the qualifier resolves to.
+/// - At the statement that reads a request body (GitLab #477): shows the limit
+///   that applies to it, because that is the statement whose cost is invisible
+///   otherwise. `aro check` reports the same fact per route; this puts it where
+///   the decision is made, while it is being written.
 public struct InlayHintHandler: Sendable {
 
     public init() {}
@@ -31,7 +35,8 @@ public struct InlayHintHandler: Sendable {
     public func handle(
         compilationResult: CompilationResult?,
         startLine: Int,
-        endLine: Int
+        endLine: Int,
+        bodyLimits: RouteBodyLimits = .empty
     ) -> [[String: Any]]? {
         guard let result = compilationResult else { return nil }
 
@@ -49,7 +54,65 @@ public struct InlayHintHandler: Sendable {
             }
         }
 
+        hints.append(contentsOf: bodyHints(
+            featureSets: result.analyzedProgram.featureSets.map(\.featureSet),
+            startLine: startLine,
+            endLine: endLine,
+            bodyLimits: bodyLimits
+        ))
+
         return hints.isEmpty ? nil : hints
+    }
+
+    // MARK: - Request body hints (GitLab #477)
+
+    /// One hint per feature set that reads its request body, at the statement
+    /// that reads it.
+    ///
+    /// Nothing is shown for a feature set that only moves its body, and nothing
+    /// for one that never touches it: an inlay hint on every statement would be
+    /// noise, and the interesting statement is the one that turns bytes into a
+    /// value, because that is the one with a ceiling.
+    private func bodyHints(
+        featureSets: [FeatureSet],
+        startLine: Int,
+        endLine: Int,
+        bodyLimits: RouteBodyLimits
+    ) -> [[String: Any]] {
+        let summaries = BodyMaterializationAnalyzer.analyze(featureSets)
+        var hints: [[String: Any]] = []
+
+        for summary in summaries.values.sorted(by: { $0.featureSet < $1.featureSet }) {
+            // `materializes` is true for a feature set that never mentions the
+            // body at all — that is the conservative default for the *policy*,
+            // not a statement anyone wrote. Only a real finding gets a hint.
+            guard summary.materializes, let span = summary.span else { continue }
+
+            let hintLine = span.end.line - 1
+            guard hintLine >= startLine && hintLine <= endLine else { continue }
+
+            let route = bodyLimits.route(forOperation: summary.featureSet)
+            let limit = bodyLimits.limit(forOperation: summary.featureSet)
+
+            var tooltip = "Reads the request body here, so the body becomes a value in memory"
+            if let route {
+                tooltip += " on `\(route)`"
+            }
+            tooltip += ", bounded by \(limit.description).\n\n"
+            tooltip += "Streams don't have a size; values do. Moving the body instead "
+            tooltip += "(`Write … to the <file: …>`, `Send`, `Return`, `Emit`) removes the "
+            tooltip += "limit, because nothing is built. See ARO-0090."
+
+            hints.append([
+                "position": ["line": hintLine, "character": span.end.column],
+                "label": "reads body ≤ \(limit.shortLabel)",
+                "tooltip": ["kind": "markdown", "value": tooltip],
+                "paddingLeft": true,
+                "paddingRight": false
+            ])
+        }
+
+        return hints
     }
 
     // MARK: - Per-statement hint generation

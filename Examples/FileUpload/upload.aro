@@ -1,0 +1,50 @@
+(* Moves the body to a file. Never reads it, so its size is bounded by the
+   disk rather than by memory — a four-gigabyte upload costs one chunk. *)
+(uploadDocument: File Upload) {
+    Extract the <name> from the <pathParameters: name>.
+    Extract the <upload> from the <request: body>.
+    Compute the <target> from "/tmp/aro-uploads/" ++ <name>.
+    Write the <upload> to the <file: target>.
+    Return a <Created: status> with <name>.
+}
+
+(* Reads a field out of the body, so the body becomes a value and the route's
+   1KB limit applies. A larger body is refused with 413 before it is read. *)
+(createNote: File Upload) {
+    Extract the <note> from the <request: body>.
+    Extract the <text> from the <note: text>.
+    Log <text> to the <console>.
+    Return a <Created: status> with <text>.
+}
+
+(* Writes the body straight back out, chunk by chunk. *)
+(echoBody: File Upload) {
+    Extract the <payload> from the <request: body>.
+    Return an <OK: status> with <payload>.
+}
+
+(* Hands the body to an event. A handler outlives the request, so the runtime
+   anchors the body on the way out — drained to a file one chunk at a time,
+   readable afterwards by every handler, and deleted when the last one is done.
+   Still no size limit: nothing is ever built in memory. *)
+(archiveDocument: File Upload) {
+    Extract the <name> from the <pathParameters: name>.
+    Extract the <upload> from the <request: body>.
+    Emit a <DocumentReceived: event> with <upload>.
+    Return an <Accepted: status> with <name>.
+}
+
+(Archive Upload: DocumentReceived Handler) {
+    Extract the <document> from the <event: upload>.
+    Write the <document> to the <file: "/tmp/aro-uploads/archived.bin">.
+    Return an <OK: status> for the <archive>.
+}
+
+(* Folds over the body instead of reading it: the digest and the byte count
+   are both answered while the bytes go past, so a four-gigabyte upload costs
+   a chunk here too. *)
+(digestBody: File Upload) {
+    Extract the <payload> from the <request: body>.
+    Compute the <digest: sha256> from <payload>.
+    Return an <OK: status> with <digest>.
+}

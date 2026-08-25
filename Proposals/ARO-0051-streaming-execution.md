@@ -3,11 +3,17 @@
 - **Status:** Draft
 - **Author:** Claude Code
 - **Created:** 2026-02-16
-- **Related:** ARO-0018 (Data Pipelines), ARO-0008 (I/O Services), ARO-0088 (Concurrency Model — a streaming pipeline is sequential per element)
+- **Related:** ARO-0018 (Data Pipelines), ARO-0008 (I/O Services), ARO-0088 (Concurrency Model — a streaming pipeline is sequential per element), ARO-0090 (Streaming I/O — where a stream is allowed to become a value, and what bounds it)
 
 ## Abstract
 
 This proposal introduces a **streaming execution model** for ARO that enables processing of arbitrarily large datasets with constant memory usage, while maintaining complete **syntax transparency** - users write the exact same code, but ARO executes it as a streaming pipeline.
+
+> **Boundaries.** This proposal covers how a stream is *processed*. ARO-0090
+> covers where one may stop being a stream: which statements turn it into a
+> value, what bounds that value, and what happens when a stream crosses a
+> lifetime boundary such as an event. The rule there — *streams don't have a
+> size, values do* — is the same syntax transparency seen from the other end.
 
 ## Motivation
 

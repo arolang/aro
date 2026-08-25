@@ -203,6 +203,7 @@ struct BuildCommand: AsyncParsableCommand {
 
         AROLogger.debug("Merged \(mergedProgram.featureSets.count) feature sets", subsystem: "build")
 
+
         if verbose {
             print("\nParsing successful!")
             print("Feature sets found:")

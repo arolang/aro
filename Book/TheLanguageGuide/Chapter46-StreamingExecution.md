@@ -644,9 +644,10 @@ See **Chapter 34: Data Pipelines** for more details on automatic pipeline detect
 ## Related Proposals
 
 - **ARO-0051**: Streaming Execution Engine (this chapter)
+- **ARO-0090**: Streaming I/O — where a stream may become a value, and what bounds it (see Chapter 50)
 - **ARO-0067**: Automatic Pipeline Detection
 - **ARO-0018**: Data Pipeline Operations
 
 ---
 
-*Next: Appendix A — Action Reference*
+*Next: Chapter 47 — Terminal UI*

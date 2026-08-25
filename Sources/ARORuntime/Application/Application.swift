@@ -385,6 +385,29 @@ public final class Application: @unchecked Sendable {
             return // No OpenAPI contract or HTTP server
         }
 
+        // Body policy per route (GitLab #477). Decided here, once, from two
+        // static facts: what the contract declares (`x-aro-max-body`) and
+        // whether the feature set ever reads its body. A route that only moves
+        // its body needs no limit, because nothing accumulates; a route that
+        // reads it gets one, and an oversized `Content-Length` is refused at
+        // the request head before a byte is allocated.
+        let materialization = BodyMaterializationAnalyzer.analyze(
+            program.featureSets.map(\.featureSet)
+        )
+        httpServer.setBodyPolicyResolver { method, path in
+            guard let match = routeRegistry.match(method: method, path: path) else {
+                return .default
+            }
+            let declared = match.operation.maxBodyBytes
+            let summary = materialization[match.operationId]
+                ?? .conservative(match.operationId)
+            let ceiling = declared ?? RuntimeDefaults.maxMaterializedBody
+            if summary.materializes {
+                return .buffered(limit: ceiling)
+            }
+            return .streamed(materializationLimit: ceiling)
+        }
+
         // Capture the current debugger context at setup time so each
         // incoming HTTP request re-establishes it inside its own
         // task. SwiftNIO dispatches requests on its event loops and
@@ -549,43 +572,26 @@ public final class Application: @unchecked Sendable {
             context.register(ts as TemplateService)
         }
 
-        // Parse request body based on Content-Type
+        // The request body, as a value or as the promise of one (GitLab #477).
+        //
+        // On a streaming route nothing has been read yet: the binding is the
+        // stream, and parsing happens only if some statement asks for the body
+        // as a value — at which point the route's limit applies. On a buffered
+        // route the bytes are already here and parse exactly as before; both
+        // paths go through `RequestBodyParser` so the same body produces the
+        // same value either way.
         let rawContentType = request.headers.first(where: { $0.key.lowercased() == "content-type" })?.value
-        var bodyValue: any Sendable = request.bodyString ?? ""
-        if let body = request.body, !body.isEmpty {
-            let baseContentType = rawContentType?
-                .split(separator: ";").first
-                .map(String.init)?
-                .trimmingCharacters(in: .whitespaces)
-                .lowercased()
-
-            switch baseContentType {
-            case "application/x-www-form-urlencoded":
-                let formDict = SchemaBinding.parseFormURLEncoded(body)
-                var sendableDict: [String: any Sendable] = [:]
-                for (key, value) in formDict {
-                    sendableDict[key] = convertJSONValueToSendable(value)
-                }
-                bodyValue = sendableDict
-            case "multipart/form-data":
-                if let ct = rawContentType, let boundary = SchemaBinding.extractBoundary(from: ct) {
-                    let formDict = SchemaBinding.parseMultipartFormData(body, boundary: boundary)
-                    var sendableDict: [String: any Sendable] = [:]
-                    for (key, value) in formDict {
-                        sendableDict[key] = convertJSONValueToSendable(value)
-                    }
-                    bodyValue = sendableDict
-                }
-            default:
-                // Default: treat as JSON
-                if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-                    var sendableDict: [String: any Sendable] = [:]
-                    for (key, value) in json {
-                        sendableDict[key] = convertJSONValueToSendable(value)
-                    }
-                    bodyValue = sendableDict
-                }
-            }
+        var bodyValue: any Sendable
+        if let bodyStream = request.bodyStream {
+            bodyValue = RequestBodyValue(
+                source: bodyStream,
+                contentType: rawContentType,
+                route: "\(request.method) \(request.path)"
+            )
+        } else if let body = request.body, !body.isEmpty {
+            bodyValue = RequestBodyParser.parse(body, contentType: rawContentType)
+        } else {
+            bodyValue = request.bodyString ?? ""
         }
 
         // Deserialize query parameters using style/explode rules from the OpenAPI spec.
@@ -643,6 +649,10 @@ public final class Application: @unchecked Sendable {
         // Also bind body directly for convenience
         if let parsedBody = bodyValue as? [String: any Sendable] {
             context.bind("body", value: parsedBody)
+        } else if let streamingBody = bodyValue as? RequestBodyValue {
+            // `<body>` and `<request: body>` name the same thing, including
+            // when that thing has not been read yet.
+            context.bind("body", value: streamingBody)
         }
 
         // Create executor and run with shared global symbols
@@ -659,6 +669,23 @@ public final class Application: @unchecked Sendable {
     private func convertToHTTPResponse(_ response: Response, requestPath: String = "") -> HTTPResponse {
         // Map status string to HTTP status code
         let statusCode = mapStatusToHTTPCode(response.status)
+
+        // Returning an unread request body writes it straight back out
+        // (GitLab #477): chunked, no Content-Length, nothing accumulated in
+        // between. This is what makes an echo or a proxy cost one chunk of
+        // memory rather than the size of the payload.
+        for value in response.data.values {
+            let body: (any UnreadBody)? = (value.get() as RequestBodyValue?) ?? (value.get() as AnchoredBody?)
+            guard let body else { continue }
+            let statement = "Return a <\(response.status): status> with the request body"
+            guard let chunks = try? body.chunkStream(consumer: statement) else { continue }
+            return HTTPResponse(
+                statusCode: statusCode,
+                headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
+                body: nil,
+                bodyStream: chunks
+            )
+        }
 
         // Check for MIME type from file extension in request path
         if let mimeType = mimeTypeFromPath(requestPath), response.data.count == 1 {

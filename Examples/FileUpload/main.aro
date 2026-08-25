@@ -1,0 +1,8 @@
+(* File Upload — streams don't have a size, values do (GitLab #477). *)
+
+(Application-Start: File Upload) {
+    Log "File upload service listening on 8080" to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}

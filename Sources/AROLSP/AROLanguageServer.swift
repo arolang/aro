@@ -803,7 +803,8 @@ public final class AROLanguageServer: Sendable {
         return inlayHintHandler.handle(
             compilationResult: state.compilationResult,
             startLine: startLine,
-            endLine: endLine
+            endLine: endLine,
+            bodyLimits: bodyLimits(for: uri)
         )
     }
 
@@ -1355,8 +1356,16 @@ public final class AROLanguageServer: Sendable {
         return inlayHintHandler.handle(
             compilationResult: state.compilationResult,
             startLine: startLine,
-            endLine: endLine
+            endLine: endLine,
+            bodyLimits: bodyLimits(for: uri)
         )
+    }
+
+    /// The contract's per-route body limits, for the request-body inlay hint
+    /// (GitLab #477). Read from the contract nearest the file being edited,
+    /// falling back to the workspace roots.
+    private func bodyLimits(for uri: String) -> RouteBodyLimits {
+        RouteBodyLimits.load(near: uriToURL(uri), roots: workspaceState.allRoots)
     }
 
     // MARK: - Diagnostics Publishing

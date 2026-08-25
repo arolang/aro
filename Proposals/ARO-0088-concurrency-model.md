@@ -3,7 +3,7 @@
 - **Status:** Accepted (describes the implemented runtime — [Issue #485](https://git.ausdertechnik.de/arolang/aro/-/issues/485))
 - **Author:** ARO Language Team
 - **Created:** 2026-08-09
-- **Related:** ARO-0005 (Application Architecture), ARO-0007 (Events & Reactive), ARO-0002 (Control Flow — iteration), ARO-0051 (Streaming Execution), ARO-0008 (I/O Services)
+- **Related:** ARO-0005 (Application Architecture), ARO-0007 (Events & Reactive), ARO-0002 (Control Flow — iteration), ARO-0051 (Streaming Execution), ARO-0008 (I/O Services), ARO-0090 (Streaming I/O — deferral vs. materialization)
 
 ## Abstract
 
@@ -288,6 +288,15 @@ The overlap is bounded by a prefetch window (default 2, `ARO_STREAM_PREFETCH`). 
 
 The window bounds the hand-off this stage owns. A source that ignores backpressure entirely — an array, a socket pushing as fast as it can — still produces at its own pace upstream; prefetch cannot retrofit backpressure onto a producer that has none.
 
+## 13. Deferral is not Materialization
+
+Two axes that are easy to conflate and are independent:
+
+- **Deferral** (this proposal) is *when* a statement runs. A deferrable action starts at its statement and is waited for at the first read of its result.
+- **Materialization** (ARO-0090) is *whether* a value is built at all. A request body that a feature set only moves never becomes a value, so nothing bounds its size; one that a feature set reads does, and `x-aro-max-body` bounds it.
+
+A body binding is not a deferred future. It is a value that happens not to have been read yet, and reading it forces nothing except the bytes themselves. The prefetch window of §12 is what bounds the memory while they flow.
+
 ## Summary
 
 | Question | Answer |
@@ -298,6 +307,7 @@ The window bounds the hand-off this stage owns. A source that ignores backpressu
 | What is shared? | Repositories and published symbols, both actor-isolated. |
 | What is atomic? | A single repository operation. Nothing larger. |
 | Does `Emit` block? | No. Handlers run independently; shutdown drains them. |
+| Is an unread request body a future? | No — see §13. It is a value not yet built (ARO-0090). |
 | Is compiled output different? | Same semantics, tighter concurrency bounds. |
 | When does a failure surface? | At the failing statement's identity, reported no later than feature-set exit. |
 

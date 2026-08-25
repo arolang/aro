@@ -195,6 +195,9 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Native Git actions (libgit2) | ✅ | ✅ | ✅ |
 | **Networking** |
 | HTTP Server | ✅ | ✅ | ✅¹ |
+| Request body limit (`x-aro-max-body`) | ✅ | ✅ | ⚠️⁸ |
+| Streaming request bodies | ✅ | ✅ | ❌⁸ |
+| Streaming bodies in compiled binaries | ✅ | ✅ | ❌⁴ |
 | HTTP Client | ✅ | ✅ | ✅ |
 | Socket Server | ✅ | ✅ | ✅¹ |
 | Socket Client | ✅ | ✅ | ✅¹ |
@@ -216,6 +219,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ⁵ `URL.lines` not available on Windows; use `Read` + `Split` instead
 ⁶ Requires `llama-server`, `mlx_lm.server`, or `$ARO_LM_ENDPOINT` to be reachable
 ⁷ macOS Apple Silicon runs the model natively via MLX (no Python, no subprocess)
+⁸ FlyingFox hands the body over whole, so Windows enforces the declared `Content-Length` and the size after reading, but cannot stream a body to a sink or bound a chunked one incrementally (ARO-0090 §9)
 
 ## Quick Start
 

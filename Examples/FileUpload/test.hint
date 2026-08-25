@@ -1,0 +1,10 @@
+# ARO-0090: streamed bodies and per-route limits.
+#
+# The harness runs the interpreter; `test.sh` itself builds the binary and
+# repeats every check against it, so both modes are covered without the harness
+# building the example twice (ARO-0090 §10).
+mode: interpreter
+timeout: 180
+# HTTP servers hang on Windows CI, and Windows cannot stream a body at all.
+skip-on-windows: request body streaming is not available on the FlyingFox path
+test-script: ./Examples/FileUpload/test.sh

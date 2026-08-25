@@ -8,6 +8,7 @@ import Foundation
 import AROParser
 import AROPackageManager
 import AROVersion
+import ARORuntime
 
 struct CheckCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -84,6 +85,11 @@ struct SourceCheckSubcommand: ParsableCommand {
             totalWarnings += warnings
         }
 
+        // Where each route's request body goes (GitLab #477).
+        if isDirectory.boolValue {
+            totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles)
+        }
+
         // Summary
         print()
         if totalErrors == 0 && totalWarnings == 0 {
@@ -100,6 +106,93 @@ struct SourceCheckSubcommand: ParsableCommand {
         if totalErrors > 0 {
             Foundation.exit(1)
         }
+    }
+
+    /// Report, per contract route, whether the request body is held in memory
+    /// or streamed (GitLab #477).
+    ///
+    /// This is the part of the body limit a programmer can act on *before*
+    /// running anything: which routes are bounded by `x-aro-max-body`, which
+    /// ones are not bounded at all because they never build the body, and
+    /// where the contract and the code disagree about which is which.
+    /// - Returns: the number of warnings emitted.
+    private func reportBodyPolicies(directory: URL, sourceFiles: [URL]) -> Int {
+        let contract = ["openapi.yaml", "openapi.yml", "openapi.json"]
+            .map { directory.appendingPathComponent($0) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let contract else { return 0 }
+
+        guard let spec = try? OpenAPILoader.load(from: contract) else { return 0 }
+
+        var featureSets: [FeatureSet] = []
+        for file in sourceFiles {
+            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
+            let result = Compiler().compile(source)
+            featureSets.append(contentsOf: result.program.featureSets)
+        }
+        guard !featureSets.isEmpty else { return 0 }
+
+        let summaries = BodyMaterializationAnalyzer.analyze(featureSets)
+        let byName = Dictionary(featureSets.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+
+        var lines: [String] = []
+        var warningCount = 0
+
+        for (path, item) in spec.paths.sorted(by: { $0.key < $1.key }) {
+            for (method, operation) in item.allOperations {
+                guard let operationId = operation.operationId else { continue }
+                guard byName[operationId] != nil else { continue }
+
+                let summary = summaries[operationId] ?? .conservative(operationId)
+                // A route with no declared body whose feature set never mentions
+                // one has nothing to report. Saying it "holds up to 1MB" would
+                // be true and useless — the buffer is empty. A route that
+                // streams (`materializes == false`) always has something to
+                // say, declared body or not.
+                let touchesBody = summary.statement != nil || !summary.materializes
+                guard operation.requestBody != nil || touchesBody else { continue }
+
+                let route = "\(method.uppercased()) \(path)"
+                let declaredText = operation.xAroMaxBody
+                let declared = operation.maxBodyBytes
+
+                if let declaredText, declared == nil {
+                    lines.append("  ⚠️  \(route): x-aro-max-body: \(declaredText) is not a size — using the default")
+                    warningCount += 1
+                    continue
+                }
+
+                if summary.materializes {
+                    let limit = declared ?? RuntimeDefaults.maxMaterializedBody
+                    var line = "  holds  \(route) — up to \(ByteSize.describe(limit)) in memory"
+                    if let statement = summary.statement {
+                        line += " (\(statement)"
+                        if let number = summary.line { line += ", line \(number)" }
+                        line += ")"
+                    }
+                    lines.append(line)
+
+                    // A large declared limit on a route that reads its body is
+                    // not a streaming route — it is that many bytes of memory
+                    // per concurrent request, which is worth saying out loud.
+                    if let declared, declared > 10_000_000 {
+                        lines.append("  ⚠️  \(route): reads its body, so \(ByteSize.describe(declared)) is held in memory per request")
+                        warningCount += 1
+                    }
+                } else {
+                    lines.append("  streams \(route) — no limit applies, nothing is buffered")
+                    if declaredText != nil {
+                        lines.append("      note: x-aro-max-body is unused here; this route never builds the body")
+                    }
+                }
+            }
+        }
+
+        guard !lines.isEmpty else { return warningCount }
+        print()
+        print("Request bodies:")
+        for line in lines { print(line) }
+        return warningCount
     }
 
     /// `--syntax` mode: validate a bare ARO snippet (no feature-set wrapper

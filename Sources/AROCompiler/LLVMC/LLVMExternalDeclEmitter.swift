@@ -38,6 +38,7 @@ public final class LLVMExternalDeclEmitter {
     private var _contextDrainDeferred: Function?
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
+    private var _httpSetBodyPolicy: Function?
     private var _setEmbeddedTemplates: Function?
     private var _registerEmbeddedPlugin: Function?
     private var _registerStaticPlugin: Function?
@@ -258,6 +259,13 @@ public final class LLVMExternalDeclEmitter {
         _setEmbeddedOpenapi = ctx.module.declareFunction(
             "aro_set_embedded_openapi",
             types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_http_set_body_policy(ptr operationId, i32 streams, ptr limit)
+        // GitLab #477: the materialization analysis, baked into the binary.
+        _httpSetBodyPolicy = ctx.module.declareFunction(
+            "aro_http_set_body_policy",
+            types.voidFunctionType(parameters: [ptr, i32, ptr])
         )
 
         // void @aro_set_embedded_templates(ptr) - ARO-0050
@@ -588,6 +596,7 @@ public final class LLVMExternalDeclEmitter {
     public var contextDrainDeferred: Function { _contextDrainDeferred! }
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
+    public var httpSetBodyPolicy: Function { _httpSetBodyPolicy! }
     public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }
     public var registerEmbeddedPlugin: Function { _registerEmbeddedPlugin! }
     public var registerStaticPlugin: Function { _registerStaticPlugin! }
