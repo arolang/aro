@@ -209,7 +209,7 @@ public final class PluginLoader: @unchecked Sendable {
                 // Parse plugin.yaml to get the handler (qualifier namespace)
                 let yamlContent = try String(contentsOf: pluginYaml, encoding: .utf8)
                 let pluginName = item.lastPathComponent
-                let pluginHandler = parseHandlerFromPluginYAML(yamlContent)
+                let pluginHandler = Self.parseHandlerFromPluginYAML(yamlContent)
 
                 // Search for the compiled library in common locations:
                 // - src/ (C plugins)
@@ -255,27 +255,77 @@ public final class PluginLoader: @unchecked Sendable {
     /// Priority:
     /// 1. Root-level `handle:` (canonical PascalCase field, GitLab #95)
     /// 2. `handler:` inside `provides:` entries (legacy, still supported)
-    private func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
+    ///
+    /// This is a line scanner rather than a YAML parse because it runs in
+    /// compiled binaries, where the manifest arrives as a string constant
+    /// baked in at build time and there is no loader to hand it to. That
+    /// is fine — but it has to handle the YAML people actually write.
+    ///
+    /// It did not handle comments. `handle: Greeting  # PascalCase …`
+    /// yielded a namespace with the comment still attached, so every
+    /// action registered under `greeting  # pascalcase ….greet` and the
+    /// binary answered `Unknown action verb: 'greeting.greet'`. The
+    /// interpreter was unaffected — it parses the manifest with a real
+    /// YAML parser — so the same example worked under `aro run` and
+    /// failed compiled, which is the most expensive shape a bug can
+    /// take.
+    static func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
         var insideProvides = false
         var legacyHandler: String? = nil
         for line in yaml.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Root-level handle: (not indented under provides:)
             if !line.hasPrefix(" ") && !line.hasPrefix("\t") && trimmed.hasPrefix("handle:") {
-                let value = String(trimmed.dropFirst("handle:".count))
-                    .trimmingCharacters(in: .whitespaces)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                let value = Self.scalarValue(after: "handle:", in: trimmed)
                 if !value.isEmpty { return value }
             }
             if trimmed.hasPrefix("provides:") { insideProvides = true }
             if insideProvides && trimmed.hasPrefix("handler:") && legacyHandler == nil {
-                let value = String(trimmed.dropFirst("handler:".count))
-                    .trimmingCharacters(in: .whitespaces)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                let value = Self.scalarValue(after: "handler:", in: trimmed)
                 if !value.isEmpty { legacyHandler = value }
             }
         }
         return legacyHandler
+    }
+
+    /// The scalar value of `key: value  # comment`, comment removed.
+    ///
+    /// YAML only starts a comment at a `#` preceded by whitespace (or at
+    /// the start of a line), so `handle: Foo#1` is the value `Foo#1` —
+    /// stripping from the first `#` unconditionally would corrupt it.
+    /// A quoted value is taken as-is up to its closing quote, since a
+    /// `#` inside quotes is data.
+    static func scalarValue(after key: String, in trimmedLine: String) -> String {
+        let raw = String(trimmedLine.dropFirst(key.count))
+            .trimmingCharacters(in: .whitespaces)
+
+        if let quote = raw.first, quote == "\"" || quote == "'" {
+            let body = raw.dropFirst()
+            if let end = body.firstIndex(of: quote) {
+                return String(body[body.startIndex..<end])
+            }
+            // Unterminated quote — fall through to the unquoted handling
+            // rather than returning the rest of the line verbatim.
+            return String(body).trimmingCharacters(in: .whitespaces)
+        }
+
+        var value = raw
+        var searchStart = value.startIndex
+        while let hash = value[searchStart...].firstIndex(of: "#") {
+            let precededBySpace = hash == value.startIndex
+                || value[value.index(before: hash)].isWhitespace
+            if precededBySpace {
+                value = String(value[value.startIndex..<hash])
+                break
+            }
+            guard let next = value.index(hash, offsetBy: 1, limitedBy: value.endIndex),
+                  next < value.endIndex else { break }
+            searchStart = next
+        }
+
+        return value
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
     }
 
     /// Load an embedded Python plugin via the in-process Python interpreter.
@@ -812,7 +862,7 @@ public final class PluginLoader: @unchecked Sendable {
         // Priority 0: Load statically-linked plugins (function pointers, no dlopen)
         if !staticPluginRegistry.isEmpty {
             for (pluginName, entry) in staticPluginRegistry {
-                let namespace = parseHandlerFromPluginYAML(entry.yaml)
+                let namespace = Self.parseHandlerFromPluginYAML(entry.yaml)
                 do {
                     try loadStaticPlugin(name: pluginName, entry: entry, namespace: namespace)
                 } catch {
@@ -847,7 +897,7 @@ public final class PluginLoader: @unchecked Sendable {
             }
 
             for (pluginName, entry) in embeddedPythonPluginRegistry {
-                let namespace = parseHandlerFromPluginYAML(entry.yaml)
+                let namespace = Self.parseHandlerFromPluginYAML(entry.yaml)
                 do {
                     try loadEmbeddedPythonPlugin(name: pluginName, entry: entry, namespace: namespace, cacheDir: cacheDir)
                 } catch {
@@ -884,7 +934,7 @@ public final class PluginLoader: @unchecked Sendable {
                     try soData.write(to: soPath)
                 }
 
-                let namespace = parseHandlerFromPluginYAML(embeddedData.yaml)
+                let namespace = Self.parseHandlerFromPluginYAML(embeddedData.yaml)
                 do {
                     try loadCPlugin(at: soPath, name: pluginName, namespace: namespace)
                 } catch {
@@ -929,7 +979,7 @@ public final class PluginLoader: @unchecked Sendable {
             let pluginHandler: String? = {
                 guard FileManager.default.fileExists(atPath: yamlPath.path),
                       let yamlContent = try? String(contentsOf: yamlPath, encoding: .utf8) else { return nil }
-                return parseHandlerFromPluginYAML(yamlContent)
+                return Self.parseHandlerFromPluginYAML(yamlContent)
             }()
 
             // Search for the library in common locations:
