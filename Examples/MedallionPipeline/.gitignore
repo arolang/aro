@@ -1,0 +1,13 @@
+# Everything here is produced by a run. `SeedLanding` writes the landing
+# CSVs so the example needs no setup and works from any working
+# directory; the three layers are derived from them.
+#
+# They land relative to the *current* directory, not this one — `aro run`
+# does not chdir into the application — so running from the repository
+# root leaves them there instead. That is what the integration runner
+# does, and why the example seeds its own input rather than shipping it.
+landing/
+bronze/
+silver/
+gold/
+MedallionPipeline

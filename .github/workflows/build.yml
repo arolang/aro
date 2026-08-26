@@ -1621,6 +1621,19 @@ jobs:
           path: Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
           retention-days: 30
 
+      - name: Build Data Engineers Book PDF
+        run: |
+          cd Book/AROForDataEngineers
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload Data Engineers Book PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-for-data-engineers
+          path: Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf
+          retention-days: 30
+
       - name: Build Debugging Guide PDF
         run: |
           cd Book/TheDebuggingGuide
@@ -1696,6 +1709,21 @@ jobs:
           VERSION="${VERSION#v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Build Jupyter kernel wheel
+        run: |
+          # The book tells readers to `pip install` this straight off the
+          # release page, so the asset has to exist here (GitLab #490).
+          # Version comes from the tag rather than pyproject.toml: two
+          # version numbers for one artifact drift, and the one that
+          # matters to pip is the one on the release.
+          python3 -m pip install --quiet build
+          sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" Editor/jupyter-aro/pyproject.toml
+          python3 -m build --outdir dist-kernel Editor/jupyter-aro
+          mkdir -p artifacts/aro-kernel
+          cp dist-kernel/aro_kernel-${{ steps.version.outputs.version }}-py3-none-any.whl \
+             artifacts/aro-kernel/aro_kernel-py3-none-any.whl
+          ls -la artifacts/aro-kernel/
+
       - name: Collect release assets
         id: assets
         run: |
@@ -1712,7 +1740,9 @@ jobs:
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf \
             artifacts/aro-by-example/ARO-By-Example.pdf \
             artifacts/aro-essential-primer/ARO-Essential-Primer.pdf \
-            artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf; do
+            artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf \
+            artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf \
+            artifacts/aro-kernel/aro_kernel-py3-none-any.whl; do
             if [ -f "$f" ]; then
               FILES="${FILES}${f}\n"
             else
@@ -1759,6 +1789,8 @@ jobs:
             artifacts/aro-by-example/ARO-By-Example.pdf
             artifacts/aro-essential-primer/ARO-Essential-Primer.pdf
             artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf
+            artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf
+            artifacts/aro-kernel/aro_kernel-py3-none-any.whl
           fail_on_unmatched_files: false
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
@@ -1778,6 +1810,25 @@ jobs:
             | ARO By Example | [ARO-By-Example.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-By-Example.pdf) |
             | ARO Essential Primer | [ARO-Essential-Primer.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Essential-Primer.pdf) |
             | SOLARO — The ARO Development Platform | [ARO-Solaro-Platform.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Solaro-Platform.pdf) |
+            | ARO for Data Engineers | [ARO-For-Data-Engineers.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-For-Data-Engineers.pdf) |
+
+            ### Jupyter kernel
+
+            Notebooks in JupyterLab, VS Code or DataSpell. Needs the `aro`
+            binary above on your `PATH`, and Python 3.9+.
+
+            ```bash
+            pip install https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro_kernel-py3-none-any.whl
+            python -m aro_kernel.install --user
+            ```
+
+            If `aro` lives somewhere else, point at it before installing the
+            kernelspec — the path is baked in:
+
+            ```bash
+            export ARO_KERNEL_ARO=/opt/aro/bin/aro
+            python -m aro_kernel.install --user
+            ```
 
             ### Installation
 

@@ -211,6 +211,8 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | **Developer Tools** |
 | Language Server (LSP) | ✅ | ✅ | ❌³ |
 | Swift Plugins | ✅ | ✅ | ✅ |
+| JSON REPL (`aro repl --json`) | ✅ | ✅ | ✅⁹ |
+| Jupyter kernel | ✅ | ✅ | ✅⁹ |
 
 ¹ Uses FlyingFox with polling-based networking (no SwiftNIO)
 ² Uses polling-based monitoring instead of native events
@@ -220,6 +222,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ⁶ Requires `llama-server`, `mlx_lm.server`, or `$ARO_LM_ENDPOINT` to be reachable
 ⁷ macOS Apple Silicon runs the model natively via MLX (no Python, no subprocess)
 ⁸ FlyingFox hands the body over whole, so Windows enforces the declared `Content-Length` and the size after reading, but cannot stream a body to a sink or bound a chunked one incrementally (ARO-0090 §9)
+⁹ `Log` output is captured; stray `print`s from plugins are not (no `pipe`/`dup2`)
 
 ## Quick Start
 
@@ -250,6 +253,8 @@ The complete language guide is available as a PDF in the [Releases](https://gith
 - Patterns and practices
 
 The **[ARO Debugging Guide](https://github.com/arolang/aro/releases/latest/download/ARO-Debugging-Guide.pdf)** is a separate, chapter-by-chapter walkthrough of `aro debug` — installation, the statement-boundary model, the five breakpoint flavors, watches, DAP integration with VS Code / IntelliJ / Neovim, recording and replay, and production attach. Source lives under [`Book/TheDebuggingGuide/`](./Book/TheDebuggingGuide).
+
+**[ARO for Data Engineers](https://github.com/arolang/aro/releases/latest/download/ARO-For-Data-Engineers.pdf)** covers the Jupyter kernel and a medallion pipeline end to end — installing the kernel, bronze/silver/gold layers, joins, aggregation, and writing a data product. The finished project is [`Examples/MedallionPipeline`](./Examples/MedallionPipeline), whose row counts are asserted in CI. Source lives under [`Book/AROForDataEngineers/`](./Book/AROForDataEngineers).
 
 For a detailed look at the implementation, see [OVERVIEW.md](./OVERVIEW.md).
 

@@ -1,0 +1,7 @@
+order_id,customer_id,sku,quantity,unit_price,status,ordered_at
+1001,C001,SKU-RED,2,19.99,confirmed,2026-08-01
+1002,C002,SKU-BLU,1,49.50,confirmed,2026-08-01
+1003,C001,SKU-GRN,5,4.25,cancelled,2026-08-02
+1004,C003,SKU-RED,3,19.99,confirmed,2026-08-02
+1005,C002,SKU-GRN,10,4.25,confirmed,2026-08-03
+1006,C004,SKU-BLU,2,49.50,pending,2026-08-03

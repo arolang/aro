@@ -19,7 +19,15 @@ struct ReplCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Disable colored output")
     var noColor: Bool = false
 
+    @Flag(name: .long, help: "Speak line-delimited JSON on stdio instead of running a terminal REPL")
+    var json: Bool = false
+
     func run() async throws {
+        if json {
+            try await runJSON()
+            return
+        }
+
         let shell = REPLShell()
         shell.useColors = !noColor
 
@@ -41,5 +49,24 @@ struct ReplCommand: AsyncParsableCommand {
         }
 
         await shell.run()
+    }
+
+    /// Machine-readable mode: one JSON object per line on stdio.
+    ///
+    /// The log prefix is suppressed because the consumer is a program (a
+    /// notebook cell, an editor panel) that already knows where the output
+    /// came from — `[_repl_session_]` in front of every line is noise there.
+    private func runJSON() async throws {
+        let session = REPLSession(suppressLogPrefix: true)
+
+        if let loadPath = load {
+            let result = try await LoadCommand().execute(args: [loadPath], session: session)
+            if case .error(let message) = result {
+                FileHandle.standardError.write(Data("Error loading file: \(message)\n".utf8))
+                throw ExitCode.failure
+            }
+        }
+
+        await JSONREPLServer(session: session).run()
     }
 }

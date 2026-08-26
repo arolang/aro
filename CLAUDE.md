@@ -41,6 +41,8 @@ aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to t
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 aro repl                 # Start the interactive ARO REPL
+aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
+                         # the Jupyter kernel in Editor/jupyter-aro speaks this
 aro test ./MyApp         # Run colocated tests (ARO-0015)
 aro new plugin foo       # Scaffold a new plugin
 aro add github:org/repo  # Install a plugin from Git
@@ -728,6 +730,9 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │   # Git
 ├── GitDemo/            # Native Git operations (status, log, stage, commit)
 │
+│   # Data engineering
+├── MedallionPipeline/  # bronze/silver/gold: ingest CSV, filter, join, aggregate, write a data product
+│
 │   # Sockets & Services
 ├── EchoSocket/         # TCP socket server
 ├── SocketClient/       # TCP client connections
@@ -804,7 +809,8 @@ Proposals/              # Language specifications
 ├── ARO-0086-automatic-pipeline-detection.md
 ├── ARO-0087-plugin-sdk.md
 ├── ARO-0088-concurrency-model.md
-└── ARO-0090-streaming-io-and-materialization.md
+├── ARO-0090-streaming-io-and-materialization.md
+└── ARO-0091-jupyter-kernel.md
 ```
 
 ## Language Proposals
@@ -859,6 +865,7 @@ The `Proposals/` directory contains language specifications:
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
 | **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
+| **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab
