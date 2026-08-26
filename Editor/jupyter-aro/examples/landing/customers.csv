@@ -1,0 +1,5 @@
+customer_id,name,region,tier
+C001,Ada Lovelace,EMEA,gold
+C002,Grace Hopper,AMER,silver
+C003,Alan Turing,EMEA,silver
+C004,Katherine Johnson,AMER,gold

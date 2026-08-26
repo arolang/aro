@@ -95,6 +95,16 @@ public final class REPLSession: @unchecked Sendable {
     /// The statement executor
     private let executor: FeatureSetExecutor
 
+    /// The registry statements are executed against. Held so that
+    /// `executeStatement(_:companions:)` can register user-defined
+    /// actions (ARO-0081) into the same registry the executor uses.
+    private let actionRegistry: ActionRegistry
+
+    /// The host for user-defined actions registered from companion
+    /// sources. Kept so a redefinition replaces its predecessor
+    /// instead of layering a second handler on the same verb.
+    private var userActionHost: UserDefinedActionHost?
+
     /// The flag the session was constructed with. Persisted so that
     /// `clear()` can rebuild the underlying RuntimeContext with the same
     /// formatting behavior.
@@ -109,6 +119,7 @@ public final class REPLSession: @unchecked Sendable {
         actionRegistry: ActionRegistry = .shared
     ) {
         self.suppressLogPrefix = suppressLogPrefix
+        self.actionRegistry = actionRegistry
         self.eventBus = EventBus()
         self.globalSymbols = GlobalSymbolStorage()
         self.context = RuntimeContext(
@@ -171,17 +182,36 @@ public final class REPLSession: @unchecked Sendable {
 
     /// Execute a single ARO statement
     public func executeStatement(_ source: String) async throws -> REPLResult {
+        try await executeStatement(source, companions: [])
+    }
+
+    /// Execute a statement (or block of statements) with `companions`
+    /// compiled into the same program.
+    ///
+    /// A companion is the source of a feature set defined earlier in the
+    /// session. Compiling them together is what lets a statement call a
+    /// user-defined action (ARO-0081) that an earlier input defined —
+    /// semantic analysis resolves `Application.<Name>` against the program
+    /// it is given, and a lone wrapped statement is a program of one.
+    ///
+    /// Companions are appended *after* the wrapper, never prepended, so the
+    /// statement keeps the line numbers the caller sees. Diagnostics stay
+    /// pointing at the input the user actually typed.
+    public func executeStatement(_ source: String, companions: [String]) async throws -> REPLResult {
         let startTime = Date()
 
         // Record in history
         var entry = HistoryEntry(input: source, type: .statement)
 
         // Wrap statement in a temporary feature set for compilation
-        let wrappedSource = """
+        var wrappedSource = """
         (_repl_temp_: Interactive) {
             \(source)
         }
         """
+        if !companions.isEmpty {
+            wrappedSource += "\n\n" + companions.joined(separator: "\n\n")
+        }
 
         let result = compiler.compile(wrappedSource)
 
@@ -193,7 +223,14 @@ public final class REPLSession: @unchecked Sendable {
             return .error(errorMsg)
         }
 
-        guard let analyzedFS = result.analyzedProgram.featureSets.first else {
+        // Register any user-defined actions the companions declare, so the
+        // statement can call them. Replaces the previous registration rather
+        // than stacking on it — a redefined action must not keep answering
+        // with its old body.
+        await registerUserActions(from: result.analyzedProgram)
+
+        guard let analyzedFS = result.analyzedProgram.byName["_repl_temp_"]
+            ?? result.analyzedProgram.featureSets.first else {
             let errorMsg = "No feature set found in compiled result"
             entry.result = .error(errorMsg)
             entry.duration = Date().timeIntervalSince(startTime)
@@ -225,6 +262,23 @@ public final class REPLSession: @unchecked Sendable {
             addHistory(entry)
             return .error(errorMsg)
         }
+    }
+
+    /// Register the user-defined actions (ARO-0081) found in `program`.
+    ///
+    /// No-op when the program declares none, so the common case — a plain
+    /// statement with no companions — costs nothing.
+    private func registerUserActions(from program: AnalyzedProgram) async {
+        let host = UserDefinedActionHost(
+            analyzedProgram: program,
+            globalSymbols: globalSymbols,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus
+        )
+        guard !host.isEmpty else { return }
+        await userActionHost?.unregister()
+        await host.register()
+        userActionHost = host
     }
 
     /// Convert AnySendable response data to displayable format
@@ -334,6 +388,16 @@ public final class REPLSession: @unchecked Sendable {
         _featureSets.removeAll()
         _featureSetSources.removeAll()
         _history.removeAll()
+
+        // Drop any user-defined action verbs this session registered.
+        // `clear()` is synchronous (the meta-command protocol is), so the
+        // unregistration is detached; verbs are replaced wholesale by the
+        // next registration anyway, this just stops a cleared session from
+        // leaving `Application.<Name>` answering from a discarded body.
+        if let host = userActionHost {
+            userActionHost = nil
+            Task { await host.unregister() }
+        }
         // Reset the runtime context to clear all variables
         context = RuntimeContext(
             featureSetName: "_repl_session_",

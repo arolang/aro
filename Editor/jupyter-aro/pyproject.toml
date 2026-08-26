@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aro-kernel"
+version = "0.1.0"
+description = "Jupyter kernel for ARO (Action Result Object)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "ARO" }]
+keywords = ["jupyter", "kernel", "aro"]
+dependencies = [
+    "ipykernel>=6.0",
+    "jupyter-client>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/arolang/aro"
+
+[project.scripts]
+aro-kernel-install = "aro_kernel.install:main"
+
+[tool.setuptools]
+packages = ["aro_kernel"]

@@ -1,0 +1,15 @@
+# Type: console
+# Command: aro run ./Examples/MedallionPipeline
+# Note: occurrence-check — stage logs interleave with the orchestration banners.
+#
+# The row counts are asserted, not just the banners. A pipeline that runs
+# to completion and writes the wrong number of rows is the failure worth
+# catching: 6 orders in, 4 confirmed, 2 regions out.
+---
+== bronze ==
+bronze/orders.jsonl — 6 rows
+bronze/customers.jsonl — 4 rows
+== silver ==
+silver/order_facts.jsonl — 4 rows
+== gold ==
+gold/revenue_by_region.csv — 2 rows

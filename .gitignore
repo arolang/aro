@@ -80,6 +80,7 @@ testrun.log
 /Examples/DirectoryReplicator/DirectoryReplicator
 /Examples/DateRangeDemo/DateRangeDemo
 /Book/AROByExample/output
+/Book/AROForDataEngineers/output
 /Examples/ConfigurableTimeout/ConfigurableTimeout
 /Examples/SocketClient/SocketClient
 /Examples/ReceiveData/ReceiveData
@@ -197,3 +198,20 @@ Train/script/output/
 
 # eval run artifact (large; regenerable)
 /ask-eval.csv
+
+# Python packaging artifacts (Editor/jupyter-aro)
+*.egg-info/
+.ipynb_checkpoints/
+
+# Written by Examples/MedallionPipeline. They land relative to the
+# current directory — `aro run` does not chdir into the application — so
+# they appear wherever the pipeline was started from: the repository root
+# by hand, or the harness directory under CI.
+/landing/
+/bronze/
+/silver/
+/gold/
+/Tests/IntegrationTestsRunner/landing/
+/Tests/IntegrationTestsRunner/bronze/
+/Tests/IntegrationTestsRunner/silver/
+/Tests/IntegrationTestsRunner/gold/

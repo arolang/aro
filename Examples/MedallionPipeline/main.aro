@@ -1,0 +1,208 @@
+(* Medallion pipeline — bronze → silver → gold.
+ *
+ * Three layers, three promises:
+ *
+ *   bronze  the source, reproduced. No cleaning, no joins, no opinions.
+ *           If the upstream CSV is wrong, bronze is wrong the same way,
+ *           which is what makes it useful when someone asks why last
+ *           Tuesday's number changed.
+ *
+ *   silver  the source, made trustworthy. Cancelled rows dropped,
+ *           customers joined on, money computed once so every consumer
+ *           computes it the same way.
+ *
+ *   gold    the answer to one question, shaped for whoever asked it.
+ *           A data product, not a table you happen to have.
+ *
+ * Every stage is a user-defined action (ARO-0081), so the pipeline reads
+ * as three named steps rather than one long procedure. They live in this
+ * file together on purpose — see the note in the book: an action is
+ * currently only callable from the file that declares it, while events
+ * do cross files.
+ *)
+
+(* ---------------------------------------------------------------- *)
+(* Landing                                                           *)
+(* ---------------------------------------------------------------- *)
+
+(* Stand-in for whatever drops files in your landing zone — a vendor
+ * SFTP, an export job, a Kafka sink. The example writes them itself so
+ * it runs from any working directory and needs nothing set up first;
+ * everything after this point reads files, exactly as it would if the
+ * upstream had put them there.
+ *)
+
+(SeedLanding: Action) {
+    Create the <orders> with [
+        { order_id: 1001, customer_id: "C001", sku: "SKU-RED", quantity: 2,  unit_price: 19.99, status: "confirmed", ordered_at: "2026-08-01" },
+        { order_id: 1002, customer_id: "C002", sku: "SKU-BLU", quantity: 1,  unit_price: 49.50, status: "confirmed", ordered_at: "2026-08-01" },
+        { order_id: 1003, customer_id: "C001", sku: "SKU-GRN", quantity: 5,  unit_price: 4.25,  status: "cancelled", ordered_at: "2026-08-02" },
+        { order_id: 1004, customer_id: "C003", sku: "SKU-RED", quantity: 3,  unit_price: 19.99, status: "confirmed", ordered_at: "2026-08-02" },
+        { order_id: 1005, customer_id: "C002", sku: "SKU-GRN", quantity: 10, unit_price: 4.25,  status: "confirmed", ordered_at: "2026-08-03" },
+        { order_id: 1006, customer_id: "C004", sku: "SKU-BLU", quantity: 2,  unit_price: 49.50, status: "pending",   ordered_at: "2026-08-03" }
+    ].
+    Write the <orders> to "./landing/orders.csv".
+
+    Create the <customers> with [
+        { customer_id: "C001", name: "Ada Lovelace",      region: "EMEA", tier: "gold" },
+        { customer_id: "C002", name: "Grace Hopper",      region: "AMER", tier: "silver" },
+        { customer_id: "C003", name: "Alan Turing",       region: "EMEA", tier: "silver" },
+        { customer_id: "C004", name: "Katherine Johnson", region: "AMER", tier: "gold" }
+    ].
+    Write the <customers> to "./landing/customers.csv".
+    Return an <OK: status> for the <seed>.
+}
+
+(* ---------------------------------------------------------------- *)
+(* Bronze                                                            *)
+(* ---------------------------------------------------------------- *)
+
+(IngestOrders: Action) {
+    Read the <rows> from "./landing/orders.csv".
+    Create the <stamp> with now.
+
+    for each <row> in <rows> {
+        Create the <record> with {
+            order_id: <row: order_id>,
+            customer_id: <row: customer_id>,
+            sku: <row: sku>,
+            quantity: <row: quantity>,
+            unit_price: <row: unit_price>,
+            status: <row: status>,
+            ordered_at: <row: ordered_at>,
+            _source: "landing/orders.csv",
+            _ingested: <stamp>
+        }.
+        Store the <record> into the <bronze-orders-repository>.
+    }
+
+    Retrieve the <bronze> from the <bronze-orders-repository>.
+    Compute the <count: length> from the <bronze>.
+    Log "  bronze/orders.jsonl — " ++ <count> ++ " rows" to the <console>.
+    Write the <bronze> to "./bronze/orders.jsonl".
+    Return an <OK: status> with <bronze>.
+}
+
+(IngestCustomers: Action) {
+    Read the <rows> from "./landing/customers.csv".
+    Create the <stamp> with now.
+
+    for each <row> in <rows> {
+        Create the <record> with {
+            customer_id: <row: customer_id>,
+            name: <row: name>,
+            region: <row: region>,
+            tier: <row: tier>,
+            _source: "landing/customers.csv",
+            _ingested: <stamp>
+        }.
+        Store the <record> into the <bronze-customers-repository>.
+    }
+
+    Retrieve the <bronze> from the <bronze-customers-repository>.
+    Compute the <count: length> from the <bronze>.
+    Log "  bronze/customers.jsonl — " ++ <count> ++ " rows" to the <console>.
+    Write the <bronze> to "./bronze/customers.jsonl".
+    Return an <OK: status> with <bronze>.
+}
+
+(* ---------------------------------------------------------------- *)
+(* Silver                                                            *)
+(* ---------------------------------------------------------------- *)
+
+(BuildSilver: Action) {
+    Read the <orders> from "./bronze/orders.jsonl".
+    Read the <customers> from "./bronze/customers.jsonl".
+
+    (* Only confirmed orders are revenue. Cancelled and pending rows
+     * stay in bronze, where they can still be counted if someone asks
+     * how many orders were abandoned. *)
+    Filter the <confirmed> from the <orders> where <status> = "confirmed".
+
+    for each <order> in <confirmed> {
+        Extract the <cid> from the <order: customer_id>.
+        Filter the <candidates> from the <customers> where <customer_id> = <cid>.
+        Extract the <customer: first> from the <candidates>.
+
+        Extract the <qty> from the <order: quantity>.
+        Extract the <price> from the <order: unit_price>.
+        Compute the <line-total> from <qty> * <price>.
+
+        Create the <fact> with {
+            order_id: <order: order_id>,
+            ordered_on: <order: ordered_at>,
+            customer_id: <cid>,
+            customer_name: <customer: name>,
+            region: <customer: region>,
+            tier: <customer: tier>,
+            sku: <order: sku>,
+            quantity: <qty>,
+            unit_price: <price>,
+            line_total: <line-total>
+        }.
+        Store the <fact> into the <silver-orders-repository>.
+    }
+
+    Retrieve the <silver> from the <silver-orders-repository>.
+    Compute the <count: length> from the <silver>.
+    Log "  silver/order_facts.jsonl — " ++ <count> ++ " rows" to the <console>.
+    Write the <silver> to "./silver/order_facts.jsonl".
+    Return an <OK: status> with <silver>.
+}
+
+(* ---------------------------------------------------------------- *)
+(* Gold                                                              *)
+(* ---------------------------------------------------------------- *)
+
+(BuildRegionRevenue: Action) {
+    Read the <facts> from "./silver/order_facts.jsonl".
+
+    (* The distinct regions, without asking for them twice: project the
+     * column, then drop duplicates. `unique` keeps first-seen order, so
+     * the output is stable run to run — which matters more than it
+     * sounds when the product is a file someone diffs. *)
+    Map the <all-regions> from the <facts> with region.
+    Compute the <regions: unique> from the <all-regions>.
+
+    for each <region-name> in <regions> {
+        Filter the <rows> from the <facts> where <region> = <region-name>.
+        Reduce the <revenue> from the <rows> with sum(<line_total>).
+        Reduce the <order-count> from the <rows> with count().
+        Compute the <avg-order> from <revenue> / <order-count>.
+
+        Create the <row> with {
+            id: <region-name>,
+            region: <region-name>,
+            orders: <order-count>,
+            revenue: <revenue>,
+            avg_order_value: <avg-order>
+        }.
+        Store the <row> into the <gold-region-repository>.
+    }
+
+    Retrieve the <product> from the <gold-region-repository>.
+    Compute the <count: length> from the <product>.
+    Log "  gold/revenue_by_region.csv — " ++ <count> ++ " rows" to the <console>.
+    Write the <product> to "./gold/revenue_by_region.csv".
+    Return an <OK: status> with <product>.
+}
+
+(* ---------------------------------------------------------------- *)
+(* Orchestration                                                     *)
+(* ---------------------------------------------------------------- *)
+
+(Application-Start: Medallion Pipeline) {
+    Application.SeedLanding the <seeded> with { }.
+
+    Log "== bronze ==" to the <console>.
+    Application.IngestOrders the <bronze-orders> with { }.
+    Application.IngestCustomers the <bronze-customers> with { }.
+
+    Log "== silver ==" to the <console>.
+    Application.BuildSilver the <silver> with { }.
+
+    Log "== gold ==" to the <console>.
+    Application.BuildRegionRevenue the <gold> with { }.
+
+    Return an <OK: status> for the <pipeline>.
+}
