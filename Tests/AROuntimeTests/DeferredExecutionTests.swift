@@ -66,11 +66,53 @@ private func runProgram(_ source: String) async throws {
     _ = try await engine.execute(compiled.analyzedProgram)
 }
 
+/// When each unit of deferred work ran.
+///
+/// Overlap is a property of the intervals — did the second start before the
+/// first ended — which holds or fails identically on a fast laptop and a
+/// contended CI runner. A wall-clock budget does not.
+private actor RunWindow {
+    private var opened: [String: Date] = [:]
+    private var closed: [String: Date] = [:]
+
+    func open(_ name: String) { opened[name] = Date() }
+    func close(_ name: String) { closed[name] = Date() }
+
+    /// True when both runs were in flight at the same moment.
+    ///
+    /// A run that never finished counts as not overlapping rather than as a
+    /// crash: the assertion message then says which one, which is more use
+    /// than a nil unwrap.
+    func overlapped(_ a: String, _ b: String) -> Bool {
+        guard let aOpen = opened[a], let aClose = closed[a],
+              let bOpen = opened[b], let bClose = closed[b] else { return false }
+        return aOpen < bClose && bOpen < aClose
+    }
+
+    func describe(_ name: String) -> String {
+        guard let open = opened[name] else { return "\(name): never started" }
+        guard let close = closed[name] else { return "\(name): started, never finished" }
+        return "\(name): ran for \(close.timeIntervalSince(open))s"
+    }
+}
+
 @Suite("Overlapping statements (ARO-0088 §2)", .serialized)
 struct StatementOverlapTests {
 
-    /// Two independent units of deferred work must cost about as much as one,
-    /// not both added together.
+    /// Two independent units of deferred work must be in flight at the same
+    /// time, rather than one waiting for the other.
+    ///
+    /// Asserted as an overlap of the two run intervals, not as a wall-clock
+    /// budget. The budget version — "both finish inside 1.9x one delay" —
+    /// measured the runner as much as the runtime, and CI runs
+    /// `swift test --parallel --num-workers 2`, so this test competes with a
+    /// whole second test process for the cores it is timing. It failed on
+    /// `main` at 1.087s against a 0.76s bound while overlapping perfectly
+    /// well.
+    ///
+    /// Interval overlap is the property actually under test and it does not
+    /// care how slow the machine is: if the two runs serialize, the second
+    /// cannot start before the first ends at any speed.
     ///
     /// Measured at the future level rather than by driving a program with slow
     /// middleware: middleware re-enters the dispatch path, which makes it a test
@@ -81,21 +123,30 @@ struct StatementOverlapTests {
     @Test("Independent deferred work overlaps instead of accumulating")
     func testIndependentWorkOverlaps() async throws {
         let delay = 0.4
+        let window = RunWindow()
 
-        let start = Date()
+        // `AROFuture` starts its Task at construction, so both are already
+        // running by the time either is forced.
         let first = AROFuture(bindingName: "first") {
+            await window.open("first")
             try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await window.close("first")
             return 1 as any Sendable
         }
         let second = AROFuture(bindingName: "second") {
+            await window.open("second")
             try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await window.close("second")
             return 2 as any Sendable
         }
         _ = try await first.value()
         _ = try await second.value()
-        let elapsed = Date().timeIntervalSince(start)
 
-        #expect(elapsed < delay * 1.9, "two independent futures took \(elapsed)s — they serialized")
+        // Both awaits happen before `#expect`: its message is an autoclosure
+        // and cannot suspend.
+        let overlapped = await window.overlapped("first", "second")
+        let detail = "\(await window.describe("first")); \(await window.describe("second"))"
+        #expect(overlapped, "the two futures never ran at the same time — they serialized. \(detail)")
     }
 
     /// End-to-end: the program's observable result is unchanged by deferral.
