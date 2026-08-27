@@ -19,6 +19,12 @@ on:
     branches:
       - main
       - 'release/**'
+  # Manual trigger. Build otherwise only fires on push, so a run that is
+  # lost — GitHub's Actions outage on 2026-08-26 left run 32985638887
+  # accepted but never dispatched, and `rerun`, `cancel` and
+  # `force-cancel` each refused it with a different contradictory
+  # reason — could only be replaced by pushing another commit.
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
