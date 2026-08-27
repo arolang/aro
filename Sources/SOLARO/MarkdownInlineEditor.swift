@@ -290,8 +290,23 @@ final class MarkdownDocumentUndoManager: UndoManager {
     /// chain) is on the main thread. Bail out rather than trap if
     /// something ever calls in from elsewhere — a disabled Undo item
     /// is a better outcome than a crash.
+    ///
+    /// `body` is `@MainActor` because that is what it is: every call
+    /// site touches the model, which is `@MainActor`. Without the
+    /// annotation the closure is nonisolated and those accesses are
+    /// errors —
+    ///
+    ///     main actor-isolated property 'canUndo' can not be
+    ///     referenced from a nonisolated context
+    ///
+    /// — on Swift 6.3.2 / macOS 15 SDK, which is what CI builds
+    /// with. Swift 6.3.3 against the macOS 26 SDK infers the
+    /// isolation and accepts it, so this compiled locally and broke
+    /// only on the runner (GitLab never sees it: SOLARO is macOS-only
+    /// and that pipeline is Linux-only). Stating the isolation makes
+    /// both toolchains agree.
     private func onMain<T: Sendable>(
-        _ body: (MarkdownEditorModel) -> T
+        _ body: @MainActor (MarkdownEditorModel) -> T
     ) -> T? {
         guard Thread.isMainThread, let model else { return nil }
         return MainActor.assumeIsolated { body(model) }
