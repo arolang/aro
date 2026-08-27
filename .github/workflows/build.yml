@@ -1071,6 +1071,30 @@ jobs:
           rustc --version
           cargo --version
 
+      # Python plugin SDK — Examples/QualifierPluginPython declares its
+      # `stats.*` qualifiers from a python-plugin, and the plugin imports
+      # this SDK. Without it the plugin registers nothing and every
+      # `stats.*` qualifier goes unresolved.
+      #
+      # That used to be invisible: an unresolved qualifier returned its
+      # input unchanged, so the example printed empty values and still
+      # matched its occurrence-check expectations. GitLab #486 closed the
+      # qualifier namespace, the unresolved name became a hard error, and
+      # the example started failing — surfacing a plugin that had never
+      # actually run here. GitLab's integration job installs the SDK for
+      # exactly this reason (`.gitlab-ci.yml`, "#486 fallout, job 122170");
+      # these jobs never did, so they went red as soon as the macOS build
+      # was fixed and they finally ran.
+      #
+      # Installed rather than tolerated: if the runner cannot reach the
+      # SDK this fails loudly here, which beats a green example that
+      # exercised no plugin.
+      - name: Install Python plugin SDK
+        run: |
+          sudo apt-get install -y -qq python3-pip
+          pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+          python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
+
       - name: Clean and compile Swift plugins
         run: |
           find Examples -name ".build" -type d -path "*/Plugins/*" -exec rm -rf {} + 2>/dev/null || true
@@ -1329,6 +1353,30 @@ jobs:
           echo "=== Checking for binary ==="
           ls -la Examples/HelloWorld/HelloWorld 2>/dev/null || echo "Binary not found"
           ls -la Examples/HelloWorld/.build/ 2>/dev/null || echo "No .build directory"
+
+      # Python plugin SDK — Examples/QualifierPluginPython declares its
+      # `stats.*` qualifiers from a python-plugin, and the plugin imports
+      # this SDK. Without it the plugin registers nothing and every
+      # `stats.*` qualifier goes unresolved.
+      #
+      # That used to be invisible: an unresolved qualifier returned its
+      # input unchanged, so the example printed empty values and still
+      # matched its occurrence-check expectations. GitLab #486 closed the
+      # qualifier namespace, the unresolved name became a hard error, and
+      # the example started failing — surfacing a plugin that had never
+      # actually run here. GitLab's integration job installs the SDK for
+      # exactly this reason (`.gitlab-ci.yml`, "#486 fallout, job 122170");
+      # these jobs never did, so they went red as soon as the macOS build
+      # was fixed and they finally ran.
+      #
+      # Installed rather than tolerated: if the runner cannot reach the
+      # SDK this fails loudly here, which beats a green example that
+      # exercised no plugin.
+      - name: Install Python plugin SDK
+        run: |
+          python3 -m ensurepip --upgrade >/dev/null 2>&1 || true
+          pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+          python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
 
       - name: Compile Swift plugins
         run: |
