@@ -1091,8 +1091,11 @@ jobs:
       # exercised no plugin.
       - name: Install Python plugin SDK
         run: |
-          sudo apt-get install -y -qq python3-pip
-          pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+          # No sudo: this job runs in the swift:6.3-jammy container as
+          # root, and `sudo` is not installed there. Every other step in
+          # this job calls apt-get bare.
+          apt-get install -y -qq python3-pip
+          python3 -m pip install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
           python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
 
       - name: Clean and compile Swift plugins
@@ -1374,8 +1377,13 @@ jobs:
       # exercised no plugin.
       - name: Install Python plugin SDK
         run: |
-          python3 -m ensurepip --upgrade >/dev/null 2>&1 || true
-          pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+          # --break-system-packages: the runner's Homebrew python is
+          # PEP 668 "externally managed" and refuses a plain install.
+          # It has to land in *this* interpreter, not a venv — the plugin
+          # host shells out to `python3`, so a venv it never activates
+          # would not help.
+          python3 -m pip install --quiet --break-system-packages \
+            "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
           python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
 
       - name: Compile Swift plugins
