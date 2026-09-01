@@ -533,6 +533,8 @@ struct PluginCompiler: Sendable {
         process.executableURL = URL(fileURLWithPath: cargoPath)
         process.arguments = ["rustc", "--release", "--crate-type=staticlib"]
         process.currentDirectoryURL = projectDir
+        // rustc brings its own LLVM; ours must not be forced on it.
+        process.environment = ToolchainEnvironment.forExternalToolchain()
 
         let errorPipe = Pipe()
         process.standardError = errorPipe

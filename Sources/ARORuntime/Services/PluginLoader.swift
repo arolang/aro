@@ -1684,6 +1684,8 @@ public final class PluginLoader: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: cargoPath)
         process.arguments = ["build", "--release"]
         process.currentDirectoryURL = projectDir
+        // rustc brings its own LLVM; ours must not be forced on it.
+        process.environment = ToolchainEnvironment.forExternalToolchain()
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()

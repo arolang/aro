@@ -389,12 +389,28 @@ public final class PluginInstaller: Sendable {
         }
     }
 
+    /// The current environment without the macOS dynamic-linker overrides.
+    ///
+    /// `aro` points `DYLD_LIBRARY_PATH` at the LLVM it links against, and a
+    /// child inherits it — which makes `rustc` load *our* `libLLVM.dylib`
+    /// instead of its own and crash before compiling. This module has no
+    /// dependency on ARORuntime, so it carries its own copy of the strip;
+    /// `ToolchainEnvironment` there documents the failure in full.
+    private static func environmentForExternalToolchain() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        for name in ["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"] {
+            environment.removeValue(forKey: name)
+        }
+        return environment
+    }
+
     /// Build a Rust plugin
     private func buildRustPlugin(at path: URL, config: ProvideEntryBuild) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.currentDirectoryURL = path
         process.arguments = ["cargo", "build", "--release"]
+        process.environment = Self.environmentForExternalToolchain()
 
         let pipe = Pipe()
         process.standardError = pipe
