@@ -1413,13 +1413,25 @@ jobs:
           # window, so aro build gets SIGTERM'd mid-cargo and reports
           # BUILD_FAILURE with empty stderr/stdout. Build dylib + staticlib
           # here so aro build's later cargo invocations are no-ops.
+          #
+          # A pre-warm failure fails the job, matching integration:linux in
+          # .gitlab-ci.yml. The previous `|| true` hid a real one: rustc was
+          # segfaulting on every invocation, the step still reported success,
+          # and the crash only surfaced later as an opaque CSVProcessor
+          # BUILD_FAILURE. `tail -3` is dropped for the same reason — the
+          # diagnostic here is worth more than the brevity.
+          #
+          # DYLD_* is cleared because this job exports it for the aro binary,
+          # pointing at Homebrew's LLVM 20; inherited by rustc it overrides
+          # rustc's own libLLVM and kills it. See ToolchainEnvironment.swift.
           source "$HOME/.cargo/env"
+          unset DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH
           for plugin_dir in \
             Examples/CSVProcessor/Plugins/plugin-rust-csv; do
             if [ -f "$plugin_dir/Cargo.toml" ]; then
               echo "=== Building $plugin_dir ==="
-              (cd "$plugin_dir" && cargo build --release 2>&1 | tail -3) || true
-              (cd "$plugin_dir" && cargo rustc --release --crate-type=staticlib 2>&1 | tail -3) || true
+              (cd "$plugin_dir" && cargo build --release) || { echo "ERROR: pre-warm build failed for $plugin_dir"; exit 1; }
+              (cd "$plugin_dir" && cargo rustc --release --crate-type=staticlib) || { echo "ERROR: pre-warm staticlib build failed for $plugin_dir"; exit 1; }
             fi
           done
 
