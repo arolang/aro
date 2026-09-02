@@ -33,10 +33,21 @@ public enum ToolchainEnvironment {
     ///
     /// A no-op on Linux, where these variables are unused.
     public static func forExternalToolchain() -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
+        stripping(ProcessInfo.processInfo.environment)
+    }
+
+    /// The strip itself, over any environment.
+    ///
+    /// Separate from `forExternalToolchain()` so it can be exercised on a
+    /// literal dictionary. Testing it through the process environment meant
+    /// a test had to `setenv` to arrange its input, which raced any sibling
+    /// test reading the environment — swift-testing runs a suite's tests in
+    /// parallel, and that is exactly how it failed on CI.
+    public static func stripping(_ environment: [String: String]) -> [String: String] {
+        var stripped = environment
         for name in dynamicLinkerOverrides {
-            environment.removeValue(forKey: name)
+            stripped.removeValue(forKey: name)
         }
-        return environment
+        return stripped
     }
 }
