@@ -32,6 +32,67 @@ default:
   tags:
     - adt
 
+# Resolve SwiftPM dependencies, retrying the fetch.
+#
+# Package resolution clones ~15 repositories from github.com. This runner's
+# egress to GitHub is intermittently refused — git gets a reply it cannot
+# read as a ref listing and reports it as missing credentials:
+#
+#   fatal: could not read Username for 'https://github.com': terminal
+#   prompts disabled
+#
+# It is not a missing credential and not an upstream problem: every one of
+# those repositories is public and clones anonymously from elsewhere. It is
+# also not one bad dependency — three consecutive failures picked three
+# different packages (`swifty-llvm` twice, `swift-nio-ssl` once), which is
+# what an intermittent refusal across a long fetch looks like rather than a
+# broken URL.
+#
+# It looks like rate limiting, and the timings say so. In pipeline 21888
+# `test` cold-fetched the whole graph successfully at 10:14; `build:linux`
+# was refused on the very first repository at 10:23, on all four attempts,
+# from the same runner. Roughly thirty anonymous clones in ten minutes is
+# what sits between those two facts.
+#
+# Which makes the cache the real story. Every job misses it, every run:
+#
+#   Checking cache for swift-build-<hash>-non_protected...
+#   No URL provided, cache will not be downloaded from shared cache server.
+#   WARNING: Cache file does not exist
+#
+# There is no shared cache server, so a "local" cache on an ephemeral pod is
+# never there, and `test` and `build:linux` use different key prefixes over
+# the same paths — so each pipeline clones the graph at least twice from
+# scratch. A warm `.build/` would need no network at all.
+#
+# THE DURABLE FIX IS A SHARED CACHE SERVER (S3/MinIO on the runner), not
+# this retry. This only buys enough time for a rate-limit window to pass:
+# ~5 minutes across four attempts, since the first version's 15s/30s backoff
+# was far too short and burned its attempts inside the same window.
+#
+# Only the fetch is retried. Nothing here re-runs a build or a test, so a
+# genuine failure is still reported from a single honest attempt — the same
+# line integration:linux draws when it retries infrastructure classes and
+# refuses to retry script failures.
+.resolve-with-retry: &resolve-with-retry |
+  resolved=""
+  delays="30 90 180"
+  attempt=1
+  for delay in $delays x; do
+    if swift package resolve; then resolved=1; break; fi
+    [ "$delay" = x ] && break
+    echo "swift package resolve failed (attempt $attempt) — retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+  if [ -z "$resolved" ]; then
+    echo "ERROR: could not resolve dependencies after 4 attempts over ~5 minutes."
+    echo "       This is the runner being refused by github.com, not a code failure."
+    echo "       See the .resolve-with-retry comment: the durable fix is a shared"
+    echo "       cache server, so these jobs stop re-cloning the graph every run."
+    exit 1
+  fi
+
 # =============================================================================
 # Proposal identifier hygiene (GitLab #481)
 # =============================================================================
@@ -84,6 +145,10 @@ test:
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
     - apt-get install -y -qq llvm-20-dev libzstd-dev
+    # Same HTTP/1.1 pin as build:linux — this job resolves the same package
+    # graph from github.com and failed the same way while only build:linux
+    # carried the setting, which gates every job behind it.
+    - git config --global http.version HTTP/1.1
     # Create pkg-config file for LLVM
     - |
       cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
@@ -102,6 +167,7 @@ test:
   # poll() syscalls and NIO event loops the constrained K8s pod can't service.
   # Same suite passes locally and on GitHub.
   script:
+    - *resolve-with-retry
     - swift test --parallel --num-workers 2 --skip "Socket"
 
 # Socket / WebSocket / Broadcast tests are NOT run on GitLab.
@@ -153,6 +219,7 @@ build:linux:
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
     - apt-get install -y -qq llvm-20-dev libzstd-dev
+    - git config --global http.version HTTP/1.1
     # Create pkg-config file for LLVM
     - |
       cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
@@ -228,6 +295,7 @@ build:linux:
       echo "  Build Date: $BUILD_DATE"
 
     # Release build with static Swift stdlib
+    - *resolve-with-retry
     - swift build -c release --static-swift-stdlib
     - swift build -c release --product ARORuntime
 
@@ -308,6 +376,13 @@ integration:linux:
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
     - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev gnupg software-properties-common python3 python3-dev python3-venv build-essential
+
+    # Same HTTP/1.1 pin as test and build:linux. This job clones from
+    # github.com too — not through SwiftPM but through pip, which shells out
+    # to git for the `git+https://` SDK below and failed identically:
+    # "could not read Username for 'https://github.com'". Set after git is
+    # installed, before anything uses it.
+    - git config --global http.version HTTP/1.1
 
     # Python plugin SDK (GitLab #486 fallout, job 122170).
     #
