@@ -1265,19 +1265,14 @@ public actor AskSession {
 
         // Step 1: Run aro check
         let aroBin = AROBinary.resolve()
-        let checkResult = try ProcessRunner.runAndCapture(
-            executable: aroBin,
-            arguments: ["check", appDir.path],
-            timeout: 10
-        )
+        let initial = try Self.runCheck(aroBin: aroBin, path: appDir.path)
 
-        if checkResult.exitCode == 0 {
-            return "aro check passed — no errors to fix"
+        if initial.isClean {
+            return "aro check passed — nothing to fix"
         }
 
-        let error = (checkResult.stderr.isEmpty ? checkResult.stdout : checkResult.stderr)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        emitStatus("aro check found errors:\n\(String(error.prefix(300)))")
+        let error = initial.report
+        emitStatus("aro check found \(initial.summary):\n\(String(error.prefix(300)))")
 
         // Step 2: Build the fix prompt with full source + error
         var sourceBlock = ""
@@ -1293,15 +1288,15 @@ public actor AskSession {
             emitStatus("Fix attempt \(attempt)/\(maxAttempts)...")
 
             let fixPrompt = """
-            The following ARO code has errors:
+            The following ARO code has problems:
 
             \(currentSource)
-            Error from `aro check`:
+            Report from `aro check`:
             ```
             \(lastError)
             ```
 
-            Fix ALL errors. Output the corrected code for each file using:
+            Fix ALL of them. Output the corrected code for each file using:
             ## filename.aro
             ```aro
             <fixed code>
@@ -1383,13 +1378,18 @@ public actor AskSession {
                 }
             }
 
-            let verifyResult = try ProcessRunner.runAndCapture(
-                executable: aroBin,
-                arguments: ["check", tmpDir.path],
-                timeout: 10
-            )
+            let verify = try Self.runCheck(aroBin: aroBin, path: tmpDir.path)
 
-            if verifyResult.exitCode == 0 {
+            // What counts as fixed depends on what we set out to fix. With
+            // errors on the table, clearing them is the win it always was —
+            // a leftover warning must not send a good repair round the loop
+            // again. Chasing warnings alone, the bar is that one actually
+            // went away: otherwise an unchanged rewrite would report success.
+            let progressed = initial.hasErrors
+                ? !verify.hasErrors
+                : !verify.hasErrors && verify.warningCount < initial.warningCount
+
+            if progressed {
                 // Step 4: Write fixed files back
                 for (name, code) in fixedFiles {
                     let dest = appDir.appendingPathComponent(name)
@@ -1399,19 +1399,20 @@ public actor AskSession {
                 // Save the repair pair for training
                 saveRepairLog([
                     AskMessage(role: "assistant", content: sourceBlock),
-                    AskMessage(role: "user", content: "aro check error: \(lastError)"),
+                    AskMessage(role: "user", content: "aro check \(initial.summary): \(lastError)"),
                     AskMessage(role: "assistant", content: output),
                 ])
 
                 let fixed = fixedFiles.keys.sorted().joined(separator: ", ")
-                emitStatus("aro check passed after \(attempt) attempt(s)")
-                return "Fixed \(fixed) in \(attempt) attempt(s)"
+                let remaining = verify.isClean
+                    ? "aro check clean"
+                    : "\(verify.summary) left"
+                emitStatus("\(remaining) after \(attempt) attempt(s)")
+                return "Fixed \(fixed) in \(attempt) attempt(s) — \(remaining)"
             }
 
-            // Update error for next attempt
-            lastError = (verifyResult.stderr.isEmpty ? verifyResult.stdout : verifyResult.stderr)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            lastError = String(lastError.prefix(500))
+            // Update the report for the next attempt
+            lastError = String(verify.report.prefix(500))
 
             // Update source for next attempt (show the fixed code that still fails)
             currentSource = ""
@@ -1419,10 +1420,72 @@ public actor AskSession {
                 currentSource += "## \(name)\n```aro\n\(code)\n```\n\n"
             }
 
-            emitStatus("  Still has errors: \(String(lastError.prefix(100)))")
+            emitStatus("  Still has \(verify.summary): \(String(lastError.prefix(100)))")
         }
 
-        return "Could not fix after \(maxAttempts) attempts. Last error:\n\(lastError)"
+        return "Could not fix after \(maxAttempts) attempts. Last report:\n\(lastError)"
+    }
+
+    /// What one `aro check` run found.
+    ///
+    /// The exit code alone is not enough to answer "is there anything to
+    /// fix?". `aro check` exits 0 when it printed only warnings, so gating
+    /// on it made `/fix` announce "aro check passed" over a report the user
+    /// could plainly see was not clean — `aro check .` listed four warnings
+    /// and `/fix .` in the same directory called it done.
+    struct CheckOutcome {
+        /// Combined stdout+stderr, trimmed. Diagnostics go to stdout, but
+        /// reading only one stream would drop whichever carried the failure.
+        let report: String
+        let hasErrors: Bool
+        let warningCount: Int
+
+        var isClean: Bool { !hasErrors && warningCount == 0 }
+
+        /// "2 errors, 4 warnings" — for messages that used to say "errors"
+        /// whether or not any error was involved.
+        var summary: String {
+            var parts: [String] = []
+            if hasErrors { parts.append("error(s)") }
+            if warningCount > 0 { parts.append("\(warningCount) warning(s)") }
+            return parts.isEmpty ? "no issues" : parts.joined(separator: ", ")
+        }
+
+        /// Classify a finished `aro check` run.
+        ///
+        /// Errors come from the exit code, which is authoritative. Warnings
+        /// are counted from the diagnostic lines rather than the summary
+        /// banner, so the count does not depend on how that banner is
+        /// worded — and `hint:` continuation lines, which carry no
+        /// `: warning:` marker, are not miscounted as extra warnings.
+        static func classify(exitCode: Int32, stdout: String, stderr: String) -> CheckOutcome {
+            let report = (stdout + "\n" + stderr)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let warnings = report.split(separator: "\n").filter {
+                $0.contains(": warning:")
+            }.count
+
+            return CheckOutcome(
+                report: report,
+                hasErrors: exitCode != 0,
+                warningCount: warnings
+            )
+        }
+    }
+
+    /// Run `aro check` on a path and classify what it found.
+    static func runCheck(aroBin: String, path: String) throws -> CheckOutcome {
+        let result = try ProcessRunner.runAndCapture(
+            executable: aroBin,
+            arguments: ["check", path],
+            timeout: 10
+        )
+        return CheckOutcome.classify(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr
+        )
     }
 }
 
