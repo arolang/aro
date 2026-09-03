@@ -1265,24 +1265,145 @@ public actor AskSession {
 
         // Step 1: Run aro check
         let aroBin = AROBinary.resolve()
-        let initial = try Self.runCheck(aroBin: aroBin, path: appDir.path)
+        var initial = try Self.runCheck(aroBin: aroBin, path: appDir.path)
 
         if initial.isClean {
             return "aro check passed — nothing to fix"
         }
 
+        // Step 1b: take the repairs that need no model. Validated exactly
+        // like a model's answer — proposed into a sandbox, kept only if the
+        // whole application comes back better and still parses.
+        var deterministic: [String] = []
+        let deletions = Self.removingUnusedVariables(from: aroFiles, report: initial.report)
+        if !deletions.isEmpty {
+            var candidate = aroFiles
+            for (name, code) in deletions { candidate[name] = code }
+
+            if let after = try? Self.checkInSandbox(candidate, sidecarsFrom: appDir, aroBin: aroBin),
+               !after.hasErrors, after.warningCount < initial.warningCount {
+                for (name, code) in deletions {
+                    try code.write(to: appDir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+                    aroFiles[name] = code
+                }
+                deterministic = deletions.keys.sorted()
+                emitStatus("Removed \(initial.warningCount - after.warningCount) unused variable(s) in \(deterministic.joined(separator: ", "))")
+                initial = after
+
+                if initial.isClean {
+                    return "Fixed \(deterministic.joined(separator: ", ")) — aro check clean"
+                }
+            }
+        }
+
+        // Step 1c: unhandled events. The repair is a feature set that does
+        // not exist yet, so the model writes only that — five lines instead
+        // of the file it would otherwise have to reproduce — and the append
+        // is done here. Existing lines are never rewritten, so they cannot
+        // be damaged, which is what defeated the whole-file rewrite.
+        //
+        // One event at a time, each validated on its own: a handler the
+        // model gets wrong costs that event, not the ones it got right.
+        for event in Self.unhandledEvents(in: initial.report) {
+            guard let existing = aroFiles[event.file] else { continue }
+
+            let sourceLines = existing.components(separatedBy: "\n")
+            let emitIndex = event.line - 1
+            let emitStatement = sourceLines.indices.contains(emitIndex)
+                ? sourceLines[emitIndex].trimmingCharacters(in: .whitespaces)
+                : ""
+
+            let handlerPrompt = """
+            This ARO statement emits an event that nothing handles:
+
+            ```aro
+            \(emitStatement)
+            ```
+
+            Write ONE feature set that handles it. Its business activity must
+            be exactly `\(event.event) Handler`, like:
+
+            ```aro
+            (Handle \(event.event): \(event.event) Handler) {
+                Extract the <value> from the <event: field>.
+                Return an <OK: status> for the <handled>.
+            }
+            ```
+
+            Extract the fields the Emit above actually passes, do something
+            sensible with them, and end with a Return. Output ONLY that one
+            feature set in a single ```aro block. Do not repeat the Emit and
+            do not output any other code.
+            """
+
+            let request = LMChatRequest(
+                model: config.model,
+                messages: [
+                    LMChatRequest.Message(role: "system", content: AskContext.defaultSystemPrompt),
+                    LMChatRequest.Message(role: "user", content: handlerPrompt),
+                ],
+                tools: nil,
+                temperature: 0.2,
+                stream: false
+            )
+
+            guard let reply = try? await backend.chat(request: request),
+                  let handler = extractAroBlocks(reply.content ?? "").first?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !handler.isEmpty
+            else { continue }
+
+            var candidate = aroFiles
+            candidate[event.file] = existing + "\n\n" + handler + "\n"
+
+            guard let after = try? Self.checkInSandbox(candidate, sidecarsFrom: appDir, aroBin: aroBin),
+                  !after.hasErrors, after.warningCount < initial.warningCount
+            else {
+                emitStatus("  handler for \(event.event) did not check out — left alone")
+                continue
+            }
+
+            try candidate[event.file]!.write(
+                to: appDir.appendingPathComponent(event.file), atomically: true, encoding: .utf8)
+            aroFiles[event.file] = candidate[event.file]
+            if !deterministic.contains(event.file) { deterministic.append(event.file) }
+            emitStatus("Added \(event.event) Handler to \(event.file)")
+            initial = after
+
+            if initial.isClean {
+                return "Fixed \(deterministic.sorted().joined(separator: ", ")) — aro check clean"
+            }
+        }
+
         let error = initial.report
         emitStatus("aro check found \(initial.summary):\n\(String(error.prefix(300)))")
 
-        // Step 2: Build the fix prompt with full source + error
-        var sourceBlock = ""
-        for (name, content) in aroFiles.sorted(by: { $0.key < $1.key }) {
-            sourceBlock += "## \(name)\n```aro\n\(content)\n```\n\n"
+        // Step 2: Build the fix prompt.
+        //
+        // Only the files `aro check` complained about go in. Sending the whole
+        // application meant the model retyped files that were already correct,
+        // and every retyped line is a chance to break one: on a real project it
+        // rewrote a file to fix two unhandled-event warnings and mangled an
+        // untouched line — `<depth>< <max-depth>` came back malformed — turning
+        // 4 warnings into 7 errors, five attempts running.
+        let focusFiles = initial.filesWithDiagnostics.filter { aroFiles[$0] != nil }
+        let sources = focusFiles.isEmpty ? Array(aroFiles.keys) : focusFiles
+
+        func render(_ files: [String], from contents: [String: String]) -> String {
+            files.sorted().reduce(into: "") { block, name in
+                guard let code = contents[name] else { return }
+                block += "## \(name)\n```aro\n\(code)\n```\n\n"
+            }
         }
 
         let maxAttempts = 5
-        var currentSource = sourceBlock
-        var lastError = String(error.prefix(500))
+        /// The "before" side of a repair pair — the code as the user has it.
+        let originalSource = render(sources, from: aroFiles)
+        var currentSource = originalSource
+        // The report is what the model is asked to act on; truncating it at
+        // 500 characters cut diagnostics in half ("warning: Variable
+        // 'link-list' is defi") and hid later ones entirely.
+        var lastError = String(error.prefix(4000))
 
         for attempt in 1...maxAttempts {
             emitStatus("Fix attempt \(attempt)/\(maxAttempts)...")
@@ -1302,6 +1423,18 @@ public actor AskSession {
             <fixed code>
             ```
 
+            RULES:
+            - Copy every line you are not fixing EXACTLY as given, byte for
+              byte. Do not reformat, re-indent, or "tidy" anything. Spacing
+              inside statements is significant: `the<name>` and `<a>< <b>`
+              are correct ARO as written and must be reproduced unchanged.
+            - Output a file only if you changed something in it. Omit the rest.
+            - To fix "Event 'X' is emitted but no handler exists", ADD a new
+              feature set `(Handle X: X Handler) { … }`; do not touch the
+              Emit statement.
+            - To fix "Variable 'v' is defined but never used", delete the one
+              statement that binds it.
+
             Output ONLY the fixed code. No explanations.
             """
 
@@ -1312,7 +1445,12 @@ public actor AskSession {
                     LMChatRequest.Message(role: "user", content: fixPrompt),
                 ],
                 tools: nil,
-                temperature: max(0.1, 0.3 - Double(attempt) * 0.05),
+                // Rising, not falling. It used to drop 0.25 → 0.05, so a
+                // failing attempt was re-rolled at ever lower entropy and came
+                // back near-identical — five attempts produced the same broken
+                // line five times. Retrying is only worth the tokens if the
+                // next sample can differ.
+                temperature: min(0.7, 0.2 + Double(attempt - 1) * 0.15),
                 stream: false
             )
 
@@ -1349,36 +1487,12 @@ public actor AskSession {
                 fixedFiles["main.aro"] = blocks[0]
             }
 
-            // Step 3: Validate the fix with aro check
-            let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-            // Best-effort cleanup of the validation sandbox; harmless if it
-            // lingers under the system temp directory.
-            defer { try? fm.removeItem(at: tmpDir) }
-
-            for (name, code) in fixedFiles {
-                let dest = tmpDir.appendingPathComponent(name)
-                try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try code.write(to: dest, atomically: true, encoding: .utf8)
-            }
-            // Copy non-.aro files (openapi.yaml, .store) from original
-            if let enumerator = fm.enumerator(at: appDir, includingPropertiesForKeys: nil) {
-                while let fileURL = enumerator.nextObject() as? URL {
-                    if fileURL.pathExtension != "aro" && !fileURL.hasDirectoryPath {
-                        let rel = fileURL.path.replacingOccurrences(of: appDir.path + "/", with: "")
-                        let dest = tmpDir.appendingPathComponent(rel)
-                        // Best-effort copy of sidecars (openapi.yaml, .store) into
-                        // the validation sandbox. A failed copy only makes the
-                        // `aro check` slightly less complete for that one file; it
-                        // never corrupts anything, so we skip it silently rather
-                        // than abort validating the model's fix.
-                        try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                        try? fm.copyItem(at: fileURL, to: dest)
-                    }
-                }
-            }
-
-            let verify = try Self.runCheck(aroBin: aroBin, path: tmpDir.path)
+            // Step 3: Validate the fix — the model's rewrites laid over the
+            // whole application, so nothing it left alone drops out of the
+            // count along with its diagnostics.
+            var candidate = aroFiles
+            for (name, code) in fixedFiles { candidate[name] = code }
+            let verify = try Self.checkInSandbox(candidate, sidecarsFrom: appDir, aroBin: aroBin)
 
             // What counts as fixed depends on what we set out to fix. With
             // errors on the table, clearing them is the win it always was —
@@ -1398,7 +1512,7 @@ public actor AskSession {
 
                 // Save the repair pair for training
                 saveRepairLog([
-                    AskMessage(role: "assistant", content: sourceBlock),
+                    AskMessage(role: "assistant", content: originalSource),
                     AskMessage(role: "user", content: "aro check \(initial.summary): \(lastError)"),
                     AskMessage(role: "assistant", content: output),
                 ])
@@ -1411,16 +1525,36 @@ public actor AskSession {
                 return "Fixed \(fixed) in \(attempt) attempt(s) — \(remaining)"
             }
 
-            // Update the report for the next attempt
-            lastError = String(verify.report.prefix(500))
+            // Update the report for the next attempt.
+            lastError = String(verify.report.prefix(4000))
 
-            // Update source for next attempt (show the fixed code that still fails)
-            currentSource = ""
-            for (name, code) in fixedFiles.sorted(by: { $0.key < $1.key }) {
-                currentSource += "## \(name)\n```aro\n\(code)\n```\n\n"
+            // Introducing errors into code that had none is a different
+            // mistake from failing to fix a warning, and worth saying so:
+            // the model damaged a line it was told to copy. Left implicit,
+            // the next attempt reads its own broken output as just more work
+            // to do and breaks it again the same way.
+            if verify.hasErrors && !initial.hasErrors {
+                lastError = """
+                Your previous answer INTRODUCED these syntax errors — the \
+                original code had none. You changed a line you were asked to \
+                copy unchanged. Start again from the ORIGINAL code below and \
+                touch only what the warnings name.
+
+                \(lastError)
+                """
+                // Re-anchor on the originals rather than compounding the
+                // damage: a broken candidate is not a better starting point
+                // than the file that at least parsed.
+                currentSource = render(sources, from: aroFiles)
+            } else {
+                // Otherwise carry the model's work forward, over the originals
+                // so nothing it left alone disappears from view.
+                var nextSource = aroFiles
+                for (name, code) in fixedFiles { nextSource[name] = code }
+                currentSource = render(Array(nextSource.keys), from: nextSource)
             }
 
-            emitStatus("  Still has \(verify.summary): \(String(lastError.prefix(100)))")
+            emitStatus("  Still has \(verify.summary): \(String(verify.report.prefix(100)))")
         }
 
         return "Could not fix after \(maxAttempts) attempts. Last report:\n\(lastError)"
@@ -1439,6 +1573,10 @@ public actor AskSession {
         let report: String
         let hasErrors: Bool
         let warningCount: Int
+        /// Files `aro check` actually had something to say about, in report
+        /// order. Used to put only those in front of the model: retyping a
+        /// clean file is pure transcription risk with nothing to gain.
+        let filesWithDiagnostics: [String]
 
         var isClean: Bool { !hasErrors && warningCount == 0 }
 
@@ -1462,16 +1600,169 @@ public actor AskSession {
             let report = (stdout + "\n" + stderr)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let warnings = report.split(separator: "\n").filter {
-                $0.contains(": warning:")
-            }.count
+            let lines = report.split(separator: "\n", omittingEmptySubsequences: false)
+
+            let warnings = lines.filter { $0.contains(": warning:") }.count
+
+            // `aro check` heads each file's diagnostics with an unindented
+            // "name.aro:" line; the per-file tally below it ("Found 2
+            // warning(s) in x.aro") is indented, so it is not mistaken for
+            // a header.
+            var files: [String] = []
+            for line in lines {
+                guard !line.hasPrefix(" "), line.hasSuffix(":") else { continue }
+                let name = String(line.dropLast())
+                guard name.hasSuffix(".aro"), !files.contains(name) else { continue }
+                files.append(name)
+            }
 
             return CheckOutcome(
                 report: report,
                 hasErrors: exitCode != 0,
-                warningCount: warnings
+                warningCount: warnings,
+                filesWithDiagnostics: files
             )
         }
+    }
+
+    /// Check a proposed set of files as a complete application.
+    ///
+    /// The whole map is written, not just what changed: a file left out of
+    /// the sandbox takes its diagnostics with it, which once let a rewrite
+    /// that fixed nothing score "4 warnings → 2" and bank the result.
+    /// Sidecars (`openapi.yaml`, `.store`) are copied so routes and
+    /// repositories still resolve.
+    static func checkInSandbox(
+        _ files: [String: String],
+        sidecarsFrom appDir: URL,
+        aroBin: String
+    ) throws -> CheckOutcome {
+        let fm = FileManager.default
+        let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        // Best-effort cleanup of the validation sandbox; harmless if it
+        // lingers under the system temp directory.
+        defer { try? fm.removeItem(at: tmpDir) }
+
+        for (name, code) in files {
+            let dest = tmpDir.appendingPathComponent(name)
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try code.write(to: dest, atomically: true, encoding: .utf8)
+        }
+
+        if let enumerator = fm.enumerator(at: appDir, includingPropertiesForKeys: nil) {
+            while let fileURL = enumerator.nextObject() as? URL {
+                guard fileURL.pathExtension != "aro", !fileURL.hasDirectoryPath else { continue }
+                let rel = fileURL.path.replacingOccurrences(of: appDir.path + "/", with: "")
+                let dest = tmpDir.appendingPathComponent(rel)
+                // Best-effort copy of sidecars into the validation sandbox. A
+                // failed copy only makes `aro check` slightly less complete for
+                // that one file; it never corrupts anything, so we skip it
+                // silently rather than abort validating the fix.
+                try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? fm.copyItem(at: fileURL, to: dest)
+            }
+        }
+
+        return try runCheck(aroBin: aroBin, path: tmpDir.path)
+    }
+
+    /// Events emitted with nothing to handle them, in report order.
+    ///
+    /// The repair for these is *new* code — a feature set that did not exist
+    /// — so it can be appended rather than woven into a rewrite of the file.
+    /// That keeps the model's output to the handler itself and leaves every
+    /// existing line untouched, which is the part it gets wrong.
+    static func unhandledEvents(in report: String) -> [(file: String, line: Int, event: String)] {
+        var found: [(file: String, line: Int, event: String)] = []
+        var currentFile: String?
+
+        for raw in report.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            if !line.hasPrefix(" "), line.hasSuffix(":"), line.dropLast().hasSuffix(".aro") {
+                currentFile = String(line.dropLast())
+                continue
+            }
+            guard let file = currentFile,
+                  let match = line.range(
+                    of: #"^\s*(\d+):\d+: warning: Event '([^']+)' is emitted but no handler exists"#,
+                    options: .regularExpression)
+            else { continue }
+
+            let head = String(line[match])
+            let lineNumber = Int(head.drop(while: { $0 == " " }).prefix(while: \.isNumber)) ?? 0
+            guard lineNumber > 0,
+                  let quoted = head.range(of: #"'[^']+'"#, options: .regularExpression)
+            else { continue }
+
+            let event = String(head[quoted]).trimmingCharacters(in: CharacterSet(charactersIn: "'"))
+            guard !found.contains(where: { $0.file == file && $0.event == event }) else { continue }
+            found.append((file, lineNumber, event))
+        }
+        return found
+    }
+
+    /// Repairs that need no model.
+    ///
+    /// `aro check` reports an unused variable with the exact line that binds
+    /// it, and the fix is to delete that statement. Routing this through the
+    /// model meant retyping a whole file to remove one line — and it lost the
+    /// trivial case: a five-line file with one unused variable, five attempts,
+    /// no fix, on the same run that failed to fix anything on a real project.
+    /// A deletion the checker has already located is not a language task.
+    ///
+    /// Only lines that actually mention the variable are touched, so a
+    /// mis-parsed report deletes nothing. The caller still validates the
+    /// result with `aro check` before it reaches disk — this is a proposal,
+    /// not a licence.
+    ///
+    /// - Returns: the changed files only, keyed the same way as the input.
+    static func removingUnusedVariables(
+        from files: [String: String],
+        report: String
+    ) -> [String: String] {
+        // "  81:13: warning: Variable 'max-iters' is defined but never used"
+        var perFile: [String: [(line: Int, name: String)]] = [:]
+        var currentFile: String?
+
+        for raw in report.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            if !line.hasPrefix(" "), line.hasSuffix(":"), line.dropLast().hasSuffix(".aro") {
+                currentFile = String(line.dropLast())
+                continue
+            }
+            guard let file = currentFile,
+                  let range = line.range(of: #"^\s*(\d+):\d+: warning: Variable '([^']+)' is defined but never used"#,
+                                         options: .regularExpression)
+            else { continue }
+
+            let head = line[range]
+            let digits = head.prefix(while: { $0 == " " }).count
+            let lineNumber = Int(head.dropFirst(digits).prefix(while: \.isNumber)) ?? 0
+            guard lineNumber > 0,
+                  let quoted = head.range(of: #"'[^']+'"#, options: .regularExpression)
+            else { continue }
+
+            perFile[file, default: []].append(
+                (lineNumber, String(head[quoted]).trimmingCharacters(in: CharacterSet(charactersIn: "'")))
+            )
+        }
+
+        var changed: [String: String] = [:]
+        for (file, hits) in perFile {
+            guard var lines = files[file]?.components(separatedBy: "\n") else { continue }
+            var touched = false
+            // Descending, so each deletion cannot shift the next one's index.
+            for hit in hits.sorted(by: { $0.line > $1.line }) {
+                let index = hit.line - 1
+                guard lines.indices.contains(index),
+                      lines[index].contains("<\(hit.name)>") else { continue }
+                lines.remove(at: index)
+                touched = true
+            }
+            if touched { changed[file] = lines.joined(separator: "\n") }
+        }
+        return changed
     }
 
     /// Run `aro check` on a path and classify what it found.
