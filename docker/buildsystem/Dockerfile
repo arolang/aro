@@ -81,6 +81,23 @@ RUN mkdir -p /usr/lib/pkgconfig && \
 RUN wget -qO- https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# Speak HTTP/1.1 to git remotes.
+#
+# The clone below and the package resolution inside `swift build` both go to
+# github.com, where an HTTP/2 fetch is cut short often enough to fail the
+# build. git cannot read the truncated reply as a ref listing, so it asks for
+# a password and blames a credential that was never the problem:
+#
+#   fatal: could not read Username for 'https://github.com'
+#   fatal: expected flush after ref listing
+#
+# `.gitlab-ci.yml` sets this for every job through GIT_CONFIG_* variables, but
+# a RUN step has its own environment and inherits none of it, so the image
+# build has to say it itself.
+ENV GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.version \
+    GIT_CONFIG_VALUE_0=HTTP/1.1
+
 # Build ARO from source
 WORKDIR /aro-build
 ARG ARO_VERSION=main
