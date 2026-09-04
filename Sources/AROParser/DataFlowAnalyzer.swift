@@ -243,9 +243,14 @@ public struct DataFlowAnalyzer {
             (DataFlowInfo(), [])
         }
 
+        func visit(_ node: RangeLoop) -> Result {
+            analyzer.analyzeRangeLoop(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
+        }
+
         // Fallback nodes — the old `as?`-chain matched none of these and so
         // returned the empty default. Keep that behaviour explicit.
-        func visit(_ node: RangeLoop) -> Result { (DataFlowInfo(), []) }
         func visit(_ node: PipelineStatement) -> Result { (DataFlowInfo(), []) }
         func visit(_ node: ErrorStatement) -> Result { (DataFlowInfo(), []) }
     }
@@ -684,6 +689,76 @@ public struct DataFlowAnalyzer {
         )
     }
 
+    // MARK: - Range Loop (ARO-0002)
+
+    /// `for <i> from <a> to <b> { … }`.
+    ///
+    /// This node used to fall through to the visitor's empty default, so the
+    /// analysis never saw it at all: variables read in the bounds or anywhere
+    /// in the body were missing from `usedVariables`, and the LAST binding of
+    /// a loop bound was reported "defined but never used" while the loop
+    /// right below it read the value. The Crawler hit exactly that —
+    /// `for <pass> from 0 to <max-iters>` did not count as a read of
+    /// `max-iters`, and a repair tool acting on the false warning would have
+    /// deleted a live binding.
+    private func analyzeRangeLoop(
+        _ statement: RangeLoop,
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
+    ) -> (DataFlowInfo, Set<String>) {
+        var inputs: Set<String> = []
+        var outputs: Set<String> = []
+        var sideEffects: [String] = []
+        var dependencies: Set<String> = []
+
+        // The bounds are reads.
+        for bound in [statement.from, statement.to] {
+            for varName in extractVariables(from: bound) {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
+        // The loop variable is scoped to the body, like for-each's item.
+        var loopDefinedSymbols = definedSymbols
+        builder.define(
+            name: statement.variable,
+            definedAt: statement.span,
+            visibility: .internal,
+            source: .computed,
+            dataType: .integer
+        )
+        loopDefinedSymbols.insert(statement.variable)
+
+        // The loop machinery itself reads the counter on every iteration to
+        // advance and compare against the bound, so it is never "unused" —
+        // and `for <pass> from 0 to <n>` with an unread counter is the
+        // idiomatic way to repeat n times; there is no bare repeat form to
+        // point the warning at.
+        inputs.insert(statement.variable)
+
+        for bodyStatement in statement.body {
+            let (flow, newDeps) = analyzeStatement(
+                bodyStatement,
+                builder: builder,
+                definedSymbols: &loopDefinedSymbols
+            )
+            inputs.formUnion(flow.inputs)
+            outputs.formUnion(flow.outputs)
+            sideEffects.append(contentsOf: flow.sideEffects)
+            dependencies.formUnion(newDeps)
+        }
+
+        outputs.remove(statement.variable)
+
+        return (
+            DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+            dependencies
+        )
+    }
+
     // MARK: - While Loop
 
     private func analyzeWhileLoop(
@@ -996,6 +1071,15 @@ public struct DataFlowAnalyzer {
                 }
                 out.append(contentsOf: collectAROStatements(m.otherwise ?? []))
             } else if let loop = stmt as? ForEachLoop {
+                out.append(contentsOf: collectAROStatements(loop.body))
+            } else if let loop = stmt as? RangeLoop {
+                // Missing from the walk while RangeLoop was invisible to the
+                // data-flow visitor. Once the visitor analyzed its body, a
+                // `Delete the <drained> …` inside a range loop started warning
+                // "defined but never used" — the exemption list is built from
+                // this walk and never saw the statement.
+                out.append(contentsOf: collectAROStatements(loop.body))
+            } else if let loop = stmt as? WhileLoop {
                 out.append(contentsOf: collectAROStatements(loop.body))
             }
         }
