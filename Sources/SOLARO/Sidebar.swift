@@ -674,6 +674,7 @@ private struct FileRow: View {
         case .openapi:         return "rectangle.connected.to.line.below"
         case .projectManifest: return "gearshape.fill"
         case .markdown:        return "doc.richtext"
+        case .replNotebook:    return "play.square.stack"
         case .other:           return "doc"
         }
     }
@@ -686,6 +687,7 @@ private struct FileRow: View {
         case .openapi:         return SolaroColor.roleRequest
         case .projectManifest: return SolaroColor.stateOK
         case .markdown:        return SolaroColor.roleOwn
+        case .replNotebook:    return SolaroColor.roleResponse
         case .other:           return SolaroColor.textTertiary
         }
     }
@@ -920,6 +922,7 @@ private struct PluginRow: View {
 struct NewFileSheet: View {
     enum Kind: String, CaseIterable, Identifiable {
         case aro
+        case notebook
         case openapi
         case empty
 
@@ -927,17 +930,19 @@ struct NewFileSheet: View {
 
         var label: String {
             switch self {
-            case .aro:     return "ARO Source (.aro)"
-            case .openapi: return "OpenAPI Contract (openapi.yaml)"
-            case .empty:   return "Empty File"
+            case .aro:      return "ARO Source (.aro)"
+            case .notebook: return "REPL Notebook (.repl)"
+            case .openapi:  return "OpenAPI Contract (openapi.yaml)"
+            case .empty:    return "Empty File"
             }
         }
 
         var symbol: String {
             switch self {
-            case .aro:     return "doc.text"
-            case .openapi: return "rectangle.connected.to.line.below"
-            case .empty:   return "doc"
+            case .aro:      return "doc.text"
+            case .notebook: return "play.square.stack"
+            case .openapi:  return "rectangle.connected.to.line.below"
+            case .empty:    return "doc"
             }
         }
 
@@ -945,6 +950,8 @@ struct NewFileSheet: View {
             switch self {
             case .aro:
                 return "A new `.aro` source file with a stub feature set ready to fill in."
+            case .notebook:
+                return "A Jupyter-style notebook: markdown + ARO code cells running against a live REPL session."
             case .openapi:
                 return "An `openapi.yaml` skeleton. The runtime needs this for the HTTP server to start."
             case .empty:
@@ -989,7 +996,13 @@ struct NewFileSheet: View {
                     .tracking(1)
                     .foregroundStyle(SolaroColor.textTertiary)
                 TextField(
-                    selectedKind == .aro ? "untitled.aro" : "README.md",
+                    {
+                        switch selectedKind {
+                        case .aro:      return "untitled.aro"
+                        case .notebook: return "untitled.repl"
+                        default:        return "README.md"
+                        }
+                    }(),
                     text: filenameBinding
                 )
                 .textFieldStyle(.roundedBorder)
@@ -1029,7 +1042,8 @@ struct NewFileSheet: View {
                 // holds a stale default from another kind — never
                 // clobber a name the user has hand-typed.
                 let stale: Set<String> = [
-                    "openapi.yaml", "untitled.aro", "README.md", ""
+                    "openapi.yaml", "untitled.aro", "untitled.repl",
+                    "README.md", ""
                 ]
                 switch kind {
                 case .openapi:
@@ -1040,6 +1054,8 @@ struct NewFileSheet: View {
                     break
                 case .aro:
                     if stale.contains(filename) { filename = "untitled.aro" }
+                case .notebook:
+                    if stale.contains(filename) { filename = "untitled.repl" }
                 case .empty:
                     if stale.contains(filename) { filename = "README.md" }
                 }

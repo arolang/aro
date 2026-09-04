@@ -34,6 +34,12 @@ struct CenterPaneView: View {
         Group {
             if controller.currentFile == nil, controller.paneMode != .map {
                 emptyPane("Select a file from the sidebar.")
+            } else if let url = controller.currentFile, ReplFile.isNotebook(url) {
+                // A notebook is a notebook in every pane mode —
+                // Canvas / Split / Map have nothing to add over the
+                // cells themselves.
+                ReplNotebookView(notebook: controller.replNotebook(for: url))
+                    .id(url.standardizedFileURL)
             } else {
                 switch controller.paneMode {
                 case .text:   textMode

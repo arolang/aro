@@ -42,6 +42,10 @@ struct FileTreeNode: Identifiable, Hashable {
         /// markdown editor rather than the code editor (#488), so
         /// it earns its own icon in the tree.
         case markdown
+        /// `.repl` — a notebook of markdown + ARO code cells that
+        /// runs against a live REPL session (ARO-0091). Opens in
+        /// the notebook editor.
+        case replNotebook
         case other
     }
 
@@ -75,18 +79,22 @@ enum FileTreeBuilder {
         }
         // Markdown docs living in the project (README.md, docs/…)
         // are part of its shape too, and #488 gives them a real
-        // editor. Without this they'd only be reachable by flipping
-        // the Files tab into "All files".
-        for url in markdownFiles(under: model.root.rootPath) {
-            allFiles.append((url, .markdown))
+        // editor. `.repl` notebooks likewise — both would otherwise
+        // only be reachable by flipping the Files tab into "All
+        // files".
+        for (url, kind) in documentFiles(under: model.root.rootPath) {
+            allFiles.append((url, kind))
         }
 
         return groupByPath(files: allFiles, root: model.root.rootPath)
     }
 
-    /// Every `.md` / `.markdown` file under `root`, skipping the
-    /// well-known noise directories and anything hidden.
-    private static func markdownFiles(under root: URL) -> [URL] {
+    /// Every `.md` / `.markdown` / `.repl` file under `root`,
+    /// skipping the well-known noise directories and anything
+    /// hidden.
+    private static func documentFiles(
+        under root: URL
+    ) -> [(URL, FileTreeNode.Kind)] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(
             at: root,
@@ -94,15 +102,17 @@ enum FileTreeBuilder {
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else { return [] }
 
-        var found: [URL] = []
+        var found: [(URL, FileTreeNode.Kind)] = []
         for entry in entries {
             let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey])
                 .isDirectory) == true
             if isDir {
                 if ignoredDirs.contains(entry.lastPathComponent) { continue }
-                found.append(contentsOf: markdownFiles(under: entry))
+                found.append(contentsOf: documentFiles(under: entry))
             } else if MarkdownFile.isMarkdown(entry) {
-                found.append(entry)
+                found.append((entry, .markdown))
+            } else if ReplFile.isNotebook(entry) {
+                found.append((entry, .replNotebook))
             }
         }
         return found
@@ -211,6 +221,10 @@ enum FileTreeBuilder {
         // Markdown opens in the rendered inline editor (#488).
         if MarkdownFile.isMarkdown(url) {
             return .markdown
+        }
+        // `.repl` opens in the notebook editor (ARO-0091 client).
+        if ReplFile.isNotebook(url) {
+            return .replNotebook
         }
         return .other
     }
