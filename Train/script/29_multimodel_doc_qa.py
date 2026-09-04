@@ -43,6 +43,12 @@ Without --save nothing is written to the pairs corpus — generation is
 expensive and reviewable output lands in data/29_doc_qa/generated.jsonl
 first, so a bad run can be inspected and discarded instead of cleaned.
 Idempotent on save via clean_notebook_pairs('NB29_docqa').
+
+RESUMABLE: survivors are appended to generated.jsonl as they happen, and
+progress.jsonl records every (model, section) already processed. Killing
+the run costs at most the section in flight; restarting with the same
+arguments skips finished work. A full sweep is ~26-44h — launch it with
+run_29_full_sweep.sh, which adds caffeinate + nohup + a log.
 """
 
 import argparse
@@ -149,7 +155,11 @@ def split_sections(text: str) -> list[tuple[str, str]]:
 def load_model(model_id: str):
     from mlx_lm import load
     print(f'loading {model_id} ...')
-    return load(model_id)
+    # Mistral tokenizers ship a broken pre-tokenizer regex; transformers
+    # warns that tokenization is incorrect unless this flag is set. Wrong
+    # tokenization would quietly degrade every pair the model generates.
+    config = {'fix_mistral_regex': True} if 'mistral' in model_id.lower() else None
+    return load(model_id, tokenizer_config=config)
 
 
 def generate_pairs(model, tokenizer, title: str, body: str) -> list[dict]:
@@ -248,15 +258,46 @@ def main():
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUT_DIR / 'generated.jsonl'
-    dedup = existing_instructions()
+    progress_path = OUT_DIR / 'progress.jsonl'
+
+    # Resume: skip (model, section) pairs already processed, and seed the
+    # dedup index with everything already generated so a restart cannot
+    # re-save near-duplicates of its own earlier output.
+    done = set()
     coverage = {}
-    survivors = []
+    if progress_path.exists():
+        for line in open(progress_path):
+            try:
+                r = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            done.add((r['model'], r['key']))
+            cov = coverage.setdefault(r['key'], {'kind': r['kind'], 'models': {}})
+            cov['models'][r['model']] = cov['models'].get(r['model'], 0) + r['kept']
+        print(f'resuming: {len(done)} (model, section) pairs already done')
+
+    dedup = existing_instructions()
+    if out_path.exists():
+        for line in open(out_path):
+            try:
+                dedup.add(json.loads(line)['instruction'])
+            except (json.JSONDecodeError, KeyError):
+                continue
+
     stats = {'generated': 0, 'bad_json': 0, 'bad_code': 0, 'dup': 0}
 
     for model_id in args.models:
-        model, tokenizer = load_model(model_id)
         model_tag = Path(model_id).name
-        for kind, ref, title, body in sections:
+        todo = [s for s in sections
+                if (model_tag, f'{s[1]}#{s[2]}') not in done]
+        if not todo:
+            print(f'{model_tag}: nothing left to do')
+            continue
+        model, tokenizer = load_model(model_id)
+        print(f'{model_tag}: {len(todo)}/{len(sections)} sections to go')
+        out_f = open(out_path, 'a')
+        prog_f = open(progress_path, 'a')
+        for n, (kind, ref, title, body) in enumerate(todo, 1):
             pairs = generate_pairs(model, tokenizer, title, body)
             if not pairs:
                 stats['bad_json'] += 1
@@ -271,7 +312,7 @@ def main():
                 if dedup.check_and_add(p['q']):
                     stats['dup'] += 1
                     continue
-                survivors.append({
+                out_f.write(json.dumps({
                     'instruction': p['q'],
                     'output': p['a'],
                     'source': kind,
@@ -279,14 +320,25 @@ def main():
                     'category': 'doc_qa_multimodel',
                     'doc_ref': ref,
                     'gen_model': model_tag,
-                })
+                }) + '\n')
                 kept += 1
             cov['models'][model_tag] = cov['models'].get(model_tag, 0) + kept
+            # One progress line per section, flushed — the resume unit.
+            prog_f.write(json.dumps(
+                {'model': model_tag, 'key': key, 'kind': kind, 'kept': kept}) + '\n')
+            out_f.flush()
+            prog_f.flush()
+            if n % 25 == 0:
+                print(f'  {model_tag}: {n}/{len(todo)} sections '
+                      f"(kept so far this run: {stats['generated'] - stats['bad_code'] - stats['dup']})",
+                      flush=True)
+        out_f.close()
+        prog_f.close()
         del model, tokenizer   # release before loading the next one
 
-    with open(out_path, 'w') as f:
-        for s in survivors:
-            f.write(json.dumps(s) + '\n')
+    survivors = []
+    if out_path.exists():
+        survivors = [json.loads(line) for line in open(out_path) if line.strip()]
 
     uncovered = sorted(k for k, v in coverage.items()
                        if not any(v['models'].values()))
