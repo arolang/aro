@@ -120,6 +120,35 @@ explanation. They block until the process is signalled, which in a cell is a
 spinner that never stops. Services started by an earlier statement keep
 running without them. `ARO_REPL_ALLOW_BLOCKING=1` overrides.
 
+### Event dispatch
+
+A `{EventName} Handler` feature set defined in the session is live: an
+`Emit` in a later input dispatches to it, with the same routing an
+application gets — event type from the business activity, state guards
+(ARO-0022), payload bound as `event` / `event:key`. The session's own
+`EventBus` carries the dispatch; no event loop is required, because
+domain events have no external source to wait on.
+
+Ordering holds. After each executed input the session waits for every
+handler it triggered — cascades included, where a handler emits an event
+of its own — so handler output lands with the input that caused it, and
+a cell's `stream` messages still all precede its `result`. A handler
+that outlives the wait (the runtime's handler timeout) is reported as a
+warning on stderr rather than an error: the emitting statement itself
+succeeded. Handler errors likewise arrive on stderr in ARO's own error
+text (ARO-0006) — they never retroactively fail the emitting cell.
+
+Redefining a handler replaces its subscription, and `reset` (or `:clear`)
+drops it — a cleared definition must not keep answering events. Both
+front-ends behave identically because the dispatch lives in
+`REPLSession`; the terminal REPL benefits equally.
+
+Service-bound handler families — `Socket Event Handler`,
+`WebSocket Event Handler`, `File Event Handler`, `KeyPress Handler` —
+are *not* subscribed. Their events come from a server the session never
+runs; subscribing them would promise dispatch that cannot arrive. Use
+`aro run` for those.
+
 ## Output capture
 
 `Log` writes to stdout directly, as do assorted warnings and `print`s in the
@@ -160,9 +189,10 @@ definitions are gone. An honest restart beats a hang or a silent amnesia.
 
 ## Limits
 
-- **Event handlers do not fire.** A `… Handler` feature set is registered but
-  never dispatched; the kernel runs no event loop. Same as `aro repl` — use
-  `aro run` for event-driven applications.
+- **Service-bound handlers do not fire.** Domain event handlers dispatch
+  (see *Event dispatch* above), but `Socket` / `WebSocket` / `File` /
+  `KeyPress` handler families need a running service the session never
+  starts — use `aro run` for those.
 - **One request at a time.** `REPLSession` is not internally synchronised, and
   the protocol is request/response; concurrent requests are not supported.
 - **Completion is local.** Actions, qualifiers, session variables, feature
@@ -172,7 +202,5 @@ definitions are gone. An honest restart beats a hang or a silent amnesia.
 ## Future directions
 
 - LSP-backed completion and hover, once `AROLSP` is a SwiftPM product.
-- Event dispatch in interactive sessions, which would make `Emit` in a cell
-  meaningful and benefits `aro repl` equally.
 - A native `aro kernel` speaking ZMQ directly, removing the Python dependency.
 - `ipywidgets` and the Jupyter debug protocol.
