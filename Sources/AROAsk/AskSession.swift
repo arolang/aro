@@ -132,6 +132,7 @@ public actor AskSession {
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
+        await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
         await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
 
@@ -164,6 +165,7 @@ public actor AskSession {
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
+        await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
         await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
         try await vectorStore.load()
@@ -1413,6 +1415,18 @@ public actor AskSession {
         // 'link-list' is defi") and hid later ones entirely.
         var lastError = String(error.prefix(4000))
 
+        // The idiom for each diagnostic class in the report, in the prompt
+        // rather than in the model's memory — the local model knows ARO's
+        // shape but not its repair conventions, and that gap is where it
+        // invented fixes.
+        let knowledge = AROKnowledgeBase.forCheckReport(initial.report)
+        let knowledgeBlock = knowledge.isEmpty ? "" : """
+
+        HOW ARO FIXES THESE (knowledge base):
+        \(knowledge.map { "- \($0.answer)" }.joined(separator: "\n"))
+
+        """
+
         for attempt in 1...maxAttempts {
             emitStatus("Fix attempt \(attempt)/\(maxAttempts)...")
 
@@ -1424,6 +1438,7 @@ public actor AskSession {
             ```
             \(lastError)
             ```
+            \(knowledgeBlock)
 
             Fix ALL of them. Output the corrected code for each file using:
             ## filename.aro

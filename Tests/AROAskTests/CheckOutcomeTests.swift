@@ -387,3 +387,45 @@ struct DeclaresHandlerTests {
         #expect(AskSession.declaresHandler(for: "SavePage", in: spaced))
     }
 }
+
+// ============================================================
+// Knowledge base
+// ============================================================
+
+@Suite("AROKnowledgeBase — how ARO does things, offline")
+struct KnowledgeBaseTests {
+
+    @Test("A fix question finds the unhandled-event idiom")
+    func findsUnhandledEvent() {
+        let hits = AROKnowledgeBase.lookup("how do I fix an unhandled event warning?")
+
+        #expect(hits.first?.id == "unhandled-event")
+    }
+
+    @Test("Phrase matches outrank stray word overlap")
+    func phraseBeatsWords() {
+        let hits = AROKnowledgeBase.lookup(
+            "aro check says a variable is defined but never used")
+
+        #expect(hits.first?.id == "unused-variable")
+    }
+
+    @Test("A check report maps each diagnostic class to its entry once")
+    func reportMapping() {
+        let report = """
+        crawler.aro:
+          38:5: warning: Event 'SavePage' is emitted but no handler exists
+          42:5: warning: Event 'ExtractLinks' is emitted but no handler exists
+        main.aro:
+          81:13: warning: Variable 'max-iters' is defined but never used
+        """
+        let entries = AROKnowledgeBase.forCheckReport(report)
+
+        #expect(entries.map(\.id) == ["unhandled-event", "unused-variable"])
+    }
+
+    @Test("An unmatched question returns nothing rather than something wrong")
+    func noMatchIsEmpty() {
+        #expect(AROKnowledgeBase.lookup("what is the capital of France?").isEmpty)
+    }
+}
