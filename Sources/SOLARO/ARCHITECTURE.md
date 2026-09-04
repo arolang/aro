@@ -36,6 +36,11 @@ Sources/
 │   ├── MarkdownDocument.swift    ← markdown buffer + block source ranges (#488)
 │   ├── MarkdownInlineEditor.swift← rendered .md with one raw block (#488)
 │   ├── MarkdownBlockSourceEditor.swift ← the single editable block
+│   ├── ReplNotebook.swift        ← .repl file format (cells + outputs, JSON)
+│   ├── ReplKernelClient.swift    ← `aro repl --json` subprocess client (ARO-0091)
+│   ├── ReplNotebookController.swift ← per-notebook state + serial run queue
+│   ├── ReplNotebookView.swift    ← the Jupyter-style notebook editor
+│   ├── ReplCellTextView.swift    ← auto-growing per-cell NSTextView
 │   ├── SyntaxHighlighter.swift   ← Lexer-driven token coloring
 │   ├── CanvasView.swift          ← action-graph rendering + Bézier wires (#232)
 │   ├── CanvasGraph.swift         ← node + edge data model

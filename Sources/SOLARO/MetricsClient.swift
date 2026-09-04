@@ -82,6 +82,11 @@ final class MetricsClient: @unchecked Sendable {
     private var readerThread: Thread?
     private var fd: Int32 = -1
     private var currentPID: Int32 = -1
+
+    /// PID the client is (or was last) attached to, `nil` when
+    /// detached. Lets callers that share the client (run sessions,
+    /// notebook kernels) check ownership before disconnecting.
+    var attachedPID: Int32? { currentPID > 0 ? currentPID : nil }
     /// Throttle window. Snapshots arrive every 500ms but we only
     /// publish to SwiftUI once a second. Every re-render bubbles the
     /// hosting-view's intrinsic-size update to the inspector

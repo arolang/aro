@@ -47,6 +47,7 @@ enum QuickOpenBuilder {
         case .projectManifest: return "gearshape.fill"
         case .directory:       return "folder.fill"
         case .markdown:        return "doc.richtext"
+        case .replNotebook:    return "play.square.stack"
         case .other:           return "doc"
         }
     }

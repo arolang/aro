@@ -569,6 +569,13 @@ struct WorkspaceView: View {
             target: $pendingDeleteFile,
             onConfirm: { url in deleteFile(url) }
         ))
+        // A `.repl` notebook kernel opens the same metrics push
+        // socket `aro run` does (ARO_METRICS_SOCKET). When no run
+        // session owns the Metrics tab, attach to the kernel so cell
+        // executions stream into the panel too. Extracted into a
+        // modifier — two more inline `.onReceive`s pushed this body
+        // over the type-checker's complexity budget.
+        .modifier(ReplKernelMetricsBridge(consoleProcess: consoleProcess))
         .onReceive(
             NotificationCenter.default.publisher(for: .solaroRequestNewFile)
         ) { note in
@@ -1744,6 +1751,17 @@ struct WorkspaceView: View {
               version: 0.1.0
             paths: {}
             """
+        case .notebook:
+            filename = trimmed.hasSuffix(".repl") ? trimmed : "\(trimmed).repl"
+            let title = filename
+                .replacingOccurrences(of: ".repl", with: "")
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map { $0.capitalized }
+                .joined(separator: " ")
+            let starter = ReplNotebookDocument.starter(
+                named: title.isEmpty ? "Notebook" : title)
+            template = (try? starter.encoded())
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         case .empty:
             filename = trimmed
             template = ""
@@ -2020,6 +2038,39 @@ struct WorkspaceView: View {
 // Real SidebarPaneView lives in Sidebar.swift (Phase 5).
 
 // Real CenterPaneView lives in CenterPane.swift (Phase 7 onwards).
+
+/// Attaches the Metrics tab's socket client to a `.repl` notebook
+/// kernel while no run session owns the panel (the kernel opens
+/// the same `ARO_METRICS_SOCKET` push socket `aro run` does).
+/// Extracted from the workspace body — inline `.onReceive`s pushed
+/// it over the type-checker's complexity budget.
+private struct ReplKernelMetricsBridge: ViewModifier {
+    let consoleProcess: ConsoleProcess
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(
+                NotificationCenter.default.publisher(for: .solaroReplKernelStarted)
+            ) { note in
+                guard let pid = note.userInfo?["pid"] as? Int32 else { return }
+                // A live run session keeps the panel; the kernel
+                // only fills the idle slot.
+                if case .running = consoleProcess.state { return }
+                consoleProcess.metricsClient.connect(pid: pid)
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .solaroReplKernelStopped)
+            ) { note in
+                guard let pid = note.userInfo?["pid"] as? Int32 else { return }
+                // Only detach if the panel is still reading this
+                // kernel — a run session may have claimed the
+                // client since.
+                if consoleProcess.metricsClient.attachedPID == pid {
+                    consoleProcess.metricsClient.disconnect()
+                }
+            }
+    }
+}
 
 // Real InspectorPaneView lives in Inspector.swift (Phase 6).
 

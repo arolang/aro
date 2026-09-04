@@ -590,6 +590,21 @@ final class WorkspaceController {
     /// file load, updated on every keystroke.
     var liveEditorText: [URL: String] = [:]
 
+    /// One live notebook per open `.repl` file, created on first
+    /// open and kept while the tab stays open — the kernel session
+    /// (variables, feature sets) must survive the user switching to
+    /// another file and back. `closeTab` tears the entry down.
+    var replNotebooks: [URL: ReplNotebookController] = [:]
+
+    /// Resolve (or create) the notebook controller for `url`.
+    func replNotebook(for url: URL) -> ReplNotebookController {
+        let std = url.standardizedFileURL
+        if let existing = replNotebooks[std] { return existing }
+        let notebook = ReplNotebookController(url: std, project: project)
+        replNotebooks[std] = notebook
+        return notebook
+    }
+
     /// Current live text for `url`: the editor buffer when known, else disk.
     func liveText(for url: URL) -> String? {
         let std = url.standardizedFileURL
@@ -643,6 +658,12 @@ final class WorkspaceController {
         if !openTabs.contains(url) {
             openTabs.append(url)
         }
+        // Materialize a notebook controller here, in event context —
+        // CenterPane's body only *reads* the cache, so opening a
+        // `.repl` file never mutates observable state mid-render.
+        if ReplFile.isNotebook(url) {
+            _ = replNotebook(for: url)
+        }
         let sidecar = LayoutSidecar.load(for: url)
         paneMode = sidecar.paneMode
         // Refresh the OpenAPI document buffer when switching files;
@@ -665,6 +686,12 @@ final class WorkspaceController {
     func closeTab(_ url: URL) {
         guard let idx = openTabs.firstIndex(of: url) else { return }
         openTabs.remove(at: idx)
+        // Closing a notebook tab ends its kernel session — the
+        // subprocess would otherwise outlive any way to reach it.
+        if let notebook = replNotebooks.removeValue(
+            forKey: url.standardizedFileURL) {
+            notebook.teardown()
+        }
         if currentFile == url {
             if openTabs.isEmpty {
                 currentFile = nil
