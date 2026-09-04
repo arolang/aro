@@ -60,10 +60,36 @@ public struct EventAnalyzer {
 
     // MARK: - Orphaned Event Detection
 
+    /// Event types handled by the feature sets in `program`.
+    ///
+    /// An ARO application has no imports — every feature set is visible to
+    /// every other one — so "is this event handled?" can only be answered
+    /// across the whole application. A caller that analyses one file at a
+    /// time must collect this from all of them first and pass the union to
+    /// `detectOrphanedEventEmissions(_:externallyHandled:)`.
+    public static func handledEventTypes(in program: Program) -> Set<String> {
+        var handled: Set<String> = []
+        for featureSet in program.featureSets {
+            if let eventType = extractEventType(from: featureSet.businessActivity) {
+                handled.insert(eventType)
+            }
+        }
+        return handled
+    }
+
     /// Detects events that are emitted but have no corresponding handler
-    public func detectOrphanedEventEmissions(_ featureSets: [AnalyzedFeatureSet]) {
+    ///
+    /// - Parameter externallyHandled: event types handled elsewhere in the
+    ///   application — outside the feature sets given here. Empty when the
+    ///   whole program is in `featureSets`, which is the case for `aro run`
+    ///   and `aro build`; `aro check` compiles a file at a time and supplies
+    ///   the rest of the application's handlers through this.
+    public func detectOrphanedEventEmissions(
+        _ featureSets: [AnalyzedFeatureSet],
+        externallyHandled: Set<String> = []
+    ) {
         // Collect all handled event types
-        var handledEvents: Set<String> = []
+        var handledEvents: Set<String> = externallyHandled
         for analyzed in featureSets {
             if let eventType = Self.extractEventType(from: analyzed.featureSet.businessActivity) {
                 handledEvents.insert(eventType)

@@ -132,6 +132,7 @@ public actor AskSession {
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
+        await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
         await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
 
@@ -164,6 +165,7 @@ public actor AskSession {
         await registry.register(ShellTool.tool(guard: pathGuard))
         await registry.register(AROTools.all(guard: pathGuard))
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
+        await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
         await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
         try await vectorStore.load()
@@ -1307,6 +1309,14 @@ public actor AskSession {
         for event in Self.unhandledEvents(in: initial.report) {
             guard let existing = aroFiles[event.file] else { continue }
 
+            // Believe the application over the report. A handler elsewhere
+            // means the warning is wrong, and appending a second one turns a
+            // false alarm into real damage.
+            if Self.declaresHandler(for: event.event, in: aroFiles) {
+                emitStatus("  \(event.event) already has a handler elsewhere — not adding another")
+                continue
+            }
+
             let sourceLines = existing.components(separatedBy: "\n")
             let emitIndex = event.line - 1
             let emitStatement = sourceLines.indices.contains(emitIndex)
@@ -1405,6 +1415,18 @@ public actor AskSession {
         // 'link-list' is defi") and hid later ones entirely.
         var lastError = String(error.prefix(4000))
 
+        // The idiom for each diagnostic class in the report, in the prompt
+        // rather than in the model's memory — the local model knows ARO's
+        // shape but not its repair conventions, and that gap is where it
+        // invented fixes.
+        let knowledge = AROKnowledgeBase.forCheckReport(initial.report)
+        let knowledgeBlock = knowledge.isEmpty ? "" : """
+
+        HOW ARO FIXES THESE (knowledge base):
+        \(knowledge.map { "- \($0.answer)" }.joined(separator: "\n"))
+
+        """
+
         for attempt in 1...maxAttempts {
             emitStatus("Fix attempt \(attempt)/\(maxAttempts)...")
 
@@ -1416,6 +1438,7 @@ public actor AskSession {
             ```
             \(lastError)
             ```
+            \(knowledgeBlock)
 
             Fix ALL of them. Output the corrected code for each file using:
             ## filename.aro
@@ -1665,6 +1688,26 @@ public actor AskSession {
         }
 
         return try runCheck(aroBin: aroBin, path: tmpDir.path)
+    }
+
+    /// Whether any file already declares a handler for `event`.
+    ///
+    /// A second opinion before appending one. `aro check` used to analyse a
+    /// file at a time, so a handler in a sibling file was invisible to it and
+    /// every cross-file event was reported unhandled — on the Crawler, three
+    /// of them, whose handlers sat in `links.aro` and `storage.aro`. Acting
+    /// on that appended duplicates and left the real handler no longer alone.
+    ///
+    /// The checker is fixed, but a repair that only ever ADDS code should not
+    /// take "it is missing" on trust when the application it was handed can
+    /// answer the question directly.
+    static func declaresHandler(for event: String, in files: [String: String]) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: event)
+        // Matches the business activity half of `(Some Name: <event> Handler)`.
+        let pattern = ":\\s*\(escaped)\\s+Handler\\s*\\)"
+        return files.values.contains {
+            $0.range(of: pattern, options: .regularExpression) != nil
+        }
     }
 
     /// Events emitted with nothing to handle them, in report order.

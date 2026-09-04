@@ -40,7 +40,13 @@ public final class Compiler {
     // MARK: - Public Interface
     
     /// Compiles ARO source code
-    public func compile(_ source: String) -> CompilationResult {
+    ///
+    /// - Parameter externallyHandledEvents: event types handled elsewhere in
+    ///   the application, for callers compiling one file of it at a time.
+    public func compile(
+        _ source: String,
+        externallyHandledEvents: Set<String> = []
+    ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
 
@@ -54,7 +60,8 @@ public final class Compiler {
             
             // Phase 3: Semantic Analysis
             let analyzer = SemanticAnalyzer(diagnostics: diagnostics)
-            let analyzedProgram = analyzer.analyze(program)
+            let analyzedProgram = analyzer.analyze(
+                program, externallyHandledEvents: externallyHandledEvents)
             
             return CompilationResult(
                 program: program,

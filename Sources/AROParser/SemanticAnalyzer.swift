@@ -285,7 +285,15 @@ public final class SemanticAnalyzer {
     // MARK: - Public Interface
 
     /// Analyzes the entire program
-    public func analyze(_ program: Program) -> AnalyzedProgram {
+    ///
+    /// - Parameter externallyHandledEvents: event types handled elsewhere in
+    ///   the application. Only non-empty when the caller is analysing part of
+    ///   an application in isolation — `aro check` walks a file at a time, and
+    ///   without this every handler in a sibling file reads as missing.
+    public func analyze(
+        _ program: Program,
+        externallyHandledEvents: Set<String> = []
+    ) -> AnalyzedProgram {
         let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
         let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
@@ -329,7 +337,7 @@ public final class SemanticAnalyzer {
         events.detectCircularEventChains(analyzedSets)
 
         // Fifth pass: detect orphaned event emissions
-        events.detectOrphanedEventEmissions(analyzedSets)
+        events.detectOrphanedEventEmissions(analyzedSets, externallyHandled: externallyHandledEvents)
 
         // ARO-0081: validate `Application.<Name>` calls and framework-variable
         // access inside Action bodies. Done last so duplicate-name diagnostics

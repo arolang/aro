@@ -1,0 +1,21 @@
+{
+  "_comment": "Knowledge Q/A pairs kept in sync by hand with Sources/AROAsk/KnowledgeBase.swift, so the aro_knowledge tool and the trained model give the same answers.",
+  "pairs": [
+    {
+      "instruction": "How do I fix \"Event X is emitted but no handler exists\"?",
+      "output": "First search EVERY .aro file in the application for a feature set with business activity `X Handler` \u2014 ARO has no imports, all files are compiled together, and handlers often live in their own file. If one exists anywhere, change nothing: the warning is stale. Only if none exists, append `(Handle X: X Handler) { Extract the <field> from the <event: field>. ... Return an <OK: status> for the <handled>. }` extracting exactly the fields the Emit passes. Never add a second handler for the same event."
+    },
+    {
+      "instruction": "How do I fix \"Variable v is defined but never used\"?",
+      "output": "Verify it first: loop bounds (`for <i> from 0 to <v>`), `when` guards, `${<v>}` interpolations and qualifier bases are all reads. If <v> is read anywhere, the report is wrong \u2014 change nothing. If it is genuinely unread, delete only the binding statement; if that statement is the sole content of a `case` or loop block, remove the enclosing block with it, because an empty block does not parse."
+    },
+    {
+      "instruction": "Can I invent a Compute qualifier if none fits?",
+      "output": "No. The qualifier namespace is closed: built-ins, plugin qualifiers (handle.name), chains (a|b), or date offsets (-7d). An unknown name is a compile error. Sorting and reversing are actions (`Sort the <s> for the <x>.`), element access is an Extract (`Extract the <f: first> from the <x>.`), and a result type uses `as` (`Compute the <n> as Float from <s>.`)."
+    },
+    {
+      "instruction": "Is spacing like `the<name>` or `<a>< <b>` a syntax error in ARO?",
+      "output": "No. Spacing inside statements is not significant: `the<name>` equals `the <name>`, and `<a>< <b>` is the comparison `<a> < <b>` written tightly. When repairing a file, copy such lines byte-for-byte \u2014 \"tidying\" them is how repairs introduce errors."
+    }
+  ]
+}

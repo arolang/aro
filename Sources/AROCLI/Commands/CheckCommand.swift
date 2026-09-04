@@ -79,8 +79,22 @@ struct SourceCheckSubcommand: ParsableCommand {
         var totalErrors = 0
         var totalWarnings = 0
 
+        // Which events the application handles, before checking any single
+        // file. An ARO application has no imports — every feature set is
+        // visible to every other — but this command compiles a file at a
+        // time, so on its own the orphan-event check can only see the
+        // handlers that happen to live in the file doing the emitting.
+        //
+        // Every handler in a sibling file was therefore reported missing.
+        // The Crawler example emits SavePage, ExtractLinks and QueueUrl from
+        // crawler.aro and main.aro and handles all three — in storage.aro
+        // and links.aro — and `aro check` called all three unhandled. Acting
+        // on that advice appends a duplicate handler and the real one stops
+        // being the only one.
+        let handledEvents = handledEventTypes(in: sourceFiles)
+
         for sourceFile in sourceFiles {
-            let (errors, warnings) = try checkFile(sourceFile)
+            let (errors, warnings) = try checkFile(sourceFile, handledEvents: handledEvents)
             totalErrors += errors
             totalWarnings += warnings
         }
@@ -398,10 +412,30 @@ struct SourceCheckSubcommand: ParsableCommand {
         return sourceFiles.sorted { $0.path < $1.path }
     }
 
-    private func checkFile(_ file: URL) throws -> (errors: Int, warnings: Int) {
+    /// Event types handled anywhere in the application.
+    ///
+    /// Parse-only: the business activity is on the feature-set header, so no
+    /// semantic analysis is needed, and a file that does not parse simply
+    /// contributes nothing — its own errors are reported when it is checked.
+    private func handledEventTypes(in files: [URL]) -> Set<String> {
+        var handled: Set<String> = []
+        for file in files {
+            guard let source = try? String(contentsOf: file, encoding: .utf8),
+                  let tokens = try? Lexer.tokenize(source),
+                  let program = try? Parser(tokens: tokens).parse()
+            else { continue }
+            handled.formUnion(EventAnalyzer.handledEventTypes(in: program))
+        }
+        return handled
+    }
+
+    private func checkFile(
+        _ file: URL,
+        handledEvents: Set<String> = []
+    ) throws -> (errors: Int, warnings: Int) {
         let source = try String(contentsOf: file, encoding: .utf8)
         let compiler = Compiler()
-        let result = compiler.compile(source)
+        let result = compiler.compile(source, externallyHandledEvents: handledEvents)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
         let warningDiags = result.diagnostics.filter { $0.severity == .warning }

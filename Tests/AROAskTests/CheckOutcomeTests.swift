@@ -326,3 +326,106 @@ struct UnhandledEventTests {
         #expect(AskSession.unhandledEvents(in: "✅ No issues found in 3 file(s)").isEmpty)
     }
 }
+
+// ============================================================
+// Handler already present
+// ============================================================
+//
+// `/fix` only ever ADDS a handler, so it must not act on "no handler
+// exists" without checking. When `aro check` analysed a file at a time it
+// reported cross-file handlers missing, and appending on that advice put a
+// duplicate handler in the Crawler while the real one sat in links.aro.
+
+@Suite("declaresHandler — believing the application over the report")
+struct DeclaresHandlerTests {
+
+    private let files = [
+        "crawler.aro": """
+        (Crawl Page: CrawlPage Handler) {
+            Emit a <SavePage: event> with <url>.
+        }
+        """,
+        "storage.aro": """
+        (Save Page: SavePage Handler) {
+            Return an <OK: status> for the <saved>.
+        }
+        """,
+    ]
+
+    @Test("Finds a handler declared in a different file")
+    func findsHandlerInAnotherFile() {
+        #expect(AskSession.declaresHandler(for: "SavePage", in: files))
+    }
+
+    @Test("Reports nothing for an event with no handler anywhere")
+    func missingHandlerIsMissing() {
+        #expect(!AskSession.declaresHandler(for: "ExtractLinks", in: files))
+    }
+
+    // The Emit naming the event is not a declaration — matching it would
+    // suppress every genuine warning, since an unhandled event is by
+    // definition emitted somewhere.
+    @Test("An Emit of the event is not a handler declaration")
+    func emitIsNotAHandler() {
+        let onlyEmits = ["a.aro": "Emit a <QueueUrl: event> with <url>."]
+
+        #expect(!AskSession.declaresHandler(for: "QueueUrl", in: onlyEmits))
+    }
+
+    // "SavePageLater Handler" must not answer for "SavePage".
+    @Test("A longer event name is not a match")
+    func prefixIsNotAMatch() {
+        let similar = ["a.aro": "(Later: SavePageLater Handler) {\n}"]
+
+        #expect(!AskSession.declaresHandler(for: "SavePage", in: similar))
+    }
+
+    @Test("Spacing in the business activity does not matter")
+    func toleratesSpacing() {
+        let spaced = ["a.aro": "(Save:   SavePage   Handler  ) {\n}"]
+
+        #expect(AskSession.declaresHandler(for: "SavePage", in: spaced))
+    }
+}
+
+// ============================================================
+// Knowledge base
+// ============================================================
+
+@Suite("AROKnowledgeBase — how ARO does things, offline")
+struct KnowledgeBaseTests {
+
+    @Test("A fix question finds the unhandled-event idiom")
+    func findsUnhandledEvent() {
+        let hits = AROKnowledgeBase.lookup("how do I fix an unhandled event warning?")
+
+        #expect(hits.first?.id == "unhandled-event")
+    }
+
+    @Test("Phrase matches outrank stray word overlap")
+    func phraseBeatsWords() {
+        let hits = AROKnowledgeBase.lookup(
+            "aro check says a variable is defined but never used")
+
+        #expect(hits.first?.id == "unused-variable")
+    }
+
+    @Test("A check report maps each diagnostic class to its entry once")
+    func reportMapping() {
+        let report = """
+        crawler.aro:
+          38:5: warning: Event 'SavePage' is emitted but no handler exists
+          42:5: warning: Event 'ExtractLinks' is emitted but no handler exists
+        main.aro:
+          81:13: warning: Variable 'max-iters' is defined but never used
+        """
+        let entries = AROKnowledgeBase.forCheckReport(report)
+
+        #expect(entries.map(\.id) == ["unhandled-event", "unused-variable"])
+    }
+
+    @Test("An unmatched question returns nothing rather than something wrong")
+    func noMatchIsEmpty() {
+        #expect(AROKnowledgeBase.lookup("what is the capital of France?").isEmpty)
+    }
+}
