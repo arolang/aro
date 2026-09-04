@@ -371,7 +371,14 @@ final class JSONREPLServer: @unchecked Sendable {
         }
         definitions[name] = source
 
-        note("Defined (\(name): \(activity))\n")
+        // A domain handler is live from this moment: an Emit in a later
+        // cell dispatches to it (ARO-0091 event dispatch). Say so —
+        // "Defined" alone reads as "parked".
+        if let eventType = REPLSession.domainHandlerEventType(for: activity) {
+            note("Defined (\(name): \(activity)) — fires on <\(eventType): event>\n")
+        } else {
+            note("Defined (\(name): \(activity))\n")
+        }
         return nil
     }
 

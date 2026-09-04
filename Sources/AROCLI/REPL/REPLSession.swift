@@ -83,6 +83,11 @@ public final class REPLSession: @unchecked Sendable {
     /// Raw feature set sources for export
     private var _featureSetSources: [String: String] = [:]
 
+    /// EventBus subscription per handler feature-set name, so a
+    /// redefinition replaces its subscription instead of stacking a
+    /// second one — the same rule user-defined actions follow.
+    private var handlerSubscriptions: [String: UUID] = [:]
+
     /// Session history
     private var _history: [HistoryEntry] = []
 
@@ -172,6 +177,97 @@ public final class REPLSession: @unchecked Sendable {
         if let source = source {
             _featureSetSources[name] = source
         }
+        registerDomainHandlerIfNeeded(name: name, featureSet: featureSet)
+    }
+
+    // MARK: - Event dispatch (interactive sessions)
+
+    /// Handler families that hang off a running service. Their events
+    /// come from a server the session never starts (the REPL runs no
+    /// Keepalive loop), so subscribing them would promise dispatch that
+    /// can never arrive. `aro run` remains their home.
+    private static let serviceBoundHandlerActivities: [String] = [
+        "Socket Event Handler",
+        "WebSocket Event Handler",
+        "File Event Handler",
+        "KeyPress Handler",
+    ]
+
+    /// Whether `businessActivity` names a domain event handler this
+    /// session will dispatch to (`{EventName} Handler`, optionally with
+    /// state guards). Exposed for the front-ends, so they can tell the
+    /// user a definition went live rather than merely registered.
+    public static func domainHandlerEventType(for businessActivity: String) -> String? {
+        guard let range = businessActivity.range(of: " Handler") else { return nil }
+        guard !serviceBoundHandlerActivities.contains(where: businessActivity.contains) else {
+            return nil
+        }
+        let eventType = String(businessActivity[..<range.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        return eventType.isEmpty ? nil : eventType
+    }
+
+    /// Subscribe a `{EventName} Handler` feature set to this session's
+    /// EventBus, so an `Emit` in a later input actually dispatches to it
+    /// (ARO-0091: event dispatch in interactive sessions).
+    ///
+    /// Dispatch mirrors `ExecutionEngine.registerDomainEventHandlers`:
+    /// filter by the event type named in the business activity, apply
+    /// state guards (ARO-0022), bind the payload as `event` /
+    /// `event:key`, and run the handler body through the same executor
+    /// statements use. Handler errors are reported on stderr — the
+    /// emitting statement already succeeded, so they must not fail it
+    /// retroactively; ARO-0006 still applies inside the handler's text.
+    private func registerDomainHandlerIfNeeded(name: String, featureSet: AnalyzedFeatureSet) {
+        guard let eventType = Self.domainHandlerEventType(
+            for: featureSet.featureSet.businessActivity) else { return }
+
+        let guardSet = StateGuardSet.parse(from: featureSet.featureSet.businessActivity)
+
+        if let previous = handlerSubscriptions.removeValue(forKey: name) {
+            eventBus.unsubscribe(previous)
+        }
+
+        handlerSubscriptions[name] = eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
+            guard let self, event.domainEventType == eventType else { return }
+            if !guardSet.isEmpty, !guardSet.allMatch(payload: event.payload) { return }
+            await self.runDomainHandler(featureSet, event: event)
+        }
+    }
+
+    private func runDomainHandler(_ featureSet: AnalyzedFeatureSet, event: DomainEvent) async {
+        // `context` is read at dispatch time, not capture time, so a
+        // handler defined before `clear()` runs against the current
+        // session state — or is gone entirely, since clear() drops the
+        // subscription.
+        let child = context.createChild(
+            featureSetName: featureSet.featureSet.name,
+            businessActivity: featureSet.featureSet.businessActivity
+        )
+        child.bind("event", value: event.payload)
+        for (key, value) in event.payload {
+            child.bind("event:\(key)", value: value)
+        }
+        do {
+            _ = try await executor.execute(featureSet, context: child)
+        } catch {
+            FileHandle.standardError.write(Data(
+                "\(formatError(error))\n".utf8))
+        }
+    }
+
+    /// Wait for every event handler triggered so far — including
+    /// cascades, where a handler emits an event of its own — to finish.
+    ///
+    /// Called after each executed input so a handler's output lands with
+    /// the statement that emitted the event, in both the terminal REPL
+    /// and a notebook cell (the protocol's stream-before-result ordering
+    /// depends on it). Returns false when the bus timed out with work
+    /// still pending, which the caller surfaces as a warning rather than
+    /// an error: the emitting statement itself succeeded.
+    @discardableResult
+    public func settleEvents() async -> Bool {
+        await eventBus.awaitPendingEvents()
     }
 
     private func addHistory(_ entry: HistoryEntry) {
@@ -241,6 +337,14 @@ public final class REPLSession: @unchecked Sendable {
         do {
             let response = try await executor.execute(analyzedFS, context: context)
 
+            // Any event this input emitted dispatches to the session's
+            // handlers now, before the result is reported — so handler
+            // output belongs to the input that caused it.
+            if await !settleEvents() {
+                FileHandle.standardError.write(Data(
+                    "[repl] Warning: event handlers still running after timeout; their output may arrive late.\n".utf8))
+            }
+
             entry.duration = Date().timeIntervalSince(startTime)
 
             // Check if there's a meaningful return value
@@ -256,6 +360,10 @@ public final class REPLSession: @unchecked Sendable {
                 return .ok
             }
         } catch {
+            // Statements before the failing one may have emitted; let
+            // those handlers finish so their output isn't attributed to
+            // the *next* input.
+            await settleEvents()
             let errorMsg = formatError(error)
             entry.result = .error(errorMsg)
             entry.duration = Date().timeIntervalSince(startTime)
@@ -371,6 +479,7 @@ public final class REPLSession: @unchecked Sendable {
 
         do {
             let response = try await executor.execute(featureSet, context: childContext)
+            await settleEvents()
 
             if !response.data.isEmpty {
                 let data = convertResponseData(response.data)
@@ -388,6 +497,13 @@ public final class REPLSession: @unchecked Sendable {
         _featureSets.removeAll()
         _featureSetSources.removeAll()
         _history.removeAll()
+
+        // Cleared handlers must stop answering events — the definition
+        // they came from is gone.
+        for (_, subscription) in handlerSubscriptions {
+            eventBus.unsubscribe(subscription)
+        }
+        handlerSubscriptions.removeAll()
 
         // Drop any user-defined action verbs this session registered.
         // `clear()` is synchronous (the meta-command protocol is), so the
