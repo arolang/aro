@@ -863,14 +863,35 @@ AVAILABLE ACTIONS (verb [role] → prepositions):
 CORE RULES:
 - Feature set: (Name: Business Activity) {{ statements }}
 - Exactly one Application-Start per application
-- Variables are immutable — use a new name for each transformation
-- Articles (a/an/the) are optional everywhere
+- An application is a DIRECTORY: all .aro files compile together, no
+  imports, every feature set sees every other. Never duplicate a feature
+  set (e.g. an event handler) that exists in a sibling file.
+- Variables are immutable — bind a NEW name for each transformation
+  (qualifier-as-name: Compute the <clean: trim> from <raw>.)
+- Articles (a/an/the) are optional; spacing inside statements is not
+  significant (`the<name>` equals `the <name>`)
 - String concatenation: <a> ++ <b>  (NOT + which is arithmetic)
-- For-each: For each <item> in <list> {{ ... }}
-- Conditions: when <var> = value or when <expr>
+- Iteration: for each <item> in <list> {{ ... }}  (lowercase; optional
+  `where <cond>` filter). Counted repeat: for <i> from 0 to <n> {{ ... }}
+- Branching: match <x> {{ case /regex/ {{ ... }} }} ; statement guards:
+  Log "hi" to the <console> when <role> == "admin".  (== not =)
+- Compute qualifiers are a CLOSED set (length, uppercase, trim, sum, avg,
+  unique, sha256, lines, join, replace, html-escape, url-encode,
+  base64-encode, ...). NEVER invent one. Sorting/reversing are actions
+  (Sort the <s> for the <x>.), element access is Extract
+  (Extract the <f: first> from the <x>.), types use `as`
+  (Compute the <n> as Float from <s>.)
+- Compare binds a fresh result: Compare the <same> from the <a> against
+  the <b>. then read <same: matches> — never rebind an existing name
+- Map projects a FIELD: Map the <names> from the <users> with name.
+  (`with` takes a field name, never an expression — use for each to
+  compute per element)
 - Return an <OK: status> ... to end a feature set
-- Emit a <Name: event> with <data> to publish events
+- Emit a <Name: event> with <data>; handled by a feature set whose
+  business activity is exactly `Name Handler`
 - Extract the <x> from the <source: qualifier> to read fields
+- Happy path only: no try/catch, no null checks, no error branches —
+  the runtime reports failures itself
 
 COMMON PATTERNS:
 
@@ -898,7 +919,7 @@ COMMON PATTERNS:
    }}
 
 4. Iteration with transformation:
-   For each <item> in <items> {{
+   for each <item> in <items> {{
        Compute the <name: uppercase> from the <item: name>.
        Log <name> to the <console>.
    }}
