@@ -167,19 +167,39 @@ def generate_pairs(model, tokenizer, title: str, body: str) -> list[dict]:
     from mlx_lm.sample_utils import make_sampler
 
     prompt = GEN_PROMPT.replace('{title}', title).replace('{body}', body)
-    chat = tokenizer.apply_chat_template(
-        [{'role': 'user', 'content': prompt}],
-        tokenize=False, add_generation_prompt=True)
+    messages = [{'role': 'user', 'content': prompt}]
+    try:
+        # Thinking-family models (Qwen3.x) reason before answering; a long
+        # <think> preamble burns the token budget and litters the output
+        # with bracketed text. Ask the template to disable it where the
+        # tokenizer supports the switch.
+        chat = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+            enable_thinking=False)
+    except TypeError:
+        chat = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True)
     text = generate(model, tokenizer, prompt=chat,
                     max_tokens=1200, sampler=make_sampler(temp=0.6),
                     verbose=False)
 
-    match = re.search(r'\[.*\]', text, re.S)
-    if not match:
-        return []
-    try:
-        raw = json.loads(match.group(0))
-    except json.JSONDecodeError:
+    # Strip any think block that slipped through, then decode the FIRST
+    # well-formed JSON array. The old greedy `\[.*\]` spanned from the
+    # first '[' anywhere (including inside reasoning text) to the last ']'
+    # and json.loads failed — every Qwen section in the smoke run was
+    # dropped as bad_json while Mistral's parsed fine.
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.S)
+    decoder = json.JSONDecoder()
+    raw = None
+    for start in [m.start() for m in re.finditer(r'\[', text)]:
+        try:
+            candidate, _ = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, list) and candidate:
+            raw = candidate
+            break
+    if raw is None:
         return []
     return [p for p in raw
             if isinstance(p, dict)
