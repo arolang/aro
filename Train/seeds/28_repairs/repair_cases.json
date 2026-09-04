@@ -1,0 +1,209 @@
+{
+  "_comment": "Seed data for Train/script/28_diagnostic_repairs.py. Each case is a complete before/after ARO application plus the training pair built from it. The script validates every case against the real `aro check` before saving: before_files must produce expect_before (when set), after_files must check clean. Edit cases HERE, not in the script \u2014 the script is a loader/validator and holds no data.",
+  "cases": [
+    {
+      "id": "append-OrderPlaced",
+      "category": "repair_append_handler",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\nmain.aro:\n  warning: Event 'OrderPlaced' is emitted but no handler exists\n```\n\nThe application has one file.\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\nFix the warning.",
+      "output": "No feature set anywhere in the application has business activity `OrderPlaced Handler`, so the warning is real. The fix is to APPEND a handler that extracts the fields the Emit passes \u2014 existing lines stay byte-for-byte unchanged:\n\n```aro\n(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n\n(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": "no handler exists"
+    },
+    {
+      "id": "append-FileUploaded",
+      "category": "repair_append_handler",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\nmain.aro:\n  warning: Event 'FileUploaded' is emitted but no handler exists\n```\n\nThe application has one file.\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\nFix the warning.",
+      "output": "No feature set anywhere in the application has business activity `FileUploaded Handler`, so the warning is real. The fix is to APPEND a handler that extracts the fields the Emit passes \u2014 existing lines stay byte-for-byte unchanged:\n\n```aro\n(Handle FileUploaded: FileUploaded Handler) {\n    Extract the <path> from the <event: path>.\n    Extract the <size> from the <event: size>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n\n(Handle FileUploaded: FileUploaded Handler) {\n    Extract the <path> from the <event: path>.\n    Extract the <size> from the <event: size>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": "no handler exists"
+    },
+    {
+      "id": "append-UserRegistered",
+      "category": "repair_append_handler",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\nmain.aro:\n  warning: Event 'UserRegistered' is emitted but no handler exists\n```\n\nThe application has one file.\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\nFix the warning.",
+      "output": "No feature set anywhere in the application has business activity `UserRegistered Handler`, so the warning is real. The fix is to APPEND a handler that extracts the fields the Emit passes \u2014 existing lines stay byte-for-byte unchanged:\n\n```aro\n(Handle UserRegistered: UserRegistered Handler) {\n    Extract the <email> from the <event: email>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n\n(Handle UserRegistered: UserRegistered Handler) {\n    Extract the <email> from the <event: email>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": "no handler exists"
+    },
+    {
+      "id": "append-ReportReady",
+      "category": "repair_append_handler",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\nmain.aro:\n  warning: Event 'ReportReady' is emitted but no handler exists\n```\n\nThe application has one file.\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <url> from the <request: url>.\n    Extract the <format> from the <request: format>.\n    Emit a <ReportReady: event> with { url: <url>, format: <format> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\nFix the warning.",
+      "output": "No feature set anywhere in the application has business activity `ReportReady Handler`, so the warning is real. The fix is to APPEND a handler that extracts the fields the Emit passes \u2014 existing lines stay byte-for-byte unchanged:\n\n```aro\n(Handle ReportReady: ReportReady Handler) {\n    Extract the <url> from the <event: url>.\n    Extract the <format> from the <event: format>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <url> from the <request: url>.\n    Extract the <format> from the <request: format>.\n    Emit a <ReportReady: event> with { url: <url>, format: <format> }.\n    Return an <OK: status> for the <processing>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <url> from the <request: url>.\n    Extract the <format> from the <request: format>.\n    Emit a <ReportReady: event> with { url: <url>, format: <format> }.\n    Return an <OK: status> for the <processing>.\n}\n\n(Handle ReportReady: ReportReady Handler) {\n    Extract the <url> from the <event: url>.\n    Extract the <format> from the <event: format>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": "no handler exists"
+    },
+    {
+      "id": "sibling-OrderPlaced",
+      "category": "repair_already_handled",
+      "task_type": "debugging",
+      "instruction": "A code checker claims event `OrderPlaced` is emitted but no handler exists. The application:\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\n## handlers.aro\n```aro\n(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n```\n\nFix the problem.",
+      "output": "There is nothing to fix. ARO applications have no imports \u2014 every feature set in every file is globally visible \u2014 and `handlers.aro` already declares `(OrderPlaced Handler)`. One handler serves every Emit of that event. The report is stale or was produced per-file; adding a second handler would be a defect, not a fix.",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": null
+    },
+    {
+      "id": "sibling-FileUploaded",
+      "category": "repair_already_handled",
+      "task_type": "debugging",
+      "instruction": "A code checker claims event `FileUploaded` is emitted but no handler exists. The application:\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\n## handlers.aro\n```aro\n(Handle FileUploaded: FileUploaded Handler) {\n    Extract the <path> from the <event: path>.\n    Extract the <size> from the <event: size>.\n    Return an <OK: status> for the <handled>.\n}\n```\n\nFix the problem.",
+      "output": "There is nothing to fix. ARO applications have no imports \u2014 every feature set in every file is globally visible \u2014 and `handlers.aro` already declares `(FileUploaded Handler)`. One handler serves every Emit of that event. The report is stale or was produced per-file; adding a second handler would be a defect, not a fix.",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle FileUploaded: FileUploaded Handler) {\n    Extract the <path> from the <event: path>.\n    Extract the <size> from the <event: size>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <path> from the <request: path>.\n    Extract the <size> from the <request: size>.\n    Emit a <FileUploaded: event> with { path: <path>, size: <size> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle FileUploaded: FileUploaded Handler) {\n    Extract the <path> from the <event: path>.\n    Extract the <size> from the <event: size>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": null
+    },
+    {
+      "id": "sibling-UserRegistered",
+      "category": "repair_already_handled",
+      "task_type": "debugging",
+      "instruction": "A code checker claims event `UserRegistered` is emitted but no handler exists. The application:\n\n## main.aro\n```aro\n(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n```\n\n## handlers.aro\n```aro\n(Handle UserRegistered: UserRegistered Handler) {\n    Extract the <email> from the <event: email>.\n    Return an <OK: status> for the <handled>.\n}\n```\n\nFix the problem.",
+      "output": "There is nothing to fix. ARO applications have no imports \u2014 every feature set in every file is globally visible \u2014 and `handlers.aro` already declares `(UserRegistered Handler)`. One handler serves every Emit of that event. The report is stale or was produced per-file; adding a second handler would be a defect, not a fix.",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle UserRegistered: UserRegistered Handler) {\n    Extract the <email> from the <event: email>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <email> from the <request: email>.\n    Emit a <UserRegistered: event> with { email: <email> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle UserRegistered: UserRegistered Handler) {\n    Extract the <email> from the <event: email>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": null
+    },
+    {
+      "id": "unused-retry-count",
+      "category": "repair_delete_unused",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\n  3:5: warning: Variable 'retry-count' is defined but never used\n```\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <retry-count> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "`<retry-count>` is bound on line 3 and read nowhere \u2014 not in a loop bound, a `when` guard, or a `${...}` interpolation. Delete exactly that one statement; every other line stays byte-for-byte identical:\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <retry-count> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": "is defined but never used"
+    },
+    {
+      "id": "unused-temp-result",
+      "category": "repair_delete_unused",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\n  3:5: warning: Variable 'temp-result' is defined but never used\n```\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <temp-result> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "`<temp-result>` is bound on line 3 and read nowhere \u2014 not in a loop bound, a `when` guard, or a `${...}` interpolation. Delete exactly that one statement; every other line stays byte-for-byte identical:\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <temp-result> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": "is defined but never used"
+    },
+    {
+      "id": "unused-old-name",
+      "category": "repair_delete_unused",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\n  3:5: warning: Variable 'old-name' is defined but never used\n```\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <old-name> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "`<old-name>` is bound on line 3 and read nowhere \u2014 not in a loop bound, a `when` guard, or a `${...}` interpolation. Delete exactly that one statement; every other line stays byte-for-byte identical:\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <old-name> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": "is defined but never used"
+    },
+    {
+      "id": "unused-debug-flag",
+      "category": "repair_delete_unused",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\n  3:5: warning: Variable 'debug-flag' is defined but never used\n```\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <debug-flag> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "`<debug-flag>` is bound on line 3 and read nowhere \u2014 not in a loop bound, a `when` guard, or a `${...}` interpolation. Delete exactly that one statement; every other line stays byte-for-byte identical:\n\n```aro\n(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Compute the <debug-flag> from 5 * 2.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Demo) {\n    Log \"starting\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": "is defined but never used"
+    },
+    {
+      "id": "case-block",
+      "category": "repair_delete_case_block",
+      "task_type": "correction",
+      "instruction": "`aro check` reports:\n```\n  8:13: warning: Variable 'fallback' is defined but never used\n```\n\n```aro\n(Application-Start: Config) {\n    Extract the <raw> from the <env: LIMIT>.\n    match <raw> {\n        case /^[1-9][0-9]*$/ {\n            Transform the <limit: int> from the <raw>.\n        }\n        case /^$/ {\n            Create the <fallback> with 1000.\n        }\n    }\n    Log <limit> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "`<fallback>` is never read, but its binding is the ONLY statement in the `case /^$/` block \u2014 deleting the line alone would leave an empty block, which does not parse. Remove the whole case:\n\n```aro\n(Application-Start: Config) {\n    Extract the <raw> from the <env: LIMIT>.\n    match <raw> {\n        case /^[1-9][0-9]*$/ {\n            Transform the <limit: int> from the <raw>.\n        }\n    }\n    Log <limit> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Application-Start: Config) {\n    Extract the <raw> from the <env: LIMIT>.\n    match <raw> {\n        case /^[1-9][0-9]*$/ {\n            Transform the <limit: int> from the <raw>.\n        }\n        case /^$/ {\n            Create the <fallback> with 1000.\n        }\n    }\n    Log <limit> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Config) {\n    Extract the <raw> from the <env: LIMIT>.\n    match <raw> {\n        case /^[1-9][0-9]*$/ {\n            Transform the <limit: int> from the <raw>.\n        }\n    }\n    Log <limit> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": "is defined but never used"
+    },
+    {
+      "id": "false-warning",
+      "category": "repair_refuse_false_warning",
+      "task_type": "debugging",
+      "instruction": "A checker report claims:\n```\n  3:5: warning: Variable 'max-iters' is defined but never used\n```\n\n```aro\n(Application-Start: Drain) {\n    Extract the <raw> from the <env: MAX>.\n    Transform the <max-iters: int> from the <raw>.\n    for <pass> from 0 to <max-iters> {\n        Log <pass> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n```\n\nFix the warning.",
+      "output": "Do not change the code. `<max-iters>` IS read \u2014 it is the upper bound of the range loop on line 4 (`for <pass> from 0 to <max-iters>`). Loop bounds, `when` guards and `${...}` interpolations are all reads. The report is stale or produced by an analyzer that misses loop bounds; deleting the binding would break the loop. The correct action is to change nothing and say why.",
+      "before_files": {
+        "main.aro": "(Application-Start: Drain) {\n    Extract the <raw> from the <env: MAX>.\n    Transform the <max-iters: int> from the <raw>.\n    for <pass> from 0 to <max-iters> {\n        Log <pass> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Application-Start: Drain) {\n    Extract the <raw> from the <env: MAX>.\n    Transform the <max-iters: int> from the <raw>.\n    for <pass> from 0 to <max-iters> {\n        Log <pass> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n"
+      },
+      "expect_before": null
+    },
+    {
+      "id": "duplicate",
+      "category": "repair_remove_duplicate",
+      "task_type": "correction",
+      "instruction": "A repair tool appended a second handler for `OrderPlaced` that already had one. Clean this up.\n\n## handlers.aro\n```aro\n(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n\n(Handle OrderPlaced Again: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "output": "Both feature sets have business activity `OrderPlaced Handler`, so both run on every `OrderPlaced` event \u2014 the work happens twice. Keep the original, remove the duplicate:\n\n```aro\n(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n```",
+      "before_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n\n(Handle OrderPlaced Again: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "after_files": {
+        "main.aro": "(Process Request: processRequest) {\n    Extract the <order-id> from the <request: order-id>.\n    Extract the <total> from the <request: total>.\n    Emit a <OrderPlaced: event> with { order-id: <order-id>, total: <total> }.\n    Return an <OK: status> for the <processing>.\n}\n",
+        "handlers.aro": "(Handle OrderPlaced: OrderPlaced Handler) {\n    Extract the <order-id> from the <event: order-id>.\n    Extract the <total> from the <event: total>.\n    Return an <OK: status> for the <handled>.\n}\n"
+      },
+      "expect_before": null
+    }
+  ]
+}
