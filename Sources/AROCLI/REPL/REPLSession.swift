@@ -414,19 +414,49 @@ public final class REPLSession: @unchecked Sendable {
         return result
     }
 
-    /// Execute an expression and return the result
+    /// Execute an expression and return the result.
+    ///
+    /// The expression runs in a *child* context: it reads the
+    /// session's variables through the parent chain, but its own
+    /// binding is discarded with the child — so evaluating twice
+    /// never rebinds anything (the runtime treats a rebind as a
+    /// fatal compiler bug), and `:vars` stays free of expression
+    /// residue. The value comes back through the Return's response
+    /// data rather than a context lookup, because `_`-prefixed
+    /// names are statement-scoped framework variables and plain
+    /// names would leak.
+    ///
+    /// (This used the retired `<Compute>` bracketed-verb spelling
+    /// for a while, which no longer parses — every expression
+    /// errored.)
     public func evaluateExpression(_ source: String) async throws -> REPLResult {
-        // For simple expressions, wrap in a Compute statement
-        let statement = "<Compute> the <_expr_result_> from \(source)."
-        let result = try await executeStatement(statement)
-
-        // Return the computed value
-        if case .ok = result {
-            if let value = context.resolveAny("_expr_result_") {
-                return .value(value)
-            }
+        let wrapped = """
+        (_repl_expr_: Interactive) {
+            Compute the <result> from \(source).
+            Return an <OK: status> with <result>.
         }
-        return result
+        """
+        let compiled = compiler.compile(wrapped)
+        guard compiled.isSuccess,
+              let featureSet = compiled.analyzedProgram.byName["_repl_expr_"]
+                ?? compiled.analyzedProgram.featureSets.first else {
+            let message = compiled.diagnostics.map { $0.message }.joined(separator: "\n")
+            return .error(message.isEmpty ? "Not a valid expression: \(source)" : message)
+        }
+
+        let child = context.createChild(
+            featureSetName: "_repl_expr_",
+            businessActivity: "Interactive"
+        )
+        do {
+            let response = try await executor.execute(featureSet, context: child)
+            if !response.data.isEmpty {
+                return .value(convertResponseData(response.data))
+            }
+            return .ok
+        } catch {
+            return .error(formatError(error))
+        }
     }
 
     /// Define a feature set from accumulated statements

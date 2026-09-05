@@ -32,8 +32,10 @@ import Glibc
 final class JSONREPLServer: @unchecked Sendable {
 
     private let session: REPLSession
-    private let commands = MetaCommandRegistry.shared
-    private let compiler = Compiler()
+    /// The transport-independent half of the server: cell splitting,
+    /// definition accumulation, auto-display, completion. Shared with
+    /// the native ZMQ kernel so both front-ends run cells identically.
+    private let engine: REPLCellEngine
 
     /// The real stdout, duplicated before fd 1 was redirected. Protocol
     /// messages go here and nowhere else.
@@ -46,26 +48,19 @@ final class JSONREPLServer: @unchecked Sendable {
     #endif
     private let writeLock = NSLock()
 
-    /// Sources of every feature set defined in this session, in definition
-    /// order, keyed by name so a redefinition replaces rather than duplicates.
-    private var definitions: [String: String] = [:]
-    private var definitionOrder: [String] = []
-
     private let stateLock = NSLock()
     private var currentRequestId = 0
     private var drainToken = 0
 
-    /// Statements that never return in a notebook. `Keepalive` blocks until a
-    /// shutdown signal, which in a cell means a spinner that never stops and
-    /// a session that can only be recovered by restarting the kernel. Better
-    /// to say so than to hang.
-    private static let blockingVerbs: Set<String> = ["keepalive", "wait", "block"]
-
     init(session: REPLSession) {
         self.session = session
+        self.engine = REPLCellEngine(session: session)
         #if !os(Windows)
         self.protocolFD = dup(STDOUT_FILENO)
         #endif
+        engine.note = { [weak self] text in
+            self?.note(text)
+        }
     }
 
     // MARK: - Lifecycle
@@ -217,9 +212,7 @@ final class JSONREPLServer: @unchecked Sendable {
     }
 
     private func reset() {
-        session.clear()
-        definitions.removeAll()
-        definitionOrder.removeAll()
+        engine.reset()
     }
 
     // MARK: - Execute
@@ -260,46 +253,12 @@ final class JSONREPLServer: @unchecked Sendable {
 
     private func executeUnits(id: Int, code: String) async {
         let start = Date()
-        let units = REPLCellSplitter.split(code)
-
-        guard !units.isEmpty else {
+        guard !REPLCellSplitter.split(code).isEmpty else {
             send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["durationMs": 0]))
             return
         }
-
-        var display: [String: Any]?
-
-        for unit in units {
-            switch unit {
-            case .meta(let line, _):
-                if let failure = await runMeta(line) {
-                    finish(id: id, error: failure, start: start)
-                    return
-                }
-
-            case .featureSet(let name, let activity, let source, let startLine):
-                if let failure = define(name: name, activity: activity, source: source, startLine: startLine) {
-                    finish(id: id, error: failure, start: start)
-                    return
-                }
-                display = nil
-
-            case .statements(let source, let startLine):
-                if let blocked = blockingVerbRejection(in: source, startLine: startLine) {
-                    finish(id: id, error: blocked, start: start)
-                    return
-                }
-                switch await runStatements(source) {
-                case .failure(let failure):
-                    finish(id: id, error: failure, start: start)
-                    return
-                case .success(let bundle):
-                    display = bundle
-                }
-            }
-        }
-
-        finish(id: id, display: display, start: start)
+        let outcome = await engine.executeCell(code)
+        finish(id: id, display: outcome.display, error: outcome.error, start: start)
     }
 
     private func finish(id: Int, display: [String: Any]? = nil, error: JSONREPLError? = nil, start: Date) {
@@ -319,148 +278,6 @@ final class JSONREPLServer: @unchecked Sendable {
             extra["display"] = display
         }
         send(JSONREPLEncoder.result(id: id, status: .ok, extra: extra))
-    }
-
-    // MARK: - Units
-
-    private enum UnitOutcome {
-        case success([String: Any]?)
-        case failure(JSONREPLError)
-    }
-
-    private func runMeta(_ line: String) async -> JSONREPLError? {
-        do {
-            let result = try await commands.execute(input: line, session: session)
-            switch result {
-            case .output(let text):
-                note(text + "\n")
-            case .table(let rows):
-                note(REPLTextTable.render(rows))
-            case .error(let message):
-                return JSONREPLError(name: "CommandError", message: message)
-            case .exit:
-                // `:quit` has no meaning here — the client owns the process
-                // lifetime, and silently killing the kernel from a cell would
-                // look like a crash.
-                note("Use the client's \"restart kernel\" action to end this session.\n")
-            case .clear, .none:
-                break
-            }
-        } catch {
-            return JSONREPLError(name: "CommandError", message: String(describing: error))
-        }
-        return nil
-    }
-
-    private func define(name: String, activity: String, source: String, startLine: Int) -> JSONREPLError? {
-        let result = compiler.compile(source)
-        guard result.isSuccess else {
-            return JSONREPLError(
-                name: "CompileError",
-                message: diagnosticText(result.diagnostics, startLine: startLine, wrapperOffset: 0)
-            )
-        }
-        guard let analyzed = result.analyzedProgram.byName[name]
-            ?? result.analyzedProgram.featureSets.first else {
-            return JSONREPLError(name: "CompileError", message: "No feature set found in '\(name)'")
-        }
-
-        session.addFeatureSet(name: name, featureSet: analyzed, source: source)
-        if definitions[name] == nil {
-            definitionOrder.append(name)
-        }
-        definitions[name] = source
-
-        // A domain handler is live from this moment: an Emit in a later
-        // cell dispatches to it (ARO-0091 event dispatch). Say so —
-        // "Defined" alone reads as "parked".
-        if let eventType = REPLSession.domainHandlerEventType(for: activity) {
-            note("Defined (\(name): \(activity)) — fires on <\(eventType): event>\n")
-        } else {
-            note("Defined (\(name): \(activity))\n")
-        }
-        return nil
-    }
-
-    private func runStatements(_ source: String) async -> UnitOutcome {
-        let companions = definitionOrder.compactMap { definitions[$0] }
-
-        do {
-            let result = try await session.executeStatement(source, companions: companions)
-            switch result {
-            case .value(let value):
-                return .success(REPLDisplay.bundle(for: value))
-            case .ok:
-                return .success(autoDisplay(for: source, companions: companions))
-            case .error(let message):
-                return .failure(JSONREPLError(message: message))
-            default:
-                return .success(nil)
-            }
-        } catch {
-            return .failure(JSONREPLError(message: String(describing: error)))
-        }
-    }
-
-    /// The value to show for a cell that ran without an explicit `Return`.
-    ///
-    /// A notebook that shows nothing for `Compute the <total> from <a> + <b>.`
-    /// is not a notebook. The last statement's result is displayed, but only
-    /// when that statement produces a value: showing something after `Log` or
-    /// `Store` would duplicate output or invent a result the statement never
-    /// had.
-    private func autoDisplay(for source: String, companions: [String]) -> [String: Any]? {
-        var wrapped = "(_repl_temp_: Interactive) {\n\(source)\n}"
-        if !companions.isEmpty {
-            wrapped += "\n\n" + companions.joined(separator: "\n\n")
-        }
-
-        let result = compiler.compile(wrapped)
-        guard
-            result.isSuccess,
-            let featureSet = result.analyzedProgram.byName["_repl_temp_"],
-            let last = featureSet.flattenedAROStatements.last
-        else { return nil }
-
-        switch last.action.semanticRole {
-        case .own, .request:
-            break
-        case .response, .export, .server:
-            return nil
-        }
-
-        let name = last.result.base
-        guard !name.isEmpty, !name.hasPrefix("_"), let value = session.getVariable(name) else {
-            return nil
-        }
-        return REPLDisplay.bundle(for: value)
-    }
-
-    /// Reject a cell whose statement would block until shutdown.
-    ///
-    /// Set `ARO_REPL_ALLOW_BLOCKING=1` to run it anyway — the escape hatch
-    /// exists because "start a server and keep it alive" is a legitimate
-    /// thing to demonstrate, just not one a cell can return from.
-    private func blockingVerbRejection(in source: String, startLine: Int) -> JSONREPLError? {
-        if ProcessInfo.processInfo.environment["ARO_REPL_ALLOW_BLOCKING"] == "1" { return nil }
-
-        for (offset, line) in source.components(separatedBy: .newlines).enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let verb = trimmed.split(separator: " ").first.map(String.init) else { continue }
-            let normalized = verb.trimmingCharacters(in: CharacterSet(charactersIn: "<>")).lowercased()
-            guard Self.blockingVerbs.contains(normalized) else { continue }
-
-            return JSONREPLError(
-                name: "BlockingStatement",
-                message: """
-                Line \(startLine + offset + 1): '\(verb)' blocks until the process is signalled, \
-                so it never returns in an interactive session.
-                Services started in an earlier statement keep running without it.
-                Set ARO_REPL_ALLOW_BLOCKING=1 to run it anyway.
-                """
-            )
-        }
-        return nil
     }
 
     // MARK: - Completion & inspection
@@ -484,14 +301,14 @@ final class JSONREPLServer: @unchecked Sendable {
     /// LSP-backed completion (ARO-0091): the shared `REPLIntel` engine
     /// frames the cell the way `execute` frames it, runs the same
     /// `CompletionHandler` the editors use, and merges the session's
-    /// own names on top. `matches` keeps the original flat shape;
-    /// `items` adds label/kind/detail for clients that render more.
+    /// own names on top. Definitions come from the cell engine — the
+    /// native kernel shares them through the same call.
     private func complete(id: Int, code: String, cursor: Int) {
         let answer = REPLIntel.complete(
             code: code,
             cursor: cursor,
             session: session,
-            definitions: definitionOrder.compactMap { definitions[$0] }
+            definitions: engine.companionSources
         )
         send(JSONREPLEncoder.result(id: id, status: .ok, extra: [
             "matches": answer.matches,
@@ -509,7 +326,7 @@ final class JSONREPLServer: @unchecked Sendable {
             code: code,
             cursor: cursor,
             session: session,
-            definitions: definitionOrder.compactMap { definitions[$0] }
+            definitions: engine.companionSources
         )
         if answer.found, let text = answer.text {
             send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": true, "text": text]))

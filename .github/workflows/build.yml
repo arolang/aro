@@ -55,7 +55,7 @@ jobs:
       - name: Install LLVM 20 and dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
+          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev libzmq3-dev
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -qq
@@ -101,7 +101,7 @@ jobs:
       - name: Install LLVM 20 and dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
+          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev libzmq3-dev
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -qq
@@ -234,7 +234,7 @@ jobs:
 
       - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20 libgit2
+          brew install llvm@20 libgit2 zeromq
           # Detect LLVM path (ARM64 vs Intel)
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
@@ -518,7 +518,7 @@ jobs:
           swift-version: ${{ env.SWIFT_VERSION }}
 
       - name: Install libgit2
-        run: brew install libgit2
+        run: brew install libgit2 zeromq
 
       - name: Cache Swift packages
         uses: actions/cache@v5

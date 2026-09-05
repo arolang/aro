@@ -130,6 +130,7 @@ struct ARO: AsyncParsableCommand {
         commands.append(LSPCommand.self)
         commands.append(MCPCommand.self)
         commands.append(AskCommand.self)
+        commands.append(KernelCommand.self)
         #endif
         return commands
     }
