@@ -56,6 +56,23 @@ struct REPLCellEngineTests {
         #expect(rebind.error?.name == "ImmutabilityError")
     }
 
+    @Test("Update-family verbs are exempt — Configure accumulates by contract")
+    func updateVerbsExempt() async {
+        let session = REPLSession(suppressLogPrefix: true)
+        let engine = REPLCellEngine(session: session)
+
+        let first = await engine.executeCell("Configure the <http-client: timeout> with 30.")
+        #expect(first.error == nil)
+        // A second Configure on the same category is ARO-0035's normal
+        // accumulation — the guard used to flag it (GitLab #506).
+        let second = await engine.executeCell("Configure the <http-client: retries> with 3.")
+        #expect(second.error == nil)
+        // Plain own-role rebinds stay guarded.
+        _ = await engine.executeCell("Compute the <v> from 1.")
+        let rebind = await engine.executeCell("Compute the <v> from 2.")
+        #expect(rebind.error?.name == "ImmutabilityError")
+    }
+
     @Test("The guard leaves effect statements alone")
     func effectsAreNotFlagged() async {
         let session = REPLSession(suppressLogPrefix: true)

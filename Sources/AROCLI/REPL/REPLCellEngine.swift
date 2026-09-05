@@ -268,6 +268,14 @@ final class REPLCellEngine: @unchecked Sendable {
         let existing = Set(session.variableNames)
         for statement in featureSet.featureSet.statements {
             guard let aro = statement as? AROStatement else { continue }
+            // Update-family verbs (update/set/modify/configure) rebind BY
+            // CONTRACT — the runtime binds them with allowRebind, and
+            // `Configure the <http-client: retries>` after an earlier
+            // Configure on the same category is exactly how ARO-0035 says
+            // configuration accumulates. Flagging them was a guard false
+            // positive (GitLab #506).
+            let verb = aro.action.verb.lowercased()
+            if VerbSets.updateVerbs.contains(verb) { continue }
             switch aro.action.semanticRole {
             case .own, .request:
                 let name = aro.result.base
