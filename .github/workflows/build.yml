@@ -615,6 +615,84 @@ jobs:
                   <string>public.directory</string>
                 </array>
               </dict>
+              <dict>
+                <!-- <name>.aroproject — the manifest wearing an extension
+                     Solaro can OWN; double-click always opens the project. -->
+                <key>CFBundleTypeName</key><string>ARO project</string>
+                <key>CFBundleTypeRole</key><string>Editor</string>
+                <key>LSHandlerRank</key><string>Owner</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>com.arolang.aro-project</string>
+                </array>
+              </dict>
+              <!-- aro.yaml project manifests — ALTERNATE rank so Solaro
+                   never steals .yaml from the user's editor; "Open With"
+                   and per-file Get Info defaults route double-click to
+                   the project (RootView.openURL maps aro.yaml to its
+                   enclosing folder). -->
+              <dict>
+                <key>CFBundleTypeName</key><string>ARO project manifest (aro.yaml)</string>
+                <key>CFBundleTypeRole</key><string>Viewer</string>
+                <key>LSHandlerRank</key><string>Alternate</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>public.yaml</string>
+                </array>
+              </dict>
+              <!-- .aro source files — parity with the local dev bundle
+                   (tools/build-solaro-app-local.sh), which has shipped
+                   these since #277; the release plist had drifted. -->
+              <dict>
+                <key>CFBundleTypeName</key><string>ARO source file</string>
+                <key>CFBundleTypeRole</key><string>Editor</string>
+                <key>LSHandlerRank</key><string>Owner</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                  <string>com.arolang.aro-source</string>
+                </array>
+              </dict>
+            </array>
+            <key>UTExportedTypeDeclarations</key>
+            <array>
+              <dict>
+                <key>UTTypeIdentifier</key><string>com.arolang.aro-project</string>
+                <key>UTTypeDescription</key><string>ARO project</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                  <string>public.yaml</string>
+                  <string>public.plain-text</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                  <key>public.filename-extension</key>
+                  <array><string>aroproject</string></array>
+                </dict>
+              </dict>
+              <dict>
+                <key>UTTypeIdentifier</key><string>com.arolang.aro-source</string>
+                <key>UTTypeDescription</key><string>ARO source file</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                  <string>public.source-code</string>
+                  <string>public.plain-text</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                  <key>public.filename-extension</key>
+                  <array><string>aro</string></array>
+                  <key>public.mime-type</key>
+                  <array><string>text/x-aro</string></array>
+                </dict>
+              </dict>
+            </array>
+            <key>CFBundleURLTypes</key>
+            <array>
+              <dict>
+                <key>CFBundleURLName</key><string>Solaro deep link</string>
+                <key>CFBundleURLSchemes</key>
+                <array><string>solaro</string></array>
+              </dict>
             </array>
           </dict></plist>
           PLIST

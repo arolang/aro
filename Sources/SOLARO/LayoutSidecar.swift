@@ -273,10 +273,14 @@ struct ProjectLayoutStore: Codable, Equatable {
                     return dir
                 }
             }
-            // Falls into the "has any .aro file" check so a project
-            // without openapi / aro.toml still resolves cleanly.
+            // Falls into the "has any .aro / .aroproject file" check
+            // so a project without openapi / aro.toml still resolves
+            // cleanly (`<name>.aroproject` is the manifest's
+            // Finder-associable spelling).
             if let entries = try? fm.contentsOfDirectory(atPath: dir.path),
-               entries.contains(where: { $0.hasSuffix(".aro") })
+               entries.contains(where: {
+                   $0.hasSuffix(".aro") || $0.hasSuffix(".aroproject")
+               })
             {
                 return dir
             }

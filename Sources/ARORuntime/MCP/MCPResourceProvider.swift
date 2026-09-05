@@ -351,6 +351,7 @@ public actor MCPResourceProvider {
 
         let relevantFiles = files.filter {
             $0.hasSuffix(".aro") || $0 == "openapi.yaml" || $0 == "aro.yaml"
+                || $0.hasSuffix(".aroproject")
         }
 
         var combinedText = "# Example: \(name)\n\n"
