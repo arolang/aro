@@ -59,6 +59,11 @@ public func aro_context_drain_deferred(_ contextPtr: UnsafeMutableRawPointer?) {
         runtime.setExecutionError(observed)
     } else if let drainError {
         runtime.setExecutionError(drainError)
+    } else if let violation = runtime.takeRebindViolation() {
+        // GitLab #495: an immutable rebind `bindTyped` refused during a
+        // deferred action or event-driven bind — no per-statement check saw
+        // it, so feature-set exit reports it, same as the interpreter.
+        runtime.setExecutionError(ActionError.statementFailed(violation))
     }
 }
 

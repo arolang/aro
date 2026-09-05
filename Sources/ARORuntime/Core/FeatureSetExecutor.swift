@@ -353,6 +353,11 @@ public final class FeatureSetExecutor: Sendable {
             } else if let pipelineStatement = statement as? PipelineStatement {
                 try await executePipelineStatement(pipelineStatement, context: context)
             }
+
+            // GitLab #495: `executeAROStatement` attributes a refused rebind
+            // to its own statement; this catches the ones the statement forms
+            // above don't check themselves (Publish, loop result bindings).
+            try throwRefusedRebind(context: context)
         } catch {
             // Issue #229 / SOLARO error border (#?). The runtime
             // declares `errorCheckpoint` on `DebugController` so a
@@ -609,6 +614,15 @@ public final class FeatureSetExecutor: Sendable {
                     (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
+                    // GitLab #495: the bind above is refused (not fatal) when
+                    // the name is already immutable — e.g. a REPL cell
+                    // rebinding an earlier cell's variable, which the
+                    // per-program analyzer cannot see. Surface it here as this
+                    // statement's error.
+                    try throwRefusedRebind(
+                        context: context,
+                        statementText: Self.statementText(statement, verb: verb)
+                    )
 
                     // Still need to run the action for side effects (like Return, Log, etc.).
                     // Goes through the registry so middleware sees it too (#107).
@@ -820,6 +834,24 @@ public final class FeatureSetExecutor: Sendable {
             )
             throw ActionError.statementFailed(aroError)
         }
+
+        // GitLab #495: covers both the executor's own result bind above and
+        // any bind the action performed internally (plugins included) that
+        // `RuntimeContext.bindTyped` refused as an immutable rebind.
+        try throwRefusedRebind(
+            context: context,
+            statementText: Self.statementText(statement, verb: verb)
+        )
+    }
+
+    /// The statement in the form `AROError.fromStatement` renders it, for
+    /// attributing an error that was detected outside the action's own throw
+    /// path (GitLab #495).
+    private static func statementText(_ statement: AROStatement, verb: String) -> String {
+        let result = ResultDescriptor(from: statement.result).fullName
+        let object = ObjectDescriptor(from: statement.object).fullName
+        let condition = statement.statementGuard.isPresent ? " when <condition>" : ""
+        return "<\(verb)> the <\(result)> \(statement.object.preposition.rawValue) the <\(object)>\(condition)."
     }
 
     /// Extra sentence appended to a statement-shaped error when the
@@ -845,6 +877,38 @@ public final class FeatureSetExecutor: Sendable {
         if let drainError {
             throw drainError
         }
+        // Backstop for a refused rebind no statement check observed — a
+        // deferred action or event-driven bind that landed after its statement
+        // was checked (GitLab #495). Less precise attribution than the
+        // per-statement check, but the violation still surfaces as an error
+        // instead of disappearing.
+        try throwRefusedRebind(context: context)
+    }
+
+    /// Throw the rebind violation `RuntimeContext.bindTyped` refused during
+    /// this statement, if there was one (GitLab #495).
+    ///
+    /// `bind` is non-throwing — it is called from every action, plugin bridge,
+    /// and framework-variable site — so an immutable rebind is refused inside
+    /// `bindTyped` (the existing value stays) and recorded on the feature-set
+    /// context. This is where the record becomes a thrown error, attributed to
+    /// the statement that attempted the rebind when the caller knows it.
+    private func throwRefusedRebind(
+        context: ExecutionContext,
+        statementText: String? = nil
+    ) throws {
+        guard let runtime = context as? RuntimeContext,
+              let violation = runtime.takeRebindViolation() else { return }
+        guard let statementText else {
+            throw ActionError.statementFailed(violation)
+        }
+        throw ActionError.statementFailed(AROError(
+            message: violation.message,
+            featureSet: violation.featureSet,
+            businessActivity: violation.businessActivity,
+            statement: statementText,
+            resolvedValues: violation.resolvedValues
+        ))
     }
 
     /// Verbs that may overwrite an existing binding rather than shadow it.
