@@ -123,7 +123,8 @@ const docsSubPages = [
     'writing-extensions.html',
     'metrics.html',
     'streaming.html',
-    'repl.html'
+    'repl.html',
+    'jupyter-notebooks.html'
 ];
 docsSubPages.forEach(file => {
     processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../');
