@@ -920,6 +920,8 @@ public final class Parser {
         case "avg": aggType = .avg
         case "min": aggType = .min
         case "max": aggType = .max
+        case "first": aggType = .first
+        case "last": aggType = .last
         default: aggType = nil
         }
 
