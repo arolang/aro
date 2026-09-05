@@ -5,6 +5,7 @@
 
 import ArgumentParser
 import Foundation
+import ARORuntime
 import AROVersion
 
 struct ReplCommand: AsyncParsableCommand {
@@ -58,6 +59,21 @@ struct ReplCommand: AsyncParsableCommand {
     /// came from — `[_repl_session_]` in front of every line is noise there.
     private func runJSON() async throws {
         let session = REPLSession(suppressLogPrefix: true)
+
+        // Plugins installed by `:plugin add` in earlier sessions load
+        // here too — a notebook restarted yesterday's kernel must not
+        // silently lose yesterday's plugins (the terminal REPL has
+        // always reloaded them; the JSON server forgot to).
+        let replPluginsDir = PluginCommand.replPluginsDirectory
+        if FileManager.default.fileExists(
+            atPath: replPluginsDir.appendingPathComponent("Plugins").path) {
+            do {
+                try UnifiedPluginLoader.shared.loadPlugins(from: replPluginsDir)
+            } catch {
+                FileHandle.standardError.write(Data(
+                    "Warning: failed to load installed REPL plugins: \(error)\n".utf8))
+            }
+        }
 
         if let loadPath = load {
             let result = try await LoadCommand().execute(args: [loadPath], session: session)

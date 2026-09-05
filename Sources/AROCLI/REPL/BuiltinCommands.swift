@@ -553,6 +553,18 @@ public struct PluginCommand: MetaCommand {
 
     // MARK: - Add
 
+    /// The persistent plugin directory for interactive sessions.
+    /// `ARO_REPL_PLUGINS_DIR` overrides it — tests and sandboxed CI
+    /// must not install into the real home directory.
+    static var replPluginsDirectory: URL {
+        if let override = ProcessInfo.processInfo.environment["ARO_REPL_PLUGINS_DIR"],
+           !override.isEmpty {
+            return URL(fileURLWithPath: override)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".aro/repl-plugins")
+    }
+
     private func handleAdd(args: [String], session: REPLSession) async throws -> MetaCommandResult {
         guard let url = args.first else {
             return .error("Usage: :plugin add <git-url> [--ref <ref>]")
@@ -564,9 +576,7 @@ public struct PluginCommand: MetaCommand {
             ref = args[refIndex + 1]
         }
 
-        // Use ~/.aro/repl-plugins/ as the persistent plugin directory for the REPL
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let replPluginsDir = homeDir.appendingPathComponent(".aro/repl-plugins")
+        let replPluginsDir = Self.replPluginsDirectory
 
         // Create directory if needed
         try FileManager.default.createDirectory(at: replPluginsDir, withIntermediateDirectories: true)
@@ -592,12 +602,13 @@ public struct PluginCommand: MetaCommand {
             buildMessages.append("  [\(icon)] \(buildResult.message)")
         }
 
-        // Load into the running session via UnifiedPluginLoader
-        let pluginDir = replPluginsDir
-            .appendingPathComponent("Plugins")
-            .appendingPathComponent(result.name)
+        // Load into the running session — from the directory the
+        // installer actually created. Reconstructing the path from
+        // the manifest name used to miss whenever the repository was
+        // named differently than the plugin ("installed but failed
+        // to load").
         do {
-            try UnifiedPluginLoader.shared.loadPluginFromDirectory(pluginDir)
+            try UnifiedPluginLoader.shared.loadPluginFromDirectory(result.path)
         } catch {
             return .error("Plugin installed but failed to load: \(error)")
         }
@@ -611,7 +622,9 @@ public struct PluginCommand: MetaCommand {
             output += "\n" + buildMessages.joined(separator: "\n")
         }
 
-        // Show registered actions
+        // Show what the session just gained: actions come from the
+        // manifest, qualifiers from the live registry (their access
+        // spelling — `handle.qualifier` — is decided at registration).
         let manifest = UnifiedPluginLoader.shared.getPlugin(name: result.name)
         if let provides = manifest?.provides {
             let actionNames = provides.flatMap { $0.actions ?? [] }.map { $0.name }
@@ -619,8 +632,50 @@ public struct PluginCommand: MetaCommand {
                 output += "\nActions: \(actionNames.joined(separator: ", "))"
             }
         }
+        let qualifierNames = QualifierRegistry.shared.allRegistrations()
+            .filter { $0.pluginName == result.name }
+            .map { "\($0.namespace).\($0.qualifier)" }
+            .sorted()
+        if !qualifierNames.isEmpty {
+            output += "\nQualifiers: \(qualifierNames.joined(separator: ", "))"
+        }
 
         return .output(output)
+    }
+
+    /// Where the installed plugin named `name` lives on disk, tried
+    /// in order of certainty: the running loader's directory map,
+    /// the directory that shares the manifest name, then a manifest
+    /// scan (installs from before the manifest-named-directory fix
+    /// may sit in a repository-named directory).
+    static func installedPluginDirectory(named name: String) -> URL? {
+        if let loaded = UnifiedPluginLoader.shared.pluginDirectory(named: name) {
+            return loaded
+        }
+        let pluginsDir = replPluginsDirectory.appendingPathComponent("Plugins")
+        let fm = FileManager.default
+
+        let direct = pluginsDir.appendingPathComponent(name)
+        if fm.fileExists(atPath: direct.appendingPathComponent("plugin.yaml").path) {
+            return direct
+        }
+
+        guard let entries = try? fm.contentsOfDirectory(
+            at: pluginsDir, includingPropertiesForKeys: nil) else { return nil }
+        for entry in entries {
+            let manifest = entry.appendingPathComponent("plugin.yaml")
+            guard let text = try? String(contentsOf: manifest, encoding: .utf8) else { continue }
+            for line in text.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("name:") else { continue }
+                let value = trimmed.dropFirst("name:".count)
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                if value == name { return entry }
+                break
+            }
+        }
+        return nil
     }
 
     // MARK: - Update
@@ -636,14 +691,11 @@ public struct PluginCommand: MetaCommand {
             ref = args[refIndex + 1]
         }
 
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let replPluginsDir = homeDir.appendingPathComponent(".aro/repl-plugins")
+        let replPluginsDir = Self.replPluginsDirectory
 
-        // Verify plugin is installed
-        let pluginDir = replPluginsDir
-            .appendingPathComponent("Plugins")
-            .appendingPathComponent(name)
-        guard FileManager.default.fileExists(atPath: pluginDir.path) else {
+        // Verify plugin is installed — by manifest name, wherever its
+        // directory actually is.
+        guard Self.installedPluginDirectory(named: name) != nil else {
             return .error("Plugin '\(name)' is not installed. Use :plugin add to install it first.")
         }
 
@@ -711,17 +763,20 @@ public struct PluginCommand: MetaCommand {
             return .error("Usage: :plugin remove <plugin-name>")
         }
 
+        // Resolve the directory BEFORE unloading — the loader's
+        // directory map is the most reliable name→path source, and
+        // unload clears it.
+        let pluginDir = Self.installedPluginDirectory(named: name)
+
         // Unload from runtime
         let removed = UnifiedPluginLoader.shared.unload(pluginName: name)
 
         // Remove from disk so :plugin add works again in future sessions.
         // Deleting a built plugin tree (.build artifacts etc.) can be slow,
         // so run it off the REPL thread (issue #365).
-        let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aro/repl-plugins/Plugins")
-        let pluginDir = replPluginsDir.appendingPathComponent(name)
-        let removedFromDisk = FileManager.default.fileExists(atPath: pluginDir.path)
-        if removedFromDisk {
+        var removedFromDisk = false
+        if let pluginDir, FileManager.default.fileExists(atPath: pluginDir.path) {
+            removedFromDisk = true
             await FileOps.removeItemIfPresent(at: pluginDir)
         }
 

@@ -833,6 +833,17 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         try loadPlugin(at: directory, manifestPath: manifestPath)
     }
 
+    /// Directory a loaded plugin was loaded from, keyed by the
+    /// manifest name — what `:plugin list` shows and what users type.
+    /// Lets callers resolve the on-disk location without guessing
+    /// that the directory shares the manifest's name (installs from
+    /// before the manifest-named-directory fix may not).
+    public func pluginDirectory(named name: String) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return pluginDirectories[name]
+    }
+
     /// Reload a single plugin: unload the current version then load the plugin
     /// fresh from its source directory on disk.
     ///
