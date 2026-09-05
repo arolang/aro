@@ -1,0 +1,12 @@
+shop: Brew & Bytes
+currency: EUR
+items:
+  - sku: ESPRESSO
+    name: Espresso
+    price: 2.40
+  - sku: FLAT-WHITE
+    name: Flat White
+    price: 3.80
+  - sku: CROISSANT
+    name: Butter Croissant
+    price: 1.90

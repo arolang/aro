@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb08-c01",
+      "kind": "markdown",
+      "source": "# 08 — Dates & Times\n\n**Brew & Bytes** runs on the clock: doors open at 7, close at 6, the\ngrinder gets deep-cleaned every second week, and the holiday\ncountdown poster needs a number every morning. All of that is date\narithmetic — and date arithmetic is where hand-rolled code\ntraditionally goes wrong (off-by-one days, months that wrap,\ntimezones that bite).\n\nARO gives dates a first-class vocabulary\n([ARO-0041](../Proposals/ARO-0041-datetime-ranges.md)): the `<now>`\nsystem value, the `date` qualifier for parsing, component qualifiers\n(`year`, `month`, `day`, …), offset qualifiers (`+7d`, `-1h`),\n`format` for display, `date-range` and `distance` for spans, and\n`recurrence` for repeating schedules. This notebook walks through\nall of them and ends with the café's schedule board.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c02",
+      "kind": "code",
+      "source": "Log <now> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`<now>`** is a system value: reading it yields the current\n  moment. You did not create it — like `<console>`, it is provided\n  by the runtime.\n- It prints as **ISO 8601** — `2026-09-05T16:20:00Z` — with the\n  trailing `Z` meaning UTC. ARO keeps every date in UTC internally:\n  unambiguous, sortable as text, and understood by every API and\n  database. Local presentation is a *formatting* concern, handled at\n  output time.\n- **`Log`** is an *EXPORT* action — it moves the value out to your\n  screen without changing anything.\n\n## Parsing dates\n\nExternal dates arrive as strings. The `date` qualifier on Compute\n(an *OWN* action) parses ISO 8601 text into a real date value. The\nparser is strict: `2026-13-40` is an error, not a guess.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c04",
+      "kind": "code",
+      "source": "Compute the <door-open: date> from \"2026-09-05T07:00:00Z\".\nCompute the <door-close: date> from \"2026-09-05T18:00:00Z\".\nCompute the <christmas-eve: date> from \"2026-12-24\".\nLog <door-open> to the <console>.\nLog <door-close> to the <console>.\nLog <christmas-eve> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c05",
+      "kind": "markdown",
+      "source": "Accepted shapes: full ISO 8601 (`2026-09-05T07:00:00Z`), with an\noffset (`…+02:00`), date-only (`2026-12-24`, midnight UTC), or date\nand time without a zone (UTC assumed).\n\n## Components — taking a date apart\n\nQualifiers pull the pieces out as integers: `year`, `month` (1 =\nJanuary), `day`, `hour` (0–23), `minute`, `second` — plus `iso` (the\nfull string) and `timestamp` (Unix epoch seconds). `Extract` is the\n*REQUEST* action doing the pulling.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c06",
+      "kind": "code",
+      "source": "Extract the <year-now> from the <now: year>.\nExtract the <month-now> from the <now: month>.\nExtract the <day-now> from the <now: day>.\nExtract the <hour-now> from the <now: hour>.\nExtract the <minute-now> from the <now: minute>.\nLog \"Today: ${<year-now>}-${<month-now>}-${<day-now>}\" to the <console>.\nLog \"Clock: ${<hour-now>}:${<minute-now>} UTC\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c07",
+      "kind": "markdown",
+      "source": "## Offsets — relative dates\n\n\"Tomorrow\", \"a week ago\", \"in 30 minutes\" are offset qualifiers: a\nsign, a number, a unit. Units: `s`, `m`, `h`, `d`, `w`, `M`\n(months — capital, minutes are lowercase `m`), `y`. Applying an\noffset creates a *new* date; the original stays put — immutability\nagain.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c08",
+      "kind": "code",
+      "source": "Compute the <tomorrow: +1d> from <now>.\nCompute the <week-ago: -7d> from <now>.\nCompute the <half-hour: +30m> from <now>.\nCompute the <next-month: +1M> from <now>.\nLog <tomorrow> to the <console>.\nLog <week-ago> to the <console>.\nLog <half-hour> to the <console>.\nLog <next-month> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c09",
+      "kind": "markdown",
+      "source": "Offsets chain by computing from an already-offset date — `+1M` from\nnow, then `+1w` from that.\n\n## Comparing dates\n\nDates compare with the ordinary `<` and `>` operators — in `when`\nguards, against other dates or even against an ISO string literal.\nEarlier means smaller.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c10",
+      "kind": "code",
+      "source": "Log \"We open before we close. Good.\" to the <console> when <door-open> < <door-close>.\nLog \"Tomorrow is after today.\" to the <console> when <tomorrow> > <now>.\nLog \"Christmas Eve is still this decade.\" to the <console> when <christmas-eve> < \"2030-01-01T00:00:00Z\".",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c11",
+      "kind": "markdown",
+      "source": "## Formatting — dates for humans\n\nISO 8601 is for machines. The `format` qualifier renders a date with\na pattern (`with \"…\"`): `yyyy` year, `MM`/`MMMM` month, `dd` day,\n`HH` 24-hour, `hh…a` 12-hour, `EEEE` weekday name.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c12",
+      "kind": "code",
+      "source": "Compute the <poster-date: format> from <christmas-eve> with \"MMMM dd, yyyy\".\nCompute the <euro-date: format> from <door-open> with \"dd.MM.yyyy HH:mm\".\nCompute the <door-sign: format> from <door-close> with \"hh:mm a\".\nCompute the <weekday-label: format> from <now> with \"EEEE\".\nLog <poster-date> to the <console>.\nLog <euro-date> to the <console>.\nLog <door-sign> to the <console>.\nLog \"Today is ${<weekday-label>}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c13",
+      "kind": "markdown",
+      "source": "## Ranges — periods with a start and an end\n\nA business day, a promotion week, a subscription term: periods are\n`date-range` values built `from` a start `to` an end. Ranges answer\nfor their own span (`days`, `hours`) and hand back their endpoints\n(`start`, `end`).",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c14",
+      "kind": "code",
+      "source": "Create the <business-day: date-range> from <door-open> to <door-close>.\nExtract the <shift-hours: hours> from <business-day>.\nExtract the <shift-start> from the <business-day: start>.\nLog <business-day> to the <console>.\nLog \"Open for ${<shift-hours>} hours\" to the <console>.\nLog <shift-start> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c15",
+      "kind": "markdown",
+      "source": "## Distance — how far apart?\n\nWhere a range *is* a period, `distance` *measures* between two\nmoments: `from` one date `to` another, then extract the gap in the\nunit your domain speaks — days for countdowns, hours for SLAs,\nminutes for shift planning.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c16",
+      "kind": "code",
+      "source": "Compute the <shift-length: distance> from <door-open> to <door-close>.\nExtract the <shift-minutes> from the <shift-length: minutes>.\nLog \"The day shift runs ${<shift-minutes>} minutes.\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c17",
+      "kind": "markdown",
+      "source": "## Recurrence — schedules that repeat\n\nRepeating events are `recurrence` values built from a plain-English\npattern: `every day`, `every monday`, `every 2 weeks`,\n`every last friday`. Ask one for its `next` occurrence and you get a\ndate — which then works with everything above (formatting,\ndistances, comparisons).",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c18",
+      "kind": "code",
+      "source": "Create the <daily-brew: recurrence> with \"every day\".\nCreate the <team-standup: recurrence> with \"every monday\".\nCreate the <deep-clean: recurrence> with \"every 2 weeks\".\nCreate the <payday: recurrence> with \"every last friday\".\nExtract the <next-brew> from the <daily-brew: next>.\nExtract the <next-standup> from the <team-standup: next>.\nExtract the <next-deep> from the <deep-clean: next>.\nExtract the <next-payday> from the <payday: next>.\nLog <next-brew> to the <console>.\nLog <next-standup> to the <console>.\nLog <next-deep> to the <console>.\nLog <next-payday> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c19",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**UTC in, formatting out.** Storing everything in UTC and formatting\nonly at the edge is the single habit that prevents most timezone\nbugs. ARO enforces the first half and gives you `format` for the\nsecond.\n\n**Strict parsing is a feature.** December 32nd does not silently\nbecome January 1st. A wrong date fails loudly, in the spirit of\n\"code is the error message\"\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)).\n\n**Dates are immutable values.** `+1d` never mutates its input; every\noffset, range, and distance derives a new named value. A schedule\ncomputation is therefore replayable — the same audit property the\npipelines in [06](06-collections-and-pipelines.repl) have.\n\n**Pitfalls:** `m` is minutes, `M` is months — the classic typo.\nComponent qualifiers cover `year` through `second`; for the weekday,\nformat with `\"EEEE\"`. Compare with `<` and `>`; a bare\n`<date> in <range>` membership test is specified in\n[ARO-0041](../Proposals/ARO-0041-datetime-ranges.md) for `when`\nblocks inside feature sets.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c20",
+      "kind": "markdown",
+      "source": "## Real-world example: the morning schedule board\n\nEvery morning the café prints one board: today's date, the holiday\ncountdown, and what is coming up. Everything derives from `<now>`\nand the values above — run it tomorrow and every number moves by\nitself.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c21",
+      "kind": "code",
+      "source": "Compute the <countdown: distance> from <now> to <christmas-eve>.\nExtract the <days-left> from the <countdown: days>.\nCompute the <board-date: format> from <now> with \"EEEE, MMMM dd\".\nCompute the <clean-label: format> from <next-deep> with \"MMMM dd\".\nCompute the <payday-label: format> from <next-payday> with \"MMMM dd\".\nLog \"=== Brew & Bytes — ${<board-date>} ===\" to the <console>.\nLog \"Doors: ${<euro-date>} until ${<door-sign>}\" to the <console>.\nLog \"${<days-left>} days until Christmas Eve\" to the <console>.\nLog \"Next deep clean: ${<clean-label>}\" to the <console>.\nLog \"Next payday: ${<payday-label>}\" to the <console>.\nLog \"======================================\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c22",
+      "kind": "markdown",
+      "source": "### Why the world needs this\n\nWhole industries are, at their core, date arithmetic. Billing\nsystems compute proration across month boundaries; logistics quotes\ndelivery windows as ranges; on-call rotations and payroll are\nrecurrences; an SLA is a distance with a contract attached. And the\nfailure stories are just as real — daylight-saving transitions have\ntaken down scheduling systems, and mixed-up date formats have\ncorrupted datasets in every field that exchanges CSV. Languages that\ntreat dates as strings make every one of these a custom parser;\nARO's approach — UTC values, strict parsing, named operations —\nmakes the schedule board above the same code a booking platform\nwrites, just smaller.\n\n## Related\n\n- Next: [09 — Feature Sets & Events](09-feature-sets-and-events.repl)\n- Guards used with dates: [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl)\n- Language Guide: [Chapter 42 — Dates](../Book/TheLanguageGuide/Chapter42-Dates.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations)\n- Specification: [ARO-0041 — Date/Time Ranges](../Proposals/ARO-0041-datetime-ranges.md)\n- Examples: `Examples/DateTimeDemo`, `Examples/DateRangeDemo`",
+      "outputs": []
+    }
+  ]
+}

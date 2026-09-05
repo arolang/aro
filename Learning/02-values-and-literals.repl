@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb02-c01",
+      "kind": "markdown",
+      "source": "# 02 — Values & Literals\n\nDay two at **Brew & Bytes**. Before the café can take a single order,\nits menu has to exist as *data*: names, prices, sizes, flags like\n\"decaf\" and \"gluten-free\". Today you turn the chalkboard into\nstructures a program can read.\n\nARO has a small, complete set of value literals: **strings**, **numbers**,\n**booleans**, **records** (named fields in braces), and **lists**\n(ordered elements in brackets). Everything the café will ever serve,\nsell, or log is built from these five.\n\nIn this notebook: all five literal forms, the two kinds of string\nquotes, numeric separators for large numbers\n([ARO-0082](../Proposals/ARO-0082-numeric-separators.md)), and how the\ncolon inside `<…>` navigates into nested data.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c02",
+      "kind": "code",
+      "source": "Create the <espresso> with { name: \"Espresso\", price: 2.4, decaf: false }.\nLog <espresso: name> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`Create`** binds a value to a name. It is an *OWN* action: it works\n  entirely inside your program — nothing is fetched, nothing is sent.\n- **`{ name: \"Espresso\", price: 2.4, decaf: false }`** is a **record\n  literal**: named fields in braces, `key: value` pairs separated by\n  commas. One record mixes a string, a number, and a boolean without\n  ceremony.\n- **`<espresso: name>`** reads *the `name` field of `espresso`*. In a\n  data position, the colon **navigates**: base name on the left, field\n  path on the right. (You will meet the colon's second job — selecting\n  operations — in [03 — Compute & Qualifiers](03-compute-and-qualifiers.repl).)\n- The binding is **immutable**: `<espresso>` will mean this exact record\n  for the rest of the session. That rule gets its own notebook:\n  [04 — Immutability](04-immutability.repl).",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c04",
+      "kind": "markdown",
+      "source": "## Strings — two kinds of quotes\n\nARO has exactly two string literal types, told apart by the quote\ncharacter alone:\n\n| Quote | Behavior |\n|-------|----------|\n| `\"…\"` | Escape sequences work (`\\n`, `\\t`, …) and `${…}` interpolates values |\n| `'…'` | Raw: backslashes and `${…}` stay exactly as typed; only `\\'` is special |\n\nUse double quotes for everyday text and anything with placeholders;\nuse single quotes when backslashes must survive untouched (regex\npatterns, Windows paths). Both must fit on one line.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c05",
+      "kind": "code",
+      "source": "Create the <customer-name> with \"Ada\".\nLog \"Welcome to Brew & Bytes, ${<customer-name>}!\" to the <console>.\nLog \"Order up:\\n- one espresso\" to the <console>.\nLog 'Raw string: ${<customer-name>} and \\n stay as typed' to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c06",
+      "kind": "markdown",
+      "source": "The first `Log` shows **interpolation**: inside a double-quoted string,\n`${<customer-name>}` is replaced by the variable's value. The second\nshows `\\n` becoming a real line break. The third is a **raw string** —\nsame characters, no processing. Full details:\n[Chapter 5 — String Literals](../Book/TheLanguageGuide/Chapter05-RawStrings.md).\n\n## Numbers\n\nIntegers and floats share one syntax; a decimal point makes the\ndifference. Since [ARO-0082](../Proposals/ARO-0082-numeric-separators.md),\nunderscores may group digits for readability — they carry no meaning.\nThe rules: never leading, trailing, doubled, or adjacent to `.`/`e`.\nHexadecimal (`0x…`) and binary (`0b…`) literals take separators too.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c07",
+      "kind": "code",
+      "source": "Create the <cups-per-year> with 1_250_000.\nCreate the <oat-milk-surcharge> with 0.6.\nCreate the <freezer-temp> with -18.\nCreate the <brand-color> with 0xC0_FF_EE.\nLog <cups-per-year> to the <console>.\nLog <oat-milk-surcharge> to the <console>.\nLog <freezer-temp> to the <console>.\nLog <brand-color> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c08",
+      "kind": "markdown",
+      "source": "`1_250_000` and `1250000` are the same number — the underscores exist\nfor the human reading the code. The hex literal `0xC0_FF_EE` logs as\nits decimal value, 12648430.\n\n## Booleans\n\n`true` and `false`, written bare. Two practical notes, learned the hard\nway:\n\n1. `Log true to the <console>.` is a syntax error — only *string*\n   literals may sit directly in Log's result slot. Bind the boolean\n   first, then log the name.\n2. Variable names must not *start* with a keyword: `<is-open>` fails to\n   parse (`is` is an operator). Name it `<open-now>` instead. The same\n   goes for `for`, `not`, `with`, `from`, `to`, `on`, `in`, `at`.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c09",
+      "kind": "code",
+      "source": "Create the <open-now> with true.\nCreate the <gluten-free> with false.\nLog <open-now> to the <console>.\nLog <gluten-free> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c10",
+      "kind": "markdown",
+      "source": "## Lists\n\nSquare brackets hold ordered elements. A list of records is the closest\nthing ARO has to a database table — and it is exactly how the menu\nlives in memory. `Extract` (a *REQUEST* action: it pulls data toward\nyou) with the `first` or `last` qualifier reads elements off a list.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c11",
+      "kind": "code",
+      "source": "Create the <sizes> with [\"small\", \"medium\", \"large\"].\nCreate the <menu> with [\n    { name: \"Espresso\", price: 2.4 },\n    { name: \"Flat White\", price: 3.8 },\n    { name: \"Mocha\", price: 4.2 }\n].\nExtract the <first-drink: first> from the <menu>.\nExtract the <last-drink: last> from the <menu>.\nLog <sizes> to the <console>.\nLog <first-drink: name> to the <console>.\nLog <last-drink: price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c12",
+      "kind": "markdown",
+      "source": "## Nested access\n\nRecords nest. The colon takes a dot-separated path, so\n`<shop: address.city>` walks two levels down. For deeply nested data,\n`Extract` intermediate values into their own names — shallow paths read\nbetter than one long chain\n([Chapter 10 — Understanding Qualifiers](../Book/TheLanguageGuide/Chapter10-QualifierSyntax.md)).",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c13",
+      "kind": "code",
+      "source": "Create the <shop> with {\n    name: \"Brew & Bytes\",\n    address: { street: \"Kaffeegasse 7\", city: \"Berlin\" },\n    wifi: true\n}.\nExtract the <shop-city> from the <shop: address.city>.\nLog \"Find us in ${<shop-city>}\" to the <console>.\nLog <shop: address.street> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c14",
+      "kind": "markdown",
+      "source": "## Discussion\n\nWhy so few literal forms? Because ARO's data model deliberately mirrors\nthe wire formats business systems already speak: a record is a JSON\nobject, a list is a JSON array. When notebook 14 wires the café to an\nHTTP API, the menu you built here travels unchanged — the OpenAPI\ncontract just gives it a schema\n([ARO-0003](../Proposals/ARO-0003-type-system.md)).\n\nTwo design choices worth internalizing now:\n\n1. **Values are facts, not containers.** `<espresso>` will never mean\n   anything else in this session. Change is expressed by binding *new*\n   names — the whole subject of\n   [04 — Immutability](04-immutability.repl).\n2. **The quote character is the contract.** There is no flag or mode\n   that changes how a string parses; you can read any string literal\n   correctly without looking anywhere else. Explicitness over cleverness\n   is a recurring ARO theme\n   ([ARO-0001](../Proposals/ARO-0001-language-fundamentals.md)).",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c15",
+      "kind": "markdown",
+      "source": "## Real-world example: the menu board\n\nThe café's menu is about to be read by four different consumers: the\nregister, the kitchen display, the website, and the receipt printer.\nNone of them should hold their own copy. One structured value — records\nand lists, exactly as above — becomes the single source of truth, and\nevery consumer reads the fields it needs.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c16",
+      "kind": "code",
+      "source": "Create the <menu-board> with {\n    title: \"BREW & BYTES — TODAY\",\n    currency: \"EUR\",\n    highlight: { name: \"Maple Oat Latte\", price: 4.6, seasonal: true }\n}.\nExtract the <special> from the <menu-board: highlight>.\nLog <menu-board: title> to the <console>.\nLog \"Special: ${<special: name>} — ${<special: price>} ${<menu-board: currency>}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb02-c17",
+      "kind": "markdown",
+      "source": "This is the pattern behind every product catalog you have ever used.\nRetail chains model tens of thousands of articles as records like\n`<espresso>`; airlines model fares; hospitals model medications. The\nindustry lesson is always the same: when price and name live as\n*structured data* instead of text on a screen, one change propagates\neverywhere — no redeploys, no stale chalkboards, and machines can\nvalidate it (is `price` really a number?) before a customer ever sees\nit. Schema-first APIs (OpenAPI, the same contract ARO uses for HTTP)\nexist precisely to give these records a shared, checkable shape.\n\n## Related\n\n- Next: [03 — Compute & Qualifiers](03-compute-and-qualifiers.repl)\n- Previous: [01 — Hello, ARO](01-hello-aro.repl)\n- Language Guide: [Chapter 4 — Statement Anatomy](../Book/TheLanguageGuide/Chapter04-StatementAnatomy.md),\n  [Chapter 5 — String Literals](../Book/TheLanguageGuide/Chapter05-RawStrings.md),\n  [Chapter 10 — Understanding Qualifiers](../Book/TheLanguageGuide/Chapter10-QualifierSyntax.md)\n- Wiki: [Guide — The Basics](https://github.com/arolang/aro/wiki/Guide-The-Basics),\n  [Language Tour](https://github.com/arolang/aro/wiki/Language-Tour)\n- Specification: [ARO-0001 — Language Fundamentals](../Proposals/ARO-0001-language-fundamentals.md),\n  [ARO-0082 — Numeric Separators](../Proposals/ARO-0082-numeric-separators.md),\n  [ARO-0019 — Standard Library](../Proposals/ARO-0019-standard-library.md)",
+      "outputs": []
+    }
+  ]
+}

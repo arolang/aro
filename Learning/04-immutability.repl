@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb04-c01",
+      "kind": "markdown",
+      "source": "# 04 — Immutability\n\nA customer at **Brew & Bytes** disputes a charge: \"I never ordered a\nfourth latte.\" Whoever is right, one thing must be beyond argument —\nwhat the receipt said when it was printed. A receipt that can be\nquietly edited afterwards is not a receipt; it is a liability.\n\nARO builds this principle into the language: **one name, one binding**.\nOnce a statement creates a variable, that variable holds that value for\nthe rest of its life. There is no reassignment. The compiler refuses it\nat build time; the runtime refuses it again as a second line of\ndefense. A variable is a *checkpoint*, not a container.\n\nIn this notebook: the binding rule, the error you get when you break it\n(on purpose, once), the new-name pattern, qualifier-as-name for\ncollisions, loop isolation — and a receipt with a fingerprint nobody\ncan forge.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c02",
+      "kind": "code",
+      "source": "Create the <espresso-price> with 2.4.\nCompute the <discounted-price> from <espresso-price> * 0.5.\nLog <espresso-price> to the <console>.\nLog <discounted-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- `Create` (an *OWN* action) bound `2.4` to `<espresso-price>` —\n  permanently, for this whole session.\n- `Compute` did **not** touch the original. It read it and bound a new\n  fact, `<discounted-price>`, next to it. Both values are alive; the\n  final two `Log` lines prove it.\n- This is what \"immutable\" buys you when *reading* code: to know what\n  `<discounted-price>` is, you find the one statement that created it.\n  Done. No scanning for later reassignments, because there are none.\n\n## Breaking the rule — deliberately\n\nWhat if we try to push a happy-hour markup back into\n`<espresso-price>` itself? The next cell is *supposed* to fail — it is\nthe one intentional error of this course.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c04",
+      "kind": "code",
+      "source": "(* expect-error *)\n(* Rebinding is refused: <espresso-price> was bound in the cell above. *)\nCompute the <espresso-price> from <espresso-price> * 1.1.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c05",
+      "kind": "markdown",
+      "source": "Read the message: *\"Cannot rebind immutable variable\n'espresso-price' — it was bound by an earlier input in this session.\"*\n\nIt names the variable and the reason — no stack trace, no error code to\nlook up. That is ARO's error philosophy at work: the plain-language\nreport *is* the error handling\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md), and\n[Chapter 12 — The Happy Path](../Book/TheLanguageGuide/Chapter12-HappyPath.md)).\nIn a compiled program the same mistake is caught before anything runs,\nand the compiler's hint even shows the fix — which is our next topic.\n\n## The new-name pattern\n\nChange is expressed by binding **new names**, one per stage, each name\ndescribing what the value *is* at that point. The transformation\nhistory stays readable in the variable names themselves.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c06",
+      "kind": "code",
+      "source": "Create the <list-price> with 4.0.\nCompute the <happy-hour-price> from <list-price> * 0.8.\nCompute the <final-price> from <happy-hour-price> * 1.07.\nLog <list-price> to the <console>.\nLog <happy-hour-price> to the <console>.\nLog <final-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c07",
+      "kind": "markdown",
+      "source": "Three names, three facts: the list price, the price after the 20%\nhappy-hour discount, the price after 7% tax. Every intermediate stays\ninspectable — when a number looks wrong, you log the stage where it\ndiverged instead of adding temporary debug variables.\n\nName stages after *what the data is*, not after a sequence:\n`<data2>`, `<data3>` or `<x1>` … `<x4>` are the classic anti-patterns —\nthey are the naming style of someone still thinking in one mutable\nvariable ([Chapter 11 §11.9](../Book/TheLanguageGuide/Chapter11-Immutability.md)).\n\n## Same operation, twice: qualifier-as-name\n\nImmutability creates one honest problem: two lengths cannot both be\ncalled `<length>`. The qualifier-as-name syntax from\n[03 — Compute & Qualifiers](03-compute-and-qualifiers.repl) is the\ndesigned answer — the base names the result, the qualifier names the\noperation.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c08",
+      "kind": "code",
+      "source": "Create the <receipt-header> with \"BREW & BYTES\".\nCreate the <receipt-footer> with \"Thank you, come again!\".\nCompute the <header-length: length> from <receipt-header>.\nCompute the <footer-length: length> from <receipt-footer>.\nCompute the <banner-length> from <header-length> + <footer-length>.\nLog <banner-length> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c09",
+      "kind": "markdown",
+      "source": "## Loops: fresh bindings every iteration\n\nInside a `for each` body, every iteration runs in its own child scope.\nThe same names bind again each time — legally, because each iteration's\nbindings die with it. Nothing leaks out: after the loop, neither the\nloop variable nor anything bound inside it exists.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c10",
+      "kind": "code",
+      "source": "Create the <tray-prices> with [2.4, 3.8, 4.6].\nfor each <tray-price> in <tray-prices> {\n    Compute the <tray-taxed> from <tray-price> * 1.07.\n    Log <tray-taxed> to the <console>.\n}\nLog \"Tray priced.\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c11",
+      "kind": "markdown",
+      "source": "## Discussion\n\nImmutability is a trade-off: you give up convenient reassignment and\nget back the ability to read any line and know exactly what every name\nholds. In a thirty-statement feature set that difference decides\nwhether the code is an afternoon or a week to debug.\n\nThe rule is scoped deliberately. *Within* a feature set (or a notebook\nsession), bindings are frozen. *Across* the application, state still\nevolves — through explicit mechanisms with their own notebooks:\nrepositories (`Store`/`Retrieve`,\n[13 — Repositories & State](13-repositories-and-state.repl)) and\nevents, whose payloads are snapshots fixed at emission\n([09 — Feature Sets & Events](09-feature-sets-and-events.repl)).\nChange is never a variable silently shifting under you; it is always a\nvisible, named operation.\n\nDeep dive: [Chapter 11 — Immutability](../Book/TheLanguageGuide/Chapter11-Immutability.md).",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c12",
+      "kind": "markdown",
+      "source": "## Real-world example: receipts that can't be forged\n\nA receipt is a *statement of fact*: this order, this total, this\nmoment. The café's receipts get a **fingerprint** — a SHA-256 digest of\nthe receipt's identifying fields. The record is immutable in the\nprogram; the fingerprint makes tampering *detectable* even after the\ndata leaves the program.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c13",
+      "kind": "code",
+      "source": "Create the <receipt> with { id: \"R-1042\", items: 3, cents: 1180, cashier: \"Sam\" }.\nExtract the <receipt-id> from the <receipt: id>.\nExtract the <receipt-cents> from the <receipt: cents>.\nCompute the <fingerprint-seed> from <receipt-id> ++ \"|\" ++ <receipt-cents>.\nCompute the <receipt-fingerprint: sha256> from <fingerprint-seed>.\nLog \"Receipt ${<receipt-id>}: ${<receipt-cents>} cents\" to the <console>.\nLog <receipt-fingerprint> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c14",
+      "kind": "markdown",
+      "source": "Now the dispute. Someone claims receipt `R-1042` was really 980\ncents. Recompute the fingerprint from the claimed data and compare.\n`Compare` takes both operands as inputs and binds a fresh result —\n`<result: matches>` holds the boolean verdict.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c15",
+      "kind": "code",
+      "source": "Create the <claimed-cents> with 980.\nCompute the <claimed-seed> from \"R-1042|\" ++ <claimed-cents>.\nCompute the <claimed-fingerprint: sha256> from <claimed-seed>.\nCompare the <fingerprint-check> from the <claimed-fingerprint> against the <receipt-fingerprint>.\nLog <fingerprint-check: matches> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb04-c16",
+      "kind": "markdown",
+      "source": "`false` — the claimed receipt does not match the recorded\nfingerprint. One changed cent flips the entire digest.\n\nThis is not café whimsy; it is how serious systems treat records.\nAccounting has worked this way for five hundred years: a ledger entry\nis never erased — a mistake is corrected by a *new* entry (a credit\nnote), preserving the full history. Modern regulation makes it law:\ntax rules like Germany's GoBD and audit standards like SOX require\nstored business records to be tamper-evident. Event sourcing builds\nwhole architectures from append-only immutable events; payment\nprocessors chain hashes so that altering one transaction invalidates\neverything after it. ARO's \"one name, one binding\" is the same\ndiscipline applied at the smallest scale — which is why the language\nfits business records so naturally: **data that means something is data\nyou don't overwrite.**\n\n## Related\n\n- Next: [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl)\n- Previous: [03 — Compute & Qualifiers](03-compute-and-qualifiers.repl)\n- Language Guide: [Chapter 11 — Immutability](../Book/TheLanguageGuide/Chapter11-Immutability.md),\n  [Chapter 12 — The Happy Path](../Book/TheLanguageGuide/Chapter12-HappyPath.md),\n  [Chapter 7 — Data Flow](../Book/TheLanguageGuide/Chapter07-DataFlow.md)\n- Wiki: [Guide — The Basics](https://github.com/arolang/aro/wiki/Guide-The-Basics)\n- Specification: [ARO-0001 — Language Fundamentals](../Proposals/ARO-0001-language-fundamentals.md),\n  [ARO-0006 — Error Philosophy](../Proposals/ARO-0006-error-philosophy.md)",
+      "outputs": []
+    }
+  ]
+}

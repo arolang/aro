@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb25-c01",
+      "kind": "markdown",
+      "source": "# 25 — Testing & Quality\n\nThe franchise ships a new build of the ordering service every week, to\nforty shops, unattended. Nobody at HQ \"just quickly checks\" forty\ntills. What earns that calm is not optimism — it is a pipeline where\n**every branch proves itself**: colocated tests\n([ARO-0015](../Proposals/ARO-0015-testing-framework.md)), static\nchecks, and a language designed so that whole classes of mistakes\ncannot pass silently.\n\nThis notebook works through that stack from the inside out: the\n**Compare** action as the session-sized assertion, unit-testing a\nuser-defined action right here in the notebook, the **closed qualifier\nnamespace** as a case study in designing errors *in*, the\nGiven/When/Then framework that runs under `aro test`, and the CLI\nquality toolchain — including the validator that tested the very cells\nyou are about to run.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c02",
+      "kind": "code",
+      "source": "Create the <expected-total> with 740.\nCreate the <actual-total> with 740.\nCompare the <till-check> from the <actual-total> against the <expected-total>.\nLog <till-check> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`Compare`** is an *OWN* action taking **both operands as inputs**\n  — `from` the actual, `against` the expected — and binding a **fresh\n  result**. (An older spelling tried to rebind its own first operand;\n  immutability killed it — GitLab #469.)\n- The result record has two fields:\n  - **`matches`** — a boolean, `true` on equality. The assertion bit.\n  - **`result`** — the ordering: `equal`, `less`, or `greater`.\n- Nothing stops on a mismatch — Compare *reports*, you decide. That is\n  what makes it composable into checks: guard on `matches`, log a\n  verdict, or feed it onward.\n\nThis is the assertion shape available *inside a session*. The\ndedicated test actions (`Then`, `Assert`) belong to the `aro test`\nrunner and appear later in fenced form.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c04",
+      "kind": "markdown",
+      "source": "## Variants\n\nGuard on the boolean for pass/fail lines, extract `result` when the\n*direction* of a mismatch matters — a till that is over is a different\nconversation than a till that is short:",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c05",
+      "kind": "code",
+      "source": "Create the <recipe-shots> with 2.\nCreate the <poured-shots> with 3.\nCompare the <shot-check> from the <poured-shots> against the <recipe-shots>.\nLog \"shots as specified\" to the <console> when <shot-check: matches>.\nExtract the <shot-verdict> from the <shot-check: result>.\nLog <shot-verdict> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c06",
+      "kind": "markdown",
+      "source": "The classic pairing from [03](03-compute-and-qualifiers.repl):\nqualifier-as-name computes two measurements under distinct names, and\nCompare judges them — no operand ever rebinds:",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c07",
+      "kind": "code",
+      "source": "Create the <first-note> with \"flat white\".\nCreate the <second-note> with \"oat cortado\".\nCompute the <first-size: length> from <first-note>.\nCompute the <second-size: length> from <second-note>.\nCompare the <size-check> from the <first-size> against the <second-size>.\nExtract the <size-verdict> from the <size-check: result>.\nLog <size-verdict> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c08",
+      "kind": "markdown",
+      "source": "## Unit-testing an action, right here\n\n[10 — User-Defined Actions](10-user-defined-actions.repl) made logic\nreusable; Compare makes it *checkable*. Define the pricing action,\ncall it with a known input, compare against the answer worked out by\nhand. This is a unit test, minus the framework — prices in cents, so\nequality is exact (never assert float equality; `4.80 + 4.50` in\nbinary floating point is a lie detector you will fail).",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c09",
+      "kind": "code",
+      "source": "(PriceLatte: Action takes <shots>) {\n    Extract the <shot-count> from the <input: shots>.\n    Create the <base-price> with 220.\n    Create the <shot-price> with 60.\n    Compute the <extra-cost> from <shot-count> * <shot-price>.\n    Compute the <total-cents> from <base-price> + <extra-cost>.\n    Return an <OK: status> with { cents: <total-cents> }.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c10",
+      "kind": "code",
+      "source": "Application.PriceLatte the <latte-quote> from 2.\nExtract the <latte-cents> from the <latte-quote: cents>.\nCreate the <expected-cents> with 340.\nCompare the <price-check> from the <latte-cents> against the <expected-cents>.\nLog \"PASS PriceLatte(2) = 340\" to the <console> when <price-check: matches>.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c11",
+      "kind": "markdown",
+      "source": "## Design for quality: the closed qualifier namespace\n\nA quality story that is about the *language*, not your code. Compute\nqualifiers used to be an open namespace: an invented qualifier\ncompiled, passed `aro check`, ran, exited `[OK]` — and silently\nreturned its input unchanged. The wrong number, wearing a green\ncheckmark. That bug class was closed by fiat (GitLab #486): a\nqualifier now **must** resolve to a built-in, a plugin qualifier, or a\ndate offset — anything else is an error, at run time *and* at\n`aro check` time (GitLab #465), where the check names the closest\nreal qualifier.\n\nThe next cell fails on purpose. In a session the refusal arrives as a\nbundle of analyzer diagnostics — find\n`Unknown Compute qualifier 'sparkle'` among them — then imagine the\nalternative: `sparkle` quietly handing back `\"abc\"` with a green\ncheckmark.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c12",
+      "kind": "code",
+      "source": "(* expect-error *)\nCompute the <fancy-total: sparkle> from \"abc\".",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c13",
+      "kind": "markdown",
+      "source": "## Colocated tests: Given / When / Then (ARO-0015)\n\nReal test suites live in the **same `.aro` files** as production code,\nmarked by a business activity ending in **`Test`** — and are stripped\nfrom every `aro build` binary, so shipping them costs nothing. Test\nfeature sets speak BDD: `Given` binds inputs, `When` executes a\nfeature set, `Then` asserts (throwing on mismatch; `Assert` is the\ndirect-equality sibling). These four run under the **`aro test`**\nrunner, not in notebook sessions — which is why this block is prose:\n\n```aro\n(* Production - stays in the binary *)\n(price-latte: Pricing) {\n    Compute the <extra> from <shots> * 60.\n    Compute the <cents> from 220 + <extra>.\n    Return an <OK: status> with <cents>.\n}\n\n(* Test - stripped from the binary *)\n(price-double-latte: Pricing Test) {\n    Given the <shots> with 2.\n    When the <cents> from the <price-latte>.\n    Then the <cents> with 340.\n}\n```\n\n```\n$ aro test ./Pricing\n=== ARO Test Results ===\n\n  PASS  price-double-latte (<1ms)\n\n------------------------\nTotal:  1\nPassed: 1\n```\n\nDesign decisions worth noticing: **no setup/teardown, no mocks, no\nfixtures** — everything inside the test *is* the test. A test that\nneeds elaborate scaffolding is the framework telling you the feature\nset under test does too much. Filter with\n`aro test . --filter \"price\"`; see\n[ARO-0015](../Proposals/ARO-0015-testing-framework.md) for the full\ngrammar.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c14",
+      "kind": "markdown",
+      "source": "## The quality toolchain\n\nTesting is one gate of several. The franchise pipeline runs, in order:\n\n| Command | Catches | When |\n|---------|---------|------|\n| `aro check ./App` | Syntax, unknown qualifiers, unused variables, missing `Return`, per-route body analysis | every save / commit |\n| `aro test ./App` | Behavioral regressions via colocated tests | every commit |\n| `aro compile ./App` | Full compilation without producing a binary | CI |\n| `aro diff --graph main..branch` | What the branch *means*: feature sets and statements added/removed (add `--html report.html` for a shareable report) | review |\n| `aro build ./App` | Native-build-only problems; strips tests | release |\n\n`aro diff --graph` deserves a word: review by *statement diff* reads\nlike the business change (\"branch adds `refundOrder`, removes a guard\non `payOrder`\") rather than like a wall of text — a natural fit for a\nlanguage whose statements are sentences.\n\nThe `Examples/` directory in the repository shows the conventions at\nfleet scale: each example carries a `test.hint` (how to invoke it) and\nan `expected.txt` (what it must print), and CI replays all ~65 of them\n— the same idea as colocated tests, one level up.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c15",
+      "kind": "markdown",
+      "source": "## The validator that just tested this page\n\nThese notebooks practice what this chapter preaches. In CI, every code\ncell of every `.repl` file in `Learning/` is executed against a real\nREPL session by `Learning/validate.py`:\n\n- one **fresh session per notebook**, cells in order, over\n  `aro repl --json` ([ARO-0091](../Proposals/ARO-0091-jupyter-kernel.md))\n  — exactly how a kernel would run them;\n- every cell must answer `status: ok` — **unless** its source carries\n  the marker `(* expect-error *)`, in which case it must answer\n  `status: error`. The two deliberate failures above declare\n  themselves;\n- any cell that stops compiling — because the language moved — fails\n  the build. The course cannot silently rot.\n\nNote the marker's design: an expected error is *declared in the\nartifact itself*, next to the code, like `Test` suffixes and\n`expected.txt` files. Expectations that live apart from what they\nconstrain drift; colocated ones cannot.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c16",
+      "kind": "markdown",
+      "source": "## Real-world example: the end-of-day reconciliation\n\nClosing time, every shop, every day: does the register's own total\nmatch the order ledger? This is the oldest automated check in\ncommerce — banks call it reconciliation, warehouses call it\ncycle-counting — and it is Compare wearing work clothes. Cents\nthroughout, so equality is exact:",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c17",
+      "kind": "code",
+      "source": "Create the <day-orders> with [\n    { id: \"o1\", item: \"latte\", cents: 480 },\n    { id: \"o2\", item: \"espresso\", cents: 300 },\n    { id: \"o3\", item: \"flat white\", cents: 450 }\n].\nMap the <order-cents: cents> from the <day-orders>.\nCompute the <register-sum: sum> from <order-cents>.\nCreate the <ledger-sum> with 1230.\nCompare the <books-check> from the <register-sum> against the <ledger-sum>.\nLog \"RECONCILED: register matches ledger\" to the <console> when <books-check: matches>.\nExtract the <books-verdict> from the <books-check: result>.\nLog <books-verdict> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb25-c18",
+      "kind": "markdown",
+      "source": "## Discussion\n\n- **Happy path and testing are allies, not rivals.** Production code\n  carries no error handling ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md));\n  the *tests* are where you spell out what must hold. `aro test` proves\n  the happy path is actually happy; the runtime's loud failures cover\n  the rest.\n- **Tests are executable specification.** `Given the <shots> with 2.\n  Then the <cents> with 340.` is readable by the person who sets\n  prices. When the spec and the test are the same sentence, they\n  cannot disagree.\n- **Prefer checks that cannot lie.** The reconciliation compared\n  integers; the qualifier namespace refuses names it does not know; the\n  validator demands a declared expectation for every error. The common\n  thread: design the *silent* failure out, and what remains is loud —\n  cheap to find, cheap to fix.\n- A live check in a running shop (`when <books-check: matches>` guarding\n  an alert) and a test in CI are the same Compare — one guards *this\n  day's data*, the other guards *every future change to the code*. You\n  need both.\n\n## Related\n\n- Next: [26 — Observability & Deployment](26-observability-and-deployment.repl)\n- Builds on: [10 — User-Defined Actions](10-user-defined-actions.repl),\n  [03 — Compute & Qualifiers](03-compute-and-qualifiers.repl),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl) (Map, sum)\n- State machines make great test tables: [24 — State Machines & Domain Modeling](24-state-machines-and-domain-modeling.repl)\n- Language Guide: [Chapter 12 — The Happy Path](../Book/TheLanguageGuide/Chapter12-HappyPath.md),\n  [Chapter 10 — Qualifier Syntax](../Book/TheLanguageGuide/Chapter10-QualifierSyntax.md)\n- Wiki: [Guide — The Basics](https://github.com/arolang/aro/wiki/Guide-The-Basics),\n  [Guide — User-Defined Actions](https://github.com/arolang/aro/wiki/Guide-User-Defined-Actions)\n- Specification: [ARO-0015 — Testing Framework](../Proposals/ARO-0015-testing-framework.md),\n  [ARO-0019 — Standard Library](../Proposals/ARO-0019-standard-library.md) (the qualifier catalog)",
+      "outputs": []
+    }
+  ]
+}

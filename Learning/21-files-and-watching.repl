@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb21-c01",
+      "kind": "markdown",
+      "source": "# 21 — Files & Watching\n\nEvery night at 02:00, each franchise shop's register closes the day\nand drops an export file into a shared folder. The **nightly export\ndrop** is the least glamorous integration in the company — and the one\nthe accountants would miss first. This notebook gives you the file\nsystem as a first-class citizen: create, write, inspect, copy, move,\nlist ([ARO-0036](../Proposals/ARO-0036-file-operations.md)) — and\nthen *watch* a folder so the drop processes itself.\n\nUnlike most notebooks in this course, these cells really touch disk.\nThey confine themselves to `./.scratch/` — a git-ignored sandbox next\nto the notebooks — and they are written to be **idempotent**: run the\nnotebook twice and you get the same result, because `Write` overwrites\nand `Make` tolerates what already exists. That discipline is not\nnotebook pedantry; it is exactly what a nightly job needs, since\nnightly jobs *will* be re-run after a failure.\n\nWatching — reacting to files appearing — needs a long-running\napplication, so it is taught in fenced blocks around\n`Examples/FileWatcher`. The handlers, as always, we can define\nright here.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c02",
+      "kind": "code",
+      "source": "Make the <drop-folder> to the <path: \"./.scratch/nightly/drop\">.\nCreate the <manifest-text> with \"Brew & Bytes nightly export drop\\nshops deliver here by 02:00\".\nWrite the <manifest-text> to the <file: \"./.scratch/nightly/drop/MANIFEST.txt\">.\nLog \"Drop folder ready.\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`Make … to the <path: …>.`** creates the directory *and* every\n  missing parent — the `mkdir -p` of ARO. Running it again is not an\n  error; an existing directory is simply confirmed. That single\n  property makes setup code re-runnable.\n- **`Write … to the <file: …>.`** (an EXPORT action — data leaves the\n  program) creates the file or **overwrites** it whole. Second run,\n  same bytes, same result: idempotent.\n- Paths are resolved against the working directory — for these\n  notebooks, `Learning/` itself; for an application, the application\n  directory.\n- The `<file: …>` and `<path: …>` qualifiers accept a string literal,\n  as here, or a variable holding one:\n  `Write the <report> to the <file: report-path>.`\n\nThe counterpart, `Read … from the <file: …>` (REQUEST — data comes\nin), you have met in [18 — Format-Aware I/O](18-format-aware-io.repl).\nOne reminder that matters for this notebook: **Read looks at the\nextension.** A `.txt` arrives as one string; `.csv`, `.json`, `.yaml`\narrive already parsed into records — which the real-world section\nbelow turns into an asset.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c04",
+      "kind": "markdown",
+      "source": "## Variants: asking before acting\n\n`Exists` and `Stat` are the questions; everything else is an act.\n`Exists` answers a boolean — for files or directories — and pairs\nnaturally with a `when` guard. `Stat` returns a metadata record:\n`name`, `path`, `size`, `isFile`, `isDirectory`, `created`,\n`modified`, `permissions` — the fields a nightly job checks before\ntrusting a file.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c05",
+      "kind": "code",
+      "source": "Exists the <manifest-present> for the <file: \"./.scratch/nightly/drop/MANIFEST.txt\">.\nLog \"Manifest is in place.\" to the <console> when <manifest-present> == true.\nRead the <manifest-back> from the <file: \"./.scratch/nightly/drop/MANIFEST.txt\">.\nLog <manifest-back> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c06",
+      "kind": "code",
+      "source": "Stat the <manifest-info> for the <file: \"./.scratch/nightly/drop/MANIFEST.txt\">.\nExtract the <manifest-size> from the <manifest-info: size>.\nExtract the <manifest-modified> from the <manifest-info: modified>.\nLog \"MANIFEST.txt: ${manifest-size} bytes, modified ${manifest-modified}\" to the <console>.\nStat the <drop-info> for the <directory: \"./.scratch/nightly/drop\">.\nExtract the <drop-directory-flag> from the <drop-info: isDirectory>.\nLog <drop-directory-flag> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c07",
+      "kind": "markdown",
+      "source": "## Variants: the archive ritual\n\n`Copy` duplicates (files or whole directory trees, recursively);\n`Move` relocates or renames, creating missing parent directories on\nthe way. Both overwrite an existing destination — which is what an\narchive step wants, and one more piece of re-runnability.\n\nNote the grammar: source rides in the *result* slot\n(`Copy the <file: source> to the <destination: target>.`). Because\nthat slot names a binding in your session, give each `Copy`/`Move` its\nown cell here — two in one cell would fight over the name.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c08",
+      "kind": "code",
+      "source": "Copy the <file: \"./.scratch/nightly/drop/MANIFEST.txt\"> to the <destination: \"./.scratch/nightly/drop/MANIFEST-copy.txt\">.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c09",
+      "kind": "code",
+      "source": "Move the <file: \"./.scratch/nightly/drop/MANIFEST-copy.txt\"> to the <destination: \"./.scratch/nightly/archive/MANIFEST-yesterday.txt\">.\nExists the <archived-present> for the <file: \"./.scratch/nightly/archive/MANIFEST-yesterday.txt\">.\nLog <archived-present> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c10",
+      "kind": "markdown",
+      "source": "The `archive/` directory did not exist — `Move` created it. The\ndrop stays clean, yesterday is preserved: copy in, move out is the\nwhole choreography of a drop folder.\n\n`Append` is the remaining writer — it adds to the end instead of\nreplacing, which is what journals and logs want. To stay idempotent we\nreset the journal with a `Write` first, then append; a real job would\nonly append.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c11",
+      "kind": "code",
+      "source": "Create the <journal-opening> with \"02:00 drop opened\".\nWrite the <journal-opening> to the <file: \"./.scratch/nightly/journal.txt\">.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c12",
+      "kind": "code",
+      "source": "Append the <journal-entry> to the <file: \"./.scratch/nightly/journal.txt\"> with \"\\n02:04 two shop exports received\".\nRead the <journal-back> from the <file: \"./.scratch/nightly/journal.txt\">.\nCompute the <journal-lines: lines> from <journal-back>.\nCompute the <journal-count: length> from <journal-lines>.\nLog \"Journal entries: ${journal-count}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c13",
+      "kind": "markdown",
+      "source": "Finally, `List` enumerates a directory. Each entry is a record —\n`name`, `path`, `isFile`, `isDirectory` — so the collection tools of\n[06](06-collections-and-pipelines.repl) apply directly. (The\nproposal's `matching \"*.txt\"` pattern form is not in the current\nparser, but `Filter` does the job and composes further.)",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c14",
+      "kind": "code",
+      "source": "List the <drop-entries> from the <directory: \"./.scratch/nightly/drop\">.\nFilter the <text-entries> from the <drop-entries> where <name> contains \".txt\".\nfor each <drop-entry> in <text-entries> {\n    Extract the <entry-name> from the <drop-entry: name>.\n    Log \"In drop: ${entry-name}\" to the <console>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c15",
+      "kind": "markdown",
+      "source": "## Discussion\n\n- **Idempotency is the design, not an accident.** `Make` tolerates\n  existing directories; `Write`, `Copy`, `Move` overwrite. A nightly\n  job built from these re-runs safely after a crash — the property\n  operations people call *at-least-once tolerance*. `Append` is the\n  deliberate exception; guard it with `Exists` when a re-run must not\n  double-write.\n- **There is no file `Delete` action today.** ARO-0036 §7 sketches\n  one, but the current runtime does not route `Delete` to the file\n  system (`Delete` works on repositories and collections). Hence this\n  notebook archives by `Move` instead of deleting — and `.scratch/`\n  is git-ignored, so leftovers cost nothing.\n- **The happy path holds** ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)):\n  `Read` on a missing file stops the feature set with\n  `Cannot read the … from the file: …` — plain language, pointing at\n  the statement. You write no existence-checking boilerplate; use\n  `Exists` only where absence is *expected* and legal.\n- **Extensions carry meaning.** `Read` on `.csv` hands you records,\n  not text. If you want the raw bytes of a data file, that is\n  [18 — Format-Aware I/O](18-format-aware-io.repl)'s territory.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c16",
+      "kind": "markdown",
+      "source": "## Watching: the drop that processes itself\n\nPolling a folder (\"is it there yet?\") wastes the same energy as\npolling an API. The file system can push too: `Start the\n<file-monitor>` watches a directory, and every change becomes an\nevent on the bus — the same bus as everything else in this course.\nServing side (fenced — it needs `Keepalive`):\n\n```aro\n(Application-Start: Nightly Import) {\n    Start the <file-monitor> with \"./.scratch/nightly/drop\".\n    Log \"Watching the drop...\" to the <console>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\nThree events, routed by handler name — `File Event Handler` is the\nactivity, and the name says which change you care about (compare\n`Examples/FileWatcher`, which handles all three):\n\n| Name contains | Fires when | Payload |\n|---------------|-----------|---------|\n| `Created` | a file appears | `path` |\n| `Modified` | a file changes | `path` |\n| `Deleted` | a file vanishes | `path` |\n\n`Examples/UserService` pushes this to its logical end: API writes\nproduce files, and *external* file edits sync back into the\nrepository through `File Event Handler`s — a two-way mirror with no\npolling anywhere.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c17",
+      "kind": "code",
+      "source": "(Handle Export Created: File Event Handler) {\n    Extract the <dropped-path> from the <event: path>.\n    Log \"New export landed: ${dropped-path}\" to the <console>.\n    Return an <OK: status> for the <ingestion>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c18",
+      "kind": "markdown",
+      "source": "Registered — in a watching application this fires the moment a\nshop's register drops its file, and the ingestion below would run with\n`<dropped-path>` instead of literals.\n\n## Real-world example: the nightly ingest\n\nTwo shops deliver; the platform consolidates. Watch what the\nextension does: the exports are `.csv`, so `Read` hands us **records**\n— no parsing code — and the pipeline verbs take it from there. The\nresult is written as a small data product for the morning dashboard.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c19",
+      "kind": "code",
+      "source": "Create the <harbor-export> with \"item,revenue\\nespresso,412.5\\nflat-white,388.2\".\nCreate the <station-export> with \"item,revenue\\ncortado,290.1\\nmocha,301.4\".\nWrite the <harbor-export> to the <file: \"./.scratch/nightly/drop/harbor.csv\">.\nWrite the <station-export> to the <file: \"./.scratch/nightly/drop/station.csv\">.\nLog \"Two shop exports dropped.\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c20",
+      "kind": "code",
+      "source": "Read the <harbor-rows> from the <file: \"./.scratch/nightly/drop/harbor.csv\">.\nRead the <station-rows> from the <file: \"./.scratch/nightly/drop/station.csv\">.\nMerge the <network-rows: harbor-rows> with <station-rows>.\nMap the <network-revenues: revenue> from the <network-rows>.\nCompute the <network-total: sum> from <network-revenues>.\nCreate the <summary-line> with \"network-revenue: ${network-total}\".\nWrite the <summary-line> to the <file: \"./.scratch/nightly/summary.txt\">.\nLog <summary-line> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb21-c21",
+      "kind": "markdown",
+      "source": "Eight statements: two reads (already parsed), one merge, one\ncolumn, one sum, one file out. In the watching application, the\n`Created` handler triggers this per arriving file — the drop folder\nbecomes a self-processing inbox.\n\nThat inbox is one of the oldest patterns in business computing, and\nit refuses to die: banks exchange settlement files over SFTP drops;\npayroll providers ingest HR exports nightly; retail chains consolidate\nper-store sales files exactly as our franchise does; print shops and\nlabel printers watch hot folders. Modern data platforms formalize the\nsame idea as the *landing zone* of a medallion architecture\n([17 — Data Engineering](17-data-engineering-medallion.repl)) — files\nland, events fire, bronze tables fill. The tools change; the drop\nfolder abides.\n\n## Related\n\n- Next: [22 — Git & DevOps](22-git-and-devops.repl)\n- Builds on: [06 — Collections & Pipelines](06-collections-and-pipelines.repl),\n  [09 — Feature Sets & Events](09-feature-sets-and-events.repl),\n  [17 — Data Engineering](17-data-engineering-medallion.repl),\n  [18 — Format-Aware I/O](18-format-aware-io.repl)\n- Language Guide: [Chapter 20 — Built-in Services](../Book/TheLanguageGuide/Chapter20-BuiltinServices.md),\n  [Chapter 21 — Format-Aware I/O](../Book/TheLanguageGuide/Chapter21-FormatAwareIO.md),\n  [Chapter 22 — System Objects](../Book/TheLanguageGuide/Chapter22-SystemObjects.md)\n- Wiki: [Guide — The Basics](https://github.com/arolang/aro/wiki/Guide-The-Basics)\n- Specification: [ARO-0036 — Extended File Operations](../Proposals/ARO-0036-file-operations.md),\n  [ARO-0040 — Format-Aware I/O](../Proposals/ARO-0040-format-aware-io.md),\n  [ARO-0008 — I/O Services](../Proposals/ARO-0008-io-services.md)\n- Run the real thing: `aro run Examples/FileOperations`,\n  `aro run Examples/FileMetadata`, `aro run Examples/FileWatcher`",
+      "outputs": []
+    }
+  ]
+}
