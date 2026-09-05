@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Jupyter Notebooks - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .doc-screenshot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 24px 0 8px;
+            display: block;
+        }
+
+        .doc-screenshot-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Jupyter Notebooks</h1>
+            <p class="lead">
+                Run ARO in notebooks: markdown prose between live code cells, executed against a
+                real REPL session. Open <code>.repl</code> files in Solaro's notebook editor, or
+                use the native Jupyter kernel in JupyterLab, VS Code, and DataSpell.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>One protocol, every front-end</h4>
+            <p>
+                Everything notebook-shaped is built on <code>aro repl --json</code> — a
+                line-delimited JSON protocol over stdio
+                (<a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0091-jupyter-kernel.md">ARO-0091</a>).
+                Solaro's notebook editor, the native <code>aro kernel</code>, and the Python shim
+                all drive the same session semantics, so a cell behaves identically everywhere.
+            </p>
+        </div>
+
+        <h2>Notebooks in Solaro</h2>
+        <p>
+            A <code>.repl</code> file opens in Solaro as a notebook: rendered markdown cells,
+            syntax-highlighted ARO code cells, a run gutter with execution counts, and outputs —
+            including native tables for tabular values — captured beneath each cell.
+            <em>Run All</em>, <em>Run Above</em>, and the kernel chip (session variables,
+            restart, clear outputs) live in the notebook toolbar; ⇧⏎ runs a cell and selects
+            the next one.
+        </p>
+
+        <img src="../img/solaro-notebook-collections.jpg" class="doc-screenshot"
+             alt="Solaro notebook editor showing the Collections &amp; Pipelines learning notebook with a rendered markdown cell, a highlighted ARO code cell, and a native table output"
+             loading="lazy">
+        <p class="doc-screenshot-caption">
+            The <em>Collections &amp; Pipelines</em> notebook from the Learning course: a day of
+            café orders becomes a native table straight from the cell's display bundle.
+        </p>
+
+        <h2>Cell semantics</h2>
+        <p>
+            A cell may mix meta-commands, feature-set definitions, and statements; it is split
+            into units in source order. Definitions accumulate across cells — cell 5 can call the
+            user-defined action cell 2 defined — and a cell's last value-producing statement is
+            displayed automatically, no explicit <code>Return</code> needed. Event handlers
+            defined in a session are live: an <code>Emit</code> in a later cell dispatches to
+            them, with handler output landing under the cell that emitted.
+        </p>
+
+        <pre><code><span class="code-comment">(* cell 1 — define a handler; it is live from this moment *)</span>
+(Notify: OrderPlaced Handler) {
+    Extract the &lt;id&gt; from the &lt;event: id&gt;.
+    Log &lt;id&gt; to the &lt;console&gt;.
+    Return an &lt;OK: status&gt; for the &lt;notification&gt;.
+}
+
+<span class="code-comment">(* cell 2 — the handler's output appears under THIS cell *)</span>
+Emit an &lt;OrderPlaced: event&gt; with { id: 4711 }.</code></pre>
+
+        <h2>The native kernel: JupyterLab, VS Code, DataSpell</h2>
+        <p>
+            <code>aro kernel</code> speaks Jupyter's wire protocol over ZeroMQ directly — no
+            Python required. Register it once and pick <strong>ARO</strong> in any Jupyter
+            front-end:
+        </p>
+
+        <pre><code><span class="code-comment"># Register the kernelspec (once)</span>
+aro kernel install
+
+<span class="code-comment"># Then: JupyterLab / VS Code / DataSpell → New Notebook → ARO</span></code></pre>
+
+        <p>
+            The kernel serves completion and inspection (LSP-backed), an
+            <code>ipywidgets</code> subset — sliders and text fields bound to session variables
+            via <code>:widget slider &lt;volume&gt; 0 11</code> — and the Jupyter debug
+            protocol's variable inspector and expression evaluation. Interrupt is honest:
+            a cell blocked inside the runtime cannot be unwound, so interrupt restarts the
+            kernel process and says so.
+        </p>
+
+        <h2>The Learning course</h2>
+        <p>
+            The repository ships a 26-notebook ARO course under
+            <a href="https://github.com/arolang/aro/tree/main/Learning"><code>Learning/</code></a> —
+            one story arc from the first <code>Log</code> statement to concurrency, streaming,
+            data engineering, and deployment. Every code cell of every notebook is executed
+            against a real REPL session in CI, so the course cannot silently rot.
+        </p>
+
+        <img src="../img/solaro-notebook-hello.jpg" class="doc-screenshot"
+             alt="Solaro notebook editor showing the Hello ARO learning notebook with an executed Log cell and its output"
+             loading="lazy">
+        <p class="doc-screenshot-caption">
+            Notebook 01 — <em>Hello, ARO</em>: the first statement, its output, and the anatomy
+            of every ARO sentence you will ever read.
+        </p>
+
+        <h2>The protocol, if you're building a front-end</h2>
+        <p>
+            One JSON object per line, both directions. Every request gets exactly one
+            <code>result</code>; any number of <code>stream</code> messages precede it, and
+            that ordering is guaranteed — a client never guesses when a cell's output is done.
+        </p>
+
+        <table>
+            <thead>
+                <tr><th>Request</th><th>Answer</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>execute</code></td><td><code>ok</code> with an optional display bundle, or a structured error</td></tr>
+                <tr><td><code>is_complete</code></td><td><code>complete</code> / <code>incomplete</code> / <code>invalid</code></td></tr>
+                <tr><td><code>complete</code></td><td>matches + rich items, LSP-backed</td></tr>
+                <tr><td><code>inspect</code></td><td>live variable values, hover docs</td></tr>
+                <tr><td><code>info</code> / <code>reset</code> / <code>shutdown</code></td><td>session management</td></tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                The full specification is
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0091-jupyter-kernel.md">ARO-0091:
+                Jupyter Kernel &amp; Machine-Readable REPL</a>; the terminal REPL it grew from is
+                <a href="repl.html">Interactive REPL</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
