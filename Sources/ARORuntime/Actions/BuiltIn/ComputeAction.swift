@@ -216,13 +216,23 @@ public struct ComputeAction: SynchronousAction {
             fallback: "identity"
         )
 
-        // Qualifier chain — e.g., "stats.sort|list.take" evaluated left-to-right
+        // Qualifier chain — `a|b` applied left-to-right (ARO-0019 §3.3,
+        // GitLab #492). Each stage descends the same ladder a lone
+        // qualifier does (plugin registry → date offset → built-in
+        // table), so mixed chains like `stats.sort|take` or `date|+1d`
+        // work, and an unknown stage names *itself*, not the whole
+        // chain. This used to hand the chain to `resolveChain`, which
+        // only knows plugin registrations — a chain of built-ins fell
+        // through and the whole string ("trim|uppercase") reached the
+        // computation lookup as one name.
         if computationName.contains("|") {
-            let chain = computationName.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-            if let chainResult = try context.container.qualifierRegistry.resolveChain(chain, value: input) {
-                context.bind(result.base, value: chainResult)
-                return chainResult
+            // A streamed input folds or materializes stage by stage on
+            // the async path.
+            if input is any UnreadBody || input is AnyStreamingValue {
+                throw NeedsAsyncExecution()
             }
+            let value = try Self.applyChain(computationName, to: input, context: context)
+            return ResultTypeCoercion.coerce(value, to: result.asType)
         }
 
         // Plugin qualifier — synchronous when the qualifier registry is sync
@@ -276,9 +286,77 @@ public struct ComputeAction: SynchronousAction {
         if !result.specifiers.isEmpty {
             throw ActionError.unknownComputation(
                 name: computationName,
-                known: Self.knownComputationNames)
+                known: Self.knownComputationNames,
+                chain: nil)
         }
         return ResultTypeCoercion.coerce(input, to: result.asType)
+    }
+
+    // MARK: - Qualifier chains (ARO-0019 §3.3, GitLab #492)
+
+    /// The stages of a chain qualifier, in application order.
+    ///
+    /// An empty stage (`trim|`, `a||b`) is an error rather than a
+    /// silently dropped element — the written form does not say what
+    /// the author meant, and guessing is how #486's silent
+    /// pass-through went unnoticed.
+    static func chainStages(of chainName: String) throws -> [String] {
+        let stages = chainName.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard stages.allSatisfy({ !$0.isEmpty }) else {
+            throw ActionError.runtimeError(
+                "Empty stage in Compute qualifier chain '\(chainName)' — "
+                + "every '|' needs a qualifier on both sides, e.g. 'trim|uppercase'")
+        }
+        return stages
+    }
+
+    /// Applies a chain of qualifiers left-to-right; each stage's
+    /// output is the next stage's input.
+    static func applyChain(
+        _ chainName: String,
+        to input: any Sendable,
+        context: ExecutionContext
+    ) throws -> any Sendable {
+        var current: any Sendable = input
+        for stage in try chainStages(of: chainName) {
+            current = try applyStage(stage, to: current, chain: chainName, context: context)
+        }
+        return current
+    }
+
+    /// One stage of a chain, through the same resolution ladder a lone
+    /// qualifier descends: plugin registry, then date offset, then the
+    /// built-in table. The namespace stays closed (GitLab #486): a
+    /// stage that resolves to nothing is an error naming the stage,
+    /// with the chain it sat in for context.
+    ///
+    /// The statement's `with` clause is shared across the chain (the
+    /// same rule `QualifierRegistry.resolveChain` applies to plugin
+    /// chains): built-in stages read `_with_` from the context
+    /// themselves, plugin stages receive it explicitly.
+    static func applyStage(
+        _ name: String,
+        to value: any Sendable,
+        chain: String,
+        context: ExecutionContext
+    ) throws -> any Sendable {
+        let withParams = context.resolveAny("_with_") as? [String: any Sendable]
+        if let pluginResult = try context.container.qualifierRegistry.resolve(
+            name, value: value, withParams: withParams) {
+            return pluginResult
+        }
+        if DateOffset.isOffsetPattern(name) {
+            return try ComputeAction().computeDateOffset(
+                input: value, offsetPattern: name, context: context)
+        }
+        if let op = computations[name.lowercased()] {
+            return try op(value, context)
+        }
+        throw ActionError.unknownComputation(
+            name: name,
+            known: knownComputationNames,
+            chain: chain)
     }
 
     // MARK: - #326: extracted computation implementations
@@ -705,6 +783,31 @@ public struct ComputeAction: SynchronousAction {
             let statement = "Compute the <\(result.fullName)> from the <\(object.fullName)>"
             let chunks = try body.chunkStream(consumer: statement)
             return try await fold.apply(to: chunks)
+        }
+
+        // Qualifier chain over a streamed input (GitLab #492). A stage
+        // that can fold folds (`lines` over an unread body stays a
+        // chunk at a time); a stage that needs the value materializes
+        // exactly what the previous stage produced, then the chain
+        // continues through the ordinary ladder. `lines|length` over a
+        // body therefore counts lines without the body ever being one
+        // value in memory.
+        if asyncComputationName.contains("|") {
+            var current: any Sendable = input
+            for stage in try Self.chainStages(of: asyncComputationName) {
+                if let body = current as? any UnreadBody,
+                   let fold = BodyFold.forQualifier(stage) {
+                    let statement = "Compute the <\(result.fullName)> from the <\(object.fullName)>"
+                    current = try await fold.apply(to: body.chunkStream(consumer: statement))
+                    continue
+                }
+                if let streaming = current as? AnyStreamingValue {
+                    current = try await streaming.materialize()
+                }
+                current = try Self.applyStage(
+                    stage, to: current, chain: asyncComputationName, context: context)
+            }
+            return ResultTypeCoercion.coerce(current, to: result.asType)
         }
 
         // ARO-0051: Streaming count — materialize and rebind

@@ -177,6 +177,44 @@ struct CollectionOpValidatorTests {
         #expect(errors("    \(line)").isEmpty)
     }
 
+    // MARK: - Chains are judged stage by stage (GitLab #492)
+
+    @Test("Chains of built-ins check clean", arguments: [
+        "Compute the <clean: trim|uppercase> from the <t>.",
+        "Compute the <n: lines|length> from the <content>.",
+        "Compute the <x: trim | uppercase | length> from the <t>.",
+        "Compute the <t: stats.sort|take> from the <scores> with 3.",
+    ])
+    func builtInChainsAccepted(line: String) {
+        #expect(errors("    \(line)").isEmpty)
+    }
+
+    @Test("An unknown chain stage is rejected, naming the stage")
+    func unknownChainStageRejected() {
+        let messages = errors("""
+                Create the <t> with "  hi  ".
+                Compute the <clean: trim|bogus> from the <t>.
+        """)
+        #expect(messages.contains {
+            $0.contains("Unknown Compute qualifier 'bogus'")
+                && $0.contains("trim|bogus")
+        })
+    }
+
+    @Test("An empty chain stage is rejected")
+    func emptyChainStageRejected() {
+        // The parser refuses `<clean: trim|>` before the validator ever
+        // sees it ("Expected '>', but got |>") — the validator's own
+        // empty-stage diagnostic is defense in depth for chains that
+        // arrive through the API rather than from source. Either way,
+        // the form must not check clean.
+        let messages = errors("""
+                Create the <t> with "  hi  ".
+                Compute the <clean: trim|> from the <t>.
+        """)
+        #expect(!messages.isEmpty)
+    }
+
     @Test("Date offsets stay accepted", arguments: [
         "Compute the <then: -7d> from the <now>.",
         "Compute the <soon: +24h> from the <now>.",
