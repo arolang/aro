@@ -563,7 +563,8 @@ struct CenterPaneView: View {
         guard LargeFilePolicy.shouldParse(url) else { return .plain }
         let name = url.lastPathComponent.lowercased()
         if name.hasSuffix(".aro") { return .aro }
-        if name.hasSuffix(".yaml") || name.hasSuffix(".yml") { return .yaml }
+        if name.hasSuffix(".yaml") || name.hasSuffix(".yml")
+            || name.hasSuffix(".aroproject") { return .yaml }
         return .plain
     }
 

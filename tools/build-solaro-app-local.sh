@@ -138,6 +138,35 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
       </array>
     </dict>
     <dict>
+      <!-- <name>.aroproject — the manifest wearing an extension
+           Solaro can OWN: identical YAML, identical meaning, but
+           double-click in Finder always opens the project. -->
+      <key>CFBundleTypeName</key><string>ARO project</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.arolang.aro-project</string>
+      </array>
+    </dict>
+    <dict>
+      <!-- aro.yaml project manifests. Launch Services associates by
+           TYPE, not by filename, so this registers Solaro as an
+           ALTERNATE handler for YAML: it never steals .yaml from the
+           user's editor, but "Open With → Solaro" works everywhere,
+           and Get Info → "Open with: Solaro" makes double-click open
+           the project for exactly the files the user picks.
+           RootView.openURL recognises the aro.yaml/aro.yml filename
+           and opens the enclosing folder as the project. -->
+      <key>CFBundleTypeName</key><string>ARO project manifest (aro.yaml)</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.yaml</string>
+      </array>
+    </dict>
+    <dict>
       <key>CFBundleTypeName</key><string>ARO source file</string>
       <key>CFBundleTypeRole</key><string>Editor</string>
       <key>LSHandlerRank</key><string>Owner</string>
@@ -149,6 +178,20 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   </array>
   <key>UTExportedTypeDeclarations</key>
   <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>com.arolang.aro-project</string>
+      <key>UTTypeDescription</key><string>ARO project</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.yaml</string>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array><string>aroproject</string></array>
+      </dict>
+    </dict>
     <dict>
       <key>UTTypeIdentifier</key><string>com.arolang.aro-source</string>
       <key>UTTypeDescription</key><string>ARO source file</string>

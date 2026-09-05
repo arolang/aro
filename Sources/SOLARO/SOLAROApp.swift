@@ -448,11 +448,14 @@ struct RootView: View {
     }
 
     /// macOS Launch Services delivers `open -a Solaro.app <path>`
-    /// invocations as an open-URL event rather than as argv. Two
-    /// shapes land here now (#277):
+    /// invocations as an open-URL event rather than as argv. The
+    /// shapes that land here (#277, project-manifest association):
     ///   * a directory URL — open it as the project root
-    ///   * an .aro file URL — open the *containing* directory and
-    ///     focus the file in the editor
+    ///   * a project manifest (`aro.yaml` / `<name>.aroproject`) —
+    ///     open its *enclosing folder* as the project; the manifest
+    ///     is the project, so nothing is focused
+    ///   * any other file URL (.aro, .repl, …) — open the containing
+    ///     directory and focus the file in the editor
     ///   * a solaro://… deep link — for future use, ignored for now
     private func openURL(_ url: URL) {
         // Deep links (solaro://foo) — keep a stub so they don't
@@ -465,6 +468,15 @@ struct RootView: View {
         }
         if isDir.boolValue {
             workspace = .open(Project(rootPath: url))
+            return
+        }
+        // Double-clicked manifest: the file IS the project — open
+        // the folder it marks and land on the project view, not on
+        // the raw YAML.
+        if ProjectManifestFile.isManifest(url) {
+            let project = Project(rootPath: url.deletingLastPathComponent())
+            RecentProjects.remember(project)
+            workspace = .open(project)
             return
         }
         // File URL — open its enclosing directory as the project
@@ -491,12 +503,16 @@ struct RootView: View {
             .filter { !$0.hasPrefix("-") }
         guard let path = candidates.first else { return .welcome }
         let resolved = path == "." ? FileManager.default.currentDirectoryPath : path
-        let url = URL(fileURLWithPath: resolved)
+        var url = URL(fileURLWithPath: resolved)
         var isDir: ObjCBool = false
-        guard
-            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-            isDir.boolValue
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
         else { return .welcome }
+        if !isDir.boolValue {
+            // `solaro path/to/aro.yaml` (or `<name>.aroproject`) —
+            // the manifest stands for its folder.
+            guard ProjectManifestFile.isManifest(url) else { return .welcome }
+            url = url.deletingLastPathComponent()
+        }
         // Only the very first RootView consumes argv; subsequent
         // windows reach this code path too, but argv is the same
         // for the whole process. We use a process-wide "consumed"

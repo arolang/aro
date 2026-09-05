@@ -69,12 +69,11 @@ enum FileTreeBuilder {
         for url in model.sourceFiles { allFiles.append((url, .aroSource)) }
         for url in model.storeFiles  { allFiles.append((url, .storeFile)) }
         if let spec = model.openAPISpec { allFiles.append((spec, .openapi)) }
-        // `aro.yaml` at the root is the project manifest. The
-        // model doesn't track it explicitly, so check the disk
-        // and inject the entry when present.
-        let manifest = model.root.rootPath
-            .appendingPathComponent("aro.yaml")
-        if FileManager.default.fileExists(atPath: manifest.path) {
+        // The project manifest — `aro.yaml`, or its Finder-associable
+        // twin `<name>.aroproject` — marks the root. The model doesn't
+        // track it explicitly, so check the disk and inject the entry
+        // when present.
+        if let manifest = ProjectManifestFile.find(in: model.root.rootPath) {
             allFiles.append((manifest, .projectManifest))
         }
         // Markdown docs living in the project (README.md, docs/…)
@@ -208,8 +207,8 @@ enum FileTreeBuilder {
            spec.standardizedFileURL.path == path {
             return .openapi
         }
-        // `aro.yaml` at the project root is the project manifest.
-        if url.lastPathComponent == "aro.yaml" {
+        // `aro.yaml` / `<name>.aroproject` is the project manifest.
+        if ProjectManifestFile.isManifest(url) {
             return .projectManifest
         }
         // Catch ARO files outside the discovered set (e.g. an .aro
