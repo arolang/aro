@@ -63,7 +63,7 @@ jobs:
     - name: Install build dependencies
       if: matrix.language == 'swift'
       run: |
-        brew install llvm@20 libgit2
+        brew install llvm@20 libgit2 zeromq
         # Setup LLVM paths (ARM64 vs Intel)
         if [ -d "/opt/homebrew/opt/llvm@20" ]; then
           LLVM_PREFIX="/opt/homebrew/opt/llvm@20"

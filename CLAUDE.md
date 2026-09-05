@@ -42,7 +42,9 @@ echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 aro repl                 # Start the interactive ARO REPL
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
-                         # the Jupyter kernel in Editor/jupyter-aro speaks this
+                         # the Python shim kernel in Editor/jupyter-aro speaks this
+aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
+                         # Jupyter then launches `aro kernel --connection-file …`
 aro test ./MyApp         # Run colocated tests (ARO-0015)
 aro new plugin foo       # Scaffold a new plugin
 aro add github:org/repo  # Install a plugin from Git

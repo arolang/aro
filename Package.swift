@@ -9,6 +9,7 @@ var runtimePlatformDependencies: [Target.Dependency] = []
 var lspDependencies: [Package.Dependency] = []
 var lspTargetDependencies: [Target.Dependency] = []
 var cliLspDependency: [Target.Dependency] = []
+var cliKernelDependency: [Target.Dependency] = []
 var compilerLLVMDependency: [Target.Dependency] = []
 var mlxDependencies: [Package.Dependency] = []
 var askMLXTargetDependencies: [Target.Dependency] = []
@@ -62,6 +63,13 @@ lspTargetDependencies = [
 ]
 cliLspDependency = [
     "AROLSP",
+]
+// Native Jupyter kernel (`aro kernel`, ARO-0091) — libzmq + HMAC
+// signing. Not on Windows: the kernel shares the REPL's POSIX
+// output-capture machinery.
+cliKernelDependency = [
+    "CZeroMQ",
+    .product(name: "Crypto", package: "swift-crypto"),
 ]
 // LLVM C API for type-safe IR generation
 compilerLLVMDependency = [
@@ -337,6 +345,18 @@ let package = Package(
                     .apt(["libgit2-dev"]),
                 ]
             ),
+            // System library for libzmq — the native Jupyter kernel's
+            // transport (`aro kernel`, ARO-0091). Only AROCLI links it,
+            // and only off-Windows.
+            .systemLibrary(
+                name: "CZeroMQ",
+                path: "Sources/CZeroMQ",
+                pkgConfig: "libzmq",
+                providers: [
+                    .brew(["zeromq"]),
+                    .apt(["libzmq3-dev"]),
+                ]
+            ),
             // Package manager for plugins
             .target(
                 name: "AROPackageManager",
@@ -366,7 +386,7 @@ let package = Package(
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     "LineNoise",
                     .product(name: "Logging", package: "swift-log"),
-                ] + cliLspDependency + askDependency,
+                ] + cliLspDependency + cliKernelDependency + askDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings
             ),

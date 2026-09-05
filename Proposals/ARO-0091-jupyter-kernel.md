@@ -169,23 +169,94 @@ guarantee true across a real pipe rather than merely likely.
 
 On Windows only (1) is available; `Log` is captured, stray `print`s are not.
 
-## The kernel
+## The kernels
 
-`Editor/jupyter-aro` is an `ipykernel` subclass owning one `aro repl --json`
-subprocess. `jupyter_client` handles ZMQ, message signing, and heartbeat; the
-package translates Jupyter messages to protocol requests and back. It does no
-ARO parsing — everything language-shaped stays on the ARO side, so every
-client of the protocol behaves identically.
+Two kernels reach notebooks; both run cells through the same
+`REPLCellEngine`, so a cell behaves identically under either.
 
-A native Swift kernel would need a libzmq binding, a new C dependency pulling
-against the fully-static binary work. The shim reaches notebooks now and can
-be replaced later without notebook-visible change.
+### `aro kernel` — native (the default)
+
+`aro kernel` speaks Jupyter's wire protocol (5.3) over ZeroMQ directly —
+no Python anywhere. `aro kernel install` writes the kernelspec into the
+user's Jupyter data dir; the front-end then launches
+`aro kernel --connection-file …` itself. libzmq is a system dependency
+(`brew install zeromq` / `libzmq3-dev`), declared the same way libgit2
+already is; message signing is HMAC-SHA256 via swift-crypto, and a
+message whose signature does not verify is dropped, not answered.
+
+Threading follows libzmq's one-socket-one-thread rule: heartbeat echoes
+on its own thread, control has its own so shutdown stays answerable
+mid-cell, shell recv/handle/reply sequentially (one request at a time
+*is* the protocol), and iopub — written by both the shell thread and the
+output-capture readers — is serialized by a lock. Output capture is the
+same descriptor-redirection machinery the JSON server uses, sentinel
+drain included, so every `stream` for a cell is on iopub before that
+cell's reply.
+
+Windows is excluded — the kernel shares the REPL's POSIX capture
+machinery. Use the Python shim there.
+
+### `Editor/jupyter-aro` — the Python shim
+
+An `ipykernel` subclass owning one `aro repl --json` subprocess;
+`jupyter_client` handles ZMQ, signing, heartbeat. It predates the native
+kernel and remains the Windows path and the reference client for the
+JSON protocol. It does no ARO parsing — everything language-shaped stays
+on the ARO side.
 
 ### Interrupt
 
-A cell blocked inside the runtime cannot be unwound from Python. Interrupt
-kills and replaces the process, and says so — the session's variables and
-definitions are gone. An honest restart beats a hang or a silent amnesia.
+A cell blocked inside the runtime cannot be unwound — from Python or
+in-process. Both kernels declare signal interrupt: the process is killed
+and replaced, and says so — the session's variables and definitions are
+gone. An honest restart beats a hang or a silent amnesia.
+
+### Widgets (comms)
+
+The native kernel implements Jupyter's comm protocol — `comm_open` /
+`comm_msg` / `comm_close` / `comm_info_request` — and on it, an
+`ipywidgets` subset: **controls bound to session variables**.
+
+```
+:widget slider <volume> 0 11      IntSlider bound to <volume>
+:widget text <name>               Text field bound to <name>
+:widget list                      what's bound in this session
+```
+
+Creating a control opens the ipywidgets-8 model comms (a LayoutModel, a
+style model, the control referencing both) and publishes a
+`display_data` carrying `application/vnd.jupyter.widget-view+json`.
+Dragging the slider sends the standard `update` — the kernel writes the
+session variable, so the next cell computes with the new value. The
+binding is the *only* writer a session variable has: ARO's immutability
+still holds for code, which is exactly what makes a slider-fed variable
+coherent.
+
+`:widget` exists only under `aro kernel` — the widget lives in the comm
+layer only that transport has. In `aro repl` it reports itself as
+unavailable, like any unknown meta-command.
+
+### Debug protocol
+
+`debug_request` on the control channel tunnels DAP. The kernel serves
+the subset that is true for ARO today: `inspectVariables` /
+`richInspectVariables` / `variables` (JupyterLab's variable inspector),
+`evaluate` against the live session, `dumpCell` with Murmur2 path
+naming (`debugInfo` publishes prefix/suffix/seed), and the lifecycle
+handshake. Breakpoints answer `verified: false` with the reason in the
+message: ARO cells run to completion, and pausing mid-cell needs the
+runtime's pause engine wired into the kernel — promising a stop that
+never comes would be worse than the hollow dot JupyterLab renders for
+the honest answer.
+
+### Rebinding across cells
+
+The semantic analyzer catches duplicate bindings within one program; a
+cell compiled alone cannot see that an earlier cell bound the name, and
+the runtime treats that miss as a fatal compiler bug — which killed the
+kernel. The cell engine now answers with ARO's own immutability message
+(bind a new name, or reset the session) before execution, on every
+front-end.
 
 ## Limits
 
@@ -224,5 +295,7 @@ The terminal REPL's Tab key routes through the same engine, so Tab in
 
 ## Future directions
 
-- A native `aro kernel` speaking ZMQ directly, removing the Python dependency.
-- `ipywidgets` and the Jupyter debug protocol.
+- Pausing cells: wiring the runtime's pause engine (`aro debug`) into the
+  kernel's debug adapter, so breakpoints verify and `stopped` events fire.
+- More widget controls (dropdowns, buttons wired to feature-set
+  invocations) on the same comm layer.
