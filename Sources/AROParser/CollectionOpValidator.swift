@@ -69,8 +69,44 @@ public struct CollectionOpValidator {
         // is not this check's business.
         guard let qualifier = result.typeAnnotation, !qualifier.isEmpty else { return }
 
+        // A chain (`a|b`, ARO-0019 §3.3) is judged stage by stage
+        // (GitLab #492): each stage follows the same rules as a lone
+        // qualifier, so `trim|bogus` is rejected here naming `bogus`,
+        // while `stats.sort|take` stays accepted — the namespaced
+        // stage is unknowable without loading plugins, and `take` is
+        // a built-in.
+        if let stages = ComputeQualifierCatalog.chainStages(qualifier) {
+            if stages.contains("") {
+                diagnostics.error(
+                    "Empty stage in Compute qualifier chain '\(qualifier)'",
+                    at: result.span.start,
+                    hints: ["Every '|' needs a qualifier on both sides, "
+                          + "e.g. <\(result.base): trim|uppercase>"]
+                )
+                return
+            }
+            for stage in stages {
+                guard !ComputeQualifierCatalog.isUncheckable(stage),
+                      !ComputeQualifierCatalog.isBuiltIn(stage) else { continue }
+                reportUnknownQualifier(stage, chain: qualifier, statement: statement)
+            }
+            return
+        }
+
         guard !ComputeQualifierCatalog.isUncheckable(qualifier) else { return }
         guard !ComputeQualifierCatalog.isBuiltIn(qualifier) else { return }
+
+        reportUnknownQualifier(qualifier, chain: nil, statement: statement)
+    }
+
+    /// Emits the unknown-qualifier diagnostic, for a lone qualifier or
+    /// for one stage of a chain.
+    private func reportUnknownQualifier(
+        _ qualifier: String,
+        chain: String?,
+        statement: AROStatement
+    ) {
+        let result = statement.result
 
         var hints: [String] = []
         if let redirect = ComputeQualifierCatalog.redirect(
@@ -87,8 +123,9 @@ public struct CollectionOpValidator {
         hints.append("Plugin qualifiers are namespaced: <\(result.base): handle.\(qualifier)>")
         hints.append("Run `aro actions --qualifiers` for the full set")
 
+        let context = chain.map { " (stage of the chain '\($0)')" } ?? ""
         diagnostics.error(
-            "Unknown Compute qualifier '\(qualifier)'",
+            "Unknown Compute qualifier '\(qualifier)'\(context)",
             at: result.span.start,
             hints: hints
         )

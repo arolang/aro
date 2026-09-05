@@ -312,6 +312,78 @@ struct ComputeQualifierTests {
         }
     }
 
+    // MARK: - Qualifier chains (ARO-0019 §3.3, GitLab #492)
+
+    @Test("A chain applies its stages left to right")
+    func chainAppliesInOrder() async throws {
+        // The repro from the issue: this used to die with
+        // "Unknown Compute qualifier: 'trim|uppercase'".
+        let value = try await compute("trim|uppercase", on: "  hi  ")
+        #expect(value as? String == "HI")
+    }
+
+    @Test("Counting lines is lines|length in one statement")
+    func chainLinesLength() async throws {
+        let value = try await compute("lines|length", on: "one\ntwo\nthree\n")
+        #expect(value as? Int == 3)
+    }
+
+    @Test("Stage order is observable")
+    func chainOrderMatters() async throws {
+        // trim first: 2 characters. length first would count 6.
+        let value = try await compute("trim|length", on: "  hi  ")
+        #expect(value as? Int == 2)
+    }
+
+    @Test("Three stages fold through the same ladder")
+    func chainThreeStages() async throws {
+        let value = try await compute("trim|uppercase|length", on: "  hello  ")
+        #expect(value as? Int == 5)
+    }
+
+    @Test("Spaces around the pipe are allowed")
+    func chainWithSpaces() async throws {
+        let value = try await compute("trim | uppercase", on: "  hi  ")
+        #expect(value as? String == "HI")
+    }
+
+    @Test("A date offset works as a chain stage")
+    func chainWithDateOffset() async throws {
+        let value = try await compute("date|+1d", on: "2026-01-01T00:00:00Z")
+        #expect(value is ARODate)
+    }
+
+    @Test("The with clause is shared across the chain")
+    func chainSharesWithClause() async throws {
+        let value = try await compute(
+            "unique|join", on: ["a", "a", "b"] as [any Sendable],
+            with: ["separator": "-"] as [String: any Sendable])
+        #expect(value as? String == "a-b")
+    }
+
+    @Test("An unknown stage names itself and the chain, not the whole string")
+    func chainUnknownStageNamed() async throws {
+        do {
+            _ = try await compute("trim|bogus", on: "  hi  ")
+            Issue.record("expected a thrown error")
+        } catch let error as ActionError {
+            guard case .unknownComputation = error else {
+                Issue.record("expected unknownComputation, got \(error)")
+                return
+            }
+            #expect(error.description.contains("'bogus'"))
+            #expect(error.description.contains("trim|bogus"))
+            #expect(!error.description.contains("Unknown Compute qualifier: 'trim|bogus'"))
+        }
+    }
+
+    @Test("An empty stage is an error, not a silently shorter chain")
+    func chainEmptyStage() async throws {
+        await #expect(throws: (any Error).self) {
+            _ = try await compute("trim|", on: "  hi  ")
+        }
+    }
+
     // MARK: - Catalog integrity
 
     @Test("Every built-in qualifier is discoverable through the registry")
