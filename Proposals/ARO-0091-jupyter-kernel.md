@@ -44,7 +44,7 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 |--------|--------|--------|
 | `execute` | `code` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
-| `complete` | `code`, `cursor` | `matches`, `cursorStart`, `cursorEnd` |
+| `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
 | `info` | — | `info` (version, feature sets, variables) |
 | `reset` | — | `status: ok`; session cleared |
@@ -195,12 +195,34 @@ definitions are gone. An honest restart beats a hang or a silent amnesia.
   starts — use `aro run` for those.
 - **One request at a time.** `REPLSession` is not internally synchronised, and
   the protocol is request/response; concurrent requests are not supported.
-- **Completion is local.** Actions, qualifiers, session variables, feature
-  sets, and meta-commands — not the LSP's full context-aware completion, which
-  assumes a document and a compilation a half-typed cell does not have.
+
+## Completion & inspection
+
+`complete` and `inspect` are LSP-backed. The input is framed exactly the
+way `execute` frames it — wrapped in a temporary feature set unless it
+already defines one, the session's definitions appended after — compiled,
+and handed to the same `CompletionHandler` / `HoverHandler` that
+`aro lsp` serves. A cell therefore completes the way a document does, by
+construction: context classification (statement opener, `<identifier`,
+qualifier slot, feature-set header) and compilation-derived symbols
+included.
+
+What the LSP cannot know is merged in from the session: its live
+variables — whose current *values* answer `inspect`, ahead of static
+hover — its defined feature sets, and the `:` meta-commands. On Windows,
+where `AROLSP` does not build, this session-local layer answers alone.
+
+The `complete` result carries two shapes: `matches`, a flat name list
+that replaces `[cursorStart, cursorEnd)` verbatim (what Jupyter's
+`complete_reply` wants), and `items`, richer `label` / `kind` / `detail`
+entries in the LSP's kind vocabulary for clients that can render them.
+Snippet items appear only in `items` — their placeholder syntax is not a
+verbatim replacement.
+
+The terminal REPL's Tab key routes through the same engine, so Tab in
+`aro repl` and Tab in a notebook agree.
 
 ## Future directions
 
-- LSP-backed completion and hover, once `AROLSP` is a SwiftPM product.
 - A native `aro kernel` speaking ZMQ directly, removing the Python dependency.
 - `ipywidgets` and the Jupyter debug protocol.

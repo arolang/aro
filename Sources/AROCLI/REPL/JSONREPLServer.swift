@@ -481,107 +481,41 @@ final class JSONREPLServer: @unchecked Sendable {
         send(JSONREPLEncoder.result(id: id, status: status, extra: extra))
     }
 
-    /// Prefix completion over the things a session can name.
-    ///
-    /// Deliberately local rather than routed through the LSP's completion
-    /// handler: that one answers for a document on disk with a full
-    /// compilation behind it, while a half-typed cell has neither, and the
-    /// session's own variables and feature sets are the part a notebook user
-    /// actually reaches for.
+    /// LSP-backed completion (ARO-0091): the shared `REPLIntel` engine
+    /// frames the cell the way `execute` frames it, runs the same
+    /// `CompletionHandler` the editors use, and merges the session's
+    /// own names on top. `matches` keeps the original flat shape;
+    /// `items` adds label/kind/detail for clients that render more.
     private func complete(id: Int, code: String, cursor: Int) {
-        let characters = Array(code)
-        let safeCursor = max(0, min(cursor, characters.count))
-
-        // Walk back over the token being typed. `<` and `:` are included as
-        // starts because they select what kind of name is wanted.
-        var start = safeCursor
-        while start > 0 {
-            let character = characters[start - 1]
-            if character.isLetter || character.isNumber || character == "-" || character == "_" || character == "." {
-                start -= 1
-            } else {
-                break
-            }
-        }
-        let token = String(characters[start..<safeCursor])
-        let preceding = start > 0 ? characters[start - 1] : " "
-
-        var matches: [String] = []
-
-        if preceding == ":" && start > 1 {
-            // `<value: qual` — a qualifier slot.
-            matches += AROCatalog.qualifiersSnapshot()
-                .map(\.fullName)
-                .filter { $0.hasPrefix(token) }
-        } else if token.hasPrefix(":") || preceding == ":" {
-            matches += commands.commandNames.map { ":\($0)" }.filter { $0.hasPrefix(token) }
-        } else {
-            if preceding == "<" {
-                matches += session.variableNames.filter { $0.hasPrefix(token) }
-            }
-            matches += AROCatalog.actionsSnapshot()
-                .map(\.verb)
-                .filter { $0.lowercased().hasPrefix(token.lowercased()) }
-            matches += session.featureSetNames.filter { $0.hasPrefix(token) }
-            if preceding != "<" {
-                matches += session.variableNames.filter { $0.hasPrefix(token) }
-            }
-        }
-
+        let answer = REPLIntel.complete(
+            code: code,
+            cursor: cursor,
+            session: session,
+            definitions: definitionOrder.compactMap { definitions[$0] }
+        )
         send(JSONREPLEncoder.result(id: id, status: .ok, extra: [
-            "matches": Array(Set(matches)).sorted(),
-            "cursorStart": start,
-            "cursorEnd": safeCursor
+            "matches": answer.matches,
+            "items": answer.items,
+            "cursorStart": answer.cursorStart,
+            "cursorEnd": answer.cursorEnd
         ]))
     }
 
     /// Answer "what is this?" for the token under the cursor: a session
-    /// variable's value, or an action's role and prepositions.
+    /// variable's live value, the LSP's hover for the compiled cell, or
+    /// the action catalog — in that order (see `REPLIntel.inspect`).
     private func inspect(id: Int, code: String, cursor: Int) {
-        let characters = Array(code)
-        let safeCursor = max(0, min(cursor, characters.count))
-
-        var start = safeCursor
-        while start > 0, isTokenCharacter(characters[start - 1]) { start -= 1 }
-        var end = safeCursor
-        while end < characters.count, isTokenCharacter(characters[end]) { end += 1 }
-
-        let token = String(characters[start..<end])
-        guard !token.isEmpty else {
-            send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": false]))
-            return
-        }
-
-        if let value = session.getVariable(token) {
-            let text = """
-            <\(token)>
-
-            \(ResponseFormatter.formatValue(value, for: .human))
-            """
-            send(JSONREPLEncoder.result(id: id, status: .ok, extra: [
-                "found": true,
-                "text": text
-            ]))
-            return
-        }
-
-        if let action = AROCatalog.actionsSnapshot().first(where: { $0.verb.lowercased() == token.lowercased() }) {
-            var text = "\(action.verb) — \(action.role.rawValue) action"
-            if !action.prepositions.isEmpty {
-                text += "\nPrepositions: \(action.prepositions.joined(separator: ", "))"
-            }
-            if let description = action.description {
-                text += "\n\n\(description)"
-            }
+        let answer = REPLIntel.inspect(
+            code: code,
+            cursor: cursor,
+            session: session,
+            definitions: definitionOrder.compactMap { definitions[$0] }
+        )
+        if answer.found, let text = answer.text {
             send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": true, "text": text]))
-            return
+        } else {
+            send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": false]))
         }
-
-        send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": false]))
-    }
-
-    private func isTokenCharacter(_ character: Character) -> Bool {
-        character.isLetter || character.isNumber || character == "-" || character == "_" || character == "."
     }
 
     // MARK: - Helpers
