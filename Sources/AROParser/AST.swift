@@ -357,6 +357,8 @@ public enum AggregationType: String, Sendable, Equatable, CustomStringConvertibl
     case avg = "avg"
     case min = "min"
     case max = "max"
+    case first = "first"
+    case last = "last"
 
     public var description: String { rawValue }
 }
