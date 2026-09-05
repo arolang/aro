@@ -402,8 +402,10 @@ public final class REPLShell: @unchecked Sendable {
 
     /// Load previously installed REPL plugins from ~/.aro/repl-plugins/
     private func loadInstalledPlugins() {
-        let replPluginsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aro/repl-plugins")
+        // Same directory `:plugin add` installs into (honors
+        // ARO_REPL_PLUGINS_DIR), so what one session installs the
+        // next session has.
+        let replPluginsDir = PluginCommand.replPluginsDirectory
         let pluginsDir = replPluginsDir.appendingPathComponent("Plugins")
 
         guard FileManager.default.fileExists(atPath: pluginsDir.path) else { return }

@@ -55,9 +55,14 @@ public final class PluginInstaller: Sendable {
         // Parse URL to get plugin name
         let repoName = git.extractRepoName(from: url)
 
-        // Check if already installed
-        let pluginDir = pluginsDirectory.appendingPathComponent(repoName)
-        if FileManager.default.fileExists(atPath: pluginDir.path) {
+        // Early duplicate check on the URL-derived name — cheap, and
+        // catches the common case (repo named after the plugin)
+        // before paying for a clone. The authoritative check happens
+        // again after the manifest is parsed, because the install
+        // directory is named after `manifest.name`, which need not
+        // match the repository name.
+        let repoNamedDir = pluginsDirectory.appendingPathComponent(repoName)
+        if FileManager.default.fileExists(atPath: repoNamedDir.path) {
             throw InstallerError.alreadyInstalled(repoName)
         }
 
@@ -99,6 +104,7 @@ public final class PluginInstaller: Sendable {
         let updatedManifest = PluginManifest(
             name: manifest.name,
             version: manifest.version,
+            handle: manifest.handle,
             description: manifest.description,
             author: manifest.author,
             license: manifest.license,
@@ -117,7 +123,17 @@ public final class PluginInstaller: Sendable {
         // Write updated manifest
         try updatedManifest.write(to: manifestPath)
 
-        // Move to plugins directory
+        // Move to the plugins directory under the MANIFEST name — the
+        // name every other layer keys on (the lock file, the runtime
+        // loader's directory map, `:plugin update/remove`). Naming the
+        // directory after the repository instead used to strand
+        // plugins whose repo name differed from their `name:` — the
+        // loader then looked for a directory that didn't exist and
+        // "installed but failed to load" was the user's reward.
+        let pluginDir = pluginsDirectory.appendingPathComponent(manifest.name)
+        if FileManager.default.fileExists(atPath: pluginDir.path) {
+            throw InstallerError.alreadyInstalled(manifest.name)
+        }
         try FileManager.default.moveItem(at: tempDir, to: pluginDir)
 
         // Build if necessary

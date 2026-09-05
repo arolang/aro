@@ -48,6 +48,13 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     /// Plugin version using semver (required)
     public let version: String
 
+    /// Namespace handle (PascalCase, e.g. `Stats`) — how plugin
+    /// actions (`Stats.Sort`) and qualifiers (`<x: Stats.sort>`) are
+    /// addressed. Optional in the schema, but it MUST survive the
+    /// installer's manifest rewrite: dropping it silently renames
+    /// every qualifier the plugin ships.
+    public let handle: String?
+
     /// Human-readable description
     public let description: String?
 
@@ -80,6 +87,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case name
         case version
+        case handle
         case description
         case author
         case license
@@ -96,6 +104,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     public init(
         name: String,
         version: String,
+        handle: String? = nil,
         description: String? = nil,
         author: String? = nil,
         license: String? = nil,
@@ -108,6 +117,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     ) {
         self.name = name
         self.version = version
+        self.handle = handle
         self.description = description
         self.author = author
         self.license = license
