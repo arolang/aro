@@ -440,9 +440,22 @@ public final class REPLShell: @unchecked Sendable {
                         completions.append("\(prefix)\(name)")
                     }
                 }
+                return completions
             }
 
-            return completions
+            // Everything else goes through the shared engine — the same
+            // LSP-backed completion the JSON protocol serves (ARO-0091),
+            // so Tab in the terminal and Tab in a notebook agree.
+            // LineNoise replaces the whole buffer, so each match is
+            // re-attached to the untouched head of the line.
+            let answer = REPLIntel.complete(
+                code: currentBuffer,
+                cursor: currentBuffer.count,
+                session: self.session,
+                definitions: Array(self.session.featureSetSources.values)
+            )
+            let head = String(Array(currentBuffer).prefix(answer.cursorStart))
+            return answer.matches.map { head + $0 }
         }
     }
 
