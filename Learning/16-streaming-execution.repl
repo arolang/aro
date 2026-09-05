@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb16-c01",
+      "kind": "markdown",
+      "source": "# 16 — Streaming Execution\n\nForty shops, every till printing all day, every shop uploading its\nreceipts to head office at closing time. The consolidated file for one\ngood Saturday is bigger than the RAM of the box that processes it.\nThis is the day **Brew & Bytes** learns the sentence that organizes\neverything in this notebook:\n\n> **Streams don't have a size. Values do.**\n> Moving data doesn't read it. Using data reads it. Only reading has a limit.\n\nARO's answer to big data is not a new API — it is that you write the\nsame code you always wrote. `Read`, `Filter`, `Reduce` chain into lazy\npipelines automatically ([ARO-0051](../Proposals/ARO-0051-streaming-execution.md),\n[ARO-0086](../Proposals/ARO-0086-automatic-pipeline-detection.md));\nthe `Stream` action hands you a file one line at a time; and on the\nHTTP side, a request body that your code only *moves* never becomes a\nvalue in memory at all ([ARO-0090](../Proposals/ARO-0090-streaming-io-and-materialization.md)).\n\nThis notebook works with the till exports in `data/` and writes only\nunder `./.scratch/`.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c02",
+      "kind": "code",
+      "source": "Stream the <till-entries> from \"data/orders.csv\".\nfor each <till-entry> in <till-entries> {\n    Log <till-entry> to the <console>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`Stream`** (a *REQUEST* action) opens the file and yields **one raw\n  line at a time** straight into the loop. No format detection, no\n  parsing, no array — only the current line is ever in memory. A\n  10 GB file costs the same as this 7-line one.\n- The header line `order_id,shop,…` came through too: to `Stream`,\n  a line is a line. Structure is a `Read` concern (below).\n- The `for each` is the **consumer**; the file is the **producer**.\n  They overlap: while the loop body works on the current line, the\n  producer is already reading the next ones — bounded by a prefetch\n  window (default 2, `ARO_STREAM_PREFETCH`). The bound is the point:\n  it is backpressure, so a fast file cannot outrun a slow loop body\n  into memory ([ARO-0088 §12](../Proposals/ARO-0088-concurrency-model.md)).\n\nThe trade-off against `Read`:\n\n| | `Read` | `Stream` |\n|---|---|---|\n| Peak memory | O(file size) | O(1) — current line |\n| Format detection | JSON / CSV / YAML / JSONL | raw lines only |\n| Count before iterating | yes | no — a stream is consumed once |\n| Best for | structured data that fits | large plain-text and log files |",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c04",
+      "kind": "markdown",
+      "source": "## Variant: pipelines over values stream anyway\n\nWhen the data *does* fit, `Read` gives you parsed records — and a\nchain of pipeline stages over them is still executed as a streaming\npipeline. The runtime detects `Read → Filter → Reduce` chains from\nthe data flow (each stage reads only the previous stage's binding —\nimmutability makes the chain obvious) and runs them element by\nelement instead of building each intermediate list\n([ARO-0086](../Proposals/ARO-0086-automatic-pipeline-detection.md)).\n\nThree `Reduce`s on one source is the classic trap — a stream can be\nconsumed once. ARO **fuses** them into a single pass with three\naccumulators (aggregation fusion, [ARO-0051](../Proposals/ARO-0051-streaming-execution.md)):",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c05",
+      "kind": "code",
+      "source": "Read the <day-rows> from \"data/orders.csv\".\nFilter the <day-confirmed> from the <day-rows> where <status> = \"confirmed\".\nReduce the <day-count: Integer> from the <day-confirmed> with count().\nReduce the <day-items: Integer> from the <day-confirmed> with sum(<quantity>).\nReduce the <day-mean: Float> from the <day-confirmed> with avg(<quantity>).\nLog \"${<day-count>} confirmed orders, ${<day-items>} items, mean ${<day-mean>} per order\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c06",
+      "kind": "markdown",
+      "source": "One pass over the data, three answers. And because every stage has a\nname, you can still `Log` any intermediate stage — the runtime *tees*\nthe stream to the extra consumer rather than materializing it.\n\n### Variant: filtering a stream\n\nA raw-line stream has no fields, but `for each … where` still works\nwith string operators. Head office wants to eyeball the croissant\nlines without parsing anything:",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c07",
+      "kind": "code",
+      "source": "Stream the <till-pastry-lines> from \"data/orders.csv\".\nfor each <pastry-line> in <till-pastry-lines> where <pastry-line> contains \"CROISSANT\" {\n    Log <pastry-line> to the <console>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c08",
+      "kind": "markdown",
+      "source": "### Variant: folding — answers without values\n\nSome questions about a file do not need the file. `sha256`, `length`,\nand `lines` are **folding qualifiers**: they answer while the bytes go\npast, holding one chunk at a time. (The qualifier namespace is closed,\nso the runtime knows exactly which qualifiers fold —\n[ARO-0090 §8](../Proposals/ARO-0090-streaming-io-and-materialization.md).)\nThe `raw` qualifier on `Read` skips format detection and hands over\nthe bytes as text ([18 — Format-Aware I/O](18-format-aware-io.repl)):",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c09",
+      "kind": "code",
+      "source": "Read the <ledger-raw: raw> from \"data/orders.csv\".\nCompute the <ledger-bytes: length> from <ledger-raw>.\nCompute the <ledger-digest: sha256> from <ledger-raw>.\nCompute the <ledger-lines: lines> from <ledger-raw>.\nCompute the <ledger-line-count: length> from <ledger-lines>.\nLog \"ledger: ${<ledger-bytes>} bytes, ${<ledger-line-count>} lines\" to the <console>.\nLog \"sha256: ${<ledger-digest>}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c10",
+      "kind": "markdown",
+      "source": "A digest and a byte count are how head office proves an upload arrived\nintact — and on a body that streams, both cost one chunk of memory no\nmatter how many gigabytes go past.\n\n## A file worth streaming\n\nSix orders don't need any of this. Let's manufacture a Saturday:\nreplay the day's till export ten times into a receipts archive —\n**JSONL**, one record per line, because that is the streaming format.\nA JSON array needs its closing bracket before it parses; a JSONL line\nis complete the moment it ends, so a consumer can start on line one\nwhile line one thousand is still being written.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c11",
+      "kind": "code",
+      "source": "Create the <replay-batches> with [\"b01\", \"b02\", \"b03\", \"b04\", \"b05\", \"b06\", \"b07\", \"b08\", \"b09\", \"b10\"].\nRead the <seed-rows> from \"data/orders.csv\".\nfor each <replay-batch> in <replay-batches> {\n    for each <seed-row> in <seed-rows> {\n        Create the <replay-receipt> with {\n            batch: <replay-batch>,\n            order_id: <seed-row: order_id>,\n            shop: <seed-row: shop>,\n            sku: <seed-row: sku>,\n            quantity: <seed-row: quantity>,\n            unit_price: <seed-row: unit_price>,\n            status: <seed-row: status>\n        }.\n        Store the <replay-receipt> into the <nb16-receipts-repository>.\n    }\n}\nRetrieve the <replay-all> from the <nb16-receipts-repository>.\nCompute the <replay-count: length> from <replay-all>.\nWrite the <replay-all> to \"./.scratch/nb16-receipts.jsonl\".\nLog \"archived ${<replay-count>} receipts to .scratch/nb16-receipts.jsonl\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c12",
+      "kind": "markdown",
+      "source": "Now stream the archive back and tally the espresso lines. Note the\naccumulation pattern: bindings are immutable, so there is no counter\nto increment — matches are **stored into a repository** and counted\nafter the loop. That is the same pattern `parallel for each` requires\n([15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)),\nwhich is no accident: it is the one accumulation shape that stays\ncorrect when iterations overlap.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c13",
+      "kind": "code",
+      "source": "Stream the <archive-lines> from \"./.scratch/nb16-receipts.jsonl\".\nfor each <archive-line> in <archive-lines> where <archive-line> contains \"ESPRESSO\" {\n    Create the <espresso-hit> with { line: <archive-line> }.\n    Store the <espresso-hit> into the <nb16-espresso-repository>.\n}\nRetrieve the <espresso-hits> from the <nb16-espresso-repository>.\nCompute the <espresso-hit-count: length> from <espresso-hits>.\nLog \"espresso receipts in the archive: ${<espresso-hit-count>}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c14",
+      "kind": "markdown",
+      "source": "## Request bodies: the same rule, on the wire\n\nThe other place data arrives bigger than memory is an HTTP request.\n[ARO-0090](../Proposals/ARO-0090-streaming-io-and-materialization.md)\napplies this notebook's rule to bodies, and the striking part is that\n**the code says nothing about it** — what a route *does* with its body\ndecides everything. These feature sets need a running server, so they\nare shown, not run (they are `Examples/FileUpload`, runnable with\n`aro run`):\n\n```aro\n(* MOVES the body: file sink. Never builds it in memory — a\n   four-gigabyte upload costs one chunk. No limit applies. *)\n(uploadDocument: Files API) {\n    Extract the <name> from the <pathParameters: name>.\n    Extract the <upload> from the <request: body>.\n    Write the <upload> to the <file: name>.\n    Return a <Created: status> with <name>.\n}\n\n(* READS the body: field access turns it into a value, and the\n   route's declared limit bounds that value. *)\n(createNote: Files API) {\n    Extract the <note> from the <request: body>.\n    Extract the <text> from the <note: text>.\n    Return a <Created: status> with <text>.\n}\n```\n\nThe limit is declared in the contract, with the route it protects\n(default 1 MB, `Configure the <http-server: max-body>` or\n`ARO_MAX_BODY` to change it globally):\n\n```yaml\npaths:\n  /notes:\n    post:\n      operationId: createNote\n      x-aro-max-body: 256KB\n```\n\nWhich column a route falls in is computed from the source **before the\nserver binds a port** (`aro check` reports it per route), and an\noversized body on a reading route is refused with `413` before a byte\nof it is read. Three consequences worth remembering:\n\n- **A body arrives once and can be consumed once.** A second consumer\n  is a program error, reported as one.\n- **`Emit` of a body anchors it**: drained to a temp file chunk by\n  chunk so handlers that outlive the request can each read it, deleted\n  when the last reference goes.\n- **Folds still fold**: `Compute the <digest: sha256> from <upload>.`\n  hashes four gigabytes at one chunk of memory — and hashes the raw\n  bytes, not a rendering of their parsed form.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c15",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**Deferral is not materialization.** [15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)\nwas about *when* a statement runs; this notebook is about *whether a\nvalue is built at all*. A request body binding is not a deferred\nfuture — it is a value that happens not to have been read yet, and\nreading it forces nothing but the bytes themselves\n([ARO-0088 §13](../Proposals/ARO-0088-concurrency-model.md)).\n\n**When to reach for which:**\n\n- **`Read`** when the data fits and you want structure: parsed\n  records, counts, random access, multiple passes.\n- **`Stream`** when it might not fit: one pass, one line at a time,\n  and no counting — a stream is consumed once, so asking its length\n  would defeat it. Need the count first? That is a `Read`.\n- **JSONL** whenever a file is written by one process and read by\n  another that should not have to wait for the end.\n\n**The pitfall to respect:** prefetch bounds the hand-off *this stage\nowns*. A producer that ignores backpressure — a socket pushing as fast\nas it can — still produces at its own pace upstream; the window cannot\nretrofit backpressure onto a source that has none.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c16",
+      "kind": "markdown",
+      "source": "## Real-world example: the nightly consolidation manifest\n\nHead office's job at 23:00: verify the archive, summarize it, and\nwrite a manifest the auditors can check against tomorrow's copy. The\ndigest and byte count fold over the bytes; the summary numbers were\nalready tallied while streaming. Nothing here holds more than a chunk\nand a handful of counters.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c17",
+      "kind": "code",
+      "source": "Read the <manifest-raw: raw> from \"./.scratch/nb16-receipts.jsonl\".\nCompute the <manifest-bytes: length> from <manifest-raw>.\nCompute the <manifest-digest: sha256> from <manifest-raw>.\nCreate the <nightly-manifest> with {\n    file: \"nb16-receipts.jsonl\",\n    bytes: <manifest-bytes>,\n    sha256: <manifest-digest>,\n    receipts: <replay-count>,\n    espresso_receipts: <espresso-hit-count>\n}.\nWrite the <nightly-manifest> to \"./.scratch/nb16-manifest.json\".\nRead the <manifest-check> from \"./.scratch/nb16-manifest.json\".\nLog \"=== nightly manifest ===\" to the <console>.\nLog <manifest-check> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb16-c18",
+      "kind": "markdown",
+      "source": "### Why the real world needs this\n\nEvery observability platform is a receipts problem: terabytes of log\nlines a day, each needing one look and no storage. Payment\nreconciliation streams two ledgers past each other and keeps only the\nmismatches. Upload endpoints — photo services, document archives,\nbackup targets — live or die on the moving-vs-reading distinction:\nthe first framework cap that forced a choice between \"allow 500 MB\nuploads\" and \"survive a hostile 500 MB POST\" created the incident\ncategory ARO-0090 closes by construction. And JSONL-with-a-manifest is\nthe shape of nearly every data hand-off between companies: complete\nlines, a digest, a count — so the consumer can start immediately and\nstill prove it got everything.\n\n## Related\n\n- Next: [17 — Data Engineering](17-data-engineering-medallion.repl) —\n  the archive becomes a data platform\n- Before this: [15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)\n- Formats in depth: [18 — Format-Aware I/O](18-format-aware-io.repl)\n- Language Guide: [Chapter 46 — Streaming Execution](../Book/TheLanguageGuide/Chapter46-StreamingExecution.md),\n  [Chapter 50 — Request Bodies](../Book/TheLanguageGuide/Chapter50-RequestBodies.md)\n- Wiki: [Guide — Streaming](https://github.com/arolang/aro/wiki/Guide-Streaming)\n- Specification: [ARO-0051 — Streaming Execution](../Proposals/ARO-0051-streaming-execution.md),\n  [ARO-0086 — Automatic Pipeline Detection](../Proposals/ARO-0086-automatic-pipeline-detection.md),\n  [ARO-0090 — Streaming I/O](../Proposals/ARO-0090-streaming-io-and-materialization.md)\n- Examples: `Examples/FileUpload`, `Examples/DataPipeline`",
+      "outputs": []
+    }
+  ]
+}

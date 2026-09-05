@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb15-c01",
+      "kind": "markdown",
+      "source": "# 15 — Concurrency & Deferral\n\n**Brew & Bytes** is franchising. Forty shops now, and every one of them\nhas a 7:45 a.m. problem: twelve orders on the board, four baristas, one\nespresso machine per station. Serving the morning rush is a scheduling\nproblem — and so is running the software behind it.\n\nARO's answer is unusual: **you do not schedule anything.** You write\nsequential statements, and the runtime derives the concurrency from\nwhat reads what. The model ([ARO-0088](../Proposals/ARO-0088-concurrency-model.md))\nfits in three sentences:\n\n1. A statement's action **starts** at its position in source order.\n2. The program **waits** for it at the **first read of its result**.\n3. **Effects never defer** — `Log`, `Store`, `Emit`, `Send` run at their\n   own statement and force what they read first, so everything you can\n   observe still happens in the order you wrote it.\n\nStatements that need nothing from each other overlap; a feature set\ncosts its critical path, not the sum of its lines. This notebook makes\nthat model visible with a clock, then shows the one place you ask for\nconcurrency explicitly: `parallel for each`.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c02",
+      "kind": "code",
+      "source": "Create the <rush-start> with now.\nSleep the <first-brew> for 1.\nSleep the <second-brew> for 1.\nCreate the <rush-end> with now.\nCompute the <rush-span: distance> from <rush-start> to <rush-end>.\nExtract the <rush-seconds> from the <rush-span: seconds>.\nLog \"Two brews, one barista: ${<rush-seconds>}s\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\nTwo one-second brews took **two seconds**. That is the baseline — and\nit teaches the first fine print of the model:\n\n- **`Sleep` never defers.** The deferral rule applies to an allowlist\n  of *value-producing* verbs — reads (`Read`, `Retrieve`, `Extract`,\n  `Request`, …) and pure transformations (`Compute`, `Create`,\n  `Filter`, `Map`, …). `Sleep` is deliberately excluded because the\n  delay **is** the effect: `Sleep` followed by an unrelated `Log` is a\n  pacing idiom, and deferring it would delete the pause\n  ([ARO-0088 §2](../Proposals/ARO-0088-concurrency-model.md)).\n  So each `Sleep` runs at its own statement, and they add up.\n- **`Create … with now`** (an *OWN* action) reads the clock where its\n  statement stands, which is what makes it a usable stopwatch.\n- **`distance`** builds a span between two dates; its `seconds`\n  qualifier reports whole seconds ([08 — Dates & Times](08-dates-and-times.repl)).\n\nSequential statements never overlap *if each one is an effect*. The\noverlap lives elsewhere: independent value-producing statements — two\n`Read`s, a `Read` and an unrelated `Compute` — start together, and the\nprogram only waits where a result is first read. Two independent\n2-second HTTP requests in one feature set cost ~2.1s, not 4.2s\n(measured in ARO-0088). You cannot see that with `Sleep`, precisely\nbecause `Sleep` is an effect — so let's rent more baristas instead.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c04",
+      "kind": "markdown",
+      "source": "## `parallel for each` — asking for concurrency\n\nIteration is sequential by default: `for each` runs one iteration at a\ntime, in order. `parallel for each` is the **one construct in the\nlanguage** that requests concurrency explicitly — up to N iterations\nin flight at once, completion order not defined.\n\nSame four drinks, four baristas:",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c05",
+      "kind": "code",
+      "source": "Create the <rush-orders> with [\n    { id: 1, drink: \"espresso\" },\n    { id: 2, drink: \"flat white\" },\n    { id: 3, drink: \"latte\" },\n    { id: 4, drink: \"cappuccino\" }\n].\nCreate the <wave-start> with now.\nparallel for each <rush-order> in <rush-orders> {\n    Sleep the <brew-pause> for 1.\n    Log \"served ${<rush-order: drink>}\" to the <console>.\n}\nCreate the <wave-end> with now.\nCompute the <wave-span: distance> from <wave-start> to <wave-end>.\nExtract the <wave-seconds> from the <wave-span: seconds>.\nLog \"Four brews, four baristas: ${<wave-seconds>}s\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c06",
+      "kind": "markdown",
+      "source": "Four one-second brews in **one second** — and look at the `served`\nlines: they arrive in whatever order the baristas finish. Run the cell\nagain and the order changes. That is the contract:\n\n| Property | Behaviour |\n|---|---|\n| Completion order | Non-deterministic — never depend on it |\n| Statements *inside* one iteration | Sequential, as always |\n| Iteration scope | Each iteration gets a fresh child scope |\n| Writes to outer bindings | Impossible — bindings are immutable |\n| Default concurrency | `min(item count, max(4, cores × 4))` |\n\nThe fresh scope is why `<brew-pause>` does not collide with itself\nacross iterations, and immutability is why there is no race to lose:\nan iteration cannot write to anything another iteration can see.\nTo collect results, store them into a repository — each repository\noperation is atomic ([ARO-0088 §8](../Proposals/ARO-0088-concurrency-model.md)).",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c07",
+      "kind": "markdown",
+      "source": "### Variant: bounding the fan-out\n\nThe default bound is a multiple of the core count, not one task per\nitem — an unbounded fan-out over 500 elements used to exhaust the\nthread pool. When the iteration cost is dominated by an external\nservice (a payment API, a rate-limited supplier), set the bound to\nwhat *that service* tolerates, not what your machine does:",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c08",
+      "kind": "code",
+      "source": "Create the <bound-start> with now.\nparallel for each <bound-order> in <rush-orders> with <concurrency: 2> {\n    Sleep the <bound-pause> for 1.\n}\nCreate the <bound-end> with now.\nCompute the <bound-span: distance> from <bound-start> to <bound-end>.\nExtract the <bound-seconds> from the <bound-span: seconds>.\nLog \"Four brews, two baristas: ${<bound-seconds>}s\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c09",
+      "kind": "markdown",
+      "source": "Two baristas, four drinks: two waves, **two seconds**. The arithmetic\nof `with <concurrency: N>` is exactly the arithmetic of staffing.\n\n## Seeing deferral itself\n\nDeferral is invisible while everything succeeds — that is the point of\nit. It becomes visible when something fails. A deferred `Read` that\nfails does not stop the world at its own line; the failure is recorded\nand surfaces at the first read of the result, or at scope exit if\nnobody reads it. Crucially, it is reported **against the statement\nthat caused it**, not the one that noticed.\n\nThe next cell reads a file that does not exist, then logs a line. The\ncell *is expected to fail* — but watch the order of what it prints:",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c10",
+      "kind": "code",
+      "source": "(* expect-error *)\nRead the <ghost-menu> from \"data/closed-shop.csv\".\nLog \"the espresso machine is already running\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c11",
+      "kind": "markdown",
+      "source": "The `Log` printed **before** the error surfaced. The `Read` started at\nits statement, its failure was recorded, the effect after it ran (it\nread nothing from `<ghost-menu>`, so it had nothing to wait for), and\nthe failure was raised at the end of the cell — still naming the\n`Read` statement as the cause.\n\nThat is the one place deferral is visible in a way you must think\nabout: **a failure can be reported after side effects that followed\nits statement have already run** ([ARO-0088 §4](../Proposals/ARO-0088-concurrency-model.md)).\nReads stay total — a read of a failed result yields an empty value\nrather than throwing mid-expression — and the recorded failure is\nraised no later than scope exit, so it can never disappear.\n\nTwo levers worth knowing when behaviour looks order-related:\n\n- **`ARO_NO_DEFER=1`** runs every action at its own statement, as the\n  runtime did before this model. If a program behaves differently with\n  it set, overlap is involved — that is the entire diagnosis, in one\n  step.\n- **`ARO_FORCE_WARN_SECONDS`** (default 5) warns when a read blocks\n  that long on a pending value, naming the binding and its source\n  location.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c12",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**What you may rely on, and what you may not:**\n\n| Guarantee | Holds |\n|---|---|\n| Effects run at their own statement, in source order | Yes |\n| An effect sees the finished value of everything it reads | Yes |\n| A failure is reported, whether or not anyone read the result | Yes |\n| A pure statement has *finished* before the next statement starts | **No** |\n\n**There is no `async`, no `await`, no lock, no channel** — not because\nthey don't exist (the runtime is built from all of them) but because\nthey are never yours to manage. The language surface offers exactly\none concurrency construct: `parallel for each`. Everything else is\nderived from data flow, which immutability makes safe to derive:\noverlapping statements cannot disagree about a value that can never\nchange ([04 — Immutability](04-immutability.repl)).\n\n**Shared state is repositories and published symbols, nothing else.**\nBoth are actor-isolated; each single operation is atomic; nothing\nlarger is. A read-then-write across two statements can interleave with\nanother execution doing the same — where that matters, model the\ntransition as a single `Accept` action\n([ARO-0022](../Proposals/ARO-0022-state-guards.md)).\n\nIn a running application there is a level above all of this: **every\ntrigger starts an independent execution.** Two HTTP requests, an event\nhandler, and a file watcher all run their feature sets at once — with\nno code asking for it. That level needs a server, so here it stays in\nprose; [14 — Building Applications](14-building-applications.repl)\nruns it for real:\n\n```aro\n(* Each request runs this concurrently with every other request. *)\n(listOrders: Orders API) {\n    Retrieve the <orders> from the <order-repository>.\n    Return an <OK: status> with <orders>.\n}\n```",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c13",
+      "kind": "markdown",
+      "source": "## Real-world example: the morning rush board\n\nFive orders hit the board at 7:45. Three prep stations. Each station\ntakes a second per drink, prepared drinks land in a repository (the\nsafe way to accumulate from parallel iterations), and the board\nreports the wave the moment it is done.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c14",
+      "kind": "code",
+      "source": "Create the <rush-queue> with [\n    { id: 101, drink: \"espresso\" },\n    { id: 102, drink: \"flat white\" },\n    { id: 103, drink: \"latte\" },\n    { id: 104, drink: \"americano\" },\n    { id: 105, drink: \"cortado\" }\n].\nCreate the <board-open> with now.\nparallel for each <queued-order> in <rush-queue> with <concurrency: 3> {\n    Sleep the <prep-pause> for 1.\n    Create the <prepared-order> with { id: <queued-order: id>, drink: <queued-order: drink> }.\n    Store the <prepared-order> into the <nb15-prepared-repository>.\n    Log \"ready: ${<queued-order: drink>}\" to the <console>.\n}\nCreate the <board-close> with now.\nRetrieve the <prepared-today> from the <nb15-prepared-repository>.\nCompute the <prepared-count: length> from <prepared-today>.\nCompute the <board-span: distance> from <board-open> to <board-close>.\nExtract the <board-seconds> from the <board-span: seconds>.\nLog \"=== Morning rush: ${<prepared-count>} drinks in ${<board-seconds>}s ===\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb15-c15",
+      "kind": "markdown",
+      "source": "Five one-second drinks, three stations, **two seconds** — one full\nwave of three, then a wave of two. The `Retrieve` after the loop sees\nall five, because a loop (parallel or not) completes before the next\nstatement runs; only the order *within* it is undefined.\n\n### Why the real world needs this\n\nEvery service that talks to more than one thing per request needs\nexactly this shape. A checkout page calls inventory, pricing, and the\ncustomer profile — three independent reads that should cost one\nround-trip, not three; ARO overlaps them because nothing reads one\nresult before the others start. ETL jobs fan out over thousands of\nfiles with a bounded `parallel for each`, sized to what the object\nstore tolerates. Payment providers bound their fan-out to a partner's\nrate limit with the same `with <concurrency: N>` a café uses for\nstaffing. And in every one of these systems the hardest bug is the\none deferral rules out by design: two workers disagreeing about a\nvalue — impossible when values cannot change.\n\n## Related\n\n- Next: [16 — Streaming Execution](16-streaming-execution.repl) — the\n  producer/consumer overlap this notebook didn't cover, bounded by\n  `ARO_STREAM_PREFETCH`\n- Foundations: [04 — Immutability](04-immutability.repl),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Language Guide: [Chapter 39 — Concurrency](../Book/TheLanguageGuide/Chapter39-Concurrency.md)\n- Wiki: [Guide — Concurrency](https://github.com/arolang/aro/wiki/Guide-Concurrency)\n- Specification: [ARO-0088 — Concurrency Model](../Proposals/ARO-0088-concurrency-model.md),\n  [ARO-0022 — State Guards](../Proposals/ARO-0022-state-guards.md)\n- Examples: `Examples/ParallelForEach`, `Examples/HTTPServer`",
+      "outputs": []
+    }
+  ]
+}

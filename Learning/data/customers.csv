@@ -1,0 +1,5 @@
+customer_id,name,city,tier
+C001,Ada Lovelace,Berlin,gold
+C002,Grace Hopper,Hamburg,silver
+C003,Alan Turing,Berlin,silver
+C004,Katherine Johnson,Munich,gold

@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb26-c01",
+      "kind": "markdown",
+      "source": "# 26 — Observability & Deployment\n\nForty shops. Four in the ground-floor food courts of train stations,\none on an island with satellite internet. When the Kiel shop's kitchen\ndisplay goes quiet at 07:40, nobody is going to drive there — someone\nat HQ looks at a dashboard, reads three log lines, replays the\nmorning, and ships a fix before the lunch rush. That is\n**observability** (seeing what a running system does) plus\n**deployment** (shipping the fix as a single artifact), and it is the\nlast capability this course installs.\n\nThe running half is real in this notebook: the `<metrics>` magic\nvariable ([ARO-0044](../Proposals/ARO-0044-metrics.md)) works in your\nsession, structured logging is just disciplined `Log`, and\ncontext-aware output ([ARO-0031](../Proposals/ARO-0031-context-aware-formatting.md))\nis happening under your cursor right now. The shipping half — native\nbuilds, Docker, time-travel debugging — needs machines this notebook\ndoes not have, so it is taught precisely in fenced blocks with links.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c02",
+      "kind": "code",
+      "source": "Log the <metrics: short> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`<metrics>`** is a **magic variable** — available everywhere, never\n  declared. Reading it takes a snapshot from the runtime's metrics\n  collector; `Log` renders it.\n- The **`short`** qualifier picks the one-line format: total\n  executions, feature-set count, average duration, uptime — then live\n  **process** stats: CPU seconds, resident memory, open file\n  descriptors.\n- The execution counters read **0** here, honestly: they count\n  *feature-set executions*, and interactive cells run as a session, not\n  as feature sets. In an `aro run` application every handler call,\n  HTTP request, and observer firing increments them. The process stats\n  are real either way — that memory number is this very kernel.\n\nFour formats, one variable: `short` (status lines), `table` (ASCII, for\nterminals), `plain` (detailed, the default), `prometheus` (for\nmonitoring systems).",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c04",
+      "kind": "markdown",
+      "source": "## Variants\n\n`table` and `plain` show their fuller layouts — and, in a session,\nsay plainly that no feature sets have executed rather than inventing\nrows. Honest empty states are an observability feature too:",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c05",
+      "kind": "code",
+      "source": "Log the <metrics: table> to the <console>.\nLog the <metrics: plain> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c06",
+      "kind": "markdown",
+      "source": "The `prometheus` format emits the standard text exposition format:\n`# HELP`/`# TYPE` headers, one sample per line, monotonic counters\n(which is why metrics never reset — Prometheus assumes counters only\nclimb). Note the streaming counters from\n[16 — Streaming Execution](16-streaming-execution.repl): bytes\nmaterialized vs. bytes streamed, and bodies refused with `413` — the\nARO-0090 story, instrumented.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c07",
+      "kind": "code",
+      "source": "Log the <metrics: prometheus> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c08",
+      "kind": "markdown",
+      "source": "In production you do not log this — you **serve** it, and a\nPrometheus server scrapes it on an interval. Contract-first, like every\nARO endpoint ([19 — HTTP Services](19-http-services-and-clients.repl)):\n\n```yaml\n# openapi.yaml\npaths:\n  /metrics:\n    get:\n      operationId: getMetrics\n```\n\n```aro\n(getMetrics: Monitoring API) {\n    Return an <OK: status> with <metrics: prometheus>.\n}\n```\n\nOne feature set, and all forty shops appear in Grafana with per-route\nexecution counts, latencies, and failure totals — labeled by feature\nset and business activity, so the dashboard speaks the same language\nas the code.\n\n## Logging like an operator\n\nMetrics say *how much*; logs say *what happened*. The 6 a.m. rule from\n[01](01-hello-aro.repl) matures into three habits: one event per line,\nstable `key=value` pairs a machine can grep and parse, and values\nbound before logging. String interpolation does the assembly:",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c09",
+      "kind": "code",
+      "source": "Create the <heartbeat-shop> with \"berlin-01\".\nCreate the <open-orders> with 7.\nCreate the <oldest-wait-s> with 210.\nLog \"evt=heartbeat shop=${<heartbeat-shop>} open=${<open-orders>} oldest-wait-s=${<oldest-wait-s>}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c10",
+      "kind": "markdown",
+      "source": "`grep evt=heartbeat` over a week of logs is a dataset; a prose\nsentence with the same facts is an anecdote. Whole industries\n(`logfmt`, JSON logs) exist because someone eventually needs *last\nTuesday, shops where `open > 15`* — write every log line for that\nreader.\n\n## One program, three audiences (ARO-0031)\n\nYou never formatted any of this — the runtime renders output for\nwhoever is looking. The same `Return`/`Log` produces:\n\n| Context | Trigger | Output |\n|---------|---------|--------|\n| `machine` | HTTP request | JSON, sorted keys, types preserved |\n| `human` | `aro run` (and this notebook) | readable `key: value` text |\n| `developer` | `aro run --debug` | bordered table with type annotations |\n\nLog a record and you get the human rendering — compare with the JSON a\nmachine caller would receive for the same data:",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c11",
+      "kind": "code",
+      "source": "Create the <shop-record> with { shop: \"berlin-01\", open: 7, status: \"ok\" }.\nLog <shop-record> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c12",
+      "kind": "markdown",
+      "source": "Same record over HTTP: `{\"open\":7,\"shop\":\"berlin-01\",\"status\":\"ok\"}`.\nUnder `--debug`: a diagnostic table with `Int(7)` and friends. The\nprinciple: **return structured data, never pre-formatted strings** —\nformatting is the runtime's job, and each audience gets its native\nshape.\n\n## Configuration from the environment\n\nThe deployment-time input channel from\n[23](23-toolsmith-cli-and-config.repl)'s table: the **environment**.\nDocker, systemd, and CI all speak it, and ARO reads it with the same\nExtract shape as everything else — the runtime's own knobs\n(`ARO_MAX_BODY`, `ARO_FORCE_WARN_SECONDS`, `ARO_STREAM_PREFETCH`) are\nenvironment variables too:",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c13",
+      "kind": "code",
+      "source": "Extract the <path-value> from the <env: PATH>.\nCompute the <path-size: length> from <path-value>.\nLog \"PATH is set, length:\" to the <console>.\nLog <path-size> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c14",
+      "kind": "markdown",
+      "source": "Missing variables fail loudly, like missing parameters — a container\nthat boots half-configured is worse than one that refuses. The 12-factor\nrule of thumb: parameters for *what to do*, environment for *where it\nruns* (hosts, secrets, limits), Configure for *application defaults*.\n\n## Time-travel debugging\n\nWhen a log line is not enough, ARO can record a session and replay it —\n**without re-executing anything**:\n\n```bash\naro debug --record /tmp/morning.jsonl ./OrderService   # record\naro debug --replay /tmp/morning.jsonl                  # replay, anywhere\n```\n\nEvery pause, emitted event, and error is appended to a plain JSONL\nfile: timestamp, feature set, statement, and a snapshot of every\nsymbol. Replay steps forward *and backward* through the frozen run —\n`n`/`p`/`g`, or jump to pause N — showing the values exactly as they\nwere. Side effects do not re-fire; the world stays untouched.\n\nThree consequences worth their weight in incident reviews:\n\n- **A bug report becomes an attachment.** Colleague replays your\n  `.jsonl`, sees your exact run — no setup, no \"works on my machine\".\n- **Production can afford it**: `--sample 1000 --record …` pauses every\n  thousandth statement, a sparse always-on flight recorder.\n- **SOLARO reads the same file** as a visual timeline — every pause a\n  tick, click to scrub the morning back and forth.\n\nThe full story is the repository's Debugging Guide\n(`Book/TheDebuggingGuide/`), chapter 9.\n\n## Shipping it: native builds\n\nDeployment starts with `aro build ./OrderService` — LLVM-compiled\nnative binary, with `openapi.yaml`, templates, and plugins **embedded**\n([ARO-0009](../Proposals/ARO-0009-native-compilation.md)). You deploy\none file. Two Linux linking modes:\n\n| Flag | Result | Choose when |\n|------|--------|-------------|\n| `--static` *(default)* | single file; Swift runtime linked in (Linux: Foundation still dynamic) | the target image provides Foundation (e.g. `ghcr.io/arolang/aro-runtime`) |\n| `--dynamic` | binary + `libswift*.so` beside it, `rpath=$ORIGIN` | you want a tarball that runs on any glibc Linux |\n\n`--release` adds optimization plus symbol stripping for production;\ntests are always stripped ([25](25-testing-and-quality.repl)). Two\noperational differences from `aro run`: compiled binaries drop the\n`[feature-set]` log prefix (cleaner production logs — one more reason\nfor `key=value` self-describing lines), and startup is near-instant\nbecause nothing parses at boot.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c15",
+      "kind": "markdown",
+      "source": "## Docker: the forty-shop artifact\n\nThe canonical two-stage build — compile in the full toolchain image,\nrun in a minimal one:\n\n```dockerfile\nFROM ghcr.io/arolang/aro-buildsystem:latest AS builder\nWORKDIR /app\nCOPY . .\nRUN aro build . --release -o orderservice\n\nFROM ghcr.io/arolang/aro-runtime:latest\nWORKDIR /app\nCOPY --from=builder /app/orderservice ./\nENV ARO_MAX_BODY=1MB\nENTRYPOINT [\"./orderservice\"]\n```\n\nThe final image holds one binary and its environment — no source, no\ncompiler, no package manager to patch. Configuration rides in as `ENV`\n/ `docker run -e`, logs go to stdout for the platform to collect,\n`/metrics` gets scraped, and rolling out shop 41 is `docker run` with\na different `SHOP_ID`. The same binary runs under systemd on bare\nmetal unchanged. Worked example: the crawler deployment in\n`Book/AROByExample/Chapter13-DockerDeployment.md`.\n\n## Discussion\n\n- **Instrument the seams, not the insides.** Feature sets are the unit\n  of metrics, logging, and replay alike — a well-named feature set is\n  self-instrumenting, one more reason to keep them small and their\n  business activities honest.\n- **The triad divides the work**: metrics tell you *that* something is\n  wrong (queue depth climbing), logs tell you *what* happened (the\n  heartbeat lines), replay tells you *why* (scrub to the moment).\n  Teams that only have logs reconstruct the other two by hand, at 3\n  a.m., badly.\n- **Deferral shows up in observability** too: a slow statement warns\n  after `ARO_FORCE_WARN_SECONDS` (default 5s), attributed to the\n  statement that caused it\n  ([15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)).\n- **One artifact, many environments.** The binary embeds its contract;\n  behavior differences ride in environment variables. When shop 07\n  misbehaves, diff its environment, not its build.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c16",
+      "kind": "markdown",
+      "source": "## Real-world example: the morning fleet check\n\nHQ's first glance of the day, in miniature: a structured status line\nper shop (greppable, parseable), a filter for trouble, and the process\nsnapshot — the same three moves a real fleet dashboard automates at\nscale.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c17",
+      "kind": "code",
+      "source": "Create the <fleet-shops> with [\n    { shop: \"berlin-01\", queued: 7, status: \"ok\" },\n    { shop: \"hamburg-02\", queued: 0, status: \"ok\" },\n    { shop: \"kiel-01\", queued: 19, status: \"backlog\" },\n    { shop: \"muenchen-01\", queued: 3, status: \"ok\" }\n].\nfor each <shop-entry> in <fleet-shops> {\n    Extract the <entry-shop> from the <shop-entry: shop>.\n    Extract the <entry-queued> from the <shop-entry: queued>.\n    Extract the <entry-status> from the <shop-entry: status>.\n    Log \"evt=fleet-check shop=${<entry-shop>} queued=${<entry-queued>} status=${<entry-status>}\" to the <console>.\n}\nFilter the <troubled-shops> from the <fleet-shops> where <status> is \"backlog\".\nCompute the <troubled-count: length> from <troubled-shops>.\nLog \"shops needing attention:\" to the <console>.\nLog <troubled-count> to the <console>.\nLog the <metrics: short> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb26-c18",
+      "kind": "markdown",
+      "source": "One shop flagged — Kiel, of course. In the real fleet this loop is a\nhandler on a timer, the log lines land in a collector, the filter is a\nPrometheus alert rule on a `queued` gauge, and the person on call\nreads exactly what you just printed. Airlines watch aircraft this way,\nCDNs watch edge nodes, and a café chain watches espresso machines: the\ndiscipline — structured events out, metrics scraped, one artifact\ndeployed, a recording when it gets weird — does not care what the\nfleet is made of.\n\nThat closes the course. The café said hello in\n[01](01-hello-aro.repl); it now takes orders over HTTP, enforces its\nlifecycle, proves itself in CI, and tells you how it feels in\nproduction. Everything past this point is depth — the guide, the\nproposals, and your own forty shops.\n\n## Related\n\n- Builds on: [23 — Toolsmith: CLI & Config](23-toolsmith-cli-and-config.repl)\n  (input channels), [25 — Testing & Quality](25-testing-and-quality.repl)\n  (the pipeline before deploy),\n  [15 — Concurrency & Deferral](15-concurrency-and-deferral.repl),\n  [16 — Streaming Execution](16-streaming-execution.repl)\n- Language Guide: [Chapter 43 — Metrics](../Book/TheLanguageGuide/Chapter43-Metrics.md),\n  [Chapter 40 — Context Responses](../Book/TheLanguageGuide/Chapter40-ContextResponses.md),\n  [Chapter 27 — Native Compilation](../Book/TheLanguageGuide/Chapter27-NativeCompilation.md),\n  [Chapter 28 — Code Signing](../Book/TheLanguageGuide/Chapter28-CodeSigning.md)\n- Wiki: [Guide — Context-Aware Responses](https://github.com/arolang/aro/wiki/Guide-Context-Aware-Responses),\n  [Guide — Linux Deployment](https://github.com/arolang/aro/wiki/Guide-Linux-Deployment)\n- Specification: [ARO-0044 — Runtime Metrics](../Proposals/ARO-0044-metrics.md),\n  [ARO-0031 — Context-Aware Formatting](../Proposals/ARO-0031-context-aware-formatting.md),\n  [ARO-0009 — Native Compilation](../Proposals/ARO-0009-native-compilation.md)\n- Examples in the repo: `Examples/MetricsDemo/`, `Examples/ContextAware/`;\n  Docker walkthrough in `Book/AROByExample/Chapter13-DockerDeployment.md`",
+      "outputs": []
+    }
+  ]
+}

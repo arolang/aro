@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb10-c01",
+      "kind": "markdown",
+      "source": "# 10 — User-Defined Actions\n\nBrew & Bytes has one pricing rule it applies everywhere: loyalty-card\nholders get 10% off. The register needs it, the web shop needs it, the\nend-of-day report needs it. Copying the arithmetic into every feature\nset invites the classic bug — three copies, two of them updated.\n\nARO's answer is the **user-defined action**\n([ARO-0081](../Proposals/ARO-0081-user-defined-actions.md)): a feature\nset whose business activity is `Action`. It becomes callable from\nanywhere in the application as `Application.<Name>`, with the same\ncall-site shape as a built-in or plugin action. No plugin to build, no\nevent to route — just reusable logic with a name.\n\nIn this notebook: defining actions, the `takes` sugar for one-argument\nactions, passing records, reading fields off results, composing actions\n— and recursion, which ARO supports without a depth limit.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c02",
+      "kind": "code",
+      "source": "(ApplyLoyaltyDiscount: Action takes <price>) {\n    Extract the <p> from the <input: price>.\n    Compute the <discounted> from <p> * 0.9.\n    Return an <OK: status> with { discounted: <discounted> }.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`(ApplyLoyaltyDiscount: Action takes <price>)`** — the business\n  activity `Action` is what makes this callable; `takes <price>`\n  declares a single positional argument. It is sugar: whatever the\n  caller passes `from` arrives as `input.price`.\n- **`Extract the <p> from the <input: price>.`** — inside an action,\n  `<input>` holds the caller's argument(s); Extract (*REQUEST* role)\n  pulls the field into a local name.\n- **`Return an <OK: status> with { discounted: <discounted> }.`** — the\n  action's answer (*RESPONSE* role). Returning a **record** is the\n  polite convention: callers can then pull named fields off the result\n  instead of guessing at a bare value.\n\nLike every feature set definition, the cell only registers the action.\nCalling looks like this:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c04",
+      "kind": "code",
+      "source": "Application.ApplyLoyaltyDiscount the <espresso-deal> from 2.4.\nExtract the <espresso-price> from the <espresso-deal: discounted>.\nLog <espresso-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c05",
+      "kind": "markdown",
+      "source": "`Application.ApplyLoyaltyDiscount` is the verb — the\n`Application.` prefix namespaces your actions the way `Markdown.ToHTML`\nwould namespace a plugin's. `<espresso-deal>` receives the returned\nrecord; the Extract afterwards reads its `discounted` field.\n\n## Variants\n\n**The object form.** `takes` enabled the positional `from 2.4`. Every\naction — with or without `takes` — also accepts a record via `with`,\nwhere field names must match what the action extracts:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c06",
+      "kind": "code",
+      "source": "Application.ApplyLoyaltyDiscount the <lunch-deal> with { price: 10.0 }.\nExtract the <lunch-price> from the <lunch-deal: discounted>.\nLog <lunch-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c07",
+      "kind": "markdown",
+      "source": "**Multiple inputs.** Drop `takes` and the record becomes the only\ncalling convention — which is exactly what you want when there is more\nthan one argument:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c08",
+      "kind": "code",
+      "source": "(PriceLabel: Action) {\n    Extract the <name> from the <input: name>.\n    Extract the <amount> from the <input: amount>.\n    Compute the <label> from <name> ++ \" — \" ++ <amount> ++ \" EUR\".\n    Return an <OK: status> with { label: <label> }.\n}\n\nApplication.PriceLabel the <board-entry> with { name: \"Cortado\", amount: 3.2 }.\nExtract the <board-line> from the <board-entry: label>.\nLog <board-line> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c09",
+      "kind": "markdown",
+      "source": "**Guarded returns.** An action may hold several `Return`\nstatements; a `when` guard on each makes the first one whose condition\nholds win. That is how an action expresses a business rule with two\noutcomes — no `if/else` construct needed:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c10",
+      "kind": "code",
+      "source": "(WeekendSurcharge: Action) {\n    Extract the <amount> from the <input: amount>.\n    Extract the <weekend> from the <input: weekend>.\n    Compute the <raised> from <amount> * 1.1.\n    Return an <OK: status> with { price: <raised> } when <weekend> is true.\n    Return an <OK: status> with { price: <amount> }.\n}\n\nApplication.WeekendSurcharge the <saturday-flat-white> with { amount: 4.0, weekend: true }.\nExtract the <saturday-price> from the <saturday-flat-white: price>.\nLog <saturday-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c11",
+      "kind": "markdown",
+      "source": "**Composition.** In an application, actions freely call other\nactions — small pieces snapped into pipelines, like\n`Examples/UserDefinedActions/` in the repo:\n\n```aro\n(SumAndDouble: Action) {\n    Extract the <a> from the <input: a>.\n    Extract the <b> from the <input: b>.\n    Compute the <sum> from <a> + <b>.\n    Application.DoubleValue the <inner> from <sum>.\n    Extract the <answer> from the <inner: doubled>.\n    Return an <OK: status> with { value: <answer> }.\n}\n```\n\nOne honest note about notebooks: each definition cell compiles on its\nown, so in an interactive session an action may call **itself**, but a\ncall from one user-defined action into *another* belongs in application\ncode, where all feature sets are compiled together and globally\nvisible ([ARO-0005](../Proposals/ARO-0005-application-architecture.md)).\nCalling any registered action from a **plain statement cell** — as we\nhave done all along — always works.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c12",
+      "kind": "markdown",
+      "source": "## Recursion\n\nAn action may call **itself** — and ARO puts no depth limit on it\n([ARO-0081 §9](../Proposals/ARO-0081-user-defined-actions.md)). The\ncost depends on the *shape* of the recursion:\n\n- A call in **tail position** — the final statement is an unguarded\n  `Return … with <r>.` forwarding the callee's result untouched —\n  reuses the current frame. Depth costs nothing.\n- Any **other** recursion keeps its frames on the heap and is bounded\n  by memory, not by a stack.\n\nGuarded `Return … when …` statements are how a recursion states its\nbase case. Here is the non-tail shape — each level still has to\nmultiply after its callee returns, so frames nest:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c13",
+      "kind": "code",
+      "source": "(Factorial: Action takes <n>) {\n    Extract the <v> from the <input: n>.\n    Return an <OK: status> with { value: 1 } when <v> <= 1.\n    Compute the <next> from <v> - 1.\n    Application.Factorial the <inner> from <next>.\n    Extract the <sub> from the <inner: value>.\n    Compute the <value> from <v> * <sub>.\n    Return an <OK: status> with { value: <value> }.\n}\n\nApplication.Factorial the <fact-result> from 10.\nExtract the <ten-factorial> from the <fact-result: value>.\nLog <ten-factorial> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c14",
+      "kind": "markdown",
+      "source": "And the tail-call shape. `SumTo` carries an **accumulator** in\nits arguments; the work happens *before* the recursive call, so the\nfinal `Return` just forwards `<r>` — and the runtime reuses the frame,\nlevel after level:",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c15",
+      "kind": "code",
+      "source": "(SumTo: Action) {\n    Extract the <n> from the <input: n>.\n    Extract the <acc> from the <input: acc>.\n    Return an <OK: status> with { total: <acc> } when <n> <= 0.\n    Compute the <next> from <n> - 1.\n    Compute the <running> from <acc> + <n>.\n    Application.SumTo the <r> with { n: <next>, acc: <running> }.\n    Return an <OK: status> with <r>.\n}\n\nApplication.SumTo the <sum-result> with { n: 500, acc: 0 }.\nExtract the <sum-total> from the <sum-result: total>.\nLog <sum-total> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c16",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**When to reach for which tool.** An event handler\n([notebook 09](09-feature-sets-and-events.repl)) answers *\"something\nhappened — who cares?\"*: many listeners, no return value to the\nemitter. A user-defined action answers *\"do this and give me the\nresult\"*: one callee, one answer, right now. A plugin\n([ARO-0087](../Proposals/ARO-0087-plugin-sdk.md)) is for logic that\nneeds another language or a native library. For reusable *business*\nlogic, the user-defined action is the lightest tool that works.\n\n**Scoping is strict.** A callee sees its own bindings and\napplication-level ones — never the caller's locals. That is why\neverything an action needs must arrive through `<input>`, and why\nlookup cost does not grow with recursion depth.\n\n**Safety nets.** `aro check` warns when every path through an action\nreaches a recursive call before a `Return` — the infinite-recursion\nshape — including mutual cycles. At runtime, a runaway recursion stops\nat `ARO_MAX_CALL_DEPTH` (default 50 000) with an error naming the call\nchain, instead of an out-of-memory kill.\n\n**Idiomatic restraint.** Recursion over *numbers* is natural here;\nrecursion over *collections* usually is not — `Filter`, `Map`, and\n`Reduce` ([06 — Collections & Pipelines](06-collections-and-pipelines.repl))\nsay it shorter and run it smarter.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c17",
+      "kind": "markdown",
+      "source": "## Real-world example: one pricing brain\n\nEvery till, kiosk, and API endpoint at Brew & Bytes must price an order\n*identically* — size multiplier first, then the loyalty discount.\nCentralizing that in one action means the rule changes in one place,\nand every caller is correct the next second. This is the same shape as\na bank's interest calculator or a tax engine: business-critical\narithmetic behind one named door.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c18",
+      "kind": "code",
+      "source": "(PriceOrder: Action) {\n    Extract the <base> from the <input: base>.\n    Extract the <size-factor> from the <input: size-factor>.\n    Extract the <loyalty> from the <input: loyalty>.\n    Compute the <sized> from <base> * <size-factor>.\n    Compute the <discounted-price> from <sized> * 0.9.\n    Return an <OK: status> with { price: <discounted-price> } when <loyalty> is true.\n    Return an <OK: status> with { price: <sized> }.\n}\n\nApplication.PriceOrder the <regular-latte> with { base: 3.0, size-factor: 1.5, loyalty: false }.\nExtract the <regular-price> from the <regular-latte: price>.\nLog <regular-price> to the <console>.\n\nApplication.PriceOrder the <member-latte> with { base: 3.0, size-factor: 1.5, loyalty: true }.\nExtract the <member-price> from the <member-latte: price>.\nLog <member-price> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb10-c19",
+      "kind": "markdown",
+      "source": "Same order, two customers: 4.5 for the walk-in, 4.05 for the\nmember. The guarded early `Return … when <loyalty> is true.` picks the\nmember outcome; the last line is the unconditional fallback. The day\nthe discount becomes 15%, this one action changes — and *every* caller\n(register, web shop, report) is correct the next second. In the full\napplication, `PriceOrder` would delegate the discount step to\n`ApplyLoyaltyDiscount` instead of repeating the arithmetic — see the\ncomposition pattern above.\n\n## Related\n\n- Next: [11 — Set Operations & Merging](11-set-operations-and-merging.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl);\n  used again in [14 — Building Applications](14-building-applications.repl)\n- Language Guide: [Chapter 24 — Custom Actions](../Book/TheLanguageGuide/Chapter24-CustomActions.md),\n  [Chapter 6 — Feature Sets](../Book/TheLanguageGuide/Chapter06-FeatureSets.md)\n- Wiki: [Guide — User-Defined Actions](https://github.com/arolang/aro/wiki/Guide-User-Defined-Actions),\n  [Guide — Actions](https://github.com/arolang/aro/wiki/Guide-Actions)\n- Specification: [ARO-0081 — User-Defined Actions](../Proposals/ARO-0081-user-defined-actions.md)\n- Examples in the repo: `Examples/UserDefinedActions/`, `Examples/RecursiveActions/`",
+      "outputs": []
+    }
+  ]
+}

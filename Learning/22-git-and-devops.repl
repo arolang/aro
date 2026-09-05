@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb22-c01",
+      "kind": "markdown",
+      "source": "# 22 — Git & DevOps\n\nForty shops, one menu. When head office renames \"Flat White\" or\nreprices the cortado, every till, website, and kitchen display must\nagree — so the franchise ships its **menu as code**: the menu lives in\na git repository, a change is a commit, a release is a tag, and a\npipeline checks every branch before it can touch `main`. Git stops\nbeing a programmer's tool and becomes the company's change ledger.\n\nARO speaks git natively\n([ARO-0080](../Proposals/ARO-0080-git-actions.md)): a `<git>` system\nobject backed by libgit2 — no shelling out for reads — with actions\nfor status, log, stage, commit, tag, and friends. In this notebook\nthe *reads* run live against the very repository these notebooks live\nin. The *writes* (stage, commit, push, tag) are shown fenced: teaching\nmaterial that commits itself into your history would be a prank, not\na lesson.\n\nThe second half zooms out from actions to **DevOps thinking**: what\n`aro check` and `aro diff` contribute to a pipeline, and how this\nrepository's own CI is built.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c02",
+      "kind": "code",
+      "source": "Retrieve the <status> from the <git: \"..\">.\nExtract the <working-branch> from the <status: branch>.\nExtract the <tree-clean> from the <status: clean>.\nLog \"Branch: ${working-branch}\" to the <console>.\nLog <tree-clean> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\nA real read of a real repository — your output shows whatever branch\nthis checkout is on right now.\n\n- **`Retrieve … from the <git: \"..\">`** is a REQUEST action against\n  the `<git>` system object. Bare `<git>` means the *current working\n  directory* — but a notebook session runs in `Learning/`, one level\n  below the repository root, so we point at it explicitly with a path\n  qualifier: `<git: \"..\">`. Any path works:\n  `<git: \"/srv/menu-repo\">`.\n- **The result name selects the read.** `<status>`, `<log>`, and\n  `<branch>` are the three recognized reads — ask for `<state>` and\n  the runtime tells you it cannot retrieve it. (Want a different\n  variable name? Qualifier-as-name works:\n  `Retrieve the <gate-check: status> from the <git: \"..\">.`)\n- The status record carries `branch` (a string), `clean` (boolean —\n  `true` when nothing is modified, staged, or untracked), and `files`\n  (a list of per-file entries, each with `path` and `status`).",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c04",
+      "kind": "markdown",
+      "source": "## Variants: the log and the branch\n\n`<log>` returns recent commits, newest first, each with `short`,\n`hash`, `message`, `author`, `email`, `timestamp` — a list like any\nother, so `Compute`, `Extract` and `for each` all apply.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c05",
+      "kind": "code",
+      "source": "Retrieve the <log> from the <git: \"..\">.\nCompute the <recent-count: length> from <log>.\nLog \"Recent commits: ${recent-count}\" to the <console>.\nExtract the <head-commit: first> from the <log>.\nExtract the <head-short> from the <head-commit: short>.\nExtract the <head-message> from the <head-commit: message>.\nLog \"HEAD: ${head-short} ${head-message}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c06",
+      "kind": "code",
+      "source": "Retrieve the <branch> from the <git: \"..\">.\nLog \"Current branch: ${branch}\" to the <console>.\nExtract the <pending-files> from the <status: files>.\nCompute the <pending-count: length> from <pending-files>.\nLog \"Working-tree changes: ${pending-count}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c07",
+      "kind": "markdown",
+      "source": "## The writing half (fenced)\n\nThe mutating actions complete the vocabulary. Fenced here — running\nthem would edit the course repository — but this is the entire release\nworkflow of the menu repo:\n\n```aro\n(* Stage everything, commit, tag, ship *)\nStage the <files> to the <git> with \".\".\nCommit the <result> to the <git> with \"menu: reprice cortado to 3.20\".\nTag the <release> for the <git> with \"menu-v2026.09\".\nPush the <pushed> to the <git>.\n\n(* Bring a shop's clone up to date *)\nPull the <updates> from the <git>.\n\n(* Onboard a new shop: clone at a specific branch *)\nClone the <shop-menu> from the <git> with {\n    url: \"https://gitlab.example.com/brewbytes/menu.git\",\n    path: \"./menu\",\n    branch: \"production\"\n}.\n\n(* Switch lines of work *)\nCheckout the <feature> from the <git> with \"seasonal/pumpkin\".\n```\n\nRoles and grammar at a glance:\n\n| Verb | Role | Shape |\n|------|------|-------|\n| `Retrieve` | REQUEST | `from the <git>` — `<status>`/`<log>`/`<branch>` |\n| `Stage` | OWN | `to the <git> with \".\"` (or a path, or a list) |\n| `Commit` | EXPORT | `to the <git> with \"message\"` |\n| `Tag` | EXPORT | `for the <git> with \"name\"` (or `{ name:, message: }`) |\n| `Checkout` | OWN | `from the <git> with \"branch\"` |\n| `Pull` / `Push` | REQUEST / EXPORT | `from` / `to the <git>` |\n| `Clone` | REQUEST | `from the <git> with { url:, path:, branch: }` |\n\nStatus, log, stage, commit, tag, checkout, clone run through libgit2\nin-process. `Push` and `Pull` shell out to the `git` CLI for\ncredential handling — they need `git` on `$PATH` and your SSH key or\ntoken set up. `Examples/GitDemo` is the runnable tour of the reads:\n`aro run Examples/GitDemo` from any repository.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c08",
+      "kind": "markdown",
+      "source": "## Git events: the repository announces itself\n\nEvery mutating action emits an event — `GitCommit`, `GitPush`,\n`GitPull`, `GitCheckout`, `GitTag`, `GitClone` — so the rest of the\napplication can react to version control the way it reacts to\neverything else. A release notifier is just a handler:",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c09",
+      "kind": "code",
+      "source": "(AnnounceRelease: GitTag Handler) {\n    Extract the <released-tag> from the <event: name>.\n    Log \"Menu release ${released-tag} is live - notify the shops.\" to the <console>.\n    Return an <OK: status> for the <announcement>.\n}\n\n(AuditCommit: GitCommit Handler) {\n    Extract the <audit-hash> from the <event: hash>.\n    Extract the <audit-message> from the <event: message>.\n    Log \"Change ledger: ${audit-hash} ${audit-message}\" to the <console>.\n    Return an <OK: status> for the <audit>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c10",
+      "kind": "markdown",
+      "source": "Both registered. In a running application, `Tag` fires\n`AnnounceRelease` and every `Commit` lands in `AuditCommit` — an\naudit trail and a release fan-out for free, no webhooks, no CI\nplumbing. The emitting action neither knows nor cares\n([09 — Feature Sets & Events](09-feature-sets-and-events.repl)).\n\n## Discussion\n\nWhy native actions instead of `Exec the <r> for the <command: \"git\">`?\n\n1. **Typed results.** `<status: clean>` is a boolean you can guard\n   on — not stdout you must parse and hope the git version didn't\n   reformat.\n2. **Events.** Shelling out is silent; native `Commit` announces\n   itself on the bus.\n3. **No binary needed for reads.** libgit2 is linked in — status and\n   log work in a container with no git installed. (Windows builds\n   skip the git module; the actions are macOS/Linux today.)\n\n`Exec` remains the honest escape hatch for plumbing the actions don't\ncover — `git bisect`, `git rebase` — see\n[Chapter 48](../Book/TheLanguageGuide/Chapter48-GitActions.md). And\nthe happy path holds: `Retrieve` from a directory that is not a\nrepository fails with a plain-language message, and your feature set\nsimply does not continue.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c11",
+      "kind": "markdown",
+      "source": "## DevOps thinking: the pipeline around the code\n\nActions are the small half of shipping. The other half is what runs\non every branch. ARO's CLI contributes three pipeline-grade tools:\n\n- **`aro check ./MyApp`** — syntax *and* semantics without running:\n  unknown qualifiers, contract routes, body-limit analysis\n  ([19](19-http-services-and-clients.repl)), recursion warnings. Fast\n  enough to gate every merge request.\n- **`aro diff --graph main..my-branch`** — a feature-set and\n  statement-level diff between revisions: which business features\n  changed, not which lines. `--html report.html` turns it into an\n  artifact reviewers actually read.\n- **`aro test ./MyApp`** — the colocated Given/When/Then tests of\n  [25 — Testing & Quality](25-testing-and-quality.repl).\n\nThis repository's own `.gitlab-ci.yml` is a worked example of the\nshape. Six stages: **test** (unit tests, plus meta-checks — every\nproposal reference must resolve, the action reference must be\nregenerated), **build** (release binary, which then `aro check`s the\nshipped examples — the compiler gatekeeping its own documentation),\n**integration** (running example apps, REPL and Jupyter protocol\nsmoke tests), **documentation**, **release**, and a **docker** pair.\nTwo habits transfer to any team: *the merge policy is \"green pipeline\nor it does not merge\"* — main stays releasable; and *checks guard the\nteaching material too* — examples and notebooks are validated like\ncode, so documentation cannot silently rot.\n\nFor the menu repo, the same shape in miniature: `aro check` the menu\nservice on every branch, `aro diff --graph` in the merge request,\ntag on `main`, and a `GitTag` handler rolls the release out to the\nshops.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c12",
+      "kind": "markdown",
+      "source": "## Real-world example: the release gate\n\nHead office ships a menu release the same way every Friday. Before\ntagging, the release script asks the repository itself whether the\ntree is clean — the readiness check below runs live, and answers\ndifferently depending on the state of *your* checkout right now.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c13",
+      "kind": "code",
+      "source": "Extract the <release-year> from the <now: year>.\nExtract the <release-month> from the <now: month>.\nCreate the <release-tag> with \"menu-v${release-year}.${release-month}\".\nLog \"Next release tag: ${release-tag}\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c14",
+      "kind": "code",
+      "source": "Retrieve the <gate-check: status> from the <git: \"..\">.\nExtract the <gate-clean> from the <gate-check: clean>.\nLog \"Tree is clean - ready to tag ${release-tag}.\" to the <console> when <gate-clean> == true.\nLog \"Uncommitted changes - finish and commit before tagging.\" to the <console> when <gate-clean> == false.",
+      "outputs": []
+    },
+    {
+      "id": "nb22-c15",
+      "kind": "markdown",
+      "source": "In the release script, the clean branch continues —\n\n```aro\nTag the <release> for the <git> with <release-tag>.\nPush the <pushed> to the <git>.\n```\n\n— and the dirty branch stops with a message a human can act on. The\ngate is four statements, yet it encodes a rule auditors love: nothing\nuntracked ever ships.\n\nThis pattern has a name in industry: **GitOps**. Kubernetes fleets\nconverge on what a git repository declares; ArgoCD and Flux watch\nrefs the way our handler watches `GitTag`; banks and med-tech shops\npass audits by pointing at commit history instead of change tickets,\nbecause the repository *is* the change ledger — every deployment\ntraceable to a hash, an author, a review. Our franchise runs the same\nplay at espresso scale: the menu is code, the release is a tag, and\nforty shops converge on it. When the auditor asks who repriced the\ncortado and when — `Retrieve the <log> from the <git>.`\n\n## Related\n\n- Next: [23 — Toolsmith: CLI & Config](23-toolsmith-cli-and-config.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl);\n  continues into [25 — Testing & Quality](25-testing-and-quality.repl)\n  and [26 — Observability & Deployment](26-observability-and-deployment.repl)\n- Language Guide: [Chapter 48 — Git Actions](../Book/TheLanguageGuide/Chapter48-GitActions.md),\n  [Chapter 37 — System Commands](../Book/TheLanguageGuide/Chapter37-SystemCommands.md)\n- Wiki: [Action Developer Guide](https://github.com/arolang/aro/wiki/Action-Developer-Guide)\n- Specification: [ARO-0080 — Git Actions](../Proposals/ARO-0080-git-actions.md),\n  [ARO-0007 — Events & Reactive](../Proposals/ARO-0007-events-reactive.md)\n- Run the real thing: `aro run Examples/GitDemo` (from inside any\n  git repository)",
+      "outputs": []
+    }
+  ]
+}

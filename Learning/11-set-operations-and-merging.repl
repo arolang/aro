@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb11-c01",
+      "kind": "markdown",
+      "source": "# 11 — Set Operations & Merging\n\n**Brew & Bytes** now has two lists of people: the regulars the\nbaristas know by name, and the newsletter subscribers who signed up\nonline. The owner wants to know: who is on *both* lists? Who comes\nin but never gets the newsletter? Who should the loyalty campaign\nreach in total?\n\nThose three questions are the three set operations —\n**intersect**, **difference**, **union** — and ARO spells them as\nCompute qualifiers ([ARO-0042](../Proposals/ARO-0042-set-operations.md)).\nThey are *polymorphic*: the same three names work on lists, on\nstrings, and (recursively) on records. Alongside them this notebook\ncovers **Merge** — combining without deduplicating — and `unique`,\nand shows when each is the right tool.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c02",
+      "kind": "code",
+      "source": "Create the <regulars> with [\"ada\", \"grace\", \"linus\", \"marge\"].\nCreate the <subscribers> with [\"grace\", \"marge\", \"tim\"].\nLog <regulars> to the <console>.\nLog <subscribers> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\nTwo plain lists, bound with `Create` (an *OWN* action). They are the\ninputs for everything below — and because bindings are immutable,\nthey will read exactly like this at the end of the notebook, no\nmatter how many operations we run on them.\n\n## Intersect — in both\n\nA set operation takes its first operand after `from` and its second\nafter `with`. `intersect` keeps what appears in both.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c04",
+      "kind": "code",
+      "source": "Compute the <loyal-readers: intersect> from <regulars> with <subscribers>.\nLog <loyal-readers> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c05",
+      "kind": "markdown",
+      "source": "`grace` and `marge` visit *and* subscribe. Note the anatomy:\n`Compute the <result: operation> from <a> with <b>.` — the qualifier\nnames the operation, the result gets its own fresh name.\n\n## Difference — in one, not the other\n\n`difference` is **directional**: `from <a> with <b>` keeps the\nelements of `a` that are not in `b`. Swap the operands and you ask\nthe opposite question — both are useful, so compute both.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c06",
+      "kind": "code",
+      "source": "Compute the <cafe-only: difference> from <regulars> with <subscribers>.\nCompute the <inbox-only: difference> from <subscribers> with <regulars>.\nLog <cafe-only> to the <console>.\nLog <inbox-only> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c07",
+      "kind": "markdown",
+      "source": "`<cafe-only>` are regulars who never subscribed — hand them a flyer.\n`<inbox-only>` subscribed but have not been in — send them a coupon.\n\n## Union — everyone, once\n\n`union` collects all *unique* elements from both operands: the\nelements of the first, then whatever the second adds that is new.\nNo duplicates — that is what distinguishes it from Merge, coming up\nbelow.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c08",
+      "kind": "code",
+      "source": "Compute the <full-audience: union> from <regulars> with <subscribers>.\nCompute the <audience-size: count> from <full-audience>.\nLog <full-audience> to the <console>.\nLog \"${<audience-size>} people in total\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c09",
+      "kind": "markdown",
+      "source": "## Duplicates count: multiset semantics\n\nWhen the inputs themselves contain repeats, the operations respect\n*how many* — `intersect` keeps each element the minimum number of\ntimes it appears in both sides. Loyalty stamps make this concrete:\nAda's card has one 2-stamp and one extra 2-stamp…",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c10",
+      "kind": "code",
+      "source": "Create the <stamps-a> with [1, 2, 2, 3].\nCreate the <stamps-b> with [2, 2, 2, 4].\nCompute the <stamps-shared: intersect> from <stamps-a> with <stamps-b>.\nCompute the <stamps-only-a: difference> from <stamps-a> with <stamps-b>.\nLog <stamps-shared> to the <console>.\nLog <stamps-only-a> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c11",
+      "kind": "markdown",
+      "source": "`[2, 2]` — the two appears twice on both cards, so twice in the\nintersection. The difference `[1, 3]` removes as many matched copies\nas the other side holds.\n\n## The same three words on strings\n\nStrings are sequences of characters, and the operations treat them\nthat way — which characters are shared, which are unique to one\nword.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c12",
+      "kind": "code",
+      "source": "Create the <word-a> with \"stream\".\nCreate the <word-b> with \"steam\".\nCompute the <letters-shared: intersect> from <word-a> with <word-b>.\nCompute the <letters-extra: difference> from <word-a> with <word-b>.\nCompute the <letters-all: union> from <word-a> with <word-b>.\nLog <letters-shared> to the <console>.\nLog <letters-extra> to the <console>.\nLog <letters-all> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c13",
+      "kind": "markdown",
+      "source": "## …and on records, recursively\n\nOn records the operations compare **fields**, and they recurse into\nnested records. `intersect` keeps the fields with matching values;\n`difference` keeps the fields where the first operand disagrees;\n`union` merges, first operand winning ties. Comparing two versions\nof the menu is a diff, in three lines:",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c14",
+      "kind": "code",
+      "source": "Create the <menu-v1> with { espresso: 2.4, latte: 3.6, scone: 2.8 }.\nCreate the <menu-v2> with { espresso: 2.4, latte: 3.8, muffin: 3.0 }.\nCompute the <menu-unchanged: intersect> from <menu-v1> with <menu-v2>.\nCompute the <menu-drift: difference> from <menu-v1> with <menu-v2>.\nCompute the <menu-combined: union> from <menu-v1> with <menu-v2>.\nLog <menu-unchanged> to the <console>.\nLog <menu-drift> to the <console>.\nLog <menu-combined> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c15",
+      "kind": "markdown",
+      "source": "## Merge — combine without deduplicating\n\n**Merge** is a different tool with a different promise. Its syntax\nputs the *base* in the result qualifier:\n`Merge the <result: base> with <addition>.` For lists it\nconcatenates — duplicates and all; for records it overlays (the\naddition's fields win, which makes it the standard update pattern\nunder immutability); for strings it concatenates.\n\nNeed Merge-then-dedupe? That composes: merge, then `unique`. Or\nskip straight to `union` when you never wanted the duplicates.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c16",
+      "kind": "code",
+      "source": "Merge the <mailing-list: regulars> with <subscribers>.\nCompute the <mailing-unique: unique> from <mailing-list>.\nLog <mailing-list> to the <console>.\nLog <mailing-unique> to the <console>.\nCreate the <profile> with { name: \"Grace\", tier: \"silver\", visits: 41 }.\nCreate the <upgrades> with { tier: \"gold\", badge: true }.\nMerge the <upgraded-profile: profile> with <upgrades>.\nLog <profile> to the <console>.\nLog <upgraded-profile> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c17",
+      "kind": "markdown",
+      "source": "Note `<mailing-list>` shows `grace` and `marge` twice — Merge kept\neverything — while `<mailing-unique>` de-duplicates, first\noccurrence winning. And `<profile>` still says `silver`: the upgrade\nproduced a *new* record.\n\n## Set membership in pipelines\n\n`in` and `not in` bring set thinking into `Filter`'s `where` clause\n— the bridge between this notebook and\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl).\nScreening a record list against a ban list is one statement:",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c18",
+      "kind": "code",
+      "source": "Create the <banned> with [\"mallory\"].\nCreate the <guests> with [\n    { name: \"ada\",     visits: 12 },\n    { name: \"mallory\", visits: 1 },\n    { name: \"tim\",     visits: 4 }\n].\nFilter the <welcome-guests> from the <guests> where <name> not in <banned>.\nLog <welcome-guests> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c19",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**Union or Merge?** Ask whether duplicates carry meaning. Audience\nlists: no — `union`. Order histories from two tills: yes, two\nespressos are two sales — `Merge`. The wrong pick silently loses\ndata (union) or double-counts it (merge); knowing which failure you\nare risking is half the choice.\n\n**Difference is directional.** `A difference B` ≠ `B difference A`.\nWhen a report needs \"who dropped off\" *and* \"who is new\", that is\ntwo statements, and immutability makes both cheap.\n\n**Records: intersect/difference compare *values*, union prefers the\nfirst operand.** For a plain \"overlay these updates\", Merge states\nthe intent more directly than union does.\n\nUnder the hood all three are one recursive walk over the two values\n— the polymorphism is the point: one vocabulary for lists, strings,\nand records ([ARO-0042](../Proposals/ARO-0042-set-operations.md)).",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c20",
+      "kind": "markdown",
+      "source": "## Real-world example: the loyalty campaign audience\n\nThe campaign brief: reach everyone we know — visitors and\nsubscribers — except the opt-outs, and give the overlap group\n(visits *and* reads the newsletter) a VIP invite. Four named\naudiences, each one auditable on its own.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c21",
+      "kind": "code",
+      "source": "Create the <visit-names> with [\"ada\", \"grace\", \"linus\", \"marge\", \"sam\"].\nCreate the <newsletter-names> with [\"grace\", \"marge\", \"tim\", \"uma\"].\nCreate the <optout-names> with [\"linus\", \"uma\"].\nCompute the <campaign-pool: union> from <visit-names> with <newsletter-names>.\nFilter the <reachable> from the <campaign-pool> where <campaign-pool> not in <optout-names>.\nCompute the <vip-invites: intersect> from <visit-names> with <newsletter-names>.\nCompute the <reach-count: count> from <reachable>.\nLog \"=== Loyalty campaign ===\" to the <console>.\nLog \"Reachable audience (${<reach-count>}):\" to the <console>.\nLog <reachable> to the <console>.\nLog \"VIP invites:\" to the <console>.\nLog <vip-invites> to the <console>.\nLog \"========================\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb11-c22",
+      "kind": "markdown",
+      "source": "### Why the world needs this\n\nAudience arithmetic is a whole industry. Marketing platforms build\nevery campaign as set algebra over segments — union the sources,\nsubtract the suppression list, intersect with the target group. The\nsuppression step is not cosmetic: opt-out lists are a legal\nrequirement (GDPR, CAN-SPAM), and \"subtract before send\" is the\ndifference between a campaign and a fine. The same algebra runs\nelsewhere under other names: access control compares granted\npermissions against required ones (intersect), security scanners\ndiff yesterday's dependency list against today's (difference),\nconfig management detects drift between the declared and the\ndeployed state (record difference — exactly the menu diff above).\nSets are how systems answer \"what changed?\" and \"who exactly?\" —\nwhich is why a language for business features ships them as three\none-word operations.\n\n## Related\n\n- Next: [12 — Templates & Output](12-templates-and-output.repl)\n- Filters and pipelines: [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Immutable update pattern: [04 — Immutability](04-immutability.repl)\n- Language Guide: [Chapter 35 — Set Operations](../Book/TheLanguageGuide/Chapter35-SetOperations.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations)\n- Specification: [ARO-0042 — Set Operations](../Proposals/ARO-0042-set-operations.md),\n  [ARO-0019 — Standard Library §3.2](../Proposals/ARO-0019-standard-library.md)\n- Examples: `Examples/SetOperations`, `Examples/CollectionMerge`",
+      "outputs": []
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "id": "nb07-c01",
+      "kind": "markdown",
+      "source": "# 07 — Text Processing\n\n**Brew & Bytes** keeps a feedback tablet by the door. Customers type\nwhat they think — with stray spaces, RANDOM capitals, and the\noccasional attempt to paste something that is definitely not\nfeedback. Before any of it lands in a report or on the website, it\nhas to be cleaned, split, counted, and — crucially — escaped.\n\nText is the universal interchange format: CSV exports, log lines,\nURLs, form input. This notebook teaches ARO's string toolbox: the\nCompute string qualifiers (`trim`, `uppercase`, `lowercase`,\n`length`, `replace`), `lines` and `join`, the **Split** action with\nregex delimiters, the encoding qualifiers (`url-encode`,\n`base64-encode`), and `html-escape` — with a serious word on why\nthat last one is not optional.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c02",
+      "kind": "code",
+      "source": "Create the <raw-feedback> with \"   The FLAT WHITE was AMAZING!!   \".\nCompute the <tidy: trim> from <raw-feedback>.\nLog \"[${<raw-feedback>}]\" to the <console>.\nLog \"[${<tidy>}]\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c03",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`Create`** (an *OWN* action) binds the raw text exactly as typed,\n  stray spaces included.\n- **`Compute the <tidy: trim>`** runs the `trim` operation. The\n  qualifier slot picks the *operation*; the base (`tidy`) is the\n  *name* the result gets. That is the qualifier-as-name pattern from\n  [03 — Compute & Qualifiers](03-compute-and-qualifiers.repl) — one\n  operation, any number of distinctly named results.\n- The brackets in the `Log` lines make the whitespace visible:\n  `<raw-feedback>` still has its padding, `<tidy>` does not. The\n  original is untouched — cleaning *derives*, never destroys.\n- The qualifier namespace is **closed**: a misspelled operation like\n  `uppecase` is a check-time error naming the closest match, not a\n  silent no-op.\n\n## Case and length\n\nThree more single-input qualifiers. Each is one statement, one new\nname — a cleaning pipeline you can read (and log) stage by stage.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c04",
+      "kind": "code",
+      "source": "Compute the <shouted: uppercase> from <tidy>.\nCompute the <hushed: lowercase> from <tidy>.\nCompute the <tidy-length: length> from <tidy>.\nLog <shouted> to the <console>.\nLog <hushed> to the <console>.\nLog \"${<tidy-length>} characters\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c05",
+      "kind": "markdown",
+      "source": "## Replace — find and substitute\n\n`replace` takes its parameters as a record after `with`: what to\n`find`, what to `replace` it with. Every occurrence is substituted.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c06",
+      "kind": "code",
+      "source": "Compute the <softened: replace> from <tidy> with { find: \"!!\", replace: \".\" }.\nLog <softened> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c07",
+      "kind": "markdown",
+      "source": "## Lines and join\n\nMulti-line text splits into a list with `lines`; a list becomes one\nstring again with `join` and a `separator`. Between the two sits the\nwhole collection toolbox from\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl) —\nsplit, filter, transform, rejoin is the standard shape of text\ncleanup. Counting lines is `lines` then `length`; the trailing\nnewline does not produce a phantom empty line.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c08",
+      "kind": "code",
+      "source": "Create the <feedback-block> with \"great espresso\\nslow service\\nlovely staff\".\nCompute the <feedback-lines: lines> from <feedback-block>.\nCompute the <line-count: length> from <feedback-lines>.\nCompute the <rejoined: join> from <feedback-lines> with { separator: \" | \" }.\nLog <feedback-lines> to the <console>.\nLog \"${<line-count>} lines\" to the <console>.\nLog <rejoined> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c09",
+      "kind": "markdown",
+      "source": "## Split — tokenizing with delimiters\n\nSplitting is an **action**, not a qualifier. The delimiter after `by`\ncan be a string literal, a variable, or a regex\n([ARO-0037](../Proposals/ARO-0037-regex-split.md)):\n\n```aro\nSplit the <parts> from the <text> by \",\".\nSplit the <parts> from the <text> by <separator>.\nSplit the <parts> from the <text> by /[,;\\s]+/.\n```\n\nRegex patterns are written between slashes, with optional flags after\nthe closing slash (`i` = case-insensitive, `m` = multiline, `s` =\ndotall). When a pattern lives in a string instead, use *raw strings*\n(single quotes, `'\\d+'`) so backslashes stay literal — see\n[Chapter 5 — String Literals](../Book/TheLanguageGuide/Chapter05-RawStrings.md).",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c10",
+      "kind": "code",
+      "source": "Create the <csv-header> with \"name,drink,rating\".\nSplit the <csv-fields> from the <csv-header> by \",\".\nLog <csv-fields> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c11",
+      "kind": "markdown",
+      "source": "The regex form earns its keep on messy input: one pattern absorbs\ncommas, semicolons, and any run of whitespace in a single pass. And\nflags handle inconsistent casing — the second split below treats\n`STOP` and `stop` alike.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c12",
+      "kind": "code",
+      "source": "Create the <messy-tags> with \"coffee, wifi;cozy  quiet\".\nSplit the <tags> from the <messy-tags> by /[,;\\s]+/.\nCreate the <stacked-notes> with \"refill beansSTOPclean grinderstopwater plants\".\nSplit the <chores> from the <stacked-notes> by /stop/i.\nLog <tags> to the <console>.\nLog <chores> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c13",
+      "kind": "markdown",
+      "source": "## Element access after splitting\n\nSplit hands back a list, and lists support positional access via\nExtract qualifiers ([ARO-0038](../Proposals/ARO-0038-list-element-access.md)):\n`first`, `last`, an index (`1`), or a range (`0-1`). `Extract` is a\n*REQUEST* action — it pulls a value out of a source into your scope.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c14",
+      "kind": "code",
+      "source": "Extract the <first-tag: first> from the <tags>.\nExtract the <last-tag: last> from the <tags>.\nExtract the <second-tag: 1> from the <tags>.\nExtract the <lead-tags: 0-1> from the <tags>.\nLog <first-tag> to the <console>.\nLog <last-tag> to the <console>.\nLog <second-tag> to the <console>.\nLog <lead-tags> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c15",
+      "kind": "markdown",
+      "source": "## Encodings — text that travels\n\nText leaving your program must match the format its destination\nexpects. Two workhorses\n([ARO-0019 §3.1](../Proposals/ARO-0019-standard-library.md)):\n\n- **`url-encode`** percent-encodes a value for a URL query string —\n  spaces, `&`, and friends would otherwise change the URL's meaning.\n- **`base64-encode`** wraps arbitrary text as safe ASCII for\n  transport — HTTP Basic auth headers, tokens, binary-in-JSON.\n  (`base64url-encode` is the URL-safe variant used by JWTs.)\n\nBoth have matching decoders, so a round trip gives the original\nback.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c16",
+      "kind": "code",
+      "source": "Create the <search-term> with \"flat white & cream\".\nCompute the <encoded-term: url-encode> from <search-term>.\nCompute the <decoded-term: url-decode> from <encoded-term>.\nLog <encoded-term> to the <console>.\nLog <decoded-term> to the <console>.\nCreate the <api-credentials> with \"barista:secret\".\nCompute the <basic-token: base64-encode> from <api-credentials>.\nCompute the <token-back: base64-decode> from <basic-token>.\nLog <basic-token> to the <console>.\nLog <token-back> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c17",
+      "kind": "markdown",
+      "source": "## Escaping — the one you must not skip\n\nEncoding makes text *transportable*. Escaping makes it *safe to\nembed*. The difference matters most with `html-escape`: it turns\n`& < > \" '` into HTML entities so that user text rendered into a\npage is displayed as text — and cannot become markup.\n\nWhy this is non-negotiable: if the feedback tablet's input goes into\nthe café website unescaped, a \"review\" containing `<script>…` stops\nbeing data and starts being *code running in every visitor's\nbrowser* — a cross-site-scripting (XSS) injection. **ARO's template\nengine does not escape for you** — always `html-escape` untrusted\nvalues before rendering them into HTML. `json-escape` plays the same\nembedding role for JSON string literals.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c18",
+      "kind": "code",
+      "source": "Create the <sketchy-review> with \"<script>alert('free coffee')</script> Nice place!\".\nCompute the <safe-review: html-escape> from <sketchy-review>.\nLog <safe-review> to the <console>.\nCreate the <quoted-note> with \"She said \\\"wow\\\" twice\".\nCompute the <json-ready: json-escape> from <quoted-note>.\nLog <json-ready> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c19",
+      "kind": "markdown",
+      "source": "## Discussion\n\n**Two string literals, one rule.** Double quotes process escapes and\n`${…}` interpolation; single quotes are raw — backslashes stay\nliteral, which is exactly what regex patterns and Windows paths\nwant. The opening quote alone decides\n([Chapter 5](../Book/TheLanguageGuide/Chapter05-RawStrings.md)).\n\n**Immutability makes cleaning honest.** Each stage above —\n`<raw-feedback>` → `<tidy>` → `<softened>` — still exists. When a\nreport shows mangled text, you can inspect every stage instead of\nwondering what the code overwrote ([ARO-0006's\nphilosophy](../Proposals/ARO-0006-error-philosophy.md): the program\nitself is the explanation).\n\n**The closed namespace is a safety net.** An invented qualifier used\nto slip through and return its input unchanged; today it is an error\nwith a suggestion. Green `aro check` means every operation you named\nexists.\n\n**Escape at the boundary, not in the middle.** Store the raw text;\nescape when — and for whichever format — you output it. Escaping\nearly bakes one output format into your data.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c20",
+      "kind": "markdown",
+      "source": "## Real-world example: cleaning the feedback box\n\nA day of tablet entries: padded, inconsistently cased, one of them\nhostile. The pipeline normalizes each entry for the report and\nescapes it for the website — both derived from the same untouched\noriginals.",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c21",
+      "kind": "code",
+      "source": "Create the <card-rows> with [\n    { author: \"ada\",   text: \"  LOVED the flat white  \" },\n    { author: \"tim\",   text: \"queue was LONG today\" },\n    { author: \"grace\", text: \"<b>free coffee</b> if you read this\" }\n].\nFilter the <praise-rows> from the <card-rows> where <text> contains \"LOVED\".\nLog \"praise entries:\" to the <console>.\nLog <praise-rows> to the <console>.\nLog \"cleaned for the website:\" to the <console>.\nfor each <card> in <card-rows> {\n    Extract the <card-text> from the <card: text>.\n    Compute the <card-tidy: trim> from <card-text>.\n    Compute the <card-norm: lowercase> from <card-tidy>.\n    Compute the <card-safe: html-escape> from <card-norm>.\n    Log \"${<card: author>}: ${<card-safe>}\" to the <console>.\n}",
+      "outputs": []
+    },
+    {
+      "id": "nb07-c22",
+      "kind": "markdown",
+      "source": "### Why the world needs this\n\nMost of the world's data plumbing is exactly this: text in one shape\nthat must become text in another. Log aggregation splits and matches\nmillions of lines a minute; ETL jobs trim, normalize, and de-duplicate\nfree-text fields before they poison analytics; every search box that\nbuilds a URL depends on percent-encoding; every API gateway speaks\nBase64 somewhere. And the escaping half is a security discipline with\nits own history: XSS has sat in the OWASP Top 10 for two decades\nprecisely because \"just render the user's text\" keeps shipping.\nThe rule the café follows — keep the raw text, name every\ntransformation, escape at the boundary — is the same one the big\nsystems follow.\n\n## Related\n\n- Next: [08 — Dates & Times](08-dates-and-times.repl)\n- Templates render text into documents: [12 — Templates & Output](12-templates-and-output.repl)\n- Collection stages between split and join: [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Language Guide: [Chapter 5 — String Literals](../Book/TheLanguageGuide/Chapter05-RawStrings.md),\n  [Chapter 9 — Computations](../Book/TheLanguageGuide/Chapter09-Computations.md),\n  [Chapter 10 — Qualifier Syntax](../Book/TheLanguageGuide/Chapter10-QualifierSyntax.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations)\n- Specification: [ARO-0037 — Regex Split](../Proposals/ARO-0037-regex-split.md),\n  [ARO-0038 — List Element Access](../Proposals/ARO-0038-list-element-access.md),\n  [ARO-0019 — Standard Library §3](../Proposals/ARO-0019-standard-library.md)",
+      "outputs": []
+    }
+  ]
+}
