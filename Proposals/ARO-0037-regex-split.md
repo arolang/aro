@@ -9,6 +9,10 @@
 
 This proposal defines the Split action with regex-based delimiters using the `by` clause. Split enables string tokenization with powerful pattern matching for parsing text, CSV data, log files, and structured strings.
 
+The delimiter goes after `by` — never `with`. Because `with` is the payload
+preposition everywhere else, `Split … with ","` is the first spelling people
+try; it is rejected at check time with a hint naming `by` (GitLab #513).
+
 ---
 
 ## 1. Syntax

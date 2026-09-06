@@ -40,6 +40,7 @@ public struct CollectionOpValidator {
         for aro in collectAROStatements(featureSet.statements) {
             validateComputeQualifier(aro)
             validateMapWithClause(aro)
+            validateSplitWithClause(aro)
         }
     }
 
@@ -159,6 +160,32 @@ public struct CollectionOpValidator {
                 "Project a field: Map the <\(result)> from the <\(source)> with fieldName.",
                 "Or on the result: Map the <\(result): fieldName> from the <\(source)>.",
                 "To compute per element, iterate: for each <item> in <\(source)> { … }",
+            ]
+        )
+    }
+
+    /// Errors when Split is handed its delimiter through `with`
+    /// (GitLab #513).
+    ///
+    /// The delimiter goes after `by` (ARO-0037): a string, a variable,
+    /// or a /regex/. But `with` is the payload preposition everywhere
+    /// else in the language, so it is the first thing people try — and
+    /// it used to parse, run, and fail at runtime with "Cannot split",
+    /// long after the mistake was made. Reject it where the mistake
+    /// is, naming the spelling that works.
+    private func validateSplitWithClause(_ statement: AROStatement) {
+        guard statement.action.verb.lowercased() == "split" else { return }
+        guard statement.rangeModifiers.withClause != nil else { return }
+        guard statement.queryModifiers.byClause == nil else { return }
+
+        let result = statement.result.base
+
+        diagnostics.error(
+            "Split takes its delimiter after 'by', not 'with'",
+            at: statement.span.start,
+            hints: [
+                "Split the <\(result)> from <text> by \",\".",
+                "A variable or /regex/ works too: by <delimiter>, by /,\\s*/ (ARO-0037).",
             ]
         )
     }
