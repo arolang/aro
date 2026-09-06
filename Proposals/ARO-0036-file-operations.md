@@ -20,11 +20,18 @@ Check if a file or directory exists.
 ```aro
 Exists the <result> for the <file: path>.
 Exists the <result> for the <directory: path>.
+Exists the <result> for "./path".
 ```
+
+The bare-string form takes the path directly, the same way Write and Read
+accept one. It checks plain existence; only the `<file: …>` / `<directory: …>`
+spellings additionally require the entry to be of that type.
 
 ### 1.2 Result
 
-Returns a boolean: `true` if exists, `false` otherwise.
+Returns a boolean: `true` if exists, `false` otherwise. All three spellings
+bind a real boolean — usable in `when` guards — and agree with each other
+(GitLab #494).
 
 ### 1.3 Examples
 
