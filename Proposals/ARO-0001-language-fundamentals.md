@@ -360,14 +360,34 @@ Special feature sets manage application lifecycle:
 
 ```ebnf
 string_literal = '"' , { string_char } , '"'
-               | "'" , { string_char } , "'" ;
+               | "'" , { string_char } , "'"
+               | multiline_string ;
 
 string_char    = any_char - ('"' | "'" | "\\" | newline)
                | escape_sequence ;
 
+multiline_string = '"""' , newline , { any_char } , newline , indent , '"""' ;
+
 escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
 ```
+
+**Multi-line strings** open with `"""` followed immediately by a newline
+and close with `"""` on its own line. The closing delimiter's
+indentation is stripped from the front of every line (so the block can
+sit indented inside a feature set), the final newline before the closing
+delimiter is dropped, escape sequences work, and `${…}` interpolation is
+NOT performed — a multi-line block is literal text:
+
+```aro
+Create the <letter> with """
+    Dear guest,
+
+    Welcome to Brew & Bytes.
+    """.
+```
+
+binds three lines with the four-space indent removed.
 
 **Examples:**
 ```
@@ -472,6 +492,21 @@ primary_expression = literal
 
 variable_reference = "<" , qualified_noun , ">" ;
 grouped_expression = "(" , expression , ")" ;
+```
+
+A `variable_reference` operand carries the full `qualified_noun` form: a
+qualified reference is a valid expression operand wherever a bare one is
+(GitLab #496). Its semantics are identical to an Extract into a temporary —
+the qualifier resolves as a field access (or registered qualifier) on the
+base value before the surrounding expression uses it.
+
+```aro
+(* These two are equivalent: *)
+Extract the <qty> from the <item: qty>.
+Extract the <price> from the <item: price>.
+Compute the <line-total> from <qty> * <price>.
+
+Compute the <line-total> from <item: qty> * <item: price>.
 ```
 
 ### Member Access
@@ -743,10 +778,23 @@ error: Cannot rebind variable 'value' - variables are immutable
   Example: Create the <value-updated> with "second"
 ```
 
-**Runtime**: A safety check prevents rebinding (should never trigger if compiler works correctly):
+**Runtime**: A safety check refuses the rebind — the existing value stays bound —
+and the statement that attempted it fails with a runtime error (GitLab #495).
+Per ARO-0006, the error is a message the process survives to deliver: a REPL or
+notebook session reports the failing cell and keeps running, and a server keeps
+serving. The check is reachable whenever the analyzer could not see the earlier
+binding — a REPL cell rebinding a previous cell's variable (each cell is its own
+program), a binding made inside a nested scope such as a match arm, or a bind
+performed by a plugin:
 
-```swift
-fatalError("Runtime Error: Cannot rebind immutable variable '\(name)'")
+```
+Runtime Error: Cannot rebind immutable variable 'value'
+
+Variables in ARO are immutable. Once bound, they cannot be changed.
+Create a new variable instead: <Action> the <value-updated> ...
+
+This error indicates the semantic analyzer missed a duplicate binding.
+Please report this as a compiler bug.
 ```
 
 ### Creating Transformed Values

@@ -66,9 +66,12 @@ public final class Compiler {
             return CompilationResult(
                 program: program,
                 analyzedProgram: analyzedProgram,
-                diagnostics: diagnostics.diagnostics
+                // Ranked (GitLab #509): errors before warnings, root causes
+                // before consequential findings, stable within each class —
+                // so the first diagnostic is the one worth acting on.
+                diagnostics: diagnostics.diagnostics.ranked()
             )
-            
+
         } catch let error as LexerError {
             diagnostics.report(error)
             return makeFailedResult()
@@ -91,7 +94,7 @@ public final class Compiler {
         return CompilationResult(
             program: emptyProgram,
             analyzedProgram: emptyAnalyzed,
-            diagnostics: diagnostics.diagnostics
+            diagnostics: diagnostics.diagnostics.ranked()
         )
     }
 }

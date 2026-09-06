@@ -28,9 +28,8 @@
     (* ── Sink syntax: number literal ────────────────────────────────── *)
     Log 42 to the <console>.
 
-    (* ── Sink syntax: boolean (via variable) ────────────────────────── *)
-    Create the <flag> with true.
-    Log <flag> to the <console>.
+    (* ── Sink syntax: boolean literal (GitLab #512) ─────────────────── *)
+    Log true to the <console>.
 
     (* ── Sink syntax: array literal ─────────────────────────────────── *)
     Log [10, 20, 30] to the <console>.

@@ -233,6 +233,16 @@ private func executeAction(
         ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
     }
 
+    // GitLab #495: an immutable rebind the action attempted internally was
+    // refused by `RuntimeContext.bindTyped` (previously a fatalError that
+    // killed the compiled binary). Surface it as this statement's execution
+    // error so the codegen'd error block reports it and the process survives.
+    if actionResult.succeeded,
+       let runtime = ctxHandle.context as? RuntimeContext,
+       let violation = runtime.takeRebindViolation() {
+        ctxHandle.context.setExecutionError(ActionError.statementFailed(violation))
+    }
+
     // Special handling for Publish action in binary mode:
     // Store published variable in globalSymbols so it's accessible across feature sets
     if verb == "publish", actionResult.succeeded {

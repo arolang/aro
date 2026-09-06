@@ -468,18 +468,35 @@ public final class REPLSession: @unchecked Sendable {
         }
         """
 
-        let result = compiler.compile(source)
+        // Compile with the session's other definitions as companions
+        // (GitLab #503): an action must be able to call the sibling
+        // actions defined before it, in the terminal REPL exactly as in
+        // a notebook cell. The definition's own previous source is
+        // excluded so a redefinition never resolves against its old body.
+        let companions = _featureSetSources
+            .filter { $0.key != name }
+            .map(\.value)
+        var compiledSource = source
+        if !companions.isEmpty {
+            compiledSource += "\n\n" + companions.joined(separator: "\n\n")
+        }
+        let result = compiler.compile(compiledSource)
 
         if !result.isSuccess {
             let errorMsg = result.diagnostics.map { $0.message }.joined(separator: "\n")
             return .error(errorMsg)
         }
 
-        guard let analyzedFS = result.analyzedProgram.featureSets.first else {
+        guard let analyzedFS = result.analyzedProgram.byName[name] else {
             return .error("No feature set found in compiled result")
         }
 
         addFeatureSet(name: name, featureSet: analyzedFS, source: source)
+
+        // Register the user-defined actions this program declares, so a
+        // define→invoke flow (no statement in between) can already call
+        // `Application.<Name>` (#503).
+        await registerUserActions(from: result.analyzedProgram)
 
         // Record in history
         let entry = HistoryEntry(input: "(\(name): \(activity)) { ... }", type: .featureSetEnd)
@@ -592,6 +609,12 @@ public final class REPLSession: @unchecked Sendable {
     private func formatError(_ error: Error) -> String {
         if let aroError = error as? AROError {
             return aroError.message
+        }
+        if let assertion = error as? AssertionError {
+            // The struct dump ('AssertionError(message: …, expected:
+            // Optional(99) …)') buried the one line that matters
+            // (GitLab #514).
+            return assertion.message
         }
         return String(describing: error)
     }

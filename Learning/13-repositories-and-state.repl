@@ -112,7 +112,7 @@
     {
       "id": "nb13-c19",
       "kind": "code",
-      "source": "Retrieve the <shelf-now> from the <inventory-repository>.\nFilter the <running-low> from the <shelf-now> where <stock> < 5.\nCompute the <low-count: length> from <running-low>.\nLog \"Items below reorder point:\" to the <console>.\nLog <low-count> to the <console>.\nfor each <item> in <running-low> {\n    Extract the <item-name> from the <item: name>.\n    Extract the <item-stock> from the <item: stock>.\n    Compute the <reorder-line> from \"REORDER: \" ++ <item-name> ++ \" (only \" ++ <item-stock> ++ \" left)\".\n    Log <reorder-line> to the <console>.\n}",
+      "source": "Retrieve the <shelf-now> from the <inventory-repository>.\nFilter the <running-low> from the <shelf-now> where <stock> < 5.\nCompute the <low-count: length> from <running-low>.\nLog \"Items below reorder point:\" to the <console>.\nLog <low-count> to the <console>.\nfor each <item> in <running-low> {\n    Compute the <reorder-line> from \"REORDER: \" ++ <item: name> ++ \" (only \" ++ <item: stock> ++ \" left)\".\n    Log <reorder-line> to the <console>.\n}",
       "outputs": []
     },
     {

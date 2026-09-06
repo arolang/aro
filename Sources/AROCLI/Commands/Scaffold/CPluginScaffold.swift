@@ -51,7 +51,7 @@ extension CFamilyScaffold {
         let ext = isCpp ? "cpp" : "c"
         return [
             "  1. Edit Plugins/\(name)/src/plugin.\(ext)",
-            "     — implement your actions in aro_plugin_execute()",
+            "     — add ARO_ACTION / ARO_QUALIFIER handlers",
             "",
             "  2. Build the plugin dynamic library:",
             "     cd Plugins/\(name) && make",
@@ -111,7 +111,7 @@ extension CFamilyScaffold {
         #   make clean    # Remove build artifacts
 
         \(compiler)
-        CFLAGS   = -O2 -fPIC -Wall -Wextra
+        CFLAGS   = -O2 -fPIC -Wall -Wextra -Iinclude
         SRC_DIR  = src
         SRC      = $(SRC_DIR)/plugin.\(srcExt)
         LIB_NAME = lib\(libName)_plugin
@@ -141,97 +141,102 @@ extension CFamilyScaffold {
         """
     }
 
-    private func pluginSource(options: ScaffoldOptions) -> String {
+    /// Internal (not private) so tests can assert the generated source without
+    /// running `generate()`, which downloads the SDK header from the network.
+    func pluginSource(options: ScaffoldOptions) -> String {
         let name   = options.pluginName
         let handle = options.handle
 
         let langComment = isCpp ? "C++ plugin" : "C plugin"
-        let externC     = isCpp ? "extern \"C\" {\n\n" : ""
-        let externCEnd  = isCpp ? "\n} // extern \"C\"\n" : ""
-        let include     = isCpp ? "#include <cstdio>\n#include <cstdlib>\n#include <cstring>" : "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>"
+        let include     = isCpp ? "#include <cctype>\n#include <cstdlib>\n#include <cstring>" : "#include <ctype.h>\n#include <stdlib.h>\n#include <string.h>"
+
+        var actionsBlock = ""
+        if options.includeActions {
+            actionsBlock = """
+
+
+            /* ── Actions ───────────────────────────────────────────────────────────── */
+
+            /*
+             * \(handle).Example  —  an example action
+             *
+             * ARO usage:
+             *   \(handle).Example the <result> from <source>.
+             */
+            ARO_ACTION("example", "own", "with,from") {
+                /* TODO: Implement your action logic */
+                aro_output_string(ctx, "result", "ok");
+                return aro_ok(ctx);
+            }
+            """
+        }
+
+        var qualifiersBlock = ""
+        if options.includeQualifiers {
+            qualifiersBlock = """
+
+
+            /* ── Qualifiers ────────────────────────────────────────────────────────── */
+
+            /*
+             * \(handle).example  —  uppercases a string (example qualifier)
+             *
+             * ARO usage:
+             *   Compute the <loud: \(handle).example> from the <text>.
+             */
+            ARO_QUALIFIER("example", "String", "Uppercases a string (example qualifier)") {
+                const char* value = aro_qualifier_string(ctx);
+                if (!value)
+                    return aro_error(ctx, ARO_ERR_INVALID_INPUT,
+                                     "example requires a string");
+
+                size_t len = strlen(value);
+                char* upper = (char*)malloc(len + 1);
+                if (!upper)
+                    return aro_error(ctx, ARO_ERR_RESOURCE_EXHAUSTED, "out of memory");
+                for (size_t i = 0; i < len; i++)
+                    upper[i] = (char)toupper((unsigned char)value[i]);
+                upper[len] = '\\0';
+
+                const char* result = aro_qualifier_result_string(ctx, upper);
+                free(upper);
+                return result;
+            }
+            """
+        }
 
         return """
         /**
-         * ARO Plugin — \(name) (\(langComment), ARO-0073 ABI)
+         * ARO Plugin — \(name) (\(langComment))
          *
-         * Implements the ARO native plugin C ABI:
-         *   char* aro_plugin_info(void)
-         *   void  aro_plugin_init(void)
-         *   void  aro_plugin_shutdown(void)
-         *   char* aro_plugin_execute(const char* action, const char* input_json)
-         *   void  aro_plugin_free(char* ptr)
+         * Written with the ARO C Plugin SDK macro syntax. The SDK implements
+         * the full ARO native plugin C ABI (aro_plugin_info, aro_plugin_execute,
+         * aro_plugin_qualifier, aro_plugin_free, aro_plugin_init,
+         * aro_plugin_shutdown) — you only write ARO_ACTION / ARO_QUALIFIER
+         * handlers.
+         *
+         * SDK docs: https://github.com/arolang/aro-plugin-sdk-c
          */
 
         \(include)
-        \(externC)
-        /* ── ARO-0073 ABI ──────────────────────────────────────────────────────── */
 
-        /**
-         * aro_plugin_info — REQUIRED
-         * Returns a heap-allocated JSON string with plugin metadata.
-         * Caller must free via aro_plugin_free().
-         */
-        char* aro_plugin_info(void) {
-            const char* info =
-                "{"
-                    "\\"name\\":\\"\(name)\\","
-                    "\\"version\\":\\"1.0.0\\","
-                    "\\"handle\\":\\"\(handle)\\","
-                    "\\"abi\\":\\"ARO-0073\\","
-                    "\\"actions\\":["
-                        "{"
-                            "\\"name\\":\\"Example\\","
-                            "\\"verbs\\":[\\"example\\"],"
-                            "\\"role\\":\\"own\\","
-                            "\\"prepositions\\":[\\"with\\",\\"from\\"]"
-                        "}"
-                    "]"
-                "}";
-            char* result = malloc(strlen(info) + 1);
-            if (result) strcpy(result, info);
-            return result;
-        }
+        #define ARO_PLUGIN_SDK_IMPLEMENTATION
+        #include "aro_plugin_sdk.h"
 
-        /** aro_plugin_init — lifecycle hook, called once after dlopen(). */
-        void aro_plugin_init(void) {
+        /* ── Plugin identity ───────────────────────────────────────────────────── */
+
+        ARO_PLUGIN("\(name)", "1.0.0")
+        ARO_HANDLE("\(handle)")
+
+        /* ── Lifecycle ─────────────────────────────────────────────────────────── */
+
+        ARO_INIT() {
             /* Allocate long-lived resources here. */
         }
 
-        /** aro_plugin_shutdown — lifecycle hook, called once before dlclose(). */
-        void aro_plugin_shutdown(void) {
+        ARO_SHUTDOWN() {
             /* Release resources here. */
-        }
-
-        /**
-         * aro_plugin_execute — dispatch an action.
-         *
-         * input_json conforms to ARO-0073:
-         *   { "result":{...}, "source":{...}, "preposition":"...",
-         *     "data":<primary>, "_with":{...}, "_context":{...} }
-         */
-        char* aro_plugin_execute(const char* action, const char* input_json) {
-            const size_t BUF = 512;
-            char* result = malloc(BUF);
-            if (!result) return NULL;
-
-            if (strcmp(action, "example") == 0) {
-                /* TODO: Implement example action */
-                snprintf(result, BUF, "{\\"result\\":\\"ok\\",\\"action\\":\\"%s\\"}", action);
-            } else {
-                snprintf(result, BUF, "{\\"error\\":\\"Unknown action: %s\\"}", action);
-            }
-
-            return result;
-        }
-
-        /**
-         * aro_plugin_free — REQUIRED
-         * Frees memory allocated by this plugin and returned to the runtime.
-         */
-        void aro_plugin_free(char* ptr) {
-            free(ptr);
-        }
-        \(externCEnd)
+        }\(actionsBlock)\(qualifiersBlock)
         """
     }
 }

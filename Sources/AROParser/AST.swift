@@ -310,7 +310,7 @@ public struct AROStatement: Statement {
         if let agg = queryModifiers.aggregation {
             desc += " with \(agg)"
         }
-        if let where_ = queryModifiers.whereClause {
+        if let where_ = queryModifiers.whereCondition {
             desc += " where \(where_)"
         }
         if let by = queryModifiers.byClause {
@@ -357,6 +357,8 @@ public enum AggregationType: String, Sendable, Equatable, CustomStringConvertibl
     case avg = "avg"
     case min = "min"
     case max = "max"
+    case first = "first"
+    case last = "last"
 
     public var description: String { rawValue }
 }
@@ -416,6 +418,72 @@ public struct WhereClause: Sendable, CustomStringConvertible {
 
     public var description: String {
         "<\(field)> \(op) \(value)"
+    }
+}
+
+/// A where-clause condition tree (ARO-0018 §2.2, GitLab #498).
+///
+/// `where <status> == "paid" and <qty> > 2` parses into
+/// `.and(.predicate(status == "paid"), .predicate(qty > 2))`.
+/// `and` binds tighter than `or`; parentheses group explicitly.
+/// `between lo and hi` desugars in the parser to
+/// `.and(field >= lo, field <= hi)`, so it never appears here as
+/// its own case. A plain single-predicate where is `.predicate`.
+public indirect enum WhereCondition: Sendable, CustomStringConvertible {
+    case predicate(WhereClause)
+    case and(WhereCondition, WhereCondition)
+    case or(WhereCondition, WhereCondition)
+
+    /// All leaf predicates, left to right. The order matches the
+    /// indices used in `treeSkeleton`.
+    public var predicates: [WhereClause] {
+        switch self {
+        case .predicate(let p): return [p]
+        case .and(let l, let r), .or(let l, let r): return l.predicates + r.predicates
+        }
+    }
+
+    /// The single predicate when the condition is not compound;
+    /// nil for any `and`/`or` node.
+    public var singlePredicate: WhereClause? {
+        if case .predicate(let p) = self { return p }
+        return nil
+    }
+
+    public var span: SourceSpan {
+        switch self {
+        case .predicate(let p): return p.span
+        case .and(let l, let r), .or(let l, let r): return l.span.merged(with: r.span)
+        }
+    }
+
+    /// Structure-only rendering with predicates replaced by their
+    /// left-to-right index: `and(0,or(1,2))`. This is the wire form
+    /// both execution modes hand to the runtime (`_where_tree_`):
+    /// the interpreter binds it directly, the LLVM backend emits it
+    /// as a string constant, and the runtime's where-condition
+    /// evaluator parses it back next to the numbered
+    /// `_where_field_N_` / `_where_op_N_` / `_where_value_N_` binds.
+    public var treeSkeleton: String {
+        var counter = 0
+        func render(_ condition: WhereCondition) -> String {
+            switch condition {
+            case .predicate:
+                defer { counter += 1 }
+                return String(counter)
+            case .and(let l, let r): return "and(\(render(l)),\(render(r)))"
+            case .or(let l, let r): return "or(\(render(l)),\(render(r)))"
+            }
+        }
+        return render(self)
+    }
+
+    public var description: String {
+        switch self {
+        case .predicate(let p): return p.description
+        case .and(let l, let r): return "(\(l) and \(r))"
+        case .or(let l, let r): return "(\(l) or \(r))"
+        }
     }
 }
 
@@ -516,8 +584,8 @@ public enum ValueSource: Sendable, CustomStringConvertible {
 
 /// Groups query-related clauses for Filter, Reduce, Split operations.
 public struct QueryModifiers: Sendable, CustomStringConvertible {
-    /// Filter condition: `where <field> is "value"`
-    public let whereClause: WhereClause?
+    /// Filter condition tree: `where <a> is "x" and <b> > 2` (GitLab #498)
+    public let whereCondition: WhereCondition?
 
     /// Aggregation function: `with sum(<field>)`
     public let aggregation: AggregationClause?
@@ -528,13 +596,33 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
     /// Default value when retrieve returns no results: `default ""`
     public let defaultValue: (any Expression)?
 
+    /// The where condition when it is a single predicate; nil when
+    /// absent or compound. Kept for consumers that can only handle
+    /// one field/op/value triple — anything walking variables or
+    /// fields must use `whereCondition?.predicates` instead.
+    public var whereClause: WhereClause? {
+        whereCondition?.singlePredicate
+    }
+
     public init(
         whereClause: WhereClause? = nil,
         aggregation: AggregationClause? = nil,
         byClause: ByClause? = nil,
         defaultValue: (any Expression)? = nil
     ) {
-        self.whereClause = whereClause
+        self.whereCondition = whereClause.map { .predicate($0) }
+        self.aggregation = aggregation
+        self.byClause = byClause
+        self.defaultValue = defaultValue
+    }
+
+    public init(
+        whereCondition: WhereCondition?,
+        aggregation: AggregationClause? = nil,
+        byClause: ByClause? = nil,
+        defaultValue: (any Expression)? = nil
+    ) {
+        self.whereCondition = whereCondition
         self.aggregation = aggregation
         self.byClause = byClause
         self.defaultValue = defaultValue
@@ -545,12 +633,12 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
 
     /// Check if any query modifier is present
     public var isEmpty: Bool {
-        whereClause == nil && aggregation == nil && byClause == nil && defaultValue == nil
+        whereCondition == nil && aggregation == nil && byClause == nil && defaultValue == nil
     }
 
     public var description: String {
         var parts: [String] = []
-        if let w = whereClause { parts.append("where \(w)") }
+        if let w = whereCondition { parts.append("where \(w)") }
         if let a = aggregation { parts.append("with \(a)") }
         if let b = byClause { parts.append("\(b)") }
         if defaultValue != nil { parts.append("default ...") }

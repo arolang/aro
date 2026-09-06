@@ -2214,12 +2214,15 @@ public struct MergeAction: ActionImplementation {
 /// - Dictionaries: removes the key
 /// - Arrays: removes by index
 /// - Repositories: removes items matching the where clause
+/// - Files and directories: removes the item at the path (ARO-0036 §7)
 ///
 /// ## Examples
 /// ```
 /// <Delete> the <key> from the <dictionary>.
 /// <Delete> the <0> from the <array>.
 /// <Delete> the <user> from the <user-repository> where id = <userId>.
+/// <Delete> the <gone> from "./scratch.txt".
+/// <Delete> the <gone> from the <file: "./scratch.txt">.
 /// ```
 public struct DeleteAction: ActionImplementation {
     public static let role: ActionRole = .own
@@ -2246,9 +2249,30 @@ public struct DeleteAction: ActionImplementation {
             )
         }
 
+        // File deletion via qualified object (ARO-0036 §7, GitLab #493):
+        // `from the <file: path>` / `from the <directory: path>` carry the
+        // path in the qualifier, like every other ARO-0036 action.
+        if targetName == "file" || targetName == "directory" {
+            let path = try context.resolveString(
+                base: object.base,
+                specifiers: object.specifiers,
+                excluding: ["file", "directory"],
+                field: "a file or directory path",
+                action: "Delete"
+            )
+            return try await deleteFile(at: path, context: context)
+        }
+
         // Get the source containing the item to delete
         guard let source = context.resolveAny(targetName) else {
             throw ActionError.undefinedVariable(targetName)
+        }
+
+        // A string object is a path (GitLab #493): `Delete the <gone> from
+        // "./f.txt"` arrives here as an `_expression_` binding, and a string
+        // variable behaves the same way Write's and Read's path objects do.
+        if let path = source as? String {
+            return try await deleteFile(at: path, context: context)
         }
 
         // Key to delete from result specifiers
@@ -2266,10 +2290,29 @@ public struct DeleteAction: ActionImplementation {
             return array
         }
 
-        // Emit delete event
-        context.emit(DataDeletedEvent(target: result.base, source: targetName))
+        // No recognized target. Answering ok while deleting nothing is the
+        // failure GitLab #493 exists to prevent — a destructive-sounding
+        // statement must delete or error, never silently succeed.
+        throw ActionError.typeMismatch(
+            expected: "a repository, dictionary, array, or file path",
+            actual: "\(type(of: source))",
+            variable: targetName
+        )
+    }
 
-        return DeleteResult(target: result.base, success: true)
+    /// Delete the file or directory at `path` via the file system service.
+    ///
+    /// A missing path is a hard error (FileSystemError.fileNotFound), matching
+    /// Copy and Move on a missing source (ARO-0006): rerunning a delete fails
+    /// loudly instead of pretending the file was just removed (GitLab #493).
+    /// Directories are removed recursively; the service publishes
+    /// FileDeletedEvent on success.
+    private func deleteFile(at path: String, context: ExecutionContext) async throws -> any Sendable {
+        guard let fileService = context.service(FileSystemService.self) else {
+            throw ActionError.missingService("FileSystemService")
+        }
+        try await fileService.delete(path: path)
+        return DeleteResult(target: path, success: true)
     }
 
     private func deleteFromRepository(
@@ -2277,6 +2320,17 @@ public struct DeleteAction: ActionImplementation {
         repositoryName: String,
         context: ExecutionContext
     ) async throws -> any Sendable {
+        // GitLab #498: a compound where (and/or chaining) has no
+        // single-field delete path in storage — and treating it as "no
+        // where clause" would fall through to clearing the entire
+        // repository. `aro check` rejects the shape; this guard covers
+        // programs that reach the runtime without the analyzer.
+        if context.resolveAny("_where_tree_") != nil {
+            throw ActionError.missingRequiredField(
+                field: "a single-predicate 'where' clause — and/or chaining is not supported for Delete",
+                action: "Delete from \(repositoryName)")
+        }
+
         // Check for where clause (bound by FeatureSetExecutor)
         let whereField: String? = context.resolve("_where_field_")
         let whereValue = context.resolveAny("_where_value_")

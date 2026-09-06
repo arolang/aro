@@ -856,8 +856,14 @@ public struct MCPToolProvider: Sendable {
                     "typeAnnotation": aro.object.noun.typeAnnotation as Any
                 ]
             ]
-            if let whereClause = aro.queryModifiers.whereClause {
-                dict["whereField"] = whereClause.field
+            if let whereCondition = aro.queryModifiers.whereCondition {
+                let fields = whereCondition.predicates.map(\.field)
+                // Single-field key kept for existing consumers; compound
+                // conditions (GitLab #498) list every predicate field.
+                dict["whereField"] = fields.joined(separator: ",")
+                if fields.count > 1 {
+                    dict["whereFields"] = fields
+                }
             }
             return dict
         } else if let publish = stmt as? PublishStatement {
