@@ -281,13 +281,13 @@ The three-times multiplier for `Read` + `Split` occurs because three copies of t
     Stream the <lines> from "./numbers.dat".
 
     Create the <init> with { sum: 0.0, count: 0 }.
-    Store the <seeded: init> into <acc>.
+    Store the <seeded: init> into the <acc-repository>.
     Extract the <acc-id> from the <seeded: id>.
 
     for each <raw-line> in <lines> {
         Transform the <num: float> from the <raw-line>.
 
-        Retrieve the <cur>       from the <acc> where <id> = <acc-id>.
+        Retrieve the <cur>       from the <acc-repository> where <id> = <acc-id>.
         Extract the <prev-sum>   from the <cur: sum>.
         Extract the <prev-count> from the <cur: count>.
 
@@ -295,10 +295,10 @@ The three-times multiplier for `Read` + `Split` occurs because three copies of t
         Compute the <new-count> from <prev-count> + 1.
 
         Create the <upd> with { id: <acc-id>, sum: <new-sum>, count: <new-count> }.
-        Update the <upd> into <acc>.
+        Update the <upd> into the <acc-repository>.
     }
 
-    Retrieve the <result>     from the <acc> where <id> = <acc-id>.
+    Retrieve the <result>     from the <acc-repository> where <id> = <acc-id>.
     Extract the <total-sum>   from the <result: sum>.
     Extract the <total-count> from the <result: count>.
     Compute the <avg>         from <total-sum> / <total-count>.

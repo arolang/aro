@@ -1549,7 +1549,7 @@ public struct CreateAction: ActionImplementation {
 public struct UpdateAction: SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["update", "modify", "change", "set", "configure"]
-    public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from]
+    public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from, .into]
 
     public init() {}
 
@@ -1559,6 +1559,19 @@ public struct UpdateAction: SynchronousAction {
         context: ExecutionContext
     ) throws -> any Sendable {
         try validatePreposition(object.preposition)
+
+        // `Update the <row> into the <x-repository> …` — repository update
+        // (GitLab #505). Storage is an actor, so the work happens on the
+        // async path.
+        if object.preposition == .into {
+            guard InMemoryRepositoryStorage.isRepositoryName(object.base) else {
+                // `into` only makes sense for a repository target; anything
+                // else keeps the pre-#505 refusal instead of silently taking
+                // the entity-update path.
+                throw ActionError.undefinedRepository(object.base)
+            }
+            throw NeedsAsyncExecution()
+        }
 
         // Repository configuration path needs async — fall back to Task path
         if InMemoryRepositoryStorage.isRepositoryName(result.base), result.specifiers.first != nil {
@@ -1686,7 +1699,12 @@ public struct UpdateAction: SynchronousAction {
         do {
             return try executeSynchronously(result: result, object: object, context: context)
         } catch is NeedsAsyncExecution {
-            // Fall through to async repository-configuration path
+            // Fall through to an async repository path
+        }
+
+        // Repository update: Update the <row> into the <x-repository> [where …].
+        if object.preposition == .into, InMemoryRepositoryStorage.isRepositoryName(object.base) {
+            return try await updateIntoRepository(result: result, object: object, context: context)
         }
 
         // Repository configuration: Configure the <repo: ttl> with <value>.
@@ -1728,6 +1746,120 @@ public struct UpdateAction: SynchronousAction {
         configDict[fieldName] = updateValue
         context.bind(result.base, value: configDict, allowRebind: true)
         return configDict
+    }
+
+    /// `Update the <row> into the <x-repository> [where <field> is <value>].`
+    ///
+    /// Merges the row into the matching repository entries (GitLab #505).
+    /// Chapter 46's accumulator pattern is built on this shape. Storage is
+    /// resolved exactly like Store / Retrieve / Delete resolve it — the
+    /// registered `RepositoryStorageService` first, the container's storage
+    /// as fallback — so the statement behaves identically under `aro run`
+    /// and in interactive sessions.
+    ///
+    /// Matching: the `where` clause when one is written; the row's own
+    /// identity field (`id`, then `name`, then `key`) otherwise — the same
+    /// identity fields the storage upserts by. Update never inserts: no
+    /// matching entry is an error (Store is the insert).
+    private func updateIntoRepository(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        let repoName = object.base
+
+        // Same immutable pattern Store supports:
+        //   Update the <updated: row> into the <repo>.  → binds <updated>
+        //   Update the <row> into the <repo>.           → rebinds <row>
+        //     (update verbs bind with allowRebind by contract)
+        let dataVarName = result.specifiers.first ?? result.base
+
+        guard let data = context.resolveAny(dataVarName) else {
+            throw ActionError.undefinedVariable(dataVarName)
+        }
+        guard let updateDict = data as? [String: any Sendable] else {
+            throw ActionError.typeMismatch(
+                expected: "an object value to merge into the matching entry",
+                actual: String(describing: type(of: data)),
+                variable: dataVarName
+            )
+        }
+
+        let storage = context.service(RepositoryStorageService.self)
+            ?? context.container.repositoryStorage
+
+        // Which entries to update: the where clause (bound by
+        // FeatureSetExecutor) when given, the row's identity otherwise.
+        let whereField: String? = context.resolve("_where_field_")
+        let whereValue = context.resolveAny("_where_value_")
+
+        let field: String
+        let matchValue: any Sendable
+        if let whereField, let whereValue {
+            field = whereField
+            matchValue = whereValue
+        } else if let id = updateDict["id"] {
+            field = "id"
+            matchValue = id
+        } else if let name = updateDict["name"] {
+            field = "name"
+            matchValue = name
+        } else if let key = updateDict["key"] {
+            field = "key"
+            matchValue = key
+        } else {
+            throw ActionError.missingRequiredField(
+                field: "a 'where' clause or an id/name/key field on the value",
+                action: "Update into \(repoName)"
+            )
+        }
+
+        let existing = await storage.retrieve(
+            from: repoName,
+            businessActivity: context.businessActivity,
+            where: field,
+            equals: matchValue
+        )
+        let existingRows = existing.compactMap { $0 as? [String: any Sendable] }
+        guard !existingRows.isEmpty else {
+            throw ActionError.runtimeError(
+                "No entry in \(repoName) where \(field) = \(matchValue) — Store inserts, Update updates"
+            )
+        }
+
+        var updatedRows: [[String: any Sendable]] = []
+        for row in existingRows {
+            var merged = row
+            for (k, v) in updateDict {
+                merged[k] = v
+            }
+            // Rows in storage always carry an id, so this store replaces the
+            // matched row in place (upsert by id) instead of inserting.
+            let storeResult = await storage.storeWithChangeInfo(
+                value: merged,
+                in: repoName,
+                businessActivity: context.businessActivity
+            )
+            updatedRows.append(merged)
+
+            // Emit only for actual changes — an identical merge is a no-op
+            // (isUpdate with nil oldValue), mirroring Store's event policy.
+            if storeResult.isUpdate, let oldValue = storeResult.oldValue {
+                context.emit(RepositoryChangedEvent(
+                    repositoryName: repoName,
+                    changeType: .updated,
+                    entityId: storeResult.entityId,
+                    newValue: storeResult.storedValue,
+                    oldValue: oldValue
+                ))
+            }
+        }
+
+        let boundValue: any Sendable = updatedRows.count == 1
+            ? updatedRows[0]
+            : updatedRows
+        context.bind(result.base, value: boundValue, allowRebind: true)
+        return boundValue
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {

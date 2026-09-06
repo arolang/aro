@@ -741,7 +741,7 @@ prepositions each one declares.
 | 65 | Then | own | then | with |
 | 66 | Throw | response | fail, raise, throw | for |
 | 67 | Transform | own | convert, map, transform | from, into, to |
-| 68 | Update | own | change, configure, modify, set, update | for, from, to, with |
+| 68 | Update | own | change, configure, modify, set, update | for, from, into, to, with |
 | 69 | Validate | own | check, validate, verify | against, for, with |
 | 70 | WaitForEvents | server | block, keepalive, wait | for |
 | 71 | When | own | when | from |
