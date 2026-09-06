@@ -80,6 +80,15 @@ ARO's error text is already the message (ARO-0006): a block naming the
 feature, the statement, and the trace. It is split, not rewritten — first line
 as `evalue`, whole block as `traceback`.
 
+Because the first line is the headline, compile diagnostics arrive **ranked**
+(GitLab #509): errors before warnings before notes, and within a severity,
+root-cause findings before consequential ones — hygiene fallout of a failed
+statement, such as `Variable 'x' is defined but never used` or
+`Feature set '…' has no Return or Throw statement`. Emission order is
+preserved within each class and nothing is dropped or reworded, so `evalue`
+names the diagnostic worth acting on (e.g. `Unknown Compute qualifier
+'sparkle'`) and the fallout stays visible in `traceback`.
+
 ## Cell semantics
 
 A terminal REPL reads one input at a time. A cell arrives whole and may mix

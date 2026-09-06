@@ -84,7 +84,11 @@ public struct CodeQualityValidator {
                     hints: [
                         "Feature sets should end with a Return statement",
                         "Add: <Return> an <OK: status> for the <result>."
-                    ]
+                    ],
+                    // Consequential (GitLab #509): a statement that failed
+                    // analysis often takes the terminator down with it, so
+                    // this must never headline over the statement's error.
+                    category: .consequential
                 )
             }
         }

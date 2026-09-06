@@ -117,7 +117,11 @@ public struct DataFlowAnalyzer {
             if !usedVariables.contains(name) {
                 diagnostics.warning(
                     "Variable '\(name)' is defined but never used",
-                    at: symbol.definedAt.start
+                    at: symbol.definedAt.start,
+                    // Consequential (GitLab #509): when the statement that
+                    // was meant to use the variable itself errored, this is
+                    // fallout, not the finding — rank it below root causes.
+                    category: .consequential
                 )
             }
         }
