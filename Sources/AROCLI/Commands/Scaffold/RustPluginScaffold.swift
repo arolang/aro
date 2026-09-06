@@ -30,7 +30,7 @@ struct RustPluginScaffold: PluginScaffold {
         let name = options.pluginName
         return [
             "  1. Edit Plugins/\(name)/src/lib.rs",
-            "     — implement your actions in aro_plugin_execute()",
+            "     — add #[action] / #[qualifier] functions and list them in aro_export!",
             "",
             "  2. Build the plugin dynamic library:",
             "     cd Plugins/\(name) && cargo build --release",
@@ -99,102 +99,71 @@ struct RustPluginScaffold: PluginScaffold {
         let name   = options.pluginName
         let handle = options.handle
 
-        // Build the optional fields for plugin info JSON (as Rust literal string fragments)
-        var extraInfoFields = ""
+        var actionsBlock = ""
+        var actionNames  = ""
         if options.includeActions {
-            extraInfoFields += #","actions":[{"name":"Example","verbs":["example"],"role":"own","prepositions":["with","from"],"description":"An example action."}]"#
-        }
-        if options.includeQualifiers {
-            extraInfoFields += #","qualifiers":[{"name":"example","description":"An example qualifier.","input":"Any","output":"Any"}]"#
-        }
+            actionNames = "example"
+            actionsBlock = """
 
-        // Build match arms for aro_plugin_execute
-        var matchArms = ""
-        if options.includeActions {
-            matchArms += """
-                        "example" => r#"{"result":"ok"}"#.to_string(),
+
+            // MARK: - Actions
+
+            /// Invoked from ARO as: \(handle).Example the <result> from <source>.
+            #[action(name = "example", verbs = ["example"], role = "own",
+                     prepositions = ["with", "from"],
+                     description = "An example action.")]
+            fn example(input: &Input) -> PluginResult<Output> {
+                let data = input.string("data").unwrap_or("");
+                // TODO: Implement your action logic
+                Ok(Output::new()
+                    .set("result", json!("ok"))
+                    .set("data", json!(data)))
+            }
             """
         }
 
-        // Produce the Rust literal for the static info JSON string
-        let infoJsonLiteral = #"{"name":""# + name + #"","version":"1.0.0","handle":""# + handle + #"","abi":"ARO-0073""# + extraInfoFields + "}"
+        var qualifiersBlock = ""
+        var qualifierNames  = ""
+        if options.includeQualifiers {
+            qualifierNames = "qualifier_example"
+            qualifiersBlock = """
+
+
+            // MARK: - Qualifiers
+
+            /// Accessed from ARO as: <value: \(handle).example>
+            #[qualifier_attr(name = "example", input_types = ["String"],
+                             description = "Uppercases a string (example qualifier).")]
+            fn qualifier_example(input: &Input) -> PluginResult<Output> {
+                let value = input
+                    .string("value")
+                    .ok_or_else(|| PluginError::invalid_type("value", "a string"))?;
+                // The runtime reads the transformed value from the "result" field.
+                Ok(Output::new().set("result", json!(value.to_uppercase())))
+            }
+            """
+        }
 
         return """
-        //! ARO Plugin — \(name) (ARO-0073 ABI)
+        //! ARO Plugin — \(name)
         //!
-        //! Implements the ARO native plugin C ABI:
-        //!   aro_plugin_info      — required: return JSON metadata
-        //!   aro_plugin_init      — lifecycle: called after load
-        //!   aro_plugin_shutdown  — lifecycle: called before unload
-        //!   aro_plugin_execute   — optional: dispatch actions
-        //!   aro_plugin_free      — required: free plugin-allocated strings
+        //! Uses the ARO Plugin SDK macros for zero-boilerplate C ABI generation.
+        //! The `aro_export!` macro generates every export the ARO runtime needs:
+        //! `aro_plugin_info`, `aro_plugin_execute`, `aro_plugin_qualifier`,
+        //! `aro_plugin_free`, `aro_plugin_init`, and `aro_plugin_shutdown`.
+        //!
+        //! See: https://github.com/arolang/aro-plugin-sdk-rust
 
-        use std::ffi::{CStr, CString};
-        use std::os::raw::c_char;
+        use aro_plugin_sdk::prelude::*;
+        \(actionsBlock)\(qualifiersBlock)
 
-        // ── C ABI ──────────────────────────────────────────────────────────────
-
-        /// Return plugin metadata as a JSON string.
-        #[no_mangle]
-        pub extern "C" fn aro_plugin_info() -> *mut c_char {
-            let info = "\(infoJsonLiteral.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))";
-            CString::new(info).unwrap().into_raw()
-        }
-
-        /// Called once after the plugin dylib is loaded.
-        #[no_mangle]
-        pub extern "C" fn aro_plugin_init() {
-            // Allocate long-lived resources here.
-        }
-
-        /// Called once before the plugin dylib is unloaded.
-        #[no_mangle]
-        pub extern "C" fn aro_plugin_shutdown() {
-            // Release resources here.
-        }
-
-        /// Execute a plugin action.
-        ///
-        /// `action`     — action name (e.g. "example")
-        /// `input_json` — ARO-0073 JSON envelope:
-        ///   { "result": {...}, "source": {...}, "preposition": "...",
-        ///     "data": <primary value>, "_with": {...}, "_context": {...} }
-        #[no_mangle]
-        pub extern "C" fn aro_plugin_execute(
-            action:     *const c_char,
-            input_json: *const c_char,
-        ) -> *mut c_char {
-            let action = unsafe {
-                if action.is_null() { return error_json("null action ptr") }
-                CStr::from_ptr(action).to_string_lossy().into_owned()
-            };
-            let _input = unsafe {
-                if input_json.is_null() { return error_json("null input ptr") }
-                CStr::from_ptr(input_json).to_string_lossy().into_owned()
-            };
-
-            let result = match action.as_str() {
-        \(matchArms)
-                // TODO: Add further action handlers
-                other => format!(r#"{{"error":"Unknown action: {}"}}"#, other),
-            };
-
-            CString::new(result).unwrap().into_raw()
-        }
-
-        /// Free a string allocated by this plugin.
-        #[no_mangle]
-        pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
-            if ptr.is_null() { return }
-            unsafe { drop(CString::from_raw(ptr)) }
-        }
-
-        // ── Helpers ────────────────────────────────────────────────────────────
-
-        fn error_json(msg: &str) -> *mut c_char {
-            CString::new(format!(r#"{{"error":"{}"}}"#, msg))
-                .unwrap()
-                .into_raw()
+        // Wire every #[action] / #[qualifier] function into the C ABI exports.
+        aro_export! {
+            name: "\(name)",
+            version: "1.0.0",
+            handle: "\(handle)",
+            actions: [\(actionNames)],
+            qualifiers: [\(qualifierNames)],
         }
         """
     }
