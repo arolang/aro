@@ -52,25 +52,93 @@ private func makeTempRepo(commitCount: Int = 1) throws -> URL {
 @Suite("GitService Tests")
 struct GitServiceTests {
 
-    @Test("resolveRepoPath defaults to cwd when qualifier is nil")
+    @Test("resolveRepoPath with nil qualifier discovers the enclosing repository")
     func testResolveRepoPathNil() {
+        // The test process runs from the package root, which is itself a git
+        // work tree — bare <git> must discover exactly that root (GitLab #510).
         let git = GitService.shared
         let result = git.resolveRepoPath(nil)
-        #expect(result.path == FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        #expect(result.standardizedFileURL.resolvingSymlinksInPath().path
+                == cwd.standardizedFileURL.resolvingSymlinksInPath().path)
     }
 
-    @Test("resolveRepoPath defaults to cwd when qualifier is dot")
+    @Test("resolveRepoPath keeps explicit dot qualifier as exact cwd (no discovery)")
     func testResolveRepoPathDot() {
         let git = GitService.shared
         let result = git.resolveRepoPath(".")
         #expect(result.path == FileManager.default.currentDirectoryPath)
     }
 
-    @Test("resolveRepoPath defaults to cwd when qualifier is empty")
+    @Test("resolveRepoPath treats empty qualifier like bare <git>")
     func testResolveRepoPathEmpty() {
         let git = GitService.shared
         let result = git.resolveRepoPath("")
-        #expect(result.path == FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        #expect(result.standardizedFileURL.resolvingSymlinksInPath().path
+                == cwd.standardizedFileURL.resolvingSymlinksInPath().path)
+    }
+
+    @Test("discoverRepository finds the repo root from a nested subdirectory")
+    func testDiscoverFromSubdirectory() throws {
+        let git = GitService.shared
+        let repo = try makeTempRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let deep = repo.appendingPathComponent("sub").appendingPathComponent("deeper")
+        try FileManager.default.createDirectory(at: deep, withIntermediateDirectories: true)
+
+        let discovered = try #require(git.discoverRepository(from: deep))
+        #expect(discovered.standardizedFileURL.resolvingSymlinksInPath().path
+                == repo.standardizedFileURL.resolvingSymlinksInPath().path)
+
+        // The discovered root must actually be usable by the service.
+        let status = try git.status(in: discovered)
+        #expect(status.branch != nil)
+    }
+
+    @Test("discoverRepository returns nil outside any repository")
+    func testDiscoverOutsideRepository() throws {
+        let git = GitService.shared
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-git-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        #expect(git.discoverRepository(from: tmpDir) == nil)
+    }
+
+    @Test("discoverRepository resolves a linked worktree (.git file) from a subdirectory")
+    func testDiscoverLinkedWorktree() throws {
+        let git = GitService.shared
+        let repo = try makeTempRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let worktree = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-git-wt-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: worktree) }
+
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        p.arguments = ["worktree", "add", "-b", "wt-branch", worktree.path]
+        p.currentDirectoryURL = repo
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else {
+            throw GitServiceError.operationFailed(context: "test-setup", detail: "git worktree add failed")
+        }
+
+        let sub = worktree.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+
+        let discovered = try #require(git.discoverRepository(from: sub))
+        #expect(discovered.standardizedFileURL.resolvingSymlinksInPath().path
+                == worktree.standardizedFileURL.resolvingSymlinksInPath().path)
+
+        let branch = try git.currentBranch(in: discovered)
+        #expect(branch == "wt-branch")
     }
 
     @Test("resolveRepoPath uses absolute path qualifier")

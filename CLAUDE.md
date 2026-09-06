@@ -577,7 +577,7 @@ The `Keepalive` action:
 
 ### Git Actions (ARO-0080)
 
-Native version control via libgit2. The `<git>` system object defaults to the current working directory; use `<git: "/path">` for an explicit repository.
+Native version control via libgit2. The bare `<git>` system object discovers the enclosing repository upward from the current working directory (like the `git` CLI); use `<git: "/path">` for an explicit repository (opened as given, no discovery).
 
 ```aro
 (* Status, log, branch via Retrieve *)
