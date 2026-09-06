@@ -1802,7 +1802,7 @@ extension CreatedEntity: Equatable {
 public struct SortAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["sort", "order", "arrange"]
-    public static let validPrepositions: Set<Preposition> = [.for, .with]
+    public static let validPrepositions: Set<Preposition> = [.for, .with, .from]
 
     public init() {}
 
@@ -1818,10 +1818,28 @@ public struct SortAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Sort order from result specifiers or base (for backward compatibility)
+        // Sort order: trailing `by <field> descending` (ARO-0002
+        // §Ordering) wins over the result qualifier form
+        // `<sorted: descending>`; both default ascending.
         let knownOrders: Set<String> = ["ascending", "descending"]
-        let order = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
+        let qualifierOrder = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
+        let order = (context.resolveAny("_by_order_") as? String) ?? qualifierOrder
         let ascending = order.lowercased() != "descending"
+
+        // Field-based sort (GitLab #491), both spellings:
+        //     Sort the <sorted> from the <users> by "score".
+        //     Sort the <sorted> from the <users> by <score>.
+        // The string form arrives as `_by_field_` (the channel Group
+        // uses). The angle form arrives as `_by_var_`: a bound string
+        // variable names the field dynamically, an unbound name IS the
+        // field — that is what ARO-0002's `by <name>` means.
+        if let byField = context.resolveAny("_by_field_") as? String {
+            return try Self.sortRecords(collection, by: byField, ascending: ascending)
+        }
+        if let byVar = context.resolveAny("_by_var_") as? String {
+            let field = (context.resolveAny(byVar) as? String) ?? byVar
+            return try Self.sortRecords(collection, by: field, ascending: ascending)
+        }
 
         // `Array(...)` around the descending branch is load-bearing
         // (GitLab #466): `sorted().reversed()` is a lazy
@@ -1862,8 +1880,98 @@ public struct SortAction: ActionImplementation {
             }
         }
 
-        // Return original if not sortable
-        return collection
+        // A record list without `by` reads as "sort these somehow" —
+        // there is no natural order on records, so say what would work.
+        if let array = collection as? [any Sendable],
+           array.contains(where: { $0 is [String: any Sendable] }) {
+            throw ActionError.validationFailed(
+                "Sort: a record list needs a field to sort by — add `by \"<field>\"` (GitLab #491)."
+            )
+        }
+
+        // Anything else used to be returned untouched, which made an
+        // `aro check`-green program compute wrong results (GitLab #491).
+        // A silent no-op is the worst failure mode; name the contract.
+        throw ActionError.validationFailed(
+            "Sort: '\(object.base)' is not sortable — expected a list of strings, "
+            + "numbers, or records (records need `by \"<field>\"`), got \(type(of: collection))."
+        )
+    }
+
+    /// Sorts a list of records by one field's value (GitLab #491).
+    ///
+    /// Field values must be uniformly comparable: all numeric (Int and
+    /// Double may mix) or all strings. A missing field or a mixed/other
+    /// type is an error, never a silent pass-through — that is the
+    /// failure mode this exists to remove.
+    public static func sortRecords(_ collection: any Sendable, by field: String, ascending: Bool) throws -> any Sendable {
+        guard let array = collection as? [any Sendable] else {
+            throw ActionError.validationFailed(
+                "Sort by \"\(field)\": expected a list of records, got \(type(of: collection))."
+            )
+        }
+
+        var keyed: [(key: SortKey, element: any Sendable)] = []
+        keyed.reserveCapacity(array.count)
+        for (index, element) in array.enumerated() {
+            guard let record = element as? [String: any Sendable] else {
+                throw ActionError.validationFailed(
+                    "Sort by \"\(field)\": element \(index + 1) is not a record (got \(type(of: element)))."
+                )
+            }
+            guard let value = record[field] else {
+                let available = record.keys.sorted().joined(separator: ", ")
+                throw ActionError.validationFailed(
+                    "Sort by \"\(field)\": record \(index + 1) has no field '\(field)' (fields: \(available))."
+                )
+            }
+            switch value {
+            case let number as Int:
+                keyed.append((.number(Double(number)), element))
+            case let number as Double:
+                keyed.append((.number(number), element))
+            case let text as String:
+                keyed.append((.text(text), element))
+            default:
+                throw ActionError.validationFailed(
+                    "Sort by \"\(field)\": record \(index + 1) holds a \(type(of: value)) — "
+                    + "only numbers and strings order."
+                )
+            }
+        }
+
+        let allNumbers = keyed.allSatisfy { if case .number = $0.key { return true } else { return false } }
+        let allTexts = keyed.allSatisfy { if case .text = $0.key { return true } else { return false } }
+        guard allNumbers || allTexts else {
+            throw ActionError.validationFailed(
+                "Sort by \"\(field)\": values mix numbers and strings, which do not order against each other."
+            )
+        }
+
+        // `enumerated` + index tiebreak keeps the sort stable — equal
+        // keys preserve input order, which record lists rely on.
+        let sorted = keyed.enumerated().sorted { lhs, rhs in
+            if lhs.element.key == rhs.element.key { return lhs.offset < rhs.offset }
+            return ascending
+                ? lhs.element.key < rhs.element.key
+                : rhs.element.key < lhs.element.key
+        }
+        return sorted.map { $0.element.element }
+    }
+
+    private enum SortKey: Comparable {
+        case number(Double)
+        case text(String)
+
+        static func < (lhs: SortKey, rhs: SortKey) -> Bool {
+            switch (lhs, rhs) {
+            case (.number(let l), .number(let r)): return l < r
+            case (.text(let l), .text(let r)): return l < r
+            // Unreachable: execute() rejects mixed key types first.
+            case (.number, .text): return true
+            case (.text, .number): return false
+            }
+        }
     }
 }
 
@@ -2082,12 +2190,15 @@ public struct MergeAction: ActionImplementation {
 /// - Dictionaries: removes the key
 /// - Arrays: removes by index
 /// - Repositories: removes items matching the where clause
+/// - Files and directories: removes the item at the path (ARO-0036 §7)
 ///
 /// ## Examples
 /// ```
 /// <Delete> the <key> from the <dictionary>.
 /// <Delete> the <0> from the <array>.
 /// <Delete> the <user> from the <user-repository> where id = <userId>.
+/// <Delete> the <gone> from "./scratch.txt".
+/// <Delete> the <gone> from the <file: "./scratch.txt">.
 /// ```
 public struct DeleteAction: ActionImplementation {
     public static let role: ActionRole = .own
@@ -2114,9 +2225,30 @@ public struct DeleteAction: ActionImplementation {
             )
         }
 
+        // File deletion via qualified object (ARO-0036 §7, GitLab #493):
+        // `from the <file: path>` / `from the <directory: path>` carry the
+        // path in the qualifier, like every other ARO-0036 action.
+        if targetName == "file" || targetName == "directory" {
+            let path = try context.resolveString(
+                base: object.base,
+                specifiers: object.specifiers,
+                excluding: ["file", "directory"],
+                field: "a file or directory path",
+                action: "Delete"
+            )
+            return try await deleteFile(at: path, context: context)
+        }
+
         // Get the source containing the item to delete
         guard let source = context.resolveAny(targetName) else {
             throw ActionError.undefinedVariable(targetName)
+        }
+
+        // A string object is a path (GitLab #493): `Delete the <gone> from
+        // "./f.txt"` arrives here as an `_expression_` binding, and a string
+        // variable behaves the same way Write's and Read's path objects do.
+        if let path = source as? String {
+            return try await deleteFile(at: path, context: context)
         }
 
         // Key to delete from result specifiers
@@ -2134,10 +2266,29 @@ public struct DeleteAction: ActionImplementation {
             return array
         }
 
-        // Emit delete event
-        context.emit(DataDeletedEvent(target: result.base, source: targetName))
+        // No recognized target. Answering ok while deleting nothing is the
+        // failure GitLab #493 exists to prevent — a destructive-sounding
+        // statement must delete or error, never silently succeed.
+        throw ActionError.typeMismatch(
+            expected: "a repository, dictionary, array, or file path",
+            actual: "\(type(of: source))",
+            variable: targetName
+        )
+    }
 
-        return DeleteResult(target: result.base, success: true)
+    /// Delete the file or directory at `path` via the file system service.
+    ///
+    /// A missing path is a hard error (FileSystemError.fileNotFound), matching
+    /// Copy and Move on a missing source (ARO-0006): rerunning a delete fails
+    /// loudly instead of pretending the file was just removed (GitLab #493).
+    /// Directories are removed recursively; the service publishes
+    /// FileDeletedEvent on success.
+    private func deleteFile(at path: String, context: ExecutionContext) async throws -> any Sendable {
+        guard let fileService = context.service(FileSystemService.self) else {
+            throw ActionError.missingService("FileSystemService")
+        }
+        try await fileService.delete(path: path)
+        return DeleteResult(target: path, success: true)
     }
 
     private func deleteFromRepository(
@@ -2145,6 +2296,17 @@ public struct DeleteAction: ActionImplementation {
         repositoryName: String,
         context: ExecutionContext
     ) async throws -> any Sendable {
+        // GitLab #498: a compound where (and/or chaining) has no
+        // single-field delete path in storage — and treating it as "no
+        // where clause" would fall through to clearing the entire
+        // repository. `aro check` rejects the shape; this guard covers
+        // programs that reach the runtime without the analyzer.
+        if context.resolveAny("_where_tree_") != nil {
+            throw ActionError.missingRequiredField(
+                field: "a single-predicate 'where' clause — and/or chaining is not supported for Delete",
+                action: "Delete from \(repositoryName)")
+        }
+
         // Check for where clause (bound by FeatureSetExecutor)
         let whereField: String? = context.resolve("_where_field_")
         let whereValue = context.resolveAny("_where_value_")

@@ -13,13 +13,13 @@ The Git actions are introduced in [ARO-0080](../../Proposals/ARO-0080-git-action
 
 ## The `<git>` System Object
 
-`<git>` represents a Git repository. With no qualifier, it points at the **current working directory**:
+`<git>` represents a Git repository. With no qualifier, it **discovers the enclosing repository** by walking upward from the current working directory — exactly like the `git` CLI, so it works from any subdirectory of a work tree (linked worktrees included):
 
 ```aro
 Retrieve the <status> from the <git>.
 ```
 
-To target a different repository, pass a path as a string qualifier:
+To target a different repository, pass a path as a string qualifier. An explicit path is opened as given — no upward discovery:
 
 ```aro
 Retrieve the <status> from the <git: "/srv/projects/my-repo">.

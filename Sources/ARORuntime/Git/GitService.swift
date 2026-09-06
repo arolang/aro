@@ -12,8 +12,10 @@ import Clibgit2
 
 /// Provides Git operations for ARO Git Actions using libgit2 directly.
 ///
-/// When `git-repository` is used without a qualifier, the current working
-/// directory is assumed. An explicit path qualifier overrides this.
+/// When `<git>` is used without a qualifier, the enclosing repository is
+/// discovered by walking upward from the current working directory —
+/// exactly like the `git` CLI (GitLab #510). An explicit path qualifier
+/// overrides this and is opened as given, with no discovery.
 public final class GitService: @unchecked Sendable {
 
     public static let shared = GitService()
@@ -48,16 +50,62 @@ public final class GitService: @unchecked Sendable {
     }
 
     /// Resolve a repository path from an ARO object qualifier.
-    /// `nil` or `"."` means the current working directory.
+    ///
+    /// A bare `<git>` (`nil` or empty qualifier) discovers the enclosing
+    /// repository by walking upward from the current working directory, the
+    /// way the `git` CLI does (GitLab #510) — so Git actions work from any
+    /// subdirectory of a work tree. An explicit qualifier — including `"."`
+    /// — is resolved as given, with no discovery. When discovery finds no
+    /// repository the working directory itself is returned, so the caller's
+    /// failure still names the place the user ran from
+    /// (`Not a Git repository: <cwd>`).
     public func resolveRepoPath(_ qualifier: String?) -> URL {
-        if let q = qualifier, !q.isEmpty, q != "." {
+        if let q = qualifier, !q.isEmpty {
+            if q == "." {
+                return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            }
             if q.hasPrefix("/") {
                 return URL(fileURLWithPath: q)
             }
             return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent(q)
         }
-        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return discoverRepository(from: cwd) ?? cwd
+    }
+
+    /// Walk upward from `start` to the enclosing Git repository, using
+    /// libgit2's `git_repository_discover` — the same walk the `git` CLI
+    /// performs. Stops at filesystem boundaries; linked worktrees (where
+    /// `.git` is a file) resolve correctly.
+    ///
+    /// Returns the work tree root — or the git directory for a bare
+    /// repository — or `nil` when no repository encloses `start`.
+    public func discoverRepository(from start: URL) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        var buf = git_buf()
+        defer { git_buf_dispose(&buf) }
+        let rc = start.path.withCString {
+            git_repository_discover(&buf, $0, 0 /* across_fs: stop at fs boundary */, nil)
+        }
+        guard rc == 0, let ptr = buf.ptr else { return nil }
+        let gitDir = String(cString: ptr)
+
+        // Discovery yields the git *directory* (`.git/`, or the private
+        // worktree gitdir when `.git` is a file). Open it to learn the work
+        // tree root, which is what every other GitService entry point takes.
+        var repo: OpaquePointer?
+        guard gitDir.withCString({ git_repository_open(&repo, $0) }) == 0, let repo else {
+            return URL(fileURLWithPath: gitDir)
+        }
+        defer { git_repository_free(repo) }
+
+        if let workdir = git_repository_workdir(repo) {
+            return URL(fileURLWithPath: String(cString: workdir))
+        }
+        return URL(fileURLWithPath: gitDir) // bare repository: no work tree
     }
 
     // MARK: - Status

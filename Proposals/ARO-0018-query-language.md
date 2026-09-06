@@ -158,11 +158,35 @@ reduce_statement = "<Reduce>" , "the" , typed_result , "from" , "the" , source ,
 
 ### 2.2 Logical Operators
 
+Predicates chain with `and` and `or`; `and` binds tighter, and
+parentheses group explicitly (grammar in §7):
+
 ```aro
-Fetch the <users: List<User>> from the <all-users>
+Filter the <big-paid: List<Order>> from the <orders>
+    where <status> is "paid" and <qty> > 2.
+
+Fetch the <users: List<User>> from the <user-repository>
     where (<role> is "admin" or <role> is "moderator")
           and <active> is true.
 ```
+
+Semantics (GitLab #498):
+
+- Each predicate's value is an expression parsed *above* the logical
+  operators, so a following `and`/`or` always starts the next
+  predicate. A value that is itself a logical expression must be
+  parenthesized: `where <flag> is (<a> or <b>)`.
+- `between lo and hi` is inclusive and desugars to
+  `<field> >= lo and <field> <= hi` — the `and` after `lo` belongs to
+  `between`, and the result chains like any other conjunction:
+  `where <qty> between 2 and 4 and <status> is "paid"`.
+- A malformed where clause (unknown operator, dangling `and`,
+  unclosed parenthesis) is a check-time error naming the clause — it
+  never mis-consumes tokens into a runtime "Undefined variable".
+- `Delete … where` keeps exactly one predicate: repository deletes
+  address rows by a single field/value pair, and a compound condition
+  is rejected by `aro check`. Chain single-predicate deletes (AND
+  semantics), or Filter what should remain and Store it back.
 
 ---
 
@@ -398,3 +422,4 @@ components:
 | 2.0 | 2025-12 | Simplified to map/reduce style. Removed JOINs, subqueries, CTEs, set operations. Results typed via OpenAPI. |
 | 2.1 | 2026-04-02 | Added Group action for partitioning collections by field value. |
 | 2.2 | 2026-08 | §1.3: documents the `with <field>` projection spelling and states that Map has no per-element binding — a `with` expression is a check-time error (GitLab #465). |
+| 2.3 | 2026-09 | §2.2: where clauses implement the documented `and`/`or` chaining with parentheses (`and` binds tighter), `between` desugars to two inclusive comparisons, malformed clauses fail `aro check`, and `Delete … where` stays single-predicate (GitLab #498). |

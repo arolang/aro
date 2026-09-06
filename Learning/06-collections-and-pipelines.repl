@@ -1,137 +1,137 @@
 {
-  "version": 1,
-  "cells": [
-    {
-      "id": "nb06-c01",
-      "kind": "markdown",
-      "source": "# 06 — Collections & Pipelines\n\nIt is 6 p.m. at **Brew & Bytes**. The register has recorded every order\nof the day, and the owner wants answers: how much did we take in, what\nsold best, which orders are still open? One day of orders is a\n*collection* — and collections are where ARO's pipeline actions shine.\n\nThis notebook teaches the five pipeline actions — **Filter**, **Map**,\n**Reduce**, **Sort**, **Group** — plus `for each` loops and the\naggregate Compute qualifiers. Each action takes a collection in and\nbinds a *new* collection (or a single value) out. Nothing is modified\nin place; a pipeline is a chain of named, immutable stages.\n\nThat chain reads like the analysis it performs:\ntake the orders → keep the paid ones → sum their totals. By the end\nyou will have written the café's end-of-day report.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c02",
-      "kind": "code",
-      "source": "Create the <day-orders> with [\n    { id: 1, item: \"espresso\",   qty: 2, price: 2.4, total: 4.8,  status: \"paid\" },\n    { id: 2, item: \"latte\",      qty: 1, price: 3.6, total: 3.6,  status: \"open\" },\n    { id: 3, item: \"croissant\",  qty: 3, price: 2.1, total: 6.3,  status: \"paid\" },\n    { id: 4, item: \"flat white\", qty: 2, price: 3.8, total: 7.6,  status: \"refunded\" },\n    { id: 5, item: \"espresso\",   qty: 1, price: 2.4, total: 2.4,  status: \"paid\" },\n    { id: 6, item: \"latte\",      qty: 4, price: 3.6, total: 14.4, status: \"paid\" }\n].",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Create`** is an *OWN* action: it builds a value internally and\n  binds it to a name. Nothing is read from outside, nothing leaves.\n- The value is a **list of records** — square brackets for the list,\n  curly braces for each record, `field: value` pairs inside. This is\n  the shape almost every real dataset takes: one record per order,\n  one field per fact about it.\n- `<day-orders>` now names this list for the whole session. It will\n  never change; every pipeline stage below derives a *new* name\n  from it.\n\nEvery pipeline action below has the same anatomy:\n`Action the <new-name> from the <source> …` — source in, fresh\nresult out.\n\n## Filter — keep what matches\n\n`Filter` keeps the elements whose fields satisfy a `where` clause and\nbinds them as a new list. Inside the clause, a bare `<field>` refers to\nthe field *of each element* — here `<status>` means each order's\nstatus.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c04",
-      "kind": "code",
-      "source": "Filter the <paid-orders> from the <day-orders> where <status> is \"paid\".\nLog <paid-orders> to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c05",
-      "kind": "markdown",
-      "source": "The `where` clause accepts these operators: `is` / `==`, `!=`,\n`<`, `<=`, `>`, `>=`, `contains`, `matches` (regex), `in`, and\n`not in`. One condition per Filter — when you need *and*, chain two\nFilters. That is not a workaround; it is the pipeline style: each\nstage has one job and one name, so every intermediate result can be\ninspected and logged.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c06",
-      "kind": "code",
-      "source": "Filter the <paid-multi> from the <paid-orders> where <qty> > 1.\nLog <paid-multi> to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c07",
-      "kind": "markdown",
-      "source": "## Map — project one field\n\n`Map` pulls a single **field** out of every record. The field goes in\nthe qualifier slot — or, equivalently, after `with`. Both spellings\nbelow are the same statement.\n\nOne thing Map does *not* take is an expression: there is no\nper-element variable for `with <x> * 0.9` to range over, and\n`aro check` rejects the attempt. To compute something per element,\nuse `for each` (below).",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c08",
-      "kind": "code",
-      "source": "Map the <items-sold: item> from the <day-orders>.\nMap the <totals-list> from the <day-orders> with total.\nLog <items-sold> to the <console>.\nLog <totals-list> to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c09",
-      "kind": "markdown",
-      "source": "## Reduce — collapse to one value\n\n`Reduce` aggregates a whole collection into a single value. The\naggregate function goes after `with`; a field argument tells it what\nto aggregate over.\n\n| Function | Meaning |\n|----------|---------|\n| `count()` | number of elements |\n| `sum(<field>)` | total of a numeric field |\n| `avg(<field>)` | arithmetic mean |\n| `min(<field>)` / `max(<field>)` | extremes |\n\nThe result qualifier (`: Float`, `: Integer`) states the type you\nexpect back — the pipeline is typed end to end.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c10",
-      "kind": "code",
-      "source": "Reduce the <revenue: Float> from the <paid-orders> with sum(<total>).\nReduce the <order-count: Integer> from the <paid-orders> with count().\nReduce the <mean-ticket: Float> from the <paid-orders> with avg(<total>).\nReduce the <best-ticket: Float> from the <paid-orders> with max(<total>).\nLog \"Paid orders: ${<order-count>}\" to the <console>.\nLog \"Revenue: ${<revenue>}\" to the <console>.\nLog \"Average ticket: ${<mean-ticket>}\" to the <console>.\nLog \"Largest ticket: ${<best-ticket>}\" to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c11",
-      "kind": "markdown",
-      "source": "### Variant: aggregate qualifiers on plain lists\n\nWhen you already hold a plain list of numbers (for instance one that\n`Map` projected out), `Compute` offers `sum`, `avg`, `count`, and\n`unique` as qualifiers — no field argument needed. Prefer `Reduce`\nwhen you are aggregating a field of a record list; prefer the Compute\nqualifiers when the list is already scalar.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c12",
-      "kind": "code",
-      "source": "Compute the <ticket-sum: sum> from <totals-list>.\nCompute the <ticket-mean: avg> from <totals-list>.\nCompute the <distinct-items: unique> from <items-sold>.\nLog <ticket-sum> to the <console>.\nLog <ticket-mean> to the <console>.\nLog <distinct-items> to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c13",
-      "kind": "markdown",
-      "source": "## Sort — an action, not a qualifier\n\nSorting is spelled as its own action: `Sort the <result> for the\n<list>.` — ascending by default, descending via the `descending`\nqualifier on the result. (Writing `Compute the <s: sort> …` is an\nerror; the diagnostic points you to the action.)\n\nSort orders **scalar lists** — numbers or strings. To order records\nby a field in the current build, project the field out with `Map`\nfirst and sort the projection; a record list handed to Sort comes\nback unchanged, which is a silent surprise worth knowing about.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c14",
-      "kind": "code",
-      "source": "Sort the <cheap-first> for the <totals-list>.\nSort the <big-first: descending> for the <totals-list>.\nLog <cheap-first> to the <console>.\nLog <big-first> to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c15",
-      "kind": "markdown",
-      "source": "## Group — partition by a field\n\n`Group` splits a record list into a dictionary: one key per distinct\nfield value, each key holding the list of records that carry it. You\nreach into a group with an `Extract` qualifier — and because each\ngroup is an ordinary list, the whole pipeline vocabulary applies to\nit again.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c16",
-      "kind": "code",
-      "source": "Group the <status-groups> from the <day-orders> by \"status\".\nExtract the <refunded-orders> from the <status-groups: refunded>.\nReduce the <refund-loss: Float> from the <refunded-orders> with sum(<total>).\nLog <status-groups> to the <console>.\nLog \"Lost to refunds: ${<refund-loss>}\" to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c17",
-      "kind": "markdown",
-      "source": "## for each — when you need per-element work\n\nThe pipeline actions cover whole-collection questions. For\nper-element *computation* — a derived value, a formatted line — use\n`for each`. A `where` clause on the loop skips non-matching elements;\ninside it, compare strings with `==` and booleans with `is`.\n\nBindings made inside the loop body are scoped to the iteration, so\n`Extract`-ing a field into a name each time round is not a rebind.\n(`Extract` is a *REQUEST* action: it pulls data from a source — here,\na field off the loop element.)",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c18",
-      "kind": "code",
-      "source": "for each <order> in <day-orders> where <order: qty> > 1 {\n    Extract the <qty-part> from the <order: qty>.\n    Extract the <price-part> from the <order: price>.\n    Compute the <line-value> from <qty-part> * <price-part>.\n    Log \"${<order: qty>} x ${<order: item>} = ${<line-value>}\" to the <console>.\n}",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c19",
-      "kind": "markdown",
-      "source": "## Discussion\n\n**Every stage has a name.** Because bindings are immutable\n([04 — Immutability](04-immutability.repl)), a pipeline cannot\noverwrite its input — `<day-orders>` is still intact after everything\nabove. That makes pipelines auditable: log any intermediate stage,\nat any time, and it shows what that stage saw.\n\n**Deliberately not SQL.** There are no joins, subqueries, or CTEs\n([ARO-0018](../Proposals/ARO-0018-query-language.md) rules them out\nby design). If your analysis outgrows filter/map/reduce/group, that\nis a signal to reshape the data, not to grow the query language.\n\n**Pitfalls worth remembering:**\n- `Sort` leaves record lists untouched — project a field first.\n- `Map` takes a field *name*; expressions belong in `for each`.\n- One `where` condition per Filter; chain Filters for *and*.\n\nIndependent pipeline stages can even overlap in time — statement\nexecution is lazy and concurrent where data flow allows\n([ARO-0088](../Proposals/ARO-0088-concurrency-model.md)), and\n`parallel for each` exists for heavy per-element work.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c20",
-      "kind": "markdown",
-      "source": "## Real-world example: the end-of-day report\n\nThe owner's evening questions, answered as one pipeline per line:\nespresso performance, outstanding orders, and the day's headline\nnumbers. Note how the stages defined earlier in this session\n(`<paid-orders>`, `<revenue>`, `<status-groups>`) are still available\n— a session is one growing, immutable fact base.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c21",
-      "kind": "code",
-      "source": "Group the <item-groups> from the <paid-orders> by \"item\".\nExtract the <espresso-orders> from the <item-groups: espresso>.\nReduce the <espresso-cups: Integer> from the <espresso-orders> with sum(<qty>).\nFilter the <open-orders> from the <day-orders> where <status> is \"open\".\nReduce the <open-count: Integer> from the <open-orders> with count().\nLog \"=== Brew & Bytes — daily report ===\" to the <console>.\nLog \"Revenue (paid): ${<revenue>}\" to the <console>.\nLog \"Espresso cups sold: ${<espresso-cups>}\" to the <console>.\nLog \"Orders still open: ${<open-count>}\" to the <console>.\nLog \"Refund loss: ${<refund-loss>}\" to the <console>.\nLog \"===================================\" to the <console>.",
-      "outputs": []
-    },
-    {
-      "id": "nb06-c22",
-      "kind": "markdown",
-      "source": "### Why the world needs this\n\nEvery till, webshop, and sensor produces exactly what\n`<day-orders>` models: a stream of records that someone must turn\ninto decisions. Retail chains run this filter–group–reduce shape\nnightly across millions of transactions; payment providers use the\nsame pattern to spot refund anomalies; observability platforms\naggregate service metrics with it every few seconds. The industry\nname for the layered version — raw records in, filtered and joined\ntables in the middle, aggregated products on top — is the *medallion\narchitecture*, and `Examples/MedallionPipeline` in this repository\nbuilds one in ARO end to end.\n\nThe reason declarative pipelines won over hand-rolled loops is the\nsame reason ARO names every stage: when the numbers look wrong at\n3 a.m., you can inspect each step's output instead of re-deriving\nthe whole calculation in your head.\n\n## Related\n\n- Next: [07 — Text Processing](07-text-processing.repl)\n- Before this: [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl)\n- Sets on collections: [11 — Set Operations & Merging](11-set-operations-and-merging.repl)\n- Language Guide: [Chapter 33 — Control Flow](../Book/TheLanguageGuide/Chapter33-ControlFlow.md),\n  [Chapter 34 — Data Pipelines](../Book/TheLanguageGuide/Chapter34-DataPipelines.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations),\n  [Language Tour](https://github.com/arolang/aro/wiki/Language-Tour)\n- Specification: [ARO-0018 — Data Pipelines](../Proposals/ARO-0018-query-language.md),\n  [ARO-0088 — Concurrency Model](../Proposals/ARO-0088-concurrency-model.md)\n- Examples: `Examples/DataPipeline`, `Examples/GroupDemo`, `Examples/Iteration`,\n  `Examples/MedallionPipeline`",
-      "outputs": []
-    }
-  ]
+ "version": 1,
+ "cells": [
+  {
+   "id": "nb06-c01",
+   "kind": "markdown",
+   "source": "# 06 — Collections & Pipelines\n\nIt is 6 p.m. at **Brew & Bytes**. The register has recorded every order\nof the day, and the owner wants answers: how much did we take in, what\nsold best, which orders are still open? One day of orders is a\n*collection* — and collections are where ARO's pipeline actions shine.\n\nThis notebook teaches the five pipeline actions — **Filter**, **Map**,\n**Reduce**, **Sort**, **Group** — plus `for each` loops and the\naggregate Compute qualifiers. Each action takes a collection in and\nbinds a *new* collection (or a single value) out. Nothing is modified\nin place; a pipeline is a chain of named, immutable stages.\n\nThat chain reads like the analysis it performs:\ntake the orders → keep the paid ones → sum their totals. By the end\nyou will have written the café's end-of-day report.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c02",
+   "kind": "code",
+   "source": "Create the <day-orders> with [\n    { id: 1, item: \"espresso\",   qty: 2, price: 2.4, total: 4.8,  status: \"paid\" },\n    { id: 2, item: \"latte\",      qty: 1, price: 3.6, total: 3.6,  status: \"open\" },\n    { id: 3, item: \"croissant\",  qty: 3, price: 2.1, total: 6.3,  status: \"paid\" },\n    { id: 4, item: \"flat white\", qty: 2, price: 3.8, total: 7.6,  status: \"refunded\" },\n    { id: 5, item: \"espresso\",   qty: 1, price: 2.4, total: 2.4,  status: \"paid\" },\n    { id: 6, item: \"latte\",      qty: 4, price: 3.6, total: 14.4, status: \"paid\" }\n].",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c03",
+   "kind": "markdown",
+   "source": "## What just happened\n\n- **`Create`** is an *OWN* action: it builds a value internally and\n  binds it to a name. Nothing is read from outside, nothing leaves.\n- The value is a **list of records** — square brackets for the list,\n  curly braces for each record, `field: value` pairs inside. This is\n  the shape almost every real dataset takes: one record per order,\n  one field per fact about it.\n- `<day-orders>` now names this list for the whole session. It will\n  never change; every pipeline stage below derives a *new* name\n  from it.\n\nEvery pipeline action below has the same anatomy:\n`Action the <new-name> from the <source> …` — source in, fresh\nresult out.\n\n## Filter — keep what matches\n\n`Filter` keeps the elements whose fields satisfy a `where` clause and\nbinds them as a new list. Inside the clause, a bare `<field>` refers to\nthe field *of each element* — here `<status>` means each order's\nstatus.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c04",
+   "kind": "code",
+   "source": "Filter the <paid-orders> from the <day-orders> where <status> is \"paid\".\nLog <paid-orders> to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c05",
+   "kind": "markdown",
+   "source": "The `where` clause accepts these operators: `is` / `==`, `!=`,\n`<`, `<=`, `>`, `>=`, `contains`, `matches` (regex), `in`, and\n`not in`. One condition per Filter — when you need *and*, chain two\nFilters. That is not a workaround; it is the pipeline style: each\nstage has one job and one name, so every intermediate result can be\ninspected and logged.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c06",
+   "kind": "code",
+   "source": "Filter the <paid-multi> from the <paid-orders> where <qty> > 1.\nLog <paid-multi> to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c07",
+   "kind": "markdown",
+   "source": "## Map — project one field\n\n`Map` pulls a single **field** out of every record. The field goes in\nthe qualifier slot — or, equivalently, after `with`. Both spellings\nbelow are the same statement.\n\nOne thing Map does *not* take is an expression: there is no\nper-element variable for `with <x> * 0.9` to range over, and\n`aro check` rejects the attempt. To compute something per element,\nuse `for each` (below).",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c08",
+   "kind": "code",
+   "source": "Map the <items-sold: item> from the <day-orders>.\nMap the <totals-list> from the <day-orders> with total.\nLog <items-sold> to the <console>.\nLog <totals-list> to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c09",
+   "kind": "markdown",
+   "source": "## Reduce — collapse to one value\n\n`Reduce` aggregates a whole collection into a single value. The\naggregate function goes after `with`; a field argument tells it what\nto aggregate over.\n\n| Function | Meaning |\n|----------|---------|\n| `count()` | number of elements |\n| `sum(<field>)` | total of a numeric field |\n| `avg(<field>)` | arithmetic mean |\n| `min(<field>)` / `max(<field>)` | extremes |\n\nThe result qualifier (`: Float`, `: Integer`) states the type you\nexpect back — the pipeline is typed end to end.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c10",
+   "kind": "code",
+   "source": "Reduce the <revenue: Float> from the <paid-orders> with sum(<total>).\nReduce the <order-count: Integer> from the <paid-orders> with count().\nReduce the <mean-ticket: Float> from the <paid-orders> with avg(<total>).\nReduce the <best-ticket: Float> from the <paid-orders> with max(<total>).\nLog \"Paid orders: ${<order-count>}\" to the <console>.\nLog \"Revenue: ${<revenue>}\" to the <console>.\nLog \"Average ticket: ${<mean-ticket>}\" to the <console>.\nLog \"Largest ticket: ${<best-ticket>}\" to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c11",
+   "kind": "markdown",
+   "source": "### Variant: aggregate qualifiers on plain lists\n\nWhen you already hold a plain list of numbers (for instance one that\n`Map` projected out), `Compute` offers `sum`, `avg`, `count`, and\n`unique` as qualifiers — no field argument needed. Prefer `Reduce`\nwhen you are aggregating a field of a record list; prefer the Compute\nqualifiers when the list is already scalar.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c12",
+   "kind": "code",
+   "source": "Compute the <ticket-sum: sum> from <totals-list>.\nCompute the <ticket-mean: avg> from <totals-list>.\nCompute the <distinct-items: unique> from <items-sold>.\nLog <ticket-sum> to the <console>.\nLog <ticket-mean> to the <console>.\nLog <distinct-items> to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c13",
+   "kind": "markdown",
+   "source": "## Sort — an action, not a qualifier\n\nSorting is spelled as its own action: `Sort the <result> for the\n<list>.` — ascending by default, descending via the `descending`\nqualifier on the result. (Writing `Compute the <s: sort> …` is an\nerror; the diagnostic points you to the action.)\n\nSort orders scalar lists — numbers or strings — and **record lists\nby a field**: `Sort the <ranked> from the <orders> by <total>.`\n(or `by \"total\"`; append `descending` after the field to flip the\norder). A list Sort cannot order is an error, never a silent\npass-through.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c14",
+   "kind": "code",
+   "source": "Sort the <cheap-first> for the <totals-list>.\nSort the <big-first: descending> for the <totals-list>.\nLog <cheap-first> to the <console>.\nLog <big-first> to the <console>.\nSort the <largest-orders> from the <day-orders> by <total> descending.\nExtract the <biggest-order: first> from the <largest-orders>.\nLog <biggest-order> to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c15",
+   "kind": "markdown",
+   "source": "## Group — partition by a field\n\n`Group` splits a record list into a dictionary: one key per distinct\nfield value, each key holding the list of records that carry it. You\nreach into a group with an `Extract` qualifier — and because each\ngroup is an ordinary list, the whole pipeline vocabulary applies to\nit again.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c16",
+   "kind": "code",
+   "source": "Group the <status-groups> from the <day-orders> by \"status\".\nExtract the <refunded-orders> from the <status-groups: refunded>.\nReduce the <refund-loss: Float> from the <refunded-orders> with sum(<total>).\nLog <status-groups> to the <console>.\nLog \"Lost to refunds: ${<refund-loss>}\" to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c17",
+   "kind": "markdown",
+   "source": "## for each — when you need per-element work\n\nThe pipeline actions cover whole-collection questions. For\nper-element *computation* — a derived value, a formatted line — use\n`for each`. A `where` clause on the loop skips non-matching elements;\ninside it, compare strings with `==` and booleans with `is`.\n\nQualified references go straight into arithmetic: `<order: qty> *\n<order: price>` reads both fields right where the math happens\n([ARO-0001](../Proposals/ARO-0001-language-fundamentals.md)).\nWhen a field deserves its own name — because several statements use\nit, or the name documents intent — `Extract` still does that, and\nbindings made inside the loop body are scoped to the iteration, so\nextracting into the same name each time round is not a rebind.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c18",
+   "kind": "code",
+   "source": "for each <order> in <day-orders> where <order: qty> > 1 {\n    Compute the <line-value> from <order: qty> * <order: price>.\n    Log \"${<order: qty>} x ${<order: item>} = ${<line-value>}\" to the <console>.\n}",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c19",
+   "kind": "markdown",
+   "source": "## Discussion\n\n**Every stage has a name.** Because bindings are immutable\n([04 — Immutability](04-immutability.repl)), a pipeline cannot\noverwrite its input — `<day-orders>` is still intact after everything\nabove. That makes pipelines auditable: log any intermediate stage,\nat any time, and it shows what that stage saw.\n\n**Deliberately not SQL.** There are no joins, subqueries, or CTEs\n([ARO-0018](../Proposals/ARO-0018-query-language.md) rules them out\nby design). If your analysis outgrows filter/map/reduce/group, that\nis a signal to reshape the data, not to grow the query language.\n\n**Pitfalls worth remembering:**\n- `Map` takes a field *name*; expressions belong in `for each`.\n- One `where` condition per Filter; chain Filters for *and*.\n\nIndependent pipeline stages can even overlap in time — statement\nexecution is lazy and concurrent where data flow allows\n([ARO-0088](../Proposals/ARO-0088-concurrency-model.md)), and\n`parallel for each` exists for heavy per-element work.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c20",
+   "kind": "markdown",
+   "source": "## Real-world example: the end-of-day report\n\nThe owner's evening questions, answered as one pipeline per line:\nespresso performance, outstanding orders, and the day's headline\nnumbers. Note how the stages defined earlier in this session\n(`<paid-orders>`, `<revenue>`, `<status-groups>`) are still available\n— a session is one growing, immutable fact base.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c21",
+   "kind": "code",
+   "source": "Group the <item-groups> from the <paid-orders> by \"item\".\nExtract the <espresso-orders> from the <item-groups: espresso>.\nReduce the <espresso-cups: Integer> from the <espresso-orders> with sum(<qty>).\nFilter the <open-orders> from the <day-orders> where <status> is \"open\".\nReduce the <open-count: Integer> from the <open-orders> with count().\nLog \"=== Brew & Bytes — daily report ===\" to the <console>.\nLog \"Revenue (paid): ${<revenue>}\" to the <console>.\nLog \"Espresso cups sold: ${<espresso-cups>}\" to the <console>.\nLog \"Orders still open: ${<open-count>}\" to the <console>.\nLog \"Refund loss: ${<refund-loss>}\" to the <console>.\nLog \"===================================\" to the <console>.",
+   "outputs": []
+  },
+  {
+   "id": "nb06-c22",
+   "kind": "markdown",
+   "source": "### Why the world needs this\n\nEvery till, webshop, and sensor produces exactly what\n`<day-orders>` models: a stream of records that someone must turn\ninto decisions. Retail chains run this filter–group–reduce shape\nnightly across millions of transactions; payment providers use the\nsame pattern to spot refund anomalies; observability platforms\naggregate service metrics with it every few seconds. The industry\nname for the layered version — raw records in, filtered and joined\ntables in the middle, aggregated products on top — is the *medallion\narchitecture*, and `Examples/MedallionPipeline` in this repository\nbuilds one in ARO end to end.\n\nThe reason declarative pipelines won over hand-rolled loops is the\nsame reason ARO names every stage: when the numbers look wrong at\n3 a.m., you can inspect each step's output instead of re-deriving\nthe whole calculation in your head.\n\n## Related\n\n- Next: [07 — Text Processing](07-text-processing.repl)\n- Before this: [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl)\n- Sets on collections: [11 — Set Operations & Merging](11-set-operations-and-merging.repl)\n- Language Guide: [Chapter 33 — Control Flow](../Book/TheLanguageGuide/Chapter33-ControlFlow.md),\n  [Chapter 34 — Data Pipelines](../Book/TheLanguageGuide/Chapter34-DataPipelines.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations),\n  [Language Tour](https://github.com/arolang/aro/wiki/Language-Tour)\n- Specification: [ARO-0018 — Data Pipelines](../Proposals/ARO-0018-query-language.md),\n  [ARO-0088 — Concurrency Model](../Proposals/ARO-0088-concurrency-model.md)\n- Examples: `Examples/DataPipeline`, `Examples/GroupDemo`, `Examples/Iteration`,\n  `Examples/MedallionPipeline`",
+   "outputs": []
+  }
+ ]
 }

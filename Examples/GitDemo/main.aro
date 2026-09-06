@@ -14,8 +14,9 @@
  *   Push/Pull — sync with remote (requires git CLI)
  *   Checkout  — switch branches from <git>
  *
- * The <git> system object defaults to the current working
- * directory. Use <git: "/path/to/repo"> for an explicit path.
+ * The bare <git> system object discovers the enclosing repository
+ * upward from the current working directory, like the git CLI.
+ * Use <git: "/path/to/repo"> for an explicit path (no discovery).
  *)
 
 (Application-Start: Git Demo) {

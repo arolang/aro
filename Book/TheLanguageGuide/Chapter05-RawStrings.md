@@ -364,3 +364,29 @@ Compute the <header> from <class> ++ "\n" ++ <begin>.
 ---
 
 *Next: Chapter 6 — Feature Sets*
+
+## Multi-line strings
+
+A block of text opens with `"""` followed immediately by a newline and
+closes with `"""` on its own line:
+
+```aro
+Create the <letter> with """
+    Dear guest,
+
+    Welcome to Brew & Bytes.
+    """.
+Log <letter> to the <console>.
+```
+
+Three rules, all borrowed from what indented code needs:
+
+1. **The closing delimiter sets the margin.** Its indentation is
+   stripped from the front of every line, so the block can sit indented
+   inside a feature set and still produce flush-left text.
+2. **The final newline is dropped** — the newline before the closing
+   `"""` belongs to the syntax, not the text.
+3. **No interpolation.** `${…}` stays literal inside a multi-line
+   block; escape sequences (`\n`, `\"`, `\u{…}`) still work. To build
+   dynamic multi-line text, `join` a list of interpolated lines, or run
+   a template (ARO-0050).

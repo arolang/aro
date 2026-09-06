@@ -25,6 +25,11 @@ public struct CodeQualityValidator {
         // tree so guarded statements, match cases and loop bodies are covered too.
         validatePrepositions(in: statements)
 
+        // GitLab #502: a bare Sleep operand is seconds, and a large one reads
+        // like milliseconds to anyone from other ecosystems — the symptom is a
+        // mysterious hang. Warn on unitless literals over a minute.
+        validateSleepDurations(in: statements)
+
         // Check for empty feature set
         if statements.isEmpty {
             diagnostics.warning(
@@ -84,7 +89,11 @@ public struct CodeQualityValidator {
                     hints: [
                         "Feature sets should end with a Return statement",
                         "Add: <Return> an <OK: status> for the <result>."
-                    ]
+                    ],
+                    // Consequential (GitLab #509): a statement that failed
+                    // analysis often takes the terminator down with it, so
+                    // this must never headline over the statement's error.
+                    category: .consequential
                 )
             }
         }
@@ -134,6 +143,91 @@ public struct CodeQualityValidator {
                 hints: hints
             )
         }
+    }
+
+    // MARK: - Sleep Duration Validation (GitLab #502)
+
+    /// Verbs that dispatch to `SleepAction` (ARO-0004 row 54).
+    private static let sleepVerbs: Set<String> = ["sleep", "delay", "pause"]
+
+    /// Warns when a Sleep operand is a bare numeric literal over
+    /// `DurationUnitCatalog.bareLiteralWarningThreshold` seconds.
+    ///
+    /// `Sleep the <pause> with 300.` sleeps five minutes. Nothing in the
+    /// syntax says seconds, and 300 reads like milliseconds to anyone
+    /// arriving from JavaScript or Java — the failure is a hang, the
+    /// least debuggable symptom there is. A spelled-out unit
+    /// (`for 300s`, `for 300ms`, `for 5 minutes`) states intent, so it
+    /// never warns; neither does a variable duration, whose value is not
+    /// decidable here.
+    private func validateSleepDurations(in statements: [Statement]) {
+        for aro in collectAROStatements(statements) {
+            guard Self.sleepVerbs.contains(aro.action.verb.lowercased()) else { continue }
+
+            // A unit in the source ends up as the object base ("ms",
+            // "seconds", …) — see Parser.parseAROObject. Its presence is
+            // exactly what makes the duration intentional.
+            guard !DurationUnitCatalog.isUnit(aro.object.noun.base) else { continue }
+
+            // Only literal durations are decidable from the AST.
+            let seconds: Double
+            switch literalNumber(of: aro) {
+            case .some(let value): seconds = value
+            case .none: continue
+            }
+
+            guard seconds > DurationUnitCatalog.bareLiteralWarningThreshold else { continue }
+
+            let shown = formatNumber(seconds)
+            diagnostics.warning(
+                "Sleep sleeps in seconds — \(shown) is \(describeDuration(seconds))",
+                at: aro.span.start,
+                hints: [
+                    "Write \(shown)s if you mean it, or \(shown)ms for milliseconds",
+                    "Units: ms, s, m (minutes), h — e.g. Sleep the <\(aro.result.base)> for 500ms.",
+                ]
+            )
+        }
+    }
+
+    /// The statement's duration operand as a number, when it is a bare
+    /// numeric literal (`with 300`, `for 90`). Anything else — variables,
+    /// arithmetic, strings — returns nil and is not judged.
+    private func literalNumber(of statement: AROStatement) -> Double? {
+        let literal: LiteralValue
+        if let expr = statement.valueSource.asExpression as? LiteralExpression {
+            literal = expr.value
+        } else if let value = statement.valueSource.asLiteral {
+            literal = value
+        } else {
+            return nil
+        }
+        switch literal {
+        case .integer(let i): return Double(i)
+        case .float(let f): return f
+        default: return nil
+        }
+    }
+
+    /// "300" for 300.0, "90.5" for 90.5 — no trailing ".0" noise.
+    private func formatNumber(_ value: Double) -> String {
+        value == value.rounded() && abs(value) < 1e15
+            ? String(Int(value))
+            : String(value)
+    }
+
+    /// A human reading of a seconds count: "5 minutes", "1.5 hours",
+    /// "~1 minute" when a tenth doesn't represent it exactly.
+    private func describeDuration(_ seconds: Double) -> String {
+        let (amount, unit) = seconds >= 3600
+            ? (seconds / 3600, "hour")
+            : (seconds / 60, "minute")
+        let rounded = (amount * 10).rounded() / 10
+        let prefix = rounded == amount ? "" : "~"
+        let shown = formatNumber(rounded)
+        return shown == "1"
+            ? "\(prefix)1 \(unit)"
+            : "\(prefix)\(shown) \(unit)s"
     }
 
     /// Flattens the statement tree, descending into match cases and loop bodies.

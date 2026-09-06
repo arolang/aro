@@ -117,7 +117,11 @@ public struct DataFlowAnalyzer {
             if !usedVariables.contains(name) {
                 diagnostics.warning(
                     "Variable '\(name)' is defined but never used",
-                    at: symbol.definedAt.start
+                    at: symbol.definedAt.start,
+                    // Consequential (GitLab #509): when the statement that
+                    // was meant to use the variable itself errored, this is
+                    // fallout, not the finding — rank it below root causes.
+                    category: .consequential
                 )
             }
         }
@@ -272,15 +276,18 @@ public struct DataFlowAnalyzer {
         let resultName = statement.result.base
         let objectName = statement.object.noun.base
 
-        // `with 2 seconds.` / `with 1 minute.` stores the time unit as the
+        // `with 2 seconds.` / `for 300ms.` stores the time unit as the
         // object base (the runtime reads it as an interval multiplier — see
-        // ScheduleAction). The unit word is not a variable reference:
-        // without this guard the analyzer reports "Variable 'seconds' used
-        // before definition" and records a phantom external dependency for
-        // every `Schedule … with N <unit>` statement.
+        // ScheduleAction and SleepAction). The unit word is not a variable
+        // reference: without this guard the analyzer reports
+        // "Variable 'seconds' used before definition" and records a phantom
+        // external dependency for every `Schedule … with N <unit>` statement.
+        // The vocabulary is DurationUnitCatalog (GitLab #502) — a partial
+        // copy here missed `milliseconds`, `ms`, `s`, `m`, `min` and `h`,
+        // so exactly the short suffixes the Sleep fix recommends drew the
+        // phantom warning.
         let objectIsTimeUnit: Bool = {
-            guard ["second", "seconds", "minute", "minutes", "hour", "hours"]
-                .contains(objectName) else { return false }
+            guard DurationUnitCatalog.isUnit(objectName) else { return false }
             switch statement.valueSource {
             case .literal(.integer), .literal(.float):
                 return true
@@ -319,14 +326,17 @@ public struct DataFlowAnalyzer {
             }
         }
 
-        // ARO-0018: Extract variables from where clause if present
-        if let whereClause = statement.queryModifiers.whereClause {
-            let whereVars = extractVariables(from: whereClause.value)
-            for varName in whereVars {
-                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
-                    dependencies.insert(varName)
+        // ARO-0018: Extract variables from every where predicate (GitLab #498:
+        // a compound condition carries one value expression per predicate)
+        if let whereCondition = statement.queryModifiers.whereCondition {
+            for predicate in whereCondition.predicates {
+                let whereVars = extractVariables(from: predicate.value)
+                for varName in whereVars {
+                    if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                        dependencies.insert(varName)
+                    }
+                    inputs.insert(varName)
                 }
-                inputs.insert(varName)
             }
         }
 

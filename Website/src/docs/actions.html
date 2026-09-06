@@ -390,7 +390,7 @@ if &lt;validation&gt; is failed then {
 <span class="code-keyword">Assert</span> the &lt;list&gt; contains &lt;item&gt;.</code></pre>
 
         <h2>Git Actions</h2>
-        <p>Native version control via libgit2 (ARO-0080). The <code>&lt;git&gt;</code> system object defaults to the current working directory; use <code>&lt;git: "/path"&gt;</code> for an explicit repository.</p>
+        <p>Native version control via libgit2 (ARO-0080). The bare <code>&lt;git&gt;</code> system object discovers the enclosing repository upward from the current working directory (like the <code>git</code> CLI); use <code>&lt;git: "/path"&gt;</code> for an explicit repository (opened as given, no discovery).</p>
 
         <h3>Status, Log, Branch</h3>
         <p>Inspect the working tree using Retrieve:</p>

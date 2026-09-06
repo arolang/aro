@@ -1,4 +1,4 @@
-# Chapter 42: Date and Time
+# Chapter 42: Date and Time and Intervals
 
 *"Time is the fire in which we burn."*
 
@@ -253,7 +253,38 @@ Supported patterns include:
 
 ---
 
-## 42.11 Design Philosophy
+## 42.11 Sleeping for an Interval
+
+Time is not only a value to compute with — it is also something programs wait through. The `Sleep` action pauses the current feature set for an interval, cooperatively: only that feature set waits, while HTTP handlers and other events keep running.
+
+**A bare number is seconds.** `Sleep the <pause> with 300.` sleeps five minutes — a number that reads like milliseconds to anyone arriving from JavaScript or Java, and the symptom is a mysterious hang. So spell the unit, either as a suffix attached to the number or as a word after it:
+
+```aro
+Sleep the <pause> for 300ms.
+Sleep the <pause> for 1.5s.
+Sleep the <pause> for 2m.
+Sleep the <pause> for 500 milliseconds.
+Sleep the <pause> for 30 seconds.
+Sleep the <pause> with 500 ms.
+```
+
+The short suffixes are the same duration vocabulary as the relative offsets of section 42.6: `ms` (milliseconds), `s` (seconds), `m` (minutes), `h` (hours), plus the spelled-out forms `millisecond(s)`, `second(s)`, `min`/`minute(s)`, `hour(s)`. Both prepositions — `for` and `with` — carry units, and `Delay` and `Pause` are synonyms for `Sleep`.
+
+Bare numbers stay seconds for backward compatibility, but a bare literal above 60 draws an `aro check` warning:
+
+```
+warning: Sleep sleeps in seconds — 300 is 5 minutes
+  hint: Write 300s if you mean it, or 300ms for milliseconds
+  hint: Units: ms, s, m (minutes), h — e.g. Sleep the <pause> for 500ms.
+```
+
+Write `300s` when five minutes is what you mean; the unit silences the warning by stating the intent.
+
+One more property matters: `Sleep` is an *effect*. It never defers and never overlaps with neighbouring statements, so consecutive pauses add up in source order — the concurrency model's deferral rules (ARO-0088) deliberately exclude it, because the delay *is* the effect.
+
+---
+
+## 42.12 Design Philosophy
 
 ARO's date handling embodies several principles:
 
@@ -269,7 +300,7 @@ ARO's date handling embodies several principles:
 
 ---
 
-## 42.12 Summary
+## 42.13 Summary
 
 Time handling in ARO provides:
 
