@@ -794,6 +794,63 @@ Update the <tracker> with {
 
 ---
 
+## Sleep Action — Duration Units
+
+The `Sleep` action (verbs `sleep`, `delay`, `pause`; prepositions `for`, `with`)
+suspends the current feature set cooperatively. **A bare numeric operand is
+seconds** — `Sleep the <pause> with 300.` sleeps five minutes, and a large
+bare number reads like milliseconds to anyone arriving from ecosystems where
+it would be (GitLab #502). The duration therefore accepts an explicit unit,
+written as a word after the number or as a suffix directly attached to it:
+
+```aro
+(* Suffix units — spaced or unspaced, both prepositions *)
+Sleep the <pause> for 300ms.
+Sleep the <pause> for 1.5s.
+Sleep the <pause> for 2m.
+Sleep the <pause> with 500 ms.
+
+(* Spelled-out units *)
+Sleep the <pause> for 30 seconds.
+Sleep the <pause> for 500 milliseconds.
+
+(* Variable duration with a unit *)
+Sleep the <pause> for <reset-at> seconds.
+
+(* Bare number — SECONDS, kept for backward compatibility *)
+Sleep the <pause> for 5.
+```
+
+Accepted units and their multipliers to seconds:
+
+| Unit | Spellings | Multiplier |
+|------|-----------|------------|
+| Milliseconds | `ms`, `millisecond`, `milliseconds` | ×0.001 |
+| Seconds | `s`, `second`, `seconds` | ×1 |
+| Minutes | `m`, `min`, `minute`, `minutes` | ×60 |
+| Hours | `h`, `hour`, `hours` | ×3600 |
+
+The short suffixes follow the duration vocabulary of ARO-0041 §2.3 (`s`, `m`,
+`h`); `ms` extends it downward because sleeps, unlike date offsets, are
+routinely sub-second. The vocabulary lives in `DurationUnitCatalog`
+(AROParser), read by the parser, by `SleepAction`, and by the check-time lint,
+so the three cannot drift.
+
+**Check-time warning.** A bare, unitless literal above 60 draws an
+`aro check` warning rather than silently sleeping minutes:
+
+```
+warning: Sleep sleeps in seconds — 300 is 5 minutes
+  hint: Write 300s if you mean it, or 300ms for milliseconds
+  hint: Units: ms, s, m (minutes), h — e.g. Sleep the <pause> for 500ms.
+```
+
+The warning never fires when a unit is spelled out, and never judges variable
+durations, whose value is not decidable at check time. It is a warning, not an
+error: bare seconds remain valid ARO.
+
+---
+
 ## Grammar
 
 Actions are used within ARO statements:

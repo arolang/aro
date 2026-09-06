@@ -643,14 +643,12 @@ public final class Parser {
         if shouldParseExpression && !isObjectPattern() {
             let expression = try parseExpression()
 
-            // Time-unit suffix for duration literals
-            let timeUnits: Set<String> = [
-                "second", "seconds", "s",
-                "minute", "minutes", "min",
-                "hour", "hours", "h",
-                "millisecond", "milliseconds", "ms"
-            ]
-            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+            // Time-unit suffix for duration literals (GitLab #502).
+            // The vocabulary lives in DurationUnitCatalog so the
+            // parser, SleepAction and the check-time lint cannot
+            // drift apart. `300ms` lexes as `300` + `ms`, so the
+            // spaced and unspaced spellings arrive here identically.
+            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, DurationUnitCatalog.isUnit(unit) {
                 advance()
                 return (QualifiedNoun(base: unit, specifiers: [], span: previous().span), expression)
             }
