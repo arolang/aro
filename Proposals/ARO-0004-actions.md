@@ -112,7 +112,7 @@ OWN actions transform, validate, and manipulate data within the internal executi
 | **Compare** | compare, match | against, with, to | Compare two values |
 | **Transform** | transform, convert, map | from, into, to | Transform data types |
 | **Create** | create, build, construct | with, from, for, to | Create new entities |
-| **Update** | update, modify, change, set | with, to, for, from | Update one or more fields of an existing object |
+| **Update** | update, modify, change, set | with, to, for, from, into | Update fields of an existing object, or a repository entry (`into`) |
 | **Filter** | filter | from | Filter collections |
 | **Sort** | sort, order, arrange | for, with | Sort collections |
 | **Split** | split | from | Split strings by delimiter |
@@ -740,7 +740,7 @@ prepositions each one declares.
 | 64 | Then | own | then | with |
 | 65 | Throw | response | fail, raise, throw | for |
 | 66 | Transform | own | convert, map, transform | from, into, to |
-| 67 | Update | own | change, configure, modify, set, update | for, from, to, with |
+| 67 | Update | own | change, configure, modify, set, update | for, from, into, to, with |
 | 68 | Validate | own | check, validate, verify | against, for, with |
 | 69 | WaitForEvents | server | block, keepalive, wait | for |
 | 70 | When | own | when | from |
@@ -752,7 +752,7 @@ prepositions each one declares.
 
 ## Update Action — Multi-Field Syntax
 
-The `Update` action supports two forms:
+The `Update` action supports three forms:
 
 ### Single-Field Update
 
@@ -790,6 +790,34 @@ Update the <tracker> with {
     fileSize: <entry: size>
 } when <newer>.
 ```
+
+### Repository Update
+
+`Update … into the <x-repository>` merges the value into the matching
+repository entries (GitLab #505). Chapter 46's accumulator pattern is
+built on this shape, and it behaves identically under `aro run` and in
+interactive sessions.
+
+```aro
+Update the <row> into the <acc-repository>.
+Update the <row> into the <acc-repository> where <id> is "c1".
+Update the <updated: row> into the <acc-repository>.   (* binds <updated> *)
+```
+
+- **Matching**: the `where` clause when one is written; otherwise the
+  value's own identity field — `id`, then `name`, then `key` — the same
+  fields `Store` upserts by.
+- **Merge semantics**: listed keys overwrite, unlisted fields of the
+  matched entry survive (same contract as multi-field update above).
+  Every matched entry is updated.
+- **Update never inserts**: no matching entry is an error. `Store` is
+  the insert.
+- The updated entry (or the list of them, when several matched) is
+  bound to the result variable, and a `.updated` repository change
+  event is emitted for each entry that actually changed — observers
+  fire exactly as they do for `Store`.
+- The target must be a repository name (`-repository` suffix); `into`
+  with any other target is an error.
 
 ---
 
