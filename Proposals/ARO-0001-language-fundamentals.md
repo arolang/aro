@@ -360,14 +360,34 @@ Special feature sets manage application lifecycle:
 
 ```ebnf
 string_literal = '"' , { string_char } , '"'
-               | "'" , { string_char } , "'" ;
+               | "'" , { string_char } , "'"
+               | multiline_string ;
 
 string_char    = any_char - ('"' | "'" | "\\" | newline)
                | escape_sequence ;
 
+multiline_string = '"""' , newline , { any_char } , newline , indent , '"""' ;
+
 escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
 ```
+
+**Multi-line strings** open with `"""` followed immediately by a newline
+and close with `"""` on its own line. The closing delimiter's
+indentation is stripped from the front of every line (so the block can
+sit indented inside a feature set), the final newline before the closing
+delimiter is dropped, escape sequences work, and `${…}` interpolation is
+NOT performed — a multi-line block is literal text:
+
+```aro
+Create the <letter> with """
+    Dear guest,
+
+    Welcome to Brew & Bytes.
+    """.
+```
+
+binds three lines with the four-space indent removed.
 
 **Examples:**
 ```

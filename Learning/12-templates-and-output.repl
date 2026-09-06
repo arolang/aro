@@ -28,8 +28,20 @@
     {
       "id": "nb12-c05",
       "kind": "markdown",
-      "source": "Each `replace` produces a **new** string under a **new** name —\nimmutability ([04](04-immutability.repl)) means the blank template\nsurvives untouched, ready for the next customer. This hand-rolled\nplaceholder scheme is precisely what a template engine automates:\nnamed slots, filled from your variables, at scale.\n\n## Multi-line documents\n\nReceipts are lines. Build the lines as a list, then fold them into one\nstring with the `join` qualifier and a newline separator:",
+      "source": "Each `replace` produces a **new** string under a **new** name —\nimmutability ([04](04-immutability.repl)) means the blank template\nsurvives untouched, ready for the next customer. This hand-rolled\nplaceholder scheme is precisely what a template engine automates:\nnamed slots, filled from your variables, at scale.\n\n## Multi-line documents\n\nFor FIXED text, write it as it should print — a triple-quoted literal\nopens with `\"\"\"` + newline, closes with `\"\"\"` on its own line, and\nstrips the closing line's indentation from every line (no `${…}`\ninterpolation inside; a block is literal text):",
       "outputs": []
+    },
+    {
+      "id": "nb12-c80",
+      "kind": "code",
+      "outputs": [],
+      "source": "Create the <sign> with \"\"\"\nBREW & BYTES\nMon-Fri 7-18\nSat     8-16\n\"\"\".\nLog <sign> to the <console>."
+    },
+    {
+      "id": "nb12-c81",
+      "kind": "markdown",
+      "outputs": [],
+      "source": "For DYNAMIC documents — receipts differ per order — build the lines\nas a list and fold them into one string with the `join` qualifier and\na newline separator:"
     },
     {
       "id": "nb12-c06",
