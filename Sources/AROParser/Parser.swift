@@ -887,10 +887,66 @@ public final class Parser {
             // Look ahead: < identifier : ... > means system object
             if case .identifier = peekAt(1)?.kind,
                case .colon = peekAt(2)?.kind {
+                // GitLab #496: unless the reference is the first operand of an
+                // expression. `from <item: qty> * <item: price>` used to capture
+                // `<item: qty>` as the object noun and then die on the operator
+                // ("Expected '.', but got *") — forcing an Extract per operand.
+                // The expression grammar already parses qualified nouns (it is
+                // what string interpolation uses), so when the token after the
+                // reference's closing '>' is a binary operator, route there.
+                if qualifiedRefStartsExpression() {
+                    return false
+                }
                 return true
             }
         }
         // Case 4: <...> without article and no colon = expression (not object)
+        return false
+    }
+
+    /// GitLab #496: decides whether a qualified variable reference in object
+    /// position (`<item: qty>`) is really the first operand of an expression.
+    ///
+    /// Scans from the current `<` to its matching `>` (angle depth tracks
+    /// generic type parameters like `List<User>` inside the qualifier) and
+    /// inspects the token that follows. A binary operator there means the
+    /// statement is `... from <a: x> * <b: y> ...` — an expression — rather
+    /// than a system-object noun. Angle-bracket comparisons (`<`, `>`) are
+    /// deliberately absent from the operator set: they are ambiguous with
+    /// variable references, matching how bare-identifier operands already
+    /// behave (`infixPrecedence` refuses them before an identifier too).
+    ///
+    /// The scan is bounded: qualifier contents are short (identifiers, dots,
+    /// chains, string literals, generic parameters). An unclosed reference
+    /// falls back to the object interpretation — the standard path then
+    /// reports its usual, well-tested error.
+    private func qualifiedRefStartsExpression() -> Bool {
+        guard check(.leftAngle) else { return false }
+        var depth = 0
+        var index = current
+        let limit = min(tokens.count, current + 64)
+        while index < limit {
+            switch tokens[index].kind {
+            case .leftAngle, .lessThan:
+                depth += 1
+            case .rightAngle, .greaterThan:
+                depth -= 1
+                if depth == 0 {
+                    guard index + 1 < tokens.count else { return false }
+                    switch tokens[index + 1].kind {
+                    case .plus, .minus, .hyphen, .star, .slash, .percent,
+                         .plusPlus, .equalEqual, .bangEqual, .lessEqual,
+                         .greaterEqual, .and, .or, .contains, .matches:
+                        return true
+                    default:
+                        return false
+                    }
+                }
+            default:
+                break
+            }
+            index += 1
+        }
         return false
     }
 

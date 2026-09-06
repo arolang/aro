@@ -474,6 +474,21 @@ variable_reference = "<" , qualified_noun , ">" ;
 grouped_expression = "(" , expression , ")" ;
 ```
 
+A `variable_reference` operand carries the full `qualified_noun` form: a
+qualified reference is a valid expression operand wherever a bare one is
+(GitLab #496). Its semantics are identical to an Extract into a temporary —
+the qualifier resolves as a field access (or registered qualifier) on the
+base value before the surrounding expression uses it.
+
+```aro
+(* These two are equivalent: *)
+Extract the <qty> from the <item: qty>.
+Extract the <price> from the <item: price>.
+Compute the <line-total> from <qty> * <price>.
+
+Compute the <line-total> from <item: qty> * <item: price>.
+```
+
 ### Member Access
 
 ```ebnf
