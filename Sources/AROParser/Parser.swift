@@ -2207,6 +2207,23 @@ extension Parser {
                         span: span)
                 }
 
+                // Everything that is not a type name compares for
+                // equality: `is "paid"`, `is 5`, `is <expected>` are the
+                // spellings Filter's where-clause has always accepted, and
+                // loop where-clauses share this grammar (GitLab #500 —
+                // strings after `is` used to die on 'Expected type name').
+                // A bare identifier (with optional article) stays a type
+                // check: `is Float`, `is a String`.
+                switch peek().kind {
+                case .identifier, .article:
+                    break // type-check path below
+                default:
+                    let right = try parsePrefix()
+                    let span = left.span.merged(with: right.span)
+                    let compOp: BinaryOperator = (actualOp == .isNot) ? .notEqual : .equal
+                    return BinaryExpression(left: left, op: compOp, right: right, span: span)
+                }
+
                 // Handle type check: <expr> is [a/an] TypeName
                 // Skip optional article
                 var hasArticle = false
