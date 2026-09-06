@@ -319,14 +319,17 @@ public struct DataFlowAnalyzer {
             }
         }
 
-        // ARO-0018: Extract variables from where clause if present
-        if let whereClause = statement.queryModifiers.whereClause {
-            let whereVars = extractVariables(from: whereClause.value)
-            for varName in whereVars {
-                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
-                    dependencies.insert(varName)
+        // ARO-0018: Extract variables from every where predicate (GitLab #498:
+        // a compound condition carries one value expression per predicate)
+        if let whereCondition = statement.queryModifiers.whereCondition {
+            for predicate in whereCondition.predicates {
+                let whereVars = extractVariables(from: predicate.value)
+                for varName in whereVars {
+                    if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                        dependencies.insert(varName)
+                    }
+                    inputs.insert(varName)
                 }
-                inputs.insert(varName)
             }
         }
 

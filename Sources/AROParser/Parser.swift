@@ -56,7 +56,7 @@
 //   - `parseActionVerb`        verb-shaped token → Action
 //   - `isExpressionStart` / `isSinkSyntaxStart` / `isLiteralToken`
 //                              token → Bool predicates
-//   - `parseWhereClause`       token → WhereOperator
+//   - `parseWherePredicate`    token → WhereOperator
 //   - `parseLiteralValue`      literal token → LiteralValue
 //   - `parseAggregationIfPresent` name → AggregationType
 //   - `parseRequireStatement`  source name → RequireSource
@@ -692,7 +692,7 @@ public final class Parser {
         var withExpression: (any Expression)? = nil
         var toExpression: (any Expression)? = nil
         var againstExpression: (any Expression)? = nil
-        var whereClause: WhereClause? = nil
+        var whereCondition: WhereCondition? = nil
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
         var whenCondition: (any Expression)? = nil
@@ -756,7 +756,7 @@ public final class Parser {
         // where clause (ARO-0018)
         if check(.where) {
             advance()
-            whereClause = try parseWhereClause()
+            whereCondition = try parseWhereCondition()
         }
 
         // by clause (ARO-0037)
@@ -802,7 +802,7 @@ public final class Parser {
 
         return AROClauses(
             queryModifiers: QueryModifiers(
-                whereClause: whereClause,
+                whereCondition: whereCondition,
                 aggregation: aggregation,
                 byClause: byClause,
                 defaultValue: defaultValue
@@ -946,14 +946,86 @@ public final class Parser {
         return AggregationClause(type: type, field: field, span: startSpan.merged(with: endSpan))
     }
 
-    /// Parses where clause: <field> is "value" or <field> > 1000
-    private func parseWhereClause() throws -> WhereClause {
+    /// Parses a where condition per ARO-0018 §7 (GitLab #498):
+    ///
+    ///     predicate     = predicate_or ;
+    ///     predicate_or  = predicate_and , { "or" , predicate_and } ;
+    ///     predicate_and = predicate_atom , { "and" , predicate_atom } ;
+    ///     predicate_atom = comparison | "(" , predicate , ")" ;
+    ///
+    /// `and` binds tighter than `or`, so `a or b and c` reads as
+    /// `a or (b and c)` — same precedence as the expression grammar.
+    private func parseWhereCondition() throws -> WhereCondition {
+        var left = try parseWhereAndCondition()
+        while check(.or) {
+            advance()
+            let right = try parseWhereAndCondition()
+            left = .or(left, right)
+        }
+        return left
+    }
+
+    private func parseWhereAndCondition() throws -> WhereCondition {
+        var left = try parseWhereAtom()
+        while check(.and) {
+            advance()
+            let right = try parseWhereAtom()
+            left = .and(left, right)
+        }
+        return left
+    }
+
+    private func parseWhereAtom() throws -> WhereCondition {
+        // Parenthesized group: where (<a> is 1 or <b> is 2) and <c> is 3
+        if check(.leftParen) {
+            advance()
+            let grouped = try parseWhereCondition()
+            try expect(.rightParen, message: "')' to close the parenthesized where condition")
+            return grouped
+        }
+        return try parseWherePredicate()
+    }
+
+    /// Parses one comparison: <field> is "value" or <field> > 1000.
+    ///
+    /// The value expression is parsed *above* the logical operators
+    /// (`parsePrecedence(.and)`), so a following `and`/`or` starts the
+    /// next predicate instead of being swallowed into the value — that
+    /// swallowing is exactly what turned
+    /// `where <status> == "paid" and <qty> > 2` into a runtime
+    /// "Undefined variable: qty" (GitLab #498). A value that really is
+    /// a logical expression can still be written in parentheses.
+    ///
+    /// `between lo and hi` (ARO-0018 §2.1) desugars right here into
+    /// `field >= lo and field <= hi` — the runtime never sees it.
+    private func parseWherePredicate() throws -> WhereCondition {
         let startSpan = peek().span
 
         // Parse field: <field>
         try expect(.leftAngle, message: "'<'")
         let field = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
+
+        // between: desugared into two predicates on the same field
+        if case .identifier(let word) = peek().kind, word.lowercased() == "between" {
+            advance()
+            let low = try parsePrecedence(.and)
+            guard check(.and) else {
+                throw ParserError.unexpectedToken(
+                    expected: "'and' between the lower and upper bound of 'between'",
+                    got: peek()
+                )
+            }
+            advance()
+            let high = try parsePrecedence(.and)
+            let lowClause = WhereClause(
+                field: field, op: .greaterEqual, value: low,
+                span: startSpan.merged(with: low.span))
+            let highClause = WhereClause(
+                field: field, op: .lessEqual, value: high,
+                span: startSpan.merged(with: high.span))
+            return .and(.predicate(lowClause), .predicate(highClause))
+        }
 
         // Parse operator
         let op: WhereOperator
@@ -1014,13 +1086,13 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in)", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in, between) after <\(field)> in where clause", got: peek())
         }
 
-        // Parse value expression
-        let value = try parseExpression()
+        // Parse value expression — stops before and/or (see doc comment)
+        let value = try parsePrecedence(.and)
 
-        return WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span))
+        return .predicate(WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span)))
     }
 
     /// Parses a literal value (string, number, boolean, null, regex)

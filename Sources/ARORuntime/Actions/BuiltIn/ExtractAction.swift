@@ -731,11 +731,18 @@ public struct RetrieveAction: ActionImplementation {
             // Check for where clause (bound by FeatureSetExecutor)
             let whereField: String? = context.resolve("_where_field_")
             let whereValue = context.resolveAny("_where_value_")
+            // Compound and/or condition (GitLab #498): storage only knows
+            // field-equals, so retrieve everything and filter here with the
+            // same matcher Filter uses.
+            let compoundCondition: ResolvedWhereCondition? =
+                context.resolveAny("_where_tree_") is String
+                    ? ResolvedWhereCondition.resolve(from: context)
+                    : nil
 
             // Retrieve from repository storage service
             var values: [any Sendable]
             if let storage = context.service(RepositoryStorageService.self) {
-                if let field = whereField, let matchValue = whereValue {
+                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
                     // Filtered retrieval with where clause
                     values = await storage.retrieve(
                         from: repoName,
@@ -752,7 +759,7 @@ public struct RetrieveAction: ActionImplementation {
                 }
             } else {
                 // Fallback to container storage if service not registered
-                if let field = whereField, let matchValue = whereValue {
+                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
                     values = await context.container.repositoryStorage.retrieve(
                         from: repoName,
                         businessActivity: context.businessActivity,
@@ -765,6 +772,10 @@ public struct RetrieveAction: ActionImplementation {
                         businessActivity: context.businessActivity
                     )
                 }
+            }
+
+            if let condition = compoundCondition {
+                values = values.filter { condition.matchesElement($0) }
             }
 
             // Check for specifiers like "first" or "last"
@@ -788,7 +799,7 @@ public struct RetrieveAction: ActionImplementation {
 
             // If where clause was used and we got exactly one result, return it directly
             // (not as an array) since we're looking for a specific entity
-            if whereField != nil && values.count == 1 {
+            if (whereField != nil || compoundCondition != nil) && values.count == 1 {
                 return values[0]
             }
 

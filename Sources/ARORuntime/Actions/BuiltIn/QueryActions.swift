@@ -331,27 +331,19 @@ public struct FilterAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Get where clause from context binding (ARO-0018) or fall back to specifiers
-        let field: String?
-        let op: String?
-        let expectedValue: any Sendable
-
-        if let whereField = context.resolveAny("_where_field_") as? String {
-            // New ARO-0018 syntax: where <field> is "value"
-            field = whereField
-            op = context.resolveAny("_where_op_") as? String
-            expectedValue = context.resolveAny("_where_value_") ?? ""
+        // Get where condition from context bindings (ARO-0018, and/or trees
+        // per GitLab #498) or fall back to legacy specifiers
+        let condition: ResolvedWhereCondition
+        if let resolved = ResolvedWhereCondition.resolve(from: context) {
+            condition = resolved
         } else if result.specifiers.count >= 3 {
             // Legacy syntax: specifiers
-            field = result.specifiers[0]
-            op = result.specifiers[1]
-            expectedValue = result.specifiers[2]
+            condition = .predicate(
+                field: result.specifiers[0],
+                op: result.specifiers[1],
+                value: result.specifiers[2])
         } else {
             // No predicate - return all
-            return source
-        }
-
-        guard let field = field, let op = op else {
             return source
         }
 
@@ -360,11 +352,8 @@ public struct FilterAction: ActionImplementation {
            runtimeContext.isLazy(object.base),
            let stream = runtimeContext.resolveAsRowStream(object.base) {
             // Return filtered stream (lazy - preserves streaming)
-            let filteredStream = stream.filter { [field, op, expectedValue] item in
-                guard let actualValue = item[field] else {
-                    return false
-                }
-                return self.matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
+            let filteredStream = stream.filter { [condition] item in
+                condition.matches(item)
             }
             // Bind as streaming value
             runtimeContext.bindLazy(result.base, stream: filteredStream)
@@ -389,134 +378,14 @@ public struct FilterAction: ActionImplementation {
            let runtimeContext = context as? RuntimeContext {
             let rows: [[String: any Sendable]] = arraySource.compactMap { $0 as? [String: any Sendable] }
             let stream = AROStream<[String: any Sendable]>.from(rows)
-            let filteredStream = stream.filter { [field, op, expectedValue] item in
-                guard let actualValue = item[field] else {
-                    return false
-                }
-                return self.matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
+            let filteredStream = stream.filter { [condition] item in
+                condition.matches(item)
             }
             runtimeContext.bindLazy(result.base, stream: filteredStream)
             return filteredStream
         }
 
-        return arraySource.filter { item in
-            guard let dict = item as? [String: any Sendable],
-                  let actualValue = dict[field] else {
-                return false
-            }
-            return matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
-        }
-    }
-
-    private func matchesPredicate(actual: Any, op: String, expected: any Sendable) -> Bool {
-        let actualStr = String(describing: actual)
-        let expectedStr = String(describing: expected)
-
-        switch op.lowercased() {
-        case "is", "==", "equals":
-            return actualStr == expectedStr
-
-        case "is not", "is-not", "!=", "not-equals":
-            return actualStr != expectedStr
-
-        case ">", "gt":
-            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
-                return actualNum > expectedNum
-            }
-            return actualStr > expectedStr
-
-        case ">=", "gte":
-            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
-                return actualNum >= expectedNum
-            }
-            return actualStr >= expectedStr
-
-        case "<", "lt":
-            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
-                return actualNum < expectedNum
-            }
-            return actualStr < expectedStr
-
-        case "<=", "lte":
-            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
-                return actualNum <= expectedNum
-            }
-            return actualStr <= expectedStr
-
-        case "contains":
-            return actualStr.contains(expectedStr)
-
-        case "starts-with":
-            return actualStr.hasPrefix(expectedStr)
-
-        case "ends-with":
-            return actualStr.hasSuffix(expectedStr)
-
-        case "matches":
-            // Regex matching
-            do {
-                let regex = try RegexCache.shared.regex(expectedStr)
-                let range = NSRange(actualStr.startIndex..., in: actualStr)
-                return regex.firstMatch(in: actualStr, range: range) != nil
-            } catch {
-                return false
-            }
-
-        case "in":
-            // Support array values (ARO-0042)
-            if let arr = expected as? [any Sendable] {
-                return arr.contains { item in
-                    areValuesEqual(actual, item)
-                }
-            }
-            // Fallback to comma-separated values
-            let values = expectedStr.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-            return values.contains(actualStr)
-
-        case "not in", "not-in", "notin":
-            // Support array values (ARO-0042)
-            if let arr = expected as? [any Sendable] {
-                return !arr.contains { item in
-                    areValuesEqual(actual, item)
-                }
-            }
-            // Fallback to comma-separated values
-            let values = expectedStr.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-            return !values.contains(actualStr)
-
-        default:
-            return actualStr == expectedStr
-        }
-    }
-
-    private func asDouble(_ value: Any) -> Double? {
-        if let d = value as? Double { return d }
-        if let i = value as? Int { return Double(i) }
-        if let f = value as? Float { return Double(f) }
-        if let s = value as? String { return Double(s) }
-        return nil
-    }
-
-    /// Type-safe equality check for set membership operations (ARO-0042)
-    private func areValuesEqual(_ a: Any, _ b: Any) -> Bool {
-        // Integer comparison
-        if let aInt = a as? Int, let bInt = b as? Int {
-            return aInt == bInt
-        }
-        // Double comparison
-        if let aDouble = a as? Double, let bDouble = b as? Double {
-            return aDouble == bDouble
-        }
-        // String comparison
-        if let aStr = a as? String, let bStr = b as? String {
-            return aStr == bStr
-        }
-        // Bool comparison
-        if let aBool = a as? Bool, let bBool = b as? Bool {
-            return aBool == bBool
-        }
-        // Fallback to string representation for other types
-        return String(describing: a) == String(describing: b)
+        return arraySource.filter { condition.matchesElement($0) }
     }
 }
 
@@ -687,38 +556,32 @@ extension FilterAction {
 
         // Check if source is already a stream
         if let streamValue = source as? AROValue<[String: any Sendable]> {
-            // Get predicate info
-            let (field, op, expectedValue) = getPredicateInfo(result: result, context: context)
+            // Get condition (single or compound, GitLab #498)
+            let condition: ResolvedWhereCondition?
+            if let resolved = ResolvedWhereCondition.resolve(from: context) {
+                condition = resolved
+            } else if result.specifiers.count >= 3 {
+                condition = .predicate(
+                    field: result.specifiers[0],
+                    op: result.specifiers[1],
+                    value: result.specifiers[2])
+            } else {
+                condition = nil
+            }
 
-            guard let field = field, let op = op else {
+            guard let condition else {
                 // No predicate - return as-is
                 return streamValue
             }
 
             // Return lazy filtered stream
-            let filtered = streamValue.filter { item in
-                guard let actualValue = item[field] else { return false }
-                return self.matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
+            return streamValue.filter { item in
+                condition.matches(item)
             }
-            return filtered
         }
 
         // Fall back to eager execution
         return try await execute(result: result, object: object, context: context)
-    }
-
-    /// Extract predicate information from result and context
-    private func getPredicateInfo(result: ResultDescriptor, context: ExecutionContext) -> (field: String?, op: String?, value: any Sendable) {
-        if let whereField = context.resolveAny("_where_field_") as? String {
-            return (
-                whereField,
-                context.resolveAny("_where_op_") as? String,
-                context.resolveAny("_where_value_") ?? ""
-            )
-        } else if result.specifiers.count >= 3 {
-            return (result.specifiers[0], result.specifiers[1], result.specifiers[2])
-        }
-        return (nil, nil, "")
     }
 }
 

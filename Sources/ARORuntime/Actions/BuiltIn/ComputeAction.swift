@@ -2145,6 +2145,17 @@ public struct DeleteAction: ActionImplementation {
         repositoryName: String,
         context: ExecutionContext
     ) async throws -> any Sendable {
+        // GitLab #498: a compound where (and/or chaining) has no
+        // single-field delete path in storage — and treating it as "no
+        // where clause" would fall through to clearing the entire
+        // repository. `aro check` rejects the shape; this guard covers
+        // programs that reach the runtime without the analyzer.
+        if context.resolveAny("_where_tree_") != nil {
+            throw ActionError.missingRequiredField(
+                field: "a single-predicate 'where' clause — and/or chaining is not supported for Delete",
+                action: "Delete from \(repositoryName)")
+        }
+
         // Check for where clause (bound by FeatureSetExecutor)
         let whereField: String? = context.resolve("_where_field_")
         let whereValue = context.resolveAny("_where_value_")

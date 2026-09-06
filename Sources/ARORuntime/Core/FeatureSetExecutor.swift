@@ -537,6 +537,7 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_where_field_")
         context.unbind("_where_op_")
         context.unbind("_where_value_")
+        context.unbind("_where_tree_")
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
         context.unbind("_by_field_")
@@ -660,12 +661,29 @@ public final class FeatureSetExecutor: Sendable {
         }
 
         // ARO-0018: Bind where clause if present
-        if let whereClause = statement.queryModifiers.whereClause {
-            context.bind("_where_field_", value: whereClause.field)
-            context.bind("_where_op_", value: whereClause.op.rawValue)
-            // Evaluate the where value expression
-            let whereValue = try await expressionEvaluator.evaluate(whereClause.value, context: context)
-            context.bind("_where_value_", value: whereValue)
+        if let whereCondition = statement.queryModifiers.whereCondition {
+            if let single = whereCondition.singlePredicate {
+                // Single predicate keeps the historical triple, which every
+                // consumer (Filter, Retrieve, Delete, plugins) understands.
+                context.bind("_where_field_", value: single.field)
+                context.bind("_where_op_", value: single.op.rawValue)
+                // Evaluate the where value expression
+                let whereValue = try await expressionEvaluator.evaluate(single.value, context: context)
+                context.bind("_where_value_", value: whereValue)
+            } else {
+                // Compound condition (GitLab #498): numbered triples plus a
+                // structure skeleton like "and(0,or(1,2))". The runtime's
+                // ResolvedWhereCondition reassembles the tree from these.
+                // Value expressions are evaluated here, in statement scope,
+                // so predicates can reference local variables.
+                for (index, predicate) in whereCondition.predicates.enumerated() {
+                    context.bind("_where_field_\(index)_", value: predicate.field)
+                    context.bind("_where_op_\(index)_", value: predicate.op.rawValue)
+                    let value = try await expressionEvaluator.evaluate(predicate.value, context: context)
+                    context.bind("_where_value_\(index)_", value: value)
+                }
+                context.bind("_where_tree_", value: whereCondition.treeSkeleton)
+            }
         }
 
         // ARO-0037: Bind by clause if present (for Split and Group actions)
