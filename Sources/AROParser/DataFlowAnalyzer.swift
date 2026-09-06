@@ -272,15 +272,18 @@ public struct DataFlowAnalyzer {
         let resultName = statement.result.base
         let objectName = statement.object.noun.base
 
-        // `with 2 seconds.` / `with 1 minute.` stores the time unit as the
+        // `with 2 seconds.` / `for 300ms.` stores the time unit as the
         // object base (the runtime reads it as an interval multiplier — see
-        // ScheduleAction). The unit word is not a variable reference:
-        // without this guard the analyzer reports "Variable 'seconds' used
-        // before definition" and records a phantom external dependency for
-        // every `Schedule … with N <unit>` statement.
+        // ScheduleAction and SleepAction). The unit word is not a variable
+        // reference: without this guard the analyzer reports
+        // "Variable 'seconds' used before definition" and records a phantom
+        // external dependency for every `Schedule … with N <unit>` statement.
+        // The vocabulary is DurationUnitCatalog (GitLab #502) — a partial
+        // copy here missed `milliseconds`, `ms`, `s`, `m`, `min` and `h`,
+        // so exactly the short suffixes the Sleep fix recommends drew the
+        // phantom warning.
         let objectIsTimeUnit: Bool = {
-            guard ["second", "seconds", "minute", "minutes", "hour", "hours"]
-                .contains(objectName) else { return false }
+            guard DurationUnitCatalog.isUnit(objectName) else { return false }
             switch statement.valueSource {
             case .literal(.integer), .literal(.float):
                 return true

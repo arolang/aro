@@ -257,4 +257,4 @@ For production monitoring, export to Prometheus and use Grafana for dashboards, 
 
 ---
 
-*Previous: Chapter 42 — Date and Time*
+*Previous: Chapter 42 — Date and Time and Intervals*
