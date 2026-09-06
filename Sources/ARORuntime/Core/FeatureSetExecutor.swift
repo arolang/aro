@@ -44,6 +44,7 @@ public final class FeatureSetExecutor: Sendable {
     private let computeVerbs: Set<String>
     private let extractVerbs: Set<String>
     private let queryVerbs: Set<String>
+    private let deleteVerbs: Set<String>
     private let responseVerbs: Set<String>
     private let serverVerbs: Set<String>
 
@@ -66,6 +67,7 @@ public final class FeatureSetExecutor: Sendable {
         self.computeVerbs = VerbSets.computeVerbs
         self.extractVerbs = VerbSets.extractVerbs
         self.queryVerbs = VerbSets.queryVerbs
+        self.deleteVerbs = VerbSets.deleteVerbs
         self.responseVerbs = VerbSets.responseVerbs
         self.serverVerbs = VerbSets.serverVerbs
     }
@@ -601,6 +603,7 @@ public final class FeatureSetExecutor: Sendable {
                     mergeVerbs.contains(lowerVerb) ||
                     responseVerbs.contains(lowerVerb) ||
                     queryVerbs.contains(lowerVerb) ||
+                    deleteVerbs.contains(lowerVerb) ||  // GitLab #493: file deletion takes its path as an expression
                     serverVerbs.contains(lowerVerb) ||
                     hasDynamicHandler ||  // Dynamic plugin actions always need execution
                     updateVerbs.contains(lowerVerb) ||  // Update always needs execution (handles rebind internally)
@@ -825,6 +828,13 @@ public final class FeatureSetExecutor: Sendable {
     /// Extra sentence appended to a statement-shaped error when the
     /// statement alone can't convey what went wrong (GitLab #486).
     private static func statementHint(for error: any Error) -> String? {
+        // A file-system failure is the second exception (GitLab #493): the
+        // statement `Delete the <gone> from "./f.txt"` reads fine, but only
+        // the underlying error says *why* it failed — the path is missing,
+        // not merely undeletable. Same for read/copy/move on missing paths.
+        if let fsError = error as? FileSystemError {
+            return fsError.description
+        }
         guard let actionError = error as? ActionError,
               case .unknownComputation = actionError
         else { return nil }

@@ -1041,4 +1041,10 @@ public protocol FileSystemService: Sendable {
     func copy(source: String, destination: String) async throws
     func move(source: String, destination: String) async throws
     func append(path: String, content: String) async throws
+
+    // ARO-0036 §7 (GitLab #493): remove the file or directory at `path`.
+    // Missing path throws, matching copy/move on a missing source. Both
+    // platform implementations already provided this; it was just absent
+    // from the protocol, which is why DeleteAction could not reach it.
+    func delete(path: String) async throws
 }
