@@ -572,7 +572,10 @@ public final class LLVMCodeGenerator {
         // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
         // subsequent Retrieve calls (e.g. "Retrieve all" after "Retrieve where key = X" would
         // incorrectly still filter by key = X).
-        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_", "_by_field_",
+        // `_where_tree_` gates the numbered `_where_*_N_` binds, so clearing
+        // the tree alone is enough to disarm a stale compound condition.
+        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
+                             "_by_pattern_", "_by_flags_", "_by_field_",
                              "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
             let keyStr = ctx.stringConstant(transientKey)
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
@@ -2030,7 +2033,8 @@ private final class StringConstantCollector {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
-                        "_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_", "_by_field_",
+                        "_where_field_", "_where_op_", "_where_value_", "_where_tree_",
+                        "_by_pattern_", "_by_flags_", "_by_field_",
                         "_with_", "_to_", "_publish_alias_", "_publish_variable_",
                         "_require_variable_", "_require_source_", "Application-Start"]
         for name in builtins {
@@ -2158,10 +2162,23 @@ private final class StringConstantCollector {
     private func collectFromQueryModifiers(_ modifiers: QueryModifiers) {
         guard !modifiers.isEmpty else { return }
 
-        if let whereClause = modifiers.whereClause {
-            _ = ctx.stringConstant(whereClause.field)
-            _ = ctx.stringConstant(whereClause.op.rawValue)
-            collectFromExpression(whereClause.value)
+        if let whereCondition = modifiers.whereCondition {
+            // Mirrors ModifierBinder.bindQueryModifiers (GitLab #498): a
+            // compound condition needs the numbered framework-variable
+            // names and the tree skeleton as constants too.
+            if whereCondition.singlePredicate == nil {
+                _ = ctx.stringConstant(whereCondition.treeSkeleton)
+                for index in whereCondition.predicates.indices {
+                    _ = ctx.stringConstant("_where_field_\(index)_")
+                    _ = ctx.stringConstant("_where_op_\(index)_")
+                    _ = ctx.stringConstant("_where_value_\(index)_")
+                }
+            }
+            for predicate in whereCondition.predicates {
+                _ = ctx.stringConstant(predicate.field)
+                _ = ctx.stringConstant(predicate.op.rawValue)
+                collectFromExpression(predicate.value)
+            }
         }
 
         if let aggregation = modifiers.aggregation {

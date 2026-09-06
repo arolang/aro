@@ -40,7 +40,35 @@ public struct CollectionOpValidator {
         for aro in collectAROStatements(featureSet.statements) {
             validateComputeQualifier(aro)
             validateMapWithClause(aro)
+            validateDeleteWhereCondition(aro)
         }
+    }
+
+    // MARK: - Delete where-conditions
+
+    /// Errors when a delete verb carries a compound where condition.
+    ///
+    /// Repository deletes go through storage's field-equals API, which
+    /// takes exactly one field/value pair. A compound condition
+    /// (`where <a> is 1 and <b> is 2`, GitLab #498) has no runtime
+    /// path there — worse, before this check the runtime treated the
+    /// unrecognized shape as "no where clause" and `Delete … from the
+    /// <x-repository>` with no where CLEARS THE WHOLE REPOSITORY. So
+    /// the shape is rejected here, where it can still name the fix.
+    private func validateDeleteWhereCondition(_ statement: AROStatement) {
+        let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
+        guard deleteVerbs.contains(statement.action.verb.lowercased()) else { return }
+        guard let condition = statement.queryModifiers.whereCondition,
+              condition.singlePredicate == nil else { return }
+
+        diagnostics.error(
+            "Delete supports a single where predicate — and/or chaining is not available for repository deletes",
+            at: condition.span.start,
+            hints: [
+                "Chain deletes: one Delete statement per predicate (AND semantics).",
+                "Or Filter what should remain and Store it back.",
+            ]
+        )
     }
 
     // MARK: - Compute qualifiers
