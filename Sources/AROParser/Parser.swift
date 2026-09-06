@@ -772,10 +772,21 @@ public final class Parser {
                 // `by <var>` — the pattern is whatever string the variable
                 // resolves to at runtime; lets data files drive Split/Group.
                 advance()
-                guard case .identifier(let name) = peek().kind else {
+                guard case .identifier(var name) = peek().kind else {
                     throw ParserError.unexpectedToken(expected: "identifier inside <…> after 'by'", got: peek())
                 }
                 advance()
+                // Hyphenated names — `by <field-name>` (GitLab #491); the
+                // single-identifier parse rejected what every other <…>
+                // position accepts.
+                while check(.hyphen) {
+                    advance()
+                    guard case .identifier(let segment) = peek().kind else {
+                        throw ParserError.unexpectedToken(expected: "identifier after '-' in 'by <…>'", got: peek())
+                    }
+                    advance()
+                    name += "-" + segment
+                }
                 try expect(.rightAngle, message: "Expected '>' after variable name in 'by <…>'")
                 byClause = ByClause(
                     pattern: "",
@@ -785,6 +796,23 @@ public final class Parser {
                 )
             } else {
                 throw ParserError.unexpectedToken(expected: "regex literal, string literal, or <var> after 'by'", got: peek())
+            }
+
+            // Trailing sort order — `by <score> descending` (ARO-0002
+            // §Ordering, GitLab #491). Only these two words are consumed;
+            // anything else stays for the clauses that follow.
+            if case .identifier(let word) = peek().kind,
+               word == "ascending" || word == "descending",
+               let clause = byClause {
+                advance()
+                byClause = ByClause(
+                    pattern: clause.pattern,
+                    flags: clause.flags,
+                    span: clause.span.merged(with: previous().span),
+                    isFieldName: clause.isFieldName,
+                    variableName: clause.variableName,
+                    order: word
+                )
             }
         }
 

@@ -540,6 +540,8 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
         context.unbind("_by_field_")
+        context.unbind("_by_var_")
+        context.unbind("_by_order_")
         context.unbind("_default_value_")
         context.unbind("_to_")
         context.unbind("_with_")
@@ -682,6 +684,16 @@ public final class FeatureSetExecutor: Sendable {
             context.bind("_by_flags_", value: byClause.flags)
             if byClause.isFieldName {
                 context.bind("_by_field_", value: byClause.pattern)
+            }
+            // `by <var>` — hand the action the NAME too (GitLab #491):
+            // Sort treats an unresolvable name as the field itself, so
+            // `Sort … by <score>` (ARO-0002 §Ordering) means the score
+            // field, while a bound string variable still drives it.
+            if let varName = byClause.variableName {
+                context.bind("_by_var_", value: varName)
+            }
+            if let order = byClause.order {
+                context.bind("_by_order_", value: order)
             }
         }
 
