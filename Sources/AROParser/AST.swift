@@ -504,17 +504,22 @@ public struct ByClause: Sendable, CustomStringConvertible {
     /// drive what a Split or Group action keys off — `pattern` is then
     /// just a fallback / display value.
     public let variableName: String?
+    /// Trailing sort order after the by target — `by <score> descending`
+    /// (ARO-0002 §Ordering, GitLab #491). "ascending" or "descending".
+    public let order: String?
     public let span: SourceSpan
 
     public init(pattern: String,
                 flags: String,
                 span: SourceSpan,
                 isFieldName: Bool = false,
-                variableName: String? = nil) {
+                variableName: String? = nil,
+                order: String? = nil) {
         self.pattern = pattern
         self.flags = flags
         self.isFieldName = isFieldName
         self.variableName = variableName
+        self.order = order
         self.span = span
     }
 
