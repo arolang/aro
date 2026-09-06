@@ -34,8 +34,10 @@ struct ExtractActionTests {
     @Test("Extract action verbs")
     func testExtractActionVerbs() {
         #expect(ExtractAction.verbs.contains("extract"))
-        #expect(ExtractAction.verbs.contains("parse"))
         #expect(ExtractAction.verbs.contains("get"))
+        // `parse` belongs to ParseDispatchAction now (GitLab #521).
+        #expect(!ExtractAction.verbs.contains("parse"))
+        #expect(ParseDispatchAction.verbs.contains("parse"))
     }
 
     @Test("Extract action valid prepositions")

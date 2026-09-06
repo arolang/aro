@@ -85,13 +85,12 @@ public struct ScheduleAction: ActionImplementation {
             )
         }
 
-        // Apply time-unit multiplier set by the parser for "with N unit" syntax
-        let multipliers: [String: Double] = [
-            "second": 1, "seconds": 1,
-            "minute": 60, "minutes": 60,
-            "hour": 3600, "hours": 3600
-        ]
-        let multiplier = multipliers[object.base] ?? 1.0
+        // Apply time-unit multiplier set by the parser for "with N unit" syntax.
+        // The vocabulary is DurationUnitCatalog (GitLab #502) — a private copy
+        // here missed the short suffixes (`ms`, `s`, `m`, `min`, `h`), so
+        // `Schedule the <tick> with 2m.` parsed and then silently ticked every
+        // 2 seconds instead of every 2 minutes.
+        let multiplier = DurationUnitCatalog.multiplier(for: object.base) ?? 1.0
         let intervalSeconds = rawValue * multiplier
 
         let eventName = result.base

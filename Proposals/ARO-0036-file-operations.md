@@ -20,11 +20,18 @@ Check if a file or directory exists.
 ```aro
 Exists the <result> for the <file: path>.
 Exists the <result> for the <directory: path>.
+Exists the <result> for "./path".
 ```
+
+The bare-string form takes the path directly, the same way Write and Read
+accept one. It checks plain existence; only the `<file: …>` / `<directory: …>`
+spellings additionally require the entry to be of that type.
 
 ### 1.2 Result
 
-Returns a boolean: `true` if exists, `false` otherwise.
+Returns a boolean: `true` if exists, `false` otherwise. All three spellings
+bind a real boolean — usable in `when` guards — and agree with each other
+(GitLab #494).
 
 ### 1.3 Examples
 
@@ -238,24 +245,35 @@ Remove files and directories.
 ### 7.1 Syntax
 
 ```aro
-Delete the <file: path>.
-Delete the <directory: path>.
+Delete the <result> from the <file: path>.
+Delete the <result> from the <directory: path>.
+Delete the <result> from "./path".
 ```
+
+The bare-string form takes the path directly, the same way Write and Read
+accept one. A string variable in object position is also treated as a path.
 
 ### 7.2 Behavior
 
 - **Files**: Removes the file
 - **Directories**: Recursively removes directory and contents
-- No error if path doesn't exist
+- A missing path is an error, matching Copy and Move on a missing source
+  (ARO-0006: the runtime reports the failed statement). Deleting a file that
+  is already gone — for example on a rerun — fails loudly rather than
+  answering ok.
+- Deletion emits a `file.deleted` event on success
 
 ### 7.3 Examples
 
 ```aro
 (* Delete a file *)
-Delete the <file: "./temp/cache.json">.
+Delete the <cleared> from the <file: "./temp/cache.json">.
 
 (* Delete a directory *)
-Delete the <directory: "./build">.
+Delete the <removed> from the <directory: "./build">.
+
+(* Bare string path *)
+Delete the <gone> from "./scratch-probe.txt".
 ```
 
 ---
@@ -269,6 +287,7 @@ File operations follow ARO's error philosophy—errors are descriptive and autom
 | Stat | File not found | `Cannot stat the info for the file: "./missing.txt"` |
 | Copy | Source not found | `Cannot copy the file: "./missing.txt" to the destination` |
 | Move | Permission denied | `Cannot move the file: "./locked.txt" to the destination` |
+| Delete | Path not found | `Cannot delete the gone from "./missing.txt"` |
 
 ---
 
@@ -282,7 +301,7 @@ File operations follow ARO's error philosophy—errors are descriptive and autom
 | **Copy** | Copy file/dir | `Copy the <file: s> to the <destination: d>.` |
 | **Move** | Move/rename | `Move the <file: s> to the <destination: d>.` |
 | **List** | List directory | `List the <r> from the <directory: p>.` |
-| **Delete** | Remove file/dir | `Delete the <file: p>.` |
+| **Delete** | Remove file/dir | `Delete the <r> from the <file: p>.` |
 
 ---
 

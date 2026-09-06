@@ -36,7 +36,7 @@ struct SwiftPluginScaffold: PluginScaffold {
         let handle = options.handle
         return [
             "  1. Edit Plugins/\(name)/Sources/\(handle)Plugin.swift",
-            "     — implement your actions in aroPluginExecute()",
+            "     — add .action / .qualifier entries to the AROPlugin builder",
             "",
             "  2. Build the plugin dynamic library:",
             "     cd Plugins/\(name) && swift build -c release",
@@ -84,7 +84,7 @@ struct SwiftPluginScaffold: PluginScaffold {
         // Package.swift — \(handle)Plugin
         //
         // Built as a dynamic library so the ARO runtime can dlopen() it.
-        // Replace the AROPluginSDK URL and version with your actual dependency.
+        // AROPluginKit provides the @AROExport macro and the AROPlugin builder.
 
         import PackageDescription
 
@@ -107,7 +107,7 @@ struct SwiftPluginScaffold: PluginScaffold {
                 .target(
                     name: "\(handle)Plugin",
                     dependencies: [
-                        .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
+                        .product(name: "AROPluginKit", package: "aro-plugin-sdk-swift"),
                     ],
                     path: "Sources"
                 ),
@@ -120,166 +120,61 @@ struct SwiftPluginScaffold: PluginScaffold {
         let handle = options.handle
         let name   = options.pluginName
 
-        var actionLines = ""
+        var builderChain = ""
         if options.includeActions {
-            actionLines = """
+            builderChain += """
 
-                    let exampleAction: NSDictionary = [
-                        "name":         "Example",
-                        "role":         "own",
-                        "verbs":        ["\(handle.lowercased())-example"] as NSArray,
-                        "prepositions": ["with", "from"]                   as NSArray,
-                        "description":  "An example action provided by \(name)."
-                    ]
-                    actions.append(exampleAction)
+                .action("Example", verbs: ["example"], role: "own", prepositions: ["with", "from"],
+                        description: "An example action provided by \(name).") { input in
+                    // Invoked from ARO as: \(handle).Example the <result> from <source>.
+                    let data = input.string("data") ?? ""
+                    // TODO: Implement your action logic
+                    return .success(["result": "ok", "data": data])
+                }
             """
         }
-
-        var qualifierLines = ""
         if options.includeQualifiers {
-            qualifierLines = """
+            builderChain += """
 
-                    let exampleQualifier: NSDictionary = [
-                        "name":        "example",
-                        "description": "An example qualifier provided by \(name).",
-                        "input":       "Any",
-                        "output":      "Any"
-                    ]
-                    qualifiers.append(exampleQualifier)
+                .qualifier("example", inputTypes: ["String"],
+                           description: "Uppercases a string (example qualifier).") { params in
+                    // Accessed from ARO as: <value: \(handle).example>
+                    guard let string = params.stringValue else {
+                        return .failure("example requires a string")
+                    }
+                    return .success(string.uppercased())
+                }
             """
         }
-
-        var serviceLines = ""
         if options.includeServices {
-            serviceLines = """
+            builderChain += """
 
-                    let exampleService: NSDictionary = [
-                        "name": "\(handle)Service",
-                        "description": "An example service provided by \(name)."
-                    ]
-                    services.append(exampleService)
+                .service("\(handle)Service", methods: ["status"],
+                         description: "An example service provided by \(name).") { method, _ in
+                    // TODO: Implement your service methods
+                    return .success(["method": method, "status": "ok"])
+                }
             """
         }
-
-        let executeBody = buildExecuteBody(options: options)
 
         return """
         // ============================================================
         // \(handle)Plugin.swift
-        // ARO Plugin - \(name) (ARO-0073 ABI)
+        // ARO Plugin - \(name)
         // ============================================================
+        //
+        // Uses the ARO Plugin SDK (AROPluginKit) zero-boilerplate pattern.
+        // No @_cdecl, no JSON, no manual memory management: the @AROExport
+        // macro generates all C ABI exports the ARO runtime needs
+        // (aro_plugin_info, aro_plugin_execute, aro_plugin_qualifier,
+        // aro_plugin_free, aro_plugin_init, aro_plugin_shutdown).
 
         import Foundation
+        import AROPluginKit
 
-        public struct \(handle)Plugin {
-            public static let name    = "\(name)"
-            public static let version = "1.0.0"
-        }
-
-        // MARK: - C ABI Interface
-
-        @_cdecl("aro_plugin_info")
-        public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-            var actions:    [NSDictionary] = []
-            var qualifiers: [NSDictionary] = []
-            var services:   [NSDictionary] = []
-        \(actionLines)
-        \(qualifierLines)
-        \(serviceLines)
-            var info: [String: Any] = [
-                "name":        "\(name)",
-                "version":     "1.0.0",
-                "handle":      "\(handle)",
-                "description": "A Swift plugin that provides \(name) functionality.",
-                "abi":         "ARO-0073",
-            ]
-            if !actions.isEmpty    { info["actions"]    = actions    as NSArray }
-            if !qualifiers.isEmpty { info["qualifiers"] = qualifiers as NSArray }
-            if !services.isEmpty   { info["services"]   = services   as NSArray }
-
-            guard let jsonData   = try? JSONSerialization.data(withJSONObject: info as NSDictionary),
-                  let jsonString = String(data: jsonData, encoding: .utf8) else {
-                return nil
-            }
-            return strdup(jsonString)
-        }
-
-        @_cdecl("aro_plugin_init")
-        public func aroPluginInit() {
-            // Allocate long-lived resources here (thread pools, connections, caches).
-        }
-
-        @_cdecl("aro_plugin_shutdown")
-        public func aroPluginShutdown() {
-            // Release resources acquired in aroPluginInit.
-        }
-
-        @_cdecl("aro_plugin_execute")
-        public func aroPluginExecute(
-            action:    UnsafePointer<CChar>?,
-            inputJson: UnsafePointer<CChar>?
-        ) -> UnsafeMutablePointer<CChar>? {
-            guard let action    = action.map({ String(cString: $0) }),
-                  let inputJson = inputJson.map({ String(cString: $0) }) else {
-                return strdup(#"{"error":"Invalid input"}"#)
-            }
-
-            guard let jsonData = inputJson.data(using: .utf8),
-                  let envelope = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-                return strdup(#"{"error":"Invalid JSON input"}"#)
-            }
-
-            let withArgs    = envelope["_with"] as? [String: Any] ?? [:]
-            let primaryData = envelope["data"]
-
-        \(executeBody)
-        }
-
-        @_cdecl("aro_plugin_free")
-        public func aroPluginFree(ptr: UnsafeMutablePointer<CChar>?) {
-            guard let ptr else { return }
-            free(ptr)
-        }
-
-        // MARK: - Helpers
-
-        private func jsonResult(_ dict: [String: Any]) -> UnsafeMutablePointer<CChar>? {
-            guard let data   = try? JSONSerialization.data(withJSONObject: dict),
-                  let string = String(data: data, encoding: .utf8) else {
-                return strdup(#"{"error":"Serialization failed"}"#)
-            }
-            return strdup(string)
-        }
-        """
-    }
-
-    private func buildExecuteBody(options: ScaffoldOptions) -> String {
-        var cases: [String] = []
-        if options.includeActions {
-            cases.append("""
-                    case "\(options.handle.lowercased())-example":
-                        // TODO: Implement example action
-                        let result: [String: Any] = ["result": "ok", "action": action]
-                        return jsonResult(result)
-            """)
-        }
-        if options.includeQualifiers {
-            cases.append("""
-                    case "example":
-                        // TODO: Implement example qualifier transformation
-                        return strdup(inputJson)
-            """)
-        }
-        let switchBody = cases.isEmpty
-            ? "            // No actions registered."
-            : cases.joined(separator: "\n")
-
-        return """
-                switch action.lowercased() {
-        \(switchBody)
-                default:
-                    return strdup("{\\\"error\\\":\\\"Unknown action: \\\\(action)\\\"}")
-                }
+        /// Plugin registration — this is the ONLY setup needed.
+        @AROExport
+        private let plugin = AROPlugin(name: "\(name)", version: "1.0.0", handle: "\(handle)")\(builderChain)
         """
     }
 }

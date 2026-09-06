@@ -239,7 +239,7 @@ public struct RenameHandler: Sendable {
         if aro.result.base == name { edits.append(createTextEdit(span: aro.result.span, newText: newName)) }
         if aro.object.noun.base == name { edits.append(createTextEdit(span: aro.object.noun.span, newText: newName)) }
         if let expr = aro.valueSource.asExpression { edits.append(contentsOf: findEditsInExpression(expr, name: name, newName: newName)) }
-        if let whereClause = aro.queryModifiers.whereClause { edits.append(contentsOf: findEditsInExpression(whereClause.value, name: name, newName: newName)) }
+        for predicate in aro.queryModifiers.whereCondition?.predicates ?? [] { edits.append(contentsOf: findEditsInExpression(predicate.value, name: name, newName: newName)) }
         return edits
     }
 

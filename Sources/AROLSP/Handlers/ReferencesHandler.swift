@@ -66,8 +66,8 @@ public struct ReferencesHandler: Sendable {
                 if let expr = aro.valueSource.asExpression {
                     references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
                 }
-                if let whereClause = aro.queryModifiers.whereClause {
-                    references.append(contentsOf: findReferencesInExpression(whereClause.value, name: symbolName, uri: uri))
+                for predicate in aro.queryModifiers.whereCondition?.predicates ?? [] {
+                    references.append(contentsOf: findReferencesInExpression(predicate.value, name: symbolName, uri: uri))
                 }
             } else if let publish = statement as? PublishStatement {
                 if publish.internalVariable == symbolName {

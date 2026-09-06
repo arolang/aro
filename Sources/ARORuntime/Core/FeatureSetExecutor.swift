@@ -44,6 +44,7 @@ public final class FeatureSetExecutor: Sendable {
     private let computeVerbs: Set<String>
     private let extractVerbs: Set<String>
     private let queryVerbs: Set<String>
+    private let deleteVerbs: Set<String>
     private let responseVerbs: Set<String>
     private let serverVerbs: Set<String>
 
@@ -66,6 +67,7 @@ public final class FeatureSetExecutor: Sendable {
         self.computeVerbs = VerbSets.computeVerbs
         self.extractVerbs = VerbSets.extractVerbs
         self.queryVerbs = VerbSets.queryVerbs
+        self.deleteVerbs = VerbSets.deleteVerbs
         self.responseVerbs = VerbSets.responseVerbs
         self.serverVerbs = VerbSets.serverVerbs
     }
@@ -353,6 +355,11 @@ public final class FeatureSetExecutor: Sendable {
             } else if let pipelineStatement = statement as? PipelineStatement {
                 try await executePipelineStatement(pipelineStatement, context: context)
             }
+
+            // GitLab #495: `executeAROStatement` attributes a refused rebind
+            // to its own statement; this catches the ones the statement forms
+            // above don't check themselves (Publish, loop result bindings).
+            try throwRefusedRebind(context: context)
         } catch {
             // Issue #229 / SOLARO error border (#?). The runtime
             // declares `errorCheckpoint` on `DebugController` so a
@@ -537,6 +544,7 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_where_field_")
         context.unbind("_where_op_")
         context.unbind("_where_value_")
+        context.unbind("_where_tree_")
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
         context.unbind("_by_field_")
@@ -603,6 +611,7 @@ public final class FeatureSetExecutor: Sendable {
                     mergeVerbs.contains(lowerVerb) ||
                     responseVerbs.contains(lowerVerb) ||
                     queryVerbs.contains(lowerVerb) ||
+                    deleteVerbs.contains(lowerVerb) ||  // GitLab #493: file deletion takes its path as an expression
                     serverVerbs.contains(lowerVerb) ||
                     hasDynamicHandler ||  // Dynamic plugin actions always need execution
                     updateVerbs.contains(lowerVerb) ||  // Update always needs execution (handles rebind internally)
@@ -610,7 +619,25 @@ public final class FeatureSetExecutor: Sendable {
                     (computeVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
-                    context.bind(resultDescriptor.base, value: expressionValue)
+                    // The fast path bypasses the action — and used to bypass
+                    // the `as <Type>` annotation with it, so
+                    // `Compute the <n> as Float from <s>.` bound the raw
+                    // string and `<n> * 2` did string repetition
+                    // (GitLab #501). Coerce exactly like the action path
+                    // would (ResultTypeCoercion, GitLab #475).
+                    context.bind(
+                        resultDescriptor.base,
+                        value: ResultTypeCoercion.coerce(
+                            expressionValue, to: resultDescriptor.asType))
+                    // GitLab #495: the bind above is refused (not fatal) when
+                    // the name is already immutable — e.g. a REPL cell
+                    // rebinding an earlier cell's variable, which the
+                    // per-program analyzer cannot see. Surface it here as this
+                    // statement's error.
+                    try throwRefusedRebind(
+                        context: context,
+                        statementText: Self.statementText(statement, verb: verb)
+                    )
 
                     // Still need to run the action for side effects (like Return, Log, etc.).
                     // Goes through the registry so middleware sees it too (#107).
@@ -662,12 +689,29 @@ public final class FeatureSetExecutor: Sendable {
         }
 
         // ARO-0018: Bind where clause if present
-        if let whereClause = statement.queryModifiers.whereClause {
-            context.bind("_where_field_", value: whereClause.field)
-            context.bind("_where_op_", value: whereClause.op.rawValue)
-            // Evaluate the where value expression
-            let whereValue = try await expressionEvaluator.evaluate(whereClause.value, context: context)
-            context.bind("_where_value_", value: whereValue)
+        if let whereCondition = statement.queryModifiers.whereCondition {
+            if let single = whereCondition.singlePredicate {
+                // Single predicate keeps the historical triple, which every
+                // consumer (Filter, Retrieve, Delete, plugins) understands.
+                context.bind("_where_field_", value: single.field)
+                context.bind("_where_op_", value: single.op.rawValue)
+                // Evaluate the where value expression
+                let whereValue = try await expressionEvaluator.evaluate(single.value, context: context)
+                context.bind("_where_value_", value: whereValue)
+            } else {
+                // Compound condition (GitLab #498): numbered triples plus a
+                // structure skeleton like "and(0,or(1,2))". The runtime's
+                // ResolvedWhereCondition reassembles the tree from these.
+                // Value expressions are evaluated here, in statement scope,
+                // so predicates can reference local variables.
+                for (index, predicate) in whereCondition.predicates.enumerated() {
+                    context.bind("_where_field_\(index)_", value: predicate.field)
+                    context.bind("_where_op_\(index)_", value: predicate.op.rawValue)
+                    let value = try await expressionEvaluator.evaluate(predicate.value, context: context)
+                    context.bind("_where_value_\(index)_", value: value)
+                }
+                context.bind("_where_tree_", value: whereCondition.treeSkeleton)
+            }
         }
 
         // ARO-0037: Bind by clause if present (for Split and Group actions)
@@ -832,11 +876,36 @@ public final class FeatureSetExecutor: Sendable {
             )
             throw ActionError.statementFailed(aroError)
         }
+
+        // GitLab #495: covers both the executor's own result bind above and
+        // any bind the action performed internally (plugins included) that
+        // `RuntimeContext.bindTyped` refused as an immutable rebind.
+        try throwRefusedRebind(
+            context: context,
+            statementText: Self.statementText(statement, verb: verb)
+        )
+    }
+
+    /// The statement in the form `AROError.fromStatement` renders it, for
+    /// attributing an error that was detected outside the action's own throw
+    /// path (GitLab #495).
+    private static func statementText(_ statement: AROStatement, verb: String) -> String {
+        let result = ResultDescriptor(from: statement.result).fullName
+        let object = ObjectDescriptor(from: statement.object).fullName
+        let condition = statement.statementGuard.isPresent ? " when <condition>" : ""
+        return "<\(verb)> the <\(result)> \(statement.object.preposition.rawValue) the <\(object)>\(condition)."
     }
 
     /// Extra sentence appended to a statement-shaped error when the
     /// statement alone can't convey what went wrong (GitLab #486).
     private static func statementHint(for error: any Error) -> String? {
+        // A file-system failure is the second exception (GitLab #493): the
+        // statement `Delete the <gone> from "./f.txt"` reads fine, but only
+        // the underlying error says *why* it failed — the path is missing,
+        // not merely undeletable. Same for read/copy/move on missing paths.
+        if let fsError = error as? FileSystemError {
+            return fsError.description
+        }
         guard let actionError = error as? ActionError,
               case .unknownComputation = actionError
         else { return nil }
@@ -857,6 +926,38 @@ public final class FeatureSetExecutor: Sendable {
         if let drainError {
             throw drainError
         }
+        // Backstop for a refused rebind no statement check observed — a
+        // deferred action or event-driven bind that landed after its statement
+        // was checked (GitLab #495). Less precise attribution than the
+        // per-statement check, but the violation still surfaces as an error
+        // instead of disappearing.
+        try throwRefusedRebind(context: context)
+    }
+
+    /// Throw the rebind violation `RuntimeContext.bindTyped` refused during
+    /// this statement, if there was one (GitLab #495).
+    ///
+    /// `bind` is non-throwing — it is called from every action, plugin bridge,
+    /// and framework-variable site — so an immutable rebind is refused inside
+    /// `bindTyped` (the existing value stays) and recorded on the feature-set
+    /// context. This is where the record becomes a thrown error, attributed to
+    /// the statement that attempted the rebind when the caller knows it.
+    private func throwRefusedRebind(
+        context: ExecutionContext,
+        statementText: String? = nil
+    ) throws {
+        guard let runtime = context as? RuntimeContext,
+              let violation = runtime.takeRebindViolation() else { return }
+        guard let statementText else {
+            throw ActionError.statementFailed(violation)
+        }
+        throw ActionError.statementFailed(AROError(
+            message: violation.message,
+            featureSet: violation.featureSet,
+            businessActivity: violation.businessActivity,
+            statement: statementText,
+            resolvedValues: violation.resolvedValues
+        ))
     }
 
     /// Verbs that may overwrite an existing binding rather than shadow it.

@@ -69,34 +69,55 @@ struct ModifierBinder {
         guard !modifiers.isEmpty else { return }
         let ip = ctx.insertionPoint
 
-        // Bind where clause if present
-        if let whereClause = modifiers.whereClause {
-            // Bind _where_field_
-            let fieldName = ctx.stringConstant("_where_field_")
-            let fieldValue = ctx.stringConstant(whereClause.field)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, fieldName, fieldValue],
-                at: ip
-            )
+        // Bind where clause if present. A single predicate keeps the
+        // historical _where_field_/_where_op_/_where_value_ triple; a
+        // compound and/or condition (GitLab #498) binds numbered triples
+        // plus a _where_tree_ skeleton — the same wire format the
+        // interpreter's FeatureSetExecutor produces, consumed by
+        // ResolvedWhereCondition in the runtime.
+        if let whereCondition = modifiers.whereCondition {
+            let predicates: [(suffix: String, clause: WhereClause)]
+            if let single = whereCondition.singlePredicate {
+                predicates = [("", single)]
+            } else {
+                predicates = whereCondition.predicates.enumerated().map { ("\($0.offset)_", $0.element) }
+                let treeName = ctx.stringConstant("_where_tree_")
+                let treeValue = ctx.stringConstant(whereCondition.treeSkeleton)
+                _ = ctx.module.insertCall(
+                    externals.variableBindString,
+                    on: [ctx.currentContextVar!, treeName, treeValue],
+                    at: ip
+                )
+            }
 
-            // Bind _where_op_
-            let opName = ctx.stringConstant("_where_op_")
-            let opValue = ctx.stringConstant(whereClause.op.rawValue)
-            _ = ctx.module.insertCall(
-                externals.variableBindString,
-                on: [ctx.currentContextVar!, opName, opValue],
-                at: ip
-            )
+            for (suffix, clause) in predicates {
+                // Bind _where_field_[N_]
+                let fieldName = ctx.stringConstant("_where_field_\(suffix)")
+                let fieldValue = ctx.stringConstant(clause.field)
+                _ = ctx.module.insertCall(
+                    externals.variableBindString,
+                    on: [ctx.currentContextVar!, fieldName, fieldValue],
+                    at: ip
+                )
 
-            // Bind _where_value_ by evaluating the expression
-            let valueName = ctx.stringConstant("_where_value_")
-            let valueJSON = ctx.stringConstant(serializer.serializeExpression(whereClause.value))
-            _ = ctx.module.insertCall(
-                externals.evaluateAndBind,
-                on: [ctx.currentContextVar!, valueName, valueJSON],
-                at: ip
-            )
+                // Bind _where_op_[N_]
+                let opName = ctx.stringConstant("_where_op_\(suffix)")
+                let opValue = ctx.stringConstant(clause.op.rawValue)
+                _ = ctx.module.insertCall(
+                    externals.variableBindString,
+                    on: [ctx.currentContextVar!, opName, opValue],
+                    at: ip
+                )
+
+                // Bind _where_value_[N_] by evaluating the expression
+                let valueName = ctx.stringConstant("_where_value_\(suffix)")
+                let valueJSON = ctx.stringConstant(serializer.serializeExpression(clause.value))
+                _ = ctx.module.insertCall(
+                    externals.evaluateAndBind,
+                    on: [ctx.currentContextVar!, valueName, valueJSON],
+                    at: ip
+                )
+            }
         }
 
         // Bind aggregation clause if present

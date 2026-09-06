@@ -362,4 +362,4 @@ components:
 
 ---
 
-*Next: Chapter 42 — Date and Time*
+*Next: Chapter 42 — Date and Time and Intervals*

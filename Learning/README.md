@@ -29,7 +29,7 @@ its ideas continue.
 | 05 | [Expressions & Conditionals](05-expressions-and-conditionals.repl) | Arithmetic, comparison, logic, `when` guards | Order rules (discounts, minimums) |
 | 06 | [Collections & Pipelines](06-collections-and-pipelines.repl) | Filter, Sort, Group, Map, `for each`, aggregation | Analyzing a day of orders |
 | 07 | [Text Processing](07-text-processing.repl) | Split, regex, lines/join, encodings, escaping | Cleaning customer feedback |
-| 08 | [Dates & Times](08-dates-and-times.repl) | Date arithmetic, ranges, formatting | Opening hours & schedules |
+| 08 | [Dates & Times and Intervals](08-dates-and-times.repl) | Date arithmetic, ranges, formatting, sleep intervals | Opening hours & schedules |
 | 09 | [Feature Sets & Events](09-feature-sets-and-events.repl) | Feature sets, business activities, Emit, handlers, state guards | Order events through the shop |
 | 10 | [User-Defined Actions](10-user-defined-actions.repl) | `Application.<Name>`, `takes`, recursion | Reusable pricing logic |
 | 11 | [Set Operations & Merging](11-set-operations-and-merging.repl) | Union, intersect, difference, merge | Loyalty audiences |

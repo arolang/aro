@@ -100,13 +100,13 @@
   {
    "id": "nb06-c17",
    "kind": "markdown",
-   "source": "## for each — when you need per-element work\n\nThe pipeline actions cover whole-collection questions. For\nper-element *computation* — a derived value, a formatted line — use\n`for each`. A `where` clause on the loop skips non-matching elements;\ninside it, compare strings with `==` and booleans with `is`.\n\nBindings made inside the loop body are scoped to the iteration, so\n`Extract`-ing a field into a name each time round is not a rebind.\n(`Extract` is a *REQUEST* action: it pulls data from a source — here,\na field off the loop element.)",
+   "source": "## for each — when you need per-element work\n\nThe pipeline actions cover whole-collection questions. For\nper-element *computation* — a derived value, a formatted line — use\n`for each`. A `where` clause on the loop skips non-matching elements;\ninside it, compare strings with `==` and booleans with `is`.\n\nQualified references go straight into arithmetic: `<order: qty> *\n<order: price>` reads both fields right where the math happens\n([ARO-0001](../Proposals/ARO-0001-language-fundamentals.md)).\nWhen a field deserves its own name — because several statements use\nit, or the name documents intent — `Extract` still does that, and\nbindings made inside the loop body are scoped to the iteration, so\nextracting into the same name each time round is not a rebind.",
    "outputs": []
   },
   {
    "id": "nb06-c18",
    "kind": "code",
-   "source": "for each <order> in <day-orders> where <order: qty> > 1 {\n    Extract the <qty-part> from the <order: qty>.\n    Extract the <price-part> from the <order: price>.\n    Compute the <line-value> from <qty-part> * <price-part>.\n    Log \"${<order: qty>} x ${<order: item>} = ${<line-value>}\" to the <console>.\n}",
+   "source": "for each <order> in <day-orders> where <order: qty> > 1 {\n    Compute the <line-value> from <order: qty> * <order: price>.\n    Log \"${<order: qty>} x ${<order: item>} = ${<line-value>}\" to the <console>.\n}",
    "outputs": []
   },
   {
