@@ -56,7 +56,7 @@
 //   - `parseActionVerb`        verb-shaped token → Action
 //   - `isExpressionStart` / `isSinkSyntaxStart` / `isLiteralToken`
 //                              token → Bool predicates
-//   - `parseWhereClause`       token → WhereOperator
+//   - `parseWherePredicate`    token → WhereOperator
 //   - `parseLiteralValue`      literal token → LiteralValue
 //   - `parseAggregationIfPresent` name → AggregationType
 //   - `parseRequireStatement`  source name → RequireSource
@@ -643,14 +643,12 @@ public final class Parser {
         if shouldParseExpression && !isObjectPattern() {
             let expression = try parseExpression()
 
-            // Time-unit suffix for duration literals
-            let timeUnits: Set<String> = [
-                "second", "seconds", "s",
-                "minute", "minutes", "min",
-                "hour", "hours", "h",
-                "millisecond", "milliseconds", "ms"
-            ]
-            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+            // Time-unit suffix for duration literals (GitLab #502).
+            // The vocabulary lives in DurationUnitCatalog so the
+            // parser, SleepAction and the check-time lint cannot
+            // drift apart. `300ms` lexes as `300` + `ms`, so the
+            // spaced and unspaced spellings arrive here identically.
+            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, DurationUnitCatalog.isUnit(unit) {
                 advance()
                 return (QualifiedNoun(base: unit, specifiers: [], span: previous().span), expression)
             }
@@ -692,7 +690,7 @@ public final class Parser {
         var withExpression: (any Expression)? = nil
         var toExpression: (any Expression)? = nil
         var againstExpression: (any Expression)? = nil
-        var whereClause: WhereClause? = nil
+        var whereCondition: WhereCondition? = nil
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
         var whenCondition: (any Expression)? = nil
@@ -756,7 +754,7 @@ public final class Parser {
         // where clause (ARO-0018)
         if check(.where) {
             advance()
-            whereClause = try parseWhereClause()
+            whereCondition = try parseWhereCondition()
         }
 
         // by clause (ARO-0037)
@@ -802,7 +800,7 @@ public final class Parser {
 
         return AROClauses(
             queryModifiers: QueryModifiers(
-                whereClause: whereClause,
+                whereCondition: whereCondition,
                 aggregation: aggregation,
                 byClause: byClause,
                 defaultValue: defaultValue
@@ -850,12 +848,12 @@ public final class Parser {
     private func isSinkSyntaxStart(_ token: Token) -> Bool {
         // Sink syntax starts with:
         // 1. String literal: <Log> "message"
-        // 2. Numeric literal: <Log> 42
+        // 2. Numeric/boolean/nil literal: <Log> 42, <Log> true (GitLab #512)
         // 3. Object/array literal: <Log> { key: value } or <Log> [1, 2, 3]
         // 4. Variable reference (without article): <Log> <data>
         //    Note: Standard syntax has article: <Log> the <result>
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral:
+        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil, .null:
             return true
         case .leftBrace, .leftBracket:
             return true
@@ -887,10 +885,66 @@ public final class Parser {
             // Look ahead: < identifier : ... > means system object
             if case .identifier = peekAt(1)?.kind,
                case .colon = peekAt(2)?.kind {
+                // GitLab #496: unless the reference is the first operand of an
+                // expression. `from <item: qty> * <item: price>` used to capture
+                // `<item: qty>` as the object noun and then die on the operator
+                // ("Expected '.', but got *") — forcing an Extract per operand.
+                // The expression grammar already parses qualified nouns (it is
+                // what string interpolation uses), so when the token after the
+                // reference's closing '>' is a binary operator, route there.
+                if qualifiedRefStartsExpression() {
+                    return false
+                }
                 return true
             }
         }
         // Case 4: <...> without article and no colon = expression (not object)
+        return false
+    }
+
+    /// GitLab #496: decides whether a qualified variable reference in object
+    /// position (`<item: qty>`) is really the first operand of an expression.
+    ///
+    /// Scans from the current `<` to its matching `>` (angle depth tracks
+    /// generic type parameters like `List<User>` inside the qualifier) and
+    /// inspects the token that follows. A binary operator there means the
+    /// statement is `... from <a: x> * <b: y> ...` — an expression — rather
+    /// than a system-object noun. Angle-bracket comparisons (`<`, `>`) are
+    /// deliberately absent from the operator set: they are ambiguous with
+    /// variable references, matching how bare-identifier operands already
+    /// behave (`infixPrecedence` refuses them before an identifier too).
+    ///
+    /// The scan is bounded: qualifier contents are short (identifiers, dots,
+    /// chains, string literals, generic parameters). An unclosed reference
+    /// falls back to the object interpretation — the standard path then
+    /// reports its usual, well-tested error.
+    private func qualifiedRefStartsExpression() -> Bool {
+        guard check(.leftAngle) else { return false }
+        var depth = 0
+        var index = current
+        let limit = min(tokens.count, current + 64)
+        while index < limit {
+            switch tokens[index].kind {
+            case .leftAngle, .lessThan:
+                depth += 1
+            case .rightAngle, .greaterThan:
+                depth -= 1
+                if depth == 0 {
+                    guard index + 1 < tokens.count else { return false }
+                    switch tokens[index + 1].kind {
+                    case .plus, .minus, .hyphen, .star, .slash, .percent,
+                         .plusPlus, .equalEqual, .bangEqual, .lessEqual,
+                         .greaterEqual, .and, .or, .contains, .matches:
+                        return true
+                    default:
+                        return false
+                    }
+                }
+            default:
+                break
+            }
+            index += 1
+        }
         return false
     }
 
@@ -948,14 +1002,86 @@ public final class Parser {
         return AggregationClause(type: type, field: field, span: startSpan.merged(with: endSpan))
     }
 
-    /// Parses where clause: <field> is "value" or <field> > 1000
-    private func parseWhereClause() throws -> WhereClause {
+    /// Parses a where condition per ARO-0018 §7 (GitLab #498):
+    ///
+    ///     predicate     = predicate_or ;
+    ///     predicate_or  = predicate_and , { "or" , predicate_and } ;
+    ///     predicate_and = predicate_atom , { "and" , predicate_atom } ;
+    ///     predicate_atom = comparison | "(" , predicate , ")" ;
+    ///
+    /// `and` binds tighter than `or`, so `a or b and c` reads as
+    /// `a or (b and c)` — same precedence as the expression grammar.
+    private func parseWhereCondition() throws -> WhereCondition {
+        var left = try parseWhereAndCondition()
+        while check(.or) {
+            advance()
+            let right = try parseWhereAndCondition()
+            left = .or(left, right)
+        }
+        return left
+    }
+
+    private func parseWhereAndCondition() throws -> WhereCondition {
+        var left = try parseWhereAtom()
+        while check(.and) {
+            advance()
+            let right = try parseWhereAtom()
+            left = .and(left, right)
+        }
+        return left
+    }
+
+    private func parseWhereAtom() throws -> WhereCondition {
+        // Parenthesized group: where (<a> is 1 or <b> is 2) and <c> is 3
+        if check(.leftParen) {
+            advance()
+            let grouped = try parseWhereCondition()
+            try expect(.rightParen, message: "')' to close the parenthesized where condition")
+            return grouped
+        }
+        return try parseWherePredicate()
+    }
+
+    /// Parses one comparison: <field> is "value" or <field> > 1000.
+    ///
+    /// The value expression is parsed *above* the logical operators
+    /// (`parsePrecedence(.and)`), so a following `and`/`or` starts the
+    /// next predicate instead of being swallowed into the value — that
+    /// swallowing is exactly what turned
+    /// `where <status> == "paid" and <qty> > 2` into a runtime
+    /// "Undefined variable: qty" (GitLab #498). A value that really is
+    /// a logical expression can still be written in parentheses.
+    ///
+    /// `between lo and hi` (ARO-0018 §2.1) desugars right here into
+    /// `field >= lo and field <= hi` — the runtime never sees it.
+    private func parseWherePredicate() throws -> WhereCondition {
         let startSpan = peek().span
 
         // Parse field: <field>
         try expect(.leftAngle, message: "'<'")
         let field = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
+
+        // between: desugared into two predicates on the same field
+        if case .identifier(let word) = peek().kind, word.lowercased() == "between" {
+            advance()
+            let low = try parsePrecedence(.and)
+            guard check(.and) else {
+                throw ParserError.unexpectedToken(
+                    expected: "'and' between the lower and upper bound of 'between'",
+                    got: peek()
+                )
+            }
+            advance()
+            let high = try parsePrecedence(.and)
+            let lowClause = WhereClause(
+                field: field, op: .greaterEqual, value: low,
+                span: startSpan.merged(with: low.span))
+            let highClause = WhereClause(
+                field: field, op: .lessEqual, value: high,
+                span: startSpan.merged(with: high.span))
+            return .and(.predicate(lowClause), .predicate(highClause))
+        }
 
         // Parse operator
         let op: WhereOperator
@@ -1016,13 +1142,13 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in)", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in, between) after <\(field)> in where clause", got: peek())
         }
 
-        // Parse value expression
-        let value = try parseExpression()
+        // Parse value expression — stops before and/or (see doc comment)
+        let value = try parsePrecedence(.and)
 
-        return WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span))
+        return .predicate(WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span)))
     }
 
     /// Parses a literal value (string, number, boolean, null, regex)

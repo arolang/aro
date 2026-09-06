@@ -360,7 +360,8 @@ Special feature sets manage application lifecycle:
 
 ```ebnf
 string_literal = '"' , { dq_string_char } , '"'
-               | "'" , { sq_string_char } , "'" ;
+               | "'" , { sq_string_char } , "'"
+               | multiline_string ;          (* deprecated, GitLab #524 *)
 
 dq_string_char = any_char - ('"' | "\\")          (* newlines are content *)
                | escape_sequence ;
@@ -368,19 +369,36 @@ dq_string_char = any_char - ('"' | "\\")          (* newlines are content *)
 sq_string_char = any_char - ("'" | "\\" | newline)
                | escape_sequence ;
 
+multiline_string = '"""' , newline , { any_char } , newline , indent , '"""' ;
+
 escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
 ```
 
 A double-quoted string may span multiple lines: a newline inside `"…"` is
 content, exactly like any other character (GitLab #523). One delimiter
-serves single-line and multiline strings alike. An unterminated string is
+serves single-line and multiline strings alike, escape sequences and
+`${…}` interpolation work across lines, and an unterminated string is
 reported at its opening quote. Raw single-quoted strings remain
 single-line.
 
-Triple-quoted strings (`"""…"""`) are **deprecated**: they still lex, with
-a warning, and will be removed in a later, announced step. Replace them
-with a plain `"…"` string.
+```aro
+Create the <letter> with "Dear guest,
+
+Welcome to Brew & Bytes.".
+```
+
+Because every character between the quotes is kept, a multiline string is
+written flush with the margin it should have in the output.
+
+**Triple-quoted strings** (`"""…"""`) are **deprecated** (GitLab #523);
+they still lex, with a warning, and removal is tracked in GitLab #524.
+They open with `"""` followed immediately by a newline and close with
+`"""` on its own line; the closing delimiter's indentation is stripped
+from every line, the final newline before the closing delimiter is
+dropped, escape sequences work, and `${…}` interpolation is NOT
+performed. That dedent is the one migration hazard: a `"""` block written
+indented becomes a plain string written flush-left.
 
 **Examples:**
 ```
@@ -487,6 +505,21 @@ primary_expression = literal
 
 variable_reference = "<" , qualified_noun , ">" ;
 grouped_expression = "(" , expression , ")" ;
+```
+
+A `variable_reference` operand carries the full `qualified_noun` form: a
+qualified reference is a valid expression operand wherever a bare one is
+(GitLab #496). Its semantics are identical to an Extract into a temporary —
+the qualifier resolves as a field access (or registered qualifier) on the
+base value before the surrounding expression uses it.
+
+```aro
+(* These two are equivalent: *)
+Extract the <qty> from the <item: qty>.
+Extract the <price> from the <item: price>.
+Compute the <line-total> from <qty> * <price>.
+
+Compute the <line-total> from <item: qty> * <item: price>.
 ```
 
 ### Member Access

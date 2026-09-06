@@ -4,7 +4,7 @@
     {
       "id": "nb08-c01",
       "kind": "markdown",
-      "source": "# 08 — Dates & Times\n\n**Brew & Bytes** runs on the clock: doors open at 7, close at 6, the\ngrinder gets deep-cleaned every second week, and the holiday\ncountdown poster needs a number every morning. All of that is date\narithmetic — and date arithmetic is where hand-rolled code\ntraditionally goes wrong (off-by-one days, months that wrap,\ntimezones that bite).\n\nARO gives dates a first-class vocabulary\n([ARO-0041](../Proposals/ARO-0041-datetime-ranges.md)): the `<now>`\nsystem value, the `date` qualifier for parsing, component qualifiers\n(`year`, `month`, `day`, …), offset qualifiers (`+7d`, `-1h`),\n`format` for display, `date-range` and `distance` for spans, and\n`recurrence` for repeating schedules. This notebook walks through\nall of them and ends with the café's schedule board.",
+      "source": "# 08 — Dates & Times and Intervals\n\n**Brew & Bytes** runs on the clock: doors open at 7, close at 6, the\ngrinder gets deep-cleaned every second week, and the holiday\ncountdown poster needs a number every morning. All of that is date\narithmetic — and date arithmetic is where hand-rolled code\ntraditionally goes wrong (off-by-one days, months that wrap,\ntimezones that bite).\n\nARO gives dates a first-class vocabulary\n([ARO-0041](../Proposals/ARO-0041-datetime-ranges.md)): the `<now>`\nsystem value, the `date` qualifier for parsing, component qualifiers\n(`year`, `month`, `day`, …), offset qualifiers (`+7d`, `-1h`),\n`format` for display, `date-range` and `distance` for spans, and\n`recurrence` for repeating schedules. Time also flows *between*\nstatements: the `Sleep` action pauses a feature set for an interval,\nand its duration units share the same suffix vocabulary\n([ARO-0004](../Proposals/ARO-0004-actions.md)). This notebook walks\nthrough all of them and ends with the café's schedule board.",
       "outputs": []
     },
     {
@@ -107,6 +107,24 @@
       "id": "nb08-c18",
       "kind": "code",
       "source": "Create the <daily-brew: recurrence> with \"every day\".\nCreate the <team-standup: recurrence> with \"every monday\".\nCreate the <deep-clean: recurrence> with \"every 2 weeks\".\nCreate the <payday: recurrence> with \"every last friday\".\nExtract the <next-brew> from the <daily-brew: next>.\nExtract the <next-standup> from the <team-standup: next>.\nExtract the <next-deep> from the <deep-clean: next>.\nExtract the <next-payday> from the <payday: next>.\nLog <next-brew> to the <console>.\nLog <next-standup> to the <console>.\nLog <next-deep> to the <console>.\nLog <next-payday> to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c23",
+      "kind": "markdown",
+      "source": "## Intervals: sleeping between actions\n\nSome café rituals are pure timing: the espresso shot runs ~27\nseconds, the milk rests before pouring, the grinder cools between\nbatches. The `Sleep` action pauses the current feature set for an\ninterval — cooperatively, so everything else (HTTP handlers, other\nevents) keeps running while you wait.\n\n**A bare number is seconds.** `Sleep the <pause> with 300.` sleeps\nfive *minutes* — a number that reads like milliseconds to anyone\narriving from JavaScript, and the symptom is a mysterious hang. So\nspell the unit: `ms`, `s`, `m` (minutes), or `h`, as a suffix\n(`300ms`, `1.5s`, `2m`) or as a word (`500 milliseconds`,\n`30 seconds`). The short suffixes are the same duration vocabulary\nthe date offsets above use (`+30m`, `-12h`).\n\nThe pauses below are millisecond-scale so the cell runs fast — the\nsame spellings scale up to real barista timing.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c24",
+      "kind": "code",
+      "source": "Sleep the <espresso-pause> for 250ms.\nSleep the <milk-rest> for 0.2s.\nSleep the <grinder-cooldown> for 0.005m.\nLog \"shot pulled, milk rested, grinder cooled — every unit spelled out\" to the <console>.",
+      "outputs": []
+    },
+    {
+      "id": "nb08-c25",
+      "kind": "markdown",
+      "source": "## What just happened\n\n- **`for 250ms`** — a suffix binds with or without a space:\n  `250ms` and `250 ms` are the same statement. `milliseconds` and\n  `millisecond` also work.\n- **`for 0.2s`** — fractional values take units too; `s`,\n  `second`, `seconds` all mean ×1.\n- **`for 0.005m`** — `m` is *minutes* (×60), exactly as in the\n  `+30m` date offset. `0.005m` is 300ms; `2m` is two minutes.\n  `min`, `minute`, `minutes` and `h`/`hour`/`hours` round out the\n  table.\n- Both prepositions carry units: `Sleep the <pause> with 500 ms.`\n  works the same as `for`.\n- **Bare numbers stay seconds** — `Sleep the <pause> for 5.` is\n  five seconds, unchanged. But a bare literal over 60 now draws an\n  `aro check` warning — *“Sleep sleeps in seconds — 300 is 5\n  minutes”* — because that spelling almost always means someone\n  thought in milliseconds. Write `300s` if you mean it.\n- `Sleep` is an *effect*: it never defers and never overlaps with\n  its neighbours, so pauses add up in source order\n  ([15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)).",
       "outputs": []
     },
     {

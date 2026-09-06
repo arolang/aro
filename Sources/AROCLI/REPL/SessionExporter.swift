@@ -76,7 +76,10 @@ public struct SessionExporter: Sendable {
                 // Add assertion for the result if we can determine the variable name
                 if let varName = extractResultVariable(from: entry.input) {
                     let literal = formatLiteral(value)
-                    output += "    <Assert> the <\(varName)> is \(literal).\n"
+                    // ARO-0015 §2.4: 'Assert the <v> with <expected>.' —
+                    // the old bracketed-verb 'is' spelling no longer
+                    // parses (GitLab #514).
+                    output += "    Assert the <\(varName)> with \(literal).\n"
                     output += "\n"
                 }
             } else if case .ok = entry.result {

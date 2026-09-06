@@ -124,9 +124,8 @@
         Filter the <candidates> from the <customers> where <customer_id> = <cid>.
         Extract the <customer: first> from the <candidates>.
 
-        Extract the <qty> from the <order: quantity>.
-        Extract the <price> from the <order: unit_price>.
-        Compute the <line-total> from <qty> * <price>.
+        (* Qualified refs compute directly — no Extract per operand. *)
+        Compute the <line-total> from <order: quantity> * <order: unit_price>.
 
         Create the <fact> with {
             order_id: <order: order_id>,
@@ -136,8 +135,8 @@
             region: <customer: region>,
             tier: <customer: tier>,
             sku: <order: sku>,
-            quantity: <qty>,
-            unit_price: <price>,
+            quantity: <order: quantity>,
+            unit_price: <order: unit_price>,
             line_total: <line-total>
         }.
         Store the <fact> into the <silver-orders-repository>.

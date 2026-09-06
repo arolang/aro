@@ -17,9 +17,14 @@ import AROParser
 ///
 /// ## Syntax
 /// ```aro
-/// (* Literal duration *)
+/// (* Literal duration — bare numbers are SECONDS *)
 /// Sleep the <pause> for 30 seconds.
 /// Sleep the <pause> for 500 milliseconds.
+///
+/// (* Suffix units, spaced or not (GitLab #502) *)
+/// Sleep the <pause> for 300ms.
+/// Sleep the <pause> for 1.5s.
+/// Sleep the <pause> for 2m.
 ///
 /// (* Variable duration *)
 /// Sleep the <pause> for <reset-at> seconds.
@@ -34,11 +39,17 @@ import AROParser
 /// to the result variable.
 ///
 /// ## Supported time units (via `object.base`)
-/// - `second`, `seconds`, `s`         → ×1
-/// - `minute`, `minutes`, `min`        → ×60
-/// - `hour`, `hours`, `h`             → ×3600
+/// The vocabulary is `DurationUnitCatalog` (AROParser) — the same table
+/// the parser and the check-time lint read, so the three cannot drift:
+/// - `second`, `seconds`, `s`            → ×1
+/// - `minute`, `minutes`, `min`, `m`     → ×60
+/// - `hour`, `hours`, `h`                → ×3600
 /// - `millisecond`, `milliseconds`, `ms` → ×0.001
-/// - *(no unit, numeric literal only)* → ×1 (treated as seconds)
+/// - *(no unit, numeric literal only)*   → ×1 (treated as seconds)
+///
+/// A bare unitless literal above 60 draws an `aro check` warning
+/// (GitLab #502): `Sleep … with 300.` sleeps five minutes, which reads
+/// like milliseconds to anyone from ecosystems where it would be.
 public struct SleepAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["sleep", "delay", "pause"]
@@ -84,14 +95,11 @@ public struct SleepAction: ActionImplementation {
         }
 
         // Apply the time-unit multiplier carried in object.base.
-        // When the parser sees "for 30 seconds", the noun "seconds" becomes object.base.
-        let multipliers: [String: Double] = [
-            "second": 1, "seconds": 1, "s": 1,
-            "minute": 60, "minutes": 60, "min": 60,
-            "hour": 3600, "hours": 3600, "h": 3600,
-            "millisecond": 0.001, "milliseconds": 0.001, "ms": 0.001
-        ]
-        let multiplier = multipliers[object.base] ?? 1.0
+        // When the parser sees "for 30 seconds" (or "for 300ms" — the
+        // suffix lexes as literal + identifier), the unit word becomes
+        // object.base. The vocabulary is DurationUnitCatalog, shared
+        // with the parser and the check-time lint (GitLab #502).
+        let multiplier = DurationUnitCatalog.multiplier(for: object.base) ?? 1.0
         let durationSeconds = rawValue * multiplier
 
         // Cooperative sleep — suspends this Task only; the thread is released

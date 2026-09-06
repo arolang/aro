@@ -167,11 +167,11 @@ public actor PipelineOptimizer {
         // Object noun base is typically the input
         used.insert(stmt.object.noun.base)
 
-        // Check for field references in where clause
-        if let whereClause = stmt.queryModifiers.whereClause {
-            used.insert(whereClause.field)
+        // Check for field references in every where predicate (GitLab #498)
+        for predicate in stmt.queryModifiers.whereCondition?.predicates ?? [] {
+            used.insert(predicate.field)
             // If value is a variable reference, add it
-            if let varRef = whereClause.value as? VariableRefExpression {
+            if let varRef = predicate.value as? VariableRefExpression {
                 used.insert(varRef.noun.base)
             }
         }
@@ -183,9 +183,9 @@ public actor PipelineOptimizer {
     private func extractAccessedFields(_ stmt: AROStatement) -> Set<String> {
         var fields: Set<String> = []
 
-        // Where clause field
-        if let whereClause = stmt.queryModifiers.whereClause {
-            fields.insert(whereClause.field)
+        // Where clause fields (every predicate of a compound condition)
+        for predicate in stmt.queryModifiers.whereCondition?.predicates ?? [] {
+            fields.insert(predicate.field)
         }
 
         // Result specifiers often reference fields
