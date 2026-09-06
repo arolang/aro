@@ -138,15 +138,30 @@ final class REPLCellEngine: @unchecked Sendable {
     }
 
     private func define(name: String, activity: String, source: String, startLine: Int) -> JSONREPLError? {
-        let result = compiler.compile(source)
+        // Compile the definition together with every OTHER definition in
+        // the session, exactly as statements are (GitLab #503) — semantic
+        // analysis resolves `Application.<Name>` against the program it is
+        // given, so without companions an action could never call a
+        // sibling action. Companions are appended AFTER the user's source,
+        // so diagnostics keep the line numbers they typed. Forward
+        // references stay unresolved (define the callee first); a
+        // redefinition excludes its own previous source, so the new body
+        // never compiles against the old one.
+        let companions = definitionOrder
+            .filter { $0 != name }
+            .compactMap { definitions[$0] }
+        var compiledSource = source
+        if !companions.isEmpty {
+            compiledSource += "\n\n" + companions.joined(separator: "\n\n")
+        }
+        let result = compiler.compile(compiledSource)
         guard result.isSuccess else {
             return JSONREPLError(
                 name: "CompileError",
                 message: diagnosticText(result.diagnostics, startLine: startLine, wrapperOffset: 0)
             )
         }
-        guard let analyzed = result.analyzedProgram.byName[name]
-            ?? result.analyzedProgram.featureSets.first else {
+        guard let analyzed = result.analyzedProgram.byName[name] else {
             return JSONREPLError(name: "CompileError", message: "No feature set found in '\(name)'")
         }
 
