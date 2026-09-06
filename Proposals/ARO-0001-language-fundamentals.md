@@ -359,21 +359,36 @@ Special feature sets manage application lifecycle:
 ### String Literals
 
 ```ebnf
-string_literal = '"' , { string_char } , '"'
-               | "'" , { string_char } , "'" ;
+string_literal = '"' , { dq_string_char } , '"'
+               | "'" , { sq_string_char } , "'" ;
 
-string_char    = any_char - ('"' | "'" | "\\" | newline)
+dq_string_char = any_char - ('"' | "\\")          (* newlines are content *)
+               | escape_sequence ;
+
+sq_string_char = any_char - ("'" | "\\" | newline)
                | escape_sequence ;
 
 escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
 ```
 
+A double-quoted string may span multiple lines: a newline inside `"…"` is
+content, exactly like any other character (GitLab #523). One delimiter
+serves single-line and multiline strings alike. An unterminated string is
+reported at its opening quote. Raw single-quoted strings remain
+single-line.
+
+Triple-quoted strings (`"""…"""`) are **deprecated**: they still lex, with
+a warning, and will be removed in a later, announced step. Replace them
+with a plain `"…"` string.
+
 **Examples:**
 ```
 "hello world"
 'single quotes also work'
 "line one\nline two"
+"line one
+line two – written across source lines"
 "unicode: \u{1F600}"
 ```
 

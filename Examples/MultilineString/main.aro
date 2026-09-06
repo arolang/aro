@@ -1,25 +1,22 @@
-(* MultilineString - Demonstrates triple-quoted multiline string literals (ARO-0097) *)
+(* MultilineString - Plain "…" strings span lines (GitLab #523).
+   One delimiter for single-line and multiline strings alike;
+   newlines inside the quotes are content, written flush with the
+   margin you want in the output. *)
 
 (Application-Start: Multiline String Demo) {
     (* Basic multiline string *)
-    Log """
-        Hello,
-        ARO World!
-        """ to the <console>.
+    Log "Hello,
+ARO World!" to the <console>.
 
     (* Multiline string assigned to a variable *)
-    Create the <query> with """
-        SELECT *
-        FROM users
-        WHERE active = true
-        """.
+    Create the <query> with "SELECT *
+FROM users
+WHERE active = true".
     Log <query> to the <console>.
 
-    (* Escape sequences work inside triple-quoted strings *)
-    Create the <escaped> with """
-        Line one\twith tab
-        Line two with \"quotes\"
-        """.
+    (* Escape sequences work across lines *)
+    Create the <escaped> with "Line one\twith tab
+Line two with \"quotes\"".
     Log <escaped> to the <console>.
 
     (* Length of a multiline string *)

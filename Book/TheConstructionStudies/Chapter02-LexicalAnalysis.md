@@ -409,18 +409,16 @@ Every error carries the source location where it occurred. The parser catches th
 
 ARO 0.7 added several literal forms without changing the overall scanner architecture. The interesting thing is how cleanly they fit in — each is just a new branch in the existing scanning logic.
 
-### Triple-Quoted Strings
+### Multiline Strings
 
-Multi-line string literals use triple-quote delimiters:
+A plain double-quoted string spans lines — a newline between the quotes is content like any other character (GitLab #523):
 
 ```aro
-Log """
-Hello,
-World!
-""" to the <console>.
+Log "Hello,
+World!" to the <console>.
 ```
 
-The scanner's `scanTripleQuotedString()` function handles `"""..."""`, allowing embedded newlines and single quotes without escaping. The only escape needed is if you want three consecutive double-quotes inside the string — which is rare enough not to worry about.
+In the scanner this is the *absence* of a rule: `scanString()` simply no longer treats a newline as a termination error. The cost is that a missing closing quote swallows the following lines, so an unterminated string is reported at its **opening** quote, where the typo is. The older triple-quote form (`"""…"""`, with dedent semantics in `scanTripleQuotedString()`) still lexes but is deprecated with a warning; its removal is tracked in GitLab #524.
 
 ### Raw Strings
 
