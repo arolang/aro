@@ -850,12 +850,12 @@ public final class Parser {
     private func isSinkSyntaxStart(_ token: Token) -> Bool {
         // Sink syntax starts with:
         // 1. String literal: <Log> "message"
-        // 2. Numeric literal: <Log> 42
+        // 2. Numeric/boolean/nil literal: <Log> 42, <Log> true (GitLab #512)
         // 3. Object/array literal: <Log> { key: value } or <Log> [1, 2, 3]
         // 4. Variable reference (without article): <Log> <data>
         //    Note: Standard syntax has article: <Log> the <result>
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral:
+        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil, .null:
             return true
         case .leftBrace, .leftBracket:
             return true
