@@ -7,6 +7,162 @@ import Foundation
 import SwiftSoup
 import AROParser
 
+
+// MARK: - Parse Dispatch (GitLab #521)
+
+/// The single owner of the `parse` verb, routing **deterministically** by
+/// the result qualifier — never by sniffing the input.
+///
+/// | Qualifier | Behavior |
+/// |---|---|
+/// | *(none)* | Extract semantics — `Parse` is a documented alias of Extract |
+/// | `json` | strict JSON: structured value, or a descriptive error |
+/// | `link-header` | RFC 8288 Link header → rel-keyed dictionary |
+/// | `html`, `page`, `links`, `content`, `text`, `markdown` | HTML parsing (SwiftSoup) |
+/// | anything else | error naming the valid formats (field access is Extract's job) |
+///
+/// History: three actions used to fight over this verb. `ExtractAction`
+/// registered it first, `ParseLinkHeaderAction` overwrote it, HTML hid
+/// behind a separate `parsehtml` verb, and the executor's expression
+/// fast path bypassed the registry only when the result had no
+/// qualifier — so `Parse the <x> from <expr>` silently bound the raw
+/// value, `Parse the <x> from the <noun>` (the documented form!) always
+/// errored, and every qualified parse except `link-header` failed.
+/// Which behavior you got depended on statement *shape*, not meaning.
+public struct ParseDispatchAction: ActionImplementation {
+    public static let role: ActionRole = .request
+    public static let verbs: Set<String> = ["parse"]
+    public static let validPrepositions: Set<Preposition> = [.from]
+
+    /// Qualifiers served by the HTML parser. `html` is an alias for the
+    /// combined `page` parse (title + markdown + links).
+    private static let htmlQualifiers: Set<String> = [
+        "html", "page", "links", "content", "text", "markdown",
+    ]
+
+    private static let validFormats = [
+        "json", "html", "page", "links", "content", "text", "markdown", "link-header",
+    ]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        let qualifier = result.specifiers.first?.lowercased() ?? ""
+
+        switch qualifier {
+        case "":
+            // Unqualified `Parse` is an Extract alias — the historic
+            // (and documented, e.g. Examples/UserService) meaning.
+            // Deterministic for every object shape: noun and
+            // expression objects both take Extract's path now.
+            return try await ExtractAction().execute(
+                result: result, object: object, context: context)
+
+        case "json":
+            let input = try stringInput(object: object, context: context)
+            return try Self.parseJSONStrict(input)
+
+        case "link-header":
+            return try await ParseLinkHeaderAction().execute(
+                result: result, object: object, context: context)
+
+        case let q where Self.htmlQualifiers.contains(q):
+            // ParseHtmlAction reads its parse type from the first
+            // result specifier; map the `html` alias onto `page`.
+            let mapped = q == "html" ? "page" : q
+            let mappedResult = ResultDescriptor(
+                base: result.base,
+                specifiers: [mapped] + result.specifiers.dropFirst(),
+                span: result.span,
+                asType: result.asType
+            )
+            return try await ParseHtmlAction().execute(
+                result: mappedResult, object: object, context: context)
+
+        default:
+            // Unknown format. Field access on structured values is
+            // Extract's job (`Extract the <name> from the <user: name>.`);
+            // saying so beats guessing.
+            throw ActionError.invalidArgument(
+                argument: "parse format",
+                value: qualifier,
+                validValues: Self.validFormats
+            )
+        }
+    }
+
+    /// Resolve the object to the string the format parsers consume.
+    private func stringInput(
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) throws -> String {
+        let raw: any Sendable
+        if object.base == "_expression_", let value = context.resolveAny("_expression_") {
+            raw = value
+        } else {
+            raw = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
+        }
+        if let httpResult = raw as? AROHTTPResult {
+            return httpResult.body as? String ?? String(describing: httpResult.body)
+        }
+        if let text = raw as? String { return text }
+        return String(describing: raw)
+    }
+
+    /// Strict JSON: a structured value or a thrown error — never the
+    /// input passed through looking parsed (the silent no-op family
+    /// this dispatcher exists to end).
+    public static func parseJSONStrict(_ content: String) throws -> any Sendable {
+        guard let data = content.data(using: .utf8) else {
+            throw ActionError.validationFailed("Parse <json>: input is not valid UTF-8 text")
+        }
+        let parsed: Any
+        do {
+            parsed = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch {
+            let preview = String(content.prefix(60))
+            throw ActionError.validationFailed(
+                "Parse <json>: input is not valid JSON (starts with: \(preview))")
+        }
+        return convertJSONValue(parsed)
+    }
+
+    /// JSON object graph → ARO Sendable values, with the platform-safe
+    /// Bool/Int/Double disambiguation.
+    private static func convertJSONValue(_ value: Any) -> any Sendable {
+        switch value {
+        case let text as String:
+            return text
+        case let number as NSNumber:
+            #if canImport(Darwin)
+            let isBool = CFGetTypeID(number) == CFBooleanGetTypeID()
+            #else
+            let objCType = String(cString: number.objCType)
+            let isBool = objCType == "c" && (number.intValue == 0 || number.intValue == 1)
+            #endif
+            if isBool { return number.boolValue }
+            if number.doubleValue == Double(number.intValue) { return number.intValue }
+            return number.doubleValue
+        case let array as [Any]:
+            return array.map { convertJSONValue($0) }
+        case let dict as [String: Any]:
+            var out: [String: any Sendable] = [:]
+            for (key, inner) in dict { out[key] = convertJSONValue(inner) }
+            return out
+        case is NSNull:
+            return ""
+        default:
+            return String(describing: value)
+        }
+    }
+}
+
 // MARK: - ParseLinkHeader Action
 
 /// Parse action for RFC 8288 Link header values into a rel-keyed dictionary.
@@ -31,7 +187,9 @@ import AROParser
 /// ```
 public struct ParseLinkHeaderAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["parse"]
+    /// No verb of its own: `ParseDispatchAction` owns `parse` and calls
+    /// this implementation for the `link-header` qualifier (GitLab #521).
+    public static let verbs: Set<String> = []
     public static let validPrepositions: Set<Preposition> = [.from]
 
     public init() {}
