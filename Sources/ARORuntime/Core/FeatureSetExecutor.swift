@@ -617,7 +617,16 @@ public final class FeatureSetExecutor: Sendable {
                     (computeVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
-                    context.bind(resultDescriptor.base, value: expressionValue)
+                    // The fast path bypasses the action — and used to bypass
+                    // the `as <Type>` annotation with it, so
+                    // `Compute the <n> as Float from <s>.` bound the raw
+                    // string and `<n> * 2` did string repetition
+                    // (GitLab #501). Coerce exactly like the action path
+                    // would (ResultTypeCoercion, GitLab #475).
+                    context.bind(
+                        resultDescriptor.base,
+                        value: ResultTypeCoercion.coerce(
+                            expressionValue, to: resultDescriptor.asType))
                     // GitLab #495: the bind above is refused (not fatal) when
                     // the name is already immutable — e.g. a REPL cell
                     // rebinding an earlier cell's variable, which the
