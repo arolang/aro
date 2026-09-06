@@ -34,6 +34,11 @@ public enum VerbSets {
     /// Query/collection verbs — always execute for where-clause and regex processing
     public static let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split", "group"]
 
+    /// Deletion verbs — always execute. `Delete the <gone> from "./f.txt"` puts
+    /// the path in expression position; skipping execution bound the path string
+    /// to the result and deleted nothing while answering ok (GitLab #493).
+    public static let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
+
     /// Response/export verbs — result must not be rebound to the expression value
     public static let responseVerbs: Set<String> = [
         "write", "read", "store", "save", "persist",
