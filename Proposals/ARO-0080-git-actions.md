@@ -14,8 +14,14 @@ repositories directly from ARO code using libgit2.
 
 The `<git>` system object represents a Git repository.
 
-* **No qualifier** — current working directory (pwd)
-* **String qualifier** — explicit path: `<git: "/path/to/repo">`
+* **No qualifier** — the enclosing repository, discovered by walking upward
+  from the current working directory (libgit2 repository discovery), exactly
+  like the `git` CLI. Running from any subdirectory of a work tree finds the
+  repository root; linked worktrees (where `.git` is a file) are handled.
+  When no repository encloses the working directory, the action fails with
+  `Not a Git repository: <cwd>`.
+* **String qualifier** — explicit path: `<git: "/path/to/repo">`. An explicit
+  path (including `<git: ".">`) is opened as given — no upward discovery.
 
 ```
 +-------------------+
@@ -44,6 +50,21 @@ The `<git>` system object represents a Git repository.
 | Tag        | EXPORT  | for, with    | Create a tag                      |
 
 ## Syntax
+
+### Retrieve result names
+
+`Retrieve … from the <git>` selects **what** to retrieve from the result
+name: `log` (alias `history`) retrieves the commit log, `branch` the current
+branch name, and anything else the full status. To use a different variable
+name, put the subcommand in the qualifier position (qualifier-as-name):
+
+```aro
+Retrieve the <log> from the <git>.              (* commit log *)
+Retrieve the <recent: log> from the <git>.      (* commit log, named <recent> *)
+Retrieve the <branch> from the <git>.           (* current branch *)
+Retrieve the <status> from the <git>.           (* full status *)
+Retrieve the <state> from the <git>.            (* also full status — the default *)
+```
 
 ### Status
 
