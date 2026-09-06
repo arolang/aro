@@ -9,6 +9,7 @@ public enum RequestActionsModule: ActionModule {
     public static var actions: [any ActionImplementation.Type] {
         [
             ExtractAction.self,
+            ParseDispatchAction.self,
             RetrieveAction.self,
             ReceiveAction.self,
             RequestAction.self,

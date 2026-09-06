@@ -9,6 +9,24 @@
 
 This proposal introduces the `<ParseHtml>` action for extracting structured data from HTML content. Using specifiers, developers can extract links, page content, or text elements from HTML strings retrieved via HTTP requests or read from files.
 
+## Parse dispatch (GitLab #521)
+
+The plain `Parse` verb routes **deterministically by the result
+qualifier** — never by sniffing the input:
+
+| Qualifier | Behavior |
+|---|---|
+| *(none)* | Extract semantics — `Parse` is an alias of Extract |
+| `json` | strict JSON: a structured value, or a descriptive error |
+| `link-header` | RFC 8288 Link header → rel-keyed dictionary |
+| `html`, `page`, `links`, `content`, `text`, `markdown` | HTML parsing per this proposal |
+| anything else | an error naming the valid formats |
+
+`Parse the <links: links> from the <html>.` therefore works with the
+natural verb; the historical `ParseHtml` spelling remains as a legacy
+alias. Field access on already-structured values is `Extract`'s job,
+not a `Parse` format.
+
 ## Introduction
 
 Web applications frequently need to process HTML content:
@@ -52,7 +70,7 @@ ParseHtml the <text-content: text> from the <html>.
 | Property         | Value                                  |
 +------------------+----------------------------------------+
 | Action           | ParseHtml                              |
-| Verbs            | parsehtml                              |
+| Verbs            | parse (with an HTML qualifier); parsehtml kept as a legacy alias |
 | Semantic Role    | OWN (Internal to Internal)             |
 | Prepositions     | from                                   |
 +------------------+----------------------------------------+

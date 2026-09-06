@@ -21,7 +21,9 @@ import AROParser
 /// ```
 public struct ExtractAction: SynchronousAction {
     public static let role: ActionRole = .request
-    public static let verbs: Set<String> = ["extract", "parse", "get"]
+    /// `parse` moved to `ParseDispatchAction` (GitLab #521): the verb was
+    /// registered by three actions and won by registration order.
+    public static let verbs: Set<String> = ["extract", "get"]
     public static let validPrepositions: Set<Preposition> = [.from, .via]
 
     public init() {}
