@@ -4,7 +4,7 @@
     {
       "id": "nb25-c01",
       "kind": "markdown",
-      "source": "# 25 — Testing & Quality\n\nThe franchise ships a new build of the ordering service every week, to\nforty shops, unattended. Nobody at HQ \"just quickly checks\" forty\ntills. What earns that calm is not optimism — it is a pipeline where\n**every branch proves itself**: colocated tests\n([ARO-0015](../Proposals/ARO-0015-testing-framework.md)), static\nchecks, and a language designed so that whole classes of mistakes\ncannot pass silently.\n\nThis notebook works through that stack from the inside out: the\n**Compare** action as the session-sized assertion, unit-testing a\nuser-defined action right here in the notebook, the **closed qualifier\nnamespace** as a case study in designing errors *in*, the\nGiven/When/Then framework that runs under `aro test`, and the CLI\nquality toolchain — including the validator that tested the very cells\nyou are about to run.",
+      "source": "# 25 — Testing & Quality\n\nThe franchise ships a new build of the ordering service every week, to\nforty shops, unattended. Nobody at HQ \"just quickly checks\" forty\ntills. What earns that calm is not optimism — it is a pipeline where\n**every branch proves itself**: colocated tests\n([ARO-0015](../Proposals/ARO-0015-testing-framework.md)), static\nchecks, and a language designed so that whole classes of mistakes\ncannot pass silently.\n\nThis notebook works through that stack from the inside out: the\n**Assert**/**Then** for direct assertions, the **Compare** action\nfor rich comparisons, unit-testing a\nuser-defined action right here in the notebook, the **closed qualifier\nnamespace** as a case study in designing errors *in*, the\nGiven/When/Then framework that runs under `aro test`, and the CLI\nquality toolchain — including the validator that tested the very cells\nyou are about to run.",
       "outputs": []
     },
     {
@@ -76,8 +76,20 @@
     {
       "id": "nb25-c13",
       "kind": "markdown",
-      "source": "## Colocated tests: Given / When / Then (ARO-0015)\n\nReal test suites live in the **same `.aro` files** as production code,\nmarked by a business activity ending in **`Test`** — and are stripped\nfrom every `aro build` binary, so shipping them costs nothing. Test\nfeature sets speak BDD: `Given` binds inputs, `When` executes a\nfeature set, `Then` asserts (throwing on mismatch; `Assert` is the\ndirect-equality sibling). These four run under the **`aro test`**\nrunner, not in notebook sessions — which is why this block is prose:\n\n```aro\n(* Production - stays in the binary *)\n(price-latte: Pricing) {\n    Compute the <extra> from <shots> * 60.\n    Compute the <cents> from 220 + <extra>.\n    Return an <OK: status> with <cents>.\n}\n\n(* Test - stripped from the binary *)\n(price-double-latte: Pricing Test) {\n    Given the <shots> with 2.\n    When the <cents> from the <price-latte>.\n    Then the <cents> with 340.\n}\n```\n\n```\n$ aro test ./Pricing\n=== ARO Test Results ===\n\n  PASS  price-double-latte (<1ms)\n\n------------------------\nTotal:  1\nPassed: 1\n```\n\nDesign decisions worth noticing: **no setup/teardown, no mocks, no\nfixtures** — everything inside the test *is* the test. A test that\nneeds elaborate scaffolding is the framework telling you the feature\nset under test does too much. Filter with\n`aro test . --filter \"price\"`; see\n[ARO-0015](../Proposals/ARO-0015-testing-framework.md) for the full\ngrammar.",
+      "source": "## Colocated tests: Given / When / Then (ARO-0015)\n\nReal test suites live in the **same `.aro` files** as production code,\nmarked by a business activity ending in **`Test`** — and are stripped\nfrom every `aro build` binary, so shipping them costs nothing. Test\nfeature sets speak BDD: `Given` binds inputs, `When` executes a\nfeature set, `Then` asserts (throwing on mismatch; `Assert` is the\ndirect-equality sibling). `Then` and `Assert` also run right here in\na session — the next cell proves it — while `Given` and `When` need\nthe **`aro test`** runner's harness, which is why this block is prose:\n\n```aro\n(* Production - stays in the binary *)\n(price-latte: Pricing) {\n    Compute the <extra> from <shots> * 60.\n    Compute the <cents> from 220 + <extra>.\n    Return an <OK: status> with <cents>.\n}\n\n(* Test - stripped from the binary *)\n(price-double-latte: Pricing Test) {\n    Given the <shots> with 2.\n    When the <cents> from the <price-latte>.\n    Then the <cents> with 340.\n}\n```\n\n```\n$ aro test ./Pricing\n=== ARO Test Results ===\n\n  PASS  price-double-latte (<1ms)\n\n------------------------\nTotal:  1\nPassed: 1\n```\n\nDesign decisions worth noticing: **no setup/teardown, no mocks, no\nfixtures** — everything inside the test *is* the test. A test that\nneeds elaborate scaffolding is the framework telling you the feature\nset under test does too much. Filter with\n`aro test . --filter \"price\"`; see\n[ARO-0015](../Proposals/ARO-0015-testing-framework.md) for the full\ngrammar.",
       "outputs": []
+    },
+    {
+      "id": "nb25-c90",
+      "kind": "code",
+      "outputs": [],
+      "source": "Compute the <reconciled-cents> from 480 + 260.\nAssert the <reconciled-cents> with 740.\nThen the <reconciled-cents> with 740."
+    },
+    {
+      "id": "nb25-c91",
+      "kind": "markdown",
+      "outputs": [],
+      "source": "Both assertions pass silently — assertions *read* the variable, they\nbind nothing, so asserting an existing name never collides with\nimmutability. A failing one stops the cell with the one line you\nneed: `Assertion failed: reconciled-cents is 740, expected 999.`\nUse `Assert`/`Then` when you know the expected value exactly;\nreach for `Compare` (above) when you want the comparison *result*\nas data — direction, matches, the full trichotomy — to compute with."
     },
     {
       "id": "nb25-c14",

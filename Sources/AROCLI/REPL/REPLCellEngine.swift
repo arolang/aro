@@ -291,6 +291,12 @@ final class REPLCellEngine: @unchecked Sendable {
             // positive (GitLab #506).
             let verb = aro.action.verb.lowercased()
             if VerbSets.updateVerbs.contains(verb) { continue }
+            // Test verbs READ their result slot — `Assert the <total>
+            // with 42.` checks <total>, binds nothing (the executor
+            // skips their post-bind too). Flagging them made
+            // assertions on any existing variable impossible in
+            // sessions (GitLab #514).
+            if VerbSets.testVerbs.contains(verb) { continue }
             switch aro.action.semanticRole {
             case .own, .request:
                 let name = aro.result.base

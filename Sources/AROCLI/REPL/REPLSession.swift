@@ -610,6 +610,12 @@ public final class REPLSession: @unchecked Sendable {
         if let aroError = error as? AROError {
             return aroError.message
         }
+        if let assertion = error as? AssertionError {
+            // The struct dump ('AssertionError(message: …, expected:
+            // Optional(99) …)') buried the one line that matters
+            // (GitLab #514).
+            return assertion.message
+        }
         return String(describing: error)
     }
 }
