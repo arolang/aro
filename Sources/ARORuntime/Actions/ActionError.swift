@@ -158,8 +158,10 @@ public enum ActionError: Error, Sendable {
     /// A Compute qualifier that resolves to no built-in, no
     /// registered plugin qualifier and no date offset (GitLab #486).
     /// Carries the known names so the message can suggest the
-    /// closest one.
-    case unknownComputation(name: String, known: Set<String>)
+    /// closest one. When the qualifier was one stage of a chain
+    /// (`a|b`, GitLab #492), `chain` carries the full chain so the
+    /// message can name the stage without losing where it sat.
+    case unknownComputation(name: String, known: Set<String>, chain: String?)
 
     /// Validation failure
     case validationFailed(String)
@@ -240,8 +242,11 @@ extension ActionError: CustomStringConvertible {
             return "Unknown action verb: '\(verb)'"
         case .callDepthExceeded(let message):
             return "Runtime Error: \(message)"
-        case .unknownComputation(let name, let known):
+        case .unknownComputation(let name, let known, let chain):
             var message = "Unknown Compute qualifier: '\(name)'"
+            if let chain {
+                message += " (stage of the chain '\(chain)')"
+            }
             if let suggestion = ActionError.closestName(to: name, in: known) {
                 message += " — did you mean '\(suggestion)'?"
             }

@@ -732,17 +732,32 @@ public actor RuntimeContext: ExecutionContext {
 
         if !isFrameworkVariable && !allowRebind && !holdsPendingResult
             && mutableScopeDepth == 0 && alreadyImmutable {
-            fatalError("""
-                Runtime Error: Cannot rebind immutable variable '\(name)'
-                Feature: \(featureSetName)
-                Business Activity: \(businessActivity)
+            // GitLab #495: this used to be a fatalError, which took the whole
+            // process down — a REPL/notebook kernel died with SIGTRAP, and an
+            // `aro run` server crashed mid-request. Per ARO-0006 the message is
+            // only useful if the process survives to deliver it, so the write
+            // is refused (the existing value stays) and the violation is
+            // recorded for the executor to throw as a statement-attributed
+            // error. `bind` stays non-throwing because it is called from every
+            // action, plugin bridge, and framework-variable site; the executor
+            // checks after each statement (`throwRefusedRebind`), and
+            // feature-set exit is the backstop for binds no statement check
+            // observed (deferred actions, event-driven binds).
+            recordRebindViolation(AROError(
+                message: """
+                    Cannot rebind immutable variable '\(name)'
 
-                Variables in ARO are immutable. Once bound, they cannot be changed.
-                Create a new variable instead: <Action> the <\(name)-updated> ...
+                    Variables in ARO are immutable. Once bound, they cannot be changed.
+                    Create a new variable instead: <Action> the <\(name)-updated> ...
 
-                This error indicates the semantic analyzer missed a duplicate binding.
-                Please report this as a compiler bug.
-                """)
+                    This error indicates the semantic analyzer missed a duplicate binding.
+                    Please report this as a compiler bug.
+                    """,
+                featureSet: featureSetName,
+                businessActivity: businessActivity,
+                statement: "(bind of <\(name)>, reported by the runtime immutability backstop)"
+            ))
+            return
         }
 
         // A pending result is a placeholder, not yet a user-visible binding, so
@@ -1086,6 +1101,40 @@ public actor RuntimeContext: ExecutionContext {
         withExclusiveMutation {
             let error = _deferredFailure
             _deferredFailure = nil
+            return error
+        }
+    }
+
+    /// An immutable rebind that `bindTyped` refused, waiting for the executor
+    /// to throw it as a statement error (GitLab #495).
+    ///
+    /// Same shape as `_deferredFailure`: `bind` is non-throwing (it is called
+    /// from every action, plugin bridge, and framework-variable site), so the
+    /// violation is parked here and the executor turns it into a thrown,
+    /// statement-attributed `AROError` right after the statement that caused
+    /// it. First violation wins — it names the binding that actually broke.
+    nonisolated(unsafe) private var _rebindViolation: AROError?
+
+    nonisolated func recordRebindViolation(_ error: AROError) {
+        let owner = statementScopeOwner
+        if owner !== self {
+            owner.recordRebindViolation(error)
+            return
+        }
+        withExclusiveMutation {
+            if _rebindViolation == nil { _rebindViolation = error }
+        }
+    }
+
+    /// Consume the recorded rebind violation, if one was observed.
+    public nonisolated func takeRebindViolation() -> AROError? {
+        let owner = statementScopeOwner
+        if owner !== self {
+            return owner.takeRebindViolation()
+        }
+        return withExclusiveMutation {
+            let error = _rebindViolation
+            _rebindViolation = nil
             return error
         }
     }

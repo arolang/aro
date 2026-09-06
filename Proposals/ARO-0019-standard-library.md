@@ -235,11 +235,23 @@ The diagnostic names the qualifier and suggests the closest registered one, so
 a typo is recoverable without consulting the table. `aro actions --qualifiers`
 lists the live set; `--format json` emits it for tooling.
 
-Cases 2 and 3 cannot be judged without loading plugins, which `aro check` does
-not do, so a namespaced name and any chain mentioning one are accepted at check
-time and resolved at run time. Everything else is decided statically (GitLab
-#465) — a green `aro check` is only worth something if it means the qualifier
-exists.
+Case 2 cannot be judged without loading plugins, which `aro check` does not
+do, so a namespaced name is accepted at check time and resolved at run time.
+Everything else is decided statically (GitLab #465) — a green `aro check` is
+only worth something if it means the qualifier exists.
+
+A chain applies its stages left to right — `trim|uppercase` trims, then
+uppercases — with each stage resolved exactly like a lone qualifier, so
+built-ins and plugin qualifiers mix freely (`lines|length`,
+`stats.sort|take`). The statement's `with` clause is shared by every stage
+that reads one. Chains are validated stage by stage: a stage `aro check` can
+judge follows the rules above and an unknown one is reported by name, with
+the chain it sat in for context; a namespaced stage is deferred to run time
+like any other plugin qualifier (GitLab #492). An empty stage (`trim|`) is an
+error in both places — a `|` needs a qualifier on both sides. (The runtime's
+stage resolution also accepts a date offset, but the written form `date|+1d`
+does not parse yet — the qualifier grammar accepts an offset only as the
+whole qualifier.)
 
 Two spellings are commonly confused with a qualifier, and the diagnostic names
 both. Sorting, reversing and element access are *actions*, not qualifiers:
@@ -373,3 +385,4 @@ Primitive types are handled throughout the runtime:
 | 1.2 | 2026-08 | Added §3.1 Encoding and Escaping: html-escape, url-encode/decode, base64(url)-encode/decode, json-escape, trim, replace (GitLab #482) |
 | 1.3 | 2026-08 | Added §3.2 Collections and Text: lines, join, sum, avg/average, unique, random, sha256; §3.3 declares the qualifier namespace closed — an unregistered qualifier is now an error instead of a silent identity (GitLab #486) |
 | 1.4 | 2026-08 | §3.3: the closed namespace is enforced at check time, not only at run time; documents the action forms (Sort/Reverse/Extract) and the `as Type` spelling that are mistaken for qualifiers (GitLab #465) |
+| 1.5 | 2026-09 | §3.3: chains (`a\|b`) run — stages apply left to right through the same resolution as a lone qualifier, mixing built-ins, plugin qualifiers and date offsets; check time validates chains stage by stage and an unknown or empty stage is reported by name (GitLab #492) |

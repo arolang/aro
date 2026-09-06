@@ -743,10 +743,23 @@ error: Cannot rebind variable 'value' - variables are immutable
   Example: Create the <value-updated> with "second"
 ```
 
-**Runtime**: A safety check prevents rebinding (should never trigger if compiler works correctly):
+**Runtime**: A safety check refuses the rebind — the existing value stays bound —
+and the statement that attempted it fails with a runtime error (GitLab #495).
+Per ARO-0006, the error is a message the process survives to deliver: a REPL or
+notebook session reports the failing cell and keeps running, and a server keeps
+serving. The check is reachable whenever the analyzer could not see the earlier
+binding — a REPL cell rebinding a previous cell's variable (each cell is its own
+program), a binding made inside a nested scope such as a match arm, or a bind
+performed by a plugin:
 
-```swift
-fatalError("Runtime Error: Cannot rebind immutable variable '\(name)'")
+```
+Runtime Error: Cannot rebind immutable variable 'value'
+
+Variables in ARO are immutable. Once bound, they cannot be changed.
+Create a new variable instead: <Action> the <value-updated> ...
+
+This error indicates the semantic analyzer missed a duplicate binding.
+Please report this as a compiler bug.
 ```
 
 ### Creating Transformed Values

@@ -189,6 +189,26 @@ public struct ReduceAction: ActionImplementation {
             }
         }
 
+        // first()/last() (ARO-0018 §5, GitLab #499) select an ELEMENT —
+        // no numeric projection. With a field, they select that field of
+        // the element, mirroring sum(<field>). An empty collection has
+        // no first element to invent: happy-path error (ARO-0006).
+        if aggregateFunc == "first" || aggregateFunc == "last" {
+            guard let element = aggregateFunc == "first" ? array.first : array.last else {
+                throw ActionError.validationFailed(
+                    "Reduce with \(aggregateFunc)(): the collection is empty")
+            }
+            if let field = field {
+                guard let dict = element as? [String: any Sendable],
+                      let value = dict[field] else {
+                    throw ActionError.propertyNotFound(
+                        property: field, on: String(describing: type(of: element)))
+                }
+                return value
+            }
+            return element
+        }
+
         // Extract numeric values from array
         let values: [Double] = array.compactMap { item -> Double? in
             if let field = field, let dict = item as? [String: any Sendable] {
@@ -235,6 +255,25 @@ public struct ReduceAction: ActionImplementation {
         switch aggregateFunc {
         case "count":
             return try await stream.count()
+
+        case "first", "last":
+            // O(1) memory: keep only the candidate row (or its field).
+            var candidate: (any Sendable)? = nil
+            for try await item in stream.stream {
+                let value: any Sendable = field.flatMap { item[$0] } ?? item
+                if aggregateFunc == "last" {
+                    candidate = value
+                } else if candidate == nil {
+                    candidate = value
+                    // NB: no early break — the stream contract drains the
+                    // producer; a partial read would leave it dangling.
+                }
+            }
+            guard let found = candidate else {
+                throw ActionError.validationFailed(
+                    "Reduce with \(aggregateFunc)(): the stream is empty")
+            }
+            return found
 
         case "sum":
             var sum: Double = 0

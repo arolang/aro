@@ -121,7 +121,9 @@ public enum ComputeQualifierCatalog {
         // exclusively namespaced (QualifierRegistry.register), so a dot
         // is the reliable marker.
         if qualifier.contains(".") { return true }
-        // Qualifier chain — `a|b`. Segments may be plugin-namespaced.
+        // Qualifier chain — `a|b`. Not judgeable *as a unit*; callers
+        // that can judge stages individually should split first via
+        // `chainStages` (GitLab #492) and apply these rules per stage.
         if qualifier.contains("|") { return true }
         // Generic type annotation, e.g. `List<UserSummary>`.
         if qualifier.contains("<") { return true }
@@ -142,6 +144,18 @@ public enum ComputeQualifierCatalog {
     /// Whether a written qualifier names a built-in.
     public static func isBuiltIn(_ qualifier: String) -> Bool {
         builtIns.contains(qualifier.lowercased())
+    }
+
+    /// The stages of a chain qualifier (`a|b`), or nil when the
+    /// qualifier is not a chain (GitLab #492).
+    ///
+    /// An empty stage (`trim|`, `a||b`) comes back as an empty string
+    /// rather than being dropped, so the caller can report the mistake
+    /// instead of validating a chain the author did not write.
+    public static func chainStages(_ qualifier: String) -> [String]? {
+        guard qualifier.contains("|") else { return nil }
+        return qualifier.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     /// Built-in names within edit distance 2 of `qualifier`, nearest

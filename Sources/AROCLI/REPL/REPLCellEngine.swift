@@ -138,15 +138,30 @@ final class REPLCellEngine: @unchecked Sendable {
     }
 
     private func define(name: String, activity: String, source: String, startLine: Int) -> JSONREPLError? {
-        let result = compiler.compile(source)
+        // Compile the definition together with every OTHER definition in
+        // the session, exactly as statements are (GitLab #503) — semantic
+        // analysis resolves `Application.<Name>` against the program it is
+        // given, so without companions an action could never call a
+        // sibling action. Companions are appended AFTER the user's source,
+        // so diagnostics keep the line numbers they typed. Forward
+        // references stay unresolved (define the callee first); a
+        // redefinition excludes its own previous source, so the new body
+        // never compiles against the old one.
+        let companions = definitionOrder
+            .filter { $0 != name }
+            .compactMap { definitions[$0] }
+        var compiledSource = source
+        if !companions.isEmpty {
+            compiledSource += "\n\n" + companions.joined(separator: "\n\n")
+        }
+        let result = compiler.compile(compiledSource)
         guard result.isSuccess else {
             return JSONREPLError(
                 name: "CompileError",
                 message: diagnosticText(result.diagnostics, startLine: startLine, wrapperOffset: 0)
             )
         }
-        guard let analyzed = result.analyzedProgram.byName[name]
-            ?? result.analyzedProgram.featureSets.first else {
+        guard let analyzed = result.analyzedProgram.byName[name] else {
             return JSONREPLError(name: "CompileError", message: "No feature set found in '\(name)'")
         }
 
@@ -268,6 +283,14 @@ final class REPLCellEngine: @unchecked Sendable {
         let existing = Set(session.variableNames)
         for statement in featureSet.featureSet.statements {
             guard let aro = statement as? AROStatement else { continue }
+            // Update-family verbs (update/set/modify/configure) rebind BY
+            // CONTRACT — the runtime binds them with allowRebind, and
+            // `Configure the <http-client: retries>` after an earlier
+            // Configure on the same category is exactly how ARO-0035 says
+            // configuration accumulates. Flagging them was a guard false
+            // positive (GitLab #506).
+            let verb = aro.action.verb.lowercased()
+            if VerbSets.updateVerbs.contains(verb) { continue }
             switch aro.action.semanticRole {
             case .own, .request:
                 let name = aro.result.base
