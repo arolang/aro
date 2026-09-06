@@ -12,7 +12,10 @@ public enum VerbSets {
     /// `parse` lives here (not in extractVerbs) so ParseDispatchAction ALWAYS
     /// runs: dispatch must be qualifier-driven, never statement-shape-driven
     /// (GitLab #521 — the expression fast path used to swallow it).
-    public static let requestVerbs: Set<String> = ["call", "invoke", "request", "probe", "fetch", "retrieve", "listen", "parse"]
+    /// `exists` is here because `Exists the <flag> for "./path"` puts its path in
+    /// expression position; skipping execution bound the path string to <flag>
+    /// instead of the boolean the action computes (GitLab #494).
+    public static let requestVerbs: Set<String> = ["call", "invoke", "request", "probe", "fetch", "retrieve", "listen", "parse", "exists"]
 
     /// Mutation verbs — always execute so they can handle rebinding internally
     public static let updateVerbs: Set<String> = ["update", "modify", "change", "set", "configure"]
