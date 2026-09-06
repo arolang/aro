@@ -174,22 +174,43 @@ public struct Diagnostic: Sendable, CustomStringConvertible {
         case warning
         case note
     }
-    
+
+    /// Whether this diagnostic names the problem itself or a symptom of it.
+    ///
+    /// A statement that fails semantic analysis leaves debris behind: its
+    /// result is "defined but never used" (nothing downstream could use it),
+    /// and the feature set "has no Return or Throw" (the terminator never
+    /// analyzed cleanly). Front-ends that show only the first line — Jupyter's
+    /// `evalue`, a notebook cell — were surfacing that debris while the real
+    /// error sat lower in the list (GitLab #509). Tagging the debris as
+    /// `.consequential` lets `ranked()` keep root causes on top.
+    public enum Category: String, Sendable {
+        /// The diagnostic names an actual problem in the source.
+        case rootCause
+        /// The diagnostic is plausible fallout of another diagnostic —
+        /// hygiene findings like unused-variable or missing-return that a
+        /// failed statement produces as a side effect.
+        case consequential
+    }
+
     public let severity: Severity
     public let message: String
     public let location: SourceLocation?
     public let hints: [String]
-    
+    public let category: Category
+
     public init(
         severity: Severity,
         message: String,
         location: SourceLocation? = nil,
-        hints: [String] = []
+        hints: [String] = [],
+        category: Category = .rootCause
     ) {
         self.severity = severity
         self.message = message
         self.location = location
         self.hints = hints
+        self.category = category
     }
     
     public var description: String {
@@ -207,6 +228,38 @@ public struct Diagnostic: Sendable, CustomStringConvertible {
     /// Creates an error diagnostic from a compiler error
     public static func from(_ error: any CompilerError) -> Diagnostic {
         Diagnostic(severity: .error, message: error.message, location: error.location)
+    }
+}
+
+extension Array where Element == Diagnostic {
+    /// The same diagnostics, root causes first (GitLab #509).
+    ///
+    /// Order: errors before warnings before notes; within a severity,
+    /// `.rootCause` before `.consequential`; within a class, emission order
+    /// is preserved (the sort is made stable by index). Nothing is dropped
+    /// or reworded — only the headline changes, so a front-end showing one
+    /// line shows the diagnostic worth acting on.
+    public func ranked() -> [Diagnostic] {
+        func severityRank(_ s: Diagnostic.Severity) -> Int {
+            switch s {
+            case .error: return 0
+            case .warning: return 1
+            case .note: return 2
+            }
+        }
+        func categoryRank(_ c: Diagnostic.Category) -> Int {
+            switch c {
+            case .rootCause: return 0
+            case .consequential: return 1
+            }
+        }
+        return self.enumerated()
+            .sorted { lhs, rhs in
+                let l = (severityRank(lhs.element.severity), categoryRank(lhs.element.category), lhs.offset)
+                let r = (severityRank(rhs.element.severity), categoryRank(rhs.element.category), rhs.offset)
+                return l < r
+            }
+            .map(\.element)
     }
 }
 
@@ -249,12 +302,22 @@ public final class DiagnosticCollector: @unchecked Sendable {
         _diagnostics.removeAll()
     }
     
-    public func error(_ message: String, at location: SourceLocation? = nil, hints: [String] = []) {
-        add(Diagnostic(severity: .error, message: message, location: location, hints: hints))
+    public func error(
+        _ message: String,
+        at location: SourceLocation? = nil,
+        hints: [String] = [],
+        category: Diagnostic.Category = .rootCause
+    ) {
+        add(Diagnostic(severity: .error, message: message, location: location, hints: hints, category: category))
     }
-    
-    public func warning(_ message: String, at location: SourceLocation? = nil, hints: [String] = []) {
-        add(Diagnostic(severity: .warning, message: message, location: location, hints: hints))
+
+    public func warning(
+        _ message: String,
+        at location: SourceLocation? = nil,
+        hints: [String] = [],
+        category: Diagnostic.Category = .rootCause
+    ) {
+        add(Diagnostic(severity: .warning, message: message, location: location, hints: hints, category: category))
     }
     
     public func note(_ message: String, at location: SourceLocation? = nil) {
