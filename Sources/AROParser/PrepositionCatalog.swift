@@ -51,7 +51,7 @@ public enum PrepositionCatalog {
         "aggregate": [.from, .with],
         "alert": [.`for`, .to, .with],
         "append": [.into, .to],
-        "arrange": [.`for`, .with],
+        "arrange": [.`for`, .from, .with],
         "ask": [.from, .with],
         "assert": [.`for`, .with],
         "await": [.`for`, .on, .to],
@@ -118,7 +118,7 @@ public enum PrepositionCatalog {
         "modify": [.`for`, .from, .into, .to, .with],
         "move": [.to],
         "notify": [.`for`, .to, .with],
-        "order": [.`for`, .with],
+        "order": [.`for`, .from, .with],
         "output": [.`for`, .to, .with],
         "parse": [.from, .via],  // union: ExtractAction + ParseLinkHeaderAction
         "parsehtml": [.from],
@@ -154,7 +154,7 @@ public enum PrepositionCatalog {
         "show": [.`for`],
         "signal": [.`for`, .to, .with],
         "sleep": [.`for`, .with],
-        "sort": [.`for`, .with],
+        "sort": [.`for`, .from, .with],
         // Reverse is not "sort descending" — it flips the order the
         // elements are already in (GitLab #466).
         "reverse": [.`for`, .from, .with],

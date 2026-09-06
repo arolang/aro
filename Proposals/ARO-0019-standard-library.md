@@ -262,6 +262,12 @@ Reverse the <flipped> for the <numbers>.      (* not <flipped: reverse> *)
 Extract the <head: first> from the <numbers>. (* the qualifier goes on Extract *)
 ```
 
+Sort also orders record lists by a field (ARO-0002 §Ordering, GitLab #491):
+`Sort the <ranked> from the <users> by <score>.` — string form `by "score"`
+and trailing `descending` both accepted; the field's values must be uniformly
+numeric or uniformly strings. What Sort cannot order is an error, never a
+silent pass-through.
+
 And a result *type* is requested with `as`, never in the qualifier slot, which
 selects an operation (GitLab #475):
 
