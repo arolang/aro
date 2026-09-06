@@ -728,7 +728,7 @@ prepositions each one declares.
 | 52 | Send | response | dispatch, send | to, via, with |
 | 53 | Show | own | show | for |
 | 54 | Sleep | own | delay, pause, sleep | for, with |
-| 55 | Sort | own | arrange, order, sort | for, with |
+| 55 | Sort | own | arrange, order, sort | for, from, with |
 | 56 | Split | own | split | from |
 | 57 | Stage | own | stage | for, to |
 | 58 | Start | server | start | with |

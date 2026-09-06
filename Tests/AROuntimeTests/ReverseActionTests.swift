@@ -135,10 +135,14 @@ struct ReverseActionTests {
         #expect(out as? [Double] == [1.5, 2.0, 3.0])
     }
 
-    @Test("A list of unsortable things comes back unchanged, not wrong")
-    func leavesUnsortableAlone() async throws {
+    @Test("A list of unsortable things is an error, never a pass-through")
+    func rejectsUnsortable() async {
+        // Pass-through was the old contract; GitLab #491 replaced it —
+        // a silent no-op made aro-check-green programs compute wrong
+        // results.
         let input: [any Sendable] = ["a", 1, true]
-        let out = try await sort(input)
-        #expect((out as? [any Sendable])?.count == 3)
+        await #expect(throws: (any Error).self) {
+            _ = try await sort(input)
+        }
     }
 }
