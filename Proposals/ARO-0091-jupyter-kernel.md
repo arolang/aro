@@ -42,13 +42,27 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 
 | `type` | Fields | Answer |
 |--------|--------|--------|
-| `execute` | `code` | `status: ok` with optional `display`, or `status: error` |
+| `execute` | `code`, optional `cellId` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
 | `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
 | `info` | — | `info` (version, feature sets, variables) |
 | `reset` | — | `status: ok`; session cleared |
 | `shutdown` | — | `status: ok`; server exits |
+
+**`cellId` — re-running a cell.** A front-end that has stable cell
+identity sends it with `execute`. Re-running a cell then releases the
+bindings *that cell* made before running it again, so the ordinary
+notebook loop — fix a typo, run again — works instead of failing as a
+rebind (GitLab #544).
+
+Immutability is unchanged everywhere else. A *different* cell binding a
+name an earlier cell bound is still refused, and a client that sends no
+`cellId` (a terminal REPL line, where each line is a new statement in
+the session's program) keeps the session-wide rule. A cell that binds
+fewer names on its second run leaves nothing behind: the names it no
+longer binds are released with it, so the session reflects the cells as
+they are now.
 
 Every request carries an `id`. Every request gets exactly one `result` message
 with the same `id`.

@@ -45,6 +45,7 @@ protocol ReplKernelDriving: AnyObject {
 
     func ensureStarted(project: Project) async
     func execute(code: String,
+                 cellID: String?,
                  onStream: @escaping @MainActor (String, String) -> Void)
         async -> ReplKernelClient.ExecOutcome
     func info() async -> ReplKernelClient.KernelInfo?
@@ -457,6 +458,7 @@ final class ReplKernelClient: ReplKernelDriving {
     /// Execute one cell. Streams arrive on `onStream` (name, text)
     /// in server order, all before the returned outcome.
     func execute(code: String,
+                 cellID: String? = nil,
                  onStream: @escaping @MainActor (String, String) -> Void) async -> ExecOutcome {
         guard await waitUntilReady() else {
             let reason = deadReason ?? "Kernel is not running."
@@ -469,7 +471,11 @@ final class ReplKernelClient: ReplKernelDriving {
         state = .busy
         executionCounter += 1
         let count = executionCounter
-        let reply = await request(["type": "execute", "code": code], onStream: onStream)
+        var payload: [String: Any] = ["type": "execute", "code": code]
+        // Cell identity lets the kernel tell a re-run from a second
+        // statement binding the same name (GitLab #544).
+        if let cellID { payload["cellId"] = cellID }
+        let reply = await request(payload, onStream: onStream)
         if state == .busy { state = .ready }
 
         return ExecOutcome(
