@@ -76,7 +76,11 @@ public enum ParserError: CompilerError {
     case missingBusinessActivity(at: SourceLocation)
     case invalidQualifiedNoun(at: SourceLocation)
     case emptyFeatureSet(at: SourceLocation)
-    
+    /// Parsing recovered from one or more errors and the caller has no
+    /// collector to read them from (GitLab #543). Carries every
+    /// diagnostic so nothing is lost by the time it surfaces.
+    case recovered(errors: [Diagnostic])
+
     public var location: SourceLocation? {
         switch self {
         case .unexpectedToken(_, let token): return token.span.start
@@ -86,6 +90,7 @@ public enum ParserError: CompilerError {
         case .missingBusinessActivity(let loc): return loc
         case .invalidQualifiedNoun(let loc): return loc
         case .emptyFeatureSet(let loc): return loc
+        case .recovered(let errors): return errors.first?.location
         }
     }
     
@@ -103,6 +108,15 @@ public enum ParserError: CompilerError {
             return "Missing business activity"
         case .invalidQualifiedNoun:
             return "Invalid qualified noun"
+        case .recovered(let errors):
+            // Lead with the first error — the one worth acting on
+            // after ranking — and say how many more there are, so a
+            // single-line log is still honest about the rest.
+            guard let first = errors.first else { return "Parsing failed" }
+            let extra = errors.count - 1
+            return extra > 0
+                ? "\(first.message) (and \(extra) more parse error\(extra == 1 ? "" : "s"))"
+                : first.message
         case .emptyFeatureSet:
             return "Feature set must contain at least one statement"
         }
