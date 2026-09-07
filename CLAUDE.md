@@ -679,13 +679,13 @@ Sources/
 ├── AROCompiler/        # Native compilation (LLVM code generation)
 │   ├── LLVMCodeGenerator.swift  # AST to LLVM IR transformation
 │   └── Linker.swift    # Compilation and linking
-├── AROCRuntime/        # C-callable Swift runtime bridge
-│   ├── RuntimeBridge.swift   # Core runtime C interface
-│   ├── ActionBridge.swift    # All 50+ actions via @_cdecl
-│   └── ServiceBridge.swift   # HTTP/File/Socket C interface
+│   └── Bridge/         # C-callable runtime for compiled binaries
+│       ├── ActionBridge.swift     # Actions via @_cdecl (245 exports across the dir)
+│       ├── FileSystemBridge.swift # File/watcher C interface
+│       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 65 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
 │
 │   # Getting Started
 ├── HelloWorld/         # Minimal single-file example
