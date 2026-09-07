@@ -1,13 +1,13 @@
 // ============================================================
 // PluginErrorCodes.swift
-// ARO Runtime - Standard Plugin Error Codes (ARO-0073)
+// ARO Runtime - Standard Plugin Error Codes (ARO-0087)
 // ============================================================
 
 import Foundation
 
 // MARK: - Standard Plugin Error Codes
 
-/// Standard numeric error codes for plugin responses (ARO-0073).
+/// Standard numeric error codes for plugin responses (ARO-0087).
 ///
 /// Plugins return these codes in their JSON response under an `"error_code"` key.
 /// The runtime maps them to descriptive error messages for the developer.

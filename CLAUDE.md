@@ -46,7 +46,8 @@ aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
                          # Jupyter then launches `aro kernel --connection-file …`
 aro test ./MyApp         # Run colocated tests (ARO-0015)
-aro new plugin foo       # Scaffold a new plugin
+aro new plugin foo --lang swift   # Scaffold a plugin (--lang is required:
+                                  # swift, rust, c, cpp, python, aro)
 aro add github:org/repo  # Install a plugin from Git
 aro plugins              # List installed plugins
 aro actions              # List built-in and plugin actions
@@ -442,7 +443,9 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
 - During `aro build`, plugins in `Plugins/` are compiled and bundled
 - Swift/C plugins are compiled to dynamic libraries
 - Python plugins are copied with their source files
-- The binary loads plugins from `Plugins/` directory at runtime
+- Native plugins are linked INTO the binary, their symbols renamed
+  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
+  Python plugins ship as source beside it
 
 ## ARO Syntax
 
