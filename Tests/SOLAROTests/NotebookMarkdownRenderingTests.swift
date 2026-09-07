@@ -306,3 +306,57 @@ struct NotebookTextWriteGuardTests {
         #expect(try String(contentsOf: aro, encoding: .utf8) == "Log 1 to the <console>.")
     }
 }
+
+@Suite("A notebook notices the file changing underneath it")
+@MainActor
+struct NotebookExternalChangeTests {
+
+    private func project() throws -> (URL, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ext-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        try ReplNotebookDocument(cells: [
+            ReplNotebookCell(kind: .markdown, source: "# One"),
+            ReplNotebookCell(kind: .code, source: "Log 1 to the <console>.")
+        ]).save(to: url)
+        return (dir, url)
+    }
+
+    @Test("A checkout under an open notebook is adopted, not overwritten")
+    func adoptsDiskContents() throws {
+        let (dir, url) = try project()
+        let nb = ReplNotebookController(url: url, project: Project(rootPath: dir))
+        #expect(nb.cells.count == 2)
+
+        // What `git checkout` looks like from in here: the file now
+        // holds different cells, in a different order.
+        try ReplNotebookDocument(cells: [
+            ReplNotebookCell(kind: .code, source: "Log 2 to the <console>."),
+            ReplNotebookCell(kind: .markdown, source: "# Two"),
+            ReplNotebookCell(kind: .code, source: "Log 3 to the <console>.")
+        ]).save(to: url)
+
+        nb.reloadFromDiskIfUnedited()
+
+        #expect(nb.cells.count == 3, "the model must follow the file")
+        #expect(nb.cells[0].kind == .code)
+        #expect(nb.cells[1].source == "# Two")
+    }
+
+    @Test("Unsaved work outranks a background change")
+    func keepsUnsavedEdits() throws {
+        let (dir, url) = try project()
+        let nb = ReplNotebookController(url: url, project: Project(rootPath: dir))
+        // A markdown cell open for editing is work in progress.
+        nb.editingMarkdownIDs.insert(nb.cells[0].id)
+
+        try ReplNotebookDocument(cells: [
+            ReplNotebookCell(kind: .code, source: "Log 9 to the <console>.")
+        ]).save(to: url)
+
+        nb.reloadFromDiskIfUnedited()
+
+        #expect(nb.cells.count == 2, "the user's open editor is not discarded")
+    }
+}
