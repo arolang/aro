@@ -1118,13 +1118,19 @@ public final class Parser {
     ///
     /// `between lo and hi` (ARO-0018 §2.1) desugars right here into
     /// `field >= lo and field <= hi` — the runtime never sees it.
+    ///
+    /// The field may be written `<status>` or bare `status` (ARO-0018
+    /// §7, GitLab #545). Every proposal has printed the bare spelling
+    /// for years — ARO-0019 §2.1, ARO-0003, ARO-0006's whole worked
+    /// example — while the parser demanded the brackets, so the
+    /// documented examples did not parse. A where clause's left-hand
+    /// side is a field of the row being tested and nothing else, so
+    /// there is nothing for a bare name to be confused with here.
     private func parseWherePredicate() throws -> WhereCondition {
         let startSpan = peek().span
 
-        // Parse field: <field>
-        try expect(.leftAngle, message: "'<'")
-        let field = try parseCompoundIdentifier()
-        try expect(.rightAngle, message: "'>'")
+        // Parse field: <field> or bare field (GitLab #545)
+        let field = try parseWhereFieldReference()
 
         // between: desugared into two predicates on the same field
         if case .identifier(let word) = peek().kind, word.lowercased() == "between" {
@@ -1213,6 +1219,43 @@ public final class Parser {
         let value = try parsePrecedence(.and)
 
         return .predicate(WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span)))
+    }
+
+    /// Parses a where-clause field reference — ARO-0018 §7's
+    /// `field_reference`, in either spelling (GitLab #545):
+    ///
+    ///     field_reference = "<" , field_name , ">" | field_name ;
+    ///
+    /// `where <status> is "active"` and `where status is "active"` are
+    /// the same clause and produce the same `WhereClause`, so the
+    /// interpreter and the compiled binary — which bind the identical
+    /// tree through `ModifierBinder` — cannot disagree about them.
+    ///
+    /// Hyphenated names work bare too (`where customer-id = <id>`):
+    /// outside a number, `-` always lexes as `.hyphen`, so the same
+    /// `parseCompoundIdentifier` serves both spellings.
+    ///
+    /// This bare form is confined to the ARO-0018 where clause, whose
+    /// left-hand side can only ever be a field of the row under test.
+    /// The `where` that guards a `for each` header, a `match` case, or
+    /// a feature-set header is an ordinary boolean *expression*, where
+    /// a bare name would be a variable reference rather than a field —
+    /// those stay angle-only.
+    private func parseWhereFieldReference() throws -> String {
+        if check(.leftAngle) {
+            advance()
+            let field = try parseCompoundIdentifier()
+            try expect(.rightAngle, message: "'>'")
+            return field
+        }
+
+        guard peek().kind.isIdentifierLike else {
+            throw ParserError.unexpectedToken(
+                expected: "a field name in the where clause — `<status>` or `status`",
+                got: peek()
+            )
+        }
+        return try parseCompoundIdentifier()
     }
 
     /// Parses a literal value (string, number, boolean, null, regex)
