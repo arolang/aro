@@ -61,6 +61,100 @@ public struct FormatSerializer: Sendable {
         }
     }
 
+
+    // MARK: - Number rendering (GitLab #517 follow-up)
+
+    /// Renders a Double the way Swift prints it: the shortest decimal that
+    /// round-trips back to the same value.
+    ///
+    /// `JSONSerialization` on Darwin prints 17 significant digits instead,
+    /// so a literal `99.95` was written to JSON as `99.950000000000003`
+    /// while the CSV writer — which uses `String(double)` — wrote `99.95`.
+    /// The same value was honest in one format and noisy in the other, and
+    /// the noise is what a reader sees, since these files are the output of
+    /// data pipelines.
+    ///
+    /// Whole values keep a `.0` so a Double stays distinguishable from an
+    /// Int, matching Swift's own printing.
+    static func renderDouble(_ value: Double) -> String {
+        if value.isNaN { return "null" }        // JSON has no NaN
+        if value.isInfinite { return "null" }   // nor infinities
+        return String(value)
+    }
+
+    /// Serializes a JSON value without going through `JSONSerialization`,
+    /// so `renderDouble` decides how numbers look. Key order matches the
+    /// `.sortedKeys` option this replaces.
+    private static func writeJSON(
+        _ value: Any,
+        pretty: Bool,
+        indent: Int = 0
+    ) -> String {
+        let pad = pretty ? String(repeating: "  ", count: indent) : ""
+        let childPad = pretty ? String(repeating: "  ", count: indent + 1) : ""
+        let newline = pretty ? "\n" : ""
+        let colon = pretty ? " : " : ":"
+
+        switch value {
+        case is NSNull:
+            return "null"
+        case let number as NSNumber:
+            // NSNumber erases Bool/Int/Double, and it must be asked BEFORE
+            // the Swift casts below: `NSNumber(1) as? Bool` succeeds, so a
+            // bridged integer 1 would otherwise be written as `true`.
+            switch numberKind(of: number) {
+            case .boolean:
+                // A char-coded value outside 0/1 is an Int8, not a Bool —
+                // writing `true` for 7 would be a silent corruption.
+                let raw = number.intValue
+                guard raw == 0 || raw == 1 else { return number.stringValue }
+                return raw == 1 ? "true" : "false"
+            case .floating: return renderDouble(number.doubleValue)
+            case .integer:  return number.stringValue
+            }
+        case let bool as Bool:
+            return bool ? "true" : "false"
+        case let int as Int:
+            return String(int)
+        case let double as Double:
+            return renderDouble(double)
+        case let float as Float:
+            return renderDouble(Double(float))
+        case let str as String:
+            return "\"\(escapeJSON(str))\""
+        case let array as [Any]:
+            if array.isEmpty { return "[]" }
+            let items = array.map { childPad + writeJSON($0, pretty: pretty, indent: indent + 1) }
+            return "[" + newline + items.joined(separator: "," + newline) + newline + pad + "]"
+        case let dict as [String: Any]:
+            if dict.isEmpty { return "{}" }
+            let items = dict.keys.sorted().map { key in
+                childPad + "\"\(escapeJSON(key))\"" + colon
+                    + writeJSON(dict[key]!, pretty: pretty, indent: indent + 1)
+            }
+            return "{" + newline + items.joined(separator: "," + newline) + newline + pad + "}"
+        default:
+            return "\"\(escapeJSON(String(describing: value)))\""
+        }
+    }
+
+    private enum NumberKind { case boolean, integer, floating }
+
+    /// Which of the three JSON number-ish shapes an `NSNumber` holds.
+    ///
+    /// `objCType` is the portable answer: `CFBooleanGetTypeID` exists only
+    /// on Darwin, and this runtime builds on Linux too. The `"c"`/`"C"`
+    /// codes are shared by Bool and Int8 — ARO never stores an Int8, so
+    /// reading them as Bool is the right trade here, and it is the only
+    /// way `true` survives the round trip through NSNumber at all.
+    private static func numberKind(of number: NSNumber) -> NumberKind {
+        switch UnicodeScalar(UInt8(number.objCType.pointee)) {
+        case "B", "c", "C": return .boolean
+        case "f", "d":      return .floating
+        default:            return .integer
+        }
+    }
+
     // MARK: - JSON Serialization
 
     private static func serializeJSON(_ value: any Sendable) -> String {
@@ -85,13 +179,12 @@ public struct FormatSerializer: Sendable {
             }
         }
 
+        // Not JSONSerialization: it renders Doubles at 17 significant
+        // digits on Darwin (GitLab #517 follow-up).
+        if JSONSerialization.isValidJSONObject(jsonValue) {
+            return writeJSON(jsonValue, pretty: true)
+        }
         do {
-            let data = try JSONSerialization.data(
-                withJSONObject: jsonValue,
-                options: [.prettyPrinted, .sortedKeys]
-            )
-            return String(data: data, encoding: .utf8) ?? "{}"
-        } catch {
             // Fallback for non-JSON-serializable values
             if let str = value as? String {
                 return "\"\(escapeJSON(str))\""
@@ -175,19 +268,10 @@ public struct FormatSerializer: Sendable {
     }
 
     private static func serializeJSONCompact(_ value: any Sendable) -> String {
-        let jsonValue = convertToJSONSerializable(value)
-        do {
-            let data = try JSONSerialization.data(
-                withJSONObject: jsonValue,
-                options: [.sortedKeys]  // No prettyPrinted - compact output
-            )
-            return String(data: data, encoding: .utf8) ?? "{}"
-        } catch {
-            if let str = value as? String {
-                return "\"\(escapeJSON(str))\""
-            }
-            return String(describing: value)
-        }
+        // A JSONL line may legitimately be a scalar, which
+        // `isValidJSONObject` rejects — writeJSON handles both, and it
+        // never throws, so the old catch-and-describe fallback is gone.
+        return writeJSON(convertToJSONSerializable(value), pretty: false)
     }
 
     // MARK: - YAML Serialization
@@ -694,12 +778,15 @@ public struct FormatSerializer: Sendable {
         switch value {
         case let str as String:
             return str
+        // Bool BEFORE Int: a value read back from JSON is an NSNumber, and
+        // `NSNumber(true) as? Int` succeeds — so testing Int first turned
+        // every boolean into 1/0 on the way back out.
+        case let bool as Bool:
+            return bool
         case let int as Int:
             return int
         case let double as Double:
             return double
-        case let bool as Bool:
-            return bool
         case let array as [any Sendable]:
             return array.map { convertToJSONSerializable($0) }
         case let dict as [String: any Sendable]:
@@ -728,12 +815,12 @@ public struct FormatSerializer: Sendable {
         switch value {
         case let str as String:
             return str
+        case let bool as Bool:   // before Int — see convertToJSONSerializable
+            return bool
         case let int as Int:
             return int
         case let double as Double:
             return double
-        case let bool as Bool:
-            return bool
         case let array as [Any]:
             return array.map { convertAnyToJSONSerializable($0) }
         case let dict as [String: Any]:
