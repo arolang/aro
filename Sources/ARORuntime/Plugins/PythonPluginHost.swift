@@ -445,7 +445,7 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
 extension PythonPluginHost {
     /// Execute a qualifier transformation via the Python plugin
     public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
-        // Create input JSON using QualifierInput (ARO-0073: includes _with params)
+        // Create input JSON using QualifierInput (ARO-0087: includes _with params)
         let qualifierInput = QualifierInput(value: input, withParams: withParams)
         let inputData = try encoder.encode(qualifierInput)
         let base64Input = inputData.base64EncodedString()

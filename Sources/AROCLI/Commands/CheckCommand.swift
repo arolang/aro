@@ -99,6 +99,13 @@ struct SourceCheckSubcommand: ParsableCommand {
             totalWarnings += warnings
         }
 
+        // Transitions the contract does not declare (GitLab #507).
+        // Directory-scoped: the state enums live in `openapi.yaml`, which a
+        // single-file check has no application root to find.
+        if isDirectory.boolValue {
+            totalErrors += reportUndeclaredTransitions(directory: resolvedPath, sourceFiles: sourceFiles)
+        }
+
         // Where each route's request body goes (GitLab #477).
         if isDirectory.boolValue {
             totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles)
@@ -120,6 +127,49 @@ struct SourceCheckSubcommand: ParsableCommand {
         if totalErrors > 0 {
             Foundation.exit(1)
         }
+    }
+
+    /// Report `Accept` statements that name a state the contract does not
+    /// declare (GitLab #507).
+    ///
+    /// The runtime checks that the entity is *in* the transition's from-state;
+    /// it never knew which moves exist. The contract does: an entity's states
+    /// are the string `enum` on its state property. Both halves of a
+    /// transition name must be members, and a state that is not declared is
+    /// an error here — before the program runs, before a binary is built.
+    ///
+    /// No contract, or no enum on that property, means no enforcement. That
+    /// is deliberate: contract-first is opt-in everywhere else in ARO (no
+    /// `openapi.yaml`, no HTTP server), and a project that never wrote one
+    /// must keep checking clean.
+    /// - Returns: the number of errors emitted.
+    private func reportUndeclaredTransitions(directory: URL, sourceFiles: [URL]) -> Int {
+        guard let contract = OpenAPILoader.findContract(in: directory),
+              let spec = try? OpenAPILoader.load(from: contract)
+        else { return 0 }
+
+        var errorCount = 0
+        for file in sourceFiles {
+            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
+            let result = Compiler().compile(source)
+            let diagnostics = TransitionContractValidator.validate(
+                result.program.featureSets,
+                against: spec,
+                contractFilename: contract.lastPathComponent
+            )
+            guard !diagnostics.isEmpty else { continue }
+
+            print("\(file.lastPathComponent):")
+            for diagnostic in diagnostics {
+                print("  \(formatLocation(diagnostic.location)) error: \(diagnostic.message)")
+                for hint in diagnostic.hints {
+                    print("    hint: \(hint)")
+                }
+            }
+            print("  Found \(diagnostics.count) error(s) in \(file.lastPathComponent)")
+            errorCount += diagnostics.count
+        }
+        return errorCount
     }
 
     /// Report, per contract route, whether the request body is held in memory

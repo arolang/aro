@@ -551,6 +551,8 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_by_var_")
         context.unbind("_by_order_")
         context.unbind("_default_value_")
+        context.unbind("_matching_")
+        context.unbind("_recursive_")
         context.unbind("_to_")
         context.unbind("_with_")
         context.unbind("_against_")
@@ -745,6 +747,20 @@ public final class FeatureSetExecutor: Sendable {
         if let defaultExpr = statement.queryModifiers.defaultValue {
             let defaultVal = try await expressionEvaluator.evaluate(defaultExpr, context: context)
             context.bind("_default_value_", value: defaultVal)
+        }
+
+        // ARO-0036: Bind the listing glob and recursion flag (GitLab #518).
+        // The pattern is an expression so `matching <pattern>` can read the
+        // glob out of a variable; it is evaluated here, in statement scope.
+        if let matchingExpr = statement.queryModifiers.matchingPattern {
+            let pattern = try await expressionEvaluator.evaluate(matchingExpr, context: context)
+            context.bind("_matching_", value: String(describing: pattern))
+        }
+        if statement.queryModifiers.recursive {
+            // A string, not a Bool: the compiled path binds framework
+            // variables through variableBindString, and one representation
+            // means one check in ListAction.
+            context.bind("_recursive_", value: "true")
         }
 
         // ARO-0041: Bind to clause if present (for date ranges)

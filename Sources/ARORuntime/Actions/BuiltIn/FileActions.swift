@@ -13,10 +13,14 @@ import AROParser
 ///
 /// ## Example
 /// ```
-/// <List> the <entries> from the <directory: path>.
-/// <List> the <aro-files> from the <directory: src-path> matching "*.aro".
-/// <List> the <all-files> from the <directory: project-path> recursively.
+/// List the <entries> from the <directory: path>.
+/// List the <aro-files> from the <directory: src-path> matching "*.aro".
+/// List the <all-files> from the <directory: project-path> recursively.
+/// List the <tests> from the <directory: path> matching "*_test.aro" recursively.
 /// ```
+///
+/// The glob is fnmatch(3), case-sensitive, matched against the entry *name*
+/// (ARO-0036 §6.2). It filters directories as well as files.
 public struct ListAction: ActionImplementation {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["list"]
@@ -40,11 +44,18 @@ public struct ListAction: ActionImplementation {
             action: "List"
         )
 
-        // Check for pattern in specifiers (e.g., matching "*.aro")
-        let pattern = result.specifiers.first { $0.contains("*") || $0.contains("?") }
+        // ARO-0036 §6.2 (GitLab #518): the glob from a `matching "…"` clause,
+        // bound as `_matching_` by both the interpreter and the compiled path.
+        // The older qualifier spelling — `List the <files: "*.aro"> …` — is
+        // still honoured, but only the clause can express a pattern that
+        // contains neither `*` nor `?` (`[0-9].txt`, `data?`-free names).
+        let pattern = (context.resolveAny("_matching_") as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? result.specifiers.first { $0.contains("*") || $0.contains("?") }
 
-        // Check for recursive flag
-        let recursive = result.specifiers.contains("recursively") ||
+        // Recursion: trailing `recursively` clause (ARO-0036 §6.3) or the
+        // qualifier form it desugars alongside.
+        let recursive = (context.resolveAny("_recursive_") as? String) == "true" ||
+                       result.specifiers.contains("recursively") ||
                        object.specifiers.contains("recursively")
 
         // Get file service
@@ -142,7 +153,7 @@ public final class LazyDirectoryList: @unchecked Sendable {
             #endif
 
             let name = url.lastPathComponent
-            if let pattern = pattern, !matchesGlob(name, pattern: pattern) { continue }
+            if let pattern = pattern, !GlobMatcher.matches(name, pattern: pattern) { continue }
 
             // On Darwin, autoreleasepool prevents NSObject accumulation over large trees.
             // On Linux, there is no ObjC runtime, so a plain closure is used instead.
@@ -155,21 +166,6 @@ public final class LazyDirectoryList: @unchecked Sendable {
             #endif
             if let entry = entry { return entry }
         }
-    }
-
-    private func matchesGlob(_ name: String, pattern: String) -> Bool {
-        var regex = "^"
-        for ch in pattern {
-            switch ch {
-            case "*": regex += ".*"
-            case "?": regex += "."
-            case ".": regex += "\\."
-            default:  regex += NSRegularExpression.escapedPattern(for: String(ch))
-            }
-        }
-        regex += "$"
-        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?
-            .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
     }
 }
 

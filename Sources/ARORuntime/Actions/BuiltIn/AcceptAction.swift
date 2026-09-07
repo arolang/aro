@@ -125,37 +125,19 @@ public struct AcceptAction: ActionImplementation {
         return updatedObject
     }
 
-    /// Parse the state transition from the result descriptor
-    /// Supports formats:
+    /// Parse the state transition from the result descriptor.
+    ///
+    /// The splitting itself lives in `TransitionName` so that the static
+    /// contract gate (`TransitionContractValidator`, GitLab #507) reads
+    /// exactly the same two states out of the same token that the runtime
+    /// does. Supported spellings:
     /// - `<transition: from_to_target>` - using `_to_` as separator
     /// - `<from_to_target: transition>` - transition in base
     private func parseTransition(_ result: ResultDescriptor) throws -> (from: String, to: String) {
-        // Try to find the transition string
-        var transitionString: String?
-
-        // Check if specifiers contain the transition (e.g., "draft_to_placed")
-        if let spec = result.specifiers.first, spec.contains("_to_") {
-            transitionString = spec
-        }
-        // Check if base contains the transition
-        else if result.base.contains("_to_") {
-            transitionString = result.base
-        }
-        // Check if specifiers can be joined to form "from_to_target"
-        else if result.specifiers.count >= 3 {
-            let joined = result.specifiers.joined(separator: "-")
-            if joined.contains("_to_") {
-                transitionString = joined
-            }
-        }
-        // Handle case where specifiers are ["from", "to", "target"]
-        else if result.specifiers.count == 3 && result.specifiers[1].lowercased() == "to" {
-            let from = result.specifiers[0]
-            let to = result.specifiers[2]
-            return (from, to)
-        }
-
-        guard let transition = transitionString else {
+        guard let transition = TransitionName.parse(
+            base: result.base,
+            specifiers: result.specifiers
+        ) else {
             throw ActionError.invalidArgument(
                 argument: "state transition",
                 value: "\(result.base):\(result.specifiers.joined(separator: ","))",
@@ -163,28 +145,7 @@ public struct AcceptAction: ActionImplementation {
             )
         }
 
-        // Parse "from_to_target" format
-        let parts = transition.components(separatedBy: "_to_")
-        guard parts.count == 2 else {
-            throw ActionError.invalidArgument(
-                argument: "state transition",
-                value: transition,
-                validValues: ["from_to_target"]
-            )
-        }
-
-        let fromState = parts[0]
-        let toState = parts[1]
-
-        guard !fromState.isEmpty && !toState.isEmpty else {
-            throw ActionError.invalidArgument(
-                argument: "state transition",
-                value: transition,
-                validValues: nil
-            )
-        }
-
-        return (fromState, toState)
+        return (transition.from, transition.to)
     }
 
     /// Extract the current state value from the target object

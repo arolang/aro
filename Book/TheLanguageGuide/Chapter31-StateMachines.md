@@ -43,7 +43,9 @@ components:
         - cancelled
 ```
 
-The enum values define all possible states. The order in the enum often reflects the expected progression, though this is convention rather than enforcement. An order typically flows from draft through placed, paid, shipped, to delivered—but the enum itself does not encode these transitions.
+The enum values define all possible states, and they define them *bindingly*. `aro check`, `aro run` and `aro build` read this enum and reject any `Accept` statement naming a state that is not in it. Misspell `shipped` as `shiped` and you get a build error, not a seventh order state invented at run time. This is the point of writing the contract: the states are declared once, in the place clients and tooling already read.
+
+The ordering inside the enum is convention, not enforcement. An order typically flows from draft through placed, paid, shipped, to delivered—but the enum lists *which states exist*, not *which moves are legal*. It says `shipped` is a state; it does not say that only `paid` may reach it. Section 31.5 covers what does check that, and Section 31.8 is honest about what still does not.
 
 The entity schema references this status type:
 
@@ -132,6 +134,29 @@ If the order's status is not `"draft"`, execution stops with an error. The calle
 ---
 
 ## 31.5 State Transition Validation
+
+Two things are checked, at two different moments.
+
+### Before it runs: is this a state at all?
+
+Both halves of the transition name are looked up in the declared enum. A name the contract has never heard of stops `aro check`, `aro run` and `aro build`:
+
+```
+orders.aro:
+  70:17: error: State 'shiped' is not declared by the contract (transition 'paid_to_shiped' on <order: status>)
+    hint: Checked against components.schemas.Order.status in openapi.yaml
+    hint: Declared states: draft, placed, paid, shipped, delivered, cancelled
+    hint: Closest declared state: shipped
+    hint: Add 'shiped' to that enum, or transition to a declared state
+```
+
+The diagnostic names the offending state, the transition it came out of, the schema it was checked against, and everything that schema does declare—so the fix is either in the code or in the contract, and you can see which.
+
+Which schema is the one to check against is worked out from the entity name: `order`, `orders` and `picked-order` all reach a schema called `Order`. If no name matches but the contract declares exactly one enum on that field, that is the state machine and it is used. If neither identifies a single schema, nothing is checked—a build error you cannot act on would be worse than none.
+
+This whole check is opt-in, the same way everything contract-first in ARO is opt-in. A project with no `openapi.yaml` gets no HTTP server and no transition checking; a state property with no enum behind it is not checked either. The `Examples/StateMachine` project runs console-only and still ships a contract, purely to declare its five document states.
+
+### While it runs: is the entity actually there?
 
 The Accept action provides clear error messages when transitions fail. If you attempt to place an order that has already been paid:
 
@@ -387,7 +412,9 @@ ARO's state machine approach is deliberately minimal. Understanding what it does
 
 **No state machine visualization.** ARO does not generate state diagrams from your code. The OpenAPI contract with its enum and operation descriptions serves as documentation. For visual diagrams, use external tools with your OpenAPI spec as input.
 
-**No automatic validation against the enum.** The Accept action validates that the current state matches the expected "from" state. It does not validate that both "from" and "to" are members of the OpenAPI enum. That validation happens when you store the entity or when an HTTP response is serialized.
+**No declared edge set.** The contract declares which states exist (Section 31.3), and a transition naming an undeclared state fails the build. It does not declare which *moves* are legal. `draft_to_delivered` is two perfectly declared states, so it builds—and it runs, too, if the order really is in draft. The diagrams in this chapter are drawn by you and honoured by you; what the machine guarantees is that every state name in the code is a state the contract knows, and that the entity was in the from-state when the move was made.
+
+If you need the edge set enforced, encode it: give each transition its own feature set and its own endpoint, as Section 31.6 does, so the only way to reach `shipped` is through the operation that spells `paid_to_shipped`.
 
 These limitations are features, not bugs. They keep the language simple. For most business applications, flat states with explicit transitions are sufficient. When you need the full power of statecharts, integrate a dedicated state machine library through custom actions.
 
@@ -472,7 +499,7 @@ State guards enable guaranteed ordering through state-based filtering. Instead o
 
 ## 31.10 Best Practices
 
-**Define all states in OpenAPI.** The contract should be the source of truth for what states exist. Clients and tooling can use this information.
+**Define all states in OpenAPI.** The contract is the source of truth for what states exist: clients read it, tooling reads it, and the build checks every transition name against it. A project without a contract keeps building, but it also keeps every typo.
 
 **Use explicit initial states.** When creating entities, set their initial state explicitly rather than relying on defaults. This makes the starting point visible in the code.
 

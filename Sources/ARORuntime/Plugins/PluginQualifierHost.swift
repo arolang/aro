@@ -15,7 +15,7 @@ public protocol PluginQualifierHost: Sendable {
     /// The name of this plugin host (for error messages)
     var pluginName: String { get }
 
-    /// Execute a qualifier transformation (ARO-0073: with optional parameters)
+    /// Execute a qualifier transformation (ARO-0087: with optional parameters)
     ///
     /// - Parameters:
     ///   - qualifier: The qualifier name (e.g., "pick-random")
@@ -41,7 +41,7 @@ public struct QualifierInput: Codable, Sendable {
     /// The detected type of the value
     public let type: String
 
-    /// Parameters from the `with` clause (ARO-0073)
+    /// Parameters from the `with` clause (ARO-0087)
     public let _with: [String: AnyCodable]?
 
     public init(value: any Sendable, withParams: [String: any Sendable]? = nil) {

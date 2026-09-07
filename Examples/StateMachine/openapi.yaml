@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Document Review
+  description: |
+    The contract declares which states a document can be in. `aro check`, `aro run`
+    and `aro build` read this enum and reject an `Accept` statement that
+    names a state it does not contain — a typo like `submitted_to_rejcted` is a build
+    error, not a new state invented at run time (GitLab #507).
+
+    There are no paths: this example is console-only, so no HTTP server is
+    started. The contract is here purely to declare the state machine.
+  version: 1.0.0
+
+paths: {}
+
+components:
+  schemas:
+    DocumentStatus:
+      type: string
+      description: Every state a document may be in
+      enum:
+        - draft
+        - submitted
+        - approved
+        - rejected
+        - cancelled
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+      required:
+        - id
+        - status

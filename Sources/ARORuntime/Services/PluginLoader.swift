@@ -23,7 +23,7 @@ private let aroDlopenFlags: Int32 = Int32(RTLD_NOW | RTLD_LOCAL)
 
 /// Loads and manages dynamic plugins for ARO
 ///
-/// Plugins must export the C ABI defined in ARO-0073:
+/// Plugins must export the C ABI defined in ARO-0087:
 /// - `aro_plugin_info` (required) — returns JSON metadata
 /// - `aro_plugin_execute` (required) — executes an action
 /// - `aro_plugin_qualifier` (optional) — executes a qualifier transformation
@@ -504,7 +504,7 @@ public final class PluginLoader: @unchecked Sendable {
                         try? ExternalServiceRegistry.shared.register(nameWrapper, withName: infoName)
                     }
 
-                    // ARO-0073: also register every service declared in aro_plugin_info
+                    // ARO-0087: also register every service declared in aro_plugin_info
                     // (the SDK's .service("foo", ...) entries) so `<foo: method>` resolves
                     // even when the service name differs from plugin/handle/info-name.
                     if let serviceObjects = info["services"] as? [[String: Any]] {
@@ -772,7 +772,7 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.serviceNotFound(serviceName)
         }
 
-        // Convert args to JSON — nest under _with for SDK-based plugins (ARO-0073)
+        // Convert args to JSON — nest under _with for SDK-based plugins (ARO-0087)
         var enrichedArgs: [String: any Sendable] = args
         enrichedArgs["_with"] = args
         let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
@@ -2304,7 +2304,7 @@ public final class PluginLoader: @unchecked Sendable {
             let wrapper = CPluginServiceWrapper(name: name, loader: self)
             try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
-            // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+            // ARO-0087: Call aro_plugin_register (if exported) to trigger plugin's
             // file-scope initialization before querying aro_plugin_info.
             #if os(Windows)
             let registerSymbol = GetProcAddress(handle, "aro_plugin_register")
@@ -2368,7 +2368,7 @@ public final class PluginLoader: @unchecked Sendable {
                         }
                     }
 
-                    // ARO-0073: Register under each declared service name
+                    // ARO-0087: Register under each declared service name
                     if let services = info["services"] as? [[String: Any]] {
                         for svcDef in services {
                             if let svcName = svcDef["name"] as? String, svcName.lowercased() != name.lowercased() {
@@ -2749,7 +2749,7 @@ private struct CPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        // ARO-0073: prepend "service:" for SDK-based plugins that dispatch by prefix
+        // ARO-0087: prepend "service:" for SDK-based plugins that dispatch by prefix
         return try loader.callCPlugin(serviceName, method: "service:\(method)", args: args)
     }
 }
@@ -2950,7 +2950,7 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
     }
 
     func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
-        // Create input JSON (ARO-0073: includes _with params)
+        // Create input JSON (ARO-0087: includes _with params)
         let qualifierInput = QualifierInput(value: input, withParams: withParams)
 
         let inputData = try encoder.encode(qualifierInput)

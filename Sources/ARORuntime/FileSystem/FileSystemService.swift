@@ -737,35 +737,10 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         )
     }
 
-    /// Check if filename matches glob pattern
+    /// Check if a directory entry's name matches the glob (ARO-0036 §6.2).
+    /// fnmatch(3) semantics, case-sensitive — see `GlobMatcher`.
     private func matchesPattern(_ name: String, pattern: String?) -> Bool {
-        guard let pattern = pattern, !pattern.isEmpty else {
-            return true
-        }
-
-        // Convert glob pattern to regex
-        var regex = "^"
-        for char in pattern {
-            switch char {
-            case "*":
-                regex += ".*"
-            case "?":
-                regex += "."
-            case ".":
-                regex += "\\."
-            case "[", "]":
-                regex += String(char)
-            default:
-                regex += String(char)
-            }
-        }
-        regex += "$"
-
-        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
-            in: name,
-            options: [],
-            range: NSRange(name.startIndex..., in: name)
-        ) != nil
+        GlobMatcher.matches(name, pattern: pattern)
     }
 
     /// Check if path exists and return type
@@ -1382,35 +1357,10 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         )
     }
 
-    /// Check if filename matches glob pattern
+    /// Check if a directory entry's name matches the glob (ARO-0036 §6.2).
+    /// fnmatch(3) semantics, case-sensitive — see `GlobMatcher`.
     private func matchesPattern(_ name: String, pattern: String?) -> Bool {
-        guard let pattern = pattern, !pattern.isEmpty else {
-            return true
-        }
-
-        // Convert glob pattern to regex
-        var regex = "^"
-        for char in pattern {
-            switch char {
-            case "*":
-                regex += ".*"
-            case "?":
-                regex += "."
-            case ".":
-                regex += "\\."
-            case "[", "]":
-                regex += String(char)
-            default:
-                regex += String(char)
-            }
-        }
-        regex += "$"
-
-        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
-            in: name,
-            options: [],
-            range: NSRange(name.startIndex..., in: name)
-        ) != nil
+        GlobMatcher.matches(name, pattern: pattern)
     }
 
     /// Check if path exists and return type

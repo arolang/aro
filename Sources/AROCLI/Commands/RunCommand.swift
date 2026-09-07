@@ -242,6 +242,30 @@ struct RunCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        // Transitions the contract does not declare (GitLab #507).
+        //
+        // The same gate `aro check` and `aro build` apply, applied here so
+        // the three agree: a state the contract never declared stops the
+        // program before it starts, instead of being written into the
+        // entity at the first Accept. No contract means no enforcement.
+        if let spec = appConfig.openAPISpec {
+            let transitionErrors = TransitionContractValidator.validate(
+                compiledPrograms.flatMap { $0.featureSets.map(\.featureSet) },
+                against: spec
+            )
+            if !transitionErrors.isEmpty {
+                print("\nUndeclared state transitions:")
+                for error in transitionErrors {
+                    let location = error.location.map { "\($0.line):\($0.column): " } ?? ""
+                    print("  \(location)error: \(error.message)")
+                    for hint in error.hints {
+                        print("    hint: \(hint)")
+                    }
+                }
+                throw ExitCode.failure
+            }
+        }
+
         if verbose {
             print("\nCompilation successful!")
             print("Feature sets found:")

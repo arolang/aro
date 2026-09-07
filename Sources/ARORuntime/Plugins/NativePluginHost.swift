@@ -55,7 +55,7 @@ struct CPluginString {
 /// The runtime uses `defer { freeFunc?(ptr) }` or `CPluginString` to guarantee
 /// cleanup even when exceptions occur between allocation and use.
 ///
-/// ## Required C Interface (ARO-0073)
+/// ## Required C Interface (ARO-0087)
 /// ```c
 /// // Get plugin info as JSON (name, version, actions[], qualifiers[], etc.)
 /// // Ownership: caller must free the returned pointer via aro_plugin_free().
@@ -902,7 +902,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             }
         }
 
-        // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+        // ARO-0087: Call aro_plugin_register (if exported) to trigger plugin's
         // file-scope initialization before querying aro_plugin_info.
         // Swift SDK plugins need this because file-scope let is lazy.
         if let registerSymbol = resolveSymbol("aro_plugin_register") {
@@ -1093,7 +1093,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_execute")
         }
 
-        // ARO-0073: SDK plugins read parameters from input["_with"] (see ActionInput.with
+        // ARO-0087: SDK plugins read parameters from input["_with"] (see ActionInput.with
         // and Params in aro-plugin-sdk-swift). The legacy dlopen path enriches in
         // PluginLoader.callCPlugin; mirror it here so plugins loaded through
         // UnifiedPluginLoader see the same envelope. Without this, services like
@@ -1298,7 +1298,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         registry.removeAll()
     }
 
-    // MARK: - Event Delivery (ARO-0073)
+    // MARK: - Event Delivery (ARO-0087)
 
     /// Deliver an event to this plugin
     public func deliverEvent(type: String, data: [String: any Sendable]) {
@@ -1323,7 +1323,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// Get event types this plugin subscribes to
     public var subscribedEventTypes: [String] { eventSubscriptions }
 
-    // MARK: - System Objects (ARO-0073)
+    // MARK: - System Objects (ARO-0087)
 
     /// Read from a system object
     public func objectRead(identifier: String, qualifier: String) throws -> any Sendable {
@@ -1421,7 +1421,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         systemObjects.contains { $0.identifier == identifier }
     }
 
-    // MARK: - Plugin Invoke Callback (ARO-0073)
+    // MARK: - Plugin Invoke Callback (ARO-0087)
 
     /// Set the invoke callback so plugins can call ARO feature sets
     ///
@@ -1431,7 +1431,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         invokeCallback = callback
     }
 
-    /// Service names declared in aro_plugin_info (ARO-0073)
+    /// Service names declared in aro_plugin_info (ARO-0087)
     public var declaredServiceNames: [String] {
         pluginInfo?.services.map { $0.name } ?? []
     }
@@ -1446,7 +1446,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
 // MARK: - Qualifier Execution
 
 extension NativePluginHost {
-    /// Execute a qualifier transformation via the native plugin (ARO-0073: with parameters)
+    /// Execute a qualifier transformation via the native plugin (ARO-0087: with parameters)
     public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
         guard let qualifierFunc = qualifierFunc else {
             throw QualifierError.executionFailed(
@@ -1455,7 +1455,7 @@ extension NativePluginHost {
             )
         }
 
-        // Create input JSON using QualifierInput (ARO-0073: includes _with params)
+        // Create input JSON using QualifierInput (ARO-0087: includes _with params)
         let qualifierInput = QualifierInput(value: input, withParams: withParams)
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
@@ -1539,20 +1539,20 @@ struct NativeActionDescriptor: Sendable {
     }
 }
 
-/// Service descriptor (ARO-0073)
+/// Service descriptor (ARO-0087)
 struct NativeServiceDescriptor: Sendable {
     let name: String
     let methods: [String]
 }
 
-/// System object descriptor (ARO-0073)
+/// System object descriptor (ARO-0087)
 public struct SystemObjectDescriptor: Sendable {
     public let identifier: String
     public let capabilities: Set<String>
     public let description: String?
 }
 
-/// Deprecation descriptor (ARO-0073)
+/// Deprecation descriptor (ARO-0087)
 struct DeprecationDescriptor: Sendable {
     let feature: String
     let message: String
@@ -1609,7 +1609,7 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             input["qualifier"] = specifier
         }
 
-        // ARO-0073: Add result and source descriptors
+        // ARO-0087: Add result and source descriptors
         input["result"] = [
             "base": result.base,
             "specifiers": result.specifiers,
@@ -1620,10 +1620,10 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             "specifiers": object.specifiers,
         ] as [String: any Sendable]
 
-        // ARO-0073: Add preposition
+        // ARO-0087: Add preposition
         input["preposition"] = String(describing: object.preposition)
 
-        // ARO-0073: Add execution context
+        // ARO-0087: Add execution context
         var contextInfo: [String: any Sendable] = [:]
         if let reqId = context.resolveAny("_requestId_") {
             contextInfo["requestId"] = reqId
@@ -1638,7 +1638,7 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             input["_context"] = contextInfo
         }
 
-        // ARO-0073: Add with-clause arguments as nested _with key
+        // ARO-0087: Add with-clause arguments as nested _with key
         if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
             input["_with"] = withArgs
         }
@@ -1650,7 +1650,7 @@ final class NativePluginActionWrapper: @unchecked Sendable {
         // Execute native action
         let output = try host.execute(action: pluginVerb, input: input)
 
-        // ARO-0073: Parse _events from response and publish to EventBus
+        // ARO-0087: Parse _events from response and publish to EventBus
         if let outputDict = output as? [String: any Sendable],
            let events = outputDict["_events"] as? [[String: any Sendable]] {
             for event in events {

@@ -1123,6 +1123,30 @@ struct BookMarkdownBlockView: View {
 
     enum Style { case book, editor }
 
+    /// Rendered markdown in a notebook follows the editor's text size,
+    /// so ⌘+ / ⌘- move prose and code together — a notebook is one
+    /// document, and having half of it resize was the tell that the
+    /// markdown side never read the preference at all.
+    ///
+    /// Book pages keep their own typography: that is a reading view
+    /// with its own measure, not the editor.
+    @AppStorage(SolaroPrefs.editorFontSize.rawValue)
+    private var editorFontSize: Double = Double(EditorTypography.defaultFontSize)
+
+    /// Every hardcoded size in this view is expressed at the shipped
+    /// 13pt editor size, so one ratio scales the lot and the relative
+    /// proportions of headings, body and captions are preserved.
+    private var textScale: CGFloat {
+        guard style == .editor else { return 1 }
+        let resolved = EditorTypography.resolve(
+            fontSize: editorFontSize,
+            lineHeight: Double(EditorTypography.defaultLineHeight)).fontSize
+        return resolved / EditorTypography.defaultFontSize
+    }
+
+    /// A size in points, scaled for the current style.
+    func scaled(_ points: CGFloat) -> CGFloat { points * textScale }
+
     /// Book blocks are selectable prose. Editor blocks are not:
     /// selectable `Text` swallows the first mouse-down, so a click
     /// on a rendered block would take *two* clicks to put the caret
@@ -1136,7 +1160,7 @@ struct BookMarkdownBlockView: View {
             heading(level: level, text: text)
         case .paragraph(let text):
             inlineText(text)
-                .font(.system(size: 14))
+                .font(.system(size: scaled(14)))
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .modifier(SelectableText(enabled: selectable))
@@ -1147,7 +1171,7 @@ struct BookMarkdownBlockView: View {
                         Text("•")
                             .foregroundStyle(SolaroColor.accent)
                         inlineText(item)
-                            .font(.system(size: 14))
+                            .font(.system(size: scaled(14)))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .modifier(SelectableText(enabled: selectable))
                     }
@@ -1159,11 +1183,11 @@ struct BookMarkdownBlockView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(idx + 1).")
-                            .font(SolaroFont.mono)
+                            .font(.system(size: scaled(13), design: .monospaced))
                             .foregroundStyle(SolaroColor.accent)
                             .frame(width: 22, alignment: .trailing)
                         inlineText(item)
-                            .font(.system(size: 14))
+                            .font(.system(size: scaled(14)))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .modifier(SelectableText(enabled: selectable))
                     }
@@ -1176,7 +1200,7 @@ struct BookMarkdownBlockView: View {
                     .fill(SolaroColor.accent.opacity(0.5))
                     .frame(width: 3)
                 inlineText(text)
-                    .font(.system(size: 14))
+                    .font(.system(size: scaled(14)))
                     .italic()
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, SolaroSpace.s)
@@ -1190,7 +1214,7 @@ struct BookMarkdownBlockView: View {
                 if let language, !language.isEmpty {
                     HStack {
                         Text(language)
-                            .font(SolaroFont.monoCaption)
+                            .font(.system(size: scaled(11), design: .monospaced))
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
@@ -1198,7 +1222,7 @@ struct BookMarkdownBlockView: View {
                     .padding(.top, 4)
                 }
                 codeBody(body, language: language)
-                    .font(SolaroFont.mono)
+                    .font(.system(size: scaled(13), design: .monospaced))
                     .modifier(SelectableText(enabled: selectable))
                     .padding(SolaroSpace.s)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1365,7 +1389,7 @@ private struct BookTableRowView: View {
     private func cellLabel(_ text: String) -> some View {
         if isHeader {
             inlineMarkdownText(text)
-                .font(.system(size: 13, weight: .semibold))
+                .font(SolaroFont.bodyBold)
                 .foregroundStyle(SolaroColor.textPrimary)
         } else {
             inlineMarkdownText(text)
@@ -1490,8 +1514,8 @@ private extension BookMarkdownBlockView {
             }
         }()
         inlineText(text)
-            .font(.system(size: size, weight: weight))
-            .padding(.top, topPad)
+            .font(.system(size: scaled(size), weight: weight))
+            .padding(.top, scaled(topPad))
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(SelectableText(enabled: selectable))
     }
