@@ -255,3 +255,54 @@ struct NotebookSaveStabilityTests {
         #expect(reloaded.cells[0].source == "one\ntwo")
     }
 }
+
+@Suite("A notebook is never written as text")
+@MainActor
+struct NotebookTextWriteGuardTests {
+
+    private func project() throws -> (URL, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("guard-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        try ReplNotebookDocument(cells: [
+            ReplNotebookCell(kind: .markdown, source: "# Title"),
+            ReplNotebookCell(kind: .code, source: "Log 1 to the <console>.")
+        ]).save(to: url)
+        return (dir, url)
+    }
+
+    @Test("An empty text write cannot truncate a notebook")
+    func emptyWriteIsRefused() throws {
+        let (dir, url) = try project()
+        let before = try Data(contentsOf: url)
+        let controller = WorkspaceController(project: Project(rootPath: dir))
+
+        // What the editor's cache holds mid-load — and what used to
+        // reach disk, leaving a 0-byte notebook.
+        let wrote = controller.writeToDisk("", to: url)
+
+        #expect(wrote == false, "the text path must refuse a notebook")
+        #expect(try Data(contentsOf: url) == before)
+        #expect(try ReplNotebookDocument.load(from: url).cells.count == 2)
+    }
+
+    @Test("Even valid-looking text is refused")
+    func anyTextWriteIsRefused() throws {
+        let (dir, url) = try project()
+        let controller = WorkspaceController(project: Project(rootPath: dir))
+
+        #expect(controller.writeToDisk("Log 2 to the <console>.", to: url) == false)
+        #expect(try ReplNotebookDocument.load(from: url).cells.count == 2)
+    }
+
+    @Test("Ordinary source files still write")
+    func sourceFilesUnaffected() throws {
+        let (dir, _) = try project()
+        let aro = dir.appendingPathComponent("main.aro")
+        let controller = WorkspaceController(project: Project(rootPath: dir))
+
+        #expect(controller.writeToDisk("Log 1 to the <console>.", to: aro) == true)
+        #expect(try String(contentsOf: aro, encoding: .utf8) == "Log 1 to the <console>.")
+    }
+}

@@ -142,6 +142,16 @@ struct CenterPaneView: View {
             streamingProgress = nil
             return
         }
+        // A notebook has no text buffer. Filling one meant the cache
+        // held its JSON (or, mid-load, an empty string) under the
+        // notebook's own URL — which is what any text write path then
+        // put back on disk.
+        guard !ReplFile.isNotebook(url) else {
+            fileText = ""
+            fileTextURL = nil
+            streamingProgress = nil
+            return
+        }
         fileTextURL = url
         let size = StreamReader.byteSize(of: url) ?? 0
 

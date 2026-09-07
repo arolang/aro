@@ -689,6 +689,23 @@ final class WorkspaceController {
     /// again, and a write that lands clears the banner.
     @discardableResult
     func writeToDisk(_ text: String, to url: URL) -> Bool {
+        // A notebook is never written as text. Its only legitimate
+        // writer is `ReplNotebookDocument.save`, which serialises the
+        // cell model; this path carries the *editor's* buffer, and for
+        // a `.repl` that buffer is either the file's JSON or — during
+        // a load, or when the pane never showed it as text — the empty
+        // string. Writing that truncated real notebooks to nothing.
+        //
+        // Refusing here rather than at each call site is deliberate:
+        // there are several ways into this function (keystroke
+        // autosave, the save-failure Retry button, Save As, the merge
+        // resolver, an AI edit) and every one of them would be the
+        // same bug. The class is closed instead of one instance.
+        guard !ReplFile.isNotebook(url) else {
+            FileHandle.standardError.write(Data(
+                "[SOLARO] Refused a text write to notebook \(url.lastPathComponent)\n".utf8))
+            return false
+        }
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
             // Baseline for external-change detection (GitLab #536):
