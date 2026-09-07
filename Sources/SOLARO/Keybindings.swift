@@ -3,16 +3,16 @@
 // SOLARO — registry of every UI command + its default shortcut
 // ============================================================
 //
-// First slice of #270 — central catalogue every shortcut in the
-// app reads, plus a read-only Settings tab so the user can see
-// what's bound to what. User-override capture + conflict
-// detection follow in a later MR; this file lands the data model
-// and surface so the registry has somewhere to live.
+// #270 — central catalogue every shortcut in the app reads, plus
+// the Settings tab where the user remaps them.
 //
-// Each command's default key + modifiers are duplicated in the
-// HiddenShortcutButton call sites in WorkspaceView for now; a
-// future MR rewires those to read straight from the registry so
-// the table here becomes the single source of truth.
+// The registry is now the single source of truth: `WorkspaceView`'s
+// hidden accelerators bind by command id via
+// `HiddenShortcutButton(commandID:)`, and the menu-bar items carry
+// `.solaroShortcut(id)` so a remapped command doesn't keep firing
+// from its old menu key equivalent. Before that (GitLab #534) every
+// call site hardcoded its keys, so this tab captured overrides,
+// persisted them, showed a "custom" chip — and changed nothing.
 
 import SwiftUI
 import AppKit
@@ -34,6 +34,10 @@ struct KeybindingCommand: Identifiable {
         case search = "Search"
         case run = "Run"
         case panels = "Panels"
+        /// Notebook command mode — these fire only while a `.repl`
+        /// cell is selected and no editor has the keyboard, which
+        /// is why bare letters are safe here.
+        case notebook = "Notebook (Command Mode)"
         var id: String { rawValue }
     }
 
@@ -155,6 +159,11 @@ enum KeybindingRegistry {
                           category: .search,
                           defaultKey: "f",
                           defaultModifiers: [.command, .shift]),
+        KeybindingCommand(id: "search.findInFile",
+                          displayName: "Find in File",
+                          category: .search,
+                          defaultKey: "f",
+                          defaultModifiers: [.command]),
         KeybindingCommand(id: "navigation.closeTab",
                           displayName: "Close Tab",
                           category: .navigation,
@@ -180,7 +189,27 @@ enum KeybindingRegistry {
                           category: .navigation,
                           defaultKey: "d",
                           defaultModifiers: [.control, .command]),
+        KeybindingCommand(id: "navigation.hover",
+                          displayName: "Show Hover Info",
+                          category: .navigation,
+                          defaultKey: "h",
+                          defaultModifiers: [.control, .command]),
+        KeybindingCommand(id: "navigation.blame",
+                          displayName: "Show Blame",
+                          category: .navigation,
+                          defaultKey: "b",
+                          defaultModifiers: [.control, .command]),
+        KeybindingCommand(id: "file.reload",
+                          displayName: "Reload from Disk",
+                          category: .navigation,
+                          defaultKey: "r",
+                          defaultModifiers: [.command, .option]),
         // Editing
+        KeybindingCommand(id: "editing.deleteFile",
+                          displayName: "Move File to Trash",
+                          category: .editing,
+                          defaultKey: .delete,
+                          defaultModifiers: [.command]),
         KeybindingCommand(id: "editing.formatDocument",
                           displayName: "Format Document",
                           category: .editing,
@@ -223,6 +252,59 @@ enum KeybindingRegistry {
                           category: .run,
                           defaultKey: "u",
                           defaultModifiers: [.control, .command]),
+        // Notebook command mode (GitLab #538). Jupyter's defaults:
+        // these only reach a selected-but-unfocused cell, so they
+        // can be bare letters without colliding with the app.
+        KeybindingCommand(id: "notebook.selectCellAbove",
+                          displayName: "Select Cell Above",
+                          category: .notebook,
+                          defaultKey: .upArrow,
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.selectCellBelow",
+                          displayName: "Select Cell Below",
+                          category: .notebook,
+                          defaultKey: .downArrow,
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.editCell",
+                          displayName: "Edit Selected Cell",
+                          category: .notebook,
+                          defaultKey: .return,
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.insertCellAbove",
+                          displayName: "Insert Cell Above",
+                          category: .notebook,
+                          defaultKey: "a",
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.insertCellBelow",
+                          displayName: "Insert Cell Below",
+                          category: .notebook,
+                          defaultKey: "b",
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.deleteCell",
+                          displayName: "Delete Cell (press twice)",
+                          category: .notebook,
+                          defaultKey: "d",
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.convertToMarkdown",
+                          displayName: "Convert Cell to Markdown",
+                          category: .notebook,
+                          defaultKey: "m",
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.convertToCode",
+                          displayName: "Convert Cell to Code",
+                          category: .notebook,
+                          defaultKey: "y",
+                          defaultModifiers: []),
+        KeybindingCommand(id: "notebook.mergeCellBelow",
+                          displayName: "Merge Cell Below",
+                          category: .notebook,
+                          defaultKey: "m",
+                          defaultModifiers: [.shift]),
+        KeybindingCommand(id: "notebook.duplicateCell",
+                          displayName: "Duplicate Cell",
+                          category: .notebook,
+                          defaultKey: "d",
+                          defaultModifiers: [.command]),
     ]
 }
 
@@ -234,14 +316,20 @@ enum KeybindingRegistry {
 @MainActor
 @Observable
 final class KeybindingStore {
-    static let shared = KeybindingStore()
+    static let shared = KeybindingStore(defaults: .standard)
 
     private static let defaultsKey = "solaro.keybindings.overrides"
 
     private(set) var overrides: [String: KeybindingBinding]
 
-    private init() {
-        let raw = UserDefaults.standard.dictionary(forKey: Self.defaultsKey)
+    /// Where overrides persist. Injectable so tests can exercise the
+    /// lookup + conflict logic without touching the user's real
+    /// preferences.
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        let raw = defaults.dictionary(forKey: Self.defaultsKey)
             as? [String: String] ?? [:]
         var parsed: [String: KeybindingBinding] = [:]
         for (id, ser) in raw {
@@ -271,24 +359,53 @@ final class KeybindingStore {
         persist()
     }
 
-    /// Returns the command id that already binds `(key, modifiers)`
-    /// if any — used by the capture popover to warn the user
-    /// before they overwrite an existing assignment.
-    func conflict(with binding: KeybindingBinding,
-                  excluding commandID: String) -> String? {
+    /// The command that already binds `(key, modifiers)`, if any.
+    /// The capture UI shows this inline so the user can see the
+    /// collision — it used to be a `print()`, invisible in a GUI app,
+    /// after which the colliding override was applied anyway
+    /// (GitLab #534).
+    func conflictingCommand(with binding: KeybindingBinding,
+                            excluding commandID: String) -> KeybindingCommand? {
         for cmd in KeybindingRegistry.shared where cmd.id != commandID {
             if let b = resolved(for: cmd.id),
                b.key.character == binding.key.character,
                b.modifiers == binding.modifiers {
-                return cmd.displayName
+                return cmd
             }
         }
         return nil
     }
 
+    /// Display name of the conflicting command, if any.
+    func conflict(with binding: KeybindingBinding,
+                  excluding commandID: String) -> String? {
+        conflictingCommand(with: binding, excluding: commandID)?.displayName
+    }
+
+    /// Every pair of commands that currently resolve to the same
+    /// combination. Two shortcuts on one key is a real state the app
+    /// can be in (the user remapped into an existing binding), and
+    /// the settings tab flags each side of it rather than pretending
+    /// the remap was clean.
+    var conflictingCommandIDs: Set<String> {
+        var seen: [String: String] = [:]   // serialised binding → id
+        var clashing: Set<String> = []
+        for cmd in KeybindingRegistry.shared {
+            guard let b = resolved(for: cmd.id) else { continue }
+            let key = b.serialised
+            if let other = seen[key] {
+                clashing.insert(other)
+                clashing.insert(cmd.id)
+            } else {
+                seen[key] = cmd.id
+            }
+        }
+        return clashing
+    }
+
     private func persist() {
         let raw = overrides.mapValues { $0.serialised }
-        UserDefaults.standard.set(raw, forKey: Self.defaultsKey)
+        defaults.set(raw, forKey: Self.defaultsKey)
     }
 }
 
@@ -303,6 +420,32 @@ extension EnvironmentValues {
     var keybindingStore: KeybindingStore {
         get { self[KeybindingStoreEnvironmentKey.self] }
         set { self[KeybindingStoreEnvironmentKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Bind this view to a registry command's resolved shortcut —
+    /// the user's override when there is one, the default otherwise.
+    ///
+    /// Menu-bar items need this as much as the hidden accelerator
+    /// buttons do: a menu item keeps its own key equivalent, so
+    /// leaving ⌘P hardcoded on "Quick Open…" would keep firing the
+    /// command after the user remapped it (GitLab #534).
+    func solaroShortcut(_ commandID: String) -> some View {
+        modifier(ResolvedKeybinding(commandID: commandID))
+    }
+}
+
+private struct ResolvedKeybinding: ViewModifier {
+    @Environment(\.keybindingStore) private var store
+    let commandID: String
+
+    func body(content: Content) -> some View {
+        if let binding = store.resolved(for: commandID) {
+            content.keyboardShortcut(binding.key, modifiers: binding.modifiers)
+        } else {
+            content
+        }
     }
 }
 
@@ -354,8 +497,15 @@ struct KeybindingsSettingsTab: View {
     private func row(for command: KeybindingCommand) -> some View {
         let active = store.resolved(for: command.id)
         let isOverridden = store.overrides[command.id] != nil
+        let clashing = store.conflictingCommandIDs.contains(command.id)
+        VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: SolaroSpace.s) {
             Text(command.displayName)
+            if clashing {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                    .help("This shortcut is bound to more than one command.")
+            }
             if isOverridden {
                 Text("custom")
                     .font(.system(size: 9, weight: .heavy))
@@ -404,21 +554,49 @@ struct KeybindingsSettingsTab: View {
                     set: { if !$0 { capturingID = nil } }
                 ),
                 onCapture: { binding in
-                    let conflict = store.conflict(with: binding,
-                                                  excluding: command.id)
-                    if let conflict {
-                        // Soft warning: still apply the override
-                        // but note the collision in the description.
-                        // A future iteration could surface a confirm
-                        // dialog and refuse.
-                        print("[keybindings] \(command.displayName) shortcut conflicts with \(conflict).")
+                    // Conflicts are shown in the row (and on the
+                    // other side of the clash), not printed to a
+                    // console nobody running the .app can see.
+                    // The override still applies — the user asked
+                    // for it — but they can now see what it collided
+                    // with and undo it with Reset (GitLab #534).
+                    if let conflict = store.conflict(with: binding,
+                                                     excluding: command.id) {
+                        conflictNotice = ConflictNotice(
+                            commandID: command.id,
+                            shortcut: KeybindingCommand.describe(
+                                key: binding.key,
+                                modifiers: binding.modifiers),
+                            otherCommand: conflict)
+                    } else {
+                        conflictNotice = nil
                     }
                     store.setOverride(binding, for: command.id)
                     capturingID = nil
                 }
             )
         )
+        if let notice = conflictNotice, notice.commandID == command.id {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                Text("\(notice.shortcut) is also bound to \(notice.otherCommand). Both will be listed; Reset reverts this one.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        }
     }
+
+    /// Last capture that landed on an already-bound combination.
+    /// Rendered under the row that caused it.
+    private struct ConflictNotice: Equatable {
+        let commandID: String
+        let shortcut: String
+        let otherCommand: String
+    }
+    @State private var conflictNotice: ConflictNotice?
 }
 
 /// Bridges an NSEvent monitor into SwiftUI: while `isCapturing`

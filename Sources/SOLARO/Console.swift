@@ -701,6 +701,17 @@ final class ConsoleProcess {
         }
         process.terminate()
         // The terminationHandler will flip state to .exited.
+        // Escalate to SIGKILL after a grace period — an `aro`
+        // process wedged in native code never services the SIGTERM
+        // and would keep its ports bound (GitLab #527). The pid is
+        // valid while `isRunning` is true: `Process` only reaps the
+        // child (freeing the pid for reuse) when it actually exits.
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
     }
 
     /// Write a line of input to the running process's stdin. Used
@@ -1007,25 +1018,42 @@ final class ConsoleProcess {
         return "/usr/bin/env"
     }
 
-    /// Drain the read-side of a pipe in the background, splitting
-    /// on newlines and posting each line back via `onLine`. ANSI
-    /// codes get stripped before the line lands in the UI.
+    /// Drain the read-side of a pipe in the background, posting each
+    /// *complete* line back via `onLine`. ANSI codes get stripped
+    /// before the line lands in the UI.
+    ///
+    /// The pipe's own `ConsoleLineAssembler` carries a partial line
+    /// from one read to the next, so a line longer than a chunk
+    /// arrives as one entry, a chunk that splits a UTF-8 scalar
+    /// isn't dropped, and an escape sequence can't leak its tail
+    /// (GitLab #541). Blank lines are kept — they're part of what
+    /// the program printed.
     nonisolated private func readPipe(_ pipe: Pipe,
                                       onLine: @Sendable @escaping (String) -> Void) {
         let handle = pipe.fileHandleForReading
+        // One assembler per pipe, mutated only from that handle's
+        // reader queue (FileHandle serialises its readability
+        // callbacks), hence the unchecked box rather than a lock.
+        let assembler = LineAssemblerBox()
         handle.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else {
+                // EOF: emit the unterminated tail, then stop reading.
+                assembler.flush().forEach(onLine)
                 handle.readabilityHandler = nil
                 return
             }
-            guard let chunk = String(data: data, encoding: .utf8) else { return }
-            let cleaned = Self.stripANSI(chunk)
-            cleaned.split(separator: "\n", omittingEmptySubsequences: false)
-                .map(String.init)
-                .filter { !$0.isEmpty }
-                .forEach(onLine)
+            assembler.append(data).forEach(onLine)
         }
+    }
+
+    /// Reference box so the escaping `@Sendable` readability handler
+    /// can carry the assembler's state across reads. Confined to one
+    /// FileHandle's serial reader queue.
+    private final class LineAssemblerBox: @unchecked Sendable {
+        private var assembler = ConsoleLineAssembler()
+        func append(_ data: Data) -> [String] { assembler.append(data) }
+        func flush() -> [String] { assembler.flush() }
     }
 
     private func appendLog(_ entry: LogEntry) {
@@ -1121,24 +1149,12 @@ final class ConsoleProcess {
         appendLog(LogEntry(kind: .error, text: line, timestamp: Date()))
     }
 
-    /// Strip the most common ANSI CSI / SGR escape sequences. A
-    /// follow-up turns these into NSAttributedString attributes
-    /// instead of dropping them on the floor.
+    /// Strip ANSI escape sequences. The grammar lives in
+    /// `ANSIEscape` (GitLab #541) — this stays as the name the rest
+    /// of SOLARO calls. A follow-up turns SGR into
+    /// NSAttributedString attributes instead of dropping it.
     nonisolated static func stripANSI(_ input: String) -> String {
-        var out = ""
-        out.reserveCapacity(input.count)
-        var iter = input.makeIterator()
-        while let c = iter.next() {
-            if c == "\u{001B}" {                  // ESC
-                // Eat until a letter (CSI terminator) or whitespace.
-                while let n = iter.next() {
-                    if n.isLetter { break }
-                }
-            } else {
-                out.append(c)
-            }
-        }
-        return out
+        ANSIEscape.strip(input)
     }
 }
 

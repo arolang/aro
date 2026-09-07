@@ -215,6 +215,79 @@ struct CrashReportTests {
     }
 }
 
+@Suite("Crash writer (#525, #526)")
+struct CrashWriterTests {
+
+    @Test("SIGTRAP is in the installed signal set")
+    func handlesSIGTRAP() {
+        // Swift runtime traps (fatalError, force-unwrap of nil,
+        // out-of-bounds) arrive as SIGTRAP on arm64 — without this
+        // the most common Swift crash left no log (#526).
+        #expect(CrashReporter.installedSignals.contains(SIGTRAP))
+    }
+
+    @Test("The classic fatal signals are still installed")
+    func classicSignalsStillCovered() {
+        for sig in [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE] {
+            #expect(CrashReporter.installedSignals.contains(sig))
+        }
+    }
+
+    @Test("The signal-safe writer produces a log the reader parses")
+    func writerReaderRoundTrip() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("solaro-crash-writer-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        CrashReporter.prepare(directory: dir)
+        CrashReporter.writeCrashSignalSafe(signal: SIGTRAP)
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil)
+        let url = try #require(files.first)
+
+        // Filename keeps the crash-yyyyMMdd-HHmmss.txt shape the
+        // store's date parser expects.
+        #expect(url.pathExtension == "txt")
+        #expect(CrashReport.dateFromFileName(url.lastPathComponent) != nil)
+
+        // Header block keeps the key: value / ## layout the reader
+        // stops at, and the fields survive the round trip.
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let report = CrashReport.parse(url: url, text: text, modified: .distantPast)
+        #expect(report.signal == SIGTRAP)
+        #expect(report.signalName == "SIGTRAP (\(SIGTRAP))")
+        #expect(report.version?.isEmpty == false)
+        #expect(text.contains("## Stack trace (best-effort)"))
+
+        // backtrace_symbols_fd wrote at least one frame after the
+        // header (address column renders as 0x…).
+        let trace = try #require(
+            text.components(separatedBy: "## Stack trace (best-effort)").last)
+        #expect(trace.contains("0x"))
+    }
+
+    @Test("Arithmetic UTC components agree with Foundation")
+    func utcComponentsMatchFoundation() throws {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try #require(TimeZone(identifier: "UTC"))
+        // A spread of instants: epoch+1, a leap day, end of year,
+        // a recent date, far future.
+        for t: time_t in [1, 951_782_400, 1_704_067_199, 1_755_163_815, 4_102_444_800] {
+            let got = CrashReporter.utcComponents(of: t)
+            let want = utc.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: Date(timeIntervalSince1970: TimeInterval(t)))
+            #expect(got.year == want.year, "t=\(t)")
+            #expect(got.month == want.month, "t=\(t)")
+            #expect(got.day == want.day, "t=\(t)")
+            #expect(got.hour == want.hour, "t=\(t)")
+            #expect(got.minute == want.minute, "t=\(t)")
+            #expect(got.second == want.second, "t=\(t)")
+        }
+    }
+}
+
 @Suite("Crash submission (#275)")
 struct CrashSubmissionTests {
 

@@ -138,3 +138,63 @@ struct ReplDisplayTableTests {
         #expect(table.truncatedRowCount == 50)
     }
 }
+
+/// GitLab #540 — the parse used to run in the view body, so every
+/// table re-parsed on every render while another cell streamed.
+@Suite("ReplDisplayTableCache", .serialized)
+@MainActor
+struct ReplDisplayTableCacheTests {
+
+    private let sample = #"[{"name":"a","age":1},{"name":"b","age":2}]"#
+
+    @Test("Repeated lookups of the same JSON parse once")
+    func memoizes() throws {
+        ReplDisplayTableCache.reset()
+        let first = try #require(ReplDisplayTableCache.table(for: sample))
+        for _ in 0..<50 {
+            #expect(ReplDisplayTableCache.table(for: sample) == first)
+        }
+        #expect(ReplDisplayTableCache.parseCount == 1)
+    }
+
+    @Test("The cached table matches an uncached parse")
+    func matchesDirectParse() {
+        ReplDisplayTableCache.reset()
+        #expect(ReplDisplayTableCache.table(for: sample)
+                == ReplDisplayTable.fromJSON(sample))
+    }
+
+    @Test("A non-tabular payload caches its nil too")
+    func cachesMisses() {
+        ReplDisplayTableCache.reset()
+        #expect(ReplDisplayTableCache.table(for: "[1,2,3]") == nil)
+        #expect(ReplDisplayTableCache.table(for: "[1,2,3]") == nil)
+        #expect(ReplDisplayTableCache.parseCount == 1)
+    }
+
+    @Test("Distinct payloads each parse once")
+    func distinctPayloads() {
+        ReplDisplayTableCache.reset()
+        for i in 0..<5 {
+            _ = ReplDisplayTableCache.table(for: #"[{"i":\#(i)}]"#)
+            _ = ReplDisplayTableCache.table(for: #"[{"i":\#(i)}]"#)
+        }
+        #expect(ReplDisplayTableCache.parseCount == 5)
+    }
+
+    @Test("The cache is bounded — old entries are evicted, not hoarded")
+    func evictsOldest() {
+        ReplDisplayTableCache.reset()
+        let overflow = ReplDisplayTableCache.capacity + 1
+        for i in 0..<overflow {
+            _ = ReplDisplayTableCache.table(for: #"[{"i":\#(i)}]"#)
+        }
+        #expect(ReplDisplayTableCache.parseCount == overflow)
+        // The first payload fell out of the window and parses again;
+        // the most recent one is still resident.
+        _ = ReplDisplayTableCache.table(for: #"[{"i":0}]"#)
+        #expect(ReplDisplayTableCache.parseCount == overflow + 1)
+        _ = ReplDisplayTableCache.table(for: #"[{"i":\#(overflow - 1)}]"#)
+        #expect(ReplDisplayTableCache.parseCount == overflow + 1)
+    }
+}

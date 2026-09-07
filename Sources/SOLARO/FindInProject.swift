@@ -182,7 +182,16 @@ final class FindInProjectModel {
             ns.replaceCharacters(in: range, with: replacement)
         }
         text = ns as String
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            // Replace-in-project runs outside the editor's save path
+            // (no WorkspaceController in hand), so it can't raise the
+            // save-failure banner (GitLab #532). It must at least not
+            // report success it didn't achieve.
+            FileHandle.standardError.write(Data(
+                "[FindInProject] Warning: replacements not written to \(url.path): \(error.localizedDescription)\n".utf8))
+        }
     }
 }
 

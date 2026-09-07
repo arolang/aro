@@ -560,16 +560,16 @@ final class AROHoverTextView: STTextView {
         let column = clamped - lineStart
 
         // Font metrics. We configured a monospaced font, so the
-        // "M" advance is the canonical character width.
+        // "M" advance is the canonical character width. The line
+        // height comes from the same resolved preference the
+        // renderer uses (GitLab #533), so the popover can't anchor
+        // against a different type size than the one on screen.
+        let typography = EditorTypography.current()
         let font = self.font
-            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let charWidth = ("M" as NSString)
             .size(withAttributes: [.font: font]).width
-        let baseLineHeight = NSLayoutManager().defaultLineHeight(for: font)
-        let lineHeightMultiple = UserDefaults.standard
-            .double(forKey: SolaroPrefs.editorLineHeight.rawValue)
-        let resolvedMultiple = lineHeightMultiple > 0 ? lineHeightMultiple : 1.25
-        let lineHeight = baseLineHeight * CGFloat(resolvedMultiple)
+        let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+            * typography.lineHeightMultiple
 
         // STTextView positions text after the gutter and a small
         // top inset. The exact insets aren't publicly surfaced on
@@ -883,12 +883,26 @@ struct AROCodeEditor: NSViewRepresentable {
     /// undoably via `STTextView.replaceCharacters` when its `id` advances,
     /// so the co-pilot's writes land live in the open document instead of a
     /// destructive whole-file reload. `oldString` empty ⇒ whole-file replace.
-    var aiEdit: WorkspaceController.AIEditCommand? = nil
+    var bufferEdit: WorkspaceController.BufferEditCommand? = nil
 
     enum Language { case aro, yaml, plain }
 
     @AppStorage(SolaroPrefs.editorGhostText.rawValue)
     private var ghostTextEnabled: Bool = false
+
+    // Observed purely so a Settings change re-evaluates the body and
+    // wakes `updateNSView`, which re-applies the type (GitLab #533).
+    // The values themselves are resolved through `EditorTypography`.
+    @AppStorage(SolaroPrefs.editorFontSize.rawValue)
+    private var editorFontSizePref: Double = 13
+    @AppStorage(SolaroPrefs.editorLineHeight.rawValue)
+    private var editorLineHeightPref: Double = 1.25
+
+    /// Type settings as they stand for this render pass.
+    fileprivate var typography: EditorTypography {
+        EditorTypography.resolve(fontSize: editorFontSizePref,
+                                 lineHeight: editorLineHeightPref)
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         // Build our hover-capable subclass by hand instead of using
@@ -999,6 +1013,17 @@ struct AROCodeEditor: NSViewRepresentable {
         // `configureTextView` (#487).
         textView.isEditable = isEditable
 
+        // Live font-size / line-height changes (GitLab #533).
+        // `configureTextView` only runs at mount, so without this an
+        // open document kept whatever type it was born with until the
+        // tab was closed and reopened.
+        let type = typography
+        if context.coordinator.lastTypography != type {
+            context.coordinator.lastTypography = type
+            applyTypography(type, to: textView)
+            applyHighlight(textView)
+        }
+
         // #272: keep ghost-text flags in sync when the user
         // toggles the Settings preference at runtime.
         if let hover = textView as? AROHoverTextView {
@@ -1039,9 +1064,9 @@ struct AROCodeEditor: NSViewRepresentable {
         // on the fly). Runs after the text-sync block so it edits the current
         // content; the delegate (textViewDidChangeText) then propagates the
         // change to the binding → disk → reparse, exactly like a user edit.
-        if let cmd = aiEdit, cmd.id != context.coordinator.lastAIEditID {
-            context.coordinator.lastAIEditID = cmd.id
-            applyAIEdit(cmd, to: textView, coordinator: context.coordinator)
+        if let cmd = bufferEdit, cmd.id != context.coordinator.lastBufferEditID {
+            context.coordinator.lastBufferEditID = cmd.id
+            applyBufferEdit(cmd, to: textView, coordinator: context.coordinator)
         }
 
         if let target = currentLine,
@@ -1143,15 +1168,7 @@ struct AROCodeEditor: NSViewRepresentable {
     // MARK: - Setup
 
     private func configureTextView(_ textView: AROHoverTextView) {
-        let fontSize = UserDefaults.standard.double(forKey: SolaroPrefs.editorFontSize.rawValue)
-        let resolvedFontSize: CGFloat = fontSize > 0 ? fontSize : 13
-        let lineHeight = UserDefaults.standard.double(forKey: SolaroPrefs.editorLineHeight.rawValue)
-        let resolvedLineHeight: CGFloat = lineHeight > 0 ? lineHeight : 1.25
-        let mono = NSFont.monospacedSystemFont(ofSize: resolvedFontSize, weight: .regular)
-        let paragraph = NSParagraphStyle.default.mutableCopy() as! NSMutableParagraphStyle
-        paragraph.lineHeightMultiple = resolvedLineHeight
-        textView.defaultParagraphStyle = paragraph
-        textView.font = mono
+        applyTypography(EditorTypography.current(), to: textView)
         textView.textColor = NSColor(SolaroColor.textPrimary)
         textView.backgroundColor = NSColor(SolaroColor.backdrop)
         textView.insertionPointColor = NSColor(SolaroColor.accent)
@@ -1167,6 +1184,16 @@ struct AROCodeEditor: NSViewRepresentable {
         textView.isIncrementalSearchingEnabled = true
         textView.isEditable = isEditable
         textView.isSelectable = true
+    }
+
+    /// Push a resolved typography onto the text view. Split out of
+    /// `configureTextView` so `updateNSView` can re-apply it when the
+    /// Settings preference changes while the document stays open
+    /// (GitLab #533) — the old code only ever ran at mount time.
+    fileprivate func applyTypography(_ typography: EditorTypography,
+                                     to textView: STTextView) {
+        textView.defaultParagraphStyle = typography.paragraphStyle
+        textView.font = typography.font
     }
 
     /// Compute the 1-indexed line number of the caret. Returns nil
@@ -1374,24 +1401,38 @@ struct AROCodeEditor: NSViewRepresentable {
     /// delegate propagates it to disk/LSP like a normal edit. `oldString`
     /// empty ⇒ replace the whole document (write_file). No-ops when the
     /// target text isn't found (the tool falls back to a disk write upstream).
-    fileprivate func applyAIEdit(_ cmd: WorkspaceController.AIEditCommand,
-                                 to textView: STTextView,
-                                 coordinator: Coordinator) {
+    fileprivate func applyBufferEdit(_ cmd: WorkspaceController.BufferEditCommand,
+                                     to textView: STTextView,
+                                     coordinator: Coordinator) {
         let nsText = (textView.text ?? "") as NSString
         let range: NSRange
-        if cmd.oldString.isEmpty {
+        if let explicit = cmd.range {
+            // Positional edit (completion accept, GitLab #535). Clamp
+            // rather than trust: the buffer can have moved on between
+            // the request and the user picking an item.
+            guard explicit.location <= nsText.length,
+                  explicit.location + explicit.length <= nsText.length
+            else { return }
+            range = explicit
+        } else if cmd.oldString.isEmpty {
             range = NSRange(location: 0, length: nsText.length)
         } else {
             let found = nsText.range(of: cmd.oldString)
             guard found.location != NSNotFound else { return }
             range = found
         }
-        textView.undoManager?.setActionName("AI Edit")
+        textView.undoManager?.setActionName(cmd.actionName)
         textView.replaceCharacters(in: range, with: cmd.newString)
         applyHighlight(textView)
         // Scroll the freshly written region into view so the user watches it land.
         let newLength = (cmd.newString as NSString).length
         textView.scrollRangeToVisible(NSRange(location: range.location, length: newLength))
+        if let caret = cmd.caretOffset {
+            let updatedLength = ((textView.text ?? "") as NSString).length
+            let target = NSRange(location: min(caret, updatedLength), length: 0)
+            textView.textSelection = target
+            textView.scrollRangeToVisible(target)
+        }
 
         // Propagate to the binding → disk/LSP/reparse on the NEXT runloop tick
         // (never during this updateNSView pass) — mirrors how
@@ -1483,11 +1524,14 @@ struct AROCodeEditor: NSViewRepresentable {
         let nsString = source as NSString
         let fullRange = NSRange(location: 0, length: nsString.length)
 
+        // Resolve the size from the preference on every pass. This
+        // used to be a hardcoded 13pt, and since `applyHighlight`
+        // re-stamps the ENTIRE document (debounced ~40ms after every
+        // keystroke), a user's font-size setting survived exactly
+        // until they typed the first character (GitLab #533).
         textView.setAttributes(
-            [
-                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-                .foregroundColor: NSColor(SolaroColor.textPrimary),
-            ],
+            EditorTypography.current()
+                .baseAttributes(foreground: NSColor(SolaroColor.textPrimary)),
             range: fullRange
         )
 
@@ -1531,6 +1575,11 @@ struct AROCodeEditor: NSViewRepresentable {
         /// Tracks the most recently painted paused line so updateNSView
         /// only re-applies the tint when it actually changes.
         var lastPausedLine: Int?
+        /// Typography last pushed onto the text view. Nil until the
+        /// first `updateNSView` pass; `makeNSView` seeds the view
+        /// itself through `configureTextView`, so the first
+        /// comparison is a harmless no-op re-apply (GitLab #533).
+        var lastTypography: EditorTypography?
         /// Snapshot of the text we most recently received from the
         /// user's typing. updateNSView uses this to distinguish a
         /// re-render triggered by user input (skip text sync — the
@@ -1539,8 +1588,8 @@ struct AROCodeEditor: NSViewRepresentable {
         /// view modified the buffer, or the file reloaded).
         var lastUserText: String?
         /// Id of the last AI co-pilot edit applied, so `updateNSView` applies
-        /// each `aiEdit` exactly once even though it re-runs for many reasons.
-        var lastAIEditID: UInt64 = 0
+        /// each `bufferEdit` exactly once even though it re-runs for many reasons.
+        var lastBufferEditID: UInt64 = 0
         /// Same idea for the caret line — tracks what we last
         /// wrote back from the textView's selection, so we don't
         /// jump the caret back to col 0 on every keystroke.

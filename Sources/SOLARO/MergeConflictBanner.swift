@@ -139,6 +139,8 @@ struct MergeConflictResolverSheet: View {
     let fileURL: URL
     @State private var conflicts: [MergeConflict] = []
     @State private var source: String = ""
+    /// Set when a resolution couldn't be written back (GitLab #532).
+    @State private var writeError: String? = nil
     let onComplete: () -> Void
 
     var body: some View {
@@ -151,6 +153,12 @@ struct MergeConflictResolverSheet: View {
                 Spacer()
                 Button("Done", action: onComplete)
                     .buttonStyle(.borderedProminent)
+            }
+            if let writeError {
+                Text("Couldn't save \(fileURL.lastPathComponent): \(writeError)")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.stateError)
+                    .textSelection(.enabled)
             }
             if conflicts.isEmpty {
                 Text("All conflicts resolved. Stage the file and continue your merge.")
@@ -232,7 +240,20 @@ struct MergeConflictResolverSheet: View {
             to: conflict,
             in: source
         )
-        try? source.write(to: fileURL, atomically: true, encoding: .utf8)
+        do {
+            try source.write(to: fileURL, atomically: true, encoding: .utf8)
+        } catch {
+            // The sheet has no WorkspaceController, so it can't raise
+            // the editor's save-failure banner (GitLab #532) — but
+            // `reload()` re-reads from disk, so a swallowed failure
+            // showed the conflict "resolving" and then snapping back
+            // with no explanation. Say why in the sheet instead.
+            writeError = error.localizedDescription
+            FileHandle.standardError.write(Data(
+                "[MergeConflict] Warning: resolution not written to \(fileURL.path): \(error.localizedDescription)\n".utf8))
+            return
+        }
+        writeError = nil
         reload()
     }
 }

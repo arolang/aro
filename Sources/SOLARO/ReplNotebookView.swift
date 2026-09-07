@@ -16,8 +16,14 @@
 // (move / convert / insert / delete) appears on hover, top-right,
 // so the resting state stays quiet.
 //
-// Chords match Jupyter: ⇧⏎ run & select below, ⌥⏎ run & insert
-// below, ⌘⏎ run in place, Esc leaves markdown editing.
+// Chords match Jupyter. While editing: ⇧⏎ run & select below, ⌥⏎
+// run & insert below, ⌘⏎ run in place, Esc drops to command mode.
+// In command mode (a cell selected, no editor focused): ↑/↓ move
+// between cells, ⏎ starts editing, A/B insert above/below, DD
+// deletes, M/Y convert, ⇧M merges with the cell below, ⌘D
+// duplicates, ⌘X/⌘C/⌘V cut/copy/paste whole cells. All of them are
+// remappable in Settings → Keybindings; the map lives in
+// ReplNotebookCommands.swift (GitLab #538).
 
 import SwiftUI
 import AppKit
@@ -29,6 +35,11 @@ struct ReplNotebookView: View {
 
     @AppStorage(SolaroPrefs.editorFontSize.rawValue)
     private var editorFontSize: Double = 13
+
+    /// Workspace-scoped UndoManager — the notebook's structural
+    /// operations register on it so ⌘Z brings a deleted cell back
+    /// (GitLab #537).
+    @Environment(\.solaroUndoManager) private var undoManager
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,6 +55,10 @@ struct ReplNotebookView: View {
             }
         }
         .background(SolaroColor.backdrop)
+        .onAppear { notebook.undoManager = undoManager }
+        .onChange(of: undoManager) { _, manager in
+            notebook.undoManager = manager
+        }
         .onDisappear { notebook.saveNow() }
     }
 
@@ -115,6 +130,14 @@ struct ReplNotebookView: View {
                 proxy.scrollTo(newID, anchor: nil)
             }
         }
+        // Command mode's keyboard. It only takes first responder
+        // while `commandMode` is on, which is exactly when no cell
+        // editor wants it.
+        .background(
+            NotebookCommandKeys(notebook: notebook,
+                                active: notebook.commandMode)
+                .frame(width: 1, height: 1),
+            alignment: .topLeading)
     }
 
     /// The quiet "grow the notebook" affordance under the last cell.
@@ -520,7 +543,15 @@ private struct ReplCellRow: View {
             if hovering { hoverToolbar(for: cell) }
         }
         .contentShape(Rectangle())
-        .onTapGesture { notebook.selectedCellID = cellID }
+        .onTapGesture {
+            notebook.selectedCellID = cellID
+            // Clicking a rendered markdown cell selects it without
+            // opening an editor — that's command mode, and the cell
+            // keys should work there.
+            notebook.commandMode =
+                cell.kind == .markdown
+                && !notebook.editingMarkdownIDs.contains(cellID)
+        }
     }
 
     @ViewBuilder
@@ -564,12 +595,19 @@ private struct ReplCellRow: View {
             text: sourceBinding(for: cell.id),
             language: .aro,
             fontSize: fontSize,
-            wantsFocus: isSelected,
-            onFocus: { notebook.selectedCellID = cellID },
+            // Command mode owns the keyboard while it's on, so the
+            // editor must not grab focus back from under it.
+            wantsFocus: isSelected && !notebook.commandMode,
+            onFocus: {
+                notebook.selectedCellID = cellID
+                notebook.commandMode = false
+            },
             onRunAndAdvance: { notebook.runCellAndAdvance(cellID) },
             onRunAndInsert: { notebook.runCellAndInsertBelow(cellID) },
             onRunInPlace: { notebook.runCell(cellID) },
-            onEscape: {}
+            // Jupyter's Esc: leave the editor, keep the cell
+            // selected, hand the keyboard to command mode.
+            onEscape: { notebook.commandMode = true }
         )
         .padding(.horizontal, SolaroSpace.s)
         .padding(.vertical, 2)
@@ -590,12 +628,18 @@ private struct ReplCellRow: View {
             text: sourceBinding(for: cell.id),
             language: .markdown,
             fontSize: fontSize,
-            wantsFocus: isSelected,
-            onFocus: { notebook.selectedCellID = cellID },
+            wantsFocus: isSelected && !notebook.commandMode,
+            onFocus: {
+                notebook.selectedCellID = cellID
+                notebook.commandMode = false
+            },
             onRunAndAdvance: { notebook.runCellAndAdvance(cellID) },
             onRunAndInsert: { notebook.runCellAndInsertBelow(cellID) },
             onRunInPlace: { notebook.runCell(cellID) },
-            onEscape: { notebook.editingMarkdownIDs.remove(cellID) }
+            onEscape: {
+                notebook.editingMarkdownIDs.remove(cellID)
+                notebook.commandMode = true
+            }
         )
         .padding(.horizontal, SolaroSpace.s)
         .padding(.vertical, 2)
@@ -629,6 +673,7 @@ private struct ReplCellRow: View {
         .contentShape(Rectangle())
         .gesture(TapGesture(count: 2).onEnded {
             notebook.selectedCellID = cellID
+            notebook.commandMode = false
             notebook.editingMarkdownIDs.insert(cellID)
         })
     }
@@ -711,6 +756,15 @@ private struct ReplCellRow: View {
             notebook.addCell(kind: .markdown, after: cellID)
         }
         Divider()
+        Button("Cut Cell") { notebook.cutCell(cellID) }
+        Button("Copy Cell") { notebook.copyCell(cellID) }
+        Button("Paste Cell Below") { notebook.pasteCells(after: cellID) }
+        Button("Duplicate Cell") { notebook.duplicateCell(cellID) }
+        if let idx = notebook.cellIndex(of: cellID),
+           idx + 1 < notebook.cells.count {
+            Button("Merge with Cell Below") { notebook.mergeCellBelow(cellID) }
+        }
+        Divider()
         Button(cell.kind == .code
                ? "Convert to Markdown" : "Convert to Code") {
             notebook.convertCell(
@@ -734,7 +788,11 @@ private struct ReplCellOutputsView: View {
                 .frame(height: 1)
             VStack(alignment: .leading, spacing: SolaroSpace.s) {
                 ForEach(Array(cell.outputs.enumerated()), id: \.offset) { _, output in
-                    outputView(output)
+                    // `.equatable()` so an output that hasn't changed
+                    // skips its body entirely while a *sibling* cell
+                    // streams and invalidates the whole column
+                    // (GitLab #540).
+                    ReplCellOutputView(output: output).equatable()
                 }
                 footer
             }
@@ -743,7 +801,33 @@ private struct ReplCellOutputsView: View {
     }
 
     @ViewBuilder
-    private func outputView(_ output: ReplCellOutput) -> some View {
+    private var footer: some View {
+        if let duration = cell.durationMs {
+            HStack {
+                Spacer()
+                Text(Self.formatDuration(duration))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(SolaroColor.textTertiary)
+            }
+        }
+    }
+
+    static func formatDuration(_ ms: Double) -> String {
+        if ms < 1 { return String(format: "%.2f ms", ms) }
+        if ms < 1000 { return String(format: "%.0f ms", ms) }
+        return String(format: "%.2f s", ms / 1000)
+    }
+}
+
+/// One captured output. `Equatable` on the output value alone, so
+/// SwiftUI can skip re-evaluating it when something else in the
+/// notebook changed — which is most of the time, since every stream
+/// chunk of any running cell invalidates every row that reads
+/// `notebook.cells`.
+private struct ReplCellOutputView: View, Equatable {
+    let output: ReplCellOutput
+
+    var body: some View {
         switch output.kind {
         case .stream:
             Text((output.text ?? "").trimmingTrailingNewline)
@@ -754,16 +838,20 @@ private struct ReplCellOutputsView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .result:
-            resultView(output)
+            resultView
         case .error:
-            errorView(output)
+            errorView
         }
     }
 
     @ViewBuilder
-    private func resultView(_ output: ReplCellOutput) -> some View {
+    private var resultView: some View {
+        // Parsing happens once per distinct JSON payload, not once
+        // per render — the result is a pure function of an immutable
+        // string, and the view body runs on every keystroke-adjacent
+        // event (GitLab #540).
         if let json = output.jsonValue,
-           let table = ReplDisplayTable.fromJSON(json) {
+           let table = ReplDisplayTableCache.table(for: json) {
             ReplDisplayTableView(table: table)
         } else if let plain = output.plainText, !plain.isEmpty {
             Text(plain.trimmingTrailingNewline)
@@ -774,7 +862,7 @@ private struct ReplCellOutputsView: View {
         }
     }
 
-    private func errorView(_ output: ReplCellOutput) -> some View {
+    private var errorView: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "xmark.octagon.fill")
@@ -800,24 +888,6 @@ private struct ReplCellOutputsView: View {
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.s)
                 .stroke(SolaroColor.stateError.opacity(0.35), lineWidth: 1))
-    }
-
-    @ViewBuilder
-    private var footer: some View {
-        if let duration = cell.durationMs {
-            HStack {
-                Spacer()
-                Text(Self.formatDuration(duration))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(SolaroColor.textTertiary)
-            }
-        }
-    }
-
-    static func formatDuration(_ ms: Double) -> String {
-        if ms < 1 { return String(format: "%.2f ms", ms) }
-        if ms < 1000 { return String(format: "%.0f ms", ms) }
-        return String(format: "%.2f s", ms / 1000)
     }
 }
 
@@ -901,6 +971,51 @@ struct ReplDisplayTable: Equatable {
             }
             return "\(nested ?? "—")"
         }
+    }
+}
+
+/// Memo for `ReplDisplayTable.fromJSON`.
+///
+/// The parse — JSONSerialization, a column union, row
+/// stringification — used to run inside the view body, so every
+/// result table in the notebook re-parsed on every re-evaluation of
+/// the outputs view: once per stream chunk of *any* running cell,
+/// per selection change, per hover, per kernel-state change. With
+/// a few 100×12 tables open that is visible jank in exactly the
+/// data-exploration workflow the table exists for (GitLab #540).
+///
+/// The result is a pure function of an immutable string, so it is
+/// cached by that string — nil results included, since "this JSON
+/// isn't tabular" is just as expensive to rediscover. The cache is
+/// small and FIFO-evicted: it exists to survive re-renders, not to
+/// remember every table the session ever showed.
+@MainActor
+enum ReplDisplayTableCache {
+    static let capacity = 32
+
+    private static var entries: [String: ReplDisplayTable?] = [:]
+    private static var order: [String] = []
+
+    /// Real parses performed. Only interesting to tests, which
+    /// assert the cache actually caches.
+    private(set) static var parseCount = 0
+
+    static func table(for json: String) -> ReplDisplayTable? {
+        if let hit = entries[json] { return hit }
+        let parsed = ReplDisplayTable.fromJSON(json)
+        parseCount += 1
+        entries[json] = parsed
+        order.append(json)
+        if order.count > capacity {
+            entries.removeValue(forKey: order.removeFirst())
+        }
+        return parsed
+    }
+
+    static func reset() {
+        entries.removeAll()
+        order.removeAll()
+        parseCount = 0
     }
 }
 

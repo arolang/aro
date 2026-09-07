@@ -130,19 +130,26 @@ struct SOLAROApp: App {
                 Label("Rename…", systemImage: "pencil")
             }
             Divider()
+            Button {
+                postSolaroMenuAction(.fileReload)
+            } label: {
+                Label("Reload from Disk", systemImage: "arrow.clockwise")
+            }
+            .solaroShortcut("file.reload")
+            Divider()
             Button(role: .destructive) {
                 postSolaroMenuAction(.fileMoveToTrash)
             } label: {
                 Label("Move to Trash", systemImage: "trash")
             }
-            .keyboardShortcut(.delete, modifiers: [.command])
+            .solaroShortcut("editing.deleteFile")
             Divider()
             Button {
                 postSolaroMenuAction(.fileCloseTab)
             } label: {
                 Label("Close Tab", systemImage: "xmark")
             }
-            .keyboardShortcut("w", modifiers: [.command])
+            .solaroShortcut("navigation.closeTab")
         }
     }
 
@@ -157,32 +164,32 @@ struct SOLAROApp: App {
             } label: {
                 Label("Find in File…", systemImage: "magnifyingglass")
             }
-            .keyboardShortcut("f", modifiers: [.command])
+            .solaroShortcut("search.findInFile")
             Button {
                 postSolaroMenuAction(.editFindInProject)
             } label: {
                 Label("Find in Project…", systemImage: "text.magnifyingglass")
             }
-            .keyboardShortcut("f", modifiers: [.command, .shift])
+            .solaroShortcut("navigation.findInProject")
             Divider()
             Button {
                 postSolaroMenuAction(.editFormatDocument)
             } label: {
                 Label("Format Document", systemImage: "text.alignleft")
             }
-            .keyboardShortcut("f", modifiers: [.option, .shift])
+            .solaroShortcut("editing.formatDocument")
             Button {
                 postSolaroMenuAction(.editRenameRefactor)
             } label: {
                 Label("Rename Symbol…", systemImage: "character.cursor.ibeam")
             }
-            .keyboardShortcut("r", modifiers: [.control, .command])
+            .solaroShortcut("editing.rename")
             Button {
                 postSolaroMenuAction(.editTriggerCompletion)
             } label: {
                 Label("Trigger Completion", systemImage: "text.append")
             }
-            .keyboardShortcut(" ", modifiers: [.control])
+            .solaroShortcut("editing.acceptCompletion")
         }
     }
 
@@ -240,7 +247,7 @@ struct SOLAROApp: App {
             } label: {
                 Label("Show Console", systemImage: "terminal")
             }
-            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .solaroShortcut("panels.toggleConsole")
             Button {
                 NotificationCenter.default.post(
                     name: .solaroShowBottomPanel,
@@ -250,7 +257,7 @@ struct SOLAROApp: App {
             } label: {
                 Label("Show Terminal", systemImage: "apple.terminal")
             }
-            .keyboardShortcut("t", modifiers: [.command, .shift])
+            .solaroShortcut("panels.toggleTerminalPane")
             Button {
                 NotificationCenter.default.post(
                     name: .solaroShowBottomPanel,
@@ -260,7 +267,7 @@ struct SOLAROApp: App {
             } label: {
                 Label("Show Tests", systemImage: "checkmark.diamond")
             }
-            .keyboardShortcut("u", modifiers: [.command, .shift])
+            .solaroShortcut("panels.toggleTests")
             Divider()
             Button {
                 InternalLogsWindow.show()
@@ -280,45 +287,45 @@ struct SOLAROApp: App {
             } label: {
                 Label("Go to Definition", systemImage: "arrow.right.circle")
             }
-            .keyboardShortcut("d", modifiers: [.control, .command])
+            .solaroShortcut("navigation.goToDefinition")
             Button {
                 postSolaroMenuAction(.navHover)
             } label: {
                 Label("Show Hover Info", systemImage: "info.circle")
             }
-            .keyboardShortcut("h", modifiers: [.control, .command])
+            .solaroShortcut("navigation.hover")
             Divider()
             Button {
                 postSolaroMenuAction(.viewCommandPalette)
             } label: {
                 Label("Command Palette…", systemImage: "command")
             }
-            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .solaroShortcut("navigation.commandPalette")
             Button {
                 postSolaroMenuAction(.viewQuickOpen)
             } label: {
                 Label("Quick Open…", systemImage: "doc.text.magnifyingglass")
             }
-            .keyboardShortcut("p", modifiers: [.command])
+            .solaroShortcut("navigation.quickOpen")
             Button {
                 postSolaroMenuAction(.viewSymbolPalette)
             } label: {
                 Label("Symbol Palette…", systemImage: "list.bullet.rectangle")
             }
-            .keyboardShortcut("o", modifiers: [.command, .shift])
+            .solaroShortcut("navigation.symbolPalette")
             Divider()
             Button {
                 postSolaroMenuAction(.navNextTab)
             } label: {
                 Label("Next Tab", systemImage: "arrow.right")
             }
-            .keyboardShortcut("]", modifiers: [.command, .shift])
+            .solaroShortcut("navigation.nextTab")
             Button {
                 postSolaroMenuAction(.navPrevTab)
             } label: {
                 Label("Previous Tab", systemImage: "arrow.left")
             }
-            .keyboardShortcut("[", modifiers: [.command, .shift])
+            .solaroShortcut("navigation.previousTab")
         }
     }
 
@@ -343,7 +350,7 @@ struct SOLAROApp: App {
             } label: {
                 Label("Run Tests", systemImage: "checkmark.diamond")
             }
-            .keyboardShortcut("u", modifiers: [.control, .command])
+            .solaroShortcut("run.tests")
             Button {
                 postSolaroMenuAction(.runStop)
             } label: {
@@ -386,7 +393,7 @@ struct SOLAROApp: App {
             } label: {
                 Label("Blame Current File", systemImage: "person.crop.circle.badge.questionmark")
             }
-            .keyboardShortcut("b", modifiers: [.control, .command])
+            .solaroShortcut("navigation.blame")
             Button(role: .destructive) {
                 postSolaroMenuAction(.gitRevertFile)
             } label: {
@@ -571,6 +578,7 @@ enum SolaroMenuAction: String {
     case fileRename
     case fileMoveToTrash
     case fileCloseTab
+    case fileReload
     // Edit
     case editFindInFile
     case editFindInProject
@@ -664,7 +672,12 @@ struct SolaroUndoCommand: View {
         _ = registry.tick
         let textMgr = activeTextResponderUndoManager()
         let workspaceMgr = registry.current
-        let active = textMgr ?? workspaceMgr
+        // A focused editor wins — but only while it has something to
+        // undo. Deleting a notebook cell leaves focus wherever it
+        // was, and ⌘Z then hit an empty text-view stack and did
+        // nothing at all; falling through to the workspace manager
+        // is what lets the cell come back (GitLab #537).
+        let active = textMgr?.canUndo == true ? textMgr : (workspaceMgr ?? textMgr)
         return Button {
             active?.undo()
             registry.noteUndoChange()
@@ -682,7 +695,7 @@ struct SolaroRedoCommand: View {
         _ = registry.tick
         let textMgr = activeTextResponderUndoManager()
         let workspaceMgr = registry.current
-        let active = textMgr ?? workspaceMgr
+        let active = textMgr?.canRedo == true ? textMgr : (workspaceMgr ?? textMgr)
         return Button {
             active?.redo()
             registry.noteUndoChange()
