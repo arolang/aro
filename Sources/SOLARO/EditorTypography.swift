@@ -51,6 +51,44 @@ struct EditorTypography: Equatable {
         return EditorTypography(fontSize: size, lineHeightMultiple: height)
     }
 
+    /// Font sizes the zoom commands step through. A multiplicative
+    /// ladder rather than +1: at 9pt a point is a lot, at 40pt it is
+    /// invisible, and every editor that reads this pref — code,
+    /// notebook cells, markdown — should move by the same *felt*
+    /// amount.
+    static let zoomLadder: [CGFloat] = [
+        7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 96
+    ]
+
+    /// Next size up from `size`, or `size` when already at the top.
+    static func zoomedIn(from size: CGFloat) -> CGFloat {
+        zoomLadder.first { $0 > size + 0.01 } ?? size
+    }
+
+    /// Next size down from `size`, or `size` when already at the bottom.
+    static func zoomedOut(from size: CGFloat) -> CGFloat {
+        zoomLadder.last { $0 < size - 0.01 } ?? size
+    }
+
+    /// Move the editor font size one rung and persist it. Every
+    /// editor resolves this pref per render pass, so the change is
+    /// live in the open document — code, notebook and markdown alike.
+    @discardableResult
+    static func zoom(_ direction: ZoomDirection,
+                     defaults: UserDefaults = .standard) -> CGFloat {
+        let current = self.current(defaults).fontSize
+        let next: CGFloat
+        switch direction {
+        case .in:    next = zoomedIn(from: current)
+        case .out:   next = zoomedOut(from: current)
+        case .reset: next = defaultFontSize
+        }
+        defaults.set(Double(next), forKey: SolaroPrefs.editorFontSize.rawValue)
+        return next
+    }
+
+    enum ZoomDirection { case `in`, out, reset }
+
     /// The live preference values. Read fresh on every call — the
     /// editor re-resolves per pass so a Settings change applies to
     /// the open document without a relaunch.

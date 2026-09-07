@@ -1614,6 +1614,25 @@ struct WorkspaceView: View {
             HiddenShortcutButton(commandID: "file.reload") {
                 controller.reloadFromDisk()
             }
+            // Text size. One preference drives the code editor, the
+            // notebook cells and the markdown editors, so a single
+            // action zooms whatever is on screen.
+            HiddenShortcutButton(commandID: "view.zoomIn") {
+                EditorTypography.zoom(.in)
+            }
+            HiddenShortcutButton(commandID: "view.zoomOut") {
+                EditorTypography.zoom(.out)
+            }
+            HiddenShortcutButton(commandID: "view.zoomReset") {
+                EditorTypography.zoom(.reset)
+            }
+            // ⌘= is the same physical key as ⌘+ without the shift,
+            // and it is what most people actually press. Fixed rather
+            // than remappable: it is an alias of view.zoomIn, not a
+            // command of its own.
+            HiddenShortcutButton(key: "=", modifiers: [.command]) {
+                EditorTypography.zoom(.in)
+            }
         }
     }
 
@@ -1770,6 +1789,12 @@ struct WorkspaceView: View {
         case .viewPaneSplit:  controller.setPaneMode(.split)
         case .viewCommandPalette:
             showCommandPalette = true
+        case .viewZoomIn:
+            EditorTypography.zoom(.in)
+        case .viewZoomOut:
+            EditorTypography.zoom(.out)
+        case .viewZoomReset:
+            EditorTypography.zoom(.reset)
         case .viewQuickOpen:
             showQuickOpen = true
         case .viewSymbolPalette:

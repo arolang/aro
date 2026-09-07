@@ -210,6 +210,25 @@ struct SOLAROApp: App {
                 Label("Toggle Inspector", systemImage: "sidebar.right")
             }
             .keyboardShortcut("0", modifiers: [.command, .option])
+            Divider()
+            Button {
+                postSolaroMenuAction(.viewZoomIn)
+            } label: {
+                Label("Increase Text Size", systemImage: "textformat.size.larger")
+            }
+            .solaroShortcut("view.zoomIn")
+            Button {
+                postSolaroMenuAction(.viewZoomOut)
+            } label: {
+                Label("Decrease Text Size", systemImage: "textformat.size.smaller")
+            }
+            .solaroShortcut("view.zoomOut")
+            Button {
+                postSolaroMenuAction(.viewZoomReset)
+            } label: {
+                Label("Actual Text Size", systemImage: "textformat.size")
+            }
+            .solaroShortcut("view.zoomReset")
         }
         CommandGroup(after: .toolbar) {
             Divider()
@@ -593,6 +612,9 @@ enum SolaroMenuAction: String {
     case viewPaneText
     case viewPaneSplit
     case viewCommandPalette
+    case viewZoomIn
+    case viewZoomOut
+    case viewZoomReset
     case viewQuickOpen
     case viewSymbolPalette
     // Navigate
