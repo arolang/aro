@@ -1,0 +1,173 @@
+{
+  "cells" : [
+    {
+      "id" : "nb28-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 28 — The Kernel & the Protocol\n\n[27](27-notebooks-and-cells.repl) was the document. This is the thing\non the other end of it.\n\nBetween your cell and the ARO runtime sits a **session** — a headless\nevaluator that keeps your bindings, your feature sets, and your event\nsubscriptions alive between cells. Something has to drive it, and in\nARO that something speaks a protocol small enough to type by hand:\n\n```bash\nprintf '%s\\n' '{\"id\":1,\"type\":\"execute\",\"code\":\"Log \\\"hi\\\" to the <console>.\"}' \\\n               '{\"id\":2,\"type\":\"shutdown\"}' | aro repl --json\n```\n\nOne JSON object per line, both directions, newline-framed — no\n`Content-Length` headers, no handshake, no negotiation. That is the\nwhole transport ([ARO-0091](..\/Proposals\/ARO-0091-jupyter-kernel.md)),\nand everything else is a client of it: JupyterLab, SOLARO's notebook\neditor, the validator that checks this course.\n\nIn this notebook: the request table, what a cell is split into, how\ndefinitions and events survive between cells, what an error looks like\non the wire, and the two kernels that carry all of it into Jupyter."
+    },
+    {
+      "id" : "nb28-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Compute the <cups: sum> from [3, 5, 8]."
+    },
+    {
+      "id" : "nb28-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nThat cell was one `execute` request and exactly one `result` message.\nHere is the wire traffic in full — the first line arrives once, when\nthe server starts:\n\n```jsonc\n{\"type\":\"ready\",\"version\":\"0.11.1\",\"protocol\":1}\n{\"id\":1,\"type\":\"execute\",\"code\":\"Compute the <cups: sum> from [3, 5, 8].\"}\n{\"type\":\"result\",\"id\":1,\"status\":\"ok\",\"durationMs\":6.1,\n \"display\":{\"text\/plain\":\"16\",\"application\/json\":16}}\n```\n\n- **`id`** is the client's. Every request carries one; every request\n  gets **exactly one** `result` back with the same `id`. That is the\n  entire correlation story.\n- **`status`** is `ok` or `error` for `execute`; other request types\n  reuse the field with their own vocabulary.\n- **`durationMs`** is measured around the execution — and is what the\n  notebook stores on the cell.\n- **`display`** is the MIME bundle, present when the cell ended on a\n  value and absent when it did not.\n\nNote what is *not* in the protocol: `executionCount`. The server does\nnot count cells; the client does, because \"which cell ran third\" is a\nproperty of the document, not of the session."
+    },
+    {
+      "id" : "nb28-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The request table\n\nSeven verbs. All of them take an `id`; `execute`, `is_complete`,\n`complete`, and `inspect` also take `code`.\n\n| `type` | Fields | Answer |\n|--------|--------|--------|\n| `execute` | `code` | `status: ok` with optional `display`, or `status: error` |\n| `is_complete` | `code` | `status: complete` \/ `incomplete` (+ `indent`) \/ `invalid` |\n| `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |\n| `inspect` | `code`, `cursor` | `found`, `text` |\n| `info` | — | `info`: version, feature sets, variables |\n| `reset` | — | `status: ok`; session cleared |\n| `shutdown` | — | `status: ok`; server exits |\n\n`is_complete` is what a front-end asks when you press Return: is this\ninput finished, or should the editor open another line? An unclosed\nfeature-set header answers `incomplete`, and suggests the indent:\n\n```jsonc\n{\"id\":1,\"type\":\"is_complete\",\"code\":\"(Price Cup: Action) {\"}\n{\"type\":\"result\",\"id\":1,\"status\":\"incomplete\",\"indent\":\"    \"}\n```\n\n`complete` and `inspect` are LSP-backed. The input is framed exactly\nthe way `execute` frames it, compiled, and handed to the same handlers\n`aro lsp` serves — so completion in a notebook matches completion in an\neditor by construction rather than by effort — then merged with what\nonly the session knows: its live variables, and their current *values*,\nwhich is what `inspect` answers with.\n\n```jsonc\n{\"id\":3,\"type\":\"complete\",\"code\":\"Comp\",\"cursor\":4}\n{\"type\":\"result\",\"id\":3,\"status\":\"ok\",\"cursorStart\":0,\"cursorEnd\":4,\n \"matches\":[\"Compare\",\"Compute\"], \"items\":[…]}\n```\n\n`matches` is the flat list Jupyter's `complete_reply` wants: each entry\nreplaces `[cursorStart, cursorEnd)` verbatim. `items` is the richer LSP\nshape, for clients that can render kinds and details."
+    },
+    {
+      "id" : "nb28-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What a cell is split into\n\nA terminal REPL reads one input at a time. A cell arrives whole and may\nmix kinds, so the engine splits it into **units** in source order:\n\n| Unit | Recognised by | Effect |\n|------|---------------|--------|\n| Meta-command | line starts with `:` | dispatched through the meta-command registry |\n| Feature set | `(Name: Activity) {` … `}` | compiled and registered in the session |\n| Statements | anything else | executed as one feature-set body |\n\nThe third row carries the important word: **one**. Consecutive\nstatements stay a single unit rather than becoming one unit each.\nSplitting them would serialize work the language is allowed to\noverlap — statements defer and force independently\n([ARO-0088](..\/Proposals\/ARO-0088-concurrency-model.md)), so two\ntwo-second requests in one cell should cost about two seconds, not\nfour. The cell boundary is where you chose to stop typing; it should\nnot be a scheduling decision.\n\nDefine a feature set and the session says so:"
+    },
+    {
+      "id" : "nb28-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(PriceCups: Action takes <count>) {\n    Extract the <n> from the <input: count>.\n    Compute the <total> from <n> * 2.4.\n    Return an <OK: status> with { total: <total> }.\n}"
+    },
+    {
+      "id" : "nb28-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Definitions accumulate\n\nThat definition is now part of the session, and here is the mechanism,\nbecause it explains a subtlety you would otherwise hit: each statement\nunit is compiled **together with the source of every feature set\ndefined earlier in the session**. Semantic analysis resolves\n`Application.<Name>` ([ARO-0081](..\/Proposals\/ARO-0081-user-defined-actions.md))\nagainst the program it is given, and a lone wrapped statement is a\nprogram of one — so without the companions, the call below would not\ncompile.\n\nThe companion sources are appended *after* the wrapper, never\nprepended, so a diagnostic's line numbers still point at the code you\ntyped rather than at somebody else's cell."
+    },
+    {
+      "id" : "nb28-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Application.PriceCups the <till> from 16.\nExtract the <till-total> from the <till: total>."
+    },
+    {
+      "id" : "nb28-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Sixteen cups at 2.40, displayed without a `Log` — the automatic\ndisplay from [27](27-notebooks-and-cells.repl), reaching through a\nuser-defined action defined in a different cell.\n\n## Events dispatch inside a session\n\nA `{EventName} Handler` feature set defined in a session is **live**.\nAn `Emit` in a later cell dispatches to it with the same routing an\napplication gets: event type from the business activity, state guards\n([ARO-0022](..\/Proposals\/ARO-0022-state-guards.md)) respected, payload\nbound as `event` \/ `event: key`. The session's own `EventBus` carries\nit; no event loop is needed, because a domain event has no external\nsource to wait for."
+    },
+    {
+      "id" : "nb28-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(Note Restock: RestockNeeded Handler) {\n    Extract the <item> from the <event: item>.\n    Log \"handler saw restock for ${<item>}\" to the <console>.\n    Return an <OK: status> for the <restock>.\n}"
+    },
+    {
+      "id" : "nb28-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit a <RestockNeeded: event> with { item: \"oat milk\" }."
+    },
+    {
+      "id" : "nb28-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The handler's output landed in the emitting cell, not in a later one\nand not on a background thread — a guarantee, not luck. After each\ninput the session waits for every handler it triggered, cascades\nincluded (a handler that emits an event of its own), so a cell's output\nis complete when its `result` arrives. A handler that outruns the\nruntime's timeout is reported as a **warning on stderr**, and handler\nerrors arrive the same way: the emitting statement itself succeeded,\nand failing that cell would blame the wrong code.\n\nRedefining a handler replaces its subscription; `reset` drops it. A\ncleared definition that kept answering events would be the worst kind\nof ghost.\n\n**What does not fire:** `Socket Event Handler`,\n`WebSocket Event Handler`, `File Event Handler`, and `KeyPress Handler`\nare deliberately *not* subscribed in a session. Their events come from\na server the session never runs, and subscribing them would promise a\ndispatch that cannot arrive. Use `aro run` for those — that is the\nline between a notebook and an application, and ARO draws it explicitly\nrather than letting you discover it at 2 a.m.\n\nFor the same reason, blocking statements are refused. `Keepalive` (and\nits aliases `Wait` and `Block`) waits for a signal that, in a cell, is\na spinner that never stops. The next cell is *supposed* to fail:"
+    },
+    {
+      "id" : "nb28-c13",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\nKeepalive the <application> for the <events>."
+    },
+    {
+      "id" : "nb28-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The message is not a stack trace — it explains, offers the escape hatch\n(`ARO_REPL_ALLOW_BLOCKING=1`), and notes that services started by an\nearlier statement keep running without it.\n\n## Errors on the wire\n\nARO's error text is already the message\n([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)): a block naming\nthe feature, the statement, and the trace. The protocol **splits** it\nrather than rewriting it — first line as `evalue`, whole block as\n`traceback` — so nothing the runtime said is lost on the way.\n\nBecause the first line becomes the headline, compile diagnostics arrive\n**ranked**: errors before warnings before notes, root causes before\nconsequential findings. A failed statement leaves hygiene fallout\nbehind it (`Variable 'x' is defined but never used`), and ranking keeps\nthat fallout visible without letting it take the headline slot:\n\n```jsonc\n{\"id\":4,\"type\":\"execute\",\"code\":\"Log \\\"one\\\" to the <console>.\\nCompute the <bad: sparkle> from \\\"x\\\".\"}\n{\"type\":\"result\",\"id\":4,\"status\":\"error\",\"durationMs\":7.5,\n \"error\":{\"ename\":\"AROError\",\n          \"evalue\":\"Unknown Compute qualifier 'sparkle'\",\n          \"traceback\":[\"Unknown Compute qualifier 'sparkle'\",\n                       \"Variable 'bad' is defined but never used\",\n                       \"Feature set '_repl_temp_' has no Return or Throw statement\"]}}\n```\n\nNotice what did **not** happen: `\"one\"` was never printed. The cell\nfailed to *compile*, so nothing in it ran — all or nothing. A cell that\nfails at *run* time is the opposite: it keeps the output it had already\nproduced, and the deferred-failure warning arrives on stderr first.\n\nTry one — a qualifier that does not exist, in a namespace that is\nclosed on purpose ([03](03-compute-and-qualifiers.repl)):"
+    },
+    {
+      "id" : "nb28-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\nCompute the <foam-art: sparkle> from \"flat white\"."
+    },
+    {
+      "id" : "nb28-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Output capture, and why ordering is guaranteed\n\n`Log` writes to standard output. So does the protocol. Getting one out\nof the other's way takes two layers, and the notebook needs both:\n\n1. **`ConsoleObject.sink`** — a task-local the runtime already consults\n   before falling back to a descriptor write, installed around every\n   execution. Console output becomes a `stream` message at the moment it\n   happens. Exact ordering, every platform.\n2. **Descriptor redirection** (POSIX only) — fds 1 and 2 replaced with\n   pipes drained into `stream` messages, catching everything the sink\n   cannot see: stray `print`s, plugin output, deferred-failure warnings.\n\nThe ordering guarantee — *every `stream` for a request precedes that\nrequest's `result`* — is then enforced with a sentinel: before\nanswering, the server writes a marker into the pipe and waits for the\nreader to reach it. That is the difference between an ordering that is\ntrue and one that is merely likely.\n\n## Display bundles\n\n`display` is a MIME bundle, and which keys appear depends on the value:\n\n| Key | When | Rendered by |\n|-----|------|-------------|\n| `text\/plain` | always, on a displayed value | `ResponseFormatter` in `.human` — the renderer `aro run` uses |\n| `application\/json` | when the value encodes | the runtime's JSON encoding |\n| `text\/html` | tabular values only | records become a table; one record becomes key\/value rows |\n\nA list of *scalars* gets no `text\/html` on purpose: a one-column table\nis noise. Run the next cell in JupyterLab or SOLARO and you get a real\ntable; run it in a terminal client and you get the same data as text —\nsame bundle, different key chosen by the front-end:"
+    },
+    {
+      "id" : "nb28-c17",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <fleet> with [\n    { shop: \"kiel-01\", open: 19, status: \"backlog\" },\n    { shop: \"berlin-01\", open: 7, status: \"ok\" },\n    { shop: \"hamburg-02\", open: 0, status: \"ok\" }\n].\nFilter the <fleet-busy> from the <fleet> where <open> > 5."
+    },
+    {
+      "id" : "nb28-c18",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The two kernels\n\nBoth reach Jupyter; both run cells through the same cell engine, so a\ncell behaves identically under either.\n\n**`aro kernel` — native, and the default.** It speaks Jupyter's wire\nprotocol (5.3) over ZeroMQ directly. No Python anywhere:\n\n```bash\naro kernel install          # writes the kernelspec into your Jupyter data dir\njupyter kernelspec list     # should now list \"aro\"\n```\n\nThe front-end then launches `aro kernel --connection-file …` itself.\nlibzmq is a system dependency (`brew install zeromq` \/\n`apt install libzmq3-dev`), declared the same way libgit2 already is;\nmessages are signed with HMAC-SHA256, and one whose signature does not\nverify is **dropped, not answered**. Control gets its own thread, so\nshutdown stays answerable while a cell is still running. Windows is\nexcluded — the kernel shares the REPL's POSIX capture machinery.\n\n**`Editor\/jupyter-aro` — the Python shim.** An `ipykernel` subclass\nowning one `aro repl --json` subprocess. It predates the native kernel\nand remains the Windows path and the reference client for the JSON\nprotocol (`pip install` the released wheel, then\n`python -m aro_kernel.install --user`). It does **no ARO parsing** —\nsplitting a cell into units, deciding what to display, completion,\nerror text all stay on the ARO side, which is why two kernels written\nin two languages cannot drift apart in behaviour.\n\n**Interrupt** is the honest part. A cell blocked inside the runtime\ncannot be unwound, so both kernels declare *signal* interrupt: the\nprocess is killed and replaced, and says so. Your variables and\ndefinitions are gone. An honest restart beats a hang or a silent\namnesia — one more reason a fixture on disk beats a value living in\ncell 14.\n\nOn its comm channel the native kernel adds two things worth knowing\nabout. **Widgets**: an `ipywidgets` subset with one idea, *controls\nbound to session variables* — `:widget slider <volume> 0 11` renders an\nIntSlider, dragging it makes the kernel write `<volume>`, and the next\ncell computes with the new value. The binding is that variable's *only*\nwriter, which is what keeps a slider-fed value coherent under\nimmutability. **A debugger that admits what it cannot do**:\n`debug_request` tunnels DAP and serves what is true today (variable\ninspector, `evaluate`), but **breakpoints answer `verified: false`**\nwith the reason in the message — cells run to completion, and pausing\nmid-cell needs `aro debug`'s pause engine\n([26](26-observability-and-deployment.repl)) wired in."
+    },
+    {
+      "id" : "nb28-c19",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\n- **The protocol is the product; the notebook is a client.** Seven\n  request types over newline-framed JSON is a surface you can implement\n  in an afternoon, in any language — and the validator that checks this\n  course is exactly that: a hundred lines of Python that send `execute`\n  and read `status`.\n- **Make the transport boring and the semantics shared.** Both kernels\n  route through one cell engine, so \"what a cell means\" has a single\n  definition. The alternative — semantics reimplemented per front-end —\n  is how notebook ecosystems end up with cells that behave differently\n  depending on who opened them.\n- **Refuse honestly.** `Keepalive` in a cell, breakpoints that cannot\n  stop, socket handlers that cannot fire, an interrupt that admits it is\n  a restart: each is a place the system says *no, and here is why*\n  instead of hanging or half-working. That is ARO's error philosophy,\n  applied to a protocol.\n\n## Real-world example: what a client does with the results\n\nStrip the transport away and driving a session is bookkeeping: send\ncells, keep the `id` → `result` mapping, and decide what the run means.\nThat is the validator's whole job, and it is a `Filter` and a `sum`.\nHere is the shape, over a transcript of results a client just\ncollected:"
+    },
+    {
+      "id" : "nb28-c20",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <run-log> with [\n    { cell: \"nb28-c02\", status: \"ok\",    ms: 6 },\n    { cell: \"nb28-c06\", status: \"ok\",    ms: 2 },\n    { cell: \"nb28-c08\", status: \"ok\",    ms: 6 },\n    { cell: \"nb28-c13\", status: \"error\", ms: 1 },\n    { cell: \"nb28-c15\", status: \"error\", ms: 7 }\n].\n\nCreate the <expected-failures> with [\"nb28-c13\", \"nb28-c15\"].\n\nFilter the <run-errors> from the <run-log> where <status> = \"error\".\nMap the <error-cells: cell> from the <run-errors>.\nCompute the <unexpected: difference> from <error-cells> with <expected-failures>.\nCompute the <unexpected-count: length> from <unexpected>.\n\nMap the <run-times: ms> from the <run-log>.\nCompute the <run-total: sum> from <run-times>.\nCompute the <run-count: length> from <run-log>.\n\nLog \"cells=${<run-count>} total-ms=${<run-total>}\" to the <console>.\nLog \"[ok]   every failure was an expected one\" to the <console> when <unexpected-count> = 0.\nLog \"[FAIL] unexpected failures: ${<unexpected-count>}\" to the <console> when <unexpected-count> > 0.\nLog <unexpected> to the <console> when <unexpected-count> > 0."
+    },
+    {
+      "id" : "nb28-c21",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two cells in this notebook failed on purpose — the `Keepalive` refusal\nand the invented qualifier — and both are named in\n`<expected-failures>`, so the verdict is green. The real validator\nspells that list differently: a cell that must fail carries\n`(* expect-error *)` in its own source, so the expectation lives beside\nthe code instead of in a list someone has to maintain. Same logic,\nbetter place to keep it.\n\nThe set difference is doing the work that matters. \"5 cells, 2 errors\"\ntells you nothing; \"2 errors, both expected\" is a passing build, and \"2\nerrors, one of them new\" is a regression with a name attached. Every CI\nsystem you will ever use is that comparison wearing a different hat —\nand [29 — Notebook-Driven Workflows](29-notebook-driven-workflows.repl)\ntakes it out of the notebook and into the pipeline.\n\n## Related\n\n- Next: [29 — Notebook-Driven Workflows](29-notebook-driven-workflows.repl)\n- Builds on: [27 — Notebooks & Cells](27-notebooks-and-cells.repl) (the document),\n  [09 — Feature Sets & Events](09-feature-sets-and-events.repl) (handlers and Emit),\n  [10 — User-Defined Actions](10-user-defined-actions.repl) (`Application.<Name>`),\n  [11 — Set Operations & Merging](11-set-operations-and-merging.repl) (`difference`)\n- Language Guide: [Chapter 13 — The Event Bus](..\/Book\/TheLanguageGuide\/Chapter13-EventBus.md),\n  [Chapter 24 — Custom Actions](..\/Book\/TheLanguageGuide\/Chapter24-CustomActions.md),\n  [Chapter 39 — Concurrency](..\/Book\/TheLanguageGuide\/Chapter39-Concurrency.md)\n- Wiki: [Guide — Events](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Events)\n- Specification: [ARO-0091 — Jupyter Kernel & Machine-Readable REPL](..\/Proposals\/ARO-0091-jupyter-kernel.md),\n  [ARO-0088 — Concurrency Model](..\/Proposals\/ARO-0088-concurrency-model.md),\n  [ARO-0006 — Error Philosophy](..\/Proposals\/ARO-0006-error-philosophy.md)\n- In the repository: `Editor\/jupyter-aro\/` (the shim, its README, and two\n  example `.ipynb` notebooks), `Learning\/validate.py` (a small client of it)"
+    }
+  ],
+  "version" : 1
+}

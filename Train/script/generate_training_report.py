@@ -120,6 +120,51 @@ def text_page(pdf, title, body):
     plt.close(fig)
 
 
+def notebook_coverage(run_dirs):
+    """Per-notebook mining coverage written by 32_notebook_pairs.py.
+
+    Not a chart file like the others — the notebook stage is a script, not a
+    notebook, so it has no plot to drop in a run dir. The numbers are read
+    from its coverage.json and drawn here.
+    """
+    path = REPO / "Train" / "data" / "32_notebooks" / "coverage.json"
+    if not path.exists():
+        path = newest("32_notebooks", ".json", run_dirs)
+    if not path or not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def notebook_page(pdf, coverage, passage):
+    """One page: verified vs. unverified cells per Learning notebook."""
+    notebooks = coverage.get("notebooks", {})
+    names = sorted(notebooks)
+    verified = [notebooks[n].get("ok", 0) for n in names]
+    unusable = [notebooks[n].get("code_cells", 0) - v
+                for n, v in zip(names, verified)]
+
+    fig = plt.figure(figsize=(8.27, 11.69))
+    fig.text(0.08, 0.95, "Notebook Corpus Coverage (Learning/*.repl)",
+             fontsize=16, fontweight="bold", va="top")
+    ax = fig.add_axes([0.30, 0.45, 0.64, 0.45])
+    positions = range(len(names))
+    ax.barh(list(positions), verified, color="#2e7d32", label="verified output")
+    ax.barh(list(positions), unusable, left=verified, color="#bdbdbd",
+            label="not reproducible / expected error")
+    ax.set_yticks(list(positions))
+    ax.set_yticklabels([n.replace(".repl", "") for n in names], fontsize=6)
+    ax.invert_yaxis()
+    ax.set_xlabel("code cells", fontsize=8)
+    ax.tick_params(axis="x", labelsize=7)
+    ax.legend(fontsize=7, loc="lower right")
+    fig.text(0.08, 0.39, wrap(passage), fontsize=10.5, va="top")
+    pdf.savefig(fig)
+    plt.close(fig)
+
+
 def chart_page(pdf, title, img_path, passage):
     fig = plt.figure(figsize=(8.27, 11.69))
     fig.text(0.08, 0.95, title, fontsize=16, fontweight="bold", va="top")
@@ -185,6 +230,31 @@ def main():
                 fallback=f"{title}: see chart.")
             chart_page(pdf, title, img, passage)
             print(f"[report] added {title} ({img.name})")
+
+        coverage = notebook_coverage(run_dirs)
+        if coverage:
+            totals = coverage.get("totals", {})
+            check = coverage.get("aro_check") or {}
+            context = (
+                f"{len(coverage.get('notebooks', {}))} Learning notebooks were "
+                f"executed through `aro repl --json`; "
+                f"{totals.get('ok')} of {totals.get('code_cells')} code cells "
+                f"produced an output reproducible across "
+                f"{coverage.get('repeats')} runs "
+                f"({totals.get('nondeterministic')} were not reproducible, "
+                f"{totals.get('failed')} failed or are deliberate errors). "
+                f"Pairs by type: {json.dumps(coverage.get('pairs_by_type', {}))}."
+                + (f" Of the ARO emitted in those pairs, {check.get('passed')}"
+                   f"/{check.get('checked')} blocks pass `aro check`."
+                   if check else ""))
+            passage = llm.ask(
+                "Write 2-3 sentences for a training report explaining ONLY the "
+                "'Notebook Corpus Coverage' chart. It shows, per notebook of the "
+                "ARO Learning course, how many code cells produced a verified "
+                "reproducible output that became training data. Data: " + context,
+                fallback=context)
+            notebook_page(pdf, coverage, passage)
+            print("[report] added Notebook Corpus Coverage")
 
         conclusion = llm.ask(
             "Write a 3-4 sentence conclusion for this ARO model training round, noting the main "

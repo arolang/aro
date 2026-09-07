@@ -1,0 +1,133 @@
+{
+  "cells" : [
+    {
+      "id" : "nb27-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 27 — Notebooks & Cells\n\nYou have been reading one of these for twenty-six notebooks. This one\nis about the notebook itself.\n\nBrew & Bytes runs on runbooks: the nightly export check, the price\nsync, the \"what happened in Kiel at 07:40\" post-mortem. They used to\nbe wiki pages, and wiki pages lie — the command in step 3 was renamed\ntwo releases ago and nobody noticed, because prose does not fail. HQ\nnow writes them as `.repl` files instead: prose that explains the step,\nnext to a live ARO session that actually performs it. A runbook that\nlies fails in CI.\n\nA notebook is a small, honest data structure. It is a list of **cells**,\neach either **markdown** (prose, never executed) or **code** (ARO,\nexecuted against a session that remembers everything earlier cells\nbound). Run a cell and its outputs are captured back into the file,\nbeside the source that produced them — so the document carries its own\nevidence.\n\nIn this notebook: cells and the session, automatic display, execution\ncounts and durations, and the `.repl` file itself — which you will\nopen, read, and dissect with ARO."
+    },
+    {
+      "id" : "nb27-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <shop> with \"kiel-01\".\nCompute the <banner: uppercase> from <shop>."
+    },
+    {
+      "id" : "nb27-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nTwo statements, one cell, and something printed that you never asked\nfor. Four things are worth naming:\n\n- **The cell is the unit.** The whole cell arrives at the session at\n  once and is executed as one feature-set body — not statement by\n  statement. That matters for speed: statements in a body defer and\n  force independently ([ARO-0088](..\/Proposals\/ARO-0088-concurrency-model.md)),\n  so two slow statements in one cell overlap. Splitting the cell would\n  have serialized them.\n- **The last value got displayed.** `Compute` is an *OWN* action — it\n  produces a value — so the session showed it without a `Return` and\n  without a `Log`. This is the notebook's one piece of magic, and it is\n  narrow on purpose: only the last statement, and only when its action\n  role is `own` or `request`. Nothing is displayed after `Log`, `Store`,\n  or `Publish`, because showing something there would either duplicate\n  the output or invent a result the statement never had.\n- **The session remembers.** `<shop>` is bound for the rest of this\n  notebook. Cell boundaries are an editing convenience; the session\n  underneath is continuous.\n- **The run was measured.** The kernel reports how long the cell took,\n  and the editor stamps the cell with a counter — the `[1]` badge — so\n  you can see the order cells actually ran in, which is not always the\n  order they appear in."
+    },
+    {
+      "id" : "nb27-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants: display versus Log\n\n`Log` writes to the console as it happens; the display is the value the\ncell *ended* with. A cell can do both, and the order is guaranteed:\nevery line of console output arrives before the cell's final value.\n\nWatch the ordering, and notice that `<shop>` is still here from the\ncell above:"
+    },
+    {
+      "id" : "nb27-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Log \"evt=open shop=${<shop>} tills=3\" to the <console>.\nCompute the <shop-label: length> from <shop>."
+    },
+    {
+      "id" : "nb27-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Reverse those two statements and the cell prints the same line but\ndisplays nothing — the last statement would be a `Log`. That is the\nwhole rule, and it is the reason a well-shaped notebook cell tends to\nend on the value it is about.\n\n## The file, opened\n\nEverything you just did is stored in a plain JSON document. Here is the\nshape, complete:\n\n```jsonc\n{\n  \"version\": 1,                       \/\/ format version; a decoder refuses what it doesn't know\n  \"cells\": [\n    { \"id\": \"nb27-c01\",               \/\/ unique within the file\n      \"kind\": \"markdown\",             \/\/ \"markdown\" | \"code\"\n      \"source\": \"# 27 — Notebooks…\",  \/\/ the text you wrote\n      \"outputs\": [] },                \/\/ markdown cells always carry []\n    { \"id\": \"nb27-c02\",\n      \"kind\": \"code\",\n      \"source\": \"Compute the <banner: uppercase> from <shop>.\",\n      \"outputs\": [ \/* captured below *\/ ],\n      \"executionCount\": 1,            \/\/ the [1] badge; absent = never run\n      \"durationMs\": 5.9 }             \/\/ what the last run cost\n  ]\n}\n```\n\nTwo fields are optional and both mean the same thing by their absence:\na cell with no `executionCount` has never run. The rest is required,\nwhich is why the file survives being hand-edited — and why the notebook\nyou are reading can be read *by* ARO. There is a small runbook in\n`data\/sample-notebook.json`; let's open it."
+    },
+    {
+      "id" : "nb27-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <runbook> from \"data\/sample-notebook.json\".\nExtract the <runbook-version> from the <runbook: version>.\nExtract the <runbook-cells> from the <runbook: cells>.\nCompute the <cell-count: length> from <runbook-cells>.\nLog \"version=${<runbook-version>} cells=${<cell-count>}\" to the <console>."
+    },
+    {
+      "id" : "nb27-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "No parser, no schema object: the `.json` extension selected the JSON\nreader ([18 — Format-Aware I\/O](18-format-aware-io.repl)) and\n`<runbook>` came back as a dictionary. `version` is an Int, `cells` is\na list of records, and from here it is an ordinary collection —\neverything [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\ntaught applies to a notebook.\n\nCheck the version before you trust the shape. A decoder that reads a\n`version: 2` file as if it were version 1 does not fail, it\n*misreads* — which is the failure mode worth spending one comparison\nto avoid.\n\n## Cells are rows\n\nSplitting a notebook by `kind` is a `Filter`:"
+    },
+    {
+      "id" : "nb27-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Filter the <code-cells> from the <runbook-cells> where <kind> = \"code\".\nFilter the <prose-cells> from the <runbook-cells> where <kind> = \"markdown\".\nCompute the <code-count: length> from <code-cells>.\nCompute the <prose-count: length> from <prose-cells>.\nLog \"code=${<code-count>} prose=${<prose-count>}\" to the <console>.\nMap the <cell-ids: id> from the <runbook-cells>."
+    },
+    {
+      "id" : "nb27-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Four cells: two of prose, two of code, alternating — the rhythm this\nwhole course is written in.\n\n## Outputs: what a run leaves behind\n\nA code cell's `outputs` is a list, in arrival order, of everything the\nrun produced. There are exactly three kinds:\n\n| `kind` | Fields | Is |\n|--------|--------|----|\n| `stream` | `streamName` (`stdout`\/`stderr`), `text` | console output, as it happened |\n| `result` | `plainText`, `jsonValue` | the displayed value — the bundle from ARO-0091 |\n| `error` | `errorName`, `errorValue`, `traceback` | the run that did not finish |\n\nThe ordering rule from the protocol holds in the file too: every\n`stream` for a cell precedes its `result`, and a cell ends with at most\none `result` **or** one `error`, never both. So the outputs list reads\ntop to bottom like the cell's own transcript.\n\nThe runbook's first code cell logged a line and ended on a value —\none stream, one result. Take it apart:"
+    },
+    {
+      "id" : "nb27-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Extract the <first-code: first> from the <code-cells>.\nExtract the <first-outputs> from the <first-code: outputs>.\nFilter the <stream-outputs> from the <first-outputs> where <kind> = \"stream\".\nFilter the <result-outputs> from the <first-outputs> where <kind> = \"result\".\nExtract the <stream-one: first> from the <stream-outputs>.\nExtract the <stream-text> from the <stream-one: text>.\nExtract the <result-one: first> from the <result-outputs>.\nExtract the <result-plain> from the <result-one: plainText>.\nLog \"stream: ${<stream-text>}\" to the <console>.\nLog \"result: ${<result-plain>}\" to the <console>."
+    },
+    {
+      "id" : "nb27-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "`plainText` is the `text\/plain` half of the display bundle — rendered\nby the same formatter the runtime uses for console output, so the\nnotebook shows a value exactly the way `aro run` would. `jsonValue`\ncarries the `application\/json` half, present whenever the value\nencoded, and it is what a machine reading your notebook should parse.\n[28 — The Kernel & the Protocol](28-the-kernel-and-the-protocol.repl)\ntakes the bundle apart properly.\n\n## Execution counts, and the trap underneath them\n\n`executionCount` is a session-order counter, not a position. Cell 9 can\ncarry `[2]` and cell 2 can carry `[9]` — that is a notebook telling you\nthe truth about how it was run, and it is the classic notebook hazard:\na document whose cells were executed out of order can show results that\nno top-to-bottom run reproduces.\n\nARO blunts it. Variables are immutable ([04](04-immutability.repl)),\nand the session extends that across cells: re-running a cell that binds\na name that is already bound does not silently shadow the old value —\nit stops, with ARO's own immutability message and the advice to bind a\nnew name or reset the session. The out-of-order run that quietly\nproduces a different number in a Python notebook is, here, a cell that\nrefuses.\n\nWhat still needs your discipline: **restart and run all before you\ntrust it.** A missing `executionCount` — and its tell, an empty\n`outputs` — marks a cell that has never run at all:"
+    },
+    {
+      "id" : "nb27-c13",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "for each <cell> in <code-cells> {\n    Extract the <cell-id> from the <cell: id>.\n    Extract the <cell-outputs> from the <cell: outputs>.\n    Compute the <output-count: length> from <cell-outputs>.\n    Log \"STALE    ${<cell-id>} — no captured outputs\" to the <console> when <output-count> = 0.\n    Log \"CAPTURED ${<cell-id>} — ${<output-count>} outputs on file\" to the <console> when <output-count> > 0.\n}"
+    },
+    {
+      "id" : "nb27-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "One of the runbook's two code cells has never been run, and the file\nsays so honestly rather than pretending. That is also how the notebooks\nin this directory ship: sources with `\"outputs\": []`, so the repository\nstores the *course*, not one machine's transcript of it. Outputs appear\nwhen you run them, and the validator runs every one of them on every\ncommit ([29 — Notebook-Driven Workflows](29-notebook-driven-workflows.repl)).\n\n## Discussion\n\n**A notebook is a document and a program, and the tension is the\npoint.** Prose can claim anything; the cell beneath it either runs or\ndoes not. Every form of documentation drifts from its subject except\nthe kind that is executed — which is why runnable notebooks have taken\nover teaching, data analysis, and increasingly operations, in every\nindustry that ships software.\n\nThree properties earn their keep:\n\n- **It diffs like source.** The file is pretty-printed JSON with sorted\n  keys, so a review shows the sentence you changed and the statement you\n  changed, not a re-serialized blob. Outputs make diffs noisier — which\n  is a real cost, and the reason the course ships without them.\n- **It carries its evidence.** A bug report with captured outputs is a\n  reproduction, not a description. The same file opened by a colleague\n  shows what you saw before they run anything.\n- **It is one session, not one file.** Definitions and bindings\n  accumulate across cells, which is what makes the composition in\n  [10 — User-Defined Actions](10-user-defined-actions.repl) work in a\n  notebook at all: define an action in one cell, call it in the next.\n\nAnd one honest limitation: a session is a process. Close the notebook\nand the bindings are gone; the file keeps the source and the outputs,\nnever the state. Anything you must not lose belongs in a fixture, a\nrepository, or a file — not in cell 14's variable.\n\n## Real-world example: auditing the runbooks\n\nHQ has forty runbooks and one recurring question before an incident\nreview: *is this document current, or is it a screenshot from March?*\nThe audit is mechanical — open the file, check the format version,\ncount what is in it, and flag every code cell that carries no evidence\nof ever having run."
+    },
+    {
+      "id" : "nb27-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <audit-name> with \"kiel-01 morning check\".\nRead the <audit-doc> from \"data\/sample-notebook.json\".\nExtract the <audit-version> from the <audit-doc: version>.\nExtract the <audit-cells> from the <audit-doc: cells>.\nFilter the <audit-code> from the <audit-cells> where <kind> = \"code\".\nCompute the <audit-total: length> from <audit-cells>.\nCompute the <audit-code-count: length> from <audit-code>.\n\nLog \"=== runbook audit: ${<audit-name>} ===\" to the <console>.\nLog \"format version ${<audit-version>}, ${<audit-total>} cells, ${<audit-code-count>} of them code\" to the <console>.\n\nfor each <audit-cell> in <audit-code> {\n    Extract the <audit-id> from the <audit-cell: id>.\n    Extract the <audit-source> from the <audit-cell: source>.\n    Extract the <audit-outputs> from the <audit-cell: outputs>.\n    Compute the <audit-lines: lines> from <audit-source>.\n    Compute the <audit-line-count: length> from <audit-lines>.\n    Compute the <audit-output-count: length> from <audit-outputs>.\n    Log \"  ${<audit-id>} — source lines: ${<audit-line-count>}, captured outputs: ${<audit-output-count>}\" to the <console>.\n    Log \"  ^ never run, so nothing here shows the step still works\" to the <console> when <audit-output-count> = 0.\n}\n\nFilter the <audit-prose> from the <audit-cells> where <kind> = \"markdown\".\nMap the <audit-prose-sources: source> from the <audit-prose>.\nCompute the <audit-prose-text: join> from <audit-prose-sources> with { separator: \" \" }.\nCompute the <audit-prose-size: length> from <audit-prose-text>.\nLog \"prose: ${<audit-prose-size>} characters explaining ${<audit-code-count>} steps\" to the <console>."
+    },
+    {
+      "id" : "nb27-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "One flagged step, a prose-to-code ratio you can watch over time, and\nno human read the file to produce any of it. Scale that to forty\nrunbooks and it becomes a job that runs nightly and opens a ticket —\nwhich is the shape every serious documentation practice eventually\nconverges on: **treat documents as data, and check them the way you\ncheck code.**\n\nThe dissection also makes a quieter point. The notebook format is small\nenough to read in twenty lines of ARO, and that is a design choice, not\nan accident: `.repl` keeps ARO's display bundle as named fields instead\nof a MIME dictionary precisely so the file stays legible to a human, a\ndiff tool, and a `Filter` statement alike.\n\n## Related\n\n- Next: [28 — The Kernel & the Protocol](28-the-kernel-and-the-protocol.repl)\n- Builds on: [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n  (Filter, Map over the cell list),\n  [18 — Format-Aware I\/O](18-format-aware-io.repl) (reading the file at all),\n  [04 — Immutability](04-immutability.repl) (why out-of-order cells refuse)\n- Language Guide: [Chapter 3 — Getting Started](..\/Book\/TheLanguageGuide\/Chapter03-GettingStarted.md),\n  [Chapter 34 — Data Pipelines](..\/Book\/TheLanguageGuide\/Chapter34-DataPipelines.md),\n  [Chapter 21 — Format-Aware File I\/O](..\/Book\/TheLanguageGuide\/Chapter21-FormatAwareIO.md)\n- Wiki: [Language Tour](https:\/\/github.com\/arolang\/aro\/wiki\/Language-Tour)\n- Specification: [ARO-0091 — Jupyter Kernel & Machine-Readable REPL](..\/Proposals\/ARO-0091-jupyter-kernel.md),\n  [ARO-0040 — Format-Aware I\/O](..\/Proposals\/ARO-0040-format-aware-io.md)\n- The fixture dissected here: [`data\/sample-notebook.json`](data\/sample-notebook.json)"
+    }
+  ],
+  "version" : 1
+}

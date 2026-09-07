@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from collections import Counter as _Counter
+from typing import NamedTuple as _NamedTuple
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +33,8 @@ TRAIN_ROOT           = SCRIPT_DIR.parent              # .../Train
 ARO_ROOT             = (TRAIN_ROOT / '..').resolve()   # .../ARO-Train
 EXAMPLES_DIR         = ARO_ROOT / 'Examples'
 BOOK_ROOT            = ARO_ROOT / 'Book'
+PROPOSALS_ROOT       = ARO_ROOT / 'Proposals'
+LEARNING_DIR         = ARO_ROOT / 'Learning'   # the .repl notebook course
 
 
 def _resolve_aro_application_root() -> Path:
@@ -123,8 +126,13 @@ SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
 #       (1200→3000) and syntax_qa (900→2500) so the distinct new examples
 #       aren't dropped, and bound correction at 4000 so the heavy error→fix
 #       set stays the dominant category without overwhelming the mix.
+#   v4 (2026-09-07): NB32 mines the Learning/ .repl notebook course. Its four
+#       task types are declared explicitly (rather than inheriting
+#       DEFAULT_TYPE_CAP) so the caps file stays the readable inventory of
+#       what the model is trained to do. All uncapped: the whole course is a
+#       few hundred pairs, and notebook skills have no other source.
 # Bump TYPE_CAPS_VERSION whenever the caps change.
-TYPE_CAPS_VERSION = 'v3-2026-07-24'
+TYPE_CAPS_VERSION = 'v4-2026-09-07'
 
 TYPE_CAPS = {
     'code_generation':     3000,   # raised — keep distinct eval-derived code
@@ -136,6 +144,11 @@ TYPE_CAPS = {
     'debugging':           None,   # uncapped — always useful
     'correction':          4000,   # bounded — dominant error→fix, not overwhelming
     'full_application':    None,   # uncapped — plan → complete multi-file app
+    # ── Notebook skills (NB32, mined from Learning/*.repl) ──────────────────
+    'notebook_output':     None,   # uncapped — predict a cell's real output
+    'notebook_cell':       None,   # uncapped — write the next cell of a session
+    'notebook_qa':         None,   # uncapped — questions about the course
+    'notebook_authoring':  None,   # uncapped — emit .repl JSON (ARO-0091)
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
 
@@ -292,6 +305,68 @@ def load_knowledge():
         return json.load(f)
 
 
+# ── Corpus source registry ────────────────────────────────────────────────────
+# Every root the pipeline mines, declared once. This used to be a literal list
+# inside corpus_preflight(), which meant a corpus could be added to a notebook
+# without ever being preflighted — Learning/ (the .repl notebook course) sat
+# unmined and unchecked for exactly that reason. Declaring the sources makes
+# "what do we train on, and who consumes it" answerable from one place, and
+# `aro_corpus_summary()` prints it.
+
+class CorpusSource(_NamedTuple):
+    label: str
+    path: Path
+    required: bool
+    kind: str           # 'repo' | 'code' | 'docs' | 'notebooks' | 'apps'
+    glob: str           # counted in the preflight report ('' = don't count)
+    consumers: tuple    # notebook tags that mine it
+
+
+def _corpus_sources() -> tuple:
+    """Built as a function so ARO_APPLICATION_ROOT's `required` flag can follow
+    the environment at call time rather than import time."""
+    return (
+        CorpusSource('ARO-Lang repository', ARO_ROOT, True, 'repo', '',
+                     ('NB03',)),
+        CorpusSource('Examples/', EXAMPLES_DIR, True, 'code', '*.aro',
+                     ('NB03', 'NB09', 'NB30')),
+        CorpusSource('Book/', BOOK_ROOT, True, 'docs', '*.md',
+                     ('NB03', 'NB10', 'NB29')),
+        CorpusSource('Proposals/', PROPOSALS_ROOT, True, 'docs', '*.md',
+                     ('NB03', 'NB29')),
+        CorpusSource('Sources/ARORuntime/Actions',
+                     ARO_ROOT / 'Sources' / 'ARORuntime' / 'Actions', True,
+                     'code', '*.swift', ('NB02', 'NB04')),
+        CorpusSource('Learning/', LEARNING_DIR, True, 'notebooks', '*.repl',
+                     ('NB32',)),
+        CorpusSource('ARO-Application', ARO_APPLICATION_ROOT, None, 'apps',
+                     '*.aro', ('NB03', 'NB13')),
+    )
+
+
+CORPUS_SOURCES = _corpus_sources()
+
+
+def corpus_source(label: str) -> CorpusSource:
+    """Look one source up by label; raises KeyError when it is not declared."""
+    for source in _corpus_sources():
+        if source.label == label:
+            return source
+    raise KeyError(f'no corpus source labelled {label!r} — '
+                   f'declared: {[s.label for s in CORPUS_SOURCES]}')
+
+
+def corpus_summary() -> str:
+    """One line per declared corpus source: what it is and who mines it."""
+    lines = []
+    for s in _corpus_sources():
+        n = f' ({sum(1 for _ in s.path.rglob(s.glob))} {s.glob})' if (
+            s.glob and s.path.exists()) else ''
+        lines.append(f'{s.label:<30} {s.kind:<10} '
+                     f'{",".join(s.consumers):<20} {s.path}{n}')
+    return '\n'.join(lines)
+
+
 # ── Corpus preflight (issue #385) ─────────────────────────────────────────────
 
 def corpus_preflight(require_application=None, raise_on_missing=True):
@@ -309,31 +384,26 @@ def corpus_preflight(require_application=None, raise_on_missing=True):
     if require_application is None:
         require_application = os.environ.get('ARO_APPLICATION_OPTIONAL', '') != '1'
 
-    checks = [
-        ('ARO-Lang repository',       ARO_ROOT,                                      True),
-        ('Examples/',                 EXAMPLES_DIR,                                  True),
-        ('Book/',                     BOOK_ROOT,                                     True),
-        ('Proposals/',                ARO_ROOT / 'Proposals',                        True),
-        ('Sources/ARORuntime/Actions', ARO_ROOT / 'Sources' / 'ARORuntime' / 'Actions', True),
-        ('ARO-Application',           ARO_APPLICATION_ROOT,                          require_application),
-    ]
-
     print('Corpus preflight check:')
     report = {}
     missing_required = []
-    for label, path, required in checks:
-        exists = path.exists()
+    for source in _corpus_sources():
+        # `required=None` means "ask the environment" — only ARO-Application does.
+        required = require_application if source.required is None else source.required
+        exists = source.path.exists()
         detail = ''
-        if exists and path.is_dir():
-            if label in ('Examples/', 'ARO-Application'):
-                detail = f'  ({sum(1 for _ in path.rglob("*.aro"))} .aro files)'
-            elif label in ('Book/', 'Proposals/'):
-                detail = f'  ({sum(1 for _ in path.rglob("*.md"))} .md files)'
+        if exists and source.path.is_dir() and source.glob:
+            detail = (f'  ({sum(1 for _ in source.path.rglob(source.glob))} '
+                      f'{source.glob} files)')
         mark = '✓' if exists else ('✗' if required else '–')
-        print(f'  {mark}  {label:<30} {path}{detail}')
-        report[label] = {'path': str(path), 'exists': exists, 'required': bool(required)}
+        print(f'  {mark}  {source.label:<30} {source.path}{detail}')
+        report[source.label] = {
+            'path': str(source.path), 'exists': exists,
+            'required': bool(required), 'kind': source.kind,
+            'consumers': list(source.consumers),
+        }
         if required and not exists:
-            missing_required.append((label, path))
+            missing_required.append((source.label, source.path))
 
     if missing_required:
         details = '\n'.join(f'  - {label}: {path}' for label, path in missing_required)
@@ -1393,6 +1463,10 @@ def aro_check_snippet(code, timeout=10, extra_files=None):
         return False, 'timeout'
 
 
+# Leading `(* … *)` comment banners, as many as a block opens with.
+_LEADING_COMMENTS_RE = _re.compile(r'^(?:\s*\(\*.*?\*\)\s*)+', _re.DOTALL)
+
+
 def auto_wrap_aro(code):
     """Wrap bare ARO statements in a feature set if they don't already have one.
 
@@ -1402,8 +1476,15 @@ def auto_wrap_aro(code):
     """
     stripped = code.strip()
 
-    # Already has a feature set wrapper — use as-is
-    if stripped.startswith('(') and '{' in stripped.split('\n')[0]:
+    # Already has a feature set wrapper — use as-is. Look *past* leading
+    # comments before deciding: docs and notebook prose habitually open a
+    # block with a `(* main.aro *)` banner, and a banner starting with `(`
+    # used to be mistaken for a fragment. Those blocks were then wrapped in a
+    # feature set they already had, producing nested headers that fail
+    # `aro check` — so valid documented code was being dropped by the gate
+    # that exists to keep invalid code out.
+    body = _LEADING_COMMENTS_RE.sub('', stripped).lstrip()
+    if body.startswith('(') and '{' in body.split('\n')[0]:
         return code, False
     # Template placeholders
     if '<statements>' in stripped or '<statement' in stripped.lower():
