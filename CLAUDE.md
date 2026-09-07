@@ -40,6 +40,14 @@ aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linu
 aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to the binary; rpath=$ORIGIN.
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
+# Testing `aro build` against local runtime changes: build the runtime
+# archive too, or the linker silently picks up the INSTALLED one.
+swift build --product aro --product ARORuntime
+#   `aro build` links libARORuntime.a by search order, and an installed
+#   /opt/homebrew/lib/libARORuntime.a wins over a worktree that never
+#   produced one. A runtime change then appears to have no effect —
+#   the binary was built against the release you have installed.
+
 aro repl                 # Start the interactive ARO REPL
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
