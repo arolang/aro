@@ -538,24 +538,10 @@ document.querySelectorAll('.animate-on-scroll').forEach(el => {
     observer.observe(el);
 });
 
-// Mobile menu
-const navToggle = document.querySelector('.nav-toggle');
-const mobileMenu = document.querySelector('.mobile-menu');
-
-navToggle.addEventListener('click', () => {
-    navToggle.classList.toggle('active');
-    mobileMenu.classList.toggle('active');
-    document.body.classList.toggle('menu-open');
-});
-
-// Close mobile menu on link click
-mobileMenu.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', () => {
-        navToggle.classList.remove('active');
-        mobileMenu.classList.remove('active');
-        document.body.classList.remove('menu-open');
-    });
-});
+// Mobile menu wiring lives in animations.js (initMobileMenu) — a second
+// handler here toggled the classes twice per tap, so the menu opened and
+// closed in the same instant (the burger only renders at mobile widths,
+// which is why desktop testing never caught it).
 
 // Blink nav cursor 5 times on homepage only
 const navLogo = document.querySelector('.nav .logo-aro');
