@@ -574,10 +574,19 @@ public final class LLVMCodeGenerator {
         // incorrectly still filter by key = X).
         // `_where_tree_` gates the numbered `_where_*_N_` binds, so clearing
         // the tree alone is enough to disarm a stale compound condition.
+        //
+        // `_with_` and `_to_` join the list with GitLab #515: Store now reads
+        // `_with_` to decide whether the statement carried an inline payload,
+        // so a leftover binding from an earlier `with` clause would make the
+        // next `Store the <x> into the <repo>.` store the wrong value. The
+        // interpreter has always cleared both (FeatureSetExecutor); the
+        // compiled path only ever cleared the query modifiers, so the two
+        // disagreed for every action that reads them.
         for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
                              "_by_pattern_", "_by_flags_", "_by_field_",
                              "_by_var_", "_by_order_",
-                             "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
+                             "_aggregation_type_", "_aggregation_field_", "_default_value_",
+                             "_with_", "_to_"] {
             let keyStr = ctx.stringConstant(transientKey)
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
         }
