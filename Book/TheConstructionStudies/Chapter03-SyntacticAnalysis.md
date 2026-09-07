@@ -138,12 +138,13 @@ Pratt parsing handles it with a single table of precedence levels:
 |------------|-------|-----------|
 | or | 1 | `or` |
 | and | 2 | `and` |
-| equality | 3 | `==`, `!=`, `is` |
-| comparison | 4 | `<`, `>`, `<=`, `>=` |
-| term | 5 | `+`, `-`, `++` |
-| factor | 6 | `*`, `/`, `%` |
-| unary | 7 | `-`, `not` |
-| postfix | 8 | `.`, `[]` |
+| not | 3 | `not` (prefix) |
+| equality | 4 | `==`, `!=`, `is`, `contains`, `matches` |
+| comparison | 5 | `<`, `>`, `<=`, `>=` |
+| term | 6 | `+`, `-`, `++` |
+| factor | 7 | `*`, `/`, `%` |
+| unary | 8 | unary `-` |
+| postfix | 9 | `.`, `[]` |
 
 The algorithm is simple: parse a prefix (a primary expression or unary op), then keep consuming infix operators as long as they bind tighter than what the caller expects. That is the entire engine for correct precedence — no grammar rewrites needed.
 

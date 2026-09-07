@@ -640,7 +640,7 @@ private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any 
     return array.map { element -> any Sendable in
         if let dict = element as? [String: Any] {
             // Check if it's an expression object
-            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil {
+            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil || dict["$unary"] != nil {
                 return evaluateExpressionJSON(dict, context: context)
             }
             // Otherwise it's a plain object - evaluate its values recursively
@@ -659,7 +659,7 @@ private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -
     for (key, value) in obj {
         if let dict = value as? [String: Any] {
             // Check if it's an expression object
-            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil {
+            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil || dict["$unary"] != nil {
                 result[key] = evaluateExpressionJSON(dict, context: context)
             } else {
                 // Plain nested object
@@ -728,6 +728,39 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             // If neither works, just continue - the value stays as-is
         }
         return value
+    }
+
+    // Unary expression: {"$unary":{"op":"not","operand":{…}}}
+    //
+    // The compiler has always serialized these; this decoder never knew
+    // about them, so every `not <flag>` and every non-constant unary minus
+    // fell through to the empty-string default at the bottom of this
+    // function. `aro run` printed `true`, the built binary printed nothing.
+    // GitLab #520 makes `not <a> >= <b>` an ordinary, parseable rule, which
+    // walks straight into that gap — so close it here and keep the two
+    // execution modes answering the same question.
+    if let unary = expr["$unary"] as? [String: Any],
+       let op = unary["op"] as? String,
+       let operandExpr = unary["operand"] as? [String: Any] {
+
+        let operand = evaluateExpressionJSON(operandExpr, context: context)
+
+        switch op {
+        case "not":
+            return !asBool(operand)
+        case "-":
+            if let i = operand as? Int {
+                return checkedInt(0.subtractingReportingOverflow(i), 0, "-", i)
+            }
+            if let d = asDouble(operand) {
+                return -d
+            }
+            return 0
+        default:
+            FileHandle.standardError.write(
+                Data("[RuntimeBridge] Warning: unknown unary operator '\(op)'\n".utf8))
+            return ""
+        }
     }
 
     // Binary expression

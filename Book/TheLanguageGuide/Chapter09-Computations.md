@@ -198,13 +198,22 @@ When expressions contain multiple operators, ARO evaluates them in this order (h
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
 | 1 (highest) | `.` `[]` | Left |
-| 2 | unary `-` `not` | Right |
+| 2 | unary `-` | Right |
 | 3 | `*` `/` `%` | Left |
 | 4 | `+` `-` `++` | Left |
 | 5 | `<` `>` `<=` `>=` | Left |
-| 6 | `==` `!=` `is` `is not` | Left |
-| 7 | `and` | Left |
-| 8 (lowest) | `or` | Left |
+| 6 | `==` `!=` `is` `is not` `contains` `matches` | Left |
+| 7 | `not` | Right |
+| 8 | `and` | Left |
+| 9 (lowest) | `or` | Left |
+
+Comparisons bind tighter than `and`/`or`, so a rule that mixes one with a named
+boolean fact groups the way it reads aloud — no parentheses needed:
+
+```aro
+Compute the <free-shipping> from <order-total> >= 50 or <prime-member>.
+Compute the <working-age> from <age> >= 18 and <age> < 65.
+```
 
 Use parentheses to override precedence:
 

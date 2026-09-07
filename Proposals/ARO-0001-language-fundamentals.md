@@ -585,13 +585,40 @@ string_concat = "++" ;
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
 | 1 (highest) | `.` `[]` | Left |
-| 2 | unary `-` `not` | Right |
+| 2 | unary `-` | Right |
 | 3 | `*` `/` `%` | Left |
 | 4 | `+` `-` `++` | Left |
 | 5 | `<` `>` `<=` `>=` | Left |
-| 6 | `==` `!=` `is` `is not` | Left |
-| 7 | `and` | Left |
-| 8 (lowest) | `or` | Left |
+| 6 | `==` `!=` `is` `is not` `contains` `matches` | Left |
+| 7 | `not` | Right |
+| 8 | `and` | Left |
+| 9 (lowest) | `or` | Left |
+
+This table is the whole story. **Grouping depends only on the operators, never
+on the shape of the operands** — a rule that combines a comparison with a
+named boolean fact groups the way it reads aloud:
+
+```
+<order-total> >= 50 or <prime-member>       (* (order-total >= 50) or prime-member *)
+<age> >= 18 and <age> < 65                  (* (age >= 18) and (age < 65)           *)
+<no-stock> or <qty> >= 10 and <express>     (* no-stock or ((qty >= 10) and express) *)
+not <balance> >= 0                          (* not (balance >= 0)                    *)
+```
+
+Parentheses are for the reader, not for the parser. Writing
+`(<order-total> >= 50) or <prime-member>` produces exactly the same tree as
+leaving them out.
+
+`not` deliberately sits *below* the comparisons rather than immediately above
+them: `not <a> == <b>` negates the comparison. Unary `-` is the tight one, so
+`-<a> * <b>` is `(-<a>) * <b>`.
+
+Earlier implementations rewrote `and`/`or` whose left operand was a comparison
+and whose right operand was a bare value, distributing the comparison's subject
+across the connective — `<n> >= 15 or <vip>` became `<n> >= 15 or <n> >= <vip>`,
+which failed with "Cannot convert Bool to number" (GitLab #520). No such
+rewrite exists; a value list is written with `contains` or a repeated
+comparison.
 
 ### Existence and Type Checks
 
