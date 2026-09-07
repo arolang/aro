@@ -22,6 +22,42 @@
 
 import Foundation
 
+/// A source file indexed for span slicing.
+///
+/// `SourceLocation.offset` counts characters, so slicing a span
+/// needs random access into the file. Building the index once per
+/// file keeps rendering a feature set linear instead of quadratic.
+public struct SourceText: Sendable {
+    private let characters: [Character]
+
+    public init(_ text: String) {
+        characters = Array(text)
+    }
+
+    /// The text a span covers, whitespace collapsed, or nil when
+    /// the span cannot be trusted — a synthesised node with no real
+    /// extent, or offsets past the end of the file because the
+    /// caller paired a statement with the wrong source. Callers
+    /// fall back to the AST description rather than show a wrong
+    /// or empty line.
+    public func slice(_ span: SourceSpan) -> String? {
+        let start = span.start.offset
+        var end = span.end.offset
+        guard start >= 0, end > start, end <= characters.count else { return nil }
+        // A statement's span stops at its last token, so the
+        // terminating period is one character past the end. Take
+        // it: a rendered ARO statement without its period isn't a
+        // statement, it's a fragment.
+        if end < characters.count, characters[end] == "." { end += 1 }
+        let text = Self.collapseWhitespace(String(characters[start..<end]))
+        return text.isEmpty ? nil : text
+    }
+
+    static func collapseWhitespace(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+}
+
 /// What happened to a feature set or a statement between two
 /// revisions.
 public enum GraphChange: String, Sendable, Hashable, CaseIterable {
@@ -178,13 +214,22 @@ public struct AROGraphDiff: Sendable, Hashable {
 
     // MARK: - Statement matching
 
-    /// LCS diff over rendered statements, then collapse an adjacent
+    /// LCS diff over rendered statements, then collapse a
     /// removed/added pair sharing a verb into one `modified`.
-    static func diffStatements(before: FeatureSet, after: FeatureSet) -> [StatementDiff] {
+    ///
+    /// `beforeSource` / `afterSource` are the files the two sides
+    /// were parsed from. When given, statements render as the code
+    /// the author actually wrote instead of the AST's debug form —
+    /// a reviewer reads `Return a <Created: status> with <user>.`,
+    /// not `<Return> the <Created: status> with the <_expression_>`.
+    static func diffStatements(before: FeatureSet, after: FeatureSet,
+                               beforeSource: SourceText? = nil,
+                               afterSource: SourceText? = nil) -> [StatementDiff]
+    {
         let old = before.statements
         let new = after.statements
-        let oldText = old.map(render)
-        let newText = new.map(render)
+        let oldText = old.map { render($0, in: beforeSource) }
+        let newText = new.map { render($0, in: afterSource) }
 
         let common = lcsTable(oldText, newText)
         var raw: [StatementDiff] = []
@@ -239,30 +284,63 @@ public struct AROGraphDiff: Sendable, Hashable {
     /// A statement whose object changed reads as remove-then-add in
     /// a line diff. On a graph that would delete a node and draw a
     /// new one, losing its position and any comment anchored to it,
-    /// so an adjacent pair with the same verb becomes one node
+    /// so a removed/added pair sharing a verb becomes one node
     /// marked `modified`.
+    ///
+    /// The pairing runs over a whole *run* of changed entries, not
+    /// just adjacent ones. LCS emits every deletion in a run before
+    /// every insertion, so editing two statements and inserting a
+    /// third between them produced three deletions facing three
+    /// insertions — six nodes churned where two were edited. Within
+    /// a run each removal takes the first still-unclaimed insertion
+    /// with the same verb, in order, and what is left over stays a
+    /// plain removal or insertion.
     static func collapseModifications(_ raw: [StatementDiff]) -> [StatementDiff] {
         var out: [StatementDiff] = []
         var index = 0
         while index < raw.count {
-            let current = raw[index]
-            if current.change == .removed, index + 1 < raw.count,
-               raw[index + 1].change == .added,
-               raw[index + 1].verb.lowercased() == current.verb.lowercased()
-            {
-                let next = raw[index + 1]
-                out.append(StatementDiff(
-                    change: .modified,
-                    before: current.before,
-                    after: next.after,
-                    beforeLine: current.beforeLine,
-                    afterLine: next.afterLine,
-                    verb: current.verb))
-                index += 2
+            guard raw[index].change != .unchanged else {
+                out.append(raw[index])
+                index += 1
                 continue
             }
-            out.append(current)
-            index += 1
+            // Take the maximal run of changed entries.
+            var end = index
+            while end < raw.count, raw[end].change != .unchanged { end += 1 }
+            out.append(contentsOf: pairRun(Array(raw[index..<end])))
+            index = end
+        }
+        return out
+    }
+
+    /// Pair the removals and insertions of one run by verb.
+    private static func pairRun(_ run: [StatementDiff]) -> [StatementDiff] {
+        let insertions = run.filter { $0.change == .added }
+        var claimed = Array(repeating: false, count: insertions.count)
+        var out: [StatementDiff] = []
+
+        for entry in run where entry.change == .removed {
+            let match = insertions.indices.first {
+                !claimed[$0] && insertions[$0].verb.lowercased() == entry.verb.lowercased()
+            }
+            guard let match else {
+                out.append(entry)
+                continue
+            }
+            claimed[match] = true
+            let insertion = insertions[match]
+            out.append(StatementDiff(
+                change: .modified,
+                before: entry.before,
+                after: insertion.after,
+                beforeLine: entry.beforeLine,
+                afterLine: insertion.afterLine,
+                verb: entry.verb))
+        }
+        // Genuinely new statements keep their order, after the
+        // statements they were interleaved with.
+        for index in insertions.indices where !claimed[index] {
+            out.append(insertions[index])
         }
         return out
     }
@@ -285,13 +363,25 @@ public struct AROGraphDiff: Sendable, Hashable {
 
     // MARK: - Statement rendering
 
-    /// Canonical text for matching. Whitespace is collapsed so a
-    /// re-indent doesn't read as a change — the graph doesn't care
-    /// about columns.
-    public static func render(_ statement: any Statement) -> String {
-        statement.description
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
+    /// Canonical text for matching and for display. Whitespace is
+    /// collapsed so a re-indent doesn't read as a change — the
+    /// graph doesn't care about columns.
+    ///
+    /// With the file the statement was parsed from, this is the
+    /// source the author wrote, sliced by the statement's span.
+    /// Without it, the AST's debug description — correct for
+    /// matching, but it renders modifiers as `<_expression_>`
+    /// placeholders, which is not something anyone typed.
+    public static func render(_ statement: any Statement, in source: SourceText? = nil) -> String {
+        if let slice = source?.slice(statement.span) { return slice }
+        return SourceText.collapseWhitespace(statement.description)
+    }
+
+    /// Convenience for a caller holding a plain string. Indexing
+    /// costs a pass over the file, so a caller rendering many
+    /// statements should build one `SourceText` and reuse it.
+    public static func render(_ statement: any Statement, in source: String) -> String {
+        render(statement, in: SourceText(source))
     }
 
     /// Verb for pairing and for the node card. Non-ARO statements
