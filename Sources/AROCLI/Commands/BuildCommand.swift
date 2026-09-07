@@ -194,6 +194,35 @@ struct BuildCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        // Transitions the contract does not declare (GitLab #507).
+        //
+        // `Accept the <transition: draft_to_shiped> on <order: status>.`
+        // compiles — the runtime only ever checked the from-state, so a
+        // misspelled or simply illegal destination became a new state at
+        // run time. The contract knows better: the entity's states are the
+        // string enum on its state property. Both halves must be declared,
+        // and this is the last moment to say so before the binary exists.
+        //
+        // No `openapi.yaml` (or no enum on that property) means no
+        // enforcement — contract-first is opt-in, and a contract-less
+        // project must keep building exactly as it did.
+        let transitionErrors = TransitionContractValidator.validate(
+            compiledPrograms.flatMap { $0.featureSets.map(\.featureSet) },
+            inDirectory: appConfig.rootPath
+        )
+        if !transitionErrors.isEmpty {
+            AROLogger.error("Undeclared state transitions: \(transitionErrors.count)", subsystem: "build")
+            print("\nUndeclared state transitions:")
+            for error in transitionErrors {
+                let location = error.location.map { "\($0.line):\($0.column): " } ?? ""
+                print("  \(location)error: \(error.message)")
+                for hint in error.hints {
+                    print("    hint: \(hint)")
+                }
+            }
+            throw ExitCode.failure
+        }
+
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
             AROLogger.error("No programs to merge", subsystem: "build")

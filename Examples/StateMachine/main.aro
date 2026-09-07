@@ -27,6 +27,19 @@
  *   - approved -> rejected  (final state, no transitions out)
  *   - rejected -> approved  (final state, no transitions out)
  *   - cancelled -> submitted  (final state, no transitions out)
+ *
+ *   What enforces what (GitLab #507):
+ *
+ *   - openapi.yaml declares the five states as an enum. `aro check`,
+ *     `aro run` and `aro build` reject an Accept naming a state that is
+ *     not in it, so `submitted_to_rejcted` is a build error rather than
+ *     a sixth state invented at run time.
+ *   - The runtime checks the from-state: an Accept only fires when the
+ *     document is already in the transition's first state.
+ *   - The arrows above are NOT declared anywhere. `draft -> approved` is
+ *     two declared states, so it passes the build; it runs, too, because
+ *     the document really is in draft. Skipping a step is still your
+ *     responsibility, not the machine's.
  *)
 
 (Application-Start: State Machine Demo) {
@@ -75,15 +88,20 @@
     Log <doc2> to the <console>.
     Log "" to the <console>.
 
-    (* Try invalid transition: draft -> approved (skipping submitted) *)
-    Log "--- Attempting Invalid: draft -> approved ---" to the <console>.
-    Log "This should fail because documents must be submitted first." to the <console>.
+    (* Try skipping a step: draft -> approved *)
+    Log "--- Skipping a step: draft -> approved ---" to the <console>.
+    Log "Nothing stops this; the review order is a convention here." to the <console>.
 
-    (* The following would throw an error:
-       Accept the <transition: draft_to_approved> on <doc2: status>.
-       Error: Cannot accept state draft->approved on doc2: status. Current state is "draft".
+    (* Honest note (GitLab #507): the line below would NOT throw.
+           Accept the <transition: draft_to_approved> on <doc2: status>.
+       Both states are declared in openapi.yaml, so it builds, and doc2 is
+       genuinely in draft, so the runtime's from-state check passes too. What
+       WOULD be rejected — at build time, before anything runs — is a state
+       the contract never declared:
+           Accept the <transition: draft_to_aproved> on <doc2: status>.
+           error: State 'aproved' is not declared by the contract
 
-       Instead, let's demonstrate the correct path first:
+       Take the reviewed path instead:
     *)
 
     (* Valid path: submit, then reject *)
