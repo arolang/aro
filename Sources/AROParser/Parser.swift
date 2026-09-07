@@ -1523,11 +1523,31 @@ public final class Parser {
             try expect(.rightAngle, message: "'>'")
         }
 
-        // Parse collection: in <collection>
+        // Parse collection: `in <collection>` or `in <expression>` (GitLab #519).
+        //
+        // The noun form is tried first and kept whenever the header ends right
+        // after it, because only a name can carry specifiers (<team: members>)
+        // and reach the lazy-stream iteration path (ARO-0051). Anything else —
+        // a list literal, a parenthesised expression, `<a>.field`, `<a> + <b>` —
+        // rewinds and re-parses the whole slot as an expression, so a quick loop
+        // no longer needs a Create first.
         try expect(.in, message: "'in'")
-        try expect(.leftAngle, message: "'<'")
-        let collection = try parseQualifiedNoun()
-        try expect(.rightAngle, message: "'>'")
+        var collection: QualifiedNoun? = nil
+        var collectionExpression: (any Expression)? = nil
+        let collectionStart = current
+        if check(.leftAngle) {
+            advance()
+            let noun = try parseQualifiedNoun()
+            try expect(.rightAngle, message: "'>'")
+            if forEachHeaderEndsHere(isParallel: isParallel) {
+                collection = noun
+            } else {
+                current = collectionStart
+            }
+        }
+        if collection == nil {
+            collectionExpression = try parseExpression()
+        }
 
         // Parse optional concurrency limit (only for parallel): with <concurrency: N>
         var concurrency: Int? = nil
@@ -1564,16 +1584,41 @@ public final class Parser {
         }
         let endToken = try expect(.rightBrace, message: "'}'")
 
+        if let collection {
+            return ForEachLoop(
+                itemVariable: itemVariable,
+                indexVariable: indexVariable,
+                collection: collection,
+                filter: filter,
+                isParallel: isParallel,
+                concurrency: concurrency,
+                body: body,
+                span: startToken.span.merged(with: endToken.span)
+            )
+        }
         return ForEachLoop(
             itemVariable: itemVariable,
             indexVariable: indexVariable,
-            collection: collection,
+            // Safe: `collectionExpression` is assigned whenever `collection` is nil.
+            collectionExpression: collectionExpression!,
             filter: filter,
             isParallel: isParallel,
             concurrency: concurrency,
             body: body,
             span: startToken.span.merged(with: endToken.span)
         )
+    }
+
+    /// Whether the for-each header is complete at the current token — i.e. what
+    /// was just parsed as `<noun>` really was the whole collection slot.
+    ///
+    /// `with` only ends the header for a parallel loop, where it introduces the
+    /// concurrency clause; on a sequential loop it can only be an operator-ish
+    /// continuation, so the slot is re-read as an expression.
+    private func forEachHeaderEndsHere(isParallel: Bool) -> Bool {
+        if check(.leftBrace) || check(.where) { return true }
+        if isParallel && check(.preposition(.with)) { return true }
+        return false
     }
 
     // MARK: - While Loop Parsing (ARO-0002 extension, GitLab #131)

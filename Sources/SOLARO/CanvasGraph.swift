@@ -468,7 +468,7 @@ struct CanvasGraph: Equatable {
                                   into: &nodes,
                                   loops: &loops)
                 let bodyIDs = nodes[startIdx..<nodes.count].map(\.id)
-                let label = "for each <\(loop.itemVariable)> in <\(loop.collection.fullName)>"
+                let label = "for each <\(loop.itemVariable)> in \(loop.collectionLabel)"
                 loops.append(LoopGroup(
                     id: "\(fileKey):\(loop.span.start.offset):foreach",
                     label: label,

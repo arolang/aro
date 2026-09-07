@@ -191,6 +191,7 @@ parallel for each <url> in <urls> with <concurrency: 8> {
 | Default concurrency | `min(item count, max(4, cores × 4))` |
 | `with <concurrency: N>` | Overrides the default; `N ≤ 0` is rejected with a diagnostic and clamped to 1 |
 | Filters (`where`) | Evaluated per item in its own child scope before the body is scheduled |
+| The collection | A noun (`<urls>`) or any expression (`[1, 2, 3]`, `<order>.lines`), per [ARO-0002](ARO-0002-control-flow.md); evaluated once on the loop's own thread before the first iteration is scheduled |
 
 The default bound is deliberately not "one task per item": an unbounded fan-out over a 500-element collection used to spawn 500 tasks and exhaust the thread pool. When iteration cost is dominated by an external service, set `with <concurrency: N>` to that service's tolerance rather than the machine's.
 
