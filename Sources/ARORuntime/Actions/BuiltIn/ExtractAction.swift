@@ -78,7 +78,22 @@ public struct ExtractAction: SynchronousAction {
         // First, apply any object specifiers for nested property access
         var resolvedSource = source
         if !object.specifiers.isEmpty {
-            resolvedSource = try extractValue(from: source, path: object.specifiers)
+            do {
+                resolvedSource = try extractValue(from: source, path: object.specifiers)
+            } catch let error as ActionError {
+                // An UNSET setting on a Configure-written category answers
+                // nil (ARO-0035 §3.2) — configuration is optional by
+                // definition; the `when <x> = nil` idiom needs a value to
+                // compare. Data records keep the happy-path error
+                // (GitLab #506).
+                if case .propertyNotFound = error,
+                   contextIsConfigured(context, category: object.base) {
+                    // NullValue is what the expression evaluator's
+                    // `= nil` / `!= nil` comparisons recognise.
+                    return NullValue.null
+                }
+                throw error
+            }
         } else if let stringSource = source as? String {
             // If source is a string containing JSON, parse it
             if let parsed = parseJSONString(stringSource) {
@@ -453,6 +468,11 @@ public struct ExtractAction: SynchronousAction {
 
         // Return original source if key not found but exists
         throw ActionError.propertyNotFound(property: key, on: String(describing: type(of: source)))
+    }
+
+    /// Whether `category` was written by Configure in this context chain.
+    private func contextIsConfigured(_ context: ExecutionContext, category: String) -> Bool {
+        (context as? RuntimeContext)?.isConfigured(category) ?? false
     }
 
     /// Extract a value from a string that might be JSON, form data, or key-value format
