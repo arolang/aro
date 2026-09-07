@@ -1,107 +1,141 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb14-c01",
-      "kind": "markdown",
-      "source": "# 14 — Building Applications\n\nThirteen notebooks ago the café said hello. Since then you have priced\norders, guarded discounts, piped a day of sales through filters,\nannounced events, written reusable actions, printed receipts, and kept\ninventory. One thing is missing: none of it *runs by itself* yet.\n\nThis capstone shows how notebook pieces become a real service — a\ndirectory that `aro run` turns into a living application with an HTTP\nAPI, background services, and a lifecycle. Most of this notebook is\nprose and annotated application code (which needs a directory, ports,\nand files — things a notebook session deliberately doesn't touch);\nthe runnable cells revisit session-safe pieces so you can feel the\nseams. By the end you will know exactly which file each earlier\nnotebook turns into.",
-      "outputs": []
+      "id" : "nb14-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 14 — Building Applications\n\nThirteen notebooks ago the café said hello. Since then you have priced\norders, guarded discounts, piped a day of sales through filters,\nannounced events, written reusable actions, printed receipts, and kept\ninventory. One thing is missing: none of it *runs by itself* yet.\n\nThis capstone shows how notebook pieces become a real service — a\ndirectory that `aro run` turns into a living application with an HTTP\nAPI, background services, and a lifecycle. Most of this notebook is\nprose and annotated application code (which needs a directory, ports,\nand files — things a notebook session deliberately doesn't touch);\nthe runnable cells revisit session-safe pieces so you can feel the\nseams. By the end you will know exactly which file each earlier\nnotebook turns into."
     },
     {
-      "id": "nb14-c02",
-      "kind": "markdown",
-      "source": "## An application is a directory\n\nNo project file, no build manifest, no imports. `aro run ./BrewAndBytes`\ntakes a **directory**, discovers every `.aro` file in it (subdirectories\ntoo), and compiles them together:\n\n```\nBrewAndBytes/\n├── openapi.yaml       # the HTTP contract (no contract - no server)\n├── main.aro           # Application-Start lives here\n├── orders.aro         # order feature sets + handlers\n├── inventory.aro      # repository observers\n├── pricing.aro        # user-defined actions\n├── menu.store         # seeds menu-repository from YAML (ARO-0073)\n├── templates/\n│   └── receipt.tpl    # rendered by Transform\n└── Plugins/           # optional native/Python extensions\n```\n\nThe rules the loader enforces\n([ARO-0005](../Proposals/ARO-0005-application-architecture.md)):\n\n- **Exactly one** `Application-Start` feature set — zero or two is an\n  error. This is the entry point.\n- At most one `Application-End: Success` and one\n  `Application-End: Error` — optional shutdown hooks.\n- Every feature set in every file is **globally visible**; there is no\n  import statement to forget.\n- Larger apps may move code under `sources/` subdirectories; discovery\n  recurses either way ([Chapter 29 — Multi-File\n  Applications](../Book/TheLanguageGuide/Chapter29-MultiFile.md)).",
-      "outputs": []
+      "id" : "nb14-c02",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## An application is a directory\n\nNo project file, no build manifest, no imports. `aro run .\/BrewAndBytes`\ntakes a **directory**, discovers every `.aro` file in it (subdirectories\ntoo), and compiles them together:\n\n```\nBrewAndBytes\/\n├── openapi.yaml       # the HTTP contract (no contract - no server)\n├── main.aro           # Application-Start lives here\n├── orders.aro         # order feature sets + handlers\n├── inventory.aro      # repository observers\n├── pricing.aro        # user-defined actions\n├── menu.store         # seeds menu-repository from YAML (ARO-0073)\n├── templates\/\n│   └── receipt.tpl    # rendered by Transform\n└── Plugins\/           # optional native\/Python extensions\n```\n\nThe rules the loader enforces\n([ARO-0005](..\/Proposals\/ARO-0005-application-architecture.md)):\n\n- **Exactly one** `Application-Start` feature set — zero or two is an\n  error. This is the entry point.\n- At most one `Application-End: Success` and one\n  `Application-End: Error` — optional shutdown hooks.\n- Every feature set in every file is **globally visible**; there is no\n  import statement to forget.\n- Larger apps may move code under `sources\/` subdirectories; discovery\n  recurses either way ([Chapter 29 — Multi-File\n  Applications](..\/Book\/TheLanguageGuide\/Chapter29-MultiFile.md))."
     },
     {
-      "id": "nb14-c03",
-      "kind": "markdown",
-      "source": "## The lifecycle\n\nThe application boots by executing `Application-Start`, starts\nwhatever services it names, then parks in the event loop. Feature sets\nrun **only** when events trigger them; `Keepalive` holds the doors\nopen until SIGINT/SIGTERM:\n\n```aro\n(Application-Start: Brew and Bytes) {\n    Log \"Opening Brew & Bytes...\" to the <console>.\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Application-End: Success) {\n    Log \"Chairs up. Good night.\" to the <console>.\n    Stop the <http-server> with <application>.\n    Return an <OK: status> for the <shutdown>.\n}\n\n(Application-End: Error) {\n    Extract the <error> from the <shutdown: error>.\n    Log <error> to the <console>.\n    Return an <OK: status> for the <error-handling>.\n}\n```\n\nCtrl+C triggers `Application-End: Success`; a crash routes through\n`Application-End: Error` with the error in the payload\n([Chapter 14 — Lifecycle](../Book/TheLanguageGuide/Chapter14-Lifecycle.md)).\n\nEverything *between* start and end is what you already know. Watch the\nsame machinery in the session — a user-defined action from\n[10](10-user-defined-actions.repl) feeding a repository from\n[13](13-repositories-and-state.repl):",
-      "outputs": []
+      "id" : "nb14-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The lifecycle\n\nThe application boots by executing `Application-Start`, starts\nwhatever services it names, then parks in the event loop. Feature sets\nrun **only** when events trigger them; `Keepalive` holds the doors\nopen until SIGINT\/SIGTERM:\n\n```aro\n(Application-Start: Brew and Bytes) {\n    Log \"Opening Brew & Bytes...\" to the <console>.\n    Start the <http-server> with <contract>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Application-End: Success) {\n    Log \"Chairs up. Good night.\" to the <console>.\n    Stop the <http-server> with <application>.\n    Return an <OK: status> for the <shutdown>.\n}\n\n(Application-End: Error) {\n    Extract the <error> from the <shutdown: error>.\n    Log <error> to the <console>.\n    Return an <OK: status> for the <error-handling>.\n}\n```\n\nCtrl+C triggers `Application-End: Success`; a crash routes through\n`Application-End: Error` with the error in the payload\n([Chapter 14 — Lifecycle](..\/Book\/TheLanguageGuide\/Chapter14-Lifecycle.md)).\n\nEverything *between* start and end is what you already know. Watch the\nsame machinery in the session — a user-defined action from\n[10](10-user-defined-actions.repl) feeding a repository from\n[13](13-repositories-and-state.repl):"
     },
     {
-      "id": "nb14-c04",
-      "kind": "code",
-      "source": "(PlaceOrder: Action takes <drink>) {\n    Extract the <drink> from the <input: drink>.\n    Create the <order> with { drink: <drink>, status: \"queued\" }.\n    Store the <order> into the <cafe-orders-repository>.\n    Return an <OK: status> with { queued: <drink> }.\n}\n\nApplication.PlaceOrder the <first-order> from \"espresso\".\nApplication.PlaceOrder the <second-order> from \"flat white\".\nRetrieve the <order-queue> from the <cafe-orders-repository>.\nCompute the <queue-size: length> from <order-queue>.\nLog <queue-size> to the <console>.",
-      "outputs": []
+      "id" : "nb14-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(PlaceOrder: Action takes <drink>) {\n    Extract the <drink> from the <input: drink>.\n    Create the <order> with { drink: <drink>, status: \"queued\" }.\n    Store the <order> into the <cafe-orders-repository>.\n    Return an <OK: status> with { queued: <drink> }.\n}\n\nApplication.PlaceOrder the <first-order> from \"espresso\".\nApplication.PlaceOrder the <second-order> from \"flat white\".\nRetrieve the <order-queue> from the <cafe-orders-repository>.\nCompute the <queue-size: length> from <order-queue>.\nLog <queue-size> to the <console>."
     },
     {
-      "id": "nb14-c05",
-      "kind": "markdown",
-      "source": "Two orders placed, two records in the repository. In the\napplication, the *only* new ingredient is who calls `PlaceOrder`: not\na notebook cell, but an HTTP feature set. Which brings us to the\ncontract.\n\n## Contract-first HTTP\n\nARO refuses to invent your API from code. Routes live in\n**`openapi.yaml`** — the OpenAPI contract — and the server starts only\nif that file exists. Each operation's `operationId` names the feature\nset that handles it:\n\n```yaml\nopenapi: 3.0.3\ninfo:\n  title: Brew & Bytes API\n  version: 1.0.0\npaths:\n  /orders:\n    get:\n      operationId: listCafeOrders\n    post:\n      operationId: createOrder\n  /orders/{id}:\n    get:\n      operationId: getOrder\n```\n\n```aro\n(createOrder: Cafe API) {\n    Extract the <data> from the <request: body>.\n    Create the <order> with <data>.\n    Store the <order> into the <cafe-orders-repository>.\n    Return a <Created: status> with <order>.\n}\n\n(getOrder: Cafe API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <cafe-orders-repository> where <id> is <id>.\n    Return an <OK: status> with <order>.\n}\n```\n\n`<request: body>` is the (schema-typed) request body,\n`<pathParameters: id>` the `{id}` from the URL, and the returned\nstatus/record pair becomes the JSON response — machine context,\nformatted automatically ([ARO-0031](12-templates-and-output.repl)).\nThe handler for `GET /orders` you can define right now — it is\nordinary ARO, and it registers in the session like any feature set:",
-      "outputs": []
+      "id" : "nb14-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two orders placed, two records in the repository. In the\napplication, the *only* new ingredient is who calls `PlaceOrder`: not\na notebook cell, but an HTTP feature set. Which brings us to the\ncontract.\n\n## Contract-first HTTP\n\nARO refuses to invent your API from code. Routes live in\n**`openapi.yaml`** — the OpenAPI contract — and the server starts only\nif that file exists. Each operation's `operationId` names the feature\nset that handles it:\n\n```yaml\nopenapi: 3.0.3\ninfo:\n  title: Brew & Bytes API\n  version: 1.0.0\npaths:\n  \/orders:\n    get:\n      operationId: listCafeOrders\n    post:\n      operationId: createOrder\n  \/orders\/{id}:\n    get:\n      operationId: getOrder\n```\n\n```aro\n(createOrder: Cafe API) {\n    Extract the <data> from the <request: body>.\n    Create the <order> with <data>.\n    Store the <order> into the <cafe-orders-repository>.\n    Return a <Created: status> with <order>.\n}\n\n(getOrder: Cafe API) {\n    Extract the <id> from the <pathParameters: id>.\n    Retrieve the <order> from the <cafe-orders-repository> where <id> is <id>.\n    Return an <OK: status> with <order>.\n}\n```\n\n`<request: body>` is the (schema-typed) request body,\n`<pathParameters: id>` the `{id}` from the URL, and the returned\nstatus\/record pair becomes the JSON response — machine context,\nformatted automatically ([ARO-0031](12-templates-and-output.repl)).\nThe handler for `GET \/orders` you can define right now — it is\nordinary ARO, and it registers in the session like any feature set:"
     },
     {
-      "id": "nb14-c06",
-      "kind": "code",
-      "source": "(listCafeOrders: Cafe API) {\n    Retrieve the <orders> from the <cafe-orders-repository>.\n    Return an <OK: status> with <orders>.\n}",
-      "outputs": []
+      "id" : "nb14-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(listCafeOrders: Cafe API) {\n    Retrieve the <orders> from the <cafe-orders-repository>.\n    Return an <OK: status> with <orders>.\n}"
     },
     {
-      "id": "nb14-c07",
-      "kind": "markdown",
-      "source": "Drop this cell's code into `orders.aro`, add the contract, and\n`GET /orders` answers with the two orders you placed above. That is\nthe whole distance between notebook and API.\nMore: [Chapter 17 — OpenAPI](../Book/TheLanguageGuide/Chapter17-OpenAPI.md),\n[Chapter 18 — HTTP Feature Sets](../Book/TheLanguageGuide/Chapter18-HTTPFeatureSets.md).\n\n## Services and events\n\nThe HTTP server is one of several built-in services an application can\n`Start`; each translates the outside world into events that trigger\nfeature sets, exactly like your `Emit`s in\n[09](09-feature-sets-and-events.repl):\n\n| Service | Started with | Triggers |\n|---------|--------------|----------|\n| HTTP server | `Start the <http-server> with <contract>.` | `operationId` feature sets |\n| File monitor | `Start the <file-monitor> with \".\".` | `File Event Handler` |\n| TCP sockets | `Start the <socket-server> with { port: 9000 }.` | `Socket Event Handler` |\n| WebSockets | via the contract | WebSocket handlers ([ARO-0048](../Proposals/ARO-0048-websocket.md)) |\n| Git | always available | `GitCommit`, `GitPush`, … ([ARO-0080](../Proposals/ARO-0080-git-actions.md)) |\n\nRepositories emit observer events, timers and domain `Emit`s flow\nthrough the same bus — an ARO application *is* feature sets waiting on\nevents, nothing else ([Chapter 20 — Built-in\nServices](../Book/TheLanguageGuide/Chapter20-BuiltinServices.md)).",
-      "outputs": []
+      "id" : "nb14-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Drop this cell's code into `orders.aro`, add the contract, and\n`GET \/orders` answers with the two orders you placed above. That is\nthe whole distance between notebook and API.\nMore: [Chapter 17 — OpenAPI](..\/Book\/TheLanguageGuide\/Chapter17-OpenAPI.md),\n[Chapter 18 — HTTP Feature Sets](..\/Book\/TheLanguageGuide\/Chapter18-HTTPFeatureSets.md).\n\n## Services and events\n\nThe HTTP server is one of several built-in services an application can\n`Start`; each translates the outside world into events that trigger\nfeature sets, exactly like your `Emit`s in\n[09](09-feature-sets-and-events.repl):\n\n| Service | Started with | Triggers |\n|---------|--------------|----------|\n| HTTP server | `Start the <http-server> with <contract>.` | `operationId` feature sets |\n| File monitor | `Start the <file-monitor> with \".\".` | `File Event Handler` |\n| TCP sockets | `Start the <socket-server> with { port: 9000 }.` | `Socket Event Handler` |\n| WebSockets | via the contract | WebSocket handlers ([ARO-0048](..\/Proposals\/ARO-0048-websocket.md)) |\n| Git | always available | `GitCommit`, `GitPush`, … ([ARO-0080](..\/Proposals\/ARO-0080-git-actions.md)) |\n\nRepositories emit observer events, timers and domain `Emit`s flow\nthrough the same bus — an ARO application *is* feature sets waiting on\nevents, nothing else ([Chapter 20 — Built-in\nServices](..\/Book\/TheLanguageGuide\/Chapter20-BuiltinServices.md))."
     },
     {
-      "id": "nb14-c08",
-      "kind": "markdown",
-      "source": "## Concurrency: what runs when\n\nYou never wrote a thread, yet your applications overlap work. The\nmodel ([ARO-0088](../Proposals/ARO-0088-concurrency-model.md)):\n\n- **Statements start in source order**, but a value-producing statement\n  may run *deferred*; the program waits at the **first read** of its\n  result. Two independent 2-second fetches in one feature set cost\n  ~2 seconds, not 4.\n- **Effects never defer.** `Log`, `Store`, `Emit`, `Return` run at\n  their own statement — observable output stays in source order, which\n  is why every notebook so far printed predictably.\n- **`parallel for each`** makes fan-out explicit; iteration order is\n  surrendered deliberately.\n- Debug switch: `ARO_NO_DEFER=1` serializes everything.\n\nThe last two you can watch — sequential first, then parallel:",
-      "outputs": []
+      "id" : "nb14-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Concurrency: what runs when\n\nYou never wrote a thread, yet your applications overlap work. The\nmodel ([ARO-0088](..\/Proposals\/ARO-0088-concurrency-model.md)):\n\n- **Statements start in source order**, but a value-producing statement\n  may run *deferred*; the program waits at the **first read** of its\n  result. Two independent 2-second fetches in one feature set cost\n  ~2 seconds, not 4.\n- **Effects never defer.** `Log`, `Store`, `Emit`, `Return` run at\n  their own statement — observable output stays in source order, which\n  is why every notebook so far printed predictably.\n- **`parallel for each`** makes fan-out explicit; iteration order is\n  surrendered deliberately.\n- Debug switch: `ARO_NO_DEFER=1` serializes everything.\n\nThe last two you can watch — sequential first, then parallel:"
     },
     {
-      "id": "nb14-c09",
-      "kind": "code",
-      "source": "Create the <drinks> with [\"espresso\", \"filter\", \"flat white\"].\nfor each <drink> in <drinks> {\n    Log <drink> to the <console>.\n}\nLog \"--- now in parallel ---\" to the <console>.\nparallel for each <drink> in <drinks> {\n    Log <drink> to the <console>.\n}",
-      "outputs": []
+      "id" : "nb14-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <drinks> with [\"espresso\", \"filter\", \"flat white\"].\nfor each <drink> in <drinks> {\n    Log <drink> to the <console>.\n}\nLog \"--- now in parallel ---\" to the <console>.\nparallel for each <drink> in <drinks> {\n    Log <drink> to the <console>.\n}"
     },
     {
-      "id": "nb14-c10",
-      "kind": "markdown",
-      "source": "The first loop prints in list order, every run. The parallel\nloop's order is whatever the scheduler chose — run the cell twice and\nit may differ. Full model, including event dispatch ordering:\n[Chapter 39 — Concurrency](../Book/TheLanguageGuide/Chapter39-Concurrency.md).\n\n## Streaming bodies\n\nHTTP uploads obey one elegant rule\n([ARO-0090](../Proposals/ARO-0090-streaming-io-and-materialization.md)):\n**streams don't have a size — values do.** A feature set that only\n*moves* its request body (`Write` to a file, `Return`, `Send`) never\nholds it in memory — a 4 GB upload streams through unbothered. A\nfeature set that *reads* the body (a field access, `Compute`, a\nguard) turns it into a value, and values are bounded — 1 MB by\ndefault, per route in the contract:\n\n```yaml\n  /documents:\n    post:\n      operationId: uploadDocument\n      x-aro-max-body: 256KB\n```\n\nOversized bodies are refused with `413` before being read. `aro check`\ntells you, per route, which of the two your code is.",
-      "outputs": []
+      "id" : "nb14-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The first loop prints in list order, every run. The parallel\nloop's order is whatever the scheduler chose — run the cell twice and\nit may differ. Full model, including event dispatch ordering:\n[Chapter 39 — Concurrency](..\/Book\/TheLanguageGuide\/Chapter39-Concurrency.md).\n\n## Streaming bodies\n\nHTTP uploads obey one elegant rule\n([ARO-0090](..\/Proposals\/ARO-0090-streaming-io-and-materialization.md)):\n**streams don't have a size — values do.** A feature set that only\n*moves* its request body (`Write` to a file, `Return`, `Send`) never\nholds it in memory — a 4 GB upload streams through unbothered. A\nfeature set that *reads* the body (a field access, `Compute`, a\nguard) turns it into a value, and values are bounded — 1 MB by\ndefault, per route in the contract:\n\n```yaml\n  \/documents:\n    post:\n      operationId: uploadDocument\n      x-aro-max-body: 256KB\n```\n\nOversized bodies are refused with `413` before being read. `aro check`\ntells you, per route, which of the two your code is."
     },
     {
-      "id": "nb14-c11",
-      "kind": "markdown",
-      "source": "## Testing\n\nTests live in the **same file** as the code, marked by a `Test`\nsuffix on the business activity, in Given/When/Then style\n([ARO-0015](../Proposals/ARO-0015-testing-framework.md)):\n\n```aro\n(order-total: Cafe Pricing) {\n    Compute the <total> from <price> * <qty>.\n    Return an <OK: status> with <total>.\n}\n\n(order-total-multiplies: Cafe Pricing Test) {\n    Given the <price> with 2.4.\n    Given the <qty> with 2.\n    When the <total> from the <order-total>.\n    Then the <total> with 4.8.\n}\n```\n\n`aro test ./BrewAndBytes` runs them (developer context — diagnostic\noutput); compiled binaries strip them. No mocking framework: the\nGiven bindings *are* the world the feature set sees.",
-      "outputs": []
+      "id" : "nb14-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Testing\n\nTests live in the **same file** as the code, marked by a `Test`\nsuffix on the business activity, in Given\/When\/Then style\n([ARO-0015](..\/Proposals\/ARO-0015-testing-framework.md)):\n\n```aro\n(order-total: Cafe Pricing) {\n    Compute the <total> from <price> * <qty>.\n    Return an <OK: status> with <total>.\n}\n\n(order-total-multiplies: Cafe Pricing Test) {\n    Given the <price> with 2.4.\n    Given the <qty> with 2.\n    When the <total> from the <order-total>.\n    Then the <total> with 4.8.\n}\n```\n\n`aro test .\/BrewAndBytes` runs them (developer context — diagnostic\noutput); compiled binaries strip them. No mocking framework: the\nGiven bindings *are* the world the feature set sees."
     },
     {
-      "id": "nb14-c12",
-      "kind": "markdown",
-      "source": "## Plugins and native builds\n\nWhen ARO needs help, plugins in `Plugins/` extend it — Swift, Rust,\nC, or Python, all speaking one C ABI\n([ARO-0087](../Proposals/ARO-0087-plugin-sdk.md)). `aro new plugin\nfoo` scaffolds one; `aro add github:org/repo` installs one. Plugin\nactions arrive namespaced (`Markdown.ToHTML the <html> from <text>.`)\n— the same call shape as your `Application.*` actions from\n[10](10-user-defined-actions.repl).\n\nAnd when the café goes to production:\n\n```bash\naro check ./BrewAndBytes     # syntax + qualifier + route analysis\naro test  ./BrewAndBytes     # colocated tests\naro build ./BrewAndBytes     # LLVM-compiled native binary\n./BrewAndBytes/BrewAndBytes  # no interpreter, same behavior\n```\n\n`aro build` compiles through LLVM IR to a single static binary —\nplugins bundled, templates and store files embedded, tests stripped,\nthe same streaming limits enforced\n([Chapter 27 — Native Compilation](../Book/TheLanguageGuide/Chapter27-NativeCompilation.md),\n[ARO-0009](../Proposals/ARO-0009-native-compilation.md)).",
-      "outputs": []
+      "id" : "nb14-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Plugins and native builds\n\nWhen ARO needs help, plugins in `Plugins\/` extend it — Swift, Rust,\nC, or Python, all speaking one C ABI\n([ARO-0087](..\/Proposals\/ARO-0087-plugin-sdk.md)). `aro new plugin\nfoo` scaffolds one; `aro add github:org\/repo` installs one. Plugin\nactions arrive namespaced (`Markdown.ToHTML the <html> from <text>.`)\n— the same call shape as your `Application.*` actions from\n[10](10-user-defined-actions.repl).\n\nAnd when the café goes to production:\n\n```bash\naro check .\/BrewAndBytes     # syntax + qualifier + route analysis\naro test  .\/BrewAndBytes     # colocated tests\naro build .\/BrewAndBytes     # LLVM-compiled native binary\n.\/BrewAndBytes\/BrewAndBytes  # no interpreter, same behavior\n```\n\n`aro build` compiles through LLVM IR to a single static binary —\nplugins bundled, templates and store files embedded, tests stripped,\nthe same streaming limits enforced\n([Chapter 27 — Native Compilation](..\/Book\/TheLanguageGuide\/Chapter27-NativeCompilation.md),\n[ARO-0009](..\/Proposals\/ARO-0009-native-compilation.md))."
     },
     {
-      "id": "nb14-c13",
-      "kind": "markdown",
-      "source": "## The café, assembled\n\nEvery notebook you have run maps onto a file of the finished\napplication:\n\n| Notebook | Becomes |\n|----------|---------|\n| 01–05 values, computations, guards | the statements inside every feature set |\n| 06 collections & pipelines | the analytics feature sets in `reports.aro` |\n| 07 text processing | feedback cleaning in `feedback.aro` |\n| 08 dates & times | opening hours logic in `schedule.aro` |\n| 09 feature sets & events | `orders.aro` — the `OrderPlaced` handlers, guards and all |\n| 10 user-defined actions | `pricing.aro` — `Application.PriceOrder` |\n| 11 set operations | loyalty audiences in `loyalty.aro` |\n| 12 templates & output | `templates/receipt.tpl` + `Transform` |\n| 13 repositories & state | `inventory.aro`, `menu.store`, the observers |\n| 14 this notebook | `main.aro` + `openapi.yaml` holding it together |\n\nThe pieces you tested cell by cell are *unchanged* in the application\n— that is ARO's promise: the language of the notebook is the language\nof production.\n\nTwo last cells before closing time. First, a subscriber — the menu\nboard from the front window, waiting for the shop to announce itself:",
-      "outputs": []
+      "id" : "nb14-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The café, assembled\n\nEvery notebook you have run maps onto a file of the finished\napplication:\n\n| Notebook | Becomes |\n|----------|---------|\n| 01–05 values, computations, guards | the statements inside every feature set |\n| 06 collections & pipelines | the analytics feature sets in `reports.aro` |\n| 07 text processing | feedback cleaning in `feedback.aro` |\n| 08 dates & times | opening hours logic in `schedule.aro` |\n| 09 feature sets & events | `orders.aro` — the `OrderPlaced` handlers, guards and all |\n| 10 user-defined actions | `pricing.aro` — `Application.PriceOrder` |\n| 11 set operations | loyalty audiences in `loyalty.aro` |\n| 12 templates & output | `templates\/receipt.tpl` + `Transform` |\n| 13 repositories & state | `inventory.aro`, `menu.store`, the observers |\n| 14 this notebook | `main.aro` + `openapi.yaml` holding it together |\n\nThe pieces you tested cell by cell are *unchanged* in the application\n— that is ARO's promise: the language of the notebook is the language\nof production.\n\nTwo last cells before closing time. First, a subscriber — the menu\nboard from the front window, waiting for the shop to announce itself:"
     },
     {
-      "id": "nb14-c14",
-      "kind": "code",
-      "source": "(LightMenuBoard: CafeReady Handler) {\n    Extract the <message> from the <event: message>.\n    Log \"MENU BOARD ON:\" to the <console>.\n    Log <message> to the <console>.\n    Return an <OK: status> for the <lighting>.\n}",
-      "outputs": []
+      "id" : "nb14-c14",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(LightMenuBoard: CafeReady Handler) {\n    Extract the <message> from the <event: message>.\n    Log \"MENU BOARD ON:\" to the <console>.\n    Log <message> to the <console>.\n    Return an <OK: status> for the <lighting>.\n}"
     },
     {
-      "id": "nb14-c15",
-      "kind": "markdown",
-      "source": "And the announcement itself — in the running application this is\nthe moment the board lights up:",
-      "outputs": []
+      "id" : "nb14-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "And the announcement itself — in the running application this is\nthe moment the board lights up:"
     },
     {
-      "id": "nb14-c16",
-      "kind": "code",
-      "source": "Emit a <CafeReady: event> with { message: \"Brew & Bytes is open for business.\" }.\nLog \"From fourteen notebooks to one running service.\" to the <console>.\nLog \"See you at the counter.\" to the <console>.",
-      "outputs": []
+      "id" : "nb14-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit a <CafeReady: event> with { message: \"Brew & Bytes is open for business.\" }.\nLog \"From fourteen notebooks to one running service.\" to the <console>.\nLog \"See you at the counter.\" to the <console>."
     },
     {
-      "id": "nb14-c17",
-      "kind": "markdown",
-      "source": "In the application, a `CafeReady Handler` would light up the\nmenu board. Here, the event simply enters the bus — and you know\nexactly what that means now.\n\n## Where to go next\n\n- Run the real thing: `aro run Examples/UserService` (multi-file REST\n  API), `aro run Examples/HTTPServer`, `Examples/SimpleChat`\n  (WebSockets), `Examples/MedallionPipeline` (data engineering).\n- Read the spec that answers your next \"but how does…\":\n  [ARO-0005](../Proposals/ARO-0005-application-architecture.md) for\n  architecture, [ARO-0088](../Proposals/ARO-0088-concurrency-model.md)\n  for ordering, [ARO-0090](../Proposals/ARO-0090-streaming-io-and-materialization.md)\n  for uploads.\n- Scaffold your own café: a directory, an `openapi.yaml`, one\n  `Application-Start` — and cells from these notebooks.\n\n## Related\n\n- Previous: [13 — Repositories & State](13-repositories-and-state.repl);\n  start of the course: [01 — Hello, ARO](01-hello-aro.repl)\n- Language Guide: [Chapter 3 — Getting Started](../Book/TheLanguageGuide/Chapter03-GettingStarted.md),\n  [Chapter 17 — OpenAPI](../Book/TheLanguageGuide/Chapter17-OpenAPI.md),\n  [Chapter 18 — HTTP Feature Sets](../Book/TheLanguageGuide/Chapter18-HTTPFeatureSets.md),\n  [Chapter 27 — Native Compilation](../Book/TheLanguageGuide/Chapter27-NativeCompilation.md),\n  [Chapter 29 — Multi-File Applications](../Book/TheLanguageGuide/Chapter29-MultiFile.md),\n  [Chapter 39 — Concurrency](../Book/TheLanguageGuide/Chapter39-Concurrency.md)\n- Wiki: [Getting Started](https://github.com/arolang/aro/wiki/Getting-Started),\n  [Guide — Application Lifecycle](https://github.com/arolang/aro/wiki/Guide-Application-Lifecycle),\n  [Guide — HTTP Services](https://github.com/arolang/aro/wiki/Guide-HTTP-Services),\n  [Guide — Concurrency](https://github.com/arolang/aro/wiki/Guide-Concurrency),\n  [Guide — Linux Deployment](https://github.com/arolang/aro/wiki/Guide-Linux-Deployment)\n- Specification: [ARO-0005 — Application Architecture](../Proposals/ARO-0005-application-architecture.md),\n  [ARO-0015 — Testing Framework](../Proposals/ARO-0015-testing-framework.md),\n  [ARO-0088 — Concurrency Model](../Proposals/ARO-0088-concurrency-model.md),\n  [ARO-0090 — Streaming I/O](../Proposals/ARO-0090-streaming-io-and-materialization.md)",
-      "outputs": []
+      "id" : "nb14-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In the application, a `CafeReady Handler` would light up the\nmenu board. Here, the event simply enters the bus — and you know\nexactly what that means now.\n\n## Where to go next\n\n- Run the real thing: `aro run Examples\/UserService` (multi-file REST\n  API), `aro run Examples\/HTTPServer`, `Examples\/SimpleChat`\n  (WebSockets), `Examples\/MedallionPipeline` (data engineering).\n- Read the spec that answers your next \"but how does…\":\n  [ARO-0005](..\/Proposals\/ARO-0005-application-architecture.md) for\n  architecture, [ARO-0088](..\/Proposals\/ARO-0088-concurrency-model.md)\n  for ordering, [ARO-0090](..\/Proposals\/ARO-0090-streaming-io-and-materialization.md)\n  for uploads.\n- Scaffold your own café: a directory, an `openapi.yaml`, one\n  `Application-Start` — and cells from these notebooks.\n\n## Related\n\n- Previous: [13 — Repositories & State](13-repositories-and-state.repl);\n  start of the course: [01 — Hello, ARO](01-hello-aro.repl)\n- Language Guide: [Chapter 3 — Getting Started](..\/Book\/TheLanguageGuide\/Chapter03-GettingStarted.md),\n  [Chapter 17 — OpenAPI](..\/Book\/TheLanguageGuide\/Chapter17-OpenAPI.md),\n  [Chapter 18 — HTTP Feature Sets](..\/Book\/TheLanguageGuide\/Chapter18-HTTPFeatureSets.md),\n  [Chapter 27 — Native Compilation](..\/Book\/TheLanguageGuide\/Chapter27-NativeCompilation.md),\n  [Chapter 29 — Multi-File Applications](..\/Book\/TheLanguageGuide\/Chapter29-MultiFile.md),\n  [Chapter 39 — Concurrency](..\/Book\/TheLanguageGuide\/Chapter39-Concurrency.md)\n- Wiki: [Getting Started](https:\/\/github.com\/arolang\/aro\/wiki\/Getting-Started),\n  [Guide — Application Lifecycle](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Application-Lifecycle),\n  [Guide — HTTP Services](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-HTTP-Services),\n  [Guide — Concurrency](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Concurrency),\n  [Guide — Linux Deployment](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Linux-Deployment)\n- Specification: [ARO-0005 — Application Architecture](..\/Proposals\/ARO-0005-application-architecture.md),\n  [ARO-0015 — Testing Framework](..\/Proposals\/ARO-0015-testing-framework.md),\n  [ARO-0088 — Concurrency Model](..\/Proposals\/ARO-0088-concurrency-model.md),\n  [ARO-0090 — Streaming I\/O](..\/Proposals\/ARO-0090-streaming-io-and-materialization.md)"
     }
-  ]
+  ],
+  "version" : 1
 }

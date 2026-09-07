@@ -1,101 +1,133 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb17-c01",
-      "kind": "markdown",
-      "source": "# 17 — Data Engineering: the Medallion Pipeline\n\nForty shops means forty opinions about what \"yesterday's revenue\" was.\n**Brew & Bytes** needs a data platform, and the architecture the\nindustry converged on for exactly this problem is the **medallion**:\nthree layers, three promises.\n\n- **bronze** — the source, reproduced. No cleaning, no joins, no\n  opinions. If the upstream export is wrong, bronze is wrong *the same\n  way* — which is what makes it useful when someone asks why last\n  Tuesday's number changed.\n- **silver** — the source, made trustworthy. Cancelled rows dropped,\n  customers joined on, money computed **once**, so every consumer\n  computes it the same way.\n- **gold** — the answer to one question, shaped for whoever asked it.\n  A data product, not a table you happen to have.\n\nThis notebook builds all three layers from the till exports in\n`data/`, using repositories as working tables and `./.scratch/` as the\nlake. It follows `Examples/MedallionPipeline` — the same pipeline as a\nrunnable `aro run` application — stage by stage.",
-      "outputs": []
+      "id" : "nb17-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 17 — Data Engineering: the Medallion Pipeline\n\nForty shops means forty opinions about what \"yesterday's revenue\" was.\n**Brew & Bytes** needs a data platform, and the architecture the\nindustry converged on for exactly this problem is the **medallion**:\nthree layers, three promises.\n\n- **bronze** — the source, reproduced. No cleaning, no joins, no\n  opinions. If the upstream export is wrong, bronze is wrong *the same\n  way* — which is what makes it useful when someone asks why last\n  Tuesday's number changed.\n- **silver** — the source, made trustworthy. Cancelled rows dropped,\n  customers joined on, money computed **once**, so every consumer\n  computes it the same way.\n- **gold** — the answer to one question, shaped for whoever asked it.\n  A data product, not a table you happen to have.\n\nThis notebook builds all three layers from the till exports in\n`data\/`, using repositories as working tables and `.\/.scratch\/` as the\nlake. It follows `Examples\/MedallionPipeline` — the same pipeline as a\nrunnable `aro run` application — stage by stage."
     },
     {
-      "id": "nb17-c02",
-      "kind": "code",
-      "source": "Read the <landing-orders> from \"data/orders.csv\".\nCreate the <ingest-stamp> with now.\nfor each <landing-order> in <landing-orders> {\n    Create the <bronze-order> with {\n        order_id: <landing-order: order_id>,\n        shop: <landing-order: shop>,\n        customer_id: <landing-order: customer_id>,\n        sku: <landing-order: sku>,\n        quantity: <landing-order: quantity>,\n        unit_price: <landing-order: unit_price>,\n        status: <landing-order: status>,\n        ordered_at: <landing-order: ordered_at>,\n        _source: \"data/orders.csv\",\n        _ingested: <ingest-stamp>\n    }.\n    Store the <bronze-order> into the <nb17-bronze-orders-repository>.\n}\nRetrieve the <bronze-orders> from the <nb17-bronze-orders-repository>.\nCompute the <bronze-order-count: length> from <bronze-orders>.\nLog \"bronze/orders — ${<bronze-order-count>} rows\" to the <console>.",
-      "outputs": []
+      "id" : "nb17-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <landing-orders> from \"data\/orders.csv\".\nCreate the <ingest-stamp> with now.\nfor each <landing-order> in <landing-orders> {\n    Create the <bronze-order> with {\n        order_id: <landing-order: order_id>,\n        shop: <landing-order: shop>,\n        customer_id: <landing-order: customer_id>,\n        sku: <landing-order: sku>,\n        quantity: <landing-order: quantity>,\n        unit_price: <landing-order: unit_price>,\n        status: <landing-order: status>,\n        ordered_at: <landing-order: ordered_at>,\n        _source: \"data\/orders.csv\",\n        _ingested: <ingest-stamp>\n    }.\n    Store the <bronze-order> into the <nb17-bronze-orders-repository>.\n}\nRetrieve the <bronze-orders> from the <nb17-bronze-orders-repository>.\nCompute the <bronze-order-count: length> from <bronze-orders>.\nLog \"bronze\/orders — ${<bronze-order-count>} rows\" to the <console>."
     },
     {
-      "id": "nb17-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\nThis is **ingestion**, the bronze promise kept literally:\n\n- **`Read`** (a *REQUEST* action) parses the CSV by extension —\n  header row becomes field names, every value arrives as text\n  ([18 — Format-Aware I/O](18-format-aware-io.repl)).\n- Each row is copied **field for field** — no filtering, no type\n  fixing, no renaming. Bronze does not have opinions.\n- Two fields are *added*, and only two: **lineage**. `_source` says\n  where the row came from; `_ingested` says when this run picked it\n  up. One `now` stamp bound *before* the loop, so every row of one\n  ingestion carries the same timestamp — that is what lets you group a\n  load and replay it.\n- **`Store`** (an *EXPORT* action) appends to a repository — the\n  platform's working table. Repositories survive across cells, which\n  is exactly what a layered pipeline wants.\n\nThe same pattern lands the second source. Same stamp, same promise:",
-      "outputs": []
+      "id" : "nb17-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nThis is **ingestion**, the bronze promise kept literally:\n\n- **`Read`** (a *REQUEST* action) parses the CSV by extension —\n  header row becomes field names, every value arrives as text\n  ([18 — Format-Aware I\/O](18-format-aware-io.repl)).\n- Each row is copied **field for field** — no filtering, no type\n  fixing, no renaming. Bronze does not have opinions.\n- Two fields are *added*, and only two: **lineage**. `_source` says\n  where the row came from; `_ingested` says when this run picked it\n  up. One `now` stamp bound *before* the loop, so every row of one\n  ingestion carries the same timestamp — that is what lets you group a\n  load and replay it.\n- **`Store`** (an *EXPORT* action) appends to a repository — the\n  platform's working table. Repositories survive across cells, which\n  is exactly what a layered pipeline wants.\n\nThe same pattern lands the second source. Same stamp, same promise:"
     },
     {
-      "id": "nb17-c04",
-      "kind": "code",
-      "source": "Read the <landing-customers> from \"data/customers.csv\".\nfor each <landing-customer> in <landing-customers> {\n    Create the <bronze-customer> with {\n        customer_id: <landing-customer: customer_id>,\n        name: <landing-customer: name>,\n        city: <landing-customer: city>,\n        tier: <landing-customer: tier>,\n        _source: \"data/customers.csv\",\n        _ingested: <ingest-stamp>\n    }.\n    Store the <bronze-customer> into the <nb17-bronze-customers-repository>.\n}\nRetrieve the <bronze-customers> from the <nb17-bronze-customers-repository>.\nCompute the <bronze-customer-count: length> from <bronze-customers>.\nLog \"bronze/customers — ${<bronze-customer-count>} rows\" to the <console>.",
-      "outputs": []
+      "id" : "nb17-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <landing-customers> from \"data\/customers.csv\".\nfor each <landing-customer> in <landing-customers> {\n    Create the <bronze-customer> with {\n        customer_id: <landing-customer: customer_id>,\n        name: <landing-customer: name>,\n        city: <landing-customer: city>,\n        tier: <landing-customer: tier>,\n        _source: \"data\/customers.csv\",\n        _ingested: <ingest-stamp>\n    }.\n    Store the <bronze-customer> into the <nb17-bronze-customers-repository>.\n}\nRetrieve the <bronze-customers> from the <nb17-bronze-customers-repository>.\nCompute the <bronze-customer-count: length> from <bronze-customers>.\nLog \"bronze\/customers — ${<bronze-customer-count>} rows\" to the <console>."
     },
     {
-      "id": "nb17-c05",
-      "kind": "markdown",
-      "source": "A real platform also *lands* bronze as files — the layer you can\nre-read after the process is gone. JSONL, one record per line, because\ndownstream readers should not have to wait for a closing bracket\n([16 — Streaming Execution](16-streaming-execution.repl)):",
-      "outputs": []
+      "id" : "nb17-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "A real platform also *lands* bronze as files — the layer you can\nre-read after the process is gone. JSONL, one record per line, because\ndownstream readers should not have to wait for a closing bracket\n([16 — Streaming Execution](16-streaming-execution.repl)):"
     },
     {
-      "id": "nb17-c06",
-      "kind": "code",
-      "source": "Write the <bronze-orders> to \"./.scratch/nb17-bronze-orders.jsonl\".\nWrite the <bronze-customers> to \"./.scratch/nb17-bronze-customers.jsonl\".\nExists the <bronze-landed> for the <file: \"./.scratch/nb17-bronze-orders.jsonl\">.\nLog \"bronze landed: ${<bronze-landed>}\" to the <console>.",
-      "outputs": []
+      "id" : "nb17-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Write the <bronze-orders> to \".\/.scratch\/nb17-bronze-orders.jsonl\".\nWrite the <bronze-customers> to \".\/.scratch\/nb17-bronze-customers.jsonl\".\nExists the <bronze-landed> for the <file: \".\/.scratch\/nb17-bronze-orders.jsonl\">.\nLog \"bronze landed: ${<bronze-landed>}\" to the <console>."
     },
     {
-      "id": "nb17-c07",
-      "kind": "markdown",
-      "source": "## Silver: trustworthy, joined, computed once\n\nSilver reads **from bronze's files** — not from the original CSVs.\nThat is deliberate: if the till export changes tomorrow, silver still\nbuilds from what *this run* ingested, and the difference is\nexplainable.\n\nThree things happen here, and each is a policy decision written down\nexactly once:\n\n1. **Only confirmed orders are revenue.** Cancelled and pending rows\n   stay in bronze, where they can still be counted if someone asks how\n   many orders were abandoned.\n2. **The customer is joined on.** The join is a lookup: filter the\n   customer rows to the matching `customer_id`, take the first match.\n   No SQL, no join engine — a named, inspectable pipeline stage\n   ([ARO-0018](../Proposals/ARO-0018-query-language.md) rules out a\n   query language by design).\n3. **`line_total` is computed here and nowhere else.** Every report\n   downstream agrees about money because none of them computes it.\n\nNote the extract-then-multiply shape: arithmetic operands are plain\nvariables, so fields are extracted into names first. Everything bound\ninside the loop is scoped to the iteration — fresh names each round,\nno rebinding.",
-      "outputs": []
+      "id" : "nb17-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Silver: trustworthy, joined, computed once\n\nSilver reads **from bronze's files** — not from the original CSVs.\nThat is deliberate: if the till export changes tomorrow, silver still\nbuilds from what *this run* ingested, and the difference is\nexplainable.\n\nThree things happen here, and each is a policy decision written down\nexactly once:\n\n1. **Only confirmed orders are revenue.** Cancelled and pending rows\n   stay in bronze, where they can still be counted if someone asks how\n   many orders were abandoned.\n2. **The customer is joined on.** The join is a lookup: filter the\n   customer rows to the matching `customer_id`, take the first match.\n   No SQL, no join engine — a named, inspectable pipeline stage\n   ([ARO-0018](..\/Proposals\/ARO-0018-query-language.md) rules out a\n   query language by design).\n3. **`line_total` is computed here and nowhere else.** Every report\n   downstream agrees about money because none of them computes it.\n\nNote the extract-then-multiply shape: arithmetic operands are plain\nvariables, so fields are extracted into names first. Everything bound\ninside the loop is scoped to the iteration — fresh names each round,\nno rebinding."
     },
     {
-      "id": "nb17-c08",
-      "kind": "code",
-      "source": "Read the <silver-order-source> from \"./.scratch/nb17-bronze-orders.jsonl\".\nRead the <silver-customer-source> from \"./.scratch/nb17-bronze-customers.jsonl\".\nFilter the <confirmed-rows> from the <silver-order-source> where <status> = \"confirmed\".\nfor each <confirmed-row> in <confirmed-rows> {\n    Extract the <fact-cid> from the <confirmed-row: customer_id>.\n    Filter the <matching-customers> from the <silver-customer-source> where <customer_id> = <fact-cid>.\n    Extract the <matched-customer: first> from the <matching-customers>.\n    Extract the <fact-qty> from the <confirmed-row: quantity>.\n    Extract the <fact-price> from the <confirmed-row: unit_price>.\n    Compute the <fact-line-total> from <fact-qty> * <fact-price>.\n    Create the <order-fact> with {\n        id: <confirmed-row: order_id>,\n        ordered_on: <confirmed-row: ordered_at>,\n        shop: <confirmed-row: shop>,\n        customer_id: <fact-cid>,\n        customer_name: <matched-customer: name>,\n        tier: <matched-customer: tier>,\n        sku: <confirmed-row: sku>,\n        quantity: <fact-qty>,\n        unit_price: <fact-price>,\n        line_total: <fact-line-total>\n    }.\n    Store the <order-fact> into the <nb17-silver-facts-repository>.\n}\nRetrieve the <silver-facts> from the <nb17-silver-facts-repository>.\nCompute the <silver-fact-count: length> from <silver-facts>.\nLog \"silver/order_facts — ${<silver-fact-count>} rows\" to the <console>.\nWrite the <silver-facts> to \"./.scratch/nb17-silver-facts.jsonl\".",
-      "outputs": []
+      "id" : "nb17-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <silver-order-source> from \".\/.scratch\/nb17-bronze-orders.jsonl\".\nRead the <silver-customer-source> from \".\/.scratch\/nb17-bronze-customers.jsonl\".\nFilter the <confirmed-rows> from the <silver-order-source> where <status> = \"confirmed\".\nfor each <confirmed-row> in <confirmed-rows> {\n    Extract the <fact-cid> from the <confirmed-row: customer_id>.\n    Filter the <matching-customers> from the <silver-customer-source> where <customer_id> = <fact-cid>.\n    Extract the <matched-customer: first> from the <matching-customers>.\n    Extract the <fact-qty> from the <confirmed-row: quantity>.\n    Extract the <fact-price> from the <confirmed-row: unit_price>.\n    Compute the <fact-line-total> from <fact-qty> * <fact-price>.\n    Create the <order-fact> with {\n        id: <confirmed-row: order_id>,\n        ordered_on: <confirmed-row: ordered_at>,\n        shop: <confirmed-row: shop>,\n        customer_id: <fact-cid>,\n        customer_name: <matched-customer: name>,\n        tier: <matched-customer: tier>,\n        sku: <confirmed-row: sku>,\n        quantity: <fact-qty>,\n        unit_price: <fact-price>,\n        line_total: <fact-line-total>\n    }.\n    Store the <order-fact> into the <nb17-silver-facts-repository>.\n}\nRetrieve the <silver-facts> from the <nb17-silver-facts-repository>.\nCompute the <silver-fact-count: length> from <silver-facts>.\nLog \"silver\/order_facts — ${<silver-fact-count>} rows\" to the <console>.\nWrite the <silver-facts> to \".\/.scratch\/nb17-silver-facts.jsonl\"."
     },
     {
-      "id": "nb17-c09",
-      "kind": "markdown",
-      "source": "Six bronze rows became four silver facts: one cancelled and one\npending order stayed behind. The fact's `id` is the order id — a\nrepository keeps an `id` field per record and generates one when you\ndon't provide it, so providing the natural key keeps the layer\nreadable.\n\nOne honest detail: `3 × 2.40` may print as `7.199999999999999`. That\nis binary floating point being exact about itself, and it belongs to\nthis layer — silver stores the true computed value; *presentation*\n(rounding to cents) is a gold concern, decided per consumer.\n\n## Gold: one question, one shape\n\nGold products are small, opinionated, and named after their question.\nThe franchise director's question: **how is each shop doing?**\n\nThe distinct shops come from projecting the column and dropping\nduplicates — `unique` keeps first-seen order, so the product is stable\nrun to run, which matters more than it sounds when the product is a\nfile someone diffs. (`Group … by \"shop\"` would partition the same\nrecords in one step — [06 — Collections & Pipelines](06-collections-and-pipelines.repl);\nthe loop keeps each aggregate a named, loggable stage.)",
-      "outputs": []
+      "id" : "nb17-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Six bronze rows became four silver facts: one cancelled and one\npending order stayed behind. The fact's `id` is the order id — a\nrepository keeps an `id` field per record and generates one when you\ndon't provide it, so providing the natural key keeps the layer\nreadable.\n\nOne honest detail: `3 × 2.40` may print as `7.199999999999999`. That\nis binary floating point being exact about itself, and it belongs to\nthis layer — silver stores the true computed value; *presentation*\n(rounding to cents) is a gold concern, decided per consumer.\n\n## Gold: one question, one shape\n\nGold products are small, opinionated, and named after their question.\nThe franchise director's question: **how is each shop doing?**\n\nThe distinct shops come from projecting the column and dropping\nduplicates — `unique` keeps first-seen order, so the product is stable\nrun to run, which matters more than it sounds when the product is a\nfile someone diffs. (`Group … by \"shop\"` would partition the same\nrecords in one step — [06 — Collections & Pipelines](06-collections-and-pipelines.repl);\nthe loop keeps each aggregate a named, loggable stage.)"
     },
     {
-      "id": "nb17-c10",
-      "kind": "code",
-      "source": "Read the <gold-source> from \"./.scratch/nb17-silver-facts.jsonl\".\nMap the <fact-shops: shop> from the <gold-source>.\nCompute the <distinct-shops: unique> from <fact-shops>.\nfor each <shop-name> in <distinct-shops> {\n    Filter the <shop-facts> from the <gold-source> where <shop> = <shop-name>.\n    Reduce the <shop-revenue: Float> from the <shop-facts> with sum(<line_total>).\n    Reduce the <shop-order-count: Integer> from the <shop-facts> with count().\n    Compute the <shop-avg-ticket> from <shop-revenue> / <shop-order-count>.\n    Create the <shop-row> with {\n        id: <shop-name>,\n        shop: <shop-name>,\n        orders: <shop-order-count>,\n        revenue: <shop-revenue>,\n        avg_order_value: <shop-avg-ticket>\n    }.\n    Store the <shop-row> into the <nb17-gold-shop-repository>.\n}\nRetrieve the <shop-product> from the <nb17-gold-shop-repository>.\nCompute the <shop-product-count: length> from <shop-product>.\nWrite the <shop-product> to \"./.scratch/nb17-gold-shop-revenue.csv\".\nLog \"gold/shop_revenue.csv — ${<shop-product-count>} rows\" to the <console>.",
-      "outputs": []
+      "id" : "nb17-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <gold-source> from \".\/.scratch\/nb17-silver-facts.jsonl\".\nMap the <fact-shops: shop> from the <gold-source>.\nCompute the <distinct-shops: unique> from <fact-shops>.\nfor each <shop-name> in <distinct-shops> {\n    Filter the <shop-facts> from the <gold-source> where <shop> = <shop-name>.\n    Reduce the <shop-revenue: Float> from the <shop-facts> with sum(<line_total>).\n    Reduce the <shop-order-count: Integer> from the <shop-facts> with count().\n    Compute the <shop-avg-ticket> from <shop-revenue> \/ <shop-order-count>.\n    Create the <shop-row> with {\n        id: <shop-name>,\n        shop: <shop-name>,\n        orders: <shop-order-count>,\n        revenue: <shop-revenue>,\n        avg_order_value: <shop-avg-ticket>\n    }.\n    Store the <shop-row> into the <nb17-gold-shop-repository>.\n}\nRetrieve the <shop-product> from the <nb17-gold-shop-repository>.\nCompute the <shop-product-count: length> from <shop-product>.\nWrite the <shop-product> to \".\/.scratch\/nb17-gold-shop-revenue.csv\".\nLog \"gold\/shop_revenue.csv — ${<shop-product-count>} rows\" to the <console>."
     },
     {
-      "id": "nb17-c11",
-      "kind": "markdown",
-      "source": "Two rows — Munich's only order is still pending, so it has no revenue\nyet and honestly does not appear. A second question gets a second\nproduct, from the same silver, without touching the first. Marketing\nasks: **which loyalty tier pays for the espresso machines?**",
-      "outputs": []
+      "id" : "nb17-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two rows — Munich's only order is still pending, so it has no revenue\nyet and honestly does not appear. A second question gets a second\nproduct, from the same silver, without touching the first. Marketing\nasks: **which loyalty tier pays for the espresso machines?**"
     },
     {
-      "id": "nb17-c12",
-      "kind": "code",
-      "source": "Map the <fact-tiers: tier> from the <gold-source>.\nCompute the <distinct-tiers: unique> from <fact-tiers>.\nfor each <tier-name> in <distinct-tiers> {\n    Filter the <tier-facts> from the <gold-source> where <tier> = <tier-name>.\n    Reduce the <tier-revenue: Float> from the <tier-facts> with sum(<line_total>).\n    Reduce the <tier-order-count: Integer> from the <tier-facts> with count().\n    Create the <tier-row> with {\n        id: <tier-name>,\n        tier: <tier-name>,\n        orders: <tier-order-count>,\n        revenue: <tier-revenue>\n    }.\n    Store the <tier-row> into the <nb17-gold-tier-repository>.\n}\nRetrieve the <tier-product> from the <nb17-gold-tier-repository>.\nWrite the <tier-product> to \"./.scratch/nb17-gold-tier-revenue.json\".\nLog <tier-product> to the <console>.",
-      "outputs": []
+      "id" : "nb17-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Map the <fact-tiers: tier> from the <gold-source>.\nCompute the <distinct-tiers: unique> from <fact-tiers>.\nfor each <tier-name> in <distinct-tiers> {\n    Filter the <tier-facts> from the <gold-source> where <tier> = <tier-name>.\n    Reduce the <tier-revenue: Float> from the <tier-facts> with sum(<line_total>).\n    Reduce the <tier-order-count: Integer> from the <tier-facts> with count().\n    Create the <tier-row> with {\n        id: <tier-name>,\n        tier: <tier-name>,\n        orders: <tier-order-count>,\n        revenue: <tier-revenue>\n    }.\n    Store the <tier-row> into the <nb17-gold-tier-repository>.\n}\nRetrieve the <tier-product> from the <nb17-gold-tier-repository>.\nWrite the <tier-product> to \".\/.scratch\/nb17-gold-tier-revenue.json\".\nLog <tier-product> to the <console>."
     },
     {
-      "id": "nb17-c13",
-      "kind": "markdown",
-      "source": "## Discussion\n\n**Why layers, when one query would do?** Because the layers isolate\n*blame*. When a number looks wrong, bronze answers \"is the source\nwrong?\", silver answers \"is our cleaning or joining wrong?\", and gold\nanswers \"is the aggregation wrong?\" — each independently checkable,\nbecause each is materialized with a name. It is the same argument that\nmade every pipeline stage a named binding in\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl),\nscaled up to files.\n\n**Lineage is cheap now and priceless later.** `_source` and\n`_ingested` cost two fields per row. The day a shop's export is\ndouble-loaded, they are the difference between `Delete … where\n<_ingested> is <bad-stamp>` and restoring from backup.\n\n**Replays are the test suite of a data platform.** Bronze never\nchanges shape, silver is derived from bronze, gold from silver — so\nany layer can be rebuilt from the one below and *diffed against\nitself*. In this notebook you can re-run the silver and gold cells\nagainst the landed files at any time.\n\n**What ARO deliberately does not give you** is a query language over\nrepositories — no joins, no subqueries ([ARO-0018](../Proposals/ARO-0018-query-language.md)).\nIf the lookup-join loop starts to hurt, that is the signal to reshape\nthe data (denormalize into silver), not to grow the query.\n\nIn a production application each stage becomes a **user-defined\naction** (`Application.IngestOrders`, `Application.BuildSilver`, …)\norchestrated by `Application-Start`, and observers on the bronze\nrepositories can rebuild silver *reactively* when new rows land —\nthat is `Examples/MedallionPipeline` and\n[13 — Repositories & State](13-repositories-and-state.repl).",
-      "outputs": []
+      "id" : "nb17-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\n**Why layers, when one query would do?** Because the layers isolate\n*blame*. When a number looks wrong, bronze answers \"is the source\nwrong?\", silver answers \"is our cleaning or joining wrong?\", and gold\nanswers \"is the aggregation wrong?\" — each independently checkable,\nbecause each is materialized with a name. It is the same argument that\nmade every pipeline stage a named binding in\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl),\nscaled up to files.\n\n**Lineage is cheap now and priceless later.** `_source` and\n`_ingested` cost two fields per row. The day a shop's export is\ndouble-loaded, they are the difference between `Delete … where\n<_ingested> is <bad-stamp>` and restoring from backup.\n\n**Replays are the test suite of a data platform.** Bronze never\nchanges shape, silver is derived from bronze, gold from silver — so\nany layer can be rebuilt from the one below and *diffed against\nitself*. In this notebook you can re-run the silver and gold cells\nagainst the landed files at any time.\n\n**What ARO deliberately does not give you** is a query language over\nrepositories — no joins, no subqueries ([ARO-0018](..\/Proposals\/ARO-0018-query-language.md)).\nIf the lookup-join loop starts to hurt, that is the signal to reshape\nthe data (denormalize into silver), not to grow the query.\n\nIn a production application each stage becomes a **user-defined\naction** (`Application.IngestOrders`, `Application.BuildSilver`, …)\norchestrated by `Application-Start`, and observers on the bronze\nrepositories can rebuild silver *reactively* when new rows land —\nthat is `Examples\/MedallionPipeline` and\n[13 — Repositories & State](13-repositories-and-state.repl)."
     },
     {
-      "id": "nb17-c14",
-      "kind": "markdown",
-      "source": "## Real-world example: a consumer reads the product\n\nThe gold CSV is the hand-off point. The franchise director's\ndashboard — or a spreadsheet, or a colleague's Python — reads the\nproduct and *never* touches silver or bronze. Read it back the way\nthey would:",
-      "outputs": []
+      "id" : "nb17-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: a consumer reads the product\n\nThe gold CSV is the hand-off point. The franchise director's\ndashboard — or a spreadsheet, or a colleague's Python — reads the\nproduct and *never* touches silver or bronze. Read it back the way\nthey would:"
     },
     {
-      "id": "nb17-c15",
-      "kind": "code",
-      "source": "Read the <consumer-view> from \"./.scratch/nb17-gold-shop-revenue.csv\".\nLog \"=== revenue by shop (gold) ===\" to the <console>.\nfor each <consumer-row> in <consumer-view> {\n    Log \"${<consumer-row: shop>}: ${<consumer-row: revenue>} EUR over ${<consumer-row: orders>} orders\" to the <console>.\n}",
-      "outputs": []
+      "id" : "nb17-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <consumer-view> from \".\/.scratch\/nb17-gold-shop-revenue.csv\".\nLog \"=== revenue by shop (gold) ===\" to the <console>.\nfor each <consumer-row> in <consumer-view> {\n    Log \"${<consumer-row: shop>}: ${<consumer-row: revenue>} EUR over ${<consumer-row: orders>} orders\" to the <console>.\n}"
     },
     {
-      "id": "nb17-c16",
-      "kind": "markdown",
-      "source": "### Why the real world needs this\n\nThe medallion architecture is the de-facto standard of the lakehouse\nworld — retail chains land every till transaction in bronze nightly,\nbanks keep bronze immutable for regulators (the *reproduced source* is\na compliance artifact, not a convenience), and streaming platforms run\nthe same three promises continuously instead of nightly. The reason it\nwon is organizational as much as technical: bronze belongs to\ningestion teams, silver to data engineering, gold to the analysts —\nand the contracts between them are files with schemas, not meetings.\nWhat a café teaches in twenty lines, a bank runs at petabyte scale\nwith the same three words.\n\n## Related\n\n- Next: [18 — Format-Aware I/O](18-format-aware-io.repl) — the\n  serialization machinery this notebook leaned on\n- Before this: [16 — Streaming Execution](16-streaming-execution.repl) —\n  what to do when bronze stops fitting in memory\n- Foundations: [06 — Collections & Pipelines](06-collections-and-pipelines.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl)\n- Book: [ARO for Data Engineers](../Book/AROForDataEngineers/) — the\n  long-form treatment of this notebook\n- Language Guide: [Chapter 34 — Data Pipelines](../Book/TheLanguageGuide/Chapter34-DataPipelines.md),\n  [Chapter 21 — Format-Aware I/O](../Book/TheLanguageGuide/Chapter21-FormatAwareIO.md)\n- Wiki: [Guide — Data Pipelines](https://github.com/arolang/aro/wiki/Guide-Data-Pipelines)\n- Specification: [ARO-0018 — Data Pipelines](../Proposals/ARO-0018-query-language.md),\n  [ARO-0040 — Format-Aware I/O](../Proposals/ARO-0040-format-aware-io.md),\n  [ARO-0073 — Store Files](../Proposals/ARO-0073-store-files.md)\n- Examples: `Examples/MedallionPipeline` — this pipeline as a runnable\n  application, with every stage a user-defined action",
-      "outputs": []
+      "id" : "nb17-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### Why the real world needs this\n\nThe medallion architecture is the de-facto standard of the lakehouse\nworld — retail chains land every till transaction in bronze nightly,\nbanks keep bronze immutable for regulators (the *reproduced source* is\na compliance artifact, not a convenience), and streaming platforms run\nthe same three promises continuously instead of nightly. The reason it\nwon is organizational as much as technical: bronze belongs to\ningestion teams, silver to data engineering, gold to the analysts —\nand the contracts between them are files with schemas, not meetings.\nWhat a café teaches in twenty lines, a bank runs at petabyte scale\nwith the same three words.\n\n## Related\n\n- Next: [18 — Format-Aware I\/O](18-format-aware-io.repl) — the\n  serialization machinery this notebook leaned on\n- Before this: [16 — Streaming Execution](16-streaming-execution.repl) —\n  what to do when bronze stops fitting in memory\n- Foundations: [06 — Collections & Pipelines](06-collections-and-pipelines.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl)\n- Book: [ARO for Data Engineers](..\/Book\/AROForDataEngineers\/) — the\n  long-form treatment of this notebook\n- Language Guide: [Chapter 34 — Data Pipelines](..\/Book\/TheLanguageGuide\/Chapter34-DataPipelines.md),\n  [Chapter 21 — Format-Aware I\/O](..\/Book\/TheLanguageGuide\/Chapter21-FormatAwareIO.md)\n- Wiki: [Guide — Data Pipelines](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Data-Pipelines)\n- Specification: [ARO-0018 — Data Pipelines](..\/Proposals\/ARO-0018-query-language.md),\n  [ARO-0040 — Format-Aware I\/O](..\/Proposals\/ARO-0040-format-aware-io.md),\n  [ARO-0073 — Store Files](..\/Proposals\/ARO-0073-store-files.md)\n- Examples: `Examples\/MedallionPipeline` — this pipeline as a runnable\n  application, with every stage a user-defined action"
     }
-  ]
+  ],
+  "version" : 1
 }

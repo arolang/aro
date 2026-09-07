@@ -1,101 +1,133 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb24-c01",
-      "kind": "markdown",
-      "source": "# 24 — State Machines & Domain Modeling\n\nEvery order at Brew & Bytes lives a life:\n`draft → placed → paid → shipped → delivered`. Money changes hands at\nexactly one of those arrows. So the franchise's most expensive bugs are\nnot crashes — they are *illegal moves*: an order shipped before it was\npaid, a refund on an order that was never placed. A field that says\n`status: \"paid\"` is just a string; nothing stops a typo or a hasty\nhandler from writing `\"shipped\"` into it a step too early.\n\nARO's answer is the **`Accept` action**: a state transition with its\nprecondition built into its name. `draft_to_placed` reads as \"*from*\ndraft *to* placed\" — and the runtime refuses the move unless the entity\nis actually in `draft`. Illegal moves become runtime errors with the\nentity's current state in the message, not silent corruption.\n\nIn this notebook: Accept and its failure mode, the events every\ntransition emits, handler guards ([ARO-0022](../Proposals/ARO-0022-state-guards.md))\nas the routing layer on top, and how all of it adds up to\ndomain modeling the DDD way\n([ARO-0014](../Proposals/ARO-0014-domain-modeling.md)).",
-      "outputs": []
+      "id" : "nb24-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 24 — State Machines & Domain Modeling\n\nEvery order at Brew & Bytes lives a life:\n`draft → placed → paid → shipped → delivered`. Money changes hands at\nexactly one of those arrows. So the franchise's most expensive bugs are\nnot crashes — they are *illegal moves*: an order shipped before it was\npaid, a refund on an order that was never placed. A field that says\n`status: \"paid\"` is just a string; nothing stops a typo or a hasty\nhandler from writing `\"shipped\"` into it a step too early.\n\nARO's answer is the **`Accept` action**: a state transition with its\nprecondition built into its name. `draft_to_placed` reads as \"*from*\ndraft *to* placed\" — and the runtime refuses the move unless the entity\nis actually in `draft`. Illegal moves become runtime errors with the\nentity's current state in the message, not silent corruption.\n\nIn this notebook: Accept and its failure mode, the events every\ntransition emits, handler guards ([ARO-0022](..\/Proposals\/ARO-0022-state-guards.md))\nas the routing layer on top, and how all of it adds up to\ndomain modeling the DDD way\n([ARO-0014](..\/Proposals\/ARO-0014-domain-modeling.md))."
     },
     {
-      "id": "nb24-c02",
-      "kind": "code",
-      "source": "Create the <espresso-order> with { id: \"ORD-100\", shop: \"berlin-01\", status: \"draft\" }.\nAccept the <place-step: draft_to_placed> on <espresso-order: status>.\nLog <espresso-order> to the <console>.",
-      "outputs": []
+      "id" : "nb24-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <espresso-order> with { id: \"ORD-100\", shop: \"berlin-01\", status: \"draft\" }.\nAccept the <place-step: draft_to_placed> on <espresso-order: status>.\nLog <espresso-order> to the <console>."
     },
     {
-      "id": "nb24-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Accept`** is an *OWN* action with the preposition **`on`** — it\n  operates on a field of an entity you already hold.\n- The qualifier **`draft_to_placed`** is the transition name:\n  `from_to_target`. It encodes both the **precondition** (the field\n  must currently be `\"draft\"`) and the **effect** (it becomes\n  `\"placed\"`).\n- **`on <espresso-order: status>`** names entity and field. After the\n  statement, the log shows `status: placed` — the entity itself\n  changed.\n- **`<place-step>`** is the transition result, a fresh binding like any\n  other. Name each step distinctly (`place-step`, `pay-step`, …): one\n  binding per name, as always.\n\nPause on the second point: Accept **mutated** `<espresso-order>` — the\none sanctioned exception to\n[04 — Immutability](04-immutability.repl). The language allows it here\nprecisely because this is what an *entity* is in domain-driven design:\nidentity that persists while state changes lawfully. The mutation is\nnarrow (one field), named (the transition), guarded (the precondition),\nand announced (an event fires — below). Compare that to\n`Update the <order: status> with \"placed\".`, which would also write the\nfield but checks nothing and means nothing.",
-      "outputs": []
+      "id" : "nb24-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Accept`** is an *OWN* action with the preposition **`on`** — it\n  operates on a field of an entity you already hold.\n- The qualifier **`draft_to_placed`** is the transition name:\n  `from_to_target`. It encodes both the **precondition** (the field\n  must currently be `\"draft\"`) and the **effect** (it becomes\n  `\"placed\"`).\n- **`on <espresso-order: status>`** names entity and field. After the\n  statement, the log shows `status: placed` — the entity itself\n  changed.\n- **`<place-step>`** is the transition result, a fresh binding like any\n  other. Name each step distinctly (`place-step`, `pay-step`, …): one\n  binding per name, as always.\n\nPause on the second point: Accept **mutated** `<espresso-order>` — the\none sanctioned exception to\n[04 — Immutability](04-immutability.repl). The language allows it here\nprecisely because this is what an *entity* is in domain-driven design:\nidentity that persists while state changes lawfully. The mutation is\nnarrow (one field), named (the transition), guarded (the precondition),\nand announced (an event fires — below). Compare that to\n`Update the <order: status> with \"placed\".`, which would also write the\nfield but checks nothing and means nothing."
     },
     {
-      "id": "nb24-c04",
-      "kind": "markdown",
-      "source": "## The full lifecycle\n\nTransitions chain. Walk one order through its whole life — each arrow\none Accept, each with its own precondition:",
-      "outputs": []
+      "id" : "nb24-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The full lifecycle\n\nTransitions chain. Walk one order through its whole life — each arrow\none Accept, each with its own precondition:"
     },
     {
-      "id": "nb24-c05",
-      "kind": "code",
-      "source": "Create the <busy-order> with { id: \"ORD-101\", shop: \"hamburg-02\", status: \"draft\" }.\nAccept the <busy-place: draft_to_placed> on <busy-order: status>.\nAccept the <busy-pay: placed_to_paid> on <busy-order: status>.\nAccept the <busy-ship: paid_to_shipped> on <busy-order: status>.\nAccept the <busy-deliver: shipped_to_delivered> on <busy-order: status>.\nLog <busy-order> to the <console>.",
-      "outputs": []
+      "id" : "nb24-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <busy-order> with { id: \"ORD-101\", shop: \"hamburg-02\", status: \"draft\" }.\nAccept the <busy-place: draft_to_placed> on <busy-order: status>.\nAccept the <busy-pay: placed_to_paid> on <busy-order: status>.\nAccept the <busy-ship: paid_to_shipped> on <busy-order: status>.\nAccept the <busy-deliver: shipped_to_delivered> on <busy-order: status>.\nLog <busy-order> to the <console>."
     },
     {
-      "id": "nb24-c06",
-      "kind": "markdown",
-      "source": "## The illegal move\n\nNow the interesting part: try to ship an order that was never paid.\nThe `from` half of `paid_to_shipped` says the order must be in `paid` —\nthis one is in `draft`. The next cell is *supposed* to fail, and the\nerror is worth reading closely: it names the transition, the entity,\nand (in the trace) the state it actually found. Code is the error\nmessage ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)).",
-      "outputs": []
+      "id" : "nb24-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The illegal move\n\nNow the interesting part: try to ship an order that was never paid.\nThe `from` half of `paid_to_shipped` says the order must be in `paid` —\nthis one is in `draft`. The next cell is *supposed* to fail, and the\nerror is worth reading closely: it names the transition, the entity,\nand (in the trace) the state it actually found. Code is the error\nmessage ([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md))."
     },
     {
-      "id": "nb24-c07",
-      "kind": "code",
-      "source": "(* expect-error *)\nCreate the <sneaky-order> with { id: \"ORD-102\", shop: \"berlin-01\", status: \"draft\" }.\nAccept the <sneaky-ship: paid_to_shipped> on <sneaky-order: status>.",
-      "outputs": []
+      "id" : "nb24-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\nCreate the <sneaky-order> with { id: \"ORD-102\", shop: \"berlin-01\", status: \"draft\" }.\nAccept the <sneaky-ship: paid_to_shipped> on <sneaky-order: status>."
     },
     {
-      "id": "nb24-c08",
-      "kind": "code",
-      "source": "Log <sneaky-order> to the <console>.",
-      "outputs": []
+      "id" : "nb24-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Log <sneaky-order> to the <console>."
     },
     {
-      "id": "nb24-c09",
-      "kind": "markdown",
-      "source": "Still `status: draft` — a refused transition leaves the entity\nexactly as it was. The failed statement changed nothing, and the\nsession carried on.\n\nNote what Accept checks and what it does not: the precondition is\n\"**current state equals the `from` part**\". It is not a global graph of\nallowed arrows — the set of legal moves is simply the set of transition\nnames your feature sets actually use. Discipline follows from\nvocabulary: if no statement in the codebase says `draft_to_shipped`,\nthat arrow does not exist.\n\n## Every transition is an event\n\nAccept does one more thing: it emits a **`StateTransition`** event\ncarrying `fromState`, `toState`, `entityId`, `fieldName`, and the full\nentity. That plugs the state machine into everything you learned in\n[09 — Feature Sets & Events](09-feature-sets-and-events.repl) — and\n**handler guards** ([ARO-0022](../Proposals/ARO-0022-state-guards.md))\nlet a handler subscribe to exactly the transitions it cares about,\ndeclaratively:\n\n| Guard | Fires when |\n|-------|-----------|\n| `Handler<toState:delivered>` | any transition *into* `delivered` |\n| `Handler<toState:paid,shipped>` | into `paid` **or** `shipped` (comma = OR) |\n| `Handler<toState:delivered;tier:premium>` | both conditions hold (semicolon = AND) |\n| `Handler<customer.region:eu>` | nested fields via dot notation |\n\nComparison is case-insensitive; events that miss the guard are skipped\nsilently — no error, the handler simply stays quiet.",
-      "outputs": []
+      "id" : "nb24-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Still `status: draft` — a refused transition leaves the entity\nexactly as it was. The failed statement changed nothing, and the\nsession carried on.\n\nNote what Accept checks and what it does not: the precondition is\n\"**current state equals the `from` part**\". It is not a global graph of\nallowed arrows — the set of legal moves is simply the set of transition\nnames your feature sets actually use. Discipline follows from\nvocabulary: if no statement in the codebase says `draft_to_shipped`,\nthat arrow does not exist.\n\n## Every transition is an event\n\nAccept does one more thing: it emits a **`StateTransition`** event\ncarrying `fromState`, `toState`, `entityId`, `fieldName`, and the full\nentity. That plugs the state machine into everything you learned in\n[09 — Feature Sets & Events](09-feature-sets-and-events.repl) — and\n**handler guards** ([ARO-0022](..\/Proposals\/ARO-0022-state-guards.md))\nlet a handler subscribe to exactly the transitions it cares about,\ndeclaratively:\n\n| Guard | Fires when |\n|-------|-----------|\n| `Handler<toState:delivered>` | any transition *into* `delivered` |\n| `Handler<toState:paid,shipped>` | into `paid` **or** `shipped` (comma = OR) |\n| `Handler<toState:delivered;tier:premium>` | both conditions hold (semicolon = AND) |\n| `Handler<customer.region:eu>` | nested fields via dot notation |\n\nComparison is case-insensitive; events that miss the guard are skipped\nsilently — no error, the handler simply stays quiet."
     },
     {
-      "id": "nb24-c10",
-      "kind": "code",
-      "source": "(CelebrateDelivery: StateTransition Handler<toState:delivered>) {\n    Extract the <delivered-id> from the <event: entityId>.\n    Log \"Delivered and done: ${<delivered-id>}\" to the <console>.\n    Return an <OK: status> for the <celebration>.\n}",
-      "outputs": []
+      "id" : "nb24-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(CelebrateDelivery: StateTransition Handler<toState:delivered>) {\n    Extract the <delivered-id> from the <event: entityId>.\n    Log \"Delivered and done: ${<delivered-id>}\" to the <console>.\n    Return an <OK: status> for the <celebration>.\n}"
     },
     {
-      "id": "nb24-c11",
-      "kind": "code",
-      "source": "(AuditShipping: status StateObserver<paid_to_shipped>) {\n    Extract the <shipped-id> from the <transition: entityId>.\n    Log \"AUDIT shipped: ${<shipped-id>}\" to the <console>.\n    Return an <OK: status> for the <audit>.\n}",
-      "outputs": []
+      "id" : "nb24-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(AuditShipping: status StateObserver<paid_to_shipped>) {\n    Extract the <shipped-id> from the <transition: entityId>.\n    Log \"AUDIT shipped: ${<shipped-id>}\" to the <console>.\n    Return an <OK: status> for the <audit>.\n}"
     },
     {
-      "id": "nb24-c12",
-      "kind": "markdown",
-      "source": "Two subscription styles, one distinction worth memorizing:\n\n- A **state guard** (`Handler<toState:shipped>`) fires on any event\n  where the field *is* that value — \"when status IS shipped\".\n- A **`StateObserver`** (`status StateObserver<paid_to_shipped>`)\n  fires only on that exact *arrow* — \"when status changes from paid TO\n  shipped\". Audit trails want observers; notifications usually want\n  guards.\n\nBoth registered fine here. As with all handlers, dispatch inside\ninteractive sessions is landing in the current release\n([ARO-0091 — Event dispatch](../Proposals/ARO-0091-jupyter-kernel.md));\nin `aro run` applications, every Accept above would have triggered\nthem.\n\n## Domain modeling: the DDD view (ARO-0014)\n\nARO does DDD by convention, not by new syntax: **types live in\nOpenAPI, behavior lives in feature sets** — and the pieces you have\nbeen using all along map onto the DDD vocabulary directly:\n\n| DDD concept | In ARO |\n|-------------|--------|\n| Value object | OpenAPI schema **without** `id` — compared by value, never mutated |\n| Entity | Schema **with** `id` — identity persists, state transitions via Accept |\n| Aggregate | Schema with nested objects — stored and retrieved as one |\n| Bounded context | The **business activity** in the feature-set header |\n| Domain event | `Emit` + handler feature sets |\n| Repository | `Store` / `Retrieve` ([13](13-repositories-and-state.repl)) |\n| Domain service / factory | A feature set with logic / one that creates |\n\n```yaml\n# openapi.yaml - structure lives here\ncomponents:\n  schemas:\n    Money:            # value object: no id\n      type: object\n      properties:\n        amount:   { type: number }\n        currency: { type: string, enum: [EUR, USD] }\n    Order:            # entity (and aggregate root): id + nested value objects\n      type: object\n      properties:\n        id:       { type: string }\n        status:   { type: string }\n        total:    { $ref: '#/components/schemas/Money' }\n```\n\nBounded contexts fall out of business activities: every feature set\ntagged `Order Management` is one context, `Shipping` another. They\nnever call each other — they *emit events across the boundary*, which\nis exactly the decoupling DDD prescribes and\n[09](09-feature-sets-and-events.repl) taught. The full treatment, with\na three-context worked example, is\n[ARO-0014 — Domain Modeling](../Proposals/ARO-0014-domain-modeling.md).",
-      "outputs": []
+      "id" : "nb24-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two subscription styles, one distinction worth memorizing:\n\n- A **state guard** (`Handler<toState:shipped>`) fires on any event\n  where the field *is* that value — \"when status IS shipped\".\n- A **`StateObserver`** (`status StateObserver<paid_to_shipped>`)\n  fires only on that exact *arrow* — \"when status changes from paid TO\n  shipped\". Audit trails want observers; notifications usually want\n  guards.\n\nBoth registered fine here. As with all handlers, dispatch inside\ninteractive sessions is landing in the current release\n([ARO-0091 — Event dispatch](..\/Proposals\/ARO-0091-jupyter-kernel.md));\nin `aro run` applications, every Accept above would have triggered\nthem.\n\n## Domain modeling: the DDD view (ARO-0014)\n\nARO does DDD by convention, not by new syntax: **types live in\nOpenAPI, behavior lives in feature sets** — and the pieces you have\nbeen using all along map onto the DDD vocabulary directly:\n\n| DDD concept | In ARO |\n|-------------|--------|\n| Value object | OpenAPI schema **without** `id` — compared by value, never mutated |\n| Entity | Schema **with** `id` — identity persists, state transitions via Accept |\n| Aggregate | Schema with nested objects — stored and retrieved as one |\n| Bounded context | The **business activity** in the feature-set header |\n| Domain event | `Emit` + handler feature sets |\n| Repository | `Store` \/ `Retrieve` ([13](13-repositories-and-state.repl)) |\n| Domain service \/ factory | A feature set with logic \/ one that creates |\n\n```yaml\n# openapi.yaml - structure lives here\ncomponents:\n  schemas:\n    Money:            # value object: no id\n      type: object\n      properties:\n        amount:   { type: number }\n        currency: { type: string, enum: [EUR, USD] }\n    Order:            # entity (and aggregate root): id + nested value objects\n      type: object\n      properties:\n        id:       { type: string }\n        status:   { type: string }\n        total:    { $ref: '#\/components\/schemas\/Money' }\n```\n\nBounded contexts fall out of business activities: every feature set\ntagged `Order Management` is one context, `Shipping` another. They\nnever call each other — they *emit events across the boundary*, which\nis exactly the decoupling DDD prescribes and\n[09](09-feature-sets-and-events.repl) taught. The full treatment, with\na three-context worked example, is\n[ARO-0014 — Domain Modeling](..\/Proposals\/ARO-0014-domain-modeling.md)."
     },
     {
-      "id": "nb24-c13",
-      "kind": "markdown",
-      "source": "## Reading a production lifecycle: Examples/OrderService\n\n`Examples/OrderService/` in the repository is the pattern of this\nnotebook shipped as an HTTP API. Each lifecycle endpoint is four moves\n— *fetch, transition, persist, respond*:\n\n```aro\n(placeOrder: Order Management) {\n    Extract the <order-id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where <id> is <order-id>.\n    Accept the <transition: draft_to_placed> on <order: status>.\n    Store the <order> into the <order-repository>.\n    Return an <OK: status> with <order>.\n}\n\n(payOrder: Order Management) {\n    Extract the <order-id> from the <pathParameters: id>.\n    Extract the <payment> from the <request: body>.\n    Retrieve the <order> from the <order-repository> where <id> is <order-id>.\n    Accept the <transition: placed_to_paid> on <order: status>.\n    Update the <order: paymentAmount> from the <payment: amount>.\n    Store the <order> into the <order-repository>.\n    Return an <OK: status> with <order>.\n}\n```\n\nThere is **no** `if order.status == \"draft\"` anywhere — the Accept *is*\nthe check. A client that calls `POST /orders/7/pay` on a draft order\ngets the refusal as its HTTP error response, generated from the same\nplain-language message you read above. `Examples/StateMachine/` shows\nthe same machinery console-only, with observers for every arrow.",
-      "outputs": []
+      "id" : "nb24-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Reading a production lifecycle: Examples\/OrderService\n\n`Examples\/OrderService\/` in the repository is the pattern of this\nnotebook shipped as an HTTP API. Each lifecycle endpoint is four moves\n— *fetch, transition, persist, respond*:\n\n```aro\n(placeOrder: Order Management) {\n    Extract the <order-id> from the <pathParameters: id>.\n    Retrieve the <order> from the <order-repository> where <id> is <order-id>.\n    Accept the <transition: draft_to_placed> on <order: status>.\n    Store the <order> into the <order-repository>.\n    Return an <OK: status> with <order>.\n}\n\n(payOrder: Order Management) {\n    Extract the <order-id> from the <pathParameters: id>.\n    Extract the <payment> from the <request: body>.\n    Retrieve the <order> from the <order-repository> where <id> is <order-id>.\n    Accept the <transition: placed_to_paid> on <order: status>.\n    Update the <order: paymentAmount> from the <payment: amount>.\n    Store the <order> into the <order-repository>.\n    Return an <OK: status> with <order>.\n}\n```\n\nThere is **no** `if order.status == \"draft\"` anywhere — the Accept *is*\nthe check. A client that calls `POST \/orders\/7\/pay` on a draft order\ngets the refusal as its HTTP error response, generated from the same\nplain-language message you read above. `Examples\/StateMachine\/` shows\nthe same machinery console-only, with observers for every arrow."
     },
     {
-      "id": "nb24-c14",
-      "kind": "markdown",
-      "source": "## Real-world example: the kiosk order, end to end\n\nThe runnable version of *fetch, transition, persist*: a kiosk order\nenters the repository as a draft, gets picked up, lawfully placed, and\nwritten back. The final Retrieve proves the state survived the round\ntrip — this is the exact sequence behind every \"your order is on its\nway\" screen you have ever seen.",
-      "outputs": []
+      "id" : "nb24-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the kiosk order, end to end\n\nThe runnable version of *fetch, transition, persist*: a kiosk order\nenters the repository as a draft, gets picked up, lawfully placed, and\nwritten back. The final Retrieve proves the state survived the round\ntrip — this is the exact sequence behind every \"your order is on its\nway\" screen you have ever seen."
     },
     {
-      "id": "nb24-c15",
-      "kind": "code",
-      "source": "Create the <kiosk-order> with { id: \"ORD-200\", shop: \"muenchen-01\", status: \"draft\" }.\nStore the <kiosk-order> into the <franchise-order-repository>.\n\nRetrieve the <picked-order> from the <franchise-order-repository> where <id> is \"ORD-200\".\nAccept the <kiosk-place: draft_to_placed> on <picked-order: status>.\nStore the <picked-order> into the <franchise-order-repository>.\n\nRetrieve the <verified-order> from the <franchise-order-repository> where <id> is \"ORD-200\".\nLog <verified-order> to the <console>.",
-      "outputs": []
+      "id" : "nb24-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <kiosk-order> with { id: \"ORD-200\", shop: \"muenchen-01\", status: \"draft\" }.\nStore the <kiosk-order> into the <franchise-order-repository>.\n\nRetrieve the <picked-order> from the <franchise-order-repository> where <id> is \"ORD-200\".\nAccept the <kiosk-place: draft_to_placed> on <picked-order: status>.\nStore the <picked-order> into the <franchise-order-repository>.\n\nRetrieve the <verified-order> from the <franchise-order-repository> where <id> is \"ORD-200\".\nLog <verified-order> to the <console>."
     },
     {
-      "id": "nb24-c16",
-      "kind": "markdown",
-      "source": "## Discussion\n\n- **Transition names are ubiquitous language.** `placed_to_paid` is a\n  sentence the café's accountant can read in the code *and* in the\n  error log. When the business renames a state, you rename a\n  transition — grep finds every arrow. Status strings scattered\n  through `Update` statements offer no such handle.\n- **Precondition, not permission.** Accept checks where the entity\n  *is*, not who is asking. Authorization stays in the HTTP layer or in\n  handler guards; keep the state machine about state.\n- **Guards replace conditionals — use that.** A handler that begins by\n  extracting `status` and `when`-guarding every statement should almost\n  always become two handlers with two guards. The filtering moves into\n  the signature, where it is visible and testable.\n- **Why the industry cares:** payment processors, logistics chains, and\n  document-approval systems all live and die by this pattern. An\n  e-commerce order double-shipped because two workers raced past a\n  string check is a real (and expensive) failure class; a validated\n  transition makes the race lose loudly instead of shipping twice.\n  State machines are also *testable* as tables: every arrow one test,\n  every non-arrow one expected refusal — see\n  [25 — Testing & Quality](25-testing-and-quality.repl).\n\n## Related\n\n- Next: [25 — Testing & Quality](25-testing-and-quality.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl),\n  [04 — Immutability](04-immutability.repl)\n- Language Guide: [Chapter 31 — State Machines](../Book/TheLanguageGuide/Chapter31-StateMachines.md),\n  [Chapter 16 — Handler Guards](../Book/TheLanguageGuide/Chapter16-HandlerGuards.md)\n- Wiki: [Guide — Events](https://github.com/arolang/aro/wiki/Guide-Events)\n- Specification: [ARO-0022 — State Guards](../Proposals/ARO-0022-state-guards.md),\n  [ARO-0014 — Domain Modeling](../Proposals/ARO-0014-domain-modeling.md)\n- Examples in the repo: `Examples/StateMachine/`, `Examples/OrderService/`",
-      "outputs": []
+      "id" : "nb24-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\n- **Transition names are ubiquitous language.** `placed_to_paid` is a\n  sentence the café's accountant can read in the code *and* in the\n  error log. When the business renames a state, you rename a\n  transition — grep finds every arrow. Status strings scattered\n  through `Update` statements offer no such handle.\n- **Precondition, not permission.** Accept checks where the entity\n  *is*, not who is asking. Authorization stays in the HTTP layer or in\n  handler guards; keep the state machine about state.\n- **Guards replace conditionals — use that.** A handler that begins by\n  extracting `status` and `when`-guarding every statement should almost\n  always become two handlers with two guards. The filtering moves into\n  the signature, where it is visible and testable.\n- **Why the industry cares:** payment processors, logistics chains, and\n  document-approval systems all live and die by this pattern. An\n  e-commerce order double-shipped because two workers raced past a\n  string check is a real (and expensive) failure class; a validated\n  transition makes the race lose loudly instead of shipping twice.\n  State machines are also *testable* as tables: every arrow one test,\n  every non-arrow one expected refusal — see\n  [25 — Testing & Quality](25-testing-and-quality.repl).\n\n## Related\n\n- Next: [25 — Testing & Quality](25-testing-and-quality.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl),\n  [04 — Immutability](04-immutability.repl)\n- Language Guide: [Chapter 31 — State Machines](..\/Book\/TheLanguageGuide\/Chapter31-StateMachines.md),\n  [Chapter 16 — Handler Guards](..\/Book\/TheLanguageGuide\/Chapter16-HandlerGuards.md)\n- Wiki: [Guide — Events](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Events)\n- Specification: [ARO-0022 — State Guards](..\/Proposals\/ARO-0022-state-guards.md),\n  [ARO-0014 — Domain Modeling](..\/Proposals\/ARO-0014-domain-modeling.md)\n- Examples in the repo: `Examples\/StateMachine\/`, `Examples\/OrderService\/`"
     }
-  ]
+  ],
+  "version" : 1
 }

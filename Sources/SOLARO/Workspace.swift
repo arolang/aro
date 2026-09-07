@@ -1413,7 +1413,22 @@ struct WorkspaceView: View {
     /// user can fill them in (pre-filled from the last successful
     /// run); otherwise starts the run immediately.
     private func requestRun() {
+        // With a notebook open, Run means "run this notebook" — the
+        // cells ARE the program, and `aro run` on the project would
+        // execute something the user is not looking at. Matches the
+        // notebook toolbar's own Run All (GitLab #543 follow-up).
+        if let url = controller.currentFile, ReplFile.isNotebook(url) {
+            controller.replNotebook(for: url).runAll()
+            return
+        }
         requestStart(intent: .play)
+    }
+
+    /// True when the Run button will drive the open notebook rather
+    /// than `aro run`.
+    private var runTargetsNotebook: Bool {
+        guard let url = controller.currentFile else { return false }
+        return ReplFile.isNotebook(url)
     }
 
     /// Debug-button click handler. Mirrors `requestRun()` — same
@@ -1470,7 +1485,7 @@ struct WorkspaceView: View {
 
     private var playButton: some View {
         Button {
-            if isRunning {
+            if isRunning, !runTargetsNotebook {
                 consoleProcess.stop()
             } else {
                 requestRun()
@@ -1494,18 +1509,21 @@ struct WorkspaceView: View {
     }
 
     private var playButtonTitle: String {
+        if runTargetsNotebook { return "Run All" }
         if isRunning { return "Stop" }
         if consoleProcess.didServiceCrash { return "Reload" }
         return "Run"
     }
 
     private var playButtonIcon: String {
+        if runTargetsNotebook { return "play.fill" }
         if isRunning { return "stop.fill" }
         if consoleProcess.didServiceCrash { return "arrow.clockwise.circle.fill" }
         return "play.fill"
     }
 
     private var playButtonHelp: String {
+        if runTargetsNotebook { return "Run every cell in this notebook" }
         if isRunning { return "Stop the running `aro run` process" }
         if controller.isLoading { return "Loading project…" }
         if consoleProcess.didServiceCrash {

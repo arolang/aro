@@ -765,6 +765,7 @@ final class WorkspaceController {
     /// behind — and a definition/hover/rename resolved against a stale
     /// document lands on the wrong column.
     func syncLSPWithLiveText(_ url: URL) {
+        guard !ReplFile.isNotebook(url) else { return }
         guard let text = liveText(for: url) else { return }
         guard lsp.openDocuments[url] != text else { return }
         lsp.didChange(url: url, text: text)
@@ -818,6 +819,19 @@ final class WorkspaceController {
     /// One file (or the project root) changed on disk.
     private func handleExternalChange(at url: URL) {
         let std = url.standardizedFileURL
+        // A notebook is not a text document. It owns its own model and
+        // its own debounced write-back, so every autosave it makes
+        // trips this watcher — and the old path then parsed the
+        // notebook's JSON as ARO source, filed the parse failure under
+        // `parseErrors`, and pushed the JSON to the language server as
+        // if it were code. Editing a notebook therefore produced
+        // diagnostics about its own file format, and left the text
+        // buffer mirror holding JSON that a text-editor write path
+        // could later put back on disk.
+        if ReplFile.isNotebook(std) {
+            gitMonitor.refresh(for: project)
+            return
+        }
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(
             atPath: std.path, isDirectory: &isDirectory)
@@ -856,6 +870,10 @@ final class WorkspaceController {
     /// pane to re-read.
     private func adoptDiskContents(_ disk: String, for url: URL) {
         let std = url.standardizedFileURL
+        // Notebooks never travel this path (see handleExternalChange);
+        // guarding here too keeps a future caller from parsing JSON as
+        // ARO and teaching the LSP about a file it cannot read.
+        guard !ReplFile.isNotebook(std) else { return }
         liveEditorText[std] = disk
         lastSavedText[std] = disk
         do {
@@ -958,7 +976,11 @@ final class WorkspaceController {
             // Watch what the user has open (GitLab #536).
             refreshWatchedFiles()
         }
-        if lastSavedText[url.standardizedFileURL] == nil,
+        // Text documents get an external-change baseline; a notebook
+        // does not, because it is not edited as text and its own
+        // autosave would look like an external write.
+        if !ReplFile.isNotebook(url),
+           lastSavedText[url.standardizedFileURL] == nil,
            let text = try? String(contentsOf: url, encoding: .utf8) {
             lastSavedText[url.standardizedFileURL] = text
         }

@@ -1,137 +1,181 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb18-c01",
-      "kind": "markdown",
-      "source": "# 18 — Format-Aware I/O\n\nOne dataset, every consumer. The **Brew & Bytes** menu lives in a YAML\nfile the shop managers edit by hand. Finance wants it as CSV for their\nspreadsheets. The web app wants JSON. The ops runbook embeds a\nMarkdown table. Nobody wants to write a parser, and nobody should:\nin ARO, **the file extension is the format declaration**\n([ARO-0040](../Proposals/ARO-0040-format-aware-io.md)).\n\n`Read the <data> from \"./config.json\"` hands you a parsed dictionary.\n`Write the <records> to \"./report.csv\"` serializes with a header row.\nNo `Parse` step, no serializer object, no format flag — until you\n*want* one, and then a single qualifier overrides the detection or\nswitches it off entirely.\n\nThis notebook reads the fixtures in `data/` and writes one dataset to\nhalf a dozen formats under `./.scratch/`.",
-      "outputs": []
+      "id" : "nb18-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 18 — Format-Aware I\/O\n\nOne dataset, every consumer. The **Brew & Bytes** menu lives in a YAML\nfile the shop managers edit by hand. Finance wants it as CSV for their\nspreadsheets. The web app wants JSON. The ops runbook embeds a\nMarkdown table. Nobody wants to write a parser, and nobody should:\nin ARO, **the file extension is the format declaration**\n([ARO-0040](..\/Proposals\/ARO-0040-format-aware-io.md)).\n\n`Read the <data> from \".\/config.json\"` hands you a parsed dictionary.\n`Write the <records> to \".\/report.csv\"` serializes with a header row.\nNo `Parse` step, no serializer object, no format flag — until you\n*want* one, and then a single qualifier overrides the detection or\nswitches it off entirely.\n\nThis notebook reads the fixtures in `data\/` and writes one dataset to\nhalf a dozen formats under `.\/.scratch\/`."
     },
     {
-      "id": "nb18-c02",
-      "kind": "code",
-      "source": "Read the <menu-doc> from \"data/menu.yaml\".\nLog <menu-doc> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <menu-doc> from \"data\/menu.yaml\".\nLog <menu-doc> to the <console>."
     },
     {
-      "id": "nb18-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Read`** is a *REQUEST* action: bytes come in from outside, and\n  a **value** comes out. The `.yaml` extension selected the YAML\n  parser, so `<menu-doc>` is not text — it is a dictionary with\n  `shop`, `currency`, and a list under `items`.\n- The lookup order is fixed and short: a `raw` qualifier beats an\n  explicit format qualifier, which beats the extension\n  ([ARO-0040 §6](../Proposals/ARO-0040-format-aware-io.md)). No\n  qualifier here, so the extension decided.\n\nBecause it is a real dictionary, you reach inside with `Extract` —\nthe same field access as everywhere else in the language:",
-      "outputs": []
+      "id" : "nb18-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Read`** is a *REQUEST* action: bytes come in from outside, and\n  a **value** comes out. The `.yaml` extension selected the YAML\n  parser, so `<menu-doc>` is not text — it is a dictionary with\n  `shop`, `currency`, and a list under `items`.\n- The lookup order is fixed and short: a `raw` qualifier beats an\n  explicit format qualifier, which beats the extension\n  ([ARO-0040 §6](..\/Proposals\/ARO-0040-format-aware-io.md)). No\n  qualifier here, so the extension decided.\n\nBecause it is a real dictionary, you reach inside with `Extract` —\nthe same field access as everywhere else in the language:"
     },
     {
-      "id": "nb18-c04",
-      "kind": "code",
-      "source": "Extract the <menu-list> from the <menu-doc: items>.\nExtract the <menu-shop> from the <menu-doc: shop>.\nCompute the <menu-count: length> from <menu-list>.\nLog \"${<menu-shop>} sells ${<menu-count>} items\" to the <console>.",
-      "outputs": []
+      "id" : "nb18-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Extract the <menu-list> from the <menu-doc: items>.\nExtract the <menu-shop> from the <menu-doc: shop>.\nCompute the <menu-count: length> from <menu-list>.\nLog \"${<menu-shop>} sells ${<menu-count>} items\" to the <console>."
     },
     {
-      "id": "nb18-c05",
-      "kind": "markdown",
-      "source": "### CSV comes in as records — of text\n\nTabular formats get the same treatment: the header row becomes field\nnames, each data row becomes a record. One thing to know and never\nforget: **CSV has no types**, so every field arrives as text. `\"2\"`\nand `\"2.40\"`, not `2` and `2.4`. ARO's arithmetic coerces numeric\nstrings when you compute with them, but a type-preserving format\n(JSON, JSONL, YAML) is the better hand-off whenever you control both\nends — the round-trip below makes the difference visible.",
-      "outputs": []
+      "id" : "nb18-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### CSV comes in as records — of text\n\nTabular formats get the same treatment: the header row becomes field\nnames, each data row becomes a record. One thing to know and never\nforget: **CSV has no types**, so every field arrives as text. `\"2\"`\nand `\"2.40\"`, not `2` and `2.4`. ARO's arithmetic coerces numeric\nstrings when you compute with them, but a type-preserving format\n(JSON, JSONL, YAML) is the better hand-off whenever you control both\nends — the round-trip below makes the difference visible."
     },
     {
-      "id": "nb18-c06",
-      "kind": "code",
-      "source": "Read the <till-export> from \"data/orders.csv\".\nExtract the <first-order: first> from the <till-export>.\nLog <first-order> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <till-export> from \"data\/orders.csv\".\nExtract the <first-order: first> from the <till-export>.\nLog <first-order> to the <console>."
     },
     {
-      "id": "nb18-c07",
-      "kind": "markdown",
-      "source": "## Variants: one value, six serializations\n\n`Write` mirrors `Read`: the extension selects the serializer. The same\n`<menu-list>` — three records — becomes six different files, one\nstatement each. (The full format table also includes XML, TOML, SQL\ninserts, HTML tables, and `.env` — see\n[Chapter 21](../Book/TheLanguageGuide/Chapter21-FormatAwareIO.md).)",
-      "outputs": []
+      "id" : "nb18-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants: one value, six serializations\n\n`Write` mirrors `Read`: the extension selects the serializer. The same\n`<menu-list>` — three records — becomes six different files, one\nstatement each. (The full format table also includes XML, TOML, SQL\ninserts, HTML tables, and `.env` — see\n[Chapter 21](..\/Book\/TheLanguageGuide\/Chapter21-FormatAwareIO.md).)"
     },
     {
-      "id": "nb18-c08",
-      "kind": "code",
-      "source": "Write the <menu-list> to \"./.scratch/nb18-menu.json\".\nWrite the <menu-list> to \"./.scratch/nb18-menu.jsonl\".\nWrite the <menu-list> to \"./.scratch/nb18-menu.yaml\".\nWrite the <menu-list> to \"./.scratch/nb18-menu.csv\".\nWrite the <menu-list> to \"./.scratch/nb18-menu.tsv\".\nWrite the <menu-list> to \"./.scratch/nb18-menu.md\".\nLog \"six files from one value — extension picks the serializer\" to the <console>.",
-      "outputs": []
+      "id" : "nb18-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Write the <menu-list> to \".\/.scratch\/nb18-menu.json\".\nWrite the <menu-list> to \".\/.scratch\/nb18-menu.jsonl\".\nWrite the <menu-list> to \".\/.scratch\/nb18-menu.yaml\".\nWrite the <menu-list> to \".\/.scratch\/nb18-menu.csv\".\nWrite the <menu-list> to \".\/.scratch\/nb18-menu.tsv\".\nWrite the <menu-list> to \".\/.scratch\/nb18-menu.md\".\nLog \"six files from one value — extension picks the serializer\" to the <console>."
     },
     {
-      "id": "nb18-c09",
-      "kind": "markdown",
-      "source": "What do those files actually contain? The `raw` qualifier reads any\nfile as plain text, format detection switched off — which makes it\nthe honest way to *look at* a serialization instead of parsing it\nback:",
-      "outputs": []
+      "id" : "nb18-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "What do those files actually contain? The `raw` qualifier reads any\nfile as plain text, format detection switched off — which makes it\nthe honest way to *look at* a serialization instead of parsing it\nback:"
     },
     {
-      "id": "nb18-c10",
-      "kind": "code",
-      "source": "Read the <csv-shape: raw> from \"./.scratch/nb18-menu.csv\".\nLog \"--- nb18-menu.csv ---\" to the <console>.\nLog <csv-shape> to the <console>.\nRead the <md-shape: raw> from \"./.scratch/nb18-menu.md\".\nLog \"--- nb18-menu.md ---\" to the <console>.\nLog <md-shape> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <csv-shape: raw> from \".\/.scratch\/nb18-menu.csv\".\nLog \"--- nb18-menu.csv ---\" to the <console>.\nLog <csv-shape> to the <console>.\nRead the <md-shape: raw> from \".\/.scratch\/nb18-menu.md\".\nLog \"--- nb18-menu.md ---\" to the <console>.\nLog <md-shape> to the <console>."
     },
     {
-      "id": "nb18-c11",
-      "kind": "markdown",
-      "source": "A header row for the spreadsheet, a pipe table for the runbook — both\nfrom the list that started as YAML. Now the round trip. Reading the\nCSV back re-parses it into records, and here is the type story from\nabove, live: the price that left as the number `1.9` comes back as\nthe text `\"1.9\"`. The JSON round trip keeps it a number:",
-      "outputs": []
+      "id" : "nb18-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "A header row for the spreadsheet, a pipe table for the runbook — both\nfrom the list that started as YAML. Now the round trip. Reading the\nCSV back re-parses it into records, and here is the type story from\nabove, live: the price that left as the number `1.9` comes back as\nthe text `\"1.9\"`. The JSON round trip keeps it a number:"
     },
     {
-      "id": "nb18-c12",
-      "kind": "code",
-      "source": "Read the <menu-round> from \"./.scratch/nb18-menu.csv\".\nExtract the <round-first: first> from the <menu-round>.\nLog <round-first> to the <console>.\nRead the <menu-json-round> from \"./.scratch/nb18-menu.json\".\nExtract the <json-first: first> from the <menu-json-round>.\nExtract the <json-price> from the <json-first: price>.\nCompute the <json-double> from <json-price> * 2.\nLog \"json price doubled: ${<json-double>}\" to the <console>.",
-      "outputs": []
+      "id" : "nb18-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <menu-round> from \".\/.scratch\/nb18-menu.csv\".\nExtract the <round-first: first> from the <menu-round>.\nLog <round-first> to the <console>.\nRead the <menu-json-round> from \".\/.scratch\/nb18-menu.json\".\nExtract the <json-first: first> from the <menu-json-round>.\nExtract the <json-price> from the <json-first: price>.\nCompute the <json-double> from <json-price> * 2.\nLog \"json price doubled: ${<json-double>}\" to the <console>."
     },
     {
-      "id": "nb18-c13",
-      "kind": "markdown",
-      "source": "### Variant: overriding the extension\n\nSometimes the extension lies — a vendor insists on `.dat`, an export\nlands as `.txt`. An explicit format qualifier on the result overrides\ndetection, on both `Write` and `Read`:",
-      "outputs": []
+      "id" : "nb18-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### Variant: overriding the extension\n\nSometimes the extension lies — a vendor insists on `.dat`, an export\nlands as `.txt`. An explicit format qualifier on the result overrides\ndetection, on both `Write` and `Read`:"
     },
     {
-      "id": "nb18-c14",
-      "kind": "code",
-      "source": "Write the <menu-list: csv> to \"./.scratch/nb18-menu.dat\".\nRead the <dat-menu: csv> from \"./.scratch/nb18-menu.dat\".\nCompute the <dat-menu-count: length> from <dat-menu>.\nLog \"parsed ${<dat-menu-count>} menu rows from a .dat file\" to the <console>.",
-      "outputs": []
+      "id" : "nb18-c14",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Write the <menu-list: csv> to \".\/.scratch\/nb18-menu.dat\".\nRead the <dat-menu: csv> from \".\/.scratch\/nb18-menu.dat\".\nCompute the <dat-menu-count: length> from <dat-menu>.\nLog \"parsed ${<dat-menu-count>} menu rows from a .dat file\" to the <console>."
     },
     {
-      "id": "nb18-c15",
-      "kind": "markdown",
-      "source": "### Variant: opting out with `raw`\n\nThe opt-out matters for more than inspection. A `.txt` file is\nparsed as `key=value` pairs by default — so a *free-form* text file\n(a note, a log fragment, a list of numbers) silently yields an empty\ndictionary, which is the kind of bug that ships. `raw` bypasses the\nformatter entirely, in both directions: the string goes to disk\nverbatim and comes back verbatim (GitLab #197 is the war story):",
-      "outputs": []
+      "id" : "nb18-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### Variant: opting out with `raw`\n\nThe opt-out matters for more than inspection. A `.txt` file is\nparsed as `key=value` pairs by default — so a *free-form* text file\n(a note, a log fragment, a list of numbers) silently yields an empty\ndictionary, which is the kind of bug that ships. `raw` bypasses the\nformatter entirely, in both directions: the string goes to disk\nverbatim and comes back verbatim (GitLab #197 is the war story):"
     },
     {
-      "id": "nb18-c16",
-      "kind": "code",
-      "source": "Create the <price-note> with \"beans supplier raised prices\\neffective monday\".\nWrite the <price-note: raw> to \"./.scratch/nb18-note.txt\".\nRead the <note-round: raw> from \"./.scratch/nb18-note.txt\".\nLog <note-round> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <price-note> with \"beans supplier raised prices\\neffective monday\".\nWrite the <price-note: raw> to \".\/.scratch\/nb18-note.txt\".\nRead the <note-round: raw> from \".\/.scratch\/nb18-note.txt\".\nLog <note-round> to the <console>."
     },
     {
-      "id": "nb18-c17",
-      "kind": "markdown",
-      "source": "### Variant: `.env` for configuration\n\nConfiguration files get their own convention: writing a record to a\n`.env` file uppercases the keys, and reading one back yields the\ndictionary — the shape every deployment tool expects:",
-      "outputs": []
+      "id" : "nb18-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### Variant: `.env` for configuration\n\nConfiguration files get their own convention: writing a record to a\n`.env` file uppercases the keys, and reading one back yields the\ndictionary — the shape every deployment tool expects:"
     },
     {
-      "id": "nb18-c18",
-      "kind": "code",
-      "source": "Create the <till-config> with { shop_name: \"Brew & Bytes Berlin\", till_count: 3, offline_mode: false }.\nWrite the <till-config> to \"./.scratch/nb18-till.env\".\nRead the <till-env> from \"./.scratch/nb18-till.env\".\nLog <till-env> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c18",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <till-config> with { shop_name: \"Brew & Bytes Berlin\", till_count: 3, offline_mode: false }.\nWrite the <till-config> to \".\/.scratch\/nb18-till.env\".\nRead the <till-env> from \".\/.scratch\/nb18-till.env\".\nLog <till-env> to the <console>."
     },
     {
-      "id": "nb18-c19",
-      "kind": "markdown",
-      "source": "## Discussion\n\n**The extension is an interface contract.** Naming a file `orders.csv`\n*is* the schema declaration, enforced at the moment of I/O. This is\nARO's happy-path philosophy ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md))\napplied to files: the common case costs zero ceremony, and when a file\ndoes not parse as its extension claims, the runtime reports it in\nplain language — `Cannot read the data from the file … JSON parsing\nfailed at line 5` — instead of handing you half a value.\n\n**Choose the format by the consumer, not by habit:**\n\n- **JSON** — APIs and anything that must keep its types.\n- **JSONL** — anything written or read as a stream; a line is a\n  complete record ([16 — Streaming Execution](16-streaming-execution.repl)).\n- **YAML** — files humans edit; comments and structure survive review.\n- **CSV / TSV** — spreadsheets and BI tools; accept that types flatten\n  to text.\n- **Markdown** — documentation; a table someone reads, not parses.\n- **raw** — everything that is not a format: notes, logs, fragments.\n\n**The two pitfalls both come from silence:** a `.txt` read that\nkey=value-parses a free-form note into an empty dictionary, and a CSV\nround trip that quietly turns numbers into strings. The first has an\nopt-out (`raw`); the second has a rule of thumb — tabular text is for\n*leaving* the system, typed formats for coming back in.",
-      "outputs": []
+      "id" : "nb18-c19",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\n**The extension is an interface contract.** Naming a file `orders.csv`\n*is* the schema declaration, enforced at the moment of I\/O. This is\nARO's happy-path philosophy ([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md))\napplied to files: the common case costs zero ceremony, and when a file\ndoes not parse as its extension claims, the runtime reports it in\nplain language — `Cannot read the data from the file … JSON parsing\nfailed at line 5` — instead of handing you half a value.\n\n**Choose the format by the consumer, not by habit:**\n\n- **JSON** — APIs and anything that must keep its types.\n- **JSONL** — anything written or read as a stream; a line is a\n  complete record ([16 — Streaming Execution](16-streaming-execution.repl)).\n- **YAML** — files humans edit; comments and structure survive review.\n- **CSV \/ TSV** — spreadsheets and BI tools; accept that types flatten\n  to text.\n- **Markdown** — documentation; a table someone reads, not parses.\n- **raw** — everything that is not a format: notes, logs, fragments.\n\n**The two pitfalls both come from silence:** a `.txt` read that\nkey=value-parses a free-form note into an empty dictionary, and a CSV\nround trip that quietly turns numbers into strings. The first has an\nopt-out (`raw`); the second has a rule of thumb — tabular text is for\n*leaving* the system, typed formats for coming back in."
     },
     {
-      "id": "nb18-c20",
-      "kind": "markdown",
-      "source": "## Real-world example: the daily product hand-off\n\nThe platform's gold output from\n[17 — Data Engineering](17-data-engineering-medallion.repl) has three\nconsumers: the finance spreadsheet, the web dashboard, the ops\nrunbook. One dataset — the day's confirmed orders — three writes,\neach named for its reader. Then read the Markdown back raw, exactly\nas the runbook would embed it:",
-      "outputs": []
+      "id" : "nb18-c20",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the daily product hand-off\n\nThe platform's gold output from\n[17 — Data Engineering](17-data-engineering-medallion.repl) has three\nconsumers: the finance spreadsheet, the web dashboard, the ops\nrunbook. One dataset — the day's confirmed orders — three writes,\neach named for its reader. Then read the Markdown back raw, exactly\nas the runbook would embed it:"
     },
     {
-      "id": "nb18-c21",
-      "kind": "code",
-      "source": "Filter the <confirmed-export> from the <till-export> where <status> = \"confirmed\".\nWrite the <confirmed-export> to \"./.scratch/nb18-confirmed.jsonl\".\nWrite the <confirmed-export> to \"./.scratch/nb18-confirmed.csv\".\nWrite the <confirmed-export> to \"./.scratch/nb18-confirmed.md\".\nRead the <runbook-table: raw> from \"./.scratch/nb18-confirmed.md\".\nLog \"=== today's confirmed orders, for the runbook ===\" to the <console>.\nLog <runbook-table> to the <console>.",
-      "outputs": []
+      "id" : "nb18-c21",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Filter the <confirmed-export> from the <till-export> where <status> = \"confirmed\".\nWrite the <confirmed-export> to \".\/.scratch\/nb18-confirmed.jsonl\".\nWrite the <confirmed-export> to \".\/.scratch\/nb18-confirmed.csv\".\nWrite the <confirmed-export> to \".\/.scratch\/nb18-confirmed.md\".\nRead the <runbook-table: raw> from \".\/.scratch\/nb18-confirmed.md\".\nLog \"=== today's confirmed orders, for the runbook ===\" to the <console>.\nLog <runbook-table> to the <console>."
     },
     {
-      "id": "nb18-c22",
-      "kind": "markdown",
-      "source": "### Why the real world needs this\n\nFormat glue is where integration projects go to die: the average data\nplatform speaks JSON to services, CSV to analysts, YAML to Kubernetes,\n`.env` to twelve-factor deployments, and Markdown to humans — and in\nmost stacks each of those is a library, a dependency, and a class of\nbugs. Making the extension authoritative collapses all of it into the\nstatement you were already writing. The same idea carries the\nindustry's data hand-offs: a partner drops `orders.jsonl` with a\nmanifest, a regulator demands CSV, an LLM pipeline wants JSONL — the\ndataset is one; the serializations are consumers' problems, solved at\nthe filename.\n\n## Related\n\n- The platform that uses this: [17 — Data Engineering](17-data-engineering-medallion.repl)\n- Streams and JSONL: [16 — Streaming Execution](16-streaming-execution.repl)\n- First contact with files: [13 — Repositories & State](13-repositories-and-state.repl)\n  (store files), `Examples/FileOperations`\n- Language Guide: [Chapter 21 — Format-Aware File I/O](../Book/TheLanguageGuide/Chapter21-FormatAwareIO.md)\n- Wiki: [Guide — File Operations](https://github.com/arolang/aro/wiki/Guide-File-Operations)\n- Specification: [ARO-0040 — Format-Aware File I/O](../Proposals/ARO-0040-format-aware-io.md),\n  [ARO-0036 — Extended File Operations](../Proposals/ARO-0036-file-operations.md)\n- Examples: `Examples/FormatAwareIO` — the full format tour, including\n  XML, TOML, SQL, and HTML",
-      "outputs": []
+      "id" : "nb18-c22",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "### Why the real world needs this\n\nFormat glue is where integration projects go to die: the average data\nplatform speaks JSON to services, CSV to analysts, YAML to Kubernetes,\n`.env` to twelve-factor deployments, and Markdown to humans — and in\nmost stacks each of those is a library, a dependency, and a class of\nbugs. Making the extension authoritative collapses all of it into the\nstatement you were already writing. The same idea carries the\nindustry's data hand-offs: a partner drops `orders.jsonl` with a\nmanifest, a regulator demands CSV, an LLM pipeline wants JSONL — the\ndataset is one; the serializations are consumers' problems, solved at\nthe filename.\n\n## Related\n\n- The platform that uses this: [17 — Data Engineering](17-data-engineering-medallion.repl)\n- Streams and JSONL: [16 — Streaming Execution](16-streaming-execution.repl)\n- First contact with files: [13 — Repositories & State](13-repositories-and-state.repl)\n  (store files), `Examples\/FileOperations`\n- Language Guide: [Chapter 21 — Format-Aware File I\/O](..\/Book\/TheLanguageGuide\/Chapter21-FormatAwareIO.md)\n- Wiki: [Guide — File Operations](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-File-Operations)\n- Specification: [ARO-0040 — Format-Aware File I\/O](..\/Proposals\/ARO-0040-format-aware-io.md),\n  [ARO-0036 — Extended File Operations](..\/Proposals\/ARO-0036-file-operations.md)\n- Examples: `Examples\/FormatAwareIO` — the full format tour, including\n  XML, TOML, SQL, and HTML"
     }
-  ]
+  ],
+  "version" : 1
 }

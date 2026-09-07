@@ -1,125 +1,165 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb13-c01",
-      "kind": "markdown",
-      "source": "# 13 — Repositories & State\n\nEverything you have bound so far was immutable — one name, one value,\nforever ([04](04-immutability.repl)). But the café's shelf is not\nimmutable: beans arrive, milk runs out. Somewhere, state must live.\n\nARO's answer is the **repository**: a named collection the runtime\nmanages for you. You `Store` records into it and `Retrieve` them back\n— by everything, by condition, by position. Repositories are the *only*\nmutable place in the language, and they are deliberately fenced off:\nyour variables stay immutable, and every change to a repository is\nobservable as an event ([ARO-0007](../Proposals/ARO-0007-events-reactive.md)).\n\nTwo things to know before running cells. Any name ending in\n`-repository` simply *exists* the first time you touch it — no\ndeclaration. And repository contents **persist for the whole session**:\nwhat a cell stores, every later cell sees. That is the point — but it\nmeans this notebook, run top to bottom, is also a small exercise in\nmanaging real state.",
-      "outputs": []
+      "id" : "nb13-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 13 — Repositories & State\n\nEverything you have bound so far was immutable — one name, one value,\nforever ([04](04-immutability.repl)). But the café's shelf is not\nimmutable: beans arrive, milk runs out. Somewhere, state must live.\n\nARO's answer is the **repository**: a named collection the runtime\nmanages for you. You `Store` records into it and `Retrieve` them back\n— by everything, by condition, by position. Repositories are the *only*\nmutable place in the language, and they are deliberately fenced off:\nyour variables stay immutable, and every change to a repository is\nobservable as an event ([ARO-0007](..\/Proposals\/ARO-0007-events-reactive.md)).\n\nTwo things to know before running cells. Any name ending in\n`-repository` simply *exists* the first time you touch it — no\ndeclaration. And repository contents **persist for the whole session**:\nwhat a cell stores, every later cell sees. That is the point — but it\nmeans this notebook, run top to bottom, is also a small exercise in\nmanaging real state."
     },
     {
-      "id": "nb13-c02",
-      "kind": "code",
-      "source": "Create the <espresso-beans> with { id: \"sku-01\", name: \"Espresso Beans\", stock: 12, category: \"coffee\" }.\nStore the <espresso-beans> into the <inventory-repository>.",
-      "outputs": []
+      "id" : "nb13-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <espresso-beans> with { id: \"sku-01\", name: \"Espresso Beans\", stock: 12, category: \"coffee\" }.\nStore the <espresso-beans> into the <inventory-repository>."
     },
     {
-      "id": "nb13-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Store … into …`** is an *EXPORT* action: it moves a value out of\n  your private scope into shared state. The record is now in\n  `inventory-repository` — and will still be there twenty cells from\n  now.\n- The repository was **created on first use**. Naming convention:\n  `<something>-repository`, and the name is the identity — every\n  feature set in an application that says `inventory-repository` means\n  the same store.\n- The binding `<espresso-beans>` itself is still immutable. Storing\n  copies the value into the repository; it does not create a mutable\n  variable.\n\nAdd a second product and read the whole shelf back — `Retrieve` is the\n*REQUEST* mirror of `Store`:",
-      "outputs": []
+      "id" : "nb13-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Store … into …`** is an *EXPORT* action: it moves a value out of\n  your private scope into shared state. The record is now in\n  `inventory-repository` — and will still be there twenty cells from\n  now.\n- The repository was **created on first use**. Naming convention:\n  `<something>-repository`, and the name is the identity — every\n  feature set in an application that says `inventory-repository` means\n  the same store.\n- The binding `<espresso-beans>` itself is still immutable. Storing\n  copies the value into the repository; it does not create a mutable\n  variable.\n\nAdd a second product and read the whole shelf back — `Retrieve` is the\n*REQUEST* mirror of `Store`:"
     },
     {
-      "id": "nb13-c04",
-      "kind": "code",
-      "source": "Create the <oat-milk> with { id: \"sku-02\", name: \"Oat Milk\", stock: 3, category: \"dairy-free\" }.\nStore the <oat-milk> into the <inventory-repository>.\nRetrieve the <full-shelf> from the <inventory-repository>.\nCompute the <shelf-count: length> from <full-shelf>.\nLog <shelf-count> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <oat-milk> with { id: \"sku-02\", name: \"Oat Milk\", stock: 3, category: \"dairy-free\" }.\nStore the <oat-milk> into the <inventory-repository>.\nRetrieve the <full-shelf> from the <inventory-repository>.\nCompute the <shelf-count: length> from <full-shelf>.\nLog <shelf-count> to the <console>."
     },
     {
-      "id": "nb13-c05",
-      "kind": "markdown",
-      "source": "## Variants: retrieving with `where`\n\nA bare `Retrieve` returns everything. Add a **`where` clause** to\nfilter on a field — this is how you fetch *one* entity by its id:",
-      "outputs": []
+      "id" : "nb13-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants: retrieving with `where`\n\nA bare `Retrieve` returns everything. Add a **`where` clause** to\nfilter on a field — this is how you fetch *one* entity by its id:"
     },
     {
-      "id": "nb13-c06",
-      "kind": "code",
-      "source": "Retrieve the <beans> from the <inventory-repository> where <id> is \"sku-01\".\nExtract the <beans-name> from the <beans: name>.\nLog <beans-name> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Retrieve the <beans> from the <inventory-repository> where <id> is \"sku-01\".\nExtract the <beans-name> from the <beans: name>.\nLog <beans-name> to the <console>."
     },
     {
-      "id": "nb13-c07",
-      "kind": "markdown",
-      "source": "The comparison value can be a literal or a variable, and the\nfield can be any field of the stored records — matching several\nrecords returns them all:",
-      "outputs": []
+      "id" : "nb13-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The comparison value can be a literal or a variable, and the\nfield can be any field of the stored records — matching several\nrecords returns them all:"
     },
     {
-      "id": "nb13-c08",
-      "kind": "code",
-      "source": "Create the <wanted-id> with \"sku-02\".\nRetrieve the <milk> from the <inventory-repository> where <id> is <wanted-id>.\nExtract the <milk-stock> from the <milk: stock>.\nLog <milk-stock> to the <console>.\nRetrieve the <coffee-goods> from the <inventory-repository> where <category> is \"coffee\".\nLog <coffee-goods> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <wanted-id> with \"sku-02\".\nRetrieve the <milk> from the <inventory-repository> where <id> is <wanted-id>.\nExtract the <milk-stock> from the <milk: stock>.\nLog <milk-stock> to the <console>.\nRetrieve the <coffee-goods> from the <inventory-repository> where <category> is \"coffee\".\nLog <coffee-goods> to the <console>."
     },
     {
-      "id": "nb13-c09",
-      "kind": "markdown",
-      "source": "Two spellings, same meaning: `where <id> is \"sku-01\"` and\n`where <id> = \"sku-01\"` are interchangeable — pick the one that reads\nbetter to you.\n\n**Missing is not an error — unless you say so.** Retrieving an id that\nis not on the shelf would normally end the feature set with a plain\nruntime message (\"code is the error message\",\n[ARO-0006](../Proposals/ARO-0006-error-philosophy.md)). When absence\nis an *expected* case, give the statement a `default`:",
-      "outputs": []
+      "id" : "nb13-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two spellings, same meaning: `where <id> is \"sku-01\"` and\n`where <id> = \"sku-01\"` are interchangeable — pick the one that reads\nbetter to you.\n\n**Missing is not an error — unless you say so.** Retrieving an id that\nis not on the shelf would normally end the feature set with a plain\nruntime message (\"code is the error message\",\n[ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)). When absence\nis an *expected* case, give the statement a `default`:"
     },
     {
-      "id": "nb13-c10",
-      "kind": "code",
-      "source": "Retrieve the <unicorn-milk> from the <inventory-repository> where <id> is \"sku-99\" default { id: \"none\", name: \"(not stocked)\", stock: 0 }.\nExtract the <unicorn-name> from the <unicorn-milk: name>.\nLog <unicorn-name> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Retrieve the <unicorn-milk> from the <inventory-repository> where <id> is \"sku-99\" default { id: \"none\", name: \"(not stocked)\", stock: 0 }.\nExtract the <unicorn-name> from the <unicorn-milk: name>.\nLog <unicorn-name> to the <console>."
     },
     {
-      "id": "nb13-c11",
-      "kind": "markdown",
-      "source": "The default is used only when the `where` filter matches\nnothing. One more retrieval mode: **by position**. Repositories keep\ninsertion order, and a qualifier picks an end — `: last` for the\nnewest record, `: first` for the oldest, `: 0`, `: 1`, … counting back\nfrom the newest:",
-      "outputs": []
+      "id" : "nb13-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The default is used only when the `where` filter matches\nnothing. One more retrieval mode: **by position**. Repositories keep\ninsertion order, and a qualifier picks an end — `: last` for the\nnewest record, `: first` for the oldest, `: 0`, `: 1`, … counting back\nfrom the newest:"
     },
     {
-      "id": "nb13-c12",
-      "kind": "code",
-      "source": "Retrieve the <newest-item> from the <inventory-repository: last>.\nLog <newest-item> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Retrieve the <newest-item> from the <inventory-repository: last>.\nLog <newest-item> to the <console>."
     },
     {
-      "id": "nb13-c13",
-      "kind": "markdown",
-      "source": "## Observers: state changes are events\n\nHere repositories meet [notebook 09](09-feature-sets-and-events.repl).\nEvery `Store`, update, and `Delete` makes the runtime emit a change\nevent — and a feature set whose business activity is\n`{repository-name} Observer` receives it. The event carries\n`changeType` (`created`, `updated`, or `deleted`), `entityId`, and\n`repositoryName`:",
-      "outputs": []
+      "id" : "nb13-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Observers: state changes are events\n\nHere repositories meet [notebook 09](09-feature-sets-and-events.repl).\nEvery `Store`, update, and `Delete` makes the runtime emit a change\nevent — and a feature set whose business activity is\n`{repository-name} Observer` receives it. The event carries\n`changeType` (`created`, `updated`, or `deleted`), `entityId`, and\n`repositoryName`:"
     },
     {
-      "id": "nb13-c14",
-      "kind": "code",
-      "source": "(WatchShelf: inventory-repository Observer) {\n    Extract the <changeType> from the <event: changeType>.\n    Extract the <entityId> from the <event: entityId>.\n    Compute the <note> from \"[SHELF] \" ++ <changeType> ++ \": \" ++ <entityId>.\n    Log <note> to the <console>.\n    Return an <OK: status> for the <watching>.\n}",
-      "outputs": []
+      "id" : "nb13-c14",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(WatchShelf: inventory-repository Observer) {\n    Extract the <changeType> from the <event: changeType>.\n    Extract the <entityId> from the <event: entityId>.\n    Compute the <note> from \"[SHELF] \" ++ <changeType> ++ \": \" ++ <entityId>.\n    Log <note> to the <console>.\n    Return an <OK: status> for the <watching>.\n}"
     },
     {
-      "id": "nb13-c15",
-      "kind": "markdown",
-      "source": "In an application, this observer now fires on **every** change\nto the inventory — the storing code does not know it exists, and does\nnot need to. (As with handlers, observer dispatch inside interactive\nsessions is landing in the current release, [ARO-0091 — Event\ndispatch](../Proposals/ARO-0091-jupyter-kernel.md); in `aro run`\napplications observers always fire.)\n\nExercise it: stock a new product, then take it off the shelf again\nwith `Delete … where` — in an application the observer would report a\n`created` and a `deleted`:",
-      "outputs": []
+      "id" : "nb13-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In an application, this observer now fires on **every** change\nto the inventory — the storing code does not know it exists, and does\nnot need to. (As with handlers, observer dispatch inside interactive\nsessions is landing in the current release, [ARO-0091 — Event\ndispatch](..\/Proposals\/ARO-0091-jupyter-kernel.md); in `aro run`\napplications observers always fire.)\n\nExercise it: stock a new product, then take it off the shelf again\nwith `Delete … where` — in an application the observer would report a\n`created` and a `deleted`:"
     },
     {
-      "id": "nb13-c16",
-      "kind": "code",
-      "source": "Create the <cold-brew> with { id: \"sku-03\", name: \"Cold Brew Bottle\", stock: 6, category: \"coffee\" }.\nStore the <cold-brew> into the <inventory-repository>.\nDelete the <retired> from the <inventory-repository> where <id> is \"sku-03\".\nRetrieve the <shelf-after> from the <inventory-repository>.\nCompute the <count-after: length> from <shelf-after>.\nLog <count-after> to the <console>.",
-      "outputs": []
+      "id" : "nb13-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <cold-brew> with { id: \"sku-03\", name: \"Cold Brew Bottle\", stock: 6, category: \"coffee\" }.\nStore the <cold-brew> into the <inventory-repository>.\nDelete the <retired> from the <inventory-repository> where <id> is \"sku-03\".\nRetrieve the <shelf-after> from the <inventory-repository>.\nCompute the <count-after: length> from <shelf-after>.\nLog <count-after> to the <console>."
     },
     {
-      "id": "nb13-c17",
-      "kind": "markdown",
-      "source": "## Store files: seeding state from disk (ARO-0073)\n\nIn an application directory, a file named `products.store` seeds\n`products-repository` before `Application-Start` runs\n([ARO-0073](../Proposals/ARO-0073-store-files.md)). The format is\nYAML:\n\n```yaml\n# products.store — read-only seed data\n- id: p1\n  name: Widget\n  price: 9.99\n  category: hardware\n- id: p2\n  name: Gadget\n  price: 24.99\n  category: electronics\n```\n\nThe file's *permissions* decide writability: read-only file, read-only\nrepository; make it world-writable (`chmod o+w sessions.store`) and\n`Store` calls persist back into it. Configuration, catalogs, and demo\ndata ship as files; the code retrieves them like any other repository —\n`Examples/StoreFileDemo/` in the repo is exactly this pattern.\n\n## Discussion\n\n- **Immutability and state coexist** by never mixing: variables are\n  bindings (immutable), repositories are shelves (mutable, shared,\n  observable). When you feel the urge to \"change a variable\", what you\n  usually want is a repository.\n- **Store *or* Emit — not both.** A feature set that stores a record\n  should not also emit a \"stored it!\" event: the repository already\n  emits the change, and observers are the subscribers. Double-announcing\n  creates double-handling.\n- **Observers vs handlers**: a handler reacts to something you *said*\n  (`Emit`), an observer to something that *happened* (state changed) —\n  whoever caused it. Audit trails belong in observers; workflow steps\n  in handlers.\n- **In applications**, repositories are also the backing of HTTP\n  feature sets — `listUsers` retrieves from `user-repository`,\n  `createUser` stores into it\n  ([Chapter 36 — Repositories](../Book/TheLanguageGuide/Chapter36-Repositories.md)).",
-      "outputs": []
+      "id" : "nb13-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Store files: seeding state from disk (ARO-0073)\n\nIn an application directory, a file named `products.store` seeds\n`products-repository` before `Application-Start` runs\n([ARO-0073](..\/Proposals\/ARO-0073-store-files.md)). The format is\nYAML:\n\n```yaml\n# products.store — read-only seed data\n- id: p1\n  name: Widget\n  price: 9.99\n  category: hardware\n- id: p2\n  name: Gadget\n  price: 24.99\n  category: electronics\n```\n\nThe file's *permissions* decide writability: read-only file, read-only\nrepository; make it world-writable (`chmod o+w sessions.store`) and\n`Store` calls persist back into it. Configuration, catalogs, and demo\ndata ship as files; the code retrieves them like any other repository —\n`Examples\/StoreFileDemo\/` in the repo is exactly this pattern.\n\n## Discussion\n\n- **Immutability and state coexist** by never mixing: variables are\n  bindings (immutable), repositories are shelves (mutable, shared,\n  observable). When you feel the urge to \"change a variable\", what you\n  usually want is a repository.\n- **Store *or* Emit — not both.** A feature set that stores a record\n  should not also emit a \"stored it!\" event: the repository already\n  emits the change, and observers are the subscribers. Double-announcing\n  creates double-handling.\n- **Observers vs handlers**: a handler reacts to something you *said*\n  (`Emit`), an observer to something that *happened* (state changed) —\n  whoever caused it. Audit trails belong in observers; workflow steps\n  in handlers.\n- **In applications**, repositories are also the backing of HTTP\n  feature sets — `listUsers` retrieves from `user-repository`,\n  `createUser` stores into it\n  ([Chapter 36 — Repositories](..\/Book\/TheLanguageGuide\/Chapter36-Repositories.md))."
     },
     {
-      "id": "nb13-c18",
-      "kind": "markdown",
-      "source": "## Real-world example: the low-stock report\n\nThe morning ritual at Brew & Bytes: check the shelf, note everything\nrunning low, order it. As code — retrieve, filter on a numeric\ncondition, format each line. This is every inventory system ever\nshipped, from café shelf to warehouse: the *reorder point* query.",
-      "outputs": []
+      "id" : "nb13-c18",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the low-stock report\n\nThe morning ritual at Brew & Bytes: check the shelf, note everything\nrunning low, order it. As code — retrieve, filter on a numeric\ncondition, format each line. This is every inventory system ever\nshipped, from café shelf to warehouse: the *reorder point* query."
     },
     {
-      "id": "nb13-c19",
-      "kind": "code",
-      "source": "Retrieve the <shelf-now> from the <inventory-repository>.\nFilter the <running-low> from the <shelf-now> where <stock> < 5.\nCompute the <low-count: length> from <running-low>.\nLog \"Items below reorder point:\" to the <console>.\nLog <low-count> to the <console>.\nfor each <item> in <running-low> {\n    Compute the <reorder-line> from \"REORDER: \" ++ <item: name> ++ \" (only \" ++ <item: stock> ++ \" left)\".\n    Log <reorder-line> to the <console>.\n}",
-      "outputs": []
+      "id" : "nb13-c19",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Retrieve the <shelf-now> from the <inventory-repository>.\nFilter the <running-low> from the <shelf-now> where <stock> < 5.\nCompute the <low-count: length> from <running-low>.\nLog \"Items below reorder point:\" to the <console>.\nLog <low-count> to the <console>.\nfor each <item> in <running-low> {\n    Compute the <reorder-line> from \"REORDER: \" ++ <item: name> ++ \" (only \" ++ <item: stock> ++ \" left)\".\n    Log <reorder-line> to the <console>.\n}"
     },
     {
-      "id": "nb13-c20",
-      "kind": "markdown",
-      "source": "Only the oat milk shows up — stock 3, and the cold brew is\nalready deleted. Notice the division of labor: the repository holds\nstate, `Filter` expresses the business rule, and in a full application\nan *observer* would watch the repository and emit a `ReorderNeeded`\nevent the moment any `Store` drops a stock value below 5 — no morning\nritual required. Retail chains run this exact loop at the scale of\nmillions of SKUs; the vocabulary — store, retrieve, observe, threshold\n— is the same.\n\n## Related\n\n- Next: [14 — Building Applications](14-building-applications.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl)\n  (observers are event handlers),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl) (Filter)\n- Language Guide: [Chapter 36 — Repositories](../Book/TheLanguageGuide/Chapter36-Repositories.md),\n  [Chapter 13 — The Event Bus](../Book/TheLanguageGuide/Chapter13-EventBus.md)\n- Wiki: [Guide — Repositories](https://github.com/arolang/aro/wiki/Guide-Repositories),\n  [Guide — Store Files](https://github.com/arolang/aro/wiki/Guide-Store-Files)\n- Specification: [ARO-0073 — Store Files](../Proposals/ARO-0073-store-files.md),\n  [ARO-0007 — Events & Reactive](../Proposals/ARO-0007-events-reactive.md)\n- Examples in the repo: `Examples/RepositoryObserver/`, `Examples/StoreFileDemo/`",
-      "outputs": []
+      "id" : "nb13-c20",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Only the oat milk shows up — stock 3, and the cold brew is\nalready deleted. Notice the division of labor: the repository holds\nstate, `Filter` expresses the business rule, and in a full application\nan *observer* would watch the repository and emit a `ReorderNeeded`\nevent the moment any `Store` drops a stock value below 5 — no morning\nritual required. Retail chains run this exact loop at the scale of\nmillions of SKUs; the vocabulary — store, retrieve, observe, threshold\n— is the same.\n\n## Related\n\n- Next: [14 — Building Applications](14-building-applications.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl)\n  (observers are event handlers),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl) (Filter)\n- Language Guide: [Chapter 36 — Repositories](..\/Book\/TheLanguageGuide\/Chapter36-Repositories.md),\n  [Chapter 13 — The Event Bus](..\/Book\/TheLanguageGuide\/Chapter13-EventBus.md)\n- Wiki: [Guide — Repositories](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Repositories),\n  [Guide — Store Files](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Store-Files)\n- Specification: [ARO-0073 — Store Files](..\/Proposals\/ARO-0073-store-files.md),\n  [ARO-0007 — Events & Reactive](..\/Proposals\/ARO-0007-events-reactive.md)\n- Examples in the repo: `Examples\/RepositoryObserver\/`, `Examples\/StoreFileDemo\/`"
     }
-  ]
+  ],
+  "version" : 1
 }

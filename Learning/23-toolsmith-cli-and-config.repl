@@ -1,107 +1,141 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb23-c01",
-      "kind": "markdown",
-      "source": "# 23 — Toolsmith: CLI & Config\n\nForty shops means forty sets of chores: the nightly stock report, the\nreorder run, the price sync. At Brew & Bytes HQ those chores are not\ndone by hand — they are **internal tools**: small ARO programs someone\nruns from a terminal, points at a shop, and forgets. This notebook is\nabout building them.\n\nInternal tools live and die by three things: how they take **input**\n(command-line parameters, [ARO-0047](../Proposals/ARO-0047-command-line-parameters.md)),\nhow they hold **settings** (the Configure action,\n[ARO-0035](../Proposals/ARO-0035-configurable-runtime.md)), and how far\nyou let them **reach** (system commands and plugins). Configuration and\nparameters run right here in the session; running shell commands needs\nan application — and a safety conversation — so those parts are shown\nas annotated code blocks.\n\nBy the end you can read any `aro run ./Tool --flag value` invocation\nand know exactly where each value lands.",
-      "outputs": []
+      "id" : "nb23-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 23 — Toolsmith: CLI & Config\n\nForty shops means forty sets of chores: the nightly stock report, the\nreorder run, the price sync. At Brew & Bytes HQ those chores are not\ndone by hand — they are **internal tools**: small ARO programs someone\nruns from a terminal, points at a shop, and forgets. This notebook is\nabout building them.\n\nInternal tools live and die by three things: how they take **input**\n(command-line parameters, [ARO-0047](..\/Proposals\/ARO-0047-command-line-parameters.md)),\nhow they hold **settings** (the Configure action,\n[ARO-0035](..\/Proposals\/ARO-0035-configurable-runtime.md)), and how far\nyou let them **reach** (system commands and plugins). Configuration and\nparameters run right here in the session; running shell commands needs\nan application — and a safety conversation — so those parts are shown\nas annotated code blocks.\n\nBy the end you can read any `aro run .\/Tool --flag value` invocation\nand know exactly where each value lands."
     },
     {
-      "id": "nb23-c02",
-      "kind": "code",
-      "source": "Configure the <report-tool: batch-size> with 40.\nExtract the <report-batch> from the <report-tool: batch-size>.\nLog <report-batch> to the <console>.",
-      "outputs": []
+      "id" : "nb23-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Configure the <report-tool: batch-size> with 40.\nExtract the <report-batch> from the <report-tool: batch-size>.\nLog <report-batch> to the <console>."
     },
     {
-      "id": "nb23-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Configure`** is an *OWN* action: it moves a value from your code\n  into the application-wide **configuration registry** — nothing leaves\n  the program. The shape is always\n  `Configure the <category: setting> with <value>.` — here category\n  `report-tool`, setting `batch-size`.\n- **`Extract`** is the *REQUEST* mirror: any feature set, anywhere in\n  the application, can later read `<report-tool: batch-size>` back. The\n  registry lives for the whole application (or session) lifetime.\n- The pattern is deliberate: **set once at startup, read everywhere.**\n  In a real tool, `Application-Start` configures; the working feature\n  sets only extract. No global variables, no parameter threading.\n\n`Set` is an accepted synonym for the verb, and the value can be any\nliteral or variable — numbers, strings, booleans.",
-      "outputs": []
+      "id" : "nb23-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Configure`** is an *OWN* action: it moves a value from your code\n  into the application-wide **configuration registry** — nothing leaves\n  the program. The shape is always\n  `Configure the <category: setting> with <value>.` — here category\n  `report-tool`, setting `batch-size`.\n- **`Extract`** is the *REQUEST* mirror: any feature set, anywhere in\n  the application, can later read `<report-tool: batch-size>` back. The\n  registry lives for the whole application (or session) lifetime.\n- The pattern is deliberate: **set once at startup, read everywhere.**\n  In a real tool, `Application-Start` configures; the working feature\n  sets only extract. No global variables, no parameter threading.\n\n`Set` is an accepted synonym for the verb, and the value can be any\nliteral or variable — numbers, strings, booleans."
     },
     {
-      "id": "nb23-c04",
-      "kind": "markdown",
-      "source": "## Variants\n\nSettings are plain values, so they combine with everything you already\nknow. A classic internal-tool move: configure a **mode**, then `match`\non it to decide what the tool does this run.\n\nOne session-specific detail: `Configure` also binds the *category*\nname (`<shift-tool>`) as a variable, and variables are immutable across\ncells — so in a notebook, each category is configured **once**. In an\napplication this never chafes: all Configure statements live together\nin `Application-Start` anyway.",
-      "outputs": []
+      "id" : "nb23-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants\n\nSettings are plain values, so they combine with everything you already\nknow. A classic internal-tool move: configure a **mode**, then `match`\non it to decide what the tool does this run.\n\nOne session-specific detail: `Configure` also binds the *category*\nname (`<shift-tool>`) as a variable, and variables are immutable across\ncells — so in a notebook, each category is configured **once**. In an\napplication this never chafes: all Configure statements live together\nin `Application-Start` anyway."
     },
     {
-      "id": "nb23-c05",
-      "kind": "code",
-      "source": "Configure the <shift-tool: mode> with \"report\".\nExtract the <shift-mode> from the <shift-tool: mode>.\nmatch <shift-mode> {\n    case \"report\" { Log \"nightly report mode\" to the <console>. }\n    case \"cleanup\" { Log \"cleanup mode\" to the <console>. }\n    otherwise { Log \"unknown mode - check the runbook\" to the <console>. }\n}",
-      "outputs": []
+      "id" : "nb23-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Configure the <shift-tool: mode> with \"report\".\nExtract the <shift-mode> from the <shift-tool: mode>.\nmatch <shift-mode> {\n    case \"report\" { Log \"nightly report mode\" to the <console>. }\n    case \"cleanup\" { Log \"cleanup mode\" to the <console>. }\n    otherwise { Log \"unknown mode - check the runbook\" to the <console>. }\n}"
     },
     {
-      "id": "nb23-c06",
-      "kind": "markdown",
-      "source": "A setting nobody configured is **not** silently `nil` — extracting it\nfails with a plain sentence naming exactly what was missing. That is\nARO's happy-path philosophy\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)) applied to\nconfiguration: a tool that runs with a half-missing config does more\ndamage than one that stops and says so. The next cell is *supposed* to\nfail — nobody ever configured a `night-tool`:",
-      "outputs": []
+      "id" : "nb23-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "A setting nobody configured is **not** silently `nil` — extracting it\nfails with a plain sentence naming exactly what was missing. That is\nARO's happy-path philosophy\n([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)) applied to\nconfiguration: a tool that runs with a half-missing config does more\ndamage than one that stops and says so. The next cell is *supposed* to\nfail — nobody ever configured a `night-tool`:"
     },
     {
-      "id": "nb23-c07",
-      "kind": "code",
-      "source": "(* expect-error *)\nExtract the <ghost-timeout> from the <night-tool: timeout>.",
-      "outputs": []
+      "id" : "nb23-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\nExtract the <ghost-timeout> from the <night-tool: timeout>."
     },
     {
-      "id": "nb23-c08",
-      "kind": "markdown",
-      "source": "## Command-line parameters (ARO-0047)\n\nConfiguration is what the tool *knows*; parameters are what the person\nrunning it *says*. Every argument after the application path lands in\nthe **`<parameter>`** system object:\n\n```bash\naro run ./ReorderTool --shop berlin-01 --count 3 --verbose\n```\n\n| Argument | Name | Value | Type |\n|----------|------|-------|------|\n| `--shop berlin-01` | `shop` | `\"berlin-01\"` | String |\n| `--count 3` | `count` | `3` | Int |\n| `--verbose` | `verbose` | `true` | Bool |\n\nValues are type-coerced automatically (digits become Int, `1.5` becomes\nFloat, bare flags become `true`), `--key=value` works too, and short\nflags combine: `-vf` sets both `v` and `f`. A compiled binary\n(`aro build`) takes the same arguments directly: `./ReorderTool --shop\nberlin-01`.\n\nA notebook session is started by the kernel, not by you at a shell — so\nits parameter dictionary exists but is **empty**. You can still touch\nthe machinery:",
-      "outputs": []
+      "id" : "nb23-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Command-line parameters (ARO-0047)\n\nConfiguration is what the tool *knows*; parameters are what the person\nrunning it *says*. Every argument after the application path lands in\nthe **`<parameter>`** system object:\n\n```bash\naro run .\/ReorderTool --shop berlin-01 --count 3 --verbose\n```\n\n| Argument | Name | Value | Type |\n|----------|------|-------|------|\n| `--shop berlin-01` | `shop` | `\"berlin-01\"` | String |\n| `--count 3` | `count` | `3` | Int |\n| `--verbose` | `verbose` | `true` | Bool |\n\nValues are type-coerced automatically (digits become Int, `1.5` becomes\nFloat, bare flags become `true`), `--key=value` works too, and short\nflags combine: `-vf` sets both `v` and `f`. A compiled binary\n(`aro build`) takes the same arguments directly: `.\/ReorderTool --shop\nberlin-01`.\n\nA notebook session is started by the kernel, not by you at a shell — so\nits parameter dictionary exists but is **empty**. You can still touch\nthe machinery:"
     },
     {
-      "id": "nb23-c09",
-      "kind": "code",
-      "source": "Extract the <cli-args> from the <parameter>.\nCompute the <cli-count: length> from <cli-args>.\nLog \"parameters passed to this session:\" to the <console>.\nLog <cli-count> to the <console>.",
-      "outputs": []
+      "id" : "nb23-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Extract the <cli-args> from the <parameter>.\nCompute the <cli-count: length> from <cli-args>.\nLog \"parameters passed to this session:\" to the <console>.\nLog <cli-count> to the <console>."
     },
     {
-      "id": "nb23-c10",
-      "kind": "markdown",
-      "source": "Extracting **all** parameters gives a dictionary (empty here).\nExtracting a **named** parameter that was never passed fails with a\ndescriptive error — which doubles as the tool's usage message. The next\ncell demonstrates that failure deliberately.\n\nIn an application, the specified pattern for optional parameters with\ndefaults ([ARO-0047 §Examples](../Proposals/ARO-0047-command-line-parameters.md))\nreads the dictionary and falls back:\n\n```aro\n(Application-Start: Reorder Tool) {\n    (* Required - fails loudly with a usage-message error if absent *)\n    Extract the <shop> from the <parameter: shop>.\n\n    (* Optional with default *)\n    Extract the <params> from the <parameter>.\n    Create the <count> with <params: count> or 3.\n\n    Log \"Reordering for ${<shop>}, batch of ${<count>}\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\n`Examples/Parameters/` in the repository is a runnable version of this\nshape.",
-      "outputs": []
+      "id" : "nb23-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Extracting **all** parameters gives a dictionary (empty here).\nExtracting a **named** parameter that was never passed fails with a\ndescriptive error — which doubles as the tool's usage message. The next\ncell demonstrates that failure deliberately.\n\nIn an application, the specified pattern for optional parameters with\ndefaults ([ARO-0047 §Examples](..\/Proposals\/ARO-0047-command-line-parameters.md))\nreads the dictionary and falls back:\n\n```aro\n(Application-Start: Reorder Tool) {\n    (* Required - fails loudly with a usage-message error if absent *)\n    Extract the <shop> from the <parameter: shop>.\n\n    (* Optional with default *)\n    Extract the <params> from the <parameter>.\n    Create the <count> with <params: count> or 3.\n\n    Log \"Reordering for ${<shop>}, batch of ${<count>}\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\n`Examples\/Parameters\/` in the repository is a runnable version of this\nshape."
     },
     {
-      "id": "nb23-c11",
-      "kind": "code",
-      "source": "(* expect-error *)\nExtract the <shop-param> from the <parameter: shop>.",
-      "outputs": []
+      "id" : "nb23-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\nExtract the <shop-param> from the <parameter: shop>."
     },
     {
-      "id": "nb23-c12",
-      "kind": "markdown",
-      "source": "## Discussion: three input channels, one rule\n\nAn internal tool has three ways to receive values, and each has a job:\n\n| Channel | Syntax | Belongs to | Changes |\n|---------|--------|-----------|---------|\n| Parameters | `<parameter: shop>` | this invocation | every run |\n| Configuration | `<report-tool: batch-size>` | the application | at startup |\n| Environment | `<env: SHOP_REGION>` | the machine/deployment | per host |\n\nThe rule: **read them at the edge, pass values inward.** Feature sets\ndeep in the tool should receive plain variables (or read the Configure\nregistry), never reach for `<parameter>` themselves — that keeps the\nlogic testable and the inputs visible in one place. Environment\nvariables and deployment-time configuration get a full treatment in\n[26 — Observability & Deployment](26-observability-and-deployment.repl).\n\nOne pitfall worth naming: because missing parameters and missing\nsettings *fail*, decide per value whether it is required (extract it\ndirectly — the error is your usage message) or optional (extract the\ndictionary, use `or` for the default). Mixing the two styles per value\nis fine; being accidental about it is not.",
-      "outputs": []
+      "id" : "nb23-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion: three input channels, one rule\n\nAn internal tool has three ways to receive values, and each has a job:\n\n| Channel | Syntax | Belongs to | Changes |\n|---------|--------|-----------|---------|\n| Parameters | `<parameter: shop>` | this invocation | every run |\n| Configuration | `<report-tool: batch-size>` | the application | at startup |\n| Environment | `<env: SHOP_REGION>` | the machine\/deployment | per host |\n\nThe rule: **read them at the edge, pass values inward.** Feature sets\ndeep in the tool should receive plain variables (or read the Configure\nregistry), never reach for `<parameter>` themselves — that keeps the\nlogic testable and the inputs visible in one place. Environment\nvariables and deployment-time configuration get a full treatment in\n[26 — Observability & Deployment](26-observability-and-deployment.repl).\n\nOne pitfall worth naming: because missing parameters and missing\nsettings *fail*, decide per value whether it is required (extract it\ndirectly — the error is your usage message) or optional (extract the\ndictionary, use `or` for the default). Mixing the two styles per value\nis fine; being accidental about it is not."
     },
     {
-      "id": "nb23-c13",
-      "kind": "markdown",
-      "source": "## Reaching for the shell: Exec — fenced, on purpose\n\nSooner or later an internal tool wants to call something that already\nexists — `tar`, `rsync`, a vendor CLI. ARO's `Exec` action does that,\nand it is the sharpest knife in the drawer, so this notebook only\n*shows* it (running arbitrary shell commands from a teaching notebook\nthat anyone may execute top-to-bottom would be exactly the mistake the\nsafety rules below warn about):\n\n```aro\n(* Command in the object qualifier, arguments via with *)\nExec the <listing> for the <command: \"ls\"> with [\"-l\", \"-a\"].\n\n(* Full control: working directory, timeout, environment *)\nExec the <backup> on the <system> with {\n    command: \"tar czf nightly.tgz exports/\",\n    workingDirectory: \"/var/brewbytes\",\n    timeout: 60000\n}.\n\n(* Every Exec returns a structured result *)\nLog <backup: output> to the <console>.\nReturn an <Error: status> with <backup> when <backup: error> = true.\n```\n\nThe result record carries `output`, `exitCode`, `error`, `message`, and\n`command` — check `error` (or `exitCode`) after every call; a timeout\nreports `exitCode: -1`.\n\n**Safety rules that are not optional:**\n\n1. **Never interpolate unvalidated input into a command.**\n   `Exec ... with \"ls ${userInput}\"` plus a crafted input is a shell\n   injection. `Validate` the value against an allowlist pattern first.\n2. **Always set a timeout** — a hung child process hangs your tool.\n3. **Prefer argument lists** (`with [\"-l\", \"-a\"]`) over one big command\n   string; there is less to inject into.\n4. **Log every command you run.** The audit trail is part of the tool.\n\n[Chapter 37 — System Commands](../Book/TheLanguageGuide/Chapter37-SystemCommands.md)\ncovers the full option table and more patterns.",
-      "outputs": []
+      "id" : "nb23-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Reaching for the shell: Exec — fenced, on purpose\n\nSooner or later an internal tool wants to call something that already\nexists — `tar`, `rsync`, a vendor CLI. ARO's `Exec` action does that,\nand it is the sharpest knife in the drawer, so this notebook only\n*shows* it (running arbitrary shell commands from a teaching notebook\nthat anyone may execute top-to-bottom would be exactly the mistake the\nsafety rules below warn about):\n\n```aro\n(* Command in the object qualifier, arguments via with *)\nExec the <listing> for the <command: \"ls\"> with [\"-l\", \"-a\"].\n\n(* Full control: working directory, timeout, environment *)\nExec the <backup> on the <system> with {\n    command: \"tar czf nightly.tgz exports\/\",\n    workingDirectory: \"\/var\/brewbytes\",\n    timeout: 60000\n}.\n\n(* Every Exec returns a structured result *)\nLog <backup: output> to the <console>.\nReturn an <Error: status> with <backup> when <backup: error> = true.\n```\n\nThe result record carries `output`, `exitCode`, `error`, `message`, and\n`command` — check `error` (or `exitCode`) after every call; a timeout\nreports `exitCode: -1`.\n\n**Safety rules that are not optional:**\n\n1. **Never interpolate unvalidated input into a command.**\n   `Exec ... with \"ls ${userInput}\"` plus a crafted input is a shell\n   injection. `Validate` the value against an allowlist pattern first.\n2. **Always set a timeout** — a hung child process hangs your tool.\n3. **Prefer argument lists** (`with [\"-l\", \"-a\"]`) over one big command\n   string; there is less to inject into.\n4. **Log every command you run.** The audit trail is part of the tool.\n\n[Chapter 37 — System Commands](..\/Book\/TheLanguageGuide\/Chapter37-SystemCommands.md)\ncovers the full option table and more patterns."
     },
     {
-      "id": "nb23-c14",
-      "kind": "markdown",
-      "source": "## Plugins: tools your tools can call\n\nWhen the chore outgrows shell commands — parse a spreadsheet, render\nmarkdown, zip an archive — the clean extension point is a **plugin**\n(Swift, Rust, C, or Python), not a fragile `Exec` pipeline. The\ntoolsmith workflow:\n\n```bash\naro new plugin sku-tools     # scaffold: plugin.yaml + source stub\naro add github:brewbytes/aro-csv-tools   # install someone else's\naro plugins                  # what is installed?\naro actions                  # every verb available, plugins included\n```\n\nA plugin declares a PascalCase `handle:` in its `plugin.yaml`; its\nactions are then invoked as `Handle.Verb` and its qualifiers as\n`handle.qualifier` — the same call shape as the user-defined actions\nfrom [10 — User-Defined Actions](10-user-defined-actions.repl):\n\n```aro\nCsv.Parse the <rows> from the <raw-export>.\nCompute the <shuffled: collections.shuffle> from the <rows>.\n```\n\nTwo facts worth knowing before you need them:\n\n- **Sessions can install plugins live.** The REPL meta-command\n  `:plugin add <git-url>` fetches, builds, and loads a plugin into the\n  *running* session (`:plugin list`, `:plugin remove` manage it) — no\n  restart. That makes a notebook a fine place to try a plugin before\n  wiring it into a tool.\n- **`aro build` bundles plugins into the binary** — native plugins are\n  statically linked, Python plugins ship with an embedded interpreter.\n  Your tool stays a single deployable file.\n\nDepth: [Chapter 26 — Plugins](../Book/TheLanguageGuide/Chapter26-Plugins.md),\n[ARO-0045 — Package Manager](../Proposals/ARO-0045-package-manager.md),\n[ARO-0087 — Plugin SDK](../Proposals/ARO-0087-plugin-sdk.md).",
-      "outputs": []
+      "id" : "nb23-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Plugins: tools your tools can call\n\nWhen the chore outgrows shell commands — parse a spreadsheet, render\nmarkdown, zip an archive — the clean extension point is a **plugin**\n(Swift, Rust, C, or Python), not a fragile `Exec` pipeline. The\ntoolsmith workflow:\n\n```bash\naro new plugin sku-tools     # scaffold: plugin.yaml + source stub\naro add github:brewbytes\/aro-csv-tools   # install someone else's\naro plugins                  # what is installed?\naro actions                  # every verb available, plugins included\n```\n\nA plugin declares a PascalCase `handle:` in its `plugin.yaml`; its\nactions are then invoked as `Handle.Verb` and its qualifiers as\n`handle.qualifier` — the same call shape as the user-defined actions\nfrom [10 — User-Defined Actions](10-user-defined-actions.repl):\n\n```aro\nCsv.Parse the <rows> from the <raw-export>.\nCompute the <shuffled: collections.shuffle> from the <rows>.\n```\n\nTwo facts worth knowing before you need them:\n\n- **Sessions can install plugins live.** The REPL meta-command\n  `:plugin add <git-url>` fetches, builds, and loads a plugin into the\n  *running* session (`:plugin list`, `:plugin remove` manage it) — no\n  restart. That makes a notebook a fine place to try a plugin before\n  wiring it into a tool.\n- **`aro build` bundles plugins into the binary** — native plugins are\n  statically linked, Python plugins ship with an embedded interpreter.\n  Your tool stays a single deployable file.\n\nDepth: [Chapter 26 — Plugins](..\/Book\/TheLanguageGuide\/Chapter26-Plugins.md),\n[ARO-0045 — Package Manager](..\/Proposals\/ARO-0045-package-manager.md),\n[ARO-0087 — Plugin SDK](..\/Proposals\/ARO-0087-plugin-sdk.md)."
     },
     {
-      "id": "nb23-c15",
-      "kind": "markdown",
-      "source": "## Real-world example: the reorder run\n\nThe tool HQ actually runs every night: look at a shop's shelf, find\neverything under the reorder threshold, print the order list. The\nthreshold is *configuration* (ops tunes it per season without touching\nlogic); the shelf would arrive per shop; the logic is four statements.",
-      "outputs": []
+      "id" : "nb23-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the reorder run\n\nThe tool HQ actually runs every night: look at a shop's shelf, find\neverything under the reorder threshold, print the order list. The\nthreshold is *configuration* (ops tunes it per season without touching\nlogic); the shelf would arrive per shop; the logic is four statements."
     },
     {
-      "id": "nb23-c16",
-      "kind": "code",
-      "source": "Configure the <reorder-tool: threshold> with 4.\n\nCreate the <berlin-shelf> with [\n    { name: \"espresso beans\", stock: 2 },\n    { name: \"oat milk\", stock: 9 },\n    { name: \"paper cups\", stock: 1 },\n    { name: \"cocoa powder\", stock: 6 }\n].\n\nExtract the <reorder-cutoff> from the <reorder-tool: threshold>.\nFilter the <reorder-list> from the <berlin-shelf> where <stock> < <reorder-cutoff>.\nCompute the <reorder-count: length> from <reorder-list>.\nLog \"Reorder run for berlin-01:\" to the <console>.\nfor each <item> in <reorder-list> {\n    Extract the <item-name> from the <item: name>.\n    Extract the <item-stock> from the <item: stock>.\n    Log \"REORDER ${<item-name>} (stock: ${<item-stock>})\" to the <console>.\n}\nLog <reorder-count> to the <console>.",
-      "outputs": []
+      "id" : "nb23-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Configure the <reorder-tool: threshold> with 4.\n\nCreate the <berlin-shelf> with [\n    { name: \"espresso beans\", stock: 2 },\n    { name: \"oat milk\", stock: 9 },\n    { name: \"paper cups\", stock: 1 },\n    { name: \"cocoa powder\", stock: 6 }\n].\n\nExtract the <reorder-cutoff> from the <reorder-tool: threshold>.\nFilter the <reorder-list> from the <berlin-shelf> where <stock> < <reorder-cutoff>.\nCompute the <reorder-count: length> from <reorder-list>.\nLog \"Reorder run for berlin-01:\" to the <console>.\nfor each <item> in <reorder-list> {\n    Extract the <item-name> from the <item: name>.\n    Extract the <item-stock> from the <item: stock>.\n    Log \"REORDER ${<item-name>} (stock: ${<item-stock>})\" to the <console>.\n}\nLog <reorder-count> to the <console>."
     },
     {
-      "id": "nb23-c17",
-      "kind": "markdown",
-      "source": "In the full tool, the shelf line would be\n`Extract the <shop> from the <parameter: shop>.` followed by a\nrepository read, and the threshold would be configured once in\n`Application-Start`. Notice what stayed *out* of the logic: no\n`--shop` parsing, no defaults, no environment reads — inputs were\nresolved at the edge, and `Filter` + `for each` never learned where\ntheir values came from.\n\nThis is why every serious engineering organization grows an internal\ntools culture: the runbook step that says \"SSH in and check the\nnumbers\" eventually becomes a tool anyone can run safely at 6 a.m.\nHalf-automated chores fail in the half that was manual. The pattern\nhere — declared inputs, loud failures for missing ones, configuration\nseparated from logic, shell access treated as a privilege — is what\nseparates a tool you hand to a new barista from a script only its\nauthor dares to run.\n\n## Related\n\n- Next: [24 — State Machines & Domain Modeling](24-state-machines-and-domain-modeling.repl)\n- Builds on: [10 — User-Defined Actions](10-user-defined-actions.repl) (the `Handle.Verb` call shape),\n  [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl) (`match`)\n- Configuration in production: [26 — Observability & Deployment](26-observability-and-deployment.repl)\n- Language Guide: [Chapter 23 — Command-Line Parameters](../Book/TheLanguageGuide/Chapter23-CommandLineParameters.md),\n  [Chapter 37 — System Commands](../Book/TheLanguageGuide/Chapter37-SystemCommands.md),\n  [Chapter 26 — Plugins](../Book/TheLanguageGuide/Chapter26-Plugins.md)\n- Wiki: [Guide — Actions](https://github.com/arolang/aro/wiki/Guide-Actions),\n  [Action Developer Guide](https://github.com/arolang/aro/wiki/Action-Developer-Guide)\n- Specification: [ARO-0047 — Command-Line Parameters](../Proposals/ARO-0047-command-line-parameters.md),\n  [ARO-0035 — Configurable Runtime](../Proposals/ARO-0035-configurable-runtime.md),\n  [ARO-0045 — Package Manager](../Proposals/ARO-0045-package-manager.md)\n- Examples in the repo: `Examples/Parameters/`, `Examples/ConfigurableTimeout/`",
-      "outputs": []
+      "id" : "nb23-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In the full tool, the shelf line would be\n`Extract the <shop> from the <parameter: shop>.` followed by a\nrepository read, and the threshold would be configured once in\n`Application-Start`. Notice what stayed *out* of the logic: no\n`--shop` parsing, no defaults, no environment reads — inputs were\nresolved at the edge, and `Filter` + `for each` never learned where\ntheir values came from.\n\nThis is why every serious engineering organization grows an internal\ntools culture: the runbook step that says \"SSH in and check the\nnumbers\" eventually becomes a tool anyone can run safely at 6 a.m.\nHalf-automated chores fail in the half that was manual. The pattern\nhere — declared inputs, loud failures for missing ones, configuration\nseparated from logic, shell access treated as a privilege — is what\nseparates a tool you hand to a new barista from a script only its\nauthor dares to run.\n\n## Related\n\n- Next: [24 — State Machines & Domain Modeling](24-state-machines-and-domain-modeling.repl)\n- Builds on: [10 — User-Defined Actions](10-user-defined-actions.repl) (the `Handle.Verb` call shape),\n  [05 — Expressions & Conditionals](05-expressions-and-conditionals.repl) (`match`)\n- Configuration in production: [26 — Observability & Deployment](26-observability-and-deployment.repl)\n- Language Guide: [Chapter 23 — Command-Line Parameters](..\/Book\/TheLanguageGuide\/Chapter23-CommandLineParameters.md),\n  [Chapter 37 — System Commands](..\/Book\/TheLanguageGuide\/Chapter37-SystemCommands.md),\n  [Chapter 26 — Plugins](..\/Book\/TheLanguageGuide\/Chapter26-Plugins.md)\n- Wiki: [Guide — Actions](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Actions),\n  [Action Developer Guide](https:\/\/github.com\/arolang\/aro\/wiki\/Action-Developer-Guide)\n- Specification: [ARO-0047 — Command-Line Parameters](..\/Proposals\/ARO-0047-command-line-parameters.md),\n  [ARO-0035 — Configurable Runtime](..\/Proposals\/ARO-0035-configurable-runtime.md),\n  [ARO-0045 — Package Manager](..\/Proposals\/ARO-0045-package-manager.md)\n- Examples in the repo: `Examples\/Parameters\/`, `Examples\/ConfigurableTimeout\/`"
     }
-  ]
+  ],
+  "version" : 1
 }

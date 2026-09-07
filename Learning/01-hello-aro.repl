@@ -1,83 +1,109 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb01-c01",
-      "kind": "markdown",
-      "source": "# 01 — Hello, ARO\n\nWelcome to **Brew & Bytes**. The café is going digital, and you are the\nperson doing it. Over fourteen notebooks you will build up every\ncapability its ordering system needs — and learn ARO along the way,\none working cell at a time.\n\nARO reads like instructions to a competent colleague. Every statement\nhas the same anatomy: an **Action** (a verb), a **Result** (what you\nget), and an **Object** (what it works with) — that triple is what the\nname *ARO* stands for. There are no semicolons, no braces around\nstatements, no type ceremonies. A statement is a sentence, and it ends\nwith a period.\n\nIn this notebook: your first statements, the `<console>`, and how to\nread any ARO line you will ever meet.",
-      "outputs": []
+      "id" : "nb01-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 01 — Hello, ARO\n\nWelcome to **Brew & Bytes**. The café is going digital, and you are the\nperson doing it. Over fourteen notebooks you will build up every\ncapability its ordering system needs — and learn ARO along the way,\none working cell at a time.\n\nARO reads like instructions to a competent colleague. Every statement\nhas the same anatomy: an **Action** (a verb), a **Result** (what you\nget), and an **Object** (what it works with) — that triple is what the\nname *ARO* stands for. There are no semicolons, no braces around\nstatements, no type ceremonies. A statement is a sentence, and it ends\nwith a period.\n\nIn this notebook: your first statements, the `<console>`, and how to\nread any ARO line you will ever meet."
     },
     {
-      "id": "nb01-c02",
-      "kind": "code",
-      "source": "Log \"Hello from Brew & Bytes!\" to the <console>.",
-      "outputs": []
+      "id" : "nb01-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Log \"Hello from Brew & Bytes!\" to the <console>."
     },
     {
-      "id": "nb01-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Log`** is the action — a verb, capitalized, opening the sentence.\n  Log is an *EXPORT* action: it moves data from your program to the\n  outside world (here: your screen).\n- **`\"Hello from Brew & Bytes!\"`** is the result slot — for Log, the\n  thing to write. A string literal in double quotes.\n- **`to the <console>`** is the object: *where* it goes. Angle brackets\n  `<…>` always mark a named thing — a variable, or a system object like\n  the console.\n- **`the`** is an article. Articles (`a`, `an`, `the`) make statements\n  read like prose; they are optional and carry no meaning.\n- The **period** ends the statement. Forget it and the parser will tell\n  you.\n\nEvery ARO statement you will ever read follows this shape:\n`Action [the] <Result> preposition [the] <Object>.`",
-      "outputs": []
+      "id" : "nb01-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Log`** is the action — a verb, capitalized, opening the sentence.\n  Log is an *EXPORT* action: it moves data from your program to the\n  outside world (here: your screen).\n- **`\"Hello from Brew & Bytes!\"`** is the result slot — for Log, the\n  thing to write. A string literal in double quotes.\n- **`to the <console>`** is the object: *where* it goes. Angle brackets\n  `<…>` always mark a named thing — a variable, or a system object like\n  the console.\n- **`the`** is an article. Articles (`a`, `an`, `the`) make statements\n  read like prose; they are optional and carry no meaning.\n- The **period** ends the statement. Forget it and the parser will tell\n  you.\n\nEvery ARO statement you will ever read follows this shape:\n`Action [the] <Result> preposition [the] <Object>.`"
     },
     {
-      "id": "nb01-c04",
-      "kind": "markdown",
-      "source": "## Variants\n\nThe result slot doesn't have to be a literal — bind a value to a name\nfirst, then log the name. `Create` binds a value; from then on\n`<greeting>` *is* that value.",
-      "outputs": []
+      "id" : "nb01-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants\n\nThe result slot doesn't have to be a literal — bind a value to a name\nfirst, then log the name. `Create` binds a value; from then on\n`<greeting>` *is* that value."
     },
     {
-      "id": "nb01-c05",
-      "kind": "code",
-      "source": "Create the <greeting> with \"Guten Morgen, Kaffeefreunde!\".\nLog <greeting> to the <console>.",
-      "outputs": []
+      "id" : "nb01-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <greeting> with \"Guten Morgen, Kaffeefreunde!\".\nLog <greeting> to the <console>."
     },
     {
-      "id": "nb01-c06",
-      "kind": "markdown",
-      "source": "Two statements, one cell. Cells run top to bottom, and every name you\nbind stays alive for the rest of the session — the next cell can use\n`<greeting>` too.\n\nValues aren't only text. Log happily prints numbers, booleans, lists,\nand records (you'll meet them properly in\n[02 — Values & Literals](02-values-and-literals.repl)):",
-      "outputs": []
+      "id" : "nb01-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two statements, one cell. Cells run top to bottom, and every name you\nbind stays alive for the rest of the session — the next cell can use\n`<greeting>` too.\n\nValues aren't only text. Log happily prints numbers, booleans, lists,\nand records (you'll meet them properly in\n[02 — Values & Literals](02-values-and-literals.repl)):"
     },
     {
-      "id": "nb01-c07",
-      "kind": "code",
-      "source": "Create the <espresso-price> with 2.4.\nCreate the <shop-open> with true.\nLog <espresso-price> to the <console>.\nLog <shop-open> to the <console>.",
-      "outputs": []
+      "id" : "nb01-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <espresso-price> with 2.4.\nCreate the <shop-open> with true.\nLog <espresso-price> to the <console>.\nLog <shop-open> to the <console>."
     },
     {
-      "id": "nb01-c08",
-      "kind": "markdown",
-      "source": "Articles are optional — this is the same statement, twice. Write\nwhichever reads better to you; the compiler sees no difference.",
-      "outputs": []
+      "id" : "nb01-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Articles are optional — this is the same statement, twice. Write\nwhichever reads better to you; the compiler sees no difference."
     },
     {
-      "id": "nb01-c09",
-      "kind": "code",
-      "source": "Log \"with articles\" to the <console>.\nLog \"without articles\" to <console>.",
-      "outputs": []
+      "id" : "nb01-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Log \"with articles\" to the <console>.\nLog \"without articles\" to <console>."
     },
     {
-      "id": "nb01-c10",
-      "kind": "markdown",
-      "source": "## Discussion\n\nWhy sentences? Because ARO's unit of thought is a **business feature**,\nnot a function call. A statement like\n`Retrieve the <user> from the <user-repository>.` is legible to the\ncafé's owner, not just to you — and that legibility is enforced by the\ngrammar, not left to discipline.\n\nTwo things worth noticing already:\n\n1. **Actions have roles.** Log *exports*; later you'll meet actions\n   that *request* data in (Extract, Retrieve), *transform* it\n   internally (Compute, Create), and *respond* (Return). The role\n   determines which prepositions a verb accepts — `Log … to …`, never\n   `Log … from …`. The full table lives in\n   [Appendix A — Action Reference](../Book/TheLanguageGuide/AppendixA-ActionReference.md).\n2. **There is no error handling in your code.** If something can't be\n   done, the runtime reports it in plain language — \"code is the error\n   message\" is a design principle\n   ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)). You will\n   see it in action in [04 — Immutability](04-immutability.repl).",
-      "outputs": []
+      "id" : "nb01-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\nWhy sentences? Because ARO's unit of thought is a **business feature**,\nnot a function call. A statement like\n`Retrieve the <user> from the <user-repository>.` is legible to the\ncafé's owner, not just to you — and that legibility is enforced by the\ngrammar, not left to discipline.\n\nTwo things worth noticing already:\n\n1. **Actions have roles.** Log *exports*; later you'll meet actions\n   that *request* data in (Extract, Retrieve), *transform* it\n   internally (Compute, Create), and *respond* (Return). The role\n   determines which prepositions a verb accepts — `Log … to …`, never\n   `Log … from …`. The full table lives in\n   [Appendix A — Action Reference](..\/Book\/TheLanguageGuide\/AppendixA-ActionReference.md).\n2. **There is no error handling in your code.** If something can't be\n   done, the runtime reports it in plain language — \"code is the error\n   message\" is a design principle\n   ([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)). You will\n   see it in action in [04 — Immutability](04-immutability.repl)."
     },
     {
-      "id": "nb01-c11",
-      "kind": "markdown",
-      "source": "## Real-world example: the opening announcement\n\nSmall, but real: every service the café runs — the register, the order\nscreen, the kitchen display — announces itself when it starts, with\nenough detail that a log file six months from now still tells the\nstory. Structured, greppable startup lines are the first thing an\non-call person reads at 6 a.m., in every industry.",
-      "outputs": []
+      "id" : "nb01-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the opening announcement\n\nSmall, but real: every service the café runs — the register, the order\nscreen, the kitchen display — announces itself when it starts, with\nenough detail that a log file six months from now still tells the\nstory. Structured, greppable startup lines are the first thing an\non-call person reads at 6 a.m., in every industry."
     },
     {
-      "id": "nb01-c12",
-      "kind": "code",
-      "source": "Create the <shop-name> with \"Brew & Bytes\".\nCreate the <build> with \"notebook-course\".\nLog \"=====================================\" to the <console>.\nLog <shop-name> to the <console>.\nLog \"Now serving. Build:\" to the <console>.\nLog <build> to the <console>.\nLog \"=====================================\" to the <console>.",
-      "outputs": []
+      "id" : "nb01-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <shop-name> with \"Brew & Bytes\".\nCreate the <build> with \"notebook-course\".\nLog \"=====================================\" to the <console>.\nLog <shop-name> to the <console>.\nLog \"Now serving. Build:\" to the <console>.\nLog <build> to the <console>.\nLog \"=====================================\" to the <console>."
     },
     {
-      "id": "nb01-c13",
-      "kind": "markdown",
-      "source": "In a real application this block would live in the\n`Application-Start` feature set — the single entry point every ARO app\nhas. You'll write one in\n[09 — Feature Sets & Events](09-feature-sets-and-events.repl), and see\nthe full application lifecycle in\n[14 — Building Applications](14-building-applications.repl).\n\n## Related\n\n- Next: [02 — Values & Literals](02-values-and-literals.repl)\n- Language Guide: [Chapter 1 — Why ARO](../Book/TheLanguageGuide/Chapter01-WhyARO.md),\n  [Chapter 2 — The Mental Model](../Book/TheLanguageGuide/Chapter02-MentalModel.md),\n  [Chapter 4 — Statement Anatomy](../Book/TheLanguageGuide/Chapter04-StatementAnatomy.md)\n- Wiki: [Start With ARO](https://github.com/arolang/aro/wiki/Start-With-ARO),\n  [Guide — The Basics](https://github.com/arolang/aro/wiki/Guide-The-Basics),\n  [Language Tour](https://github.com/arolang/aro/wiki/Language-Tour)\n- Specification: [ARO-0001 — Language Fundamentals](../Proposals/ARO-0001-language-fundamentals.md)",
-      "outputs": []
+      "id" : "nb01-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In a real application this block would live in the\n`Application-Start` feature set — the single entry point every ARO app\nhas. You'll write one in\n[09 — Feature Sets & Events](09-feature-sets-and-events.repl), and see\nthe full application lifecycle in\n[14 — Building Applications](14-building-applications.repl).\n\n## Related\n\n- Next: [02 — Values & Literals](02-values-and-literals.repl)\n- Language Guide: [Chapter 1 — Why ARO](..\/Book\/TheLanguageGuide\/Chapter01-WhyARO.md),\n  [Chapter 2 — The Mental Model](..\/Book\/TheLanguageGuide\/Chapter02-MentalModel.md),\n  [Chapter 4 — Statement Anatomy](..\/Book\/TheLanguageGuide\/Chapter04-StatementAnatomy.md)\n- Wiki: [Start With ARO](https:\/\/github.com\/arolang\/aro\/wiki\/Start-With-ARO),\n  [Guide — The Basics](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-The-Basics),\n  [Language Tour](https:\/\/github.com\/arolang\/aro\/wiki\/Language-Tour)\n- Specification: [ARO-0001 — Language Fundamentals](..\/Proposals\/ARO-0001-language-fundamentals.md)"
     }
-  ]
+  ],
+  "version" : 1
 }

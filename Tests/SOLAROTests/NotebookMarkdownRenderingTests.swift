@@ -15,6 +15,7 @@
 //      unknown tags — so prose about ARO lost the ARO.
 
 import Testing
+import Foundation
 @testable import SOLARO
 
 @Suite("Notebook markdown rendering")
@@ -158,5 +159,99 @@ struct NotebookMarkdownRenderingTests {
         }
         #expect(tail.contains("<new-name>"))
         #expect(tail.contains("<source>"))
+    }
+}
+
+@Suite("Markdown cells render when you click away")
+@MainActor
+struct MarkdownBlurRenderTests {
+
+    private func notebook(_ cells: [ReplNotebookCell]) -> ReplNotebookController {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blur-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        try? ReplNotebookDocument(cells: cells).save(to: url)
+        return ReplNotebookController(url: url, project: Project(rootPath: dir))
+    }
+
+    @Test("Selecting another cell renders the markdown left behind")
+    func selectionAwayRenders() {
+        let md = ReplNotebookCell(kind: .markdown, source: "# Title")
+        let code = ReplNotebookCell(kind: .code, source: "Log 1 to the <console>.")
+        let nb = notebook([md, code])
+        nb.selectedCellID = md.id
+        nb.editingMarkdownIDs.insert(md.id)
+
+        nb.selectedCellID = code.id
+
+        #expect(!nb.editingMarkdownIDs.contains(md.id),
+                "clicking away is how a notebook user says 'done'")
+    }
+
+    @Test("The cell you move to keeps its open editor")
+    func destinationKeepsEditing() {
+        let a = ReplNotebookCell(kind: .markdown, source: "one")
+        let b = ReplNotebookCell(kind: .markdown, source: "two")
+        let nb = notebook([a, b])
+        nb.selectedCellID = a.id
+        nb.editingMarkdownIDs = [a.id, b.id]
+
+        nb.selectedCellID = b.id
+
+        #expect(!nb.editingMarkdownIDs.contains(a.id))
+        #expect(nb.editingMarkdownIDs.contains(b.id), "a freshly opened cell stays open")
+    }
+
+    @Test("Staying on the same cell changes nothing")
+    func sameSelectionIsNoOp() {
+        let md = ReplNotebookCell(kind: .markdown, source: "# Title")
+        let nb = notebook([md])
+        nb.selectedCellID = md.id
+        nb.editingMarkdownIDs.insert(md.id)
+
+        nb.selectedCellID = md.id
+
+        #expect(nb.editingMarkdownIDs.contains(md.id))
+    }
+}
+
+@Suite("Opening a notebook doesn't dirty it")
+@MainActor
+struct NotebookSaveStabilityTests {
+
+    @Test("A cell the editor normalised saves back byte-identical")
+    func trailingNewlineIsNotAnEdit() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stable-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        let cell = ReplNotebookCell(kind: .markdown, source: "# Title")
+        try ReplNotebookDocument(cells: [cell]).save(to: url)
+        let before = try Data(contentsOf: url)
+
+        let nb = ReplNotebookController(url: url, project: Project(rootPath: dir))
+        // What the text view does to a cell it displays.
+        nb.updateSource("# Title\n", for: nb.cells[0].id)
+        nb.saveNow()
+
+        #expect(try Data(contentsOf: url) == before,
+                "opening a notebook must not rewrite it")
+    }
+
+    @Test("Real edits still save")
+    func realEditsPersist() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stable-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        try ReplNotebookDocument(cells: [ReplNotebookCell(kind: .code, source: "one")]).save(to: url)
+
+        let nb = ReplNotebookController(url: url, project: Project(rootPath: dir))
+        nb.updateSource("one\ntwo", for: nb.cells[0].id)
+        nb.saveNow()
+
+        let reloaded = try ReplNotebookDocument.load(from: url)
+        #expect(reloaded.cells[0].source == "one\ntwo")
     }
 }

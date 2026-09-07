@@ -32,7 +32,27 @@ final class ReplNotebookController {
 
     /// The focused cell — target of toolbar actions and keyboard
     /// cell operations.
-    var selectedCellID: String?
+    ///
+    /// Moving the selection renders any markdown cell left behind:
+    /// clicking into a markdown cell opens its source, and clicking
+    /// away is how a notebook user says "done" — Jupyter renders on
+    /// blur too. Without this, a cell only rendered on ⇧⏎ or Esc, so
+    /// a notebook read as raw markdown wherever someone had looked.
+    var selectedCellID: String? {
+        didSet {
+            guard oldValue != selectedCellID else { return }
+            commitMarkdownEditing(except: selectedCellID)
+        }
+    }
+
+    /// Render every markdown cell whose source is open, except the
+    /// one named — the cell being moved to, which the caller may
+    /// have deliberately opened for editing (a new cell, or M).
+    func commitMarkdownEditing(except keep: String? = nil) {
+        let leaving = editingMarkdownIDs.filter { $0 != keep }
+        guard !leaving.isEmpty else { return }
+        editingMarkdownIDs.subtract(leaving)
+    }
     /// Markdown cells currently showing raw source. Everything
     /// else renders. A brand-new markdown cell starts here so the
     /// user can type immediately.
@@ -111,7 +131,20 @@ final class ReplNotebookController {
         saveTask = nil
         guard loadError == nil else { return }
         do {
-            try ReplNotebookDocument(cells: cells).save(to: url)
+            // Trailing newlines are trimmed on the way to disk. The
+            // text view normalises a cell it displays by appending
+            // one, which came back as an edit and autosaved — so
+            // merely OPENING a notebook dirtied the file, and a
+            // course of 26 notebooks turned into 26 modified files
+            // in git. Trimming here and not in the buffer keeps
+            // typing untouched: pressing Return still puts a newline
+            // in the editor, it just does not end up in the file.
+            let normalized = cells.map { cell -> ReplNotebookCell in
+                var copy = cell
+                while copy.source.hasSuffix("\n") { copy.source.removeLast() }
+                return copy
+            }
+            try ReplNotebookDocument(cells: normalized).save(to: url)
         } catch {
             FileHandle.standardError.write(
                 Data("[ReplNotebook] Warning: couldn't save \(url.lastPathComponent): \(error)\n".utf8))

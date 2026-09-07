@@ -1,113 +1,149 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb09-c01",
-      "kind": "markdown",
-      "source": "# 09 — Feature Sets & Events\n\nThe café has outgrown single statements. When a customer orders, several\nthings must happen: the barista queues the drink, the register records\nthe sale, the loyalty system adds points. Nobody phones each department\n— the order is *announced*, and every department that cares reacts.\n\nThat is exactly how ARO structures programs. Code lives in **feature\nsets**: named blocks with a **business activity**. Feature sets never\ncall each other directly — they are triggered by **events**. One part\nof the program `Emit`s an event; every feature set whose activity says\n*\"I handle that event\"* runs, each with its own copy of the payload.\n\nIn this notebook: the anatomy of a feature set, emitting events,\nwriting `{EventName} Handler` feature sets, reading the event payload,\nand **guards** that let a handler declare precisely which events it\nwants (ARO-0022).",
-      "outputs": []
+      "id" : "nb09-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 09 — Feature Sets & Events\n\nThe café has outgrown single statements. When a customer orders, several\nthings must happen: the barista queues the drink, the register records\nthe sale, the loyalty system adds points. Nobody phones each department\n— the order is *announced*, and every department that cares reacts.\n\nThat is exactly how ARO structures programs. Code lives in **feature\nsets**: named blocks with a **business activity**. Feature sets never\ncall each other directly — they are triggered by **events**. One part\nof the program `Emit`s an event; every feature set whose activity says\n*\"I handle that event\"* runs, each with its own copy of the payload.\n\nIn this notebook: the anatomy of a feature set, emitting events,\nwriting `{EventName} Handler` feature sets, reading the event payload,\nand **guards** that let a handler declare precisely which events it\nwants (ARO-0022)."
     },
     {
-      "id": "nb09-c02",
-      "kind": "code",
-      "source": "(RecordOrder: OrderPlaced Handler) {\n    Extract the <id> from the <event: id>.\n    Log \"Recording order:\" to the <console>.\n    Log <id> to the <console>.\n    Return an <OK: status> for the <handling>.\n}",
-      "outputs": []
+      "id" : "nb09-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(RecordOrder: OrderPlaced Handler) {\n    Extract the <id> from the <event: id>.\n    Log \"Recording order:\" to the <console>.\n    Log <id> to the <console>.\n    Return an <OK: status> for the <handling>.\n}"
     },
     {
-      "id": "nb09-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\nYou defined a feature set — the cell answers `Defined (RecordOrder:\nOrderPlaced Handler)`. Nothing ran yet; definitions *register*.\n\n- **`(RecordOrder: OrderPlaced Handler)`** is the header. Before the\n  colon: the feature set's **name**. After it: the **business\n  activity** — and the activity is not documentation, it is *routing*.\n  The pattern `OrderPlaced Handler` means: run this whenever an\n  `OrderPlaced` event is emitted.\n- **`Extract the <id> from the <event: id>.`** — inside a handler,\n  `<event>` is the payload the emitter sent. `<event: id>` reaches\n  into its `id` field. Extract is a *REQUEST* action: it pulls external\n  data (the event) into your scope.\n- **`Return an <OK: status> for the <handling>.`** — every feature set\n  ends by returning a status (*RESPONSE* role). The `<handling>` noun\n  names what succeeded; it reads like a sentence and shows up in logs.\n\nOne rule to remember: feature set **names must not contain articles** —\n`RecordOrder` works, `Record A Order` breaks the parser, because\n`a`/`an`/`the` are grammar tokens.",
-      "outputs": []
+      "id" : "nb09-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nYou defined a feature set — the cell answers `Defined (RecordOrder:\nOrderPlaced Handler)`. Nothing ran yet; definitions *register*.\n\n- **`(RecordOrder: OrderPlaced Handler)`** is the header. Before the\n  colon: the feature set's **name**. After it: the **business\n  activity** — and the activity is not documentation, it is *routing*.\n  The pattern `OrderPlaced Handler` means: run this whenever an\n  `OrderPlaced` event is emitted.\n- **`Extract the <id> from the <event: id>.`** — inside a handler,\n  `<event>` is the payload the emitter sent. `<event: id>` reaches\n  into its `id` field. Extract is a *REQUEST* action: it pulls external\n  data (the event) into your scope.\n- **`Return an <OK: status> for the <handling>.`** — every feature set\n  ends by returning a status (*RESPONSE* role). The `<handling>` noun\n  names what succeeded; it reads like a sentence and shows up in logs.\n\nOne rule to remember: feature set **names must not contain articles** —\n`RecordOrder` works, `Record A Order` breaks the parser, because\n`a`\/`an`\/`the` are grammar tokens."
     },
     {
-      "id": "nb09-c04",
-      "kind": "markdown",
-      "source": "## Variants: emitting an event\n\nThe other half of the conversation is `Emit` — an *EXPORT* action. The\nresult slot names the event type (`<OrderPlaced: event>`), and `with`\ncarries the payload, usually a record literal. Field names in the\npayload are the field names handlers will extract.",
-      "outputs": []
+      "id" : "nb09-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants: emitting an event\n\nThe other half of the conversation is `Emit` — an *EXPORT* action. The\nresult slot names the event type (`<OrderPlaced: event>`), and `with`\ncarries the payload, usually a record literal. Field names in the\npayload are the field names handlers will extract."
     },
     {
-      "id": "nb09-c05",
-      "kind": "code",
-      "source": "Emit an <OrderPlaced: event> with { id: 101, total: 8.4 }.",
-      "outputs": []
+      "id" : "nb09-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit an <OrderPlaced: event> with { id: 101, total: 8.4 }."
     },
     {
-      "id": "nb09-c06",
-      "kind": "markdown",
-      "source": "In an application run with `aro run`, this line makes every\nregistered `OrderPlaced Handler` fire — you would see *\"Recording\norder: 101\"* above. In interactive sessions, handler dispatch is\nlanding in the current release ([ARO-0091 — Event\ndispatch](../Proposals/ARO-0091-jupyter-kernel.md)); the `Emit` itself\nsucceeds either way, and the event enters the bus.\n\nFan-out is the point: **any number of handlers** may subscribe to the\nsame event, and all of them run — the emitter neither knows nor cares\nhow many listeners exist. Let's add a second one:",
-      "outputs": []
+      "id" : "nb09-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In an application run with `aro run`, this line makes every\nregistered `OrderPlaced Handler` fire — you would see *\"Recording\norder: 101\"* above. In interactive sessions, handler dispatch is\nlanding in the current release ([ARO-0091 — Event\ndispatch](..\/Proposals\/ARO-0091-jupyter-kernel.md)); the `Emit` itself\nsucceeds either way, and the event enters the bus.\n\nFan-out is the point: **any number of handlers** may subscribe to the\nsame event, and all of them run — the emitter neither knows nor cares\nhow many listeners exist. Let's add a second one:"
     },
     {
-      "id": "nb09-c07",
-      "kind": "code",
-      "source": "(NotifyBarista: OrderPlaced Handler) {\n    Extract the <total> from the <event: total>.\n    Log \"New order for the bar. Total:\" to the <console>.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <notification>.\n}",
-      "outputs": []
+      "id" : "nb09-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(NotifyBarista: OrderPlaced Handler) {\n    Extract the <total> from the <event: total>.\n    Log \"New order for the bar. Total:\" to the <console>.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <notification>.\n}"
     },
     {
-      "id": "nb09-c08",
-      "kind": "markdown",
-      "source": "Now one `Emit an <OrderPlaced: event> …` triggers *both*\n`RecordOrder` and `NotifyBarista`. Each handler gets its own scope and\nits own copy of the payload — they cannot see each other's variables.\n\n## Guards: handlers that choose their events\n\nOften a handler only cares about *some* events of a type. The register\nshould celebrate a payment, not every status change. You could test\ninside the body — but ARO lets you put the condition **on the\ndeclaration**, so unwanted events never enter the handler at all\n([ARO-0022](../Proposals/ARO-0022-state-guards.md)).\n\nThe compact form is the **field-value guard**, written directly after\n`Handler` with *no space*:",
-      "outputs": []
+      "id" : "nb09-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Now one `Emit an <OrderPlaced: event> …` triggers *both*\n`RecordOrder` and `NotifyBarista`. Each handler gets its own scope and\nits own copy of the payload — they cannot see each other's variables.\n\n## Guards: handlers that choose their events\n\nOften a handler only cares about *some* events of a type. The register\nshould celebrate a payment, not every status change. You could test\ninside the body — but ARO lets you put the condition **on the\ndeclaration**, so unwanted events never enter the handler at all\n([ARO-0022](..\/Proposals\/ARO-0022-state-guards.md)).\n\nThe compact form is the **field-value guard**, written directly after\n`Handler` with *no space*:"
     },
     {
-      "id": "nb09-c09",
-      "kind": "code",
-      "source": "(CelebratePayment: OrderUpdated Handler<status:paid>) {\n    Extract the <id> from the <event: id>.\n    Log \"Payment received for order:\" to the <console>.\n    Log <id> to the <console>.\n    Return an <OK: status> for the <celebration>.\n}",
-      "outputs": []
+      "id" : "nb09-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(CelebratePayment: OrderUpdated Handler<status:paid>) {\n    Extract the <id> from the <event: id>.\n    Log \"Payment received for order:\" to the <console>.\n    Log <id> to the <console>.\n    Return an <OK: status> for the <celebration>.\n}"
     },
     {
-      "id": "nb09-c10",
-      "kind": "markdown",
-      "source": "`Handler<status:paid>` runs the handler only when the event's\n`status` field equals `\"paid\"` (matching is case-insensitive). The\nguard grammar goes further:\n\n- **OR** — commas: `Handler<status:paid,shipped>` fires for either value.\n- **AND** — semicolons: `Handler<status:paid;tier:premium>` requires both.\n- **Nested fields** — dot paths: `Handler<customer.tier:premium>`.\n\nEquality is all this form can express. For comparisons, use the second\nmechanism: a **`when` guard** between the header and the body. It sees\nthe event's payload fields directly — no Extract needed:",
-      "outputs": []
+      "id" : "nb09-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "`Handler<status:paid>` runs the handler only when the event's\n`status` field equals `\"paid\"` (matching is case-insensitive). The\nguard grammar goes further:\n\n- **OR** — commas: `Handler<status:paid,shipped>` fires for either value.\n- **AND** — semicolons: `Handler<status:paid;tier:premium>` requires both.\n- **Nested fields** — dot paths: `Handler<customer.tier:premium>`.\n\nEquality is all this form can express. For comparisons, use the second\nmechanism: a **`when` guard** between the header and the body. It sees\nthe event's payload fields directly — no Extract needed:"
     },
     {
-      "id": "nb09-c11",
-      "kind": "code",
-      "source": "(FlagBigOrder: OrderPlaced Handler) when <total> > 50 {\n    Log \"Large order - brief the kitchen.\" to the <console>.\n    Return an <OK: status> for the <flagging>.\n}",
-      "outputs": []
+      "id" : "nb09-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(FlagBigOrder: OrderPlaced Handler) when <total> > 50 {\n    Log \"Large order - brief the kitchen.\" to the <console>.\n    Return an <OK: status> for the <flagging>.\n}"
     },
     {
-      "id": "nb09-c12",
-      "kind": "markdown",
-      "source": "Two guard positions, two meanings — don't confuse them:\n\n- **Declaration guard** (`) when <total> > 50 {`): the *whole handler*\n  is skipped when the condition fails. Silently — no error, no log.\n  Not firing is a routing decision, not a failure.\n- **Statement guard** (`Log … to the <console> when <total> > 50.`):\n  the handler runs; only that one statement is conditional.\n\nDeclaration guards see **only the event payload** — not application\nvariables, not repositories. If a guard needs a threshold, the emitter\nmust put the threshold *into the event*. Both guard styles combine on\none handler; details in [Chapter 16 — Handler\nGuards](../Book/TheLanguageGuide/Chapter16-HandlerGuards.md).\n\nTime to exercise all four handlers:",
-      "outputs": []
+      "id" : "nb09-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two guard positions, two meanings — don't confuse them:\n\n- **Declaration guard** (`) when <total> > 50 {`): the *whole handler*\n  is skipped when the condition fails. Silently — no error, no log.\n  Not firing is a routing decision, not a failure.\n- **Statement guard** (`Log … to the <console> when <total> > 50.`):\n  the handler runs; only that one statement is conditional.\n\nDeclaration guards see **only the event payload** — not application\nvariables, not repositories. If a guard needs a threshold, the emitter\nmust put the threshold *into the event*. Both guard styles combine on\none handler; details in [Chapter 16 — Handler\nGuards](..\/Book\/TheLanguageGuide\/Chapter16-HandlerGuards.md).\n\nTime to exercise all four handlers:"
     },
     {
-      "id": "nb09-c13",
-      "kind": "code",
-      "source": "Emit an <OrderUpdated: event> with { id: 101, status: \"paid\" }.\nEmit an <OrderPlaced: event> with { id: 102, total: 61.0 }.\nLog \"Events emitted.\" to the <console>.",
-      "outputs": []
+      "id" : "nb09-c13",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit an <OrderUpdated: event> with { id: 101, status: \"paid\" }.\nEmit an <OrderPlaced: event> with { id: 102, total: 61.0 }.\nLog \"Events emitted.\" to the <console>."
     },
     {
-      "id": "nb09-c14",
-      "kind": "markdown",
-      "source": "In an application: the first `Emit` triggers `CelebratePayment`\n(status is `paid`); the second triggers `RecordOrder`, `NotifyBarista`,\n*and* `FlagBigOrder` (61.0 > 50). An `OrderUpdated` with\n`status: \"preparing\"` would trigger nothing — and that silence is\ncorrect behavior.\n\n## Discussion\n\nWhy events instead of calls? **Decoupling.** The register that emits\n`OrderPlaced` does not import, name, or count its listeners. Add a\nstamp-card handler next month — the register's code does not change.\nThis is the architecture of ARO applications, top to bottom: HTTP\nrequests, file changes, repository writes — all become events routed to\nfeature sets ([ARO-0007 — Events &\nReactive](../Proposals/ARO-0007-events-reactive.md)).\n\nThree habits that keep event code healthy:\n\n1. **Design the payload for the readers.** Handlers and guards can only\n   use what the event carries. Emit records with named fields, not bare\n   values, so guards like `Handler<status:paid>` have something to read.\n2. **Store *or* Emit, not both.** A handler that stores data should not\n   also emit an event announcing it — repository observers exist for\n   exactly that (you'll meet them in\n   [13 — Repositories & State](13-repositories-and-state.repl)).\n3. **Guards beat body conditionals.** A guard on the declaration\n   documents the trigger condition where readers look for it, and the\n   runtime skips ineligible events without running a single statement.\n\nAnd the happy path holds ([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)):\nhandlers describe success. If an Extract fails because the payload\nlacks the field, the runtime reports it in plain language — you write\nno error branches.",
-      "outputs": []
+      "id" : "nb09-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In an application: the first `Emit` triggers `CelebratePayment`\n(status is `paid`); the second triggers `RecordOrder`, `NotifyBarista`,\n*and* `FlagBigOrder` (61.0 > 50). An `OrderUpdated` with\n`status: \"preparing\"` would trigger nothing — and that silence is\ncorrect behavior.\n\n## Discussion\n\nWhy events instead of calls? **Decoupling.** The register that emits\n`OrderPlaced` does not import, name, or count its listeners. Add a\nstamp-card handler next month — the register's code does not change.\nThis is the architecture of ARO applications, top to bottom: HTTP\nrequests, file changes, repository writes — all become events routed to\nfeature sets ([ARO-0007 — Events &\nReactive](..\/Proposals\/ARO-0007-events-reactive.md)).\n\nThree habits that keep event code healthy:\n\n1. **Design the payload for the readers.** Handlers and guards can only\n   use what the event carries. Emit records with named fields, not bare\n   values, so guards like `Handler<status:paid>` have something to read.\n2. **Store *or* Emit, not both.** A handler that stores data should not\n   also emit an event announcing it — repository observers exist for\n   exactly that (you'll meet them in\n   [13 — Repositories & State](13-repositories-and-state.repl)).\n3. **Guards beat body conditionals.** A guard on the declaration\n   documents the trigger condition where readers look for it, and the\n   runtime skips ineligible events without running a single statement.\n\nAnd the happy path holds ([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)):\nhandlers describe success. If an Extract fails because the payload\nlacks the field, the runtime reports it in plain language — you write\nno error branches."
     },
     {
-      "id": "nb09-c15",
-      "kind": "markdown",
-      "source": "## Real-world example: the order lifecycle\n\nA real point-of-sale system is a chain of announcements: *ordered* →\n*paid* → *prepared* → *closed*. Each station subscribes to the stage it\nowns. Below, the espresso machine's queue only wants espresso orders —\na field-value guard says so — while the archive takes every closed\norder, unconditionally.",
-      "outputs": []
+      "id" : "nb09-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the order lifecycle\n\nA real point-of-sale system is a chain of announcements: *ordered* →\n*paid* → *prepared* → *closed*. Each station subscribes to the stage it\nowns. Below, the espresso machine's queue only wants espresso orders —\na field-value guard says so — while the archive takes every closed\norder, unconditionally."
     },
     {
-      "id": "nb09-c16",
-      "kind": "code",
-      "source": "(QueueEspresso: DrinkOrdered Handler<drink:espresso>) {\n    Extract the <order-id> from the <event: id>.\n    Log \"Espresso machine: order queued.\" to the <console>.\n    Return an <OK: status> for the <queueing>.\n}\n\n(ArchiveOrder: OrderClosed Handler) {\n    Extract the <closed-id> from the <event: id>.\n    Log \"Order archived for the books.\" to the <console>.\n    Return an <OK: status> for the <archiving>.\n}",
-      "outputs": []
+      "id" : "nb09-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(QueueEspresso: DrinkOrdered Handler<drink:espresso>) {\n    Extract the <order-id> from the <event: id>.\n    Log \"Espresso machine: order queued.\" to the <console>.\n    Return an <OK: status> for the <queueing>.\n}\n\n(ArchiveOrder: OrderClosed Handler) {\n    Extract the <closed-id> from the <event: id>.\n    Log \"Order archived for the books.\" to the <console>.\n    Return an <OK: status> for the <archiving>.\n}"
     },
     {
-      "id": "nb09-c17",
-      "kind": "code",
-      "source": "Emit a <DrinkOrdered: event> with { id: 501, drink: \"espresso\" }.\nEmit a <DrinkOrdered: event> with { id: 502, drink: \"filter\" }.\nEmit an <OrderClosed: event> with { id: 500 }.\nLog \"A morning at the counter, as three events.\" to the <console>.",
-      "outputs": []
+      "id" : "nb09-c17",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit a <DrinkOrdered: event> with { id: 501, drink: \"espresso\" }.\nEmit a <DrinkOrdered: event> with { id: 502, drink: \"filter\" }.\nEmit an <OrderClosed: event> with { id: 500 }.\nLog \"A morning at the counter, as three events.\" to the <console>."
     },
     {
-      "id": "nb09-c18",
-      "kind": "markdown",
-      "source": "Order 502 is filter coffee — `QueueEspresso`'s guard skips it,\nand presumably a `Handler<drink:filter>` twin picks it up. Notice what\nwe did *not* write: no dispatcher, no switch over drink types, no list\nof subscribers. The routing table **is** the set of declarations.\n\nBeyond the café this pattern runs the digital world: payment providers\nemit `payment.succeeded` webhooks; warehouses react to `OrderPacked`;\nbrokers like Kafka carry exactly these announce-and-subscribe streams\nbetween services. ARO builds the pattern into the language — which is\nwhy an ARO application ([notebook 14](14-building-applications.repl))\nis *nothing but* feature sets waiting for events.\n\n## Related\n\n- Next: [10 — User-Defined Actions](10-user-defined-actions.repl)\n- Uses events: [13 — Repositories & State](13-repositories-and-state.repl)\n  (observers), [14 — Building Applications](14-building-applications.repl)\n- Language Guide: [Chapter 6 — Feature Sets](../Book/TheLanguageGuide/Chapter06-FeatureSets.md),\n  [Chapter 13 — The Event Bus](../Book/TheLanguageGuide/Chapter13-EventBus.md),\n  [Chapter 15 — Custom Events](../Book/TheLanguageGuide/Chapter15-CustomEvents.md),\n  [Chapter 16 — Handler Guards](../Book/TheLanguageGuide/Chapter16-HandlerGuards.md)\n- Wiki: [Guide — Feature Sets](https://github.com/arolang/aro/wiki/Guide-Feature-Sets),\n  [Guide — Events](https://github.com/arolang/aro/wiki/Guide-Events)\n- Specification: [ARO-0007 — Events & Reactive](../Proposals/ARO-0007-events-reactive.md),\n  [ARO-0022 — State Guards](../Proposals/ARO-0022-state-guards.md)",
-      "outputs": []
+      "id" : "nb09-c18",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Order 502 is filter coffee — `QueueEspresso`'s guard skips it,\nand presumably a `Handler<drink:filter>` twin picks it up. Notice what\nwe did *not* write: no dispatcher, no switch over drink types, no list\nof subscribers. The routing table **is** the set of declarations.\n\nBeyond the café this pattern runs the digital world: payment providers\nemit `payment.succeeded` webhooks; warehouses react to `OrderPacked`;\nbrokers like Kafka carry exactly these announce-and-subscribe streams\nbetween services. ARO builds the pattern into the language — which is\nwhy an ARO application ([notebook 14](14-building-applications.repl))\nis *nothing but* feature sets waiting for events.\n\n## Related\n\n- Next: [10 — User-Defined Actions](10-user-defined-actions.repl)\n- Uses events: [13 — Repositories & State](13-repositories-and-state.repl)\n  (observers), [14 — Building Applications](14-building-applications.repl)\n- Language Guide: [Chapter 6 — Feature Sets](..\/Book\/TheLanguageGuide\/Chapter06-FeatureSets.md),\n  [Chapter 13 — The Event Bus](..\/Book\/TheLanguageGuide\/Chapter13-EventBus.md),\n  [Chapter 15 — Custom Events](..\/Book\/TheLanguageGuide\/Chapter15-CustomEvents.md),\n  [Chapter 16 — Handler Guards](..\/Book\/TheLanguageGuide\/Chapter16-HandlerGuards.md)\n- Wiki: [Guide — Feature Sets](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Feature-Sets),\n  [Guide — Events](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Events)\n- Specification: [ARO-0007 — Events & Reactive](..\/Proposals\/ARO-0007-events-reactive.md),\n  [ARO-0022 — State Guards](..\/Proposals\/ARO-0022-state-guards.md)"
     }
-  ]
+  ],
+  "version" : 1
 }

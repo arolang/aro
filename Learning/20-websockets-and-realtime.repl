@@ -1,125 +1,165 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb20-c01",
-      "kind": "markdown",
-      "source": "# 20 — WebSockets & Real-Time\n\nThe franchise kitchens have a problem HTTP cannot solve politely. The\n**kitchen display** — the screen above the espresso machine showing\nopen tickets — must update the moment an order lands. Polling\n(`GET /tickets` every second) hammers the server to learn, 59 times\nout of 60, that nothing changed. What the display needs is a\nconnection that stays open so the *server* can push.\n\nThat is a **WebSocket**: it starts life as an ordinary HTTP request,\nupgrades to a persistent two-way channel, and from then on either side\ncan send at any time. In ARO\n([ARO-0048](../Proposals/ARO-0048-websocket.md)), WebSocket traffic\nbecomes what everything becomes: **events**. A client connecting, a\nmessage arriving, a connection closing — each is an event routed to a\nfeature set, exactly like the handlers of\n[09](09-feature-sets-and-events.repl).\n\nA live WebSocket needs a running server and an open port, so serving\nsetups stay in fenced blocks here. But the handlers themselves — the\npart *you* write — are plain feature sets, and those we define and\nexercise right in this session.",
-      "outputs": []
+      "id" : "nb20-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 20 — WebSockets & Real-Time\n\nThe franchise kitchens have a problem HTTP cannot solve politely. The\n**kitchen display** — the screen above the espresso machine showing\nopen tickets — must update the moment an order lands. Polling\n(`GET \/tickets` every second) hammers the server to learn, 59 times\nout of 60, that nothing changed. What the display needs is a\nconnection that stays open so the *server* can push.\n\nThat is a **WebSocket**: it starts life as an ordinary HTTP request,\nupgrades to a persistent two-way channel, and from then on either side\ncan send at any time. In ARO\n([ARO-0048](..\/Proposals\/ARO-0048-websocket.md)), WebSocket traffic\nbecomes what everything becomes: **events**. A client connecting, a\nmessage arriving, a connection closing — each is an event routed to a\nfeature set, exactly like the handlers of\n[09](09-feature-sets-and-events.repl).\n\nA live WebSocket needs a running server and an open port, so serving\nsetups stay in fenced blocks here. But the handlers themselves — the\npart *you* write — are plain feature sets, and those we define and\nexercise right in this session."
     },
     {
-      "id": "nb20-c02",
-      "kind": "code",
-      "source": "(Handle Display Connect: WebSocket Event Handler) {\n    Extract the <display-id> from the <event: connectionId>.\n    Extract the <display-path> from the <event: path>.\n    Log \"Kitchen display connected on ${display-path}\" to the <console>.\n    Return an <OK: status> for the <connection>.\n}",
-      "outputs": []
+      "id" : "nb20-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(Handle Display Connect: WebSocket Event Handler) {\n    Extract the <display-id> from the <event: connectionId>.\n    Extract the <display-path> from the <event: path>.\n    Log \"Kitchen display connected on ${display-path}\" to the <console>.\n    Return an <OK: status> for the <connection>.\n}"
     },
     {
-      "id": "nb20-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\nThe cell registered a handler for WebSocket *connections*. The\nbusiness activity `WebSocket Event Handler` subscribes the feature set\nto the socket lifecycle, and the **feature set's name** selects which\nof the three events it receives:\n\n| Name contains | Event | Fires when |\n|---------------|-------|------------|\n| `Connect` | `websocket.connected` | a client completes the handshake |\n| `Message` | `websocket.message` | a client sends a text frame |\n| `Disconnect` | `websocket.disconnected` | the connection closes, either side |\n\nEach event carries a payload you `Extract` from `<event>`:\n\n- **connected**: `connectionId`, `path`, `remoteAddress`\n- **message**: `connectionId`, `message` (the text frame)\n- **disconnected**: `connectionId`, `reason`\n\nThe `connectionId` is the one piece of state worth holding on to — it\nis how you answer *this* client later. In a session no client can\nconnect (no server is listening), so the handler registers and waits,\nwhich is precisely what it would do in a running app between\nconnections.",
-      "outputs": []
+      "id" : "nb20-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nThe cell registered a handler for WebSocket *connections*. The\nbusiness activity `WebSocket Event Handler` subscribes the feature set\nto the socket lifecycle, and the **feature set's name** selects which\nof the three events it receives:\n\n| Name contains | Event | Fires when |\n|---------------|-------|------------|\n| `Connect` | `websocket.connected` | a client completes the handshake |\n| `Message` | `websocket.message` | a client sends a text frame |\n| `Disconnect` | `websocket.disconnected` | the connection closes, either side |\n\nEach event carries a payload you `Extract` from `<event>`:\n\n- **connected**: `connectionId`, `path`, `remoteAddress`\n- **message**: `connectionId`, `message` (the text frame)\n- **disconnected**: `connectionId`, `reason`\n\nThe `connectionId` is the one piece of state worth holding on to — it\nis how you answer *this* client later. In a session no client can\nconnect (no server is listening), so the handler registers and waits,\nwhich is precisely what it would do in a running app between\nconnections."
     },
     {
-      "id": "nb20-c04",
-      "kind": "markdown",
-      "source": "## Variants: a frame is text\n\nA WebSocket frame carries *text* — usually JSON by convention, but\nnothing enforces that. Your message handler's first job is turning the\nframe into data. `Extract` from a string parses JSON when there is\nJSON to parse; here is the till announcing a ticket, exactly as it\nwould arrive on the wire:",
-      "outputs": []
+      "id" : "nb20-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Variants: a frame is text\n\nA WebSocket frame carries *text* — usually JSON by convention, but\nnothing enforces that. Your message handler's first job is turning the\nframe into data. `Extract` from a string parses JSON when there is\nJSON to parse; here is the till announcing a ticket, exactly as it\nwould arrive on the wire:"
     },
     {
-      "id": "nb20-c05",
-      "kind": "code",
-      "source": "Create the <incoming-frame> with \"{\\\"table\\\": 4, \\\"item\\\": \\\"cortado\\\", \\\"station\\\": \\\"espresso\\\"}\".\nExtract the <frame-ticket> from the <incoming-frame>.\nExtract the <ticket-table> from the <frame-ticket: table>.\nExtract the <ticket-item> from the <frame-ticket: item>.\nLog \"Ticket in: table ${ticket-table}, ${ticket-item}\" to the <console>.",
-      "outputs": []
+      "id" : "nb20-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <incoming-frame> with \"{\\\"table\\\": 4, \\\"item\\\": \\\"cortado\\\", \\\"station\\\": \\\"espresso\\\"}\".\nExtract the <frame-ticket> from the <incoming-frame>.\nExtract the <ticket-table> from the <frame-ticket: table>.\nExtract the <ticket-item> from the <frame-ticket: item>.\nLog \"Ticket in: table ${ticket-table}, ${ticket-item}\" to the <console>."
     },
     {
-      "id": "nb20-c06",
-      "kind": "markdown",
-      "source": "One `Extract` parses the frame, the next ones walk the record —\nthe same two-step every message handler performs. Now the full message\nhandler, with the two answering verbs of the real-time vocabulary,\n`Send` and `Broadcast`:",
-      "outputs": []
+      "id" : "nb20-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "One `Extract` parses the frame, the next ones walk the record —\nthe same two-step every message handler performs. Now the full message\nhandler, with the two answering verbs of the real-time vocabulary,\n`Send` and `Broadcast`:"
     },
     {
-      "id": "nb20-c07",
-      "kind": "code",
-      "source": "(Handle Display Message: WebSocket Event Handler) {\n    Extract the <frame-text> from the <event: message>.\n    Extract the <sender-id> from the <event: connectionId>.\n    Compute the <ack> from \"received: \" ++ <frame-text>.\n    Send the <ack> to the <websocket-connection: sender-id>.\n    Broadcast the <frame-text> to the <websocket>.\n    Return an <OK: status> for the <message>.\n}",
-      "outputs": []
+      "id" : "nb20-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(Handle Display Message: WebSocket Event Handler) {\n    Extract the <frame-text> from the <event: message>.\n    Extract the <sender-id> from the <event: connectionId>.\n    Compute the <ack> from \"received: \" ++ <frame-text>.\n    Send the <ack> to the <websocket-connection: sender-id>.\n    Broadcast the <frame-text> to the <websocket>.\n    Return an <OK: status> for the <message>.\n}"
     },
     {
-      "id": "nb20-c08",
-      "kind": "markdown",
-      "source": "Two verbs, two audiences — both EXPORT actions:\n\n- **`Send … to the <websocket-connection: id>.`** answers *one*\n  client, addressed by its `connectionId`. Acknowledgements, private\n  errors, direct replies.\n- **`Broadcast … to the <websocket>.`** pushes to *every* connected\n  client. Board updates, chat lines, alerts. The sender neither knows\n  nor counts the receivers — fan-out, like `Emit`, but across the\n  network edge.\n\nThe serving side is one option on the HTTP server — WebSocket rides\nthe same port via HTTP Upgrade, so this stays fenced:\n\n```aro\n(Application-Start: Kitchen Display Service) {\n    Start the <http-server> with { websocket: \"/ws\" }.\n    Log \"Displays connect on ws://localhost:8080/ws\" to the <console>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\n`{ websocket: \"/ws\" }` opens the upgrade path; `Configure the\n<websocket: path> with \"/displays\".` changes it; `Close the\n<websocket-connection: id>.` hangs up on one client. Try it live:\n`aro run Examples/WebSocketDemo`, then\n`websocat ws://localhost:8080/ws`.",
-      "outputs": []
+      "id" : "nb20-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two verbs, two audiences — both EXPORT actions:\n\n- **`Send … to the <websocket-connection: id>.`** answers *one*\n  client, addressed by its `connectionId`. Acknowledgements, private\n  errors, direct replies.\n- **`Broadcast … to the <websocket>.`** pushes to *every* connected\n  client. Board updates, chat lines, alerts. The sender neither knows\n  nor counts the receivers — fan-out, like `Emit`, but across the\n  network edge.\n\nThe serving side is one option on the HTTP server — WebSocket rides\nthe same port via HTTP Upgrade, so this stays fenced:\n\n```aro\n(Application-Start: Kitchen Display Service) {\n    Start the <http-server> with { websocket: \"\/ws\" }.\n    Log \"Displays connect on ws:\/\/localhost:8080\/ws\" to the <console>.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n```\n\n`{ websocket: \"\/ws\" }` opens the upgrade path; `Configure the\n<websocket: path> with \"\/displays\".` changes it; `Close the\n<websocket-connection: id>.` hangs up on one client. Try it live:\n`aro run Examples\/WebSocketDemo`, then\n`websocat ws:\/\/localhost:8080\/ws`."
     },
     {
-      "id": "nb20-c09",
-      "kind": "markdown",
-      "source": "## From socket event to domain event\n\nA good real-time app keeps two vocabularies apart. *Socket events*\n(`Connect`, `Message`, `Disconnect`) speak transport; *domain events*\n(`TicketBumped`, `OrderReady`) speak business. The message handler's\nreal job is translation: parse the frame, then `Emit` the domain\nevent — and let the rest of the shop subscribe to *that*, never to\nthe socket.",
-      "outputs": []
+      "id" : "nb20-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## From socket event to domain event\n\nA good real-time app keeps two vocabularies apart. *Socket events*\n(`Connect`, `Message`, `Disconnect`) speak transport; *domain events*\n(`TicketBumped`, `OrderReady`) speak business. The message handler's\nreal job is translation: parse the frame, then `Emit` the domain\nevent — and let the rest of the shop subscribe to *that*, never to\nthe socket."
     },
     {
-      "id": "nb20-c10",
-      "kind": "code",
-      "source": "(RefreshBoard: TicketBumped Handler) {\n    Extract the <bumped-table> from the <event: table>.\n    Log \"Board refresh: table ${bumped-table} is served.\" to the <console>.\n    Return an <OK: status> for the <refresh>.\n}",
-      "outputs": []
+      "id" : "nb20-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(RefreshBoard: TicketBumped Handler) {\n    Extract the <bumped-table> from the <event: table>.\n    Log \"Board refresh: table ${bumped-table} is served.\" to the <console>.\n    Return an <OK: status> for the <refresh>.\n}"
     },
     {
-      "id": "nb20-c11",
-      "kind": "code",
-      "source": "Emit a <TicketBumped: event> with { table: 4, barista: \"barista-2\" }.\nLog \"Bump announced to the bus.\" to the <console>.",
-      "outputs": []
+      "id" : "nb20-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Emit a <TicketBumped: event> with { table: 4, barista: \"barista-2\" }.\nLog \"Bump announced to the bus.\" to the <console>."
     },
     {
-      "id": "nb20-c12",
-      "kind": "markdown",
-      "source": "In a running application the `Emit` fires `RefreshBoard` — and a\n`Broadcast` inside it would push the refresh to every display. In\ninteractive sessions, handler dispatch is landing in the current\nrelease ([ARO-0091](../Proposals/ARO-0091-jupyter-kernel.md)); the\n`Emit` succeeds either way and the event enters the bus.\n\n## Walkthrough: the shipped examples\n\n**`Examples/WebSocketDemo`** is the echo-and-broadcast classic. Its\nmessage handler answers the sender *and* the room:\n\n```aro\n(Handle WebSocket Message: WebSocket Event Handler) {\n    Extract the <message> from the <event: message>.\n    Extract the <connection-id> from the <event: connectionId>.\n    Compute the <echo> from \"Echo: \" + <message>.\n    Send the <echo> to the <websocket-connection: connection-id>.\n    Compute the <broadcast-message> from \"Broadcast: \" + <message>.\n    Broadcast the <broadcast-message> to the <websocket>.\n    Return an <OK: status> for the <message>.\n}\n```\n\n**`Examples/SimpleChat`** shows the pattern most real systems need:\nthe **HTTP-to-realtime bridge**. A plain REST endpoint accepts the\nwrite, persists it, *and* pushes it to everyone connected:\n\n```aro\n(postStatus: Simple Chat API) {\n    Extract the <message> from the <body: message>.\n    Store the <message> into the <message-repository>.\n    Broadcast the <message> to the <socket-server>.\n    Return a <Created: status> with { message: <message> }.\n}\n```\n\nOne request, three audiences: the caller (`Created`), the database\n(`Store`), the room (`Broadcast`). This is the kitchen display's\narchitecture in miniature — orders arrive over HTTP from\n[notebook 19](19-http-services-and-clients.repl), displays listen on\na socket.",
-      "outputs": []
+      "id" : "nb20-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "In a running application the `Emit` fires `RefreshBoard` — and a\n`Broadcast` inside it would push the refresh to every display. In\ninteractive sessions, handler dispatch is landing in the current\nrelease ([ARO-0091](..\/Proposals\/ARO-0091-jupyter-kernel.md)); the\n`Emit` succeeds either way and the event enters the bus.\n\n## Walkthrough: the shipped examples\n\n**`Examples\/WebSocketDemo`** is the echo-and-broadcast classic. Its\nmessage handler answers the sender *and* the room:\n\n```aro\n(Handle WebSocket Message: WebSocket Event Handler) {\n    Extract the <message> from the <event: message>.\n    Extract the <connection-id> from the <event: connectionId>.\n    Compute the <echo> from \"Echo: \" + <message>.\n    Send the <echo> to the <websocket-connection: connection-id>.\n    Compute the <broadcast-message> from \"Broadcast: \" + <message>.\n    Broadcast the <broadcast-message> to the <websocket>.\n    Return an <OK: status> for the <message>.\n}\n```\n\n**`Examples\/SimpleChat`** shows the pattern most real systems need:\nthe **HTTP-to-realtime bridge**. A plain REST endpoint accepts the\nwrite, persists it, *and* pushes it to everyone connected:\n\n```aro\n(postStatus: Simple Chat API) {\n    Extract the <message> from the <body: message>.\n    Store the <message> into the <message-repository>.\n    Broadcast the <message> to the <socket-server>.\n    Return a <Created: status> with { message: <message> }.\n}\n```\n\nOne request, three audiences: the caller (`Created`), the database\n(`Store`), the room (`Broadcast`). This is the kitchen display's\narchitecture in miniature — orders arrive over HTTP from\n[notebook 19](19-http-services-and-clients.repl), displays listen on\na socket."
     },
     {
-      "id": "nb20-c13",
-      "kind": "markdown",
-      "source": "## Below WebSockets: raw TCP\n\nNot every kitchen device speaks HTTP. Label printers, scales, legacy\ntills — many talk plain TCP. ARO's socket server is the same\nevent-driven shape one layer down. `Examples/EchoSocket` in full:\n\n```aro\n(Application-Start: Echo Socket) {\n    Start the <socket-server> with { port: 9000 }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Handle Data Received: Socket Event Handler) {\n    Extract the <received-data> from the <packet: buffer>.\n    Extract the <client> from the <packet: connection>.\n    Send the <received-data> to the <client>.\n    Return an <OK: status> for the <packet>.\n}\n```\n\n`Socket Event Handler` is the activity; `<packet: buffer>` is the raw\ndata, `<packet: connection>` the sender; `Connected`/`Disconnected`\nhandlers complete the lifecycle. Choose by client: **WebSocket** for\nanything with a browser or HTTP stack (framing, upgrade, one port);\n**TCP** for hardware that predates both. The handler you write barely\nchanges — that is the event bus doing its job.",
-      "outputs": []
+      "id" : "nb20-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Below WebSockets: raw TCP\n\nNot every kitchen device speaks HTTP. Label printers, scales, legacy\ntills — many talk plain TCP. ARO's socket server is the same\nevent-driven shape one layer down. `Examples\/EchoSocket` in full:\n\n```aro\n(Application-Start: Echo Socket) {\n    Start the <socket-server> with { port: 9000 }.\n    Keepalive the <application> for the <events>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Handle Data Received: Socket Event Handler) {\n    Extract the <received-data> from the <packet: buffer>.\n    Extract the <client> from the <packet: connection>.\n    Send the <received-data> to the <client>.\n    Return an <OK: status> for the <packet>.\n}\n```\n\n`Socket Event Handler` is the activity; `<packet: buffer>` is the raw\ndata, `<packet: connection>` the sender; `Connected`\/`Disconnected`\nhandlers complete the lifecycle. Choose by client: **WebSocket** for\nanything with a browser or HTTP stack (framing, upgrade, one port);\n**TCP** for hardware that predates both. The handler you write barely\nchanges — that is the event bus doing its job."
     },
     {
-      "id": "nb20-c14",
-      "kind": "code",
-      "source": "(Handle Station Data: Socket Event Handler) {\n    Extract the <station-bytes> from the <packet: buffer>.\n    Extract the <station-conn> from the <packet: connection>.\n    Send the <station-bytes> to the <station-conn>.\n    Return an <OK: status> for the <packet>.\n}",
-      "outputs": []
+      "id" : "nb20-c14",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(Handle Station Data: Socket Event Handler) {\n    Extract the <station-bytes> from the <packet: buffer>.\n    Extract the <station-conn> from the <packet: connection>.\n    Send the <station-bytes> to the <station-conn>.\n    Return an <OK: status> for the <packet>.\n}"
     },
     {
-      "id": "nb20-c15",
-      "kind": "markdown",
-      "source": "## Discussion\n\nThree truths keep real-time systems honest:\n\n1. **Connections are ephemeral; state is not.** A `connectionId` dies\n   with the connection — wifi drops, screens reboot. Never make a\n   connection the owner of business state. The board lives in a\n   repository; a reconnecting display re-reads it, then rides\n   broadcasts. (Reconnecting is the *client's* job — the server just\n   sees a fresh `Connect`.)\n2. **Broadcast is fan-out, not delivery.** `Broadcast` pushes to\n   whoever is connected *now*; nobody queues frames for the absent.\n   Anything that must not be lost goes through `Store` or `Emit`\n   first — the broadcast is a courtesy copy.\n3. **Effects stay ordered.** Within a handler, `Send`, `Broadcast`,\n   `Store`, `Log` run in source order\n   ([ARO-0088](../Proposals/ARO-0088-concurrency-model.md)) — so\n   \"persist, then announce\" in the code is persist-then-announce on\n   the wire.\n\nAnd the happy path holds: a `Send` to a vanished connection is the\nruntime's problem to report, not yours to defend against.",
-      "outputs": []
+      "id" : "nb20-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\nThree truths keep real-time systems honest:\n\n1. **Connections are ephemeral; state is not.** A `connectionId` dies\n   with the connection — wifi drops, screens reboot. Never make a\n   connection the owner of business state. The board lives in a\n   repository; a reconnecting display re-reads it, then rides\n   broadcasts. (Reconnecting is the *client's* job — the server just\n   sees a fresh `Connect`.)\n2. **Broadcast is fan-out, not delivery.** `Broadcast` pushes to\n   whoever is connected *now*; nobody queues frames for the absent.\n   Anything that must not be lost goes through `Store` or `Emit`\n   first — the broadcast is a courtesy copy.\n3. **Effects stay ordered.** Within a handler, `Send`, `Broadcast`,\n   `Store`, `Log` run in source order\n   ([ARO-0088](..\/Proposals\/ARO-0088-concurrency-model.md)) — so\n   \"persist, then announce\" in the code is persist-then-announce on\n   the wire.\n\nAnd the happy path holds: a `Send` to a vanished connection is the\nruntime's problem to report, not yours to defend against."
     },
     {
-      "id": "nb20-c16",
-      "kind": "markdown",
-      "source": "## Real-world example: the ticket board\n\nThe full kitchen display, session-sized. The board is a repository —\nthe durable truth displays re-read on reconnect. Tickets land, domain\nevents announce them, and each station renders only its own queue.",
-      "outputs": []
+      "id" : "nb20-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the ticket board\n\nThe full kitchen display, session-sized. The board is a repository —\nthe durable truth displays re-read on reconnect. Tickets land, domain\nevents announce them, and each station renders only its own queue."
     },
     {
-      "id": "nb20-c17",
-      "kind": "code",
-      "source": "Create the <ticket-one> with { id: 1, table: 4, item: \"cortado\", station: \"espresso\" }.\nCreate the <ticket-two> with { id: 2, table: 2, item: \"croissant\", station: \"pastry\" }.\nCreate the <ticket-three> with { id: 3, table: 4, item: \"flat white\", station: \"espresso\" }.\nStore the <ticket-one> into the <kitchen-ticket-repository>.\nStore the <ticket-two> into the <kitchen-ticket-repository>.\nStore the <ticket-three> into the <kitchen-ticket-repository>.\nEmit a <TicketPlaced: event> with { id: 1, station: \"espresso\" }.\nLog \"Three tickets on the board.\" to the <console>.",
-      "outputs": []
+      "id" : "nb20-c17",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <ticket-one> with { id: 1, table: 4, item: \"cortado\", station: \"espresso\" }.\nCreate the <ticket-two> with { id: 2, table: 2, item: \"croissant\", station: \"pastry\" }.\nCreate the <ticket-three> with { id: 3, table: 4, item: \"flat white\", station: \"espresso\" }.\nStore the <ticket-one> into the <kitchen-ticket-repository>.\nStore the <ticket-two> into the <kitchen-ticket-repository>.\nStore the <ticket-three> into the <kitchen-ticket-repository>.\nEmit a <TicketPlaced: event> with { id: 1, station: \"espresso\" }.\nLog \"Three tickets on the board.\" to the <console>."
     },
     {
-      "id": "nb20-c18",
-      "kind": "code",
-      "source": "Retrieve the <board-tickets> from the <kitchen-ticket-repository>.\nFilter the <espresso-queue> from the <board-tickets> where <station> is \"espresso\".\nfor each <queued> in <espresso-queue> {\n    Extract the <queued-item> from the <queued: item>.\n    Extract the <queued-table> from the <queued: table>.\n    Log \"Espresso station: ${queued-item} for table ${queued-table}\" to the <console>.\n}",
-      "outputs": []
+      "id" : "nb20-c18",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Retrieve the <board-tickets> from the <kitchen-ticket-repository>.\nFilter the <espresso-queue> from the <board-tickets> where <station> is \"espresso\".\nfor each <queued> in <espresso-queue> {\n    Extract the <queued-item> from the <queued: item>.\n    Extract the <queued-table> from the <queued: table>.\n    Log \"Espresso station: ${queued-item} for table ${queued-table}\" to the <console>.\n}"
     },
     {
-      "id": "nb20-c19",
-      "kind": "code",
-      "source": "Create the <notify-stations> with [\"espresso\", \"pastry\", \"till\"].\nparallel for each <notify-station> in <notify-stations> {\n    Log \"Push update -> ${notify-station}\" to the <console>.\n}\nLog \"Fan-out complete.\" to the <console>.",
-      "outputs": []
+      "id" : "nb20-c19",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <notify-stations> with [\"espresso\", \"pastry\", \"till\"].\nparallel for each <notify-station> in <notify-stations> {\n    Log \"Push update -> ${notify-station}\" to the <console>.\n}\nLog \"Fan-out complete.\" to the <console>."
     },
     {
-      "id": "nb20-c20",
-      "kind": "markdown",
-      "source": "The `parallel for each` delivers station updates concurrently —\nrun the cell twice and the order changes, because delivery to\nindependent screens has no natural order. The final `Log` still comes\nlast: the loop is a single statement, and the effect after it waits\n([15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)).\n\nBeyond the kitchen, this exact architecture runs much of the visible\ninternet: trading dashboards stream price ticks to thousands of\nbrowsers; logistics screens track fleet positions; collaborative\neditors broadcast keystrokes; ops walls stream deployments and\nalerts. In every case the winning design is the one above — durable\nstate in a store, transport events translated to domain events at the\nedge, broadcast as an optimization of *re-reading*, never the source\nof truth. Systems built the other way around are the ones that show\nstale prices after a reconnect.\n\n## Related\n\n- Next: [21 — Files & Watching](21-files-and-watching.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl),\n  [19 — HTTP Services & Clients](19-http-services-and-clients.repl)\n- Language Guide: [Chapter 45 — WebSockets](../Book/TheLanguageGuide/Chapter45-WebSockets.md),\n  [Chapter 20 — Built-in Services](../Book/TheLanguageGuide/Chapter20-BuiltinServices.md),\n  [Chapter 13 — The Event Bus](../Book/TheLanguageGuide/Chapter13-EventBus.md)\n- Wiki: [Guide — Events](https://github.com/arolang/aro/wiki/Guide-Events)\n- Specification: [ARO-0048 — WebSocket](../Proposals/ARO-0048-websocket.md),\n  [ARO-0007 — Events & Reactive](../Proposals/ARO-0007-events-reactive.md),\n  [ARO-0088 — Concurrency Model](../Proposals/ARO-0088-concurrency-model.md)\n- Run the real thing: `aro run Examples/WebSocketDemo`,\n  `aro run Examples/SimpleChat`, `aro run Examples/EchoSocket`",
-      "outputs": []
+      "id" : "nb20-c20",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The `parallel for each` delivers station updates concurrently —\nrun the cell twice and the order changes, because delivery to\nindependent screens has no natural order. The final `Log` still comes\nlast: the loop is a single statement, and the effect after it waits\n([15 — Concurrency & Deferral](15-concurrency-and-deferral.repl)).\n\nBeyond the kitchen, this exact architecture runs much of the visible\ninternet: trading dashboards stream price ticks to thousands of\nbrowsers; logistics screens track fleet positions; collaborative\neditors broadcast keystrokes; ops walls stream deployments and\nalerts. In every case the winning design is the one above — durable\nstate in a store, transport events translated to domain events at the\nedge, broadcast as an optimization of *re-reading*, never the source\nof truth. Systems built the other way around are the ones that show\nstale prices after a reconnect.\n\n## Related\n\n- Next: [21 — Files & Watching](21-files-and-watching.repl)\n- Builds on: [09 — Feature Sets & Events](09-feature-sets-and-events.repl),\n  [13 — Repositories & State](13-repositories-and-state.repl),\n  [19 — HTTP Services & Clients](19-http-services-and-clients.repl)\n- Language Guide: [Chapter 45 — WebSockets](..\/Book\/TheLanguageGuide\/Chapter45-WebSockets.md),\n  [Chapter 20 — Built-in Services](..\/Book\/TheLanguageGuide\/Chapter20-BuiltinServices.md),\n  [Chapter 13 — The Event Bus](..\/Book\/TheLanguageGuide\/Chapter13-EventBus.md)\n- Wiki: [Guide — Events](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Events)\n- Specification: [ARO-0048 — WebSocket](..\/Proposals\/ARO-0048-websocket.md),\n  [ARO-0007 — Events & Reactive](..\/Proposals\/ARO-0007-events-reactive.md),\n  [ARO-0088 — Concurrency Model](..\/Proposals\/ARO-0088-concurrency-model.md)\n- Run the real thing: `aro run Examples\/WebSocketDemo`,\n  `aro run Examples\/SimpleChat`, `aro run Examples\/EchoSocket`"
     }
-  ]
+  ],
+  "version" : 1
 }

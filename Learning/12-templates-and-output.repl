@@ -1,113 +1,149 @@
 {
- "version": 1,
- "cells": [
-  {
-   "id": "nb12-c01",
-   "kind": "markdown",
-   "source": "# 12 — Templates & Output\n\nA receipt leaves the café in a customer's pocket; an order\nconfirmation leaves it as an email; the day's totals leave it as a\nreport. All of them are the same job: **data poured into text**. Get\nthat job wrong and you either hand-concatenate fragile strings\neverywhere, or — worse — paste raw user input into HTML and get\nhacked.\n\nARO splits the job in two. For quick composition there are string\nexpressions and text qualifiers, which you will use in this notebook's\ncells. For real documents there is the **template engine**\n([ARO-0050](../Proposals/ARO-0050-template-engine.md)): template\n*files* with `{{ }}` blocks, rendered by the `Transform` action.\nTemplate files live in an application's `templates/` directory, so a\nnotebook session cannot run them — we will read them instead, closely,\nand everything they do will look familiar.\n\nIn this notebook: composing text with `++`, placeholder filling,\nmulti-line assembly with `join`, escaping untrusted input, the\ntemplate engine on paper, and context-aware output (ARO-0031).",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c02",
-   "kind": "code",
-   "source": "Create the <customer> with \"Maja\".\nCompute the <headline> from \"Receipt for \" ++ <customer>.\nLog <headline> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c03",
-   "kind": "markdown",
-   "source": "## What just happened\n\n- **`++`** is string concatenation. `Compute` (an *OWN* action —\n  internal data to internal data) evaluates the expression and binds\n  the result.\n- Non-strings are welcome: `\"Total: \" ++ 8.6` stringifies the number.\n  That is what makes `++` the workhorse of quick labels and log lines.\n- The pieces are **data** (`<customer>`) and **presentation**\n  (`\"Receipt for \"`). Keeping those separable is the whole art of\n  output — templates just industrialize it.\n\n## Variants: placeholder filling\n\nConcatenation breaks down when the text is designed by someone else —\na receipt layout, an email blessed by marketing. Then you want the\n*text* to carry named slots, and the code to fill them. The `replace`\nqualifier does exactly that; chaining two `Compute` statements fills\ntwo slots. (Recall from [03](03-compute-and-qualifiers.repl): the\nqualifier names the *operation*, the base is just your variable name.)",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c04",
-   "kind": "code",
-   "source": "Create the <greeting-template> with \"Hello, {name}! Your total is {total} EUR.\".\nCompute the <greeting-named: replace> from <greeting-template> with { find: \"{name}\", replace: \"Maja\" }.\nCompute the <greeting-filled: replace> from <greeting-named> with { find: \"{total}\", replace: \"8.60\" }.\nLog <greeting-filled> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c05",
-   "kind": "markdown",
-   "source": "Each `replace` produces a **new** string under a **new** name —\nimmutability ([04](04-immutability.repl)) means the blank template\nsurvives untouched, ready for the next customer. This hand-rolled\nplaceholder scheme is precisely what a template engine automates:\nnamed slots, filled from your variables, at scale.\n\n## Multi-line documents\n\nFor FIXED text, write it as it should print — a plain `\"…\"` string\nspans as many lines as you like, and every character between the quotes\nis kept, so the text is written flush with the margin it should have in\nthe output. Escapes and `${…}` interpolation work here exactly as they\ndo on one line:",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c80",
-   "kind": "code",
-   "outputs": [],
-   "source": "Create the <sign> with \"BREW & BYTES\nMon-Fri 7-18\nSat     8-16\".\nLog <sign> to the <console>."
-  },
-  {
-   "id": "nb12-c81",
-   "kind": "markdown",
-   "outputs": [],
-   "source": "For DYNAMIC documents — receipts differ per order — build the lines\nas a list and fold them into one string with the `join` qualifier and\na newline separator:"
-  },
-  {
-   "id": "nb12-c06",
-   "kind": "code",
-   "source": "Create the <order-lines> with [\n    \"1x Espresso      2.40\",\n    \"2x Croissant     6.20\"\n].\nCompute the <receipt-body: join> from <order-lines> with { separator: \"\\n\" }.\nCompute the <receipt> from <headline> ++ \"\\n\" ++ <receipt-body> ++ \"\\nTOTAL            8.60\".\nLog <receipt> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c07",
-   "kind": "markdown",
-   "source": "`\"\\n\"` inside double quotes is a real newline (raw\nsingle-quoted strings would keep the backslash — see\n[07 — Text Processing](07-text-processing.repl)). Note the reuse of\n`<headline>` from the first cell: within one session, every binding\nstays available.\n\n## Escaping: the security section\n\nNow the dangerous part. Suppose the receipt becomes a web page, and it\nincludes something a *customer* typed — their name, a feedback line.\nText is only text until it is pasted into HTML; then `<script>` is\ncode. Before any untrusted value goes into markup, pass it through\n`html-escape`:",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c08",
-   "kind": "code",
-   "source": "Create the <feedback> with \"Great <3 & 5 stars!\".\nCompute the <safe-feedback: html-escape> from <feedback>.\nLog <safe-feedback> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c09",
-   "kind": "markdown",
-   "source": "`html-escape` rewrites the five HTML metacharacters — `&` `<`\n`>` `\"` `'` — into entities (`&amp;`, `&lt;`, …), so the browser\ndisplays them instead of interpreting them. The rule to internalize:\n\n> **The template engine does not escape for you.** Escape untrusted\n> values *before* rendering them into markup — every time.\n\nThat sentence is from the standard library specification\n([ARO-0019 §3.1](../Proposals/ARO-0019-standard-library.md)), and it is\nthe difference between a guest book and a cross-site-scripting hole.\nSiblings for other destinations: `url-encode` for query strings,\n`json-escape` for JSON string literals, `base64-encode` for binary in\ntext ([07 — Text Processing](07-text-processing.repl)).",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c10",
-   "kind": "markdown",
-   "source": "## The real template engine (ARO-0050)\n\nIn an application, layouts move out of the code entirely — into files\nunder `templates/`. A receipt template, `templates/receipt.tpl`:\n\n```\n========  BREW & BYTES  ========\nReceipt for {{ <order: customer> }}\n\n{{ for each <item> in <order: items> { }}\n{{ <item: qty> }}x {{ <item: name> }}   {{ <item: line-total> }}\n{{ } }}\n\nTOTAL  {{ <order: total> }} EUR\n{{ <Print> \"Loyalty discount applied.\" to the <template> when <order: member> = true. }}\n```\n\nOne statement renders it, with your session variables visible inside\nthe `{{ }}` blocks:\n\n```aro\nTransform the <printable-receipt> from the <template: receipt.tpl>.\nLog <printable-receipt> to the <console>.\n```\n\nEverything in the file reads like this notebook: `{{ <order: customer> }}`\ninterpolates a variable; `{{ for each … { }} … {{ } }}` is a loop\nspanning template text; `{{ <Print> … when … }}` is a guarded\nstatement writing into the output. Templates can even `{{ <Include> }}`\nother templates for shared headers and footers, and `Transform` runs\neach render in an isolated context — a template cannot rebind your\nvariables. When you build an application in\n[14](14-building-applications.repl), `templates/` ships with it (and\n`aro build` embeds the files into the compiled binary).\n\nFull tour: [Chapter 44 — Templates](../Book/TheLanguageGuide/Chapter44-Templates.md)\nand the runnable `Examples/TemplateEngine/` in the repository.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c11",
-   "kind": "markdown",
-   "source": "## Context-aware output (ARO-0031)\n\nOne more piece of ARO's output philosophy: **you do not format for\nyour audience — the runtime does.** The same `Log` and `Return`\nstatements produce different renderings depending on who is watching\n([ARO-0031](../Proposals/ARO-0031-context-aware-formatting.md)):\n\n| Context | Triggered by | Output style |\n|---------|--------------|--------------|\n| **Human** | `aro run`, a REPL session | readable `key: value` lines |\n| **Machine** | HTTP handlers, event dispatch | JSON |\n| **Developer** | `aro test`, `--debug` | diagnostic tables |\n\nWatch the human context at work — log a whole record, no formatting\ncode at all:",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c12",
-   "kind": "code",
-   "source": "Create the <order-summary> with { id: 7, customer: \"Maja\", total: 8.6, items: 2 }.\nLog <order-summary> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c13",
-   "kind": "markdown",
-   "source": "Readable field-per-line output — because a notebook is a human\ncontext. The *same statement* inside an HTTP feature set answers\nmachine context and serializes to JSON; under `aro test` it renders as\na diagnostic table. Your code states *what* to output; the context\ndecides *how it looks*. Details in [Chapter 40 — Context-Aware\nResponses](../Book/TheLanguageGuide/Chapter40-ContextResponses.md).\n\n## Discussion\n\nThe theme of this notebook is **separation**: data on one side,\npresentation on the other, an explicit step between them.\n\n- *Composition* (`++`, `join`) is fine when the layout belongs to the\n  programmer — log lines, quick labels.\n- *Templates* are right when the layout belongs to someone else, or\n  changes on its own schedule. Editing a `.tpl` file cannot break the\n  pricing logic — and the reverse is also true.\n- *Escaping* is non-negotiable at every trust boundary, whichever of\n  the two you use.\n- *Context-aware output* removes the last temptation: no `toJSON()`\n  helpers, no format flags — presentation follows the audience.\n\nThe happy path applies here too\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)): a `Transform`\nwhose template file is missing reports itself in plain language; you\nwrite no fallback rendering.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c14",
-   "kind": "markdown",
-   "source": "## Real-world example: the printable receipt\n\nThe register's actual job at closing a sale: turn an order — a list of\nline items — into the paper slip. Line items formatted one by one,\namounts summed, one banner top and bottom. Everything below is\ncomposition you now know.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c15",
-   "kind": "code",
-   "source": "Create the <receipt-items> with [\n    { qty: 1, name: \"Flat White \", line-total: 4.2 },\n    { qty: 2, name: \"Cinnamon Bun\", line-total: 7.0 },\n    { qty: 1, name: \"Cold Brew  \", line-total: 4.5 }\n].\nCreate the <banner> with \"==============================\".\nLog <banner> to the <console>.\nLog \"       BREW & BYTES\" to the <console>.\nLog <banner> to the <console>.\nfor each <item> in <receipt-items> {\n    Compute the <line-text> from <item: qty> ++ \"x \" ++ <item: name> ++ \"  \" ++ <item: line-total>.\n    Log <line-text> to the <console>.\n}\nMap the <line-amounts: line-total> from <receipt-items>.\nCompute the <grand-total: sum> from <line-amounts>.\nCompute the <total-line> from \"TOTAL            \" ++ <grand-total> ++ \" EUR\".\nLog <banner> to the <console>.\nLog <total-line> to the <console>.",
-   "outputs": []
-  },
-  {
-   "id": "nb12-c16",
-   "kind": "markdown",
-   "source": "Every business that faces a customer prints this shape of\ndocument: receipts, boarding passes, shipping labels, bank statements,\ninvoice PDFs. The pattern never changes — iterate the items, format\neach line, aggregate, frame it. What changes is the *scale*: at ten\nthousand invoices a day you graduate from `++` to template files, from\nconsole to files or HTTP responses — and the data side of your code\nstays exactly as it is here. That is the payoff of the separation.\n\n## Related\n\n- Next: [13 — Repositories & State](13-repositories-and-state.repl)\n- Builds on: [07 — Text Processing](07-text-processing.repl),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Language Guide: [Chapter 44 — Templates](../Book/TheLanguageGuide/Chapter44-Templates.md),\n  [Chapter 40 — Context-Aware Responses](../Book/TheLanguageGuide/Chapter40-ContextResponses.md),\n  [Chapter 8 — Export Actions](../Book/TheLanguageGuide/Chapter08-ExportActions.md)\n- Wiki: [Guide — Context-Aware Responses](https://github.com/arolang/aro/wiki/Guide-Context-Aware-Responses),\n  [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations)\n- Specification: [ARO-0050 — Template Engine](../Proposals/ARO-0050-template-engine.md),\n  [ARO-0031 — Context-Aware Formatting](../Proposals/ARO-0031-context-aware-formatting.md),\n  [ARO-0019 — Standard Library](../Proposals/ARO-0019-standard-library.md)\n- Example in the repo: `Examples/TemplateEngine/`",
-   "outputs": []
-  }
- ]
+  "cells" : [
+    {
+      "id" : "nb12-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 12 — Templates & Output\n\nA receipt leaves the café in a customer's pocket; an order\nconfirmation leaves it as an email; the day's totals leave it as a\nreport. All of them are the same job: **data poured into text**. Get\nthat job wrong and you either hand-concatenate fragile strings\neverywhere, or — worse — paste raw user input into HTML and get\nhacked.\n\nARO splits the job in two. For quick composition there are string\nexpressions and text qualifiers, which you will use in this notebook's\ncells. For real documents there is the **template engine**\n([ARO-0050](..\/Proposals\/ARO-0050-template-engine.md)): template\n*files* with `{{ }}` blocks, rendered by the `Transform` action.\nTemplate files live in an application's `templates\/` directory, so a\nnotebook session cannot run them — we will read them instead, closely,\nand everything they do will look familiar.\n\nIn this notebook: composing text with `++`, placeholder filling,\nmulti-line assembly with `join`, escaping untrusted input, the\ntemplate engine on paper, and context-aware output (ARO-0031)."
+    },
+    {
+      "id" : "nb12-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <customer> with \"Maja\".\nCompute the <headline> from \"Receipt for \" ++ <customer>.\nLog <headline> to the <console>."
+    },
+    {
+      "id" : "nb12-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`++`** is string concatenation. `Compute` (an *OWN* action —\n  internal data to internal data) evaluates the expression and binds\n  the result.\n- Non-strings are welcome: `\"Total: \" ++ 8.6` stringifies the number.\n  That is what makes `++` the workhorse of quick labels and log lines.\n- The pieces are **data** (`<customer>`) and **presentation**\n  (`\"Receipt for \"`). Keeping those separable is the whole art of\n  output — templates just industrialize it.\n\n## Variants: placeholder filling\n\nConcatenation breaks down when the text is designed by someone else —\na receipt layout, an email blessed by marketing. Then you want the\n*text* to carry named slots, and the code to fill them. The `replace`\nqualifier does exactly that; chaining two `Compute` statements fills\ntwo slots. (Recall from [03](03-compute-and-qualifiers.repl): the\nqualifier names the *operation*, the base is just your variable name.)"
+    },
+    {
+      "id" : "nb12-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <greeting-template> with \"Hello, {name}! Your total is {total} EUR.\".\nCompute the <greeting-named: replace> from <greeting-template> with { find: \"{name}\", replace: \"Maja\" }.\nCompute the <greeting-filled: replace> from <greeting-named> with { find: \"{total}\", replace: \"8.60\" }.\nLog <greeting-filled> to the <console>."
+    },
+    {
+      "id" : "nb12-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Each `replace` produces a **new** string under a **new** name —\nimmutability ([04](04-immutability.repl)) means the blank template\nsurvives untouched, ready for the next customer. This hand-rolled\nplaceholder scheme is precisely what a template engine automates:\nnamed slots, filled from your variables, at scale.\n\n## Multi-line documents\n\nFor FIXED text, write it as it should print — a plain `\"…\"` string\nspans as many lines as you like, and every character between the quotes\nis kept, so the text is written flush with the margin it should have in\nthe output. Escapes and `${…}` interpolation work here exactly as they\ndo on one line:"
+    },
+    {
+      "id" : "nb12-c80",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <sign> with \"BREW & BYTES\nMon-Fri 7-18\nSat     8-16\".\nLog <sign> to the <console>."
+    },
+    {
+      "id" : "nb12-c81",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "For DYNAMIC documents — receipts differ per order — build the lines\nas a list and fold them into one string with the `join` qualifier and\na newline separator:"
+    },
+    {
+      "id" : "nb12-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <order-lines> with [\n    \"1x Espresso      2.40\",\n    \"2x Croissant     6.20\"\n].\nCompute the <receipt-body: join> from <order-lines> with { separator: \"\\n\" }.\nCompute the <receipt> from <headline> ++ \"\\n\" ++ <receipt-body> ++ \"\\nTOTAL            8.60\".\nLog <receipt> to the <console>."
+    },
+    {
+      "id" : "nb12-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "`\"\\n\"` inside double quotes is a real newline (raw\nsingle-quoted strings would keep the backslash — see\n[07 — Text Processing](07-text-processing.repl)). Note the reuse of\n`<headline>` from the first cell: within one session, every binding\nstays available.\n\n## Escaping: the security section\n\nNow the dangerous part. Suppose the receipt becomes a web page, and it\nincludes something a *customer* typed — their name, a feedback line.\nText is only text until it is pasted into HTML; then `<script>` is\ncode. Before any untrusted value goes into markup, pass it through\n`html-escape`:"
+    },
+    {
+      "id" : "nb12-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <feedback> with \"Great <3 & 5 stars!\".\nCompute the <safe-feedback: html-escape> from <feedback>.\nLog <safe-feedback> to the <console>."
+    },
+    {
+      "id" : "nb12-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "`html-escape` rewrites the five HTML metacharacters — `&` `<`\n`>` `\"` `'` — into entities (`&amp;`, `&lt;`, …), so the browser\ndisplays them instead of interpreting them. The rule to internalize:\n\n> **The template engine does not escape for you.** Escape untrusted\n> values *before* rendering them into markup — every time.\n\nThat sentence is from the standard library specification\n([ARO-0019 §3.1](..\/Proposals\/ARO-0019-standard-library.md)), and it is\nthe difference between a guest book and a cross-site-scripting hole.\nSiblings for other destinations: `url-encode` for query strings,\n`json-escape` for JSON string literals, `base64-encode` for binary in\ntext ([07 — Text Processing](07-text-processing.repl))."
+    },
+    {
+      "id" : "nb12-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The real template engine (ARO-0050)\n\nIn an application, layouts move out of the code entirely — into files\nunder `templates\/`. A receipt template, `templates\/receipt.tpl`:\n\n```\n========  BREW & BYTES  ========\nReceipt for {{ <order: customer> }}\n\n{{ for each <item> in <order: items> { }}\n{{ <item: qty> }}x {{ <item: name> }}   {{ <item: line-total> }}\n{{ } }}\n\nTOTAL  {{ <order: total> }} EUR\n{{ <Print> \"Loyalty discount applied.\" to the <template> when <order: member> = true. }}\n```\n\nOne statement renders it, with your session variables visible inside\nthe `{{ }}` blocks:\n\n```aro\nTransform the <printable-receipt> from the <template: receipt.tpl>.\nLog <printable-receipt> to the <console>.\n```\n\nEverything in the file reads like this notebook: `{{ <order: customer> }}`\ninterpolates a variable; `{{ for each … { }} … {{ } }}` is a loop\nspanning template text; `{{ <Print> … when … }}` is a guarded\nstatement writing into the output. Templates can even `{{ <Include> }}`\nother templates for shared headers and footers, and `Transform` runs\neach render in an isolated context — a template cannot rebind your\nvariables. When you build an application in\n[14](14-building-applications.repl), `templates\/` ships with it (and\n`aro build` embeds the files into the compiled binary).\n\nFull tour: [Chapter 44 — Templates](..\/Book\/TheLanguageGuide\/Chapter44-Templates.md)\nand the runnable `Examples\/TemplateEngine\/` in the repository."
+    },
+    {
+      "id" : "nb12-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Context-aware output (ARO-0031)\n\nOne more piece of ARO's output philosophy: **you do not format for\nyour audience — the runtime does.** The same `Log` and `Return`\nstatements produce different renderings depending on who is watching\n([ARO-0031](..\/Proposals\/ARO-0031-context-aware-formatting.md)):\n\n| Context | Triggered by | Output style |\n|---------|--------------|--------------|\n| **Human** | `aro run`, a REPL session | readable `key: value` lines |\n| **Machine** | HTTP handlers, event dispatch | JSON |\n| **Developer** | `aro test`, `--debug` | diagnostic tables |\n\nWatch the human context at work — log a whole record, no formatting\ncode at all:"
+    },
+    {
+      "id" : "nb12-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <order-summary> with { id: 7, customer: \"Maja\", total: 8.6, items: 2 }.\nLog <order-summary> to the <console>."
+    },
+    {
+      "id" : "nb12-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Readable field-per-line output — because a notebook is a human\ncontext. The *same statement* inside an HTTP feature set answers\nmachine context and serializes to JSON; under `aro test` it renders as\na diagnostic table. Your code states *what* to output; the context\ndecides *how it looks*. Details in [Chapter 40 — Context-Aware\nResponses](..\/Book\/TheLanguageGuide\/Chapter40-ContextResponses.md).\n\n## Discussion\n\nThe theme of this notebook is **separation**: data on one side,\npresentation on the other, an explicit step between them.\n\n- *Composition* (`++`, `join`) is fine when the layout belongs to the\n  programmer — log lines, quick labels.\n- *Templates* are right when the layout belongs to someone else, or\n  changes on its own schedule. Editing a `.tpl` file cannot break the\n  pricing logic — and the reverse is also true.\n- *Escaping* is non-negotiable at every trust boundary, whichever of\n  the two you use.\n- *Context-aware output* removes the last temptation: no `toJSON()`\n  helpers, no format flags — presentation follows the audience.\n\nThe happy path applies here too\n([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)): a `Transform`\nwhose template file is missing reports itself in plain language; you\nwrite no fallback rendering."
+    },
+    {
+      "id" : "nb12-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the printable receipt\n\nThe register's actual job at closing a sale: turn an order — a list of\nline items — into the paper slip. Line items formatted one by one,\namounts summed, one banner top and bottom. Everything below is\ncomposition you now know."
+    },
+    {
+      "id" : "nb12-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <receipt-items> with [\n    { qty: 1, name: \"Flat White \", line-total: 4.2 },\n    { qty: 2, name: \"Cinnamon Bun\", line-total: 7.0 },\n    { qty: 1, name: \"Cold Brew  \", line-total: 4.5 }\n].\nCreate the <banner> with \"==============================\".\nLog <banner> to the <console>.\nLog \"       BREW & BYTES\" to the <console>.\nLog <banner> to the <console>.\nfor each <item> in <receipt-items> {\n    Compute the <line-text> from <item: qty> ++ \"x \" ++ <item: name> ++ \"  \" ++ <item: line-total>.\n    Log <line-text> to the <console>.\n}\nMap the <line-amounts: line-total> from <receipt-items>.\nCompute the <grand-total: sum> from <line-amounts>.\nCompute the <total-line> from \"TOTAL            \" ++ <grand-total> ++ \" EUR\".\nLog <banner> to the <console>.\nLog <total-line> to the <console>."
+    },
+    {
+      "id" : "nb12-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Every business that faces a customer prints this shape of\ndocument: receipts, boarding passes, shipping labels, bank statements,\ninvoice PDFs. The pattern never changes — iterate the items, format\neach line, aggregate, frame it. What changes is the *scale*: at ten\nthousand invoices a day you graduate from `++` to template files, from\nconsole to files or HTTP responses — and the data side of your code\nstays exactly as it is here. That is the payoff of the separation.\n\n## Related\n\n- Next: [13 — Repositories & State](13-repositories-and-state.repl)\n- Builds on: [07 — Text Processing](07-text-processing.repl),\n  [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Language Guide: [Chapter 44 — Templates](..\/Book\/TheLanguageGuide\/Chapter44-Templates.md),\n  [Chapter 40 — Context-Aware Responses](..\/Book\/TheLanguageGuide\/Chapter40-ContextResponses.md),\n  [Chapter 8 — Export Actions](..\/Book\/TheLanguageGuide\/Chapter08-ExportActions.md)\n- Wiki: [Guide — Context-Aware Responses](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Context-Aware-Responses),\n  [Guide — Computations](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Computations)\n- Specification: [ARO-0050 — Template Engine](..\/Proposals\/ARO-0050-template-engine.md),\n  [ARO-0031 — Context-Aware Formatting](..\/Proposals\/ARO-0031-context-aware-formatting.md),\n  [ARO-0019 — Standard Library](..\/Proposals\/ARO-0019-standard-library.md)\n- Example in the repo: `Examples\/TemplateEngine\/`"
+    }
+  ],
+  "version" : 1
 }

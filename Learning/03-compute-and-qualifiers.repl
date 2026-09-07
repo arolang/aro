@@ -1,125 +1,165 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb03-c01",
-      "kind": "markdown",
-      "source": "# 03 — Compute & Qualifiers\n\nThe menu exists ([02 — Values & Literals](02-values-and-literals.repl));\nnow **Brew & Bytes** must price an order. Two lattes, tax on top, a\nreceipt code at the bottom — every number on that slip is produced by\none action: **Compute**.\n\nCompute is the workhorse of ARO's *OWN* role: it reads bindings that\nalready exist, transforms them, and binds the result to a new name.\nNo network, no files — pure, predictable transformation. What it does\nis chosen either by an **expression** (`<price> * 2`) or by a\n**qualifier** (`<total: sum>`), and the set of qualifiers is *closed*:\na name the runtime doesn't know is an error, not a silent no-op.\n\nIn this notebook: expressions, the built-in operations, the\nqualifier-as-name pattern, what happens when you invent a qualifier,\nand the things that look like qualifiers but aren't.",
-      "outputs": []
+      "id" : "nb03-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 03 — Compute & Qualifiers\n\nThe menu exists ([02 — Values & Literals](02-values-and-literals.repl));\nnow **Brew & Bytes** must price an order. Two lattes, tax on top, a\nreceipt code at the bottom — every number on that slip is produced by\none action: **Compute**.\n\nCompute is the workhorse of ARO's *OWN* role: it reads bindings that\nalready exist, transforms them, and binds the result to a new name.\nNo network, no files — pure, predictable transformation. What it does\nis chosen either by an **expression** (`<price> * 2`) or by a\n**qualifier** (`<total: sum>`), and the set of qualifiers is *closed*:\na name the runtime doesn't know is an error, not a silent no-op.\n\nIn this notebook: expressions, the built-in operations, the\nqualifier-as-name pattern, what happens when you invent a qualifier,\nand the things that look like qualifiers but aren't."
     },
     {
-      "id": "nb03-c02",
-      "kind": "code",
-      "source": "Create the <latte-price> with 3.4.\nCreate the <latte-count> with 2.\nCompute the <latte-subtotal> from <latte-price> * <latte-count>.\nLog <latte-subtotal> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <latte-price> with 3.4.\nCreate the <latte-count> with 2.\nCompute the <latte-subtotal> from <latte-price> * <latte-count>.\nLog <latte-subtotal> to the <console>."
     },
     {
-      "id": "nb03-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\n- **`Compute`** read two existing bindings, multiplied them, and bound\n  `6.8` to `<latte-subtotal>`. Read → transform → bind: that rhythm is\n  the heartbeat of ARO data processing.\n- The object slot holds an **expression**. Arithmetic (`+ - * / %`),\n  parentheses, and comparisons all work there; string concatenation\n  uses `++` (never `+` — the operator tells you whether you are doing\n  math or building text).\n- One caution that will save you a puzzled minute: expression operands\n  must be **plain variables**. `<item: price> * 2` does not parse —\n  `Extract` the field into its own name first, then compute.",
-      "outputs": []
+      "id" : "nb03-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\n- **`Compute`** read two existing bindings, multiplied them, and bound\n  `6.8` to `<latte-subtotal>`. Read → transform → bind: that rhythm is\n  the heartbeat of ARO data processing.\n- The object slot holds an **expression**. Arithmetic (`+ - * \/ %`),\n  parentheses, and comparisons all work there; string concatenation\n  uses `++` (never `+` — the operator tells you whether you are doing\n  math or building text).\n- One caution that will save you a puzzled minute: expression operands\n  must be **plain variables**. `<item: price> * 2` does not parse —\n  `Extract` the field into its own name first, then compute."
     },
     {
-      "id": "nb03-c04",
-      "kind": "markdown",
-      "source": "## The built-in operations\n\nWhen the transformation has a *name* rather than a formula, put that\nname in the qualifier slot. A sample of the catalog (run\n`aro actions --qualifiers` for the live, complete set):\n\n| Qualifier | Does | Qualifier | Does |\n|-----------|------|-----------|------|\n| `length` / `count` | count characters / elements | `sum` | total a numeric list |\n| `uppercase` / `lowercase` | change case | `avg` | arithmetic mean (always Float) |\n| `trim` | strip surrounding whitespace | `unique` | drop duplicates, first wins |\n| `replace` | substring replacement | `join` | list → string with a separator |\n| `hash` / `sha256` | SHA-256 hex digest | `lines` | text → list of lines |\n| `base64-encode` / `-decode` | Base64 | `html-escape`, `url-encode` | escaping for output |\n\nThe full specification is\n[ARO-0019 §3](../Proposals/ARO-0019-standard-library.md).",
-      "outputs": []
+      "id" : "nb03-c04",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The built-in operations\n\nWhen the transformation has a *name* rather than a formula, put that\nname in the qualifier slot. A sample of the catalog (run\n`aro actions --qualifiers` for the live, complete set):\n\n| Qualifier | Does | Qualifier | Does |\n|-----------|------|-----------|------|\n| `length` \/ `count` | count characters \/ elements | `sum` | total a numeric list |\n| `uppercase` \/ `lowercase` | change case | `avg` | arithmetic mean (always Float) |\n| `trim` | strip surrounding whitespace | `unique` | drop duplicates, first wins |\n| `replace` | substring replacement | `join` | list → string with a separator |\n| `hash` \/ `sha256` | SHA-256 hex digest | `lines` | text → list of lines |\n| `base64-encode` \/ `-decode` | Base64 | `html-escape`, `url-encode` | escaping for output |\n\nThe full specification is\n[ARO-0019 §3](..\/Proposals\/ARO-0019-standard-library.md)."
     },
     {
-      "id": "nb03-c05",
-      "kind": "code",
-      "source": "Create the <shouted-order> with \"  one FLAT WHITE please  \".\nCompute the <tidy-order: trim> from <shouted-order>.\nCompute the <calm-order: lowercase> from <tidy-order>.\nCompute the <order-length: length> from <calm-order>.\nLog <calm-order> to the <console>.\nLog <order-length> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c05",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <shouted-order> with \"  one FLAT WHITE please  \".\nCompute the <tidy-order: trim> from <shouted-order>.\nCompute the <calm-order: lowercase> from <tidy-order>.\nCompute the <order-length: length> from <calm-order>.\nLog <calm-order> to the <console>.\nLog <order-length> to the <console>."
     },
     {
-      "id": "nb03-c06",
-      "kind": "code",
-      "source": "Create the <morning-sales> with [4.2, 3.8, 2.4, 3.8].\nCompute the <morning-total: sum> from <morning-sales>.\nCompute the <morning-mean: avg> from <morning-sales>.\nCreate the <milk-orders> with [\"oat\", \"soy\", \"oat\", \"whole\", \"oat\"].\nCompute the <milk-kinds: unique> from <milk-orders>.\nCompute the <milk-line: join> from <milk-kinds> with { separator: \", \" }.\nLog <morning-total> to the <console>.\nLog <morning-mean> to the <console>.\nLog <milk-line> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <morning-sales> with [4.2, 3.8, 2.4, 3.8].\nCompute the <morning-total: sum> from <morning-sales>.\nCompute the <morning-mean: avg> from <morning-sales>.\nCreate the <milk-orders> with [\"oat\", \"soy\", \"oat\", \"whole\", \"oat\"].\nCompute the <milk-kinds: unique> from <milk-orders>.\nCompute the <milk-line: join> from <milk-kinds> with { separator: \", \" }.\nLog <morning-total> to the <console>.\nLog <morning-mean> to the <console>.\nLog <milk-line> to the <console>."
     },
     {
-      "id": "nb03-c07",
-      "kind": "markdown",
-      "source": "Notice `join` taking parameters through a `with` clause — some\noperations accept options this way. Also notice the types: `sum` of\nfloats stays a float, `avg` is *always* a float (averaging integers\nrarely yields one), and `sum` of an empty list is `0` while `avg` of\nnothing is a runtime error — there is no defensible mean of no data.\n\n## Qualifier-as-name\n\nBindings are immutable, so this cannot work:\n\n```aro\nCompute the <length> from <first-blend>.\nCompute the <length> from <second-blend>.   (* ERROR: rebind *)\n```\n\nThe **qualifier-as-name** syntax separates the two jobs: the base is\n*your name for the result*, the qualifier is *the operation*.",
-      "outputs": []
+      "id" : "nb03-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Notice `join` taking parameters through a `with` clause — some\noperations accept options this way. Also notice the types: `sum` of\nfloats stays a float, `avg` is *always* a float (averaging integers\nrarely yields one), and `sum` of an empty list is `0` while `avg` of\nnothing is a runtime error — there is no defensible mean of no data.\n\n## Qualifier-as-name\n\nBindings are immutable, so this cannot work:\n\n```aro\nCompute the <length> from <first-blend>.\nCompute the <length> from <second-blend>.   (* ERROR: rebind *)\n```\n\nThe **qualifier-as-name** syntax separates the two jobs: the base is\n*your name for the result*, the qualifier is *the operation*."
     },
     {
-      "id": "nb03-c08",
-      "kind": "code",
-      "source": "Create the <first-blend> with \"House Roast\".\nCreate the <second-blend> with \"Midnight Decaf\".\nCompute the <first-blend-length: length> from <first-blend>.\nCompute the <second-blend-length: length> from <second-blend>.\nCompute the <length-gap> from <second-blend-length> - <first-blend-length>.\nLog <length-gap> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <first-blend> with \"House Roast\".\nCreate the <second-blend> with \"Midnight Decaf\".\nCompute the <first-blend-length: length> from <first-blend>.\nCompute the <second-blend-length: length> from <second-blend>.\nCompute the <length-gap> from <second-blend-length> - <first-blend-length>.\nLog <length-gap> to the <console>."
     },
     {
-      "id": "nb03-c09",
-      "kind": "markdown",
-      "source": "## The qualifier namespace is closed\n\nA Compute qualifier must resolve to one of exactly four things: a\nbuilt-in, a plugin qualifier (`Handle.qualifier`), a chain (`a|b`), or\na date offset (`-7d`). **Anything else is an error.**\n\nIt was not always so. An unrecognized qualifier used to return its\ninput unchanged — so a typo compiled, passed `aro check`, exited\n`[OK]`, and printed the wrong value (GitLab #486 tells the story).\nCounting the café's feedback lines with an invented `linecount`\nqualifier once returned *the whole file*. Try it — the next cell is\nsupposed to fail.",
-      "outputs": []
+      "id" : "nb03-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## The qualifier namespace is closed\n\nA Compute qualifier must resolve to one of exactly four things: a\nbuilt-in, a plugin qualifier (`Handle.qualifier`), a chain (`a|b`), or\na date offset (`-7d`). **Anything else is an error.**\n\nIt was not always so. An unrecognized qualifier used to return its\ninput unchanged — so a typo compiled, passed `aro check`, exited\n`[OK]`, and printed the wrong value (GitLab #486 tells the story).\nCounting the café's feedback lines with an invented `linecount`\nqualifier once returned *the whole file*. Try it — the next cell is\nsupposed to fail."
     },
     {
-      "id": "nb03-c10",
-      "kind": "code",
-      "source": "Create the <feedback-text> with \"great\\ntoo sweet\\nloved it\\n\".\nLog <feedback-text> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <feedback-text> with \"great\\ntoo sweet\\nloved it\\n\".\nLog <feedback-text> to the <console>."
     },
     {
-      "id": "nb03-c11",
-      "kind": "code",
-      "source": "(* expect-error *)\n(* 'linecount' is an invented qualifier - the closed namespace rejects it. *)\nCompute the <feedback-total: linecount> from <feedback-text>.\nLog <feedback-total> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c11",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "(* expect-error *)\n(* 'linecount' is an invented qualifier - the closed namespace rejects it. *)\nCompute the <feedback-total: linecount> from <feedback-text>.\nLog <feedback-total> to the <console>."
     },
     {
-      "id": "nb03-c12",
-      "kind": "markdown",
-      "source": "The diagnostic names the problem — `Unknown Compute qualifier\n'linecount'` — and in a full program `aro check` reports it before\nanything runs, so a green check now means every qualifier exists. The\ncorrect spelling for counting lines is two small steps: `lines`, then\n`length`. (`lines` already drops the trailing newline's phantom\nelement, so a three-line file counts as 3, not 4.)",
-      "outputs": []
+      "id" : "nb03-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The diagnostic names the problem — `Unknown Compute qualifier\n'linecount'` — and in a full program `aro check` reports it before\nanything runs, so a green check now means every qualifier exists. The\ncorrect spelling for counting lines is two small steps: `lines`, then\n`length`. (`lines` already drops the trailing newline's phantom\nelement, so a three-line file counts as 3, not 4.)"
     },
     {
-      "id": "nb03-c13",
-      "kind": "code",
-      "source": "Compute the <feedback-lines: lines> from <feedback-text>.\nCompute the <feedback-line-count: length> from <feedback-lines>.\nLog <feedback-line-count> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c13",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Compute the <feedback-lines: lines> from <feedback-text>.\nCompute the <feedback-line-count: length> from <feedback-lines>.\nLog <feedback-line-count> to the <console>."
     },
     {
-      "id": "nb03-c14",
-      "kind": "markdown",
-      "source": "## Things that look like qualifiers but aren't\n\nTwo forms are commonly mistaken for qualifiers, and the error message\nwill point you here:\n\n1. **Sorting, reversing, element access are actions.** Write\n   `Sort the <s> for the <xs>.`, not `<s: sort>`. Element access puts\n   its qualifier on `Extract`: `Extract the <head: first> from <xs>.`\n2. **A result *type* uses `as`.** `Compute the <n> as Float from …`\n   annotates the intended type — the qualifier slot selects an\n   *operation*, so `<n: Float>` would ask for an operation named\n   `Float`. Note that `as` documents; it does not convert. To actually\n   turn text into a number, use **Transform** with a type qualifier.",
-      "outputs": []
+      "id" : "nb03-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Things that look like qualifiers but aren't\n\nTwo forms are commonly mistaken for qualifiers, and the error message\nwill point you here:\n\n1. **Sorting, reversing, element access are actions.** Write\n   `Sort the <s> for the <xs>.`, not `<s: sort>`. Element access puts\n   its qualifier on `Extract`: `Extract the <head: first> from <xs>.`\n2. **A result *type* uses `as`.** `Compute the <n> as Float from …`\n   annotates the intended type — the qualifier slot selects an\n   *operation*, so `<n: Float>` would ask for an operation named\n   `Float`. Note that `as` documents; it does not convert. To actually\n   turn text into a number, use **Transform** with a type qualifier."
     },
     {
-      "id": "nb03-c15",
-      "kind": "code",
-      "source": "Create the <queue-lengths> with [5, 2, 9].\nSort the <queue-sorted> for the <queue-lengths>.\nReverse the <queue-reversed> for the <queue-lengths>.\nExtract the <longest-queue: first> from the <queue-reversed>.\nLog <queue-sorted> to the <console>.\nLog <queue-reversed> to the <console>.\nLog <longest-queue> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <queue-lengths> with [5, 2, 9].\nSort the <queue-sorted> for the <queue-lengths>.\nReverse the <queue-reversed> for the <queue-lengths>.\nExtract the <longest-queue: first> from the <queue-reversed>.\nLog <queue-sorted> to the <console>.\nLog <queue-reversed> to the <console>.\nLog <longest-queue> to the <console>."
     },
     {
-      "id": "nb03-c16",
-      "kind": "code",
-      "source": "Create the <price-text> with \"4.60\".\nTransform the <price-value: float> from <price-text>.\nCompute the <price-plus-tip> from <price-value> + 0.4.\nCompute the <tip-share> as Float from 0.4.\nLog <price-plus-tip> to the <console>.\nLog <tip-share> to the <console>.",
-      "outputs": []
+      "id" : "nb03-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <price-text> with \"4.60\".\nTransform the <price-value: float> from <price-text>.\nCompute the <price-plus-tip> from <price-value> + 0.4.\nCompute the <tip-share> as Float from 0.4.\nLog <price-plus-tip> to the <console>.\nLog <tip-share> to the <console>."
     },
     {
-      "id": "nb03-c17",
-      "kind": "markdown",
-      "source": "## Discussion\n\nThe closed namespace is ARO's error philosophy\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)) applied to\nspelling: your code stays free of defensive checks *because* the\nruntime refuses to guess. A system that silently forgives typos does\nnot remove errors — it relocates them to production, where they wear\nthe disguise of plausible-looking wrong numbers.\n\nQualifier-as-name, meanwhile, is not mere convenience: it is the\ndesigned answer to \"how do I apply the same operation twice?\" under\nimmutability. The two notebooks meet in\n[04 — Immutability](04-immutability.repl).\n\nOne habit to build early: **`html-escape` every untrusted value**\nbefore it lands in an HTML template — the template engine will not\nescape for you\n([ARO-0019 §3.1](../Proposals/ARO-0019-standard-library.md)).",
-      "outputs": []
+      "id" : "nb03-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\nThe closed namespace is ARO's error philosophy\n([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)) applied to\nspelling: your code stays free of defensive checks *because* the\nruntime refuses to guess. A system that silently forgives typos does\nnot remove errors — it relocates them to production, where they wear\nthe disguise of plausible-looking wrong numbers.\n\nQualifier-as-name, meanwhile, is not mere convenience: it is the\ndesigned answer to \"how do I apply the same operation twice?\" under\nimmutability. The two notebooks meet in\n[04 — Immutability](04-immutability.repl).\n\nOne habit to build early: **`html-escape` every untrusted value**\nbefore it lands in an HTML template — the template engine will not\nescape for you\n([ARO-0019 §3.1](..\/Proposals\/ARO-0019-standard-library.md))."
     },
     {
-      "id": "nb03-c18",
-      "kind": "markdown",
-      "source": "## Real-world example: pricing an order\n\nA real order at the register: two lattes, a bagel, one seasonal\nspecial. Industry practice keeps money in **integer cents** — floats\naccumulate rounding drift, and a ledger that is off by a cent is a\nledger that is wrong. Watch the pipeline stay in whole cents until the\nfinal display, and end with a receipt code derived from the total.",
-      "outputs": []
+      "id" : "nb03-c18",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: pricing an order\n\nA real order at the register: two lattes, a bagel, one seasonal\nspecial. Industry practice keeps money in **integer cents** — floats\naccumulate rounding drift, and a ledger that is off by a cent is a\nledger that is wrong. Watch the pipeline stay in whole cents until the\nfinal display, and end with a receipt code derived from the total."
     },
     {
-      "id": "nb03-c19",
-      "kind": "code",
-      "source": "Create the <order-cents> with [340, 340, 280, 460].\nCompute the <subtotal-cents: sum> from <order-cents>.\nCompute the <tax-cents> from <subtotal-cents> / 10.\nCompute the <total-cents> from <subtotal-cents> + <tax-cents>.\nCompute the <total-euros> from <total-cents> / 100.0.\nCompute the <receipt-seed> from \"brew-bytes|\" ++ <total-cents>.\nCompute the <receipt-code: sha256> from <receipt-seed>.\nLog \"Subtotal: ${<subtotal-cents>} cents\" to the <console>.\nLog \"Total incl. 10% tax: ${<total-euros>} EUR\" to the <console>.\nLog \"Receipt code: ${<receipt-code>}\" to the <console>.",
-      "outputs": []
+      "id" : "nb03-c19",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <order-cents> with [340, 340, 280, 460].\nCompute the <subtotal-cents: sum> from <order-cents>.\nCompute the <tax-cents> from <subtotal-cents> \/ 10.\nCompute the <total-cents> from <subtotal-cents> + <tax-cents>.\nCompute the <total-euros> from <total-cents> \/ 100.0.\nCompute the <receipt-seed> from \"brew-bytes|\" ++ <total-cents>.\nCompute the <receipt-code: sha256> from <receipt-seed>.\nLog \"Subtotal: ${<subtotal-cents>} cents\" to the <console>.\nLog \"Total incl. 10% tax: ${<total-euros>} EUR\" to the <console>.\nLog \"Receipt code: ${<receipt-code>}\" to the <console>."
     },
     {
-      "id": "nb03-c20",
-      "kind": "markdown",
-      "source": "Every commerce system on earth runs this exact shape of pipeline:\nsum the line items, apply tax rules, derive a total, stamp the result\nwith an identifier. The details that look fussy here are the ones that\nmatter at scale. Integer cents are how payment processors and\naccounting standards avoid float drift across millions of\ntransactions. The SHA-256 receipt code is a **fingerprint**: change one\ncent of the input and the code changes completely, which is how systems\ndetect tampering and deduplicate retries — the same mechanism behind\nwebhook signatures and idempotency keys. And the deterministic,\nside-effect-free nature of Compute is what makes such a pipeline\n*testable*: same inputs, same slip, every time.\n\n## Related\n\n- Next: [04 — Immutability](04-immutability.repl)\n- Previous: [02 — Values & Literals](02-values-and-literals.repl)\n- Language Guide: [Chapter 9 — Computations](../Book/TheLanguageGuide/Chapter09-Computations.md),\n  [Chapter 10 — Understanding Qualifiers](../Book/TheLanguageGuide/Chapter10-QualifierSyntax.md)\n- Wiki: [Guide — Computations](https://github.com/arolang/aro/wiki/Guide-Computations)\n- Specification: [ARO-0019 — Standard Library](../Proposals/ARO-0019-standard-library.md),\n  [ARO-0001 — Language Fundamentals](../Proposals/ARO-0001-language-fundamentals.md)",
-      "outputs": []
+      "id" : "nb03-c20",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Every commerce system on earth runs this exact shape of pipeline:\nsum the line items, apply tax rules, derive a total, stamp the result\nwith an identifier. The details that look fussy here are the ones that\nmatter at scale. Integer cents are how payment processors and\naccounting standards avoid float drift across millions of\ntransactions. The SHA-256 receipt code is a **fingerprint**: change one\ncent of the input and the code changes completely, which is how systems\ndetect tampering and deduplicate retries — the same mechanism behind\nwebhook signatures and idempotency keys. And the deterministic,\nside-effect-free nature of Compute is what makes such a pipeline\n*testable*: same inputs, same slip, every time.\n\n## Related\n\n- Next: [04 — Immutability](04-immutability.repl)\n- Previous: [02 — Values & Literals](02-values-and-literals.repl)\n- Language Guide: [Chapter 9 — Computations](..\/Book\/TheLanguageGuide\/Chapter09-Computations.md),\n  [Chapter 10 — Understanding Qualifiers](..\/Book\/TheLanguageGuide\/Chapter10-QualifierSyntax.md)\n- Wiki: [Guide — Computations](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Computations)\n- Specification: [ARO-0019 — Standard Library](..\/Proposals\/ARO-0019-standard-library.md),\n  [ARO-0001 — Language Fundamentals](..\/Proposals\/ARO-0001-language-fundamentals.md)"
     }
-  ]
+  ],
+  "version" : 1
 }

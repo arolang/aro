@@ -1,119 +1,157 @@
 {
-  "version": 1,
-  "cells": [
+  "cells" : [
     {
-      "id": "nb05-c01",
-      "kind": "markdown",
-      "source": "# 05 — Expressions & Conditionals\n\n**Brew & Bytes** is growing rules the way cafés do: orders under five\neuros can't be delivered, loyalty members get 10% off, large cups cost\nextra, ten stamps earn a free drink. Rules are decisions — and today\nyou learn how ARO decides.\n\nARO has no `if`/`else` block. Instead it gives you two sharper tools:\na **`when` guard**, which conditions a *single statement*, and a\n**`match` expression**, which branches over *multiple cases*. Feeding\nboth are ordinary expressions: arithmetic, comparisons, and boolean\nlogic, all producing values you can bind and inspect like any other.\n\nIn this notebook: the operators, booleans as first-class values,\n`when` guards (and what they *don't* bind when they skip), and\n`match`/`case`/`otherwise`.",
-      "outputs": []
+      "id" : "nb05-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 05 — Expressions & Conditionals\n\n**Brew & Bytes** is growing rules the way cafés do: orders under five\neuros can't be delivered, loyalty members get 10% off, large cups cost\nextra, ten stamps earn a free drink. Rules are decisions — and today\nyou learn how ARO decides.\n\nARO has no `if`\/`else` block. Instead it gives you two sharper tools:\na **`when` guard**, which conditions a *single statement*, and a\n**`match` expression**, which branches over *multiple cases*. Feeding\nboth are ordinary expressions: arithmetic, comparisons, and boolean\nlogic, all producing values you can bind and inspect like any other.\n\nIn this notebook: the operators, booleans as first-class values,\n`when` guards (and what they *don't* bind when they skip), and\n`match`\/`case`\/`otherwise`."
     },
     {
-      "id": "nb05-c02",
-      "kind": "code",
-      "source": "Create the <bagel-price> with 2.8.\nCreate the <bagel-count> with 3.\nCompute the <bagel-total> from <bagel-price> * <bagel-count>.\nCompute the <delivery-total> from <bagel-total> + 1.5.\nLog <delivery-total> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <bagel-price> with 2.8.\nCreate the <bagel-count> with 3.\nCompute the <bagel-total> from <bagel-price> * <bagel-count>.\nCompute the <delivery-total> from <bagel-total> + 1.5.\nLog <delivery-total> to the <console>."
     },
     {
-      "id": "nb05-c03",
-      "kind": "markdown",
-      "source": "## What just happened\n\nTwo `Compute` statements (*OWN* role) evaluated arithmetic expressions:\nthree bagels at 2.80, plus a 1.50 delivery fee. The operator set:\n\n| Kind | Operators |\n|------|-----------|\n| Arithmetic | `+  -  *  /  %` |\n| String concatenation | `++` (never `+`) |\n| Comparison | `==  !=  <  >  <=  >=` |\n| Logic | `and  or  not` (short-circuiting) |\n\nPrecedence follows math conventions (`*` before `+`); parentheses\ngroup everything else. `++` exists\nso an operator always tells you whether it does math or builds text —\n`1 + 2` is `3`, `\"1\" ++ \"2\"` is `\"12\"`, and there is no ambiguity\n([Chapter 9 §9.3](../Book/TheLanguageGuide/Chapter09-Computations.md)).",
-      "outputs": []
+      "id" : "nb05-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nTwo `Compute` statements (*OWN* role) evaluated arithmetic expressions:\nthree bagels at 2.80, plus a 1.50 delivery fee. The operator set:\n\n| Kind | Operators |\n|------|-----------|\n| Arithmetic | `+  -  *  \/  %` |\n| String concatenation | `++` (never `+`) |\n| Comparison | `==  !=  <  >  <=  >=` |\n| Logic | `and  or  not` (short-circuiting) |\n\nPrecedence follows math conventions (`*` before `+`); parentheses\ngroup everything else. `++` exists\nso an operator always tells you whether it does math or builds text —\n`1 + 2` is `3`, `\"1\" ++ \"2\"` is `\"12\"`, and there is no ambiguity\n([Chapter 9 §9.3](..\/Book\/TheLanguageGuide\/Chapter09-Computations.md))."
     },
     {
-      "id": "nb05-c04",
-      "kind": "code",
-      "source": "Compute the <no-parens> from 2 + 3 * 4.\nCompute the <grouped-result> from (2 + 3) * 4.\nCreate the <drink-pick> with \"Cortado\".\nCompute the <order-line> from \"1x \" ++ <drink-pick> ++ \", takeaway\".\nLog <no-parens> to the <console>.\nLog <grouped-result> to the <console>.\nLog <order-line> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Compute the <no-parens> from 2 + 3 * 4.\nCompute the <grouped-result> from (2 + 3) * 4.\nCreate the <drink-pick> with \"Cortado\".\nCompute the <order-line> from \"1x \" ++ <drink-pick> ++ \", takeaway\".\nLog <no-parens> to the <console>.\nLog <grouped-result> to the <console>.\nLog <order-line> to the <console>."
     },
     {
-      "id": "nb05-c05",
-      "kind": "markdown",
-      "source": "## Comparisons produce values\n\nA comparison is just an expression whose result is a boolean — bind it,\nname it well, and the *rule* becomes a readable fact in your program.",
-      "outputs": []
+      "id" : "nb05-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Comparisons produce values\n\nA comparison is just an expression whose result is a boolean — bind it,\nname it well, and the *rule* becomes a readable fact in your program."
     },
     {
-      "id": "nb05-c06",
-      "kind": "code",
-      "source": "Create the <order-value> with 18.5.\nCompute the <free-delivery> from <order-value> >= 25.\nCompute the <under-minimum> from <order-value> < 5.\nLog <free-delivery> to the <console>.\nLog <under-minimum> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c06",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <order-value> with 18.5.\nCompute the <free-delivery> from <order-value> >= 25.\nCompute the <under-minimum> from <order-value> < 5.\nLog <free-delivery> to the <console>.\nLog <under-minimum> to the <console>."
     },
     {
-      "id": "nb05-c07",
-      "kind": "markdown",
-      "source": "## Combining rules with logic\n\n`and`, `or`, `not` combine booleans, short-circuiting left to right.\nOne habit to adopt immediately: **parenthesize each comparison** when\nyou mix it with named boolean facts — `(<order-value> >= 15) or\n<happy-hour>` — both for the reader and for the parser, which\notherwise tries to read `15 or <happy-hour>` as one operand.\nThe `Validate` action is an alternative spelling for binding a boolean\ncheck — same result, reads as intent (\"validate that…\").",
-      "outputs": []
+      "id" : "nb05-c07",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Combining rules with logic\n\n`and`, `or`, `not` combine booleans, short-circuiting left to right.\nOne habit to adopt immediately: **parenthesize each comparison** when\nyou mix it with named boolean facts — `(<order-value> >= 15) or\n<happy-hour>` — both for the reader and for the parser, which\notherwise tries to read `15 or <happy-hour>` as one operand.\nThe `Validate` action is an alternative spelling for binding a boolean\ncheck — same result, reads as intent (\"validate that…\")."
     },
     {
-      "id": "nb05-c08",
-      "kind": "code",
-      "source": "Create the <loyalty-member> with true.\nCreate the <happy-hour> with false.\nCompute the <discount-eligible> from <loyalty-member> and ((<order-value> >= 15) or <happy-hour>).\nValidate the <can-order> for not <under-minimum>.\nLog <discount-eligible> to the <console>.\nLog <can-order> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c08",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <loyalty-member> with true.\nCreate the <happy-hour> with false.\nCompute the <discount-eligible> from <loyalty-member> and ((<order-value> >= 15) or <happy-hour>).\nValidate the <can-order> for not <under-minimum>.\nLog <discount-eligible> to the <console>.\nLog <can-order> to the <console>."
     },
     {
-      "id": "nb05-c09",
-      "kind": "markdown",
-      "source": "## `when` guards: one statement, one condition\n\nAppend `when <condition>` to any statement and it executes only if the\ncondition holds — otherwise it is *skipped*, and execution simply\ncontinues. No branch, no else. Watch which of these four lines actually\nprint. In a `when` guard, use `is true` / `is false` / `is null` for\nthose checks and `==` for value equality — `is` alone is not equality\nhere.",
-      "outputs": []
+      "id" : "nb05-c09",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## `when` guards: one statement, one condition\n\nAppend `when <condition>` to any statement and it executes only if the\ncondition holds — otherwise it is *skipped*, and execution simply\ncontinues. No branch, no else. Watch which of these four lines actually\nprint. In a `when` guard, use `is true` \/ `is false` \/ `is null` for\nthose checks and `==` for value equality — `is` alone is not equality\nhere."
     },
     {
-      "id": "nb05-c10",
-      "kind": "code",
-      "source": "Log \"Free delivery unlocked!\" to the <console> when <free-delivery> is true.\nLog \"Loyalty discount available.\" to the <console> when <discount-eligible> is true.\nLog \"Below the delivery minimum.\" to the <console> when <under-minimum> is true.\nLog \"Rules checked.\" to the <console>.",
-      "outputs": []
+      "id" : "nb05-c10",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Log \"Free delivery unlocked!\" to the <console> when <free-delivery> is true.\nLog \"Loyalty discount available.\" to the <console> when <discount-eligible> is true.\nLog \"Below the delivery minimum.\" to the <console> when <under-minimum> is true.\nLog \"Rules checked.\" to the <console>."
     },
     {
-      "id": "nb05-c11",
-      "kind": "markdown",
-      "source": "Two of the guarded lines were skipped: `<free-delivery>` and\n`<under-minimum>` are both `false`.\n\nGuards work on *any* statement, including ones that bind. Caution: a\nskipped `Compute … when …` binds **nothing** — reading the name later\nfails. Keep guarded bindings close to the guarded statements that use\nthem, and prefer `match` when every path must produce a value.",
-      "outputs": []
+      "id" : "nb05-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two of the guarded lines were skipped: `<free-delivery>` and\n`<under-minimum>` are both `false`.\n\nGuards work on *any* statement, including ones that bind. Caution: a\nskipped `Compute … when …` binds **nothing** — reading the name later\nfails. Keep guarded bindings close to the guarded statements that use\nthem, and prefer `match` when every path must produce a value."
     },
     {
-      "id": "nb05-c12",
-      "kind": "code",
-      "source": "Create the <party-order-value> with 120.\nCompute the <bulk-discount> from <party-order-value> * 0.1 when <party-order-value> >= 100.\nLog <bulk-discount> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c12",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <party-order-value> with 120.\nCompute the <bulk-discount> from <party-order-value> * 0.1 when <party-order-value> >= 100.\nLog <bulk-discount> to the <console>."
     },
     {
-      "id": "nb05-c13",
-      "kind": "markdown",
-      "source": "## `match`: several cases, first hit wins\n\nFor decisions with several outcomes, `match` compares a **variable**\n(literals can't be the subject) against `case` patterns top to bottom.\nThe first matching case's block runs; `otherwise` catches the rest. A\n`case` may carry its own `where` guard for finer conditions. Bindings\nmade inside the winning block survive after the match — and different\ncases may bind the *same* name, because only one of them will run.",
-      "outputs": []
+      "id" : "nb05-c13",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## `match`: several cases, first hit wins\n\nFor decisions with several outcomes, `match` compares a **variable**\n(literals can't be the subject) against `case` patterns top to bottom.\nThe first matching case's block runs; `otherwise` catches the rest. A\n`case` may carry its own `where` guard for finer conditions. Bindings\nmade inside the winning block survive after the match — and different\ncases may bind the *same* name, because only one of them will run."
     },
     {
-      "id": "nb05-c14",
-      "kind": "code",
-      "source": "Create the <cup-choice> with \"large\".\nmatch <cup-choice> {\n    case \"small\" { Log \"Small cup: 0.30 EUR off.\" to the <console>. }\n    case \"large\" { Log \"Large cup: 0.60 EUR extra.\" to the <console>. }\n    otherwise { Log \"Standard cup.\" to the <console>. }\n}",
-      "outputs": []
+      "id" : "nb05-c14",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <cup-choice> with \"large\".\nmatch <cup-choice> {\n    case \"small\" { Log \"Small cup: 0.30 EUR off.\" to the <console>. }\n    case \"large\" { Log \"Large cup: 0.60 EUR extra.\" to the <console>. }\n    otherwise { Log \"Standard cup.\" to the <console>. }\n}"
     },
     {
-      "id": "nb05-c15",
-      "kind": "code",
-      "source": "Create the <stamps-collected> with 10.\nmatch <stamps-collected> {\n    case 10 where <loyalty-member> is true { Create the <reward> with \"free drink\". }\n    case 10 { Create the <reward> with \"half-price drink\". }\n    otherwise { Create the <reward> with \"keep collecting\". }\n}\nLog <reward> to the <console>.",
-      "outputs": []
+      "id" : "nb05-c15",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <stamps-collected> with 10.\nmatch <stamps-collected> {\n    case 10 where <loyalty-member> is true { Create the <reward> with \"free drink\". }\n    case 10 { Create the <reward> with \"half-price drink\". }\n    otherwise { Create the <reward> with \"keep collecting\". }\n}\nLog <reward> to the <console>."
     },
     {
-      "id": "nb05-c16",
-      "kind": "markdown",
-      "source": "Both `case 10` arms could match the value — the `where` guard decides\nbetween them, and order matters: the guarded case must come first, or\nit would never be reached.\n\n## Discussion\n\nWhy no `if`/`else`? Because ARO wants decisions to be either *local*\n(one statement fires or doesn't — a guard) or *exhaustive* (a value\nsorts into named cases — a match). The murky middle — nested\nconditionals mutating shared state — is exactly what the language\ndeclines to express. Combined with the happy-path philosophy\n([ARO-0006](../Proposals/ARO-0006-error-philosophy.md)), the idiomatic\nshape of a feature set becomes: guard the exceptional cases early, let\nthe main flow read straight down.\n\nMatch patterns can also be regular expressions (`case /^ERROR:/i`) —\nthey arrive with text processing in\n[07 — Text Processing](07-text-processing.repl). Iterating rules over\nwhole collections is next door in\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl).\nThe full control-flow specification is\n[ARO-0002](../Proposals/ARO-0002-control-flow.md).",
-      "outputs": []
+      "id" : "nb05-c16",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Both `case 10` arms could match the value — the `where` guard decides\nbetween them, and order matters: the guarded case must come first, or\nit would never be reached.\n\n## Discussion\n\nWhy no `if`\/`else`? Because ARO wants decisions to be either *local*\n(one statement fires or doesn't — a guard) or *exhaustive* (a value\nsorts into named cases — a match). The murky middle — nested\nconditionals mutating shared state — is exactly what the language\ndeclines to express. Combined with the happy-path philosophy\n([ARO-0006](..\/Proposals\/ARO-0006-error-philosophy.md)), the idiomatic\nshape of a feature set becomes: guard the exceptional cases early, let\nthe main flow read straight down.\n\nMatch patterns can also be regular expressions (`case \/^ERROR:\/i`) —\nthey arrive with text processing in\n[07 — Text Processing](07-text-processing.repl). Iterating rules over\nwhole collections is next door in\n[06 — Collections & Pipelines](06-collections-and-pipelines.repl).\nThe full control-flow specification is\n[ARO-0002](..\/Proposals\/ARO-0002-control-flow.md)."
     },
     {
-      "id": "nb05-c17",
-      "kind": "markdown",
-      "source": "## Real-world example: the checkout rule engine\n\nOne checkout, every rule at once: a member with ten loyalty stamps\norders a large drink. Size surcharge via `match`, membership discount\nvia a guarded `Compute`, all in integer cents\n(the money habit from [03](03-compute-and-qualifiers.repl)).",
-      "outputs": []
+      "id" : "nb05-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Real-world example: the checkout rule engine\n\nOne checkout, every rule at once: a member with ten loyalty stamps\norders a large drink. Size surcharge via `match`, membership discount\nvia a guarded `Compute`, all in integer cents\n(the money habit from [03](03-compute-and-qualifiers.repl))."
     },
     {
-      "id": "nb05-c18",
-      "kind": "code",
-      "source": "Create the <checkout> with { subtotal: 2350, size: \"large\", member: true }.\nExtract the <checkout-subtotal> from the <checkout: subtotal>.\nExtract the <checkout-size> from the <checkout: size>.\nExtract the <checkout-member> from the <checkout: member>.\nmatch <checkout-size> {\n    case \"large\" { Create the <size-surcharge> with 60. }\n    case \"small\" { Create the <size-surcharge> with -30. }\n    otherwise { Create the <size-surcharge> with 0. }\n}\nCompute the <member-discount> from <checkout-subtotal> / 10 when <checkout-member> is true.\nCompute the <charged-cents> from <checkout-subtotal> + <size-surcharge> - <member-discount>.\nCompute the <charged-euros> from <charged-cents> / 100.0.\nLog \"Charged: ${<charged-euros>} EUR\" to the <console>.\nLog \"Thanks for being a member!\" to the <console> when <checkout-member> is true.",
-      "outputs": []
+      "id" : "nb05-c18",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <checkout> with { subtotal: 2350, size: \"large\", member: true }.\nExtract the <checkout-subtotal> from the <checkout: subtotal>.\nExtract the <checkout-size> from the <checkout: size>.\nExtract the <checkout-member> from the <checkout: member>.\nmatch <checkout-size> {\n    case \"large\" { Create the <size-surcharge> with 60. }\n    case \"small\" { Create the <size-surcharge> with -30. }\n    otherwise { Create the <size-surcharge> with 0. }\n}\nCompute the <member-discount> from <checkout-subtotal> \/ 10 when <checkout-member> is true.\nCompute the <charged-cents> from <checkout-subtotal> + <size-surcharge> - <member-discount>.\nCompute the <charged-euros> from <charged-cents> \/ 100.0.\nLog \"Charged: ${<charged-euros>} EUR\" to the <console>.\nLog \"Thanks for being a member!\" to the <console> when <checkout-member> is true."
     },
     {
-      "id": "nb05-c19",
-      "kind": "markdown",
-      "source": "Note the design: the `match` binds `<size-surcharge>` on *every* path,\nso the final arithmetic can rely on it. The member discount is guarded\n— which is safe here only because the same `<checkout-member>` fact\ngates both the binding and everything downstream of it.\n\nEvery business you interact with runs a rule engine like this at far\ngreater scale. E-commerce checkouts stack promotions, tier pricing,\ntax jurisdiction, and shipping thresholds; insurers price policies as\ncascades of guarded rules; banks gate transactions with limit and\ncompliance checks. The industry's chronic pain is rules that are\n*implemented* somewhere in a million lines and *documented* nowhere —\nwhen the tax rate changes, someone has to find every buried `if`. Rules\nwritten as named boolean facts (`<discount-eligible>`) and explicit\ncases are rules an auditor — or the café's owner — can actually read,\nwhich is precisely the legibility ARO's grammar is built to enforce.\n\n## Related\n\n- Next: [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Previous: [04 — Immutability](04-immutability.repl)\n- Language Guide: [Chapter 33 — Control Flow](../Book/TheLanguageGuide/Chapter33-ControlFlow.md),\n  [Chapter 9 — Computations](../Book/TheLanguageGuide/Chapter09-Computations.md),\n  [Chapter 12 — The Happy Path](../Book/TheLanguageGuide/Chapter12-HappyPath.md)\n- Wiki: [Guide — Control Flow](https://github.com/arolang/aro/wiki/Guide-Control-Flow)\n- Specification: [ARO-0002 — Control Flow](../Proposals/ARO-0002-control-flow.md),\n  [ARO-0006 — Error Philosophy](../Proposals/ARO-0006-error-philosophy.md)",
-      "outputs": []
+      "id" : "nb05-c19",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Note the design: the `match` binds `<size-surcharge>` on *every* path,\nso the final arithmetic can rely on it. The member discount is guarded\n— which is safe here only because the same `<checkout-member>` fact\ngates both the binding and everything downstream of it.\n\nEvery business you interact with runs a rule engine like this at far\ngreater scale. E-commerce checkouts stack promotions, tier pricing,\ntax jurisdiction, and shipping thresholds; insurers price policies as\ncascades of guarded rules; banks gate transactions with limit and\ncompliance checks. The industry's chronic pain is rules that are\n*implemented* somewhere in a million lines and *documented* nowhere —\nwhen the tax rate changes, someone has to find every buried `if`. Rules\nwritten as named boolean facts (`<discount-eligible>`) and explicit\ncases are rules an auditor — or the café's owner — can actually read,\nwhich is precisely the legibility ARO's grammar is built to enforce.\n\n## Related\n\n- Next: [06 — Collections & Pipelines](06-collections-and-pipelines.repl)\n- Previous: [04 — Immutability](04-immutability.repl)\n- Language Guide: [Chapter 33 — Control Flow](..\/Book\/TheLanguageGuide\/Chapter33-ControlFlow.md),\n  [Chapter 9 — Computations](..\/Book\/TheLanguageGuide\/Chapter09-Computations.md),\n  [Chapter 12 — The Happy Path](..\/Book\/TheLanguageGuide\/Chapter12-HappyPath.md)\n- Wiki: [Guide — Control Flow](https:\/\/github.com\/arolang\/aro\/wiki\/Guide-Control-Flow)\n- Specification: [ARO-0002 — Control Flow](..\/Proposals\/ARO-0002-control-flow.md),\n  [ARO-0006 — Error Philosophy](..\/Proposals\/ARO-0006-error-philosophy.md)"
     }
-  ]
+  ],
+  "version" : 1
 }
