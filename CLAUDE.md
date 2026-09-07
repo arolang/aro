@@ -498,6 +498,7 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,

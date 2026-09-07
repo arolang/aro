@@ -4,7 +4,7 @@
 
 ---
 
-*Language version: 0.12.0 · August 2026*
+*Language version: 0.12.0 · September 2026*
 
 ---
 
@@ -58,8 +58,10 @@ this book will tell you where the line is (§9).
 
 - **Statements read as requirements.** The filter that defines revenue is
   one sentence, in the file, in English.
-- **Notebook-native.** ARO runs as a Jupyter kernel, so the loop is the
-  one you already use: run a cell, look at a table, change it, run again.
+- **Notebook-native.** ARO ships a Jupyter kernel — JupyterLab, VS Code,
+  DataSpell — and Solaro, its own notebook editor. Either way the loop is
+  the one you already use: run a cell, look at a table, change it, run
+  again.
 - **One binary.** `aro` is a single executable. No cluster, no JVM, no
   virtualenv for the pipeline itself.
 - **Format-aware I/O.** `Read`/`Write` pick their format from the file
@@ -69,8 +71,8 @@ this book will tell you where the line is (§9).
 
 ## 2. Installing the Kernel
 
-You need two things: the `aro` binary, and the Python package that lets
-Jupyter talk to it.
+You need one thing: the `aro` binary. It is the kernel as well as the
+compiler, so registering it with Jupyter is a command it runs on itself.
 
 ### 2.1 The binary
 
@@ -92,14 +94,27 @@ Windows builds are on the same page as `aro-windows-amd64.zip`.
 
 ### 2.2 The kernel
 
-The kernel is a Python package. It ships as a wheel on the same release
-page, so installing it does not mean cloning the repository:
+`aro` is the kernel. It speaks Jupyter's wire protocol over ZeroMQ
+directly — no Python, no `ipykernel` — so registering it is one command:
 
 ```bash
-pip install jupyterlab
-pip install https://github.com/arolang/aro/releases/latest/download/aro_kernel-py3-none-any.whl
-python -m aro_kernel.install --user
+aro kernel install
 ```
+
+```
+Installed kernelspec: ~/Library/Jupyter/kernels/aro/kernel.json
+Pick "ARO" in JupyterLab / VS Code / DataSpell.
+```
+
+libzmq is a system dependency, declared the same way libgit2 already is:
+`brew install zeromq`, or `apt install libzmq3-dev`.
+
+The kernelspec records the **absolute path of the `aro` that installed
+it**, because Jupyter will not inherit your `PATH`. Run
+`aro kernel install` from the binary you actually want notebooks to use —
+a checkout's `.build/debug/aro` if you are working on the language, the
+one on your `PATH` otherwise — and run it again after you move the
+binary.
 
 Confirm it registered:
 
@@ -110,40 +125,87 @@ jupyter kernelspec list
 You should see `aro` in the list. Then:
 
 ```bash
+pip install jupyterlab
 jupyter lab
 ```
 
 **New → ARO**, and you have a notebook.
 
-If `aro` lives somewhere unusual — a checkout, a container path — point
-the kernel at it *before* installing the kernelspec. The path is baked
-into the spec, not resolved at run time:
+**Windows, and the `pip`-shaped route.** There is a second kernel: an
+`ipykernel` subclass that owns one `aro repl --json` subprocess. It
+predates the native one and remains the Windows path, because the native
+kernel shares the REPL's POSIX output-capture machinery. It ships as a
+wheel on the same release page, so installing it does not mean cloning
+the repository:
+
+```bash
+pip install jupyterlab
+pip install https://github.com/arolang/aro/releases/latest/download/aro_kernel-py3-none-any.whl
+python -m aro_kernel.install --user
+```
+
+That one resolves `aro` from `$ARO_KERNEL_ARO`, or from `PATH`, at
+install time:
 
 ```bash
 export ARO_KERNEL_ARO=/opt/aro/bin/aro
 python -m aro_kernel.install --user
 ```
 
+Both kernels run cells through the same engine, so a notebook behaves
+identically under either. Both also declare *signal* interrupt: a cell
+blocked inside the runtime cannot be unwound, so interrupting kills and
+replaces the kernel process, and says so. The session's variables and
+definitions are gone. On a long `Read` that is worth knowing before you
+reach for the stop button.
+
 ### 2.3 VS Code and DataSpell
+
+Registration is per machine, not per editor — every front-end below
+reads the same kernelspec that `aro kernel install` wrote.
 
 **VS Code**: install the Jupyter extension, open a `.ipynb`, and pick
 **ARO** from the kernel picker. The `Editor/vscode-aro` extension adds
 syntax highlighting for ARO cells.
 
 **DataSpell / PyCharm**: these run notebooks through a Jupyter server and
-discover kernels from that server's kernelspec directories, so a `--user`
-install appears in the kernel selector after a restart. If it does not,
-the usual cause is that DataSpell is configured against a different
-interpreter than the one you installed into — run `jupyter kernelspec
-list` from *that* interpreter and check `aro` is there.
+discover kernels from that server's kernelspec directories, so **ARO**
+appears in the kernel selector after a restart. If it does not, check
+which Jupyter DataSpell is pointed at and run `jupyter kernelspec list`
+from *there*; the native kernelspec is interpreter-independent, but the
+directory it lives in is not.
 
 There is an ARO plugin on the JetBrains Marketplace, and it does install
 in DataSpell, but it carries language support only — highlighting,
-diagnostics, navigation. It does not carry the kernel, and it is worth
-knowing why: the kernelspec has to name a Python that can import
-`aro_kernel` and an `aro` binary that exists on this machine, and a
-plugin cannot make either true inside an interpreter it does not own.
-Two `pip` lines can. That is the supported route.
+diagnostics, navigation. It does not carry the kernel, and it does not
+need to: the kernelspec has to name an `aro` binary that exists on this
+machine, which is a thing only that binary can know. `aro kernel
+install` is the supported route in every front-end.
+
+### 2.4 Solaro: notebooks without Jupyter
+
+Solaro is ARO's own IDE, and it edits notebooks natively. Its `.repl`
+files are the same idea as `.ipynb` — markdown cells and code cells with
+their captured outputs, JSON on disk — but with ARO's display bundle as
+first-class fields instead of a MIME dictionary, so a notebook diffs
+like source rather than like a minified blob.
+
+![A `.repl` notebook in Solaro](screenshots/01-solaro-notebook.png){ width=95% }
+
+Cells run against the same session engine the Jupyter kernel drives, so
+the same statements behave the same way: definitions accumulate, the
+last value is displayed, and a list of records renders as a table.
+Above, silver is being built one cell at a time against the landing CSVs
+from §4 — the second cell's result is the fact table itself.
+
+Use whichever fits the moment. JupyterLab, VS Code and DataSpell are the
+right answer when the notebook sits beside Python work, in a repository
+of `.ipynb` files, or on a machine where the whole team already has a
+Jupyter install. Solaro is the right answer when the notebook sits
+beside the *application* it becomes: the file tree, the LSP diagnostics,
+the actions catalogue and the notebook are one window, and §10's
+"build in the notebook, ship as a directory" is a scroll rather than a
+context switch.
 
 ---
 
@@ -372,9 +434,9 @@ Silver is where opinions are allowed. Three of them here:
    orders were abandoned.
 2. **Customers are joined on.** Downstream should never have to know that
    region lives in a different file.
-3. **Money is computed once.** `line_total` is calculated here so every
-   consumer computes it the same way — which is to say, so no two
-   dashboards disagree.
+3. **Money is computed once, and rounded once.** `line_total` is
+   calculated here so every consumer computes it the same way — which is
+   to say, so no two dashboards disagree.
 
 ```aro
 (BuildSilver: Action) {
@@ -388,9 +450,8 @@ Silver is where opinions are allowed. Three of them here:
         Filter the <candidates> from the <customers> where <customer_id> = <cid>.
         Extract the <customer: first> from the <candidates>.
 
-        Extract the <qty> from the <order: quantity>.
-        Extract the <price> from the <order: unit_price>.
-        Compute the <line-total> from <qty> * <price>.
+        Compute the <raw-total> from <order: quantity> * <order: unit_price>.
+        Compute the <line-total: fixed> from the <raw-total>.
 
         Create the <fact> with {
             order_id: <order: order_id>,
@@ -400,8 +461,8 @@ Silver is where opinions are allowed. Three of them here:
             region: <customer: region>,
             tier: <customer: tier>,
             sku: <order: sku>,
-            quantity: <qty>,
-            unit_price: <price>,
+            quantity: <order: quantity>,
+            unit_price: <order: unit_price>,
             line_total: <line-total>
         }.
         Store the <fact> into the <silver-orders-repository>.
@@ -422,6 +483,13 @@ silver/order_facts.jsonl — 4 rows
 Six orders in; four facts out. The two that vanished are order 1003
 (cancelled) and 1006 (pending), and the statement that dropped them is
 one line you can point a finance person at.
+
+Two smaller things in that block. `<order: quantity>` is usable directly
+in an expression — the `Extract` per operand that §4 showed is only
+needed when you want the value under a name of its own. And
+`<line-total: fixed>` is money: `2 × 19.99` in binary floating point is
+not `39.98`, and `fixed` makes the stored value the one a person would
+write. §7 has the full story, because gold is where it shows.
 
 ### 6.1 The join
 
@@ -471,9 +539,11 @@ question*, shaped for whoever asked it. Ours: **revenue by region.**
 
     for each <region-name> in <regions> {
         Filter the <rows> from the <facts> where <region> = <region-name>.
-        Reduce the <revenue> from the <rows> with sum(<line_total>).
+        Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
         Reduce the <order-count> from the <rows> with count().
-        Compute the <avg-order> from <revenue> / <order-count>.
+        Compute the <revenue: fixed> from the <raw-revenue>.
+        Compute the <raw-avg> from <revenue> / <order-count>.
+        Compute the <avg-order: fixed> from the <raw-avg>.
 
         Create the <row> with {
             id: <region-name>,
@@ -497,24 +567,71 @@ And the product:
 
 ```
 avg_order_value,id,orders,region,revenue
-49.974999999999994,EMEA,2,EMEA,99.94999999999999
+49.98,EMEA,2,EMEA,99.95
 46.0,AMER,2,AMER,92.0
 ```
 
 CSV, because the person who asked for it opens things in a spreadsheet.
 Had they asked for JSON, the only change is the extension.
 
-Those digits are the real output, and they are worth not tidying away.
-`19.99` is not representable in binary floating point, so two of them
-plus three more come to `99.94999999999999`. This is not an ARO quirk —
-it is IEEE 754, and the same sum in Python or Java prints the same
-thing. It matters here because a data product is read by people who will
-notice. Round at the presentation layer, or hold money in minor units
-(integer cents) through the pipeline and divide once at the end. What you
-should not do is round in silver and again in gold, and then wonder why
-the totals disagree by a penny.
+### 7.1 Money, and the digits you would otherwise ship
 
-### 7.1 Getting the distinct values
+Without those two `fixed` statements, the same file reads:
+
+```
+avg_order_value,id,orders,region,revenue
+49.974999999999994,EMEA,2,EMEA,99.94999999999999
+46.0,AMER,2,AMER,92.0
+```
+
+That is not an ARO quirk. `19.99` is not representable in binary
+floating point, so two of them plus three more land on the `Double` next
+door, and the same sum in Python or Java prints the same thing. What
+makes it a problem here is where it surfaces: the *console* absorbs it —
+human-facing output is rendered at 15 significant digits, so a `Log` of
+that revenue prints `99.95` — but a **file does not, and must not**.
+`Write` serializes at full precision, and a data product is a file
+someone opens.
+
+`fixed` moves the correction from the renderer to the value. It rounds
+through the decimal spelling, so what is stored is the `Double` nearest
+to `99.95` — the number a person would have written, which the CSV, the
+console, and anything that reads the file back then agree about:
+
+```aro
+Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
+Compute the <revenue: fixed> from the <raw-revenue>.
+```
+
+Two decimal places by default; `with { places: 4 }` for a rate. The
+result stays a number — a rendered string would print correctly and then
+quote itself into a JSON data product, which is a different wrong
+answer. There is no `round` qualifier, and no `money` one; both
+diagnostics point at `fixed`.
+
+![The same revenue, before and after `fixed`](screenshots/02-solaro-money.png){ width=95% }
+
+The discipline around it matters more than the spelling. **Round each
+amount once, where it is produced, to the precision that amount actually
+has.** `line_total` is rounded in silver because a line total *is* money
+to the cent; the `fixed` in gold is not a second rounding of that number
+but the cleanup after summing, because floating-point addition of
+exact-to-the-cent values still drifts. What you must not do is round the
+same quantity twice at different precisions — that is how two dashboards
+come to disagree by a penny, and exercise 4 in Appendix D makes it happen
+on purpose so you can see the size of it.
+
+Where a ledger has to balance to the cent rather than merely display
+well, the stricter option is still the old one: hold money in integer
+minor units through the pipeline and divide once at the end.
+
+One caveat, so the JSONL in §6.2 is not a surprise: ARO's JSON writer
+renders every `Double` at 17 significant digits, so a silver row shows
+`39.979999999999997` even after `fixed` has made the value the nearest
+one to `39.98`. The number is right, the rendering is not, and it is the
+CSV data product — the file with a reader — where the difference shows.
+
+### 7.2 Getting the distinct values
 
 ```aro
 Map the <all-regions> from the <facts> with region.
@@ -538,7 +655,7 @@ Undefined variable: line_total
 over. Per-element arithmetic goes in a `for each` loop, which is what the
 silver layer does.
 
-### 7.2 Aggregating
+### 7.3 Aggregating
 
 ```aro
 Reduce the <revenue> from the <rows> with sum(<line_total>).
@@ -549,7 +666,7 @@ Reduce the <order-count> from the <rows> with count().
 `min`, `max`, `first`, `last`. Field aggregates name their field;
 `count()` takes none.
 
-### 7.3 The `id` column
+### 7.4 The `id` column
 
 The gold rows set `id` explicitly:
 
@@ -701,6 +818,18 @@ to read, in pipelines whose data fits in memory, where the ability to
 point at the line that defines revenue is worth more than the ability to
 express anything at all.
 
+**And the parts of the job this book does not cover at all.** One
+pipeline is not the discipline. Around it sit data platforms, orchestration,
+dashboards and the decisions they drive, access and discoverability,
+privacy, streaming, and the ownership questions data mesh asks — which
+team owns this product, and who do you page when it is wrong. If you
+want that map, [Data Derp](https://data-derp.github.io/docs/2.0/intro) is
+an open-source curriculum that walks it step by step, vendor-neutral and
+exercise-driven. It teaches in Python and SQL on Databricks notebooks;
+the vocabulary it establishes — bronze/silver/gold, data product, data
+mesh — is the vocabulary this book has been using, so the two read well
+together.
+
 ---
 
 ## 10. A Working Method
@@ -764,13 +893,15 @@ Verified against the language version on the cover.
 | `uppercase`, `lowercase`, `trim`, `replace` | Text |
 | `lines`, `join` | Text ↔ collection |
 | `hash` / `sha256` | Digest |
+| `fixed` | Round to N decimal places, 2 by default — money (§7.1) |
 | `-7d`, `+24h`, `+1M` | Date offsets |
 
 The qualifier set is **closed**. An unrecognised one is a check-time
 error naming the closest match, not a silent pass-through. Notably
 `sort`, `reverse`, `first` and `last` are *not* Compute qualifiers:
 sorting and reversing are actions, and element access is an Extract
-qualifier (`Extract the <head: first> from the <xs>.`).
+qualifier (`Extract the <head: first> from the <xs>.`). Nor is `round`
+or `money` — both diagnostics point at `fixed`.
 
 Run `aro actions --qualifiers` for the live set.
 
@@ -801,7 +932,7 @@ replacement for the common cases.
 **`Map … with <expr>` says "Undefined variable"** — you gave `Map` an
 expression. It takes a field name, and has no per-element binding for an
 expression to range over; per-element arithmetic goes in a `for each`
-(§7.1).
+(§7.2).
 
 **A count is implausibly large** — you counted a stage's return payload
 rather than a collection, and got its serialized length (§8.3).
@@ -811,8 +942,24 @@ not change into the application directory, so relative paths resolve
 against *your* current directory. Run it from where you want the layers
 written (§8).
 
-**The kernel does not appear in DataSpell** — the kernelspec went into a
-different interpreter than the one DataSpell uses (§2.3).
+**A price ends in `…9999` in the output file** — the console renders at
+15 significant digits and hides it; the file does not. Round the value
+once, at the layer that publishes: `Compute the <revenue: fixed> from the
+<raw-revenue>.` (§7.1).
+
+**"Unknown Compute qualifier 'round'"** — the qualifier is `fixed`, and
+the diagnostic says so (§7.1).
+
+**The kernel does not appear in DataSpell** — the kernelspec is in a
+Jupyter data directory that DataSpell's server does not read. Find out
+which Jupyter it launches, run `jupyter kernelspec list` from there, and
+re-run `aro kernel install` under that `JUPYTER_DATA_DIR` if the entry is
+missing (§2.3).
+
+**A notebook cell hangs and the stop button restarts everything** — that
+is the documented interrupt: a cell blocked inside the runtime cannot be
+unwound, so both kernels kill and replace the process. Bindings and
+definitions from earlier cells are gone; re-run from the top (§2.2).
 
 ---
 
@@ -829,3 +976,74 @@ your current directory** — `aro run` does not change into the application
 directory, which is worth knowing before you wonder where the output
 went. Its row counts are asserted in CI, which is the only reason this
 book is allowed to claim they are right.
+
+---
+
+## Appendix D: Exercises
+
+Reading a pipeline is not the same as having built one. Run the project
+once (Appendix C) so `bronze/`, `silver/` and `gold/` exist, then work
+these in a notebook against those files — a cell and a feature-set body
+are the same statements, so anything that works here moves into
+`main.aro` unchanged.
+
+**1. Count what bronze kept.** Silver dropped two orders. Prove bronze
+still has them, and say how many there are, without re-reading the
+landing CSV.
+
+> Answer: `2`.
+> ```aro
+> Read the <orders> from "./bronze/orders.jsonl".
+> Filter the <rejected> from the <orders> where <status> != "confirmed".
+> Compute the <n: length> from the <rejected>.
+> ```
+> This is the bronze promise paying for itself: the rows are still
+> countable because nobody was clever in the ingest.
+
+**2. Ship a second data product.** The head of sales wants revenue by
+customer *tier*, not by region. Write `gold/revenue_by_tier.csv`.
+
+> Answer: §7's loop with `tier` where `region` was —
+> `Map … with tier`, `Compute the <tiers: unique> …`, filter, reduce,
+> `fixed`, store, write. Two rows: `gold,39.98` and `silver,151.97`.
+> Note what you did *not* have to do: no re-derivation of `line_total`.
+> Silver computed money once, so the second product agrees with the
+> first by construction.
+
+**3. Break the rounding on purpose.** Delete the two `fixed` statements
+from `BuildRegionRevenue`, re-run, and open the CSV. Put them back.
+
+> The point is to see `99.94999999999999` land in a file a person opens,
+> once, deliberately — so you recognise it the next time it happens by
+> accident (§7.1).
+
+**4. Round the same quantity twice, and watch it drift.** Round
+`line_total` in silver to whole units — `Compute the <line-total: fixed>
+from the <raw-total> with { places: 0 }.` — leave gold as it is, re-run,
+and compare EMEA's revenue against §7's `99.95`.
+
+> You get `100.0`. Nothing errored, no count changed, and the number is
+> wrong by five cents — which is exactly why a rounding decision belongs
+> in one place, at the precision the amount actually has.
+
+**5. Break the join.** Change the silver join to match on `sku` instead
+of `customer_id` and re-run.
+
+> No customer matches an SKU, so the join finds nothing and the stage
+> stops on the first order rather than quietly writing four facts with
+> empty customer columns. A pipeline that fails is cheaper than one that
+> succeeds with the wrong answer — §6's whole argument for putting the
+> opinions in silver where they can be pointed at.
+
+**6. Assert the counts.** Add a check that silver has exactly four rows,
+so a future change that drops a filter fails loudly instead of shipping.
+
+> ```aro
+> Compute the <silver-count: length> from the <silver>.
+> Assert the <silver-count> with 4.
+> ```
+> A wrong count reports `Assertion failed: silver-count is 3, expected 4`
+> and stops. `Examples/MedallionPipeline` gets the same guarantee from
+> CI, which compares its logged `6 / 4 / 2` against a recorded expectation
+> — §10 argues this is the single highest-value check in a pipeline,
+> however you spell it.

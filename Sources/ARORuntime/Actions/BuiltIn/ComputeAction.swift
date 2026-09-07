@@ -179,6 +179,11 @@ public struct ComputeAction: SynchronousAction {
               acceptsParameters: false,
               summary: "A random element, or a random Int below a bound",
               op: Self.opRandom),
+        // Money (GitLab #517).
+        .init(name: "fixed", inputTypes: [.int, .double, .string],
+              acceptsParameters: true,
+              summary: "Round to a fixed number of decimal places "
+                     + "(2 by default); with { places: 3 }", op: Self.opFixed),
     ]
 
     /// Canonical computation name → implementation, derived from
@@ -669,6 +674,59 @@ public struct ComputeAction: SynchronousAction {
             expected: "List, String, or positive Number",
             actual: String(describing: type(of: input)),
             variable: "random")
+    }
+
+    /// A number rounded to a fixed number of decimal places — money,
+    /// without the IEEE noise (GitLab #517).
+    ///
+    /// Console output already absorbs binary artifacts: 15 significant
+    /// digits turns `19.99 * 5` into `99.95` for a human reader
+    /// (`AroNumberFormatting`). Files do not, and must not — `Write` and
+    /// HTTP bodies serialize at full precision, so a data product built
+    /// from float arithmetic ships `99.94999999999999` in its revenue
+    /// column and the analyst who opens it has a question.
+    ///
+    /// The fix is to make the *value* the one a person would write, not
+    /// to prettify it on the way out. Rounding through the decimal
+    /// rendering (`%.2f`, then parsed back) yields the `Double` nearest
+    /// to `99.95`, which every downstream path — JSON, CSV, console,
+    /// further arithmetic — then agrees about.
+    ///
+    /// The result stays numeric. Returning a string would render
+    /// correctly and then quote itself into a JSON data product, which
+    /// is a different wrong answer.
+    private static func opFixed(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        var places = 2
+        if let config = context.resolveAny("_with_") as? [String: any Sendable] {
+            if let p = config["places"] as? Int { places = p }
+            else if let p = config["places"] as? Double { places = Int(p) }
+        } else if let p = context.resolveAny("_with_") as? Int {
+            // `with 3` — the bare form reads fine for one obvious parameter.
+            places = p
+        } else if let p = context.resolveAny("_with_") as? Double {
+            places = Int(p)
+        }
+        guard places >= 0, places <= 15 else {
+            throw ActionError.validationFailed(
+                "fixed expects 0…15 decimal places, got \(places)")
+        }
+
+        let value: Double
+        if let d = input as? Double { value = d }
+        else if let i = input as? Int { value = Double(i) }
+        else if let s = input as? String, let d = Double(s) { value = d }
+        else {
+            throw ActionError.typeMismatch(
+                expected: "Number", actual: String(describing: type(of: input)),
+                variable: "fixed")
+        }
+        // NaN and the infinities have no fixed-point form; passing them
+        // through beats inventing one.
+        guard value.isFinite else { return value }
+        guard let rounded = Double(String(format: "%.\(places)f", value)) else {
+            return value
+        }
+        return rounded
     }
 
     private static func opClip(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
