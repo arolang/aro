@@ -102,7 +102,7 @@
       "outputs" : [
 
       ],
-      "source" : "Finally, `List` enumerates a directory. Each entry is a record —\n`name`, `path`, `isFile`, `isDirectory` — so the collection tools of\n[06](06-collections-and-pipelines.repl) apply directly. (The\nproposal's `matching \"*.txt\"` pattern form is not in the current\nparser, but `Filter` does the job and composes further.)"
+      "source" : "Finally, `List` enumerates a directory. Each entry is a record —\n`name`, `path`, `isFile`, `isDirectory` — so the collection tools of\n[06](06-collections-and-pipelines.repl) apply directly. A trailing\n`matching \"*.txt\"` filters the listing at the source with a glob:\nanchored and case-sensitive, so it keeps `sales.txt` and rejects\n`sales.txtx` — which a `Filter … contains \".txt\"` would not, because\n`contains` is substring matching. Add `recursively` to descend."
     },
     {
       "id" : "nb21-c14",
@@ -110,7 +110,7 @@
       "outputs" : [
 
       ],
-      "source" : "List the <drop-entries> from the <directory: \".\/.scratch\/nightly\/drop\">.\nFilter the <text-entries> from the <drop-entries> where <name> contains \".txt\".\nfor each <drop-entry> in <text-entries> {\n    Extract the <entry-name> from the <drop-entry: name>.\n    Log \"In drop: ${entry-name}\" to the <console>.\n}"
+      "source" : "List the <drop-entries> from the <directory: \".\/.scratch\/nightly\/drop\"> matching \"*.txt\".\nfor each <drop-entry> in <drop-entries> {\n    Extract the <entry-name> from the <drop-entry: name>.\n    Log \"In drop: ${entry-name}\" to the <console>.\n}"
     },
     {
       "id" : "nb21-c15",

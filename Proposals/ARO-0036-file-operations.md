@@ -201,13 +201,47 @@ List the <result> from the <directory: path>.
 
 ```aro
 List the <result> from the <directory: path> matching "pattern".
+List the <result> from the <directory: path> matching <pattern-variable>.
 ```
+
+The pattern is a POSIX `fnmatch(3)` glob, evaluated with no flags:
+
+| Form | Matches |
+|------|---------|
+| `*` | any run of characters, including none |
+| `?` | exactly one character |
+| `[abc]`, `[a-z]` | one character from the set or range |
+| `[!abc]`, `[^abc]` | one character *not* in the set |
+| `\*`, `\?` | a literal `*` or `?` |
+
+Four properties the glob has, and the `Filter … contains` workaround it
+replaces does not:
+
+- **It is anchored.** The whole name must match, so `"*.csv"` keeps `a.csv`
+  and rejects `report.csvx` — the substring filter kept both.
+- **It matches the entry *name*, not the path.** Only the last component is
+  ever tested, so `"*.csv"` behaves the same at any depth under
+  `recursively`.
+- **It is case-sensitive** (POSIX default): `"*.md"` does not match
+  `README.MD`.
+- **It filters entries, so it filters directories too.** A glob is not a
+  file test; `"s*"` keeps a subdirectory named `sub`.
+
+A leading dot is not special (no `FNM_PERIOD`), so `"*.csv"` also keeps
+`.hidden.csv`. A pattern that matches nothing yields an empty listing —
+never the unfiltered directory.
+
+`matching` is a List clause. On any other verb it is a check-time error
+rather than a clause the action would quietly ignore.
 
 ### 6.3 Recursive Listing
 
 ```aro
 List the <result> from the <directory: path> recursively.
 ```
+
+The older qualifier spelling — `List the <all-files: recursively> from the
+<directory: path>.` — remains valid.
 
 ### 6.4 Examples
 
@@ -223,6 +257,10 @@ List the <all-files> from the <directory: "./project"> recursively.
 
 (* Combine pattern and recursion *)
 List the <all-tests> from the <directory: "."> matching "*_test.aro" recursively.
+
+(* The glob may come from a variable — a config file can drive it *)
+Extract the <glob> from the <config: pattern>.
+List the <exports> from the <directory: "./out"> matching <glob>.
 ```
 
 ### 6.5 Result Properties

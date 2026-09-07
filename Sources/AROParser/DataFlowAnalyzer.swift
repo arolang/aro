@@ -340,6 +340,18 @@ public struct DataFlowAnalyzer {
             }
         }
 
+        // ARO-0036: `matching <pattern>` reads the glob out of a variable, so
+        // that variable is an input like any other (GitLab #518).
+        if let matching = statement.queryModifiers.matchingPattern {
+            let matchVars = extractVariables(from: matching)
+            for varName in matchVars {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
         // Extract variables from range modifiers with clause
         if let withClause = statement.rangeModifiers.withClause {
             let withVars = extractVariables(from: withClause)
