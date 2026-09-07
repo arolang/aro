@@ -35,7 +35,11 @@ struct MapFieldProjectionTests {
         let program = try Parser.parse("""
         (Process Users: List Example) {
             Retrieve the <users> from the <user-repository>.
-            Filter the <active-users> from the <users> where status = "active".
+            (* ARO-0019 §2.1 prints `where status = "active"`, with the
+               field bare. That does not parse — the where clause wants
+               `<status>`. Tracked separately; the line is spelled the
+               working way here so this test is about Map. *)
+            Filter the <active-users> from the <users> where <status> = "active".
             Map the <names> from the <active-users> with name.
             Return an <OK: status> with <names>.
         }
@@ -92,12 +96,14 @@ struct MapFieldProjectionTests {
         // parse error it has always been, rather than silently
         // becoming a result specifier. The parser records it as an
         // ErrorStatement instead of throwing, so that is what to
-        // assert.
+        // assert — via the collector overload, which is the one that
+        // recovers (GitLab #543). The plain overload throws, by
+        // design, when a caller has nowhere to read errors from.
         let program = try Parser.parse("""
         (Project: Test Activity) {
             Filter the <y> from the <x> with name.
         }
-        """)
+        """, diagnostics: DiagnosticCollector())
         let first = program.featureSets[0].statements[0]
         #expect(first is ErrorStatement)
         #expect(!(first is AROStatement))
