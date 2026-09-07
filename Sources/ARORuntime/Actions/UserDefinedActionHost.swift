@@ -275,6 +275,14 @@ public final class UserDefinedActionHost: @unchecked Sendable {
     /// Convert a `Response` into the flat dict shape callers see at the call site.
     /// Matches the plugin convention: `status` and `reason` become top-level
     /// keys alongside whatever fields `Return ... with <data>.` produced.
+    ///
+    /// The field values come from `structuredData` where `Return` recorded it,
+    /// so a returned list stays a list and a returned record stays a record
+    /// (GitLab #504). `data` — flattened for HTTP, where nested records become
+    /// dot-notation keys and lists become JSON text — is laid down first, so a
+    /// response built by something other than `Return` still carries its
+    /// fields, and the dot-notation keys stay available to anything that reads
+    /// them.
     private func flatten(response: Response) -> [String: any Sendable] {
         var dict: [String: any Sendable] = [
             "status": response.status,
@@ -286,6 +294,9 @@ public final class UserDefinedActionHost: @unchecked Sendable {
             if let value: any Sendable = anySendable.get() {
                 dict[key] = value
             }
+        }
+        for (key, value) in response.structuredData {
+            dict[key] = value
         }
         return dict
     }

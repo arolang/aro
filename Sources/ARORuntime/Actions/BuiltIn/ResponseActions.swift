@@ -35,6 +35,12 @@ public struct ReturnAction: SynchronousAction {
         // Gather any data to include in response
         var data: [String: AnySendable] = [:]
 
+        // The same payload without the lossy flattening. `data` is what HTTP
+        // and the CLI render; `structured` is what an in-process caller — a
+        // user-defined action's call site above all — binds, so a returned
+        // list arrives as a list rather than as its JSON text (GitLab #504).
+        var structured: [String: any Sendable] = [:]
+
         // Check for expression from "with" clause (e.g., with { user: <user>, ... } or with <variable>)
         // Note: When with clause contains variable references, it's parsed as expression
         if let expr = context.resolveAny("_expression_") {
@@ -42,6 +48,7 @@ public struct ReturnAction: SynchronousAction {
                 // Map literal: { key: value, ... } - preserve nested structure
                 for (key, value) in dict {
                     flattenValue(value, into: &data, prefix: key, context: context)
+                    structured[key] = value
                 }
             } else if let array = expr as? [any Sendable] {
                 // Array value - serialize to JSON
@@ -54,6 +61,7 @@ public struct ReturnAction: SynchronousAction {
                     FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed, returning empty array\n".utf8))
                     data["data"] = AnySendable("[]")
                 }
+                structured["data"] = array
             } else if let str = expr as? String {
                 // Simple variable that contains a JSON string - try to parse it
                 if let jsonData = str.data(using: .utf8),
@@ -62,10 +70,12 @@ public struct ReturnAction: SynchronousAction {
                     // Variable contains JSON object - use it directly as response data
                     for (key, value) in dict {
                         addAnyValue(value, into: &data, key: key)
+                        structured[key] = SendableConverter.fromJSON(value)
                     }
                 } else {
                     // Plain string value
                     data["value"] = AnySendable(str)
+                    structured["value"] = str
                 }
             } else if let body = expr as? RequestBodyValue {  // live body: streams back out
                 // Returning an unread request body writes it straight back to
@@ -73,16 +83,21 @@ public struct ReturnAction: SynchronousAction {
                 // response as itself; `Application.convertToHTTPResponse` turns
                 // it into a chunked body without ever holding the whole.
                 data["value"] = AnySendable(body)
+                structured["value"] = body
             } else if let anchored = expr as? AnchoredBody {
                 // Same for a body that has been anchored: the response is
                 // written from the file rather than from memory.
                 data["value"] = AnySendable(anchored)
+                structured["value"] = anchored
             } else if let int = expr as? Int {
                 data["value"] = AnySendable(int)
+                structured["value"] = int
             } else if let double = expr as? Double {
                 data["value"] = AnySendable(double)
+                structured["value"] = double
             } else if let bool = expr as? Bool {
                 data["value"] = AnySendable(bool)
+                structured["value"] = bool
             }
         }
 
@@ -91,6 +106,7 @@ public struct ReturnAction: SynchronousAction {
             if let dict = literal as? [String: any Sendable] {
                 for (key, value) in dict {
                     flattenValue(value, into: &data, prefix: key, context: context)
+                    structured[key] = value
                 }
             }
         }
@@ -104,14 +120,17 @@ public struct ReturnAction: SynchronousAction {
             let format = object.specifiers.first ?? "plain"
             let formatted = MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
             data["value"] = AnySendable(formatted)
+            structured["value"] = formatted
         } else if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
             flattenValue(value, into: &data, prefix: object.base, context: context)
+            structured[object.base] = value
         }
 
         // Include object specifiers as data references (skip internal names)
         for specifier in object.specifiers where !internalNames.contains(specifier) {
             if let value = context.resolveAny(specifier) {
                 flattenValue(value, into: &data, prefix: specifier, context: context)
+                structured[specifier] = value
             }
         }
 
@@ -129,6 +148,9 @@ public struct ReturnAction: SynchronousAction {
                     } else {
                         data["value"] = AnySendable(String(describing: value))
                     }
+                    // The structured copy keeps the value itself — the
+                    // `String(describing:)` above is a rendering for transport.
+                    structured["value"] = value
                     break
                 }
             }
@@ -137,7 +159,8 @@ public struct ReturnAction: SynchronousAction {
         let response = Response(
             status: statusName,
             reason: reason,
-            data: data
+            data: data,
+            structuredData: structured
         )
 
         context.setResponse(response)

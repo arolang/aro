@@ -137,6 +137,32 @@ The caller always uses `Extract` to pull individual fields. This matches the plu
 
 > **Note:** when the body uses `Return an <OK: status> with <variable>` and `<variable>` resolves to a primitive (Int/Double/Bool/String), Return places the value under the `value` key — i.e. callers extract via `<d: value>`. Use the object-literal form `with { name: <variable> }` when you want a specific field name.
 
+**Field values keep their shape.** Only the top level is flattened: a returned
+list is a list, a returned record is a record, and nesting survives to any
+depth. The caller may iterate or measure it like any other value:
+
+```aro
+(PaidOnly: Action takes <orders>) {
+    Extract the <all> from the <input: orders>.
+    Filter the <paid> from the <all> where <status> == "paid".
+    Return an <OK: status> with { paid: <paid> }.
+}
+
+(* caller *)
+Application.PaidOnly the <res> from <orders>.
+Extract the <paid-list> from the <res: paid>.
+Compute the <n: length> from <paid-list>.   (* elements, not characters *)
+for each <o> in <paid-list> { … }           (* once per element *)
+```
+
+This is what makes decomposing collection-shaped logic into actions work at
+all. `Return` also renders a flattened copy of the payload — records become
+dot-notation keys, collections become JSON text — because that is the shape an
+HTTP response or a CLI line needs; a call site in the same process never sees
+it. Until GitLab #504 it was the only copy, so a returned list arrived as its
+JSON serialization: `length` counted characters, `for each` ran once, and a
+nested record could not be reached at all.
+
 ### 6. Body restrictions
 
 Inside an `Action` feature set:
@@ -283,7 +309,7 @@ See `Examples/UserDefinedActions/main.aro` for the runnable version.
   - synthesises `<input>` from the sugar field when present,
   - spawns a fresh `RuntimeContext` parented to the caller (services and globals stay accessible; framework variables are not copied),
   - runs the body via the standard `FeatureSetExecutor`,
-  - flattens the resulting `Response` into `[String: Sendable]` so callers `Extract` fields exactly like plugin actions.
+  - flattens the resulting `Response` into `[String: Sendable]` so callers `Extract` fields exactly like plugin actions. Field *values* come from `Response.structuredData`, the unflattened copy `ReturnAction` records alongside the transport-shaped `Response.data`, so lists and records cross the call boundary as themselves (GitLab #504). The compiled path (`aro_register_user_action` in `Sources/ARORuntime/Bridge/RuntimeEventRecordingBridge.swift`) reads the same field, and `Return` runs through the same `ReturnAction` in both modes, so there is one place the record is made.
 - **No new ABI work**: user-defined actions are pure ARO; no plugin SDK changes are required.
 
 ## Future Extensions (out of scope)

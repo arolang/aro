@@ -264,6 +264,12 @@ private func buildCompiledUserActionInput(
 /// Read the response the compiled feature-set body wrote into its child
 /// context and flatten it into the dict shape callers see from plugin
 /// and interpreter user-actions.
+///
+/// Field values come from `structuredData` where `Return` recorded it, so a
+/// compiled binary hands lists and records back structured exactly like the
+/// interpreter does (GitLab #504). `Return` runs through the same
+/// `ReturnAction` in both modes, so there is one place where that record is
+/// made and both call sites read it.
 private func flattenCompiledUserActionResponse(_ context: RuntimeContext) -> [String: any Sendable] {
     guard let response = context.getResponse() else { return [:] }
     var dict: [String: any Sendable] = ["status": response.status]
@@ -271,6 +277,7 @@ private func flattenCompiledUserActionResponse(_ context: RuntimeContext) -> [St
     for (key, anySendable) in response.data {
         if let value: any Sendable = anySendable.get() { dict[key] = value }
     }
+    for (key, value) in response.structuredData { dict[key] = value }
     return dict
 }
 

@@ -16,13 +16,34 @@ public struct Response: Sendable, Equatable {
     /// Reason or description
     public let reason: String
 
-    /// Response data
+    /// Response data, flattened for transport: nested objects become
+    /// dot-notation keys and collections become their JSON serialization,
+    /// because `AnySendable` can only hold `Equatable` values.
     public let data: [String: AnySendable]
 
-    public init(status: String, reason: String = "", data: [String: AnySendable] = [:]) {
+    /// The same payload *before* flattening — lists stay lists, records stay
+    /// records (GitLab #504).
+    ///
+    /// `data` is what HTTP and the CLI render, and its lossy shape is baked
+    /// into those renderers. In-process callers — chiefly a user-defined
+    /// action returning to its caller (ARO-0081 §5) — need the values
+    /// themselves, not a rendering of them, so `Return` records both and
+    /// callers pick the one their boundary needs.
+    ///
+    /// Empty for responses built by anything other than `Return`; callers
+    /// must fall back to `data` in that case.
+    public let structuredData: [String: any Sendable]
+
+    public init(
+        status: String,
+        reason: String = "",
+        data: [String: AnySendable] = [:],
+        structuredData: [String: any Sendable] = [:]
+    ) {
         self.status = status
         self.reason = reason
         self.data = data
+        self.structuredData = structuredData
     }
 
     /// Common responses
@@ -32,6 +53,14 @@ public struct Response: Sendable, Equatable {
 
     public static func error(_ reason: String, data: [String: AnySendable] = [:]) -> Response {
         Response(status: "Error", reason: reason, data: data)
+    }
+
+    /// Identity is the transport payload. `structuredData` is the same values
+    /// in a richer shape, so comparing it would only re-answer a question
+    /// `data` already answered — and `any Sendable` has no `==` to answer it
+    /// with.
+    public static func == (lhs: Response, rhs: Response) -> Bool {
+        lhs.status == rhs.status && lhs.reason == rhs.reason && lhs.data == rhs.data
     }
 }
 

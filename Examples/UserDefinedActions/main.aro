@@ -33,6 +33,16 @@
     Return an <OK: status> with { value: <answer> }.
 }
 
+(* PaidOnly — returns a collection.
+ * Field values keep their shape across the call boundary (ARO-0081 §5):
+ * the caller gets a list it can measure and iterate, not a rendering of one.
+ *)
+(PaidOnly: Action takes <orders>) {
+    Extract the <all> from the <input: orders>.
+    Filter the <paid> from the <all> where <status> == "paid".
+    Return an <OK: status> with { paid: <paid> }.
+}
+
 (Application-Start: Custom Actions Demo) {
     Log "=== User-Defined Actions Demo (ARO-0081) ===" to the <console>.
 
@@ -50,6 +60,20 @@
     Application.SumAndDouble the <answer> with { a: 3, b: 4 }.
     Extract the <total> from the <answer: value>.
     Log <total> to the <console>.   (* prints 14 *)
+
+    (* A returned collection stays a collection *)
+    Create the <orders> with [
+        { id: 1, status: "paid" },
+        { id: 2, status: "open" },
+        { id: 3, status: "paid" }
+    ].
+    Application.PaidOnly the <res> from <orders>.
+    Extract the <paid-list> from the <res: paid>.
+    Compute the <paid-count: length> from <paid-list>.
+    Log <paid-count> to the <console>.   (* prints 2 — elements, not characters *)
+    for each <order> in <paid-list> {
+        Log <order: id> to the <console>.   (* prints 1, then 3 *)
+    }
 
     Return an <OK: status> for the <startup>.
 }
