@@ -367,26 +367,40 @@ Compute the <header> from <class> ++ "\n" ++ <begin>.
 
 ## Multi-line strings
 
-A block of text opens with `"""` followed immediately by a newline and
-closes with `"""` on its own line:
+A double-quoted string spans as many lines as you like. A newline
+between the quotes is content, exactly like any other character:
 
 ```aro
-Create the <letter> with """
-    Dear guest,
+Create the <letter> with "Dear guest,
 
-    Welcome to Brew & Bytes.
-    """.
+Welcome to Brew & Bytes.".
 Log <letter> to the <console>.
 ```
 
-Three rules, all borrowed from what indented code needs:
+Two things follow from "a newline is just a character":
 
-1. **The closing delimiter sets the margin.** Its indentation is
-   stripped from the front of every line, so the block can sit indented
-   inside a feature set and still produce flush-left text.
-2. **The final newline is dropped** — the newline before the closing
-   `"""` belongs to the syntax, not the text.
-3. **No interpolation.** `${…}` stays literal inside a multi-line
-   block; escape sequences (`\n`, `\"`, `\u{…}`) still work. To build
-   dynamic multi-line text, `join` a list of interpolated lines, or run
-   a template (ARO-0050).
+1. **Every character is kept.** There is no dedent rule, so a multi-line
+   string is written flush with the margin it should have in the output.
+   That reads oddly beside indented code — it is the price of one rule
+   instead of three.
+2. **Everything else still works.** Escape sequences (`\n`, `\"`,
+   `\u{…}`) and `${…}` interpolation behave exactly as they do in a
+   single-line string; only the `${…}` expression itself must stay on
+   one line.
+
+The cost is paid by the typo: a missing closing quote swallows the lines
+that follow, so ARO reports an unterminated string at its **opening**
+quote, where the mistake is.
+
+Raw single-quoted strings stay single-line — they exist to avoid escape
+processing, and a multi-line raw block has no reader.
+
+### The older `"""` form (deprecated)
+
+The `"""` form used to be the only way to write multi-line text, `"""…"""`, with
+its own rules: the closing delimiter's indentation stripped from every
+line, the final newline dropped, and no interpolation. It still lexes
+and now warns (GitLab #523); removal is tracked in GitLab #524.
+
+Migrating is a rewrite, not a swap of delimiters: the dedent is gone, so
+an indented `"""` block becomes a plain string written flush-left.

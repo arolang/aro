@@ -5,7 +5,14 @@
 //
 // The literal existed but was documented nowhere — three course
 // authors independently concluded multi-line strings don't parse.
-// These tests pin the semantics ARO-0001 now documents.
+// These tests pin the semantics ARO-0001 documents.
+//
+// The form is DEPRECATED since GitLab #523 (a plain "…" string spans
+// lines now) and its removal is tracked in GitLab #524. Until then it
+// still lexes, and these tests keep it honest — the dedent behaviour
+// in particular, because it is what makes migration a rewrite rather
+// than a swap of delimiters. See MultilinePlainStringTests for the
+// replacement.
 
 import Testing
 @testable import AROParser

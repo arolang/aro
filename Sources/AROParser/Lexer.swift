@@ -307,9 +307,10 @@ public final class Lexer: @unchecked Sendable {
 
         while !isAtEnd && peek() != quote {
             let char = peek()
-            if char == "\n" {
-                throw LexerError.unterminatedString(at: start)
-            }
+            // A newline is content: plain "…" strings span lines
+            // (GitLab #523). An unterminated string is still reported
+            // at its OPENING quote, so the missing-quote typo points
+            // at the right line, not at end of file.
             if char == "\\" {
                 _ = advance()
                 if isAtEnd {
@@ -415,6 +416,15 @@ public final class Lexer: @unchecked Sendable {
     /// - The first newline (after opening `"""`) and last newline (before closing `"""`)
     ///   are not included in the resulting string value.
     private func scanTripleQuotedString(start: SourceLocation) throws {
+        // Deprecated (GitLab #523): a plain "…" string spans lines now,
+        // so the special delimiter earns nothing. Still lexes — removal
+        // is a separate, announced step.
+        diagnostics?.warning(
+            "Triple-quoted strings are deprecated — a plain \"…\" string can span multiple lines",
+            at: start,
+            hints: ["Replace \"\"\"…\"\"\" with \"…\" (GitLab #523)"]
+        )
+
         // Consume the second and third opening quotes (first was consumed in scanToken)
         _ = advance() // second "
         _ = advance() // third "

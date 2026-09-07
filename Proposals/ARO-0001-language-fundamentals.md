@@ -359,11 +359,14 @@ Special feature sets manage application lifecycle:
 ### String Literals
 
 ```ebnf
-string_literal = '"' , { string_char } , '"'
-               | "'" , { string_char } , "'"
-               | multiline_string ;
+string_literal = '"' , { dq_string_char } , '"'
+               | "'" , { sq_string_char } , "'"
+               | multiline_string ;          (* deprecated, GitLab #524 *)
 
-string_char    = any_char - ('"' | "'" | "\\" | newline)
+dq_string_char = any_char - ('"' | "\\")          (* newlines are content *)
+               | escape_sequence ;
+
+sq_string_char = any_char - ("'" | "\\" | newline)
                | escape_sequence ;
 
 multiline_string = '"""' , newline , { any_char } , newline , indent , '"""' ;
@@ -372,28 +375,38 @@ escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
 ```
 
-**Multi-line strings** open with `"""` followed immediately by a newline
-and close with `"""` on its own line. The closing delimiter's
-indentation is stripped from the front of every line (so the block can
-sit indented inside a feature set), the final newline before the closing
-delimiter is dropped, escape sequences work, and `${…}` interpolation is
-NOT performed — a multi-line block is literal text:
+A double-quoted string may span multiple lines: a newline inside `"…"` is
+content, exactly like any other character (GitLab #523). One delimiter
+serves single-line and multiline strings alike, escape sequences and
+`${…}` interpolation work across lines, and an unterminated string is
+reported at its opening quote. Raw single-quoted strings remain
+single-line.
 
 ```aro
-Create the <letter> with """
-    Dear guest,
+Create the <letter> with "Dear guest,
 
-    Welcome to Brew & Bytes.
-    """.
+Welcome to Brew & Bytes.".
 ```
 
-binds three lines with the four-space indent removed.
+Because every character between the quotes is kept, a multiline string is
+written flush with the margin it should have in the output.
+
+**Triple-quoted strings** (`"""…"""`) are **deprecated** (GitLab #523);
+they still lex, with a warning, and removal is tracked in GitLab #524.
+They open with `"""` followed immediately by a newline and close with
+`"""` on its own line; the closing delimiter's indentation is stripped
+from every line, the final newline before the closing delimiter is
+dropped, escape sequences work, and `${…}` interpolation is NOT
+performed. That dedent is the one migration hazard: a `"""` block written
+indented becomes a plain string written flush-left.
 
 **Examples:**
 ```
 "hello world"
 'single quotes also work'
 "line one\nline two"
+"line one
+line two – written across source lines"
 "unicode: \u{1F600}"
 ```
 
