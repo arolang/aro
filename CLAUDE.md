@@ -518,8 +518,11 @@ The Compute action transforms data using built-in operations:
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
-collection/text qualifiers in §3.2. Always `html-escape` untrusted values before
-rendering them into an HTML template — the template engine does not escape for you.
+collection/text qualifiers in §3.2. A template whose path ends `.html` or `.htm`
+escapes what it prints; `.tpl`, `.txt` and `.md` do not, so a `.tpl` emitting HTML
+still needs `html-escape` (GitLab #476, `TemplateEscaping.forTemplate`). Opt one
+value out with `Print <x> to the <template: raw>.` — and do not hand-escape into
+an escaping template, or the reader sees `&amp;lt;`.
 
 **The qualifier namespace is closed** (§3.3, GitLab #486). A Compute qualifier must
 resolve to a built-in, a plugin qualifier (`handle.qualifier`), a chain (`a|b`), or a
