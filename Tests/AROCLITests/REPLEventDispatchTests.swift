@@ -26,8 +26,18 @@ struct REPLEventDispatchTests {
     /// state between cases.
     private struct Playground {
         let session = REPLSession(suppressLogPrefix: true)
-        let token = String(UUID().uuidString.prefix(8).lowercased()
-            .filter { $0.isLetter })
+        /// A name fragment unique to this Playground.
+        ///
+        /// This used to filter letters out of a UUID's first eight
+        /// characters — and those eight can be all digits, which left
+        /// the token EMPTY. Two Playgrounds then shared one repository
+        /// name and saw each other's events, so a test read a payload
+        /// another test had stored. Draw from two whole UUIDs and keep
+        /// a leading letter: never empty, effectively never repeated.
+        let token = "p" + String((UUID().uuidString + UUID().uuidString)
+            .lowercased()
+            .filter { $0.isLetter }
+            .prefix(10))
         var eventType: String { "Ping\(token.capitalized)" }
         var repository: String { "ping\(token)-repository" }
 
