@@ -456,7 +456,7 @@ final class ReplNotebookController {
             cells[idx].durationMs = nil
 
             let source = cells[idx].source
-            let outcome = await kernel.execute(code: source) { [weak self] name, text in
+            let outcome = await kernel.execute(code: source, cellID: id) { [weak self] name, text in
                 self?.appendStream(name: name, text: text, to: id)
             }
             applyOutcome(outcome, to: id)

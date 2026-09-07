@@ -178,7 +178,7 @@ final class JSONREPLServer: @unchecked Sendable {
 
         switch request.type {
         case "execute":
-            await execute(id: request.id, code: request.code ?? "")
+            await execute(id: request.id, code: request.code ?? "", cellID: request.cellId)
         case "is_complete":
             isComplete(id: request.id, code: request.code ?? "")
         case "complete":
@@ -217,7 +217,7 @@ final class JSONREPLServer: @unchecked Sendable {
 
     // MARK: - Execute
 
-    private func execute(id: Int, code: String) async {
+    private func execute(id: Int, code: String, cellID: String? = nil) async {
         #if os(Windows)
         // `Log` consults this sink before falling back to writing at fd 1
         // (ResponseActions). Windows has no `pipe`/`dup2` capture, so the
@@ -227,7 +227,7 @@ final class JSONREPLServer: @unchecked Sendable {
             self?.send(JSONREPLEncoder.stream(id: id, name: "stdout", text: text + "\n"))
         }
         await ConsoleObject.$sink.withValue(sink) {
-            await executeUnits(id: id, code: code)
+            await executeUnits(id: id, code: code, cellID: cellID)
         }
         #else
         // No sink on POSIX: `OutputCapture` already redirects fd 1, so
@@ -247,17 +247,17 @@ final class JSONREPLServer: @unchecked Sendable {
         //     #2  JSONREPLServer.execute(id:code:)
         //
         // Two mechanisms for one job, one of which does not work here.
-        await executeUnits(id: id, code: code)
+        await executeUnits(id: id, code: code, cellID: cellID)
         #endif
     }
 
-    private func executeUnits(id: Int, code: String) async {
+    private func executeUnits(id: Int, code: String, cellID: String? = nil) async {
         let start = Date()
         guard !REPLCellSplitter.split(code).isEmpty else {
             send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["durationMs": 0]))
             return
         }
-        let outcome = await engine.executeCell(code)
+        let outcome = await engine.executeCell(code, cellID: cellID)
         finish(id: id, display: outcome.display, error: outcome.error, start: start)
     }
 

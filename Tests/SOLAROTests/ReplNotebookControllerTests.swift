@@ -58,10 +58,17 @@ final class FakeKernel: ReplKernelDriving {
         state = .ready
     }
 
+    /// Cell ids the notebook sent with each execution — a re-run
+    /// must carry the same id so the kernel can release that cell's
+    /// bindings (GitLab #544).
+    var executedCellIDs: [String?] = []
+
     func execute(code: String,
+                 cellID: String?,
                  onStream: @escaping @MainActor (String, String) -> Void)
         async -> ReplKernelClient.ExecOutcome {
         executed.append(code)
+        executedCellIDs.append(cellID)
         if holdFirstExecution {
             holdFirstExecution = false
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in

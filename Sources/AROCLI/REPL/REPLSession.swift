@@ -595,6 +595,16 @@ public final class REPLSession: @unchecked Sendable {
         context.resolveAny(name)
     }
 
+    /// Release a binding so the name is free again.
+    ///
+    /// Immutability is a property of a program; a notebook cell run a
+    /// second time is not a second statement, it is the same statement
+    /// evaluated again (GitLab #544). The engine releases what a cell
+    /// bound before re-running it, and nothing else in the session.
+    public func unbindVariable(_ name: String) {
+        context.unbind(name)
+    }
+
     /// Set a variable
     public func setVariable(_ name: String, value: any Sendable) {
         context.bind(name, value: value, allowRebind: true)

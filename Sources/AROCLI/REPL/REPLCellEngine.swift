@@ -37,6 +37,16 @@ final class REPLCellEngine: @unchecked Sendable {
     private(set) var definitions: [String: String] = [:]
     private(set) var definitionOrder: [String] = []
 
+    /// What each cell bound, keyed by the cell's identity.
+    ///
+    /// Re-running a cell is the notebook's core loop — fix a typo,
+    /// press ⇧⏎ again — and it used to be refused as a rebind, with
+    /// Restart Kernel as the only way out (GitLab #544). A cell that
+    /// runs again releases the names IT bound, so the fresh run binds
+    /// them legitimately. Names bound by other cells stay guarded,
+    /// which is the case the guard exists for (#503 / #506 / #514).
+    private(set) var bindingsByCell: [String: Set<String>] = [:]
+
     /// Statements that never return in a notebook. `Keepalive` blocks
     /// until a shutdown signal, which in a cell means a spinner that
     /// never stops. Better to say so than to hang.
@@ -54,6 +64,7 @@ final class REPLCellEngine: @unchecked Sendable {
         session.clear()
         definitions.removeAll()
         definitionOrder.removeAll()
+        bindingsByCell.removeAll()
     }
 
     // MARK: - Execute
@@ -70,9 +81,19 @@ final class REPLCellEngine: @unchecked Sendable {
     /// blocks in source order. Output streams through the installed
     /// captures as it happens; the returned outcome carries only the
     /// final display bundle or error.
-    func executeCell(_ code: String) async -> Outcome {
+    func executeCell(_ code: String, cellID: String? = nil) async -> Outcome {
         let units = REPLCellSplitter.split(code)
         guard !units.isEmpty else { return Outcome() }
+
+        // A re-run replaces this cell's own bindings. Released before
+        // execution so the rebind guard — and the runtime — see the
+        // names as free, exactly as they were on the first run.
+        let before = Set(session.variableNames)
+        if let cellID, let previous = bindingsByCell[cellID] {
+            for name in previous where before.contains(name) {
+                session.unbindVariable(name)
+            }
+        }
 
         var display: [String: Any]?
 
@@ -103,6 +124,13 @@ final class REPLCellEngine: @unchecked Sendable {
             }
         }
 
+        if let cellID {
+            // Whatever is bound now that was not bound before this
+            // cell ran belongs to this cell. Re-running it will
+            // release exactly these.
+            let after = Set(session.variableNames)
+            bindingsByCell[cellID] = after.subtracting(before)
+        }
         return Outcome(display: display)
     }
 

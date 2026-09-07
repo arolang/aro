@@ -30,6 +30,12 @@ struct JSONREPLRequest: Decodable {
     let code: String?
     /// Cursor offset (UTF-8 character index) for `complete` / `inspect`.
     let cursor: Int?
+    /// Stable identity of the notebook cell being executed, when the
+    /// front-end has one. Re-running the same cell releases the
+    /// bindings that cell made rather than refusing them as a rebind
+    /// (GitLab #544). Absent for a plain REPL line, which keeps the
+    /// session-wide immutability rule.
+    let cellId: String?
 }
 
 // MARK: - Responses
