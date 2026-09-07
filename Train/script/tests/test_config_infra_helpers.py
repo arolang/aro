@@ -210,7 +210,14 @@ class TestTypeCaps(unittest.TestCase):
     def test_caps_present_and_versioned(self):
         self.assertIsInstance(config.TYPE_CAPS, dict)
         self.assertIn('code_generation', config.TYPE_CAPS)
-        self.assertEqual(config.TYPE_CAPS['code_generation'], 1200)
+        # The caps are deliberately re-tuned (v2 raised them, v3 raised them
+        # again, v4 added the notebook types); pinning one number here only
+        # made the test rot behind config.py. Assert the shape and that the
+        # majority category stays capped.
+        self.assertIsInstance(config.TYPE_CAPS['code_generation'], int)
+        self.assertGreater(config.TYPE_CAPS['code_generation'], 0)
+        self.assertTrue(all(cap is None or isinstance(cap, int)
+                            for cap in config.TYPE_CAPS.values()))
         self.assertIsNone(config.DEFAULT_TYPE_CAP)
         self.assertTrue(config.TYPE_CAPS_VERSION.startswith('v'))
 

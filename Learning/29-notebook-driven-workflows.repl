@@ -1,0 +1,141 @@
+{
+  "cells" : [
+    {
+      "id" : "nb29-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# 29 — Notebook-Driven Workflows\n\nThe format ([27](27-notebooks-and-cells.repl)) and the machinery\n([28](28-the-kernel-and-the-protocol.repl)) are behind you. What is\nleft is the part that changes how a team works: once a document can be\n*executed*, it stops being a description of the system and starts being\npart of it.\n\nBrew & Bytes noticed this the way most organizations do — by accident.\nThe Kiel post-mortem was written as a notebook because that was where\nthe analysis happened, and three weeks later someone re-ran it against\nfresh data instead of writing a new one. Now the incident runbooks, the\nweekly franchise report, and the onboarding course for new shop\nmanagers are all `.repl` files in the same repository as the service,\nreviewed in the same merge requests, and checked by the same pipeline.\n\nIn this notebook: where notebooks open, how a machine reads their\noutputs, `validate.py` as a CI gate, notebooks as runbooks and living\ndocumentation, and notebooks as verified training material for\n`aro ask`."
+    },
+    {
+      "id" : "nb29-c02",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <shift-report> with {\n    shop: \"kiel-01\",\n    date: \"2026-03-14\",\n    open-orders: 19,\n    threshold: 12\n}.\nExtract the <report-open> from the <shift-report: open-orders>.\nExtract the <report-threshold> from the <shift-report: threshold>.\nCompute the <report-gap> from <report-open> - <report-threshold>.\nLog \"evt=shift-report shop=kiel-01 over-by=${<report-gap>}\" to the <console>.\nCompute the <report-verdict: uppercase> from \"escalate\"."
+    },
+    {
+      "id" : "nb29-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## What just happened\n\nNothing you have not seen — and that is the point. A runbook step is an\nordinary cell: prose above it says *why*, the code does the thing, the\ncaptured output is the evidence it did. What makes the cell usable as\nan operational artifact is a set of constraints this course has been\nfollowing all along:\n\n- **The working directory is the notebook's own directory.** A cell\n  runs with `Learning\/` as its cwd, so `data\/menu.yaml` means the same\n  file for you, for CI, and for the colleague who cloned the repository\n  ten minutes ago. Relative paths are what make a notebook portable;\n  absolute ones are what make it yours alone.\n- **Read fixtures, write only into scratch.** Every cell in this course\n  may read the files under `data\/`, and writes only into `.scratch\/`,\n  which is ignored by git. A notebook that mutates shared state cannot\n  be run twice, and one that cannot be run twice is not a runbook.\n- **Anything that needs a server, the network, or a mutable git\n  repository is shown in a fenced block, not run.** That is why 19, 20,\n  22, and 23 teach with annotated code — determinism is worth more than\n  spectacle.\n\nThe first of those is easy to prove — and worth proving, because a\nrunbook that only works from one directory is not a runbook:"
+    },
+    {
+      "id" : "nb29-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <fixture-menu> from \"data\/menu.yaml\".\nExtract the <fixture-shop> from the <fixture-menu: shop>.\nLog \"relative to the notebook's own directory: ${<fixture-shop>}\" to the <console>."
+    },
+    {
+      "id" : "nb29-c05",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Where notebooks open\n\nFour front-ends, one session protocol underneath:\n\n| Front-end | How | Notes |\n|-----------|-----|-------|\n| **SOLARO** | open a `.repl` file | native editor for this format; ⇧⏎ runs a cell |\n| **JupyterLab** | `aro kernel install`, pick **ARO** | the native ZMQ kernel — no Python |\n| **VS Code** | Jupyter extension, `.ipynb`, kernel picker | add `Editor\/vscode-aro` for highlighting |\n| **DataSpell \/ PyCharm** | discovers kernelspecs after restart | check the IDE's Jupyter interpreter is the one you installed into |\n\n```bash\naro kernel install       # once\njupyter kernelspec list  # should list \"aro\"\njupyter lab              # then pick ARO from the launcher\n```\n\nNote the format split: SOLARO reads `.repl`, Jupyter and VS Code read\n`.ipynb`. Same kernel, same cell semantics, different container —\n`.repl` keeps ARO's display bundle as named fields so the file stays\nlegible in a diff, which is the trade it makes for not being `.ipynb`."
+    },
+    {
+      "id" : "nb29-c06",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Reading outputs like a machine\n\nA notebook that has been run carries its results, and results are data.\nThis is the move that turns a document into a check: instead of a human\nreading the outputs, something else does."
+    },
+    {
+      "id" : "nb29-c07",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <checked> from \"data\/sample-notebook.json\".\nExtract the <checked-version> from the <checked: version>.\nExtract the <checked-cells> from the <checked: cells>.\nFilter the <checked-code> from the <checked-cells> where <kind> = \"code\".\n\nfor each <checked-cell> in <checked-code> {\n    Extract the <checked-id> from the <checked-cell: id>.\n    Extract the <checked-outputs> from the <checked-cell: outputs>.\n    Filter the <checked-errors> from the <checked-outputs> where <kind> = \"error\".\n    Compute the <error-count: length> from <checked-errors>.\n    Compute the <output-count: length> from <checked-outputs>.\n    Log \"ok      ${<checked-id>}\" to the <console> when <error-count> = 0.\n    Log \"FAILED  ${<checked-id>}\" to the <console> when <error-count> > 0.\n    Log \"        (no captured evidence — never run)\" to the <console> when <output-count> = 0.\n}"
+    },
+    {
+      "id" : "nb29-c08",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Three questions answered without opening an editor: does the file\nparse, did any cell capture an `error` output, and does every step have\nevidence behind it. Run that over forty runbooks nightly and you have a\ndocumentation health check — the thing every wiki wishes it had.\n\n## The validator as a CI gate\n\nReading *stored* outputs tells you what happened last time. Running the\ncells tells you what happens now, and that is what\n[`validate.py`](validate.py) does on every commit to this repository:\n\n```bash\nswift build --product aro\nARO_BIN=.build\/debug\/aro python3 Learning\/validate.py\n```\n\nIt is a client of the protocol from [28](28-the-kernel-and-the-protocol.repl)\nand nothing more. Per notebook: start one `aro repl --json` session,\nsend every code cell as an `execute` in document order, collect the\n`result` for each `id`, and compare the status against what the cell\nclaims it should be:\n\n```python\nexpect_error = \"(* expect-error *)\" in source\nif expect_error and status != \"error\":  fail(\"expected an error\")\nelif not expect_error and status != \"ok\": fail(result[\"error\"][\"evalue\"])\n```\n\nFour decisions in that little program are worth stealing:\n\n- **One session per notebook, cells in order.** The notebook is\n  validated the way a reader experiences it — top to bottom, in one\n  session — so a cell that only works because of something you ran\n  three cells later fails here, loudly.\n- **The expectation lives in the cell.** `(* expect-error *)` sits in\n  the source it describes, so a course *can* teach failure (04's\n  immutability error, 23's missing configuration, 28's refused\n  `Keepalive`) without shipping a broken curriculum.\n- **A dead session stops attribution.** If a cell returns no result at\n  all, the validator reports that one and stops reading — everything\n  after a crashed session is unattributable, and guessing would be\n  worse than silence.\n- **The failure message is ARO's own.** `evalue` goes straight into the\n  CI log. No wrapper text, no \"validation failed at step 3\".\n\nThe gate's real value is the class of bug it catches: **documentation\nrot**. When a qualifier is removed or a verb changes shape, the cell\nthat used it stops compiling, and the build turns red on the *course*\nbefore anyone notices in the wild. Prose alone cannot do that. Neither\ncan a screenshot."
+    },
+    {
+      "id" : "nb29-c09",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Create the <ci-run> with [\n    { notebook: \"27-notebooks-and-cells.repl\",         cells: 7, failures: 0 },\n    { notebook: \"28-the-kernel-and-the-protocol.repl\", cells: 9, failures: 0 },\n    { notebook: \"29-notebook-driven-workflows.repl\",   cells: 6, failures: 0 }\n].\nFilter the <ci-broken> from the <ci-run> where <failures> > 0.\nCompute the <ci-broken-count: length> from <ci-broken>.\nMap the <ci-cell-counts: cells> from the <ci-run>.\nCompute the <ci-cells: sum> from <ci-cell-counts>.\nCompute the <ci-notebooks: length> from <ci-run>.\nLog \"${<ci-notebooks>} notebooks, ${<ci-cells>} code cells executed\" to the <console>.\nLog \"[ok] the course still runs\" to the <console> when <ci-broken-count> = 0.\nLog \"[FAIL] ${<ci-broken-count>} notebooks broke\" to the <console> when <ci-broken-count> > 0."
+    },
+    {
+      "id" : "nb29-c10",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "That is the pipeline's whole verdict, and it is the shape of every\nbuild gate you will meet: a list of runs, a filter for the bad ones, a\ncount, and a message that names the thing to go look at.\n\n## Notebooks as runbooks\n\nAn incident runbook has one job at 06:00: get a tired person to the\nright action without making them think. The traditional version is a\nwiki page with commands to copy; the failure mode is that step 3 was\ntrue in March. A notebook closes that gap in both directions — the\nsteps *run*, and running them proves the steps still exist.\n\nWhat changes in how you write them:\n\n- **One step per cell**, with the prose *above* it. Someone half awake\n  reads the sentence, then runs the cell, and never has to reconstruct\n  what the code was for.\n- **Every step has a check, not just an action.** Compute the number,\n  compare it against the threshold, print a verdict. \"Restart the\n  kitchen display\" is an instruction; \"if `queued` is over 15, restart\n  the kitchen display\" is a runbook.\n- **Read-only until the human says otherwise.** Diagnosis cells run\n  freely; the cell that actually changes something is fenced in\n  markdown with the command to paste, so nobody heals production with\n  ⇧⏎ by reflex.\n- **The notebook is the incident record.** Attach the run — outputs and\n  all — to the ticket, and the post-mortem starts from what was true\n  rather than what was remembered."
+    },
+    {
+      "id" : "nb29-c11",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Notebooks as living documentation\n\nThe same properties make notebooks good documentation and bad\ndocumentation, and the difference is discipline:\n\n**Good.** Examples that are guaranteed to compile. A tutorial whose\noutput the reader can see before running anything. A design document\nwhose benchmark is in the document. A shared analysis a colleague can\nre-run against this week's numbers.\n\n**Bad, if you let it.** Outputs stored in the file make diffs noisy —\nwhich is why this course ships every cell with `\"outputs\": []` and lets\nCI produce them. Notebooks resist ordinary refactoring: no compiler\nrenames a variable across sixteen cells for you. And a notebook is a\npoor place for anything another program needs to import — that belongs\nin an application ([14](14-building-applications.repl)), with the\nnotebook explaining it rather than being it.\n\nThe rule of thumb Brew & Bytes settled on: **a notebook is for the work\nyou want someone to follow; a module is for the work you want someone\nto call.**"
+    },
+    {
+      "id" : "nb29-c12",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Notebooks as training material\n\nThere is one more consumer, and it is newer than the rest. `aro ask` —\nthe assistant that writes ARO — needs examples of ARO that is *correct*,\nand correctness is exactly what a validated notebook guarantees. The\ncourse is, incidentally, a supervised dataset: prose that states an\nintent, followed by code that satisfies it, followed by output proving\nit ran.\n\nExtracting a pair is a `Filter` and two `Extract`s:"
+    },
+    {
+      "id" : "nb29-c13",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <corpus-doc> from \"data\/sample-notebook.json\".\nExtract the <corpus-cells> from the <corpus-doc: cells>.\nFilter the <corpus-prose> from the <corpus-cells> where <kind> = \"markdown\".\nFilter the <corpus-code> from the <corpus-cells> where <kind> = \"code\".\n\nExtract the <pair-prompt-cell: first> from the <corpus-prose>.\nExtract the <pair-answer-cell: first> from the <corpus-code>.\nExtract the <pair-prompt> from the <pair-prompt-cell: source>.\nExtract the <pair-answer> from the <pair-answer-cell: source>.\nExtract the <pair-outputs> from the <pair-answer-cell: outputs>.\nCompute the <pair-evidence: length> from <pair-outputs>.\n\nCreate the <training-pair> with {\n    prompt: <pair-prompt>,\n    completion: <pair-answer>,\n    captured-outputs: <pair-evidence>,\n    verified: true\n}.\nLog <training-pair> to the <console>."
+    },
+    {
+      "id" : "nb29-c14",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "The pairing here is positional — this runbook alternates prose and\ncode, so the first of each belong together; a real extractor walks the\ncell list in order and pairs each code cell with the markdown above it.\n\n`verified: true` is the field that matters, and it is not a claim\nsomeone typed. It means the validator ran that exact source through a\nreal session and it answered `ok`. A corpus of *plausible-looking* ARO\nis worse than no corpus: it teaches a model the shape of the language\nwithout the truth of it, and the mistakes it produces are the confident\nkind — code that reads beautifully and names a qualifier that does not\nexist. A validated corpus is smaller and worth more.\n\nThat is the loop the whole track has been building toward:\n\n```\nwrite a notebook  →  validate.py runs every cell  →  green\n                                                      ↓\n                          examples that are true by construction\n                                                      ↓\n                              docs, courses, and training data\n                                     that cannot silently rot\n```"
+    },
+    {
+      "id" : "nb29-c15",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "## Discussion\n\n- **Executable documents make staleness loud.** Every other form of\n  documentation decays quietly; this one fails a build. That single\n  property is why notebooks spread from research into teaching,\n  analysis, and now operations.\n- **Determinism is the price of admission.** Fixtures instead of live\n  services, `.scratch\/` instead of shared state, fenced blocks for\n  anything that touches the world. A notebook that only passes on one\n  laptop is a screenshot with extra steps.\n- **Review the source, generate the outputs.** Storing outputs makes\n  the artifact self-contained and the diff unreadable; the compromise\n  this course makes — ship sources, let CI produce outputs — keeps both\n  properties where they belong.\n- **The same document serves four readers**: the person following it,\n  the reviewer reading the diff, the pipeline running it, and the model\n  learning from it. Very little else in an engineering repository has\n  that reach, and it costs nothing extra once the cells are honest.\n\n## Real-world example: the Kiel runbook, run\n\nEverything at once, on the notebook that started the story: open the\nrunbook, confirm the format, check the evidence, and re-run its\nquestion — is the shop over threshold this morning? — against today's\nnumbers rather than March's."
+    },
+    {
+      "id" : "nb29-c16",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Read the <kiel-doc> from \"data\/sample-notebook.json\".\nExtract the <kiel-version> from the <kiel-doc: version>.\nExtract the <kiel-cells> from the <kiel-doc: cells>.\nFilter the <kiel-code> from the <kiel-cells> where <kind> = \"code\".\nCompute the <kiel-steps: length> from <kiel-code>.\nLog \"=== runbook: kiel-01 morning check (format ${<kiel-version>}) ===\" to the <console>.\nLog \"steps: ${<kiel-steps>}\" to the <console>.\n\n(* Step 1: is there stored evidence that this runbook has ever run? *)\nExtract the <kiel-first: first> from the <kiel-code>.\nExtract the <kiel-first-outputs> from the <kiel-first: outputs>.\nCompute the <kiel-evidence: length> from <kiel-first-outputs>.\nLog \"evidence on file: ${<kiel-evidence>} outputs\" to the <console>.\n\n(* Step 2: today's numbers, not the ones baked into the document *)\nCreate the <today> with [\n    { shop: \"kiel-01\",     open: 19, threshold: 12 },\n    { shop: \"berlin-01\",   open: 7,  threshold: 12 },\n    { shop: \"hamburg-02\",  open: 14, threshold: 12 }\n].\nFilter the <over-threshold> from the <today> where <open> > 12.\nCompute the <over-count: length> from <over-threshold>.\n\n(* Step 3: the verdict, one greppable line per shop *)\nfor each <shop-row> in <over-threshold> {\n    Extract the <row-shop> from the <shop-row: shop>.\n    Extract the <row-open> from the <shop-row: open>.\n    Extract the <row-threshold> from the <shop-row: threshold>.\n    Compute the <row-over> from <row-open> - <row-threshold>.\n    Log \"evt=runbook-check shop=${<row-shop>} open=${<row-open>} over-by=${<row-over>} action=escalate\" to the <console>.\n}\nLog \"[ok] every shop within threshold\" to the <console> when <over-count> = 0.\nLog \"[escalate] ${<over-count>} shops over threshold — page the regional lead\" to the <console> when <over-count> > 0."
+    },
+    {
+      "id" : "nb29-c17",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Two shops over, one line each, and a verdict a person can act on\nwithout reading the code above it. The same cell is the diagnosis, the\nrecord, and — because CI runs it — the proof that the diagnosis still\nworks. Hamburg was not on anyone's radar this morning; it is now,\nbecause the runbook asked the question again instead of repeating an\nanswer.\n\nThat closes the notebook track, and the course. Twenty-eight notebooks\nago the café said hello to a console. It now takes orders over HTTP,\nstreams uploads it never holds in memory, runs a data platform, proves\nitself in CI, reports how it feels in production — and documents itself\nin files that fail when they stop being true.\n\nWhere to go next: the [Language Guide](..\/Book\/TheLanguageGuide\/) for\ndepth on any chapter these notebooks touched, the\n[`Proposals\/`](..\/Proposals\/) directory for the specifications that\ndecide what ARO *is*, and `Examples\/` for sixty-odd runnable\napplications. Or open a blank `.repl`, point it at your own data, and\nwrite the runbook your team keeps meaning to write.\n\n## Related\n\n- Builds on: [27 — Notebooks & Cells](27-notebooks-and-cells.repl)\n  (the file format), [28 — The Kernel & the Protocol](28-the-kernel-and-the-protocol.repl)\n  (what the validator speaks),\n  [25 — Testing & Quality](25-testing-and-quality.repl) (the rest of the\n  pipeline), [26 — Observability & Deployment](26-observability-and-deployment.repl)\n  (structured lines an operator can grep)\n- Language Guide: [Chapter 3 — Getting Started](..\/Book\/TheLanguageGuide\/Chapter03-GettingStarted.md),\n  [Chapter 49 — Local LLM](..\/Book\/TheLanguageGuide\/Chapter49-LocalLLM.md)\n- Wiki: [Start With ARO](https:\/\/github.com\/arolang\/aro\/wiki\/Start-With-ARO)\n- Specification: [ARO-0091 — Jupyter Kernel & Machine-Readable REPL](..\/Proposals\/ARO-0091-jupyter-kernel.md),\n  [ARO-0015 — Testing Framework](..\/Proposals\/ARO-0015-testing-framework.md),\n  [ARO-0084 — Local LLM](..\/Proposals\/ARO-0084-local-llm.md)\n- In the repository: [`validate.py`](validate.py) (the CI gate),\n  `Editor\/jupyter-aro\/examples\/` (two notebooks as `.ipynb`),\n  `Editor\/vscode-aro\/`, `Editor\/intellij-aro\/`"
+    }
+  ],
+  "version" : 1
+}

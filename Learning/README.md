@@ -62,6 +62,24 @@ rather than live cells, so the validator stays deterministic.
 | 25 | [Testing & Quality](25-testing-and-quality.repl) | Colocated tests, Given/When/Then (ARO-0015), `aro check`/`diff` | Trusting every branch |
 | 26 | [Observability & Deployment](26-observability-and-deployment.repl) | Metrics (ARO-0044), logging, time travel, native builds, Linux/Docker | Running 40 shops |
 
+## The notebook track
+
+The last three turn around and look at the thing you have been reading.
+A `.repl` file is a small JSON document, driven by a line-delimited
+protocol, opened by four different front-ends — and once HQ noticed
+that a document which *executes* cannot quietly go stale, the incident
+runbooks and the onboarding material moved into the same repository as
+the service. These notebooks read a real `.repl` document with ARO,
+take the protocol apart request by request, and end where the course
+itself lives: a pipeline that runs every cell of every notebook on
+every commit.
+
+| # | Notebook | Teaches | Franchise capability |
+|---|----------|---------|----------------------|
+| 27 | [Notebooks & Cells](27-notebooks-and-cells.repl) | Cells, the session, automatic display, execution counts, the `.repl` file format | Runbooks that carry their evidence |
+| 28 | [The Kernel & the Protocol](28-the-kernel-and-the-protocol.repl) | `aro repl --json` (ARO-0091), cell units, event dispatch, display bundles, the two kernels | The machinery under the document |
+| 29 | [Notebook-Driven Workflows](29-notebook-driven-workflows.repl) | SOLARO/JupyterLab/VS Code/DataSpell, reading outputs, `validate.py` as a CI gate, notebooks as training data | Documentation that fails a build |
+
 ## How to run
 
 **SOLARO**: open this repository (or copy `Learning/` into any project)
@@ -74,9 +92,11 @@ JupyterLab session with the ARO kernel (or drive them from the
 Cells are **non-destructive**: they compute, define, and store in the
 session's memory only — no files are written, nothing leaves the
 machine. Each notebook is self-contained: run it top to bottom in a
-fresh session. One notebook (04) contains a cell that is *supposed* to
-fail — it is marked in the text and carries `(* expect-error *)` so the
-validator expects the error too.
+fresh session. A few cells are *supposed* to fail — the immutability
+error in 04, the missing configuration and parameter in 23, the refused
+`Keepalive` and the invented qualifier in 28. Each is announced in the
+text and carries `(* expect-error *)`, so the validator expects the
+error too.
 
 ## Validating
 

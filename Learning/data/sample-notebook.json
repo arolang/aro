@@ -1,0 +1,48 @@
+{
+  "cells" : [
+    {
+      "id" : "kiel-c01",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "# Morning check — kiel-01\n\nRun this top to bottom before the doors open. It prints one\n`evt=` line for the shift log and leaves the queue depth on\nscreen for whoever is standing at the till.\n"
+    },
+    {
+      "durationMs" : 4.1,
+      "executionCount" : 1,
+      "id" : "kiel-c02",
+      "kind" : "code",
+      "outputs" : [
+        {
+          "kind" : "stream",
+          "streamName" : "stdout",
+          "text" : "evt=morning-check shop=kiel-01 open=19\n"
+        },
+        {
+          "jsonValue" : "\"BACKLOG\"",
+          "kind" : "result",
+          "plainText" : "BACKLOG"
+        }
+      ],
+      "source" : "Create the <open-orders> with 19.\nLog \"evt=morning-check shop=kiel-01 open=${<open-orders>}\" to the <console>.\nCompute the <shift-state: uppercase> from \"backlog\"."
+    },
+    {
+      "id" : "kiel-c03",
+      "kind" : "markdown",
+      "outputs" : [
+
+      ],
+      "source" : "Nineteen open orders at 07:40 is over the twelve the kitchen\ndisplay can hold. The next cell measures the gap, and it has\nnever been run in this file — no outputs, no execution count,\nwhich is exactly how a notebook ships before anyone opens it.\n"
+    },
+    {
+      "id" : "kiel-c04",
+      "kind" : "code",
+      "outputs" : [
+
+      ],
+      "source" : "Compute the <threshold-gap> from <open-orders> - 12."
+    }
+  ],
+  "version" : 1
+}

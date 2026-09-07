@@ -9,6 +9,11 @@ Each report contains:
   post-release validation gate, dataset composition, fine-tune / distillation
   loss, action-verb coverage), each with a short passage written by the local
   Qwen model (`aro ask`)
+- **Notebook corpus coverage** — per notebook of the `Learning/` course, how
+  many code cells produced an output reproducible across two real REPL runs
+  and therefore became training data (read from
+  `Train/data/32_notebooks/coverage.json`, written by `32_notebook_pairs.py`;
+  the page is skipped when that file is absent)
 - **Conclusion** — main strength + top area to improve next
 
 Regenerate manually for the latest run:
