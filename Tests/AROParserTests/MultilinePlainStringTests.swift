@@ -64,10 +64,10 @@ struct MultilinePlainStringTests {
         }
     }
 
-    @Test("Triple-quoted strings still lex, with a deprecation warning")
-    func tripleQuotedDeprecated() {
+    @Test("Triple-quoted strings are an error naming the replacement")
+    func tripleQuotedRemoved() {
         let source = """
-        (Deprecation Probe: Test) {
+        (Removal Probe: Test) {
             Create the <t> with \"\"\"
                 content
                 \"\"\".
@@ -76,9 +76,29 @@ struct MultilinePlainStringTests {
         }
         """
         let result = Compiler().compile(source)
-        #expect(result.isSuccess)
-        let warnings = result.diagnostics.filter { $0.severity == .warning }.map(\.message)
-        #expect(warnings.contains { $0.contains("Triple-quoted strings are deprecated") })
+        #expect(!result.isSuccess)
+        let errors = result.diagnostics.filter { $0.severity == .error }
+        // One mistake, one diagnostic: the literal is replaced by a
+        // placeholder token so the statement keeps its shape and the
+        // parser does not add a second, misleading complaint.
+        #expect(errors.count == 1, "\(result.diagnostics.map(\.message))")
+        #expect(errors.first?.message.contains("Triple-quoted strings were removed") == true)
+        #expect(errors.first?.hints.contains { $0.contains("plain") } == true)
+    }
+
+    @Test("An empty string is not mistaken for a removed delimiter")
+    func emptyStringUnaffected() {
+        // `""` is two quotes, not three — the detection must not widen.
+        // (The feature set is named "Blank", not "Empty": a keyword
+        // cannot open a feature-set name — GitLab #497, unrelated.)
+        let result = Compiler().compile("""
+        (Blank Probe: Test) {
+            Create the <t> with "".
+            Log <t> to the <console>.
+            Return an <OK: status> for the <run>.
+        }
+        """)
+        #expect(result.isSuccess, "\(result.diagnostics.map(\.message))")
     }
 
     @Test("Raw '…' strings keep their single-line rule")

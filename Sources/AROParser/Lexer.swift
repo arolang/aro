@@ -272,9 +272,33 @@ public final class Lexer: @unchecked Sendable {
             }
 
         case "\"":
-            // Check for triple-quoted multiline string: """
+            // `"""` was the multiline delimiter until GitLab #523 gave a
+            // plain "…" string the same power; #524 removed it. Detecting
+            // it here is what keeps the diagnostic useful: left alone, the
+            // lexer would read `"""` as an empty string followed by an
+            // unterminated one and report something unrecognisable.
             if peek() == "\"" && peekNext() == "\"" {
-                try scanTripleQuotedString(start: startLocation)
+                _ = advance()  // second "
+                _ = advance()  // third "
+                if let diagnostics {
+                    diagnostics.error(
+                        LexerError.tripleQuotedStringRemoved(at: startLocation).message,
+                        at: startLocation,
+                        hints: [
+                            "Write the text in a plain \"…\" string — newlines inside it are content.",
+                            "The dedent is gone with the delimiter, so the text goes flush against the margin it should print at."
+                        ]
+                    )
+                    // Skip to the closing delimiter, then stand in for the
+                    // literal: one mistake earns one diagnostic. Without the
+                    // placeholder the statement loses its value and the
+                    // parser adds "Expected object" on the closing line,
+                    // which points away from the actual problem.
+                    skipPastTripleQuoteBody()
+                    addToken(.stringLiteral(""), start: startLocation)
+                } else {
+                    throw LexerError.tripleQuotedStringRemoved(at: startLocation)
+                }
             } else {
                 // Double quotes: regular string with full escape processing
                 try scanString(quote: char, start: startLocation)
@@ -398,129 +422,31 @@ public final class Lexer: @unchecked Sendable {
         addToken(.stringLiteral(value), start: start)
     }
 
-    /// Scans a triple-quoted multiline string literal (GitLab #97).
+    /// Skips the body of a removed `"""…"""` literal (GitLab #524).
     ///
-    /// Syntax:
-    /// ```
-    /// """
-    ///     content line 1
-    ///     content line 2
-    ///     """
-    /// ```
-    ///
-    /// Rules:
-    /// - Opening `"""` must be followed by optional whitespace then a newline.
-    /// - Closing `"""` must be on its own line, preceded only by whitespace.
-    /// - The indentation of the closing `"""` is stripped from all content lines.
-    /// - Standard escape sequences (`\n`, `\t`, `\\`, `\"`, `\u{XXXX}`) are supported.
-    /// - The first newline (after opening `"""`) and last newline (before closing `"""`)
-    ///   are not included in the resulting string value.
-    private func scanTripleQuotedString(start: SourceLocation) throws {
-        // Deprecated (GitLab #523): a plain "…" string spans lines now,
-        // so the special delimiter earns nothing. Still lexes — removal
-        // is a separate, announced step.
-        diagnostics?.warning(
-            "Triple-quoted strings are deprecated — a plain \"…\" string can span multiple lines",
-            at: start,
-            hints: ["Replace \"\"\"…\"\"\" with \"…\" (GitLab #523)"]
-        )
-
-        // Consume the second and third opening quotes (first was consumed in scanToken)
-        _ = advance() // second "
-        _ = advance() // third "
-
-        // Skip optional whitespace on the opening line (but not past newline)
-        while !isAtEnd && peek() != "\n" && peek().isWhitespace {
-            _ = advance()
-        }
-        // Enforce: opening """ must be followed immediately by a newline
-        guard !isAtEnd && peek() == "\n" else {
-            throw LexerError.unterminatedString(at: start)
-        }
-        _ = advance() // consume the opening newline
-
-        // Collect raw lines until the closing """
-        var rawLines: [String] = []
-        var currentLine = ""
-
+    /// The text is already reported as one error; this walks to the
+    /// closing delimiter (or end of file) so its contents do not lex into
+    /// a second, unrelated complaint.
+    private func skipPastTripleQuoteBody() {
         while !isAtEnd {
-            let ch = peek()
-
-            if ch == "\n" {
-                _ = advance()
-                rawLines.append(currentLine)
-                currentLine = ""
-            } else if ch == "\"" {
-                // Possibly the closing """ — save state for backtracking
-                let savedIndex = pos
+            if peek() == "\"" {
+                let savedPos = pos
                 let savedNext = nextPos
                 let savedLoc = location
-
-                _ = advance() // first "
+                _ = advance()
                 if !isAtEnd && peek() == "\"" {
-                    _ = advance() // second "
+                    _ = advance()
                     if !isAtEnd && peek() == "\"" {
-                        _ = advance() // third " — confirmed closing """
-
-                        // currentLine is the indentation prefix on the closing """ line
-                        let closingIndent = currentLine
-
-                        // Apply dedentation: strip closingIndent from the front of each line
-                        let dedentedLines = rawLines.map { line -> String in
-                            if line.hasPrefix(closingIndent) {
-                                return String(line.dropFirst(closingIndent.count))
-                            }
-                            // Blank / whitespace-only lines are kept as empty
-                            if line.allSatisfy({ $0.isWhitespace }) { return "" }
-                            return line // mismatched indent — leave as-is
-                        }
-
-                        // Drop trailing empty line produced by the newline before closing """
-                        var finalLines = dedentedLines
-                        if finalLines.last == "" {
-                            finalLines.removeLast()
-                        }
-
-                        let value = finalLines.joined(separator: "\n")
-                        addToken(.stringLiteral(value), start: start)
+                        _ = advance()
                         return
                     }
-                    // Two quotes but not three — put them in the current line
-                    currentLine.append("\"")
-                    currentLine.append("\"")
-                } else {
-                    // Just one quote — restore and add it normally
-                    pos = savedIndex
-                    nextPos = savedNext
-                    location = savedLoc
-                    currentLine.append(advance())
                 }
-            } else if ch == "\\" {
-                // Escape sequences inside triple-quoted strings
-                _ = advance()
-                guard !isAtEnd else { throw LexerError.unterminatedString(at: start) }
-                let escaped = advance()
-                switch escaped {
-                case "n": currentLine.append("\n")
-                case "r": currentLine.append("\r")
-                case "t": currentLine.append("\t")
-                case "\\": currentLine.append("\\")
-                case "\"": currentLine.append("\"")
-                case "'": currentLine.append("'")
-                case "0": currentLine.append("\0")
-                case "$": currentLine.append("$")
-                case "u":
-                    let unicodeChar = try scanUnicodeEscape(start: start)
-                    currentLine.append(unicodeChar)
-                default:
-                    throw LexerError.invalidEscapeSequence(escaped, at: location)
-                }
-            } else {
-                currentLine.append(advance())
+                pos = savedPos
+                nextPos = savedNext
+                location = savedLoc
             }
+            _ = advance()
         }
-
-        throw LexerError.unterminatedString(at: start)
     }
 
     /// Scans a unicode escape sequence: \u{XXXX}

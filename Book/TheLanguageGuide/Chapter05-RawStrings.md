@@ -395,12 +395,23 @@ quote, where the mistake is.
 Raw single-quoted strings stay single-line — they exist to avoid escape
 processing, and a multi-line raw block has no reader.
 
-### The older `"""` form (deprecated)
+### The older `"""` form (removed)
 
-The `"""` form used to be the only way to write multi-line text, `"""…"""`, with
-its own rules: the closing delimiter's indentation stripped from every
-line, the final newline dropped, and no interpolation. It still lexes
-and now warns (GitLab #523); removal is tracked in GitLab #524.
+Multi-line text used to need its own delimiter, `"""…"""`, with its own
+rules: the closing delimiter's indentation stripped from every line, the
+final newline dropped, and no interpolation. It was deprecated in
+GitLab #523 and removed in GitLab #524 — writing one now produces an
+error naming the replacement.
 
-Migrating is a rewrite, not a swap of delimiters: the dedent is gone, so
-an indented `"""` block becomes a plain string written flush-left.
+If you meet one in old code, migrating is a rewrite rather than a swap
+of delimiters. The dedent is what disappears: an indented `"""` block
+becomes a plain string written flush-left, because a plain string keeps
+every character between its quotes.
+
+```aro
+(* was *)                          (* now *)
+Create the <sign> with """         Create the <sign> with "BREW & BYTES
+    BREW & BYTES                   Mon-Fri 7-18".
+    Mon-Fri 7-18
+    """.
+```
