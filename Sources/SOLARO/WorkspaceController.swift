@@ -388,8 +388,30 @@ final class WorkspaceController {
         askPanelRequested = true
     }
 
+    /// `willTerminateNotification` token — removed in deinit.
+    @ObservationIgnored
+    private nonisolated(unsafe) var terminationObserver: NSObjectProtocol?
+
     init(project: Project) {
         self.project = project
+        // Mirror ConsoleProcess: tear the workspace's subprocesses
+        // down on ⌘Q (GitLab #529). Without this, `aro lsp` and
+        // every open notebook's `aro repl --json` were simply
+        // abandoned on app exit — a kernel mid-cell doesn't read
+        // stdin, so pipe EOF never reached it and it outlived
+        // SOLARO, keeping its metrics socket and any bound ports.
+        // This also flushes each notebook's debounced 800ms
+        // autosave, which `onDisappear` doesn't reliably do during
+        // app termination.
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.teardown()
+            }
+        }
     }
 
     deinit {
@@ -401,6 +423,24 @@ final class WorkspaceController {
         // from a non-isolated deinit; the parse closure checks
         // `Task.isCancelled` between files and exits promptly.
         loadTask?.cancel()
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
+    }
+
+    /// Stop everything that owns a subprocess and flush unsaved
+    /// notebook state: the `aro lsp` server, and every open
+    /// notebook (autosave flush + kernel shutdown with SIGKILL
+    /// escalation). Idempotent. Called when the workspace unmounts
+    /// (Close Project / window close) and on app termination
+    /// (GitLab #529).
+    func teardown() {
+        lsp.stop()
+        fileWatcher.stop()
+        for notebook in replNotebooks.values {
+            notebook.teardown()
+        }
+        replNotebooks.removeAll()
     }
 
     func load() {
@@ -507,8 +547,12 @@ final class WorkspaceController {
         for url in loaded.sourceFiles {
             if let text = try? String(contentsOf: url, encoding: .utf8) {
                 lsp.didOpen(url: url, text: text)
+                // Baseline for external-change detection: what the
+                // file held when we read it (GitLab #536).
+                lastSavedText[url.standardizedFileURL] = text
             }
         }
+        refreshWatchedFiles()
     }
 
     /// Parsed program for the file currently shown in the center
@@ -567,22 +611,36 @@ final class WorkspaceController {
         return MarkdownFile.isMarkdown(url)
     }
 
-    // MARK: - AI co-pilot live editing (#…)
+    // MARK: - Live buffer editing (#…, GitLab #535)
 
-    /// A single co-pilot edit to apply into the OPEN editor's STTextView,
-    /// undoably and on the fly — instead of the destructive disk-reload path
-    /// that wipes the undo stack. `oldString` empty ⇒ replace the whole file.
-    struct AIEditCommand: Equatable {
+    /// A single edit to apply into the OPEN editor's STTextView,
+    /// undoably and on the fly — instead of the destructive
+    /// write-disk-and-reload path, which trips `updateNSView`'s
+    /// external-swap branch and calls `undoManager.removeAllActions()`.
+    ///
+    /// Built for the AI co-pilot first; completion acceptance uses the
+    /// same pipeline now (GitLab #535), which is why the edit can be
+    /// located either by matching `oldString` (empty ⇒ whole file) or
+    /// by an explicit UTF-16 `range`.
+    struct BufferEditCommand: Equatable {
         let id: UInt64
         let url: URL
-        let oldString: String
+        /// Explicit UTF-16 range to replace. When nil, the editor
+        /// locates the edit by searching for `oldString`.
+        var range: NSRange? = nil
+        var oldString: String = ""
         let newString: String
+        /// Label for the Edit menu's Undo item.
+        var actionName: String = "Edit"
+        /// UTF-16 offset to park the caret at once the edit lands.
+        /// Nil leaves the caret wherever the replacement put it.
+        var caretOffset: Int? = nil
     }
 
     /// The pending live edit for the active editor. `AROCodeEditor` observes
     /// it (keyed on `id`) and applies it via `STTextView.replaceCharacters`.
-    var pendingAIEdit: AIEditCommand?
-    private var aiEditSeq: UInt64 = 0
+    var pendingBufferEdit: BufferEditCommand?
+    private var bufferEditSeq: UInt64 = 0
 
     /// Live editor text per open file, mirrored from the editor's binding so
     /// the co-pilot's context sees the user's current (even mid-edit) buffer
@@ -611,6 +669,49 @@ final class WorkspaceController {
         return liveEditorText[std] ?? (try? String(contentsOf: std, encoding: .utf8))
     }
 
+    // MARK: - Editor writes (GitLab #532)
+
+    /// Disk-write health of the open buffers. Non-empty while some
+    /// file's last save failed; the center pane renders a banner off
+    /// it and the state clears itself on the next successful write.
+    var saveState = EditorSaveState()
+
+    /// THE editor write path. Every keystroke-autosave, node edit,
+    /// snippet splice, ghost accept and completion insert goes
+    /// through here.
+    ///
+    /// Returns whether the bytes reached disk. Callers keep updating
+    /// their in-memory caches either way — dropping the user's
+    /// keystrokes on a failed write would be a second bug — but a
+    /// failure is now recorded, logged once, and shown, instead of
+    /// swallowed by a `try?` (GitLab #532). The next change retries
+    /// automatically, which is the whole retry story: autosave fires
+    /// again, and a write that lands clears the banner.
+    @discardableResult
+    func writeToDisk(_ text: String, to url: URL) -> Bool {
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            // Baseline for external-change detection (GitLab #536):
+            // this is now what SOLARO believes is on disk, so a later
+            // difference is somebody else's write.
+            lastSavedText[url.standardizedFileURL] = text
+            if saveState.recordSuccess(for: url) {
+                // Only log the recovery when there was something to
+                // recover from.
+                FileHandle.standardError.write(Data(
+                    "[SOLARO] Save recovered: \(url.path)\n".utf8))
+            }
+            return true
+        } catch {
+            let message = (error as NSError).localizedDescription
+            if saveState.recordFailure(for: url, message: message) {
+                FileHandle.standardError.write(Data(
+                    "[SOLARO] Warning: could not save \(url.path): \(message)\n".utf8))
+            }
+            return false
+        }
+    }
+
     /// Route a co-pilot edit into the OPEN editor buffer. Returns true when
     /// this file is the active editor and the edit can be placed (so the file
     /// tool skips its disk write); false to fall back to a disk write + reload.
@@ -623,10 +724,207 @@ final class WorkspaceController {
             // Exactly one occurrence, matching the disk-path semantics.
             guard buffer.components(separatedBy: oldString).count == 2 else { return false }
         }
-        aiEditSeq &+= 1
-        pendingAIEdit = AIEditCommand(id: aiEditSeq, url: std,
-                                      oldString: oldString, newString: newString)
+        bufferEditSeq &+= 1
+        pendingBufferEdit = BufferEditCommand(
+            id: bufferEditSeq, url: std,
+            oldString: oldString, newString: newString,
+            actionName: "AI Edit")
         return true
+    }
+
+    /// Replace an explicit UTF-16 range of the OPEN editor buffer,
+    /// undoably. Returns false when `url` isn't the active editor, so
+    /// the caller can fall back to a disk write.
+    ///
+    /// This is what accepting a completion uses (GitLab #535). It used
+    /// to splice the text into a disk snapshot, write the file, and
+    /// call `openFile` — which pushed the whole document back through
+    /// the editor's external-swap branch and wiped the file's entire
+    /// undo history for one accepted suggestion.
+    @discardableResult
+    func replaceInOpenBuffer(url: URL,
+                             range: NSRange,
+                             with text: String,
+                             actionName: String,
+                             caretOffset: Int? = nil) -> Bool {
+        let std = url.standardizedFileURL
+        guard currentFile?.standardizedFileURL == std else { return false }
+        bufferEditSeq &+= 1
+        pendingBufferEdit = BufferEditCommand(
+            id: bufferEditSeq, url: std, range: range,
+            newString: text, actionName: actionName,
+            caretOffset: caretOffset)
+        return true
+    }
+
+    /// Make sure the language server's view of `url` matches the live
+    /// editor buffer before a position-sensitive request. Every
+    /// keystroke already sends `didChange`, but a write that failed
+    /// (GitLab #532), a YAML file (whose binding skips the LSP), or a
+    /// document the server only saw at load time can leave the mirror
+    /// behind — and a definition/hover/rename resolved against a stale
+    /// document lands on the wrong column.
+    func syncLSPWithLiveText(_ url: URL) {
+        guard let text = liveText(for: url) else { return }
+        guard lsp.openDocuments[url] != text else { return }
+        lsp.didChange(url: url, text: text)
+    }
+
+    // MARK: - External changes (GitLab #536)
+
+    /// What SOLARO last wrote to (or read from) each file. The
+    /// baseline that makes "does this buffer hold unsaved work?"
+    /// answerable under per-keystroke autosave, where the buffer
+    /// otherwise always equals disk.
+    var lastSavedText: [URL: String] = [:]
+
+    /// Files whose buffer AND disk contents have both moved on. While
+    /// a file is in here the editor must NOT autosave over it — the
+    /// user picks Reload or Keep mine first. Value is the disk text
+    /// at the moment the conflict was detected.
+    var conflictedFiles: [URL: String] = [:]
+
+    /// Watches the open tabs plus the project root so a `git
+    /// checkout`, a pull, or an edit in another editor doesn't leave
+    /// the IDE showing — and then re-saving — stale content.
+    @ObservationIgnored
+    private lazy var fileWatcher: ExternalFileWatcher = {
+        let watcher = ExternalFileWatcher()
+        watcher.onChange = { [weak self] url in
+            self?.handleExternalChange(at: url)
+        }
+        return watcher
+    }()
+
+    /// True when this file must not be autosaved over.
+    func isConflicted(_ url: URL) -> Bool {
+        conflictedFiles[url.standardizedFileURL] != nil
+    }
+
+    /// Point the watcher at the current open tabs + the project root.
+    /// Called whenever the tab set changes.
+    func refreshWatchedFiles() {
+        var targets = openTabs.map(\.standardizedFileURL)
+        // The root directory catches files created / deleted outside
+        // SOLARO, which is what leaves the sidebar tree stale.
+        targets.append(project.rootPath.standardizedFileURL)
+        let sources = project.rootPath.appendingPathComponent("sources")
+        if FileManager.default.fileExists(atPath: sources.path) {
+            targets.append(sources.standardizedFileURL)
+        }
+        fileWatcher.watch(targets)
+    }
+
+    /// One file (or the project root) changed on disk.
+    private func handleExternalChange(at url: URL) {
+        let std = url.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(
+            atPath: std.path, isDirectory: &isDirectory)
+        if isDirectory.boolValue {
+            // A directory changed: files appeared or vanished. Rebuild
+            // the model so the tree and the program cache catch up.
+            load()
+            return
+        }
+        guard exists else {
+            // The file went away (deleted, or renamed by a checkout
+            // that hasn't put it back yet). Leave the buffer alone —
+            // the user still has their text — but say so.
+            conflictedFiles[std] = ""
+            return
+        }
+        guard let disk = try? String(contentsOf: std, encoding: .utf8) else { return }
+        switch ExternalChangePolicy.outcome(
+            buffer: liveEditorText[std],
+            lastSaved: lastSavedText[std],
+            disk: disk
+        ) {
+        case .inSync:
+            conflictedFiles.removeValue(forKey: std)
+        case .reload:
+            conflictedFiles.removeValue(forKey: std)
+            adoptDiskContents(disk, for: std)
+        case .conflict:
+            conflictedFiles[std] = disk
+        }
+        gitMonitor.refresh(for: project)
+    }
+
+    /// Take the file's on-disk contents as the truth: refresh the
+    /// buffer mirror, the parse cache, the LSP, and force the center
+    /// pane to re-read.
+    private func adoptDiskContents(_ disk: String, for url: URL) {
+        let std = url.standardizedFileURL
+        liveEditorText[std] = disk
+        lastSavedText[std] = disk
+        do {
+            programs[std] = try Parser.parse(disk)
+            parseErrors.removeValue(forKey: std)
+        } catch {
+            parseErrors[std] = "\(error)"
+        }
+        lsp.didChange(url: std, text: disk)
+        if currentFile?.standardizedFileURL == std {
+            fileReloadTick &+= 1
+        }
+    }
+
+    /// "Reload" on the conflict bar: discard the buffer and take what
+    /// is on disk.
+    func resolveConflictByReloading(_ url: URL) {
+        let std = url.standardizedFileURL
+        guard let disk = conflictedFiles.removeValue(forKey: std) else { return }
+        // Re-read rather than trusting the snapshot — the file may
+        // have changed again while the bar was up.
+        let current = (try? String(contentsOf: std, encoding: .utf8)) ?? disk
+        adoptDiskContents(current, for: std)
+    }
+
+    /// "Keep mine" on the conflict bar: the buffer wins. Writing it
+    /// out re-establishes the baseline, so the file stops being
+    /// conflicted and autosave resumes.
+    func resolveConflictByKeepingBuffer(_ url: URL) {
+        let std = url.standardizedFileURL
+        conflictedFiles.removeValue(forKey: std)
+        guard let buffer = liveEditorText[std] else { return }
+        if writeToDisk(buffer, to: std) {
+            lsp.didChange(url: std, text: buffer)
+            do {
+                programs[std] = try Parser.parse(buffer)
+                parseErrors.removeValue(forKey: std)
+            } catch {
+                parseErrors[std] = "\(error)"
+            }
+        }
+    }
+
+    /// File → Reload (⌥⌘R). Re-reads the project from disk: model,
+    /// programs, tree, and every open buffer that has no unsaved
+    /// work. The comment in `load()` used to promise this menu item
+    /// existed; it never did (GitLab #536).
+    func reloadFromDisk() {
+        for url in openTabs {
+            let std = url.standardizedFileURL
+            guard let disk = try? String(contentsOf: std, encoding: .utf8)
+            else { continue }
+            switch ExternalChangePolicy.outcome(
+                buffer: liveEditorText[std],
+                lastSaved: lastSavedText[std],
+                disk: disk
+            ) {
+            case .inSync:
+                conflictedFiles.removeValue(forKey: std)
+            case .reload:
+                conflictedFiles.removeValue(forKey: std)
+                adoptDiskContents(disk, for: std)
+            case .conflict:
+                // An explicit Reload still doesn't get to throw away
+                // unsaved work without asking — surface the bar.
+                conflictedFiles[std] = disk
+            }
+        }
+        load()
     }
 
     /// A file was modified on disk behind the editor's back (AI
@@ -657,6 +955,12 @@ final class WorkspaceController {
         currentFile = url
         if !openTabs.contains(url) {
             openTabs.append(url)
+            // Watch what the user has open (GitLab #536).
+            refreshWatchedFiles()
+        }
+        if lastSavedText[url.standardizedFileURL] == nil,
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            lastSavedText[url.standardizedFileURL] = text
         }
         // Materialize a notebook controller here, in event context —
         // CenterPane's body only *reads* the cache, so opening a
@@ -692,6 +996,23 @@ final class WorkspaceController {
             forKey: url.standardizedFileURL) {
             notebook.teardown()
         }
+        // Tell the LSP the document is gone (GitLab #530) — the
+        // server otherwise accumulates every document ever opened.
+        // Project source files are deliberately exempt: `applyParse`
+        // opens ALL of them at load time (independent of tabs) so
+        // the server has whole-project visibility for cross-file
+        // definition/rename/workspace-symbols, and the server drops
+        // a closed document from exactly those features. Only
+        // documents that entered the server through editing outside
+        // the project set are closed with their tab.
+        if model?.sourceFiles.contains(url) != true {
+            lsp.didClose(url: url)
+        }
+        // A closed tab shouldn't leave its save-failure banner
+        // hanging over the next file (GitLab #532).
+        saveState.forget(url)
+        conflictedFiles.removeValue(forKey: url.standardizedFileURL)
+        refreshWatchedFiles()
         if currentFile == url {
             if openTabs.isEmpty {
                 currentFile = nil

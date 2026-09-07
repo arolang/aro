@@ -175,6 +175,20 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
         <string>com.arolang.aro-source</string>
       </array>
     </dict>
+    <dict>
+      <!-- .repl notebooks (ARO-0091). The in-app half — file tree,
+           tab routing, notebook editor, RootView.onOpenURL — has
+           treated .repl as first-class all along; this is the
+           Launch Services half so Finder can double-click one
+           (GitLab #539). -->
+      <key>CFBundleTypeName</key><string>ARO notebook</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.arolang.aro-notebook</string>
+      </array>
+    </dict>
   </array>
   <key>UTExportedTypeDeclarations</key>
   <array>
@@ -206,6 +220,22 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
         <array><string>aro</string></array>
         <key>public.mime-type</key>
         <array><string>text/x-aro</string></array>
+      </dict>
+    </dict>
+    <dict>
+      <!-- .repl notebooks are JSON on disk (ReplNotebookDocument
+           uses JSONEncoder/JSONDecoder). -->
+      <key>UTTypeIdentifier</key><string>com.arolang.aro-notebook</string>
+      <key>UTTypeDescription</key><string>ARO notebook</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.json</string>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array><string>repl</string></array>
       </dict>
     </dict>
   </array>

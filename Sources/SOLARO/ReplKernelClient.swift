@@ -25,12 +25,37 @@
 // definitions are gone, and the UI says so — an honest restart
 // beats a hang.
 
+import AppKit
 import Foundation
 import Observation
 
+/// What a notebook needs from a kernel session.
+///
+/// `ReplNotebookController` used to hold a hardwired
+/// `ReplKernelClient`, which meant the trickiest async logic in the
+/// notebook stack — the serial run queue, its re-drain tail call,
+/// the kernel-death drop — could only be exercised by clicking
+/// (GitLab #542). The seam is this protocol: production passes the
+/// real client, tests pass a scriptable fake.
+@MainActor
+protocol ReplKernelDriving: AnyObject {
+    var state: ReplKernelClient.State { get }
+    /// `aro` version from the `ready` message — the kernel chip.
+    var serverVersion: String? { get }
+
+    func ensureStarted(project: Project) async
+    func execute(code: String,
+                 onStream: @escaping @MainActor (String, String) -> Void)
+        async -> ReplKernelClient.ExecOutcome
+    func info() async -> ReplKernelClient.KernelInfo?
+    func interrupt(reason: String)
+    func restart(project: Project) async
+    func shutdown()
+}
+
 @MainActor
 @Observable
-final class ReplKernelClient {
+final class ReplKernelClient: ReplKernelDriving {
 
     // MARK: - State
 
@@ -172,7 +197,51 @@ final class ReplKernelClient {
     /// generation are dropped instead of resolving new requests.
     private var generation = 0
 
+    /// Test seam (GitLab #527/#528): absolute path of the executable
+    /// to launch instead of the resolved `aro` binary. Lets the unit
+    /// tests drive the full lifecycle (ready handshake, SIGTERM
+    /// escalation, dead-stdin failure) against a scripted fake
+    /// kernel. Nil in production.
+    var aroBinaryOverride: String?
+
+    /// How long a SIGTERM gets before we escalate to SIGKILL. A
+    /// kernel wedged in native code (blocked syscall, spin) never
+    /// services SIGTERM — without escalation, "Stop" silently does
+    /// nothing and "Restart Kernel" hangs forever (GitLab #527).
+    private static let killGraceNanoseconds: UInt64 = 2_000_000_000
+
+    /// `willTerminateNotification` token — removed in deinit.
+    @ObservationIgnored
+    private nonisolated(unsafe) var terminationObserver: NSObjectProtocol?
+
     // MARK: - Lifecycle
+
+    init() {
+        // Belt-and-suspenders for ⌘Q (GitLab #529): a kernel mid-cell
+        // doesn't read stdin, so pipe EOF never reaches it, and a
+        // wedged one may not service SIGTERM either — it would
+        // survive SOLARO's exit holding its metrics socket and any
+        // bound ports. The app is exiting, so there is no later
+        // moment to escalate: SIGTERM and SIGKILL go out together.
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let process = self.process,
+                      process.isRunning else { return }
+                process.terminate()
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+    }
+
+    deinit {
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
+    }
 
     /// Start the subprocess if it isn't running. Safe to call
     /// repeatedly. Returns once the server said `ready` (or died).
@@ -198,7 +267,7 @@ final class ReplKernelClient {
         stderrTail = ""
         stdoutBuffer.removeAll()
 
-        let aro = ConsoleProcess.resolveAroBinary(near: project)
+        let aro = aroBinaryOverride ?? ConsoleProcess.resolveAroBinary(near: project)
         let task = Process()
         if aro == "/usr/bin/env" {
             task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -261,14 +330,21 @@ final class ReplKernelClient {
         }
     }
 
+    /// What the UI says after a plain "Stop".
+    static let interruptReason =
+        "Interrupted — the session was restarted, its variables and definitions are gone."
+
     /// Kill the subprocess. The session's variables and definitions
     /// are gone — that is the documented interrupt semantics.
-    func interrupt(reason: String = "Interrupted — the session was restarted, its variables and definitions are gone.") {
+    func interrupt(reason: String = ReplKernelClient.interruptReason) {
         guard let process, process.isRunning else { return }
         // The termination handler does the bookkeeping (fails the
         // in-flight cell, notifies, flips state).
         pendingDeathReason = reason
         process.terminate()
+        // A kernel wedged inside the runtime may never service the
+        // SIGTERM — escalate so "Stop" actually stops (GitLab #527).
+        scheduleKillEscalation(for: process)
     }
 
     /// Graceful stop: ask the server to exit, then close stdin so a
@@ -278,25 +354,69 @@ final class ReplKernelClient {
         if state == .ready {
             sendLine(["id": takeRequestID(), "type": "shutdown"])
         }
+        // Flip to dead BEFORE closing stdin: an execute() racing in
+        // must see a dead kernel, not a `.ready` client with a
+        // closed pipe — that combination leaked the request's
+        // continuation and left the notebook busy forever
+        // (GitLab #528).
+        pendingDeathReason = "Kernel was shut down."
+        state = .dead("Kernel was shut down.")
         try? stdinHandle?.close()
         stdinHandle = nil
-        process?.terminate()
+        if let process, process.isRunning {
+            process.terminate()
+            scheduleKillEscalation(for: process)
+        }
     }
 
     /// Kill (if needed) and start a fresh session.
     func restart(project: Project) async {
-        if let process, process.isRunning {
+        if let running = process, running.isRunning {
             pendingDeathReason = "Restarting…"
-            process.terminate()
+            running.terminate()
             // Termination handler runs async; wait for it so the new
-            // generation doesn't race the old handler's cleanup.
-            while self.process != nil {
-                try? await Task.sleep(nanoseconds: 20_000_000)
+            // generation doesn't race the old handler's cleanup. The
+            // wait is bounded: a kernel wedged in native code never
+            // services SIGTERM, and the old unbounded poll hung
+            // "Restart Kernel" forever (GitLab #527).
+            if !(await waitForProcessExit(nanoseconds: Self.killGraceNanoseconds)) {
+                kill(running.processIdentifier, SIGKILL)
+                if !(await waitForProcessExit(nanoseconds: Self.killGraceNanoseconds)) {
+                    // Even SIGKILL didn't reap it (uninterruptible
+                    // sleep, most likely stuck disk I/O). Surface
+                    // the failure instead of hanging the UI.
+                    state = .dead("Kernel did not exit — sent SIGKILL, but the process would not die. Check for a stuck `aro repl` process, then restart again.")
+                    return
+                }
             }
         }
         executionCounter = 0
         state = .stopped
         await ensureStarted(project: project)
+    }
+
+    /// Poll until `handleTermination` has cleared `process`, up to
+    /// the deadline. Returns true when the process was reaped.
+    private func waitForProcessExit(nanoseconds: UInt64) async -> Bool {
+        let deadline = DispatchTime.now().advanced(by: .nanoseconds(Int(nanoseconds)))
+        while process != nil {
+            if DispatchTime.now() >= deadline { return false }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return true
+    }
+
+    /// After a SIGTERM, give the process a bounded grace period and
+    /// then SIGKILL it if it is still running. The pid stays valid
+    /// while `isRunning` is true — `Process` only reaps (and frees
+    /// the pid for reuse) when the child actually exits.
+    private func scheduleKillEscalation(for process: Process) {
+        Task {
+            try? await Task.sleep(nanoseconds: Self.killGraceNanoseconds)
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
     }
 
     private var pendingDeathReason: String?
@@ -397,7 +517,19 @@ final class ReplKernelClient {
         return await withCheckedContinuation { continuation in
             pending[id] = continuation
             streamSinks[id] = onStream
-            sendLine(message)
+            if !sendLine(message) {
+                // The line never reached the kernel, so no `result`
+                // will ever come back for this id. Fail the request
+                // NOW — leaving the continuation in `pending` parked
+                // the notebook on a spinner forever (GitLab #528).
+                pending.removeValue(forKey: id)
+                streamSinks.removeValue(forKey: id)
+                let reason = "Could not write to the kernel — its stdin is closed."
+                if state == .busy || state == .ready {
+                    state = .dead(reason)
+                }
+                continuation.resume(returning: .died(reason))
+            }
         }
     }
 
@@ -406,14 +538,33 @@ final class ReplKernelClient {
         return nextRequestID
     }
 
-    private func sendLine(_ object: [String: Any]) {
+    /// Write one protocol line. Returns false when the line could
+    /// not be handed to the kernel — no stdin (already closed), the
+    /// message didn't encode, or the pipe broke before the
+    /// termination handler fired. Callers with a pending reply must
+    /// treat false as "this request will never be answered".
+    @discardableResult
+    private func sendLine(_ object: [String: Any]) -> Bool {
         guard let stdinHandle,
-              let data = try? JSONSerialization.data(withJSONObject: object) else { return }
+              let data = try? JSONSerialization.data(withJSONObject: object) else { return false }
         var line = data
         line.append(0x0A)
-        // A write to a dead pipe raises; the termination handler
-        // already owns that failure path.
-        try? stdinHandle.write(contentsOf: line)
+        do {
+            try stdinHandle.write(contentsOf: line)
+            return true
+        } catch {
+            // Broken pipe — the process is dying; the termination
+            // handler owns the state flip, but the caller still
+            // needs to know this particular line was lost.
+            return false
+        }
+    }
+
+    /// Test seam (GitLab #528): simulate the shutdown/stdin race by
+    /// dropping the write end of the pipe while the client still
+    /// believes the kernel is ready.
+    func dropStdinForTesting() {
+        stdinHandle = nil
     }
 
     private var deadReason: String? {

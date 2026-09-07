@@ -39,26 +39,36 @@ struct SymbolNameWrapper: Identifiable {
 /// the parent view can wire a global accelerator without exposing
 /// any visible chrome.
 struct HiddenShortcutButton: View {
-    let key: KeyEquivalent
-    let modifiers: EventModifiers
+    /// Where this button's shortcut comes from. A `commandID` is
+    /// resolved through the keybinding store on every body pass, so
+    /// a user override in Settings → Keybindings takes effect
+    /// immediately (GitLab #534); `.fixed` is for the handful of
+    /// accelerators that aren't user-remappable.
+    private enum Source {
+        case command(String)
+        case fixed(KeyEquivalent, EventModifiers)
+    }
+
+    private let source: Source
     let action: () -> Void
+
+    @Environment(\.keybindingStore) private var store
 
     init(key: Character, modifiers: EventModifiers,
          action: @escaping () -> Void) {
-        self.key = KeyEquivalent(key)
-        self.modifiers = modifiers
+        self.source = .fixed(KeyEquivalent(key), modifiers)
         self.action = action
     }
 
-    /// Convenience initialiser that pulls the resolved (default
-    /// or user-overridden) key + modifiers for a command id out
-    /// of `KeybindingStore.shared`. Used by every call site so
-    /// the registry is the single source of truth for shortcuts
-    /// (#270).
+    /// Bind to a registry command: the resolved (default or
+    /// user-overridden) key + modifiers for `commandID`.
+    ///
+    /// This initialiser existed for a year with zero call sites
+    /// while every shortcut hardcoded its keys, which is what made
+    /// the Keybindings settings tab a UI that visibly lied
+    /// (GitLab #534).
     init(commandID: String, action: @escaping () -> Void) {
-        let resolved = KeybindingStore.shared.resolved(for: commandID)
-        self.key = resolved?.key ?? KeyEquivalent("\0")
-        self.modifiers = resolved?.modifiers ?? []
+        self.source = .command(commandID)
         self.action = action
     }
 
@@ -70,9 +80,20 @@ struct HiddenShortcutButton: View {
     /// string literals like `"p"`.
     init(keyEquivalent: KeyEquivalent, modifiers: EventModifiers,
          action: @escaping () -> Void) {
-        self.key = keyEquivalent
-        self.modifiers = modifiers
+        self.source = .fixed(keyEquivalent, modifiers)
         self.action = action
+    }
+
+    /// The shortcut to install, or nil for an unknown command id —
+    /// in which case the button binds nothing rather than claiming
+    /// a bogus key equivalent.
+    private var binding: KeybindingBinding? {
+        switch source {
+        case .fixed(let key, let modifiers):
+            return KeybindingBinding(key: key, modifiers: modifiers)
+        case .command(let id):
+            return store.resolved(for: id)
+        }
     }
 
     var body: some View {
@@ -82,7 +103,20 @@ struct HiddenShortcutButton: View {
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
-        .keyboardShortcut(key, modifiers: modifiers)
+        .modifier(OptionalShortcut(binding: binding))
+    }
+}
+
+/// Applies a keyboard shortcut only when one resolved.
+private struct OptionalShortcut: ViewModifier {
+    let binding: KeybindingBinding?
+
+    func body(content: Content) -> some View {
+        if let binding {
+            content.keyboardShortcut(binding.key, modifiers: binding.modifiers)
+        } else {
+            content
+        }
     }
 }
 
@@ -400,6 +434,16 @@ struct WorkspaceView: View {
                 WorkspaceUndoRegistry.shared.push(undoManager)
                 defer { WorkspaceUndoRegistry.shared.pop(undoManager) }
                 try? await Task.sleep(nanoseconds: .max)
+            }
+            // The workspace unmounted — Close Project back to the
+            // welcome screen, or the window closed. Stop `aro lsp`
+            // and every notebook kernel, and flush notebook
+            // autosaves; without this they were abandoned to run on
+            // (GitLab #529). App termination is covered separately
+            // by the controller's willTerminate observer, since
+            // onDisappear doesn't reliably fire on ⌘Q.
+            .onDisappear {
+                controller.teardown()
             }
     }
 
@@ -818,20 +862,44 @@ struct WorkspaceView: View {
         CanvasExporter.exportPNG(graph: placed, project: project)
     }
 
-    private func goToDefinition() {
+    /// Everything a caret-based LSP request needs, resolved against
+    /// the LIVE editor buffer rather than the file on disk
+    /// (GitLab #535). The two diverge whenever a write failed or is
+    /// still in flight, and a position computed against disk then
+    /// resolves to the wrong column — or the wrong line entirely.
+    /// Also nudges the server's document mirror into step first, so
+    /// the position we send means what we think it means.
+    private struct CaretContext {
+        let url: URL
+        let text: String
+        /// 0-based line, as LSP wants it.
+        let line0: Int
+        let column: Int
+        let line: String
+    }
+
+    private func caretContext() -> CaretContext? {
         guard
             let url = controller.currentFile,
             let lineNumber = controller.currentLine,
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return }
+            let text = controller.liveText(for: url)
+        else { return nil }
         let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return }
+        guard lineNumber - 1 < lines.count else { return nil }
+        controller.syncLSPWithLiveText(url)
         let line = lines[lineNumber - 1]
-        let column = resolvedColumn(for: line)
+        return CaretContext(url: url, text: text,
+                            line0: lineNumber - 1,
+                            column: resolvedColumn(for: line),
+                            line: line)
+    }
+
+    private func goToDefinition() {
+        guard let caret = caretContext() else { return }
         controller.lsp.definition(
-            url: url,
-            line0: lineNumber - 1,
-            character0: column
+            url: caret.url,
+            line0: caret.line0,
+            character0: caret.column
         ) { location in
             guard let location else { return }
             controller.openFile(location.url)
@@ -844,24 +912,17 @@ struct WorkspaceView: View {
     /// column when we have one, otherwise the first `<` or first
     /// non-whitespace character on the line.
     private func hoverAtCaret() {
-        guard
-            let url = controller.currentFile,
-            let lineNumber = controller.currentLine,
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return }
-        let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return }
-        let line = lines[lineNumber - 1]
-        let column = resolvedColumn(for: line)
+        guard let caret = caretContext() else { return }
         hoverState.content = ""
         hoverState.hasResult = false
         hoverState.isLoading = true
-        hoverState.symbol = identifierAround(line: line, column: column)
+        hoverState.symbol = identifierAround(line: caret.line,
+                                             column: caret.column)
         showHoverSheet = true
         controller.lsp.hover(
-            url: url,
-            line0: lineNumber - 1,
-            character0: column
+            url: caret.url,
+            line0: caret.line0,
+            character0: caret.column
         ) { content in
             hoverState.isLoading = false
             hoverState.hasResult = true
@@ -890,14 +951,7 @@ struct WorkspaceView: View {
     // MARK: - LSP autocompletion (#254)
 
     private func triggerCompletion() {
-        guard
-            let url = controller.currentFile,
-            let lineNumber = controller.currentLine,
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return }
-        let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return }
-        let column = resolvedColumn(for: lines[lineNumber - 1])
+        guard let caret = caretContext() else { return }
 
         completionState.items = []
         completionState.isLoading = true
@@ -906,7 +960,7 @@ struct WorkspaceView: View {
         showCompletionSheet = true
 
         controller.lsp.completion(
-            url: url, line0: lineNumber - 1, character0: column
+            url: caret.url, line0: caret.line0, character0: caret.column
         ) { items in
             completionState.items = items
             completionState.isLoading = false
@@ -917,31 +971,46 @@ struct WorkspaceView: View {
 
     private func acceptCompletion(_ item: AROLSPClient.CompletionItem) {
         showCompletionSheet = false
-        guard
-            let url = controller.currentFile,
-            let lineNumber = controller.currentLine,
-            var text = try? String(contentsOf: url, encoding: .utf8)
-        else { return }
-        // Insert the chosen text at the current caret position.
-        // Simplification: insert at the end of the current line
-        // followed by a space if no caret column tracked.
-        let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return }
-        let column = resolvedColumn(for: lines[lineNumber - 1])
+        guard let caret = caretContext() else { return }
+        // Insert the chosen text at the current caret position,
+        // computed against the live buffer (GitLab #535).
+        let ns = caret.text as NSString
         var lineStarts: [Int] = [0]
-        let ns = text as NSString
         for i in 0..<ns.length {
             if ns.character(at: i) == 0x0A { lineStarts.append(i + 1) }
         }
-        let insertOffset = lineStarts[lineNumber - 1] + column
+        let insertOffset = lineStarts[caret.line0] + caret.column
         guard insertOffset <= ns.length else { return }
-        text = ns.replacingCharacters(
-            in: NSRange(location: insertOffset, length: 0),
-            with: item.insertText
-        )
-        try? text.write(to: url, atomically: true, encoding: .utf8)
-        controller.lsp.didChange(url: url, text: text)
-        controller.openFile(url)
+        let insertRange = NSRange(location: insertOffset, length: 0)
+        let insertLength = (item.insertText as NSString).length
+
+        // Edit the OPEN buffer through the undoable replace path.
+        // This used to splice a disk snapshot, write the file and call
+        // `openFile` — a whole-document swap that hits
+        // `updateNSView`'s external-swap branch, whose
+        // `removeAllActions()` erased the file's entire undo history
+        // every time the user accepted one suggestion.
+        if controller.replaceInOpenBuffer(
+            url: caret.url,
+            range: insertRange,
+            with: item.insertText,
+            actionName: "Accept Completion",
+            caretOffset: insertOffset + insertLength
+        ) {
+            // The editor propagates the new text back through the
+            // editable binding on the next runloop tick, which writes
+            // disk, syncs the LSP and reparses.
+            return
+        }
+
+        // No open editor for this file (canvas-only pane): fall back
+        // to the disk path.
+        let text = ns.replacingCharacters(in: insertRange,
+                                          with: item.insertText)
+        controller.writeToDisk(text, to: caret.url)
+        controller.liveEditorText[caret.url.standardizedFileURL] = text
+        controller.lsp.didChange(url: caret.url, text: text)
+        controller.openFile(caret.url)
     }
 
     // MARK: - LSP rename (#256)
@@ -953,21 +1022,14 @@ struct WorkspaceView: View {
     }
 
     private func applyRename() {
-        guard
-            let url = controller.currentFile,
-            let lineNumber = controller.currentLine,
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return }
-        let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return }
-        let column = resolvedColumn(for: lines[lineNumber - 1])
+        guard let caret = caretContext() else { return }
         let newName = renameNewName.trimmingCharacters(in: .whitespaces)
         guard !newName.isEmpty else {
             renameError = "Enter a new name."
             return
         }
         controller.lsp.rename(
-            url: url, line0: lineNumber - 1, character0: column,
+            url: caret.url, line0: caret.line0, character0: caret.column,
             newName: newName
         ) { edits, error in
             if let edits {
@@ -983,6 +1045,10 @@ struct WorkspaceView: View {
 
     private func formatDocument() {
         guard let url = controller.currentFile else { return }
+        // The returned edits carry positions into the server's copy
+        // of the document — make sure that's the live buffer before
+        // asking (GitLab #535).
+        controller.syncLSPWithLiveText(url)
         controller.lsp.format(url: url) { edits in
             guard !edits.isEmpty else { return }
             _ = LSPEditApplier.apply(edits: edits, through: controller)
@@ -1045,7 +1111,8 @@ struct WorkspaceView: View {
         guard let result = ExtractActionRefactor.apply(
             source: source, node: node, actionName: name
         ) else { return }
-        try? result.newSource.write(to: url, atomically: true, encoding: .utf8)
+        guard controller.writeToDisk(result.newSource, to: url) else { return }
+        controller.liveEditorText[url.standardizedFileURL] = result.newSource
         controller.openFile(url)  // reparses + refreshes graph
         controller.currentLine = result.newCallSiteLine
     }
@@ -1466,61 +1533,68 @@ struct WorkspaceView: View {
     /// participates in SwiftUI's shortcut routing; they fire
     /// regardless of which control has focus.
     @ViewBuilder
+    /// Every workspace accelerator, each bound by registry command id
+    /// so a Settings → Keybindings override actually takes effect
+    /// (GitLab #534). These used to hardcode key + modifiers, which
+    /// made the remapping UI purely decorative.
     private var workspaceShortcuts: some View {
         Group {
-            HiddenShortcutButton(key: "p", modifiers: [.command, .shift]) {
+            HiddenShortcutButton(commandID: "navigation.commandPalette") {
                 showCommandPalette = true
             }
-            HiddenShortcutButton(key: "p", modifiers: [.command]) {
+            HiddenShortcutButton(commandID: "navigation.quickOpen") {
                 showQuickOpen = true
             }
-            HiddenShortcutButton(key: "f", modifiers: [.command, .shift]) {
+            HiddenShortcutButton(commandID: "navigation.findInProject") {
                 showFindInProject = true
             }
-            HiddenShortcutButton(key: "f", modifiers: [.command]) {
+            HiddenShortcutButton(commandID: "search.findInFile") {
                 handleFindInFile()
             }
-            HiddenShortcutButton(key: "w", modifiers: [.command]) {
+            HiddenShortcutButton(commandID: "navigation.closeTab") {
                 if let url = controller.currentFile {
                     controller.closeTab(url)
                 }
             }
-            HiddenShortcutButton(keyEquivalent: .delete, modifiers: [.command]) {
+            HiddenShortcutButton(commandID: "editing.deleteFile") {
                 if let url = controller.currentFile,
                    !isTextEditorFocused() {
                     pendingDeleteFile = url
                 }
             }
-            HiddenShortcutButton(key: "]", modifiers: [.command, .shift]) {
+            HiddenShortcutButton(commandID: "navigation.nextTab") {
                 controller.cycleTab(by: 1)
             }
-            HiddenShortcutButton(key: "[", modifiers: [.command, .shift]) {
+            HiddenShortcutButton(commandID: "navigation.previousTab") {
                 controller.cycleTab(by: -1)
             }
-            HiddenShortcutButton(key: "o", modifiers: [.command, .shift]) {
+            HiddenShortcutButton(commandID: "navigation.symbolPalette") {
                 showSymbolPalette = true
             }
-            HiddenShortcutButton(key: "`", modifiers: [.control]) {
+            HiddenShortcutButton(commandID: "panels.toggleTerminal") {
                 bottomTab = .terminal
                 showConsole = true
             }
-            HiddenShortcutButton(key: "d", modifiers: [.control, .command]) {
+            HiddenShortcutButton(commandID: "navigation.goToDefinition") {
                 goToDefinition()
             }
-            HiddenShortcutButton(key: "h", modifiers: [.control, .command]) {
+            HiddenShortcutButton(commandID: "navigation.hover") {
                 hoverAtCaret()
             }
-            HiddenShortcutButton(key: " ", modifiers: [.control]) {
+            HiddenShortcutButton(commandID: "editing.acceptCompletion") {
                 triggerCompletion()
             }
-            HiddenShortcutButton(key: "r", modifiers: [.control, .command]) {
+            HiddenShortcutButton(commandID: "editing.rename") {
                 beginRename()
             }
-            HiddenShortcutButton(key: "f", modifiers: [.option, .shift]) {
+            HiddenShortcutButton(commandID: "editing.formatDocument") {
                 formatDocument()
             }
-            HiddenShortcutButton(key: "b", modifiers: [.control, .command]) {
+            HiddenShortcutButton(commandID: "navigation.blame") {
                 showBlame()
+            }
+            HiddenShortcutButton(commandID: "file.reload") {
+                controller.reloadFromDisk()
             }
         }
     }
@@ -1652,6 +1726,10 @@ struct WorkspaceView: View {
             if let url = controller.currentFile {
                 controller.closeTab(url)
             }
+        case .fileReload:
+            // File → Reload from Disk (GitLab #536). The comment in
+            // `load()` promised this menu item for a year.
+            controller.reloadFromDisk()
         // Edit
         case .editFindInFile:
             handleFindInFile()

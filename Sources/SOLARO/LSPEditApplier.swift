@@ -21,7 +21,12 @@ enum LSPEditApplier {
         let grouped = Dictionary(grouping: edits, by: { $0.url })
         var written: [URL] = []
         for (url, fileEdits) in grouped {
-            guard var text = try? String(contentsOf: url, encoding: .utf8) else {
+            // The live buffer, not disk (GitLab #535): the server
+            // computed these positions against the document it was
+            // last told about, which is the editor's buffer. Applying
+            // them to a disk snapshot that lags behind lands the edit
+            // on the wrong characters.
+            guard var text = controller.liveText(for: url) else {
                 continue
             }
             // Sort by end position descending so each replace doesn't
@@ -35,7 +40,11 @@ enum LSPEditApplier {
                 let ns = text as NSString
                 text = ns.replacingCharacters(in: range, with: edit.newText)
             }
-            try? text.write(to: url, atomically: true, encoding: .utf8)
+            // One save path for the whole editor (GitLab #532): a
+            // rename that can't reach disk records a failure the user
+            // can see instead of reporting success.
+            guard controller.writeToDisk(text, to: url) else { continue }
+            controller.liveEditorText[url.standardizedFileURL] = text
             written.append(url)
             controller.lsp.didChange(url: url, text: text)
         }

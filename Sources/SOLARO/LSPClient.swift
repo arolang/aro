@@ -14,6 +14,7 @@
 // follow-ups (the server supports them but the editor doesn't
 // surface them yet).
 
+import AppKit
 import Foundation
 
 @MainActor
@@ -43,6 +44,21 @@ final class AROLSPClient {
     /// the inspector when something goes wrong.
     private(set) var lastErrorLine: String?
 
+    /// Coarse health for the status bar (GitLab #530): a crashed
+    /// server used to disappear silently — diagnostics froze,
+    /// completion went empty, and the only trace was
+    /// `lastErrorLine` buried in the inspector.
+    enum ServerStatus: Equatable {
+        case stopped
+        case starting
+        case running
+        /// Crashed; a restart is scheduled.
+        case restarting(attempt: Int)
+        /// Crashed repeatedly; gave up.
+        case failed(String)
+    }
+    private(set) var serverStatus: ServerStatus = .stopped
+
     // MARK: - Lifecycle
 
     private var process: Process?
@@ -61,11 +77,65 @@ final class AROLSPClient {
     /// and call the pending callback with nil so SwiftUI doesn't
     /// hang waiting on a silent server.
     private var requestTimeouts: [Int: DispatchWorkItem] = [:]
-    /// Queued didOpen/didChange notifications that arrived before
-    /// `initialize` completed. Drained from `handleFrame` once
-    /// isReady flips true.
-    private var pendingDocOps: [() -> Void] = []
+    /// Latest full text per open document — the client-side mirror
+    /// of what the server should have open. Serves two jobs
+    /// (GitLab #530): it buffers didOpen/didChange that arrive
+    /// before the initialize handshake completes, and it is what
+    /// gets replayed onto a fresh server after a crash restart.
+    /// Bounded by the number of open documents — unlike the old
+    /// closure queue, which grew by one full-document capture per
+    /// keystroke for as long as the server stayed dead.
+    private(set) var openDocuments: [URL: String] = [:]
+    /// JSON-RPC id of the outstanding `initialize` request. The old
+    /// hard-coded `id == 1` check only worked for the first server;
+    /// a restarted one gets whatever `nextID` is up to.
+    private var initializeID: Int?
+    /// When the current server process was launched — feeds the
+    /// restart policy's "was it healthy for a while?" reset.
+    private var startedAt: Date?
+    /// Consecutive crash-restarts already spent.
+    private var restartAttempts = 0
+    /// Set by `stop()` so an intentional teardown doesn't trigger
+    /// the crash-restart path.
+    private var stopRequested = false
+    private var restartTask: Task<Void, Never>?
+    /// Remembered for crash restarts — `start(project:)` resolves
+    /// the aro binary relative to it.
+    private var lastProject: Project?
     private static let defaultRequestTimeout: TimeInterval = 2.5
+    private static let restartPolicy = LSPRestartPolicy()
+
+    /// `willTerminateNotification` token — removed in deinit.
+    @ObservationIgnored
+    private nonisolated(unsafe) var terminationObserver: NSObjectProtocol?
+
+    init() {
+        // Belt-and-suspenders for ⌘Q (GitLab #529): the workspace
+        // controller's teardown calls `stop()`, but its 2s SIGKILL
+        // escalation can't run once the app is exiting — so here
+        // SIGTERM and SIGKILL go out together, and no restart is
+        // scheduled behind them.
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.stopRequested = true
+                self.restartTask?.cancel()
+                guard let process = self.process, process.isRunning else { return }
+                process.terminate()
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+    }
+
+    deinit {
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
+    }
 
     /// A location returned by `textDocument/definition`, expressed
     /// in SOLARO's 1-based line convention so callers can hand it
@@ -102,6 +172,9 @@ final class AROLSPClient {
 
     func start(project: Project? = nil) {
         guard process == nil else { return }
+        if let project { lastProject = project }
+        stopRequested = false
+        serverStatus = .starting
         let task = Process()
         // Use the same resolver as Console/AICoPilot so SOLARO prefers
         // the in-repo `.build/release/aro` when run inside a SOLARO
@@ -148,46 +221,124 @@ final class AROLSPClient {
             }
         }
 
-        task.terminationHandler = { [weak self] _ in
+        task.terminationHandler = { [weak self] proc in
+            let status = proc.terminationStatus
             Task { @MainActor [weak self] in
-                self?.process = nil
-                self?.isReady = false
+                self?.handleServerExit(status: status)
             }
         }
 
         do {
             try task.run()
             process = task
+            startedAt = Date()
             sendInitialize()
         } catch {
             lastErrorLine = "Could not launch `aro lsp`: \(error.localizedDescription)"
+            serverStatus = .failed(lastErrorLine ?? "launch failed")
         }
     }
 
     func stop() {
-        process?.terminate()
+        stopRequested = true
+        restartTask?.cancel()
+        restartTask = nil
+        isReady = false
+        initializeID = nil
+        serverStatus = .stopped
+        guard let running = process else { return }
+        process = nil
+        guard running.isRunning else { return }
+        running.terminate()
+        // A server stuck mid-request may never service the SIGTERM
+        // — escalate so teardown actually tears down (same rationale
+        // as the notebook kernel, GitLab #527). The pid stays valid
+        // while `isRunning` is true; `Process` only reaps on exit.
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if running.isRunning {
+                kill(running.processIdentifier, SIGKILL)
+            }
+        }
+    }
+
+    /// The subprocess exited. Intentional stops just settle state;
+    /// a crash fails every in-flight request immediately and
+    /// schedules a restart with backoff (GitLab #530) — before
+    /// this, one LSP crash silently downgraded the whole session:
+    /// frozen diagnostics, empty completions, dead navigation, and
+    /// an op queue growing with every keystroke.
+    private func handleServerExit(status: Int32) {
         process = nil
         isReady = false
+        initializeID = nil
+        documentVersions.removeAll()
+        partialBuffer.removeAll()
+        // Fail in-flight requests now instead of letting each one
+        // wait out its 2.5s timeout against a dead server.
+        for (_, work) in requestTimeouts { work.cancel() }
+        requestTimeouts.removeAll()
+        let callbacks = pendingResults
+        pendingResults.removeAll()
+        for (_, cb) in callbacks { cb(nil) }
+
+        if stopRequested {
+            serverStatus = .stopped
+            return
+        }
+
+        let uptime = Date().timeIntervalSince(startedAt ?? Date())
+        switch Self.restartPolicy.decision(attemptsSoFar: restartAttempts,
+                                           uptime: uptime) {
+        case .restart(let delay, let attempt):
+            restartAttempts = attempt
+            serverStatus = .restarting(attempt: attempt)
+            lastErrorLine = "aro lsp exited (\(status)) — restarting, attempt \(attempt)/\(Self.restartPolicy.maxAttempts)"
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .error,
+                summary: "server exited (\(status)) — restart \(attempt)/\(Self.restartPolicy.maxAttempts) in \(delay)s",
+                body: ""
+            )
+            restartTask?.cancel()
+            restartTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard let self, !Task.isCancelled,
+                      self.process == nil, !self.stopRequested else { return }
+                self.start(project: self.lastProject)
+            }
+        case .giveUp:
+            let message = "aro lsp crashed repeatedly — giving up after \(Self.restartPolicy.maxAttempts) restarts. Diagnostics, completion and navigation are unavailable."
+            serverStatus = .failed(message)
+            lastErrorLine = message
+            InternalLogStore.shared.record(
+                category: .lsp, direction: .error,
+                summary: "server exited (\(status)) — giving up after \(Self.restartPolicy.maxAttempts) restarts",
+                body: ""
+            )
+        }
     }
 
     // MARK: - Document lifecycle
 
     func didOpen(url: URL, text: String) {
+        // Remember the text either way — it buffers ops that arrive
+        // before the initialize handshake completes (without this,
+        // every load-time didOpen got dropped and the server treated
+        // the project as empty), and it is the replay source after a
+        // crash restart (GitLab #530).
+        openDocuments[url] = text
         guard isReady else {
-            // Queue until the initialize handshake completes —
-            // without this, every load-time didOpen got dropped and
-            // the server treated the project as empty, returning
-            // null from every completion request.
-            pendingDocOps.append { [weak self] in
-                self?.didOpen(url: url, text: text)
-            }
             InternalLogStore.shared.record(
                 category: .lsp, direction: .info,
-                summary: "queued didOpen \(url.lastPathComponent) — LSP not ready",
+                summary: "buffered didOpen \(url.lastPathComponent) — LSP not ready",
                 body: ""
             )
             return
         }
+        sendDidOpen(url: url, text: text)
+    }
+
+    private func sendDidOpen(url: URL, text: String) {
         documentVersions[url] = 1
         sendNotification(method: "textDocument/didOpen", params: [
             "textDocument": [
@@ -200,10 +351,13 @@ final class AROLSPClient {
     }
 
     func didChange(url: URL, text: String) {
-        guard isReady else {
-            pendingDocOps.append { [weak self] in
-                self?.didChange(url: url, text: text)
-            }
+        openDocuments[url] = text
+        guard isReady else { return }
+        guard documentVersions[url] != nil else {
+            // Not opened on THIS server process (it restarted after
+            // a crash) — a didChange for an unopened document is
+            // invalid, so open it with the current text instead.
+            sendDidOpen(url: url, text: text)
             return
         }
         let version = (documentVersions[url] ?? 0) + 1
@@ -220,9 +374,13 @@ final class AROLSPClient {
     }
 
     func didClose(url: URL) {
-        guard isReady else { return }
-        documentVersions.removeValue(forKey: url)
+        // Always drop the local mirror + stale diagnostics, even
+        // when the server is down — the document must not come back
+        // from a crash-restart replay after its tab closed.
+        openDocuments.removeValue(forKey: url)
         diagnostics.removeValue(forKey: url)
+        guard isReady,
+              documentVersions.removeValue(forKey: url) != nil else { return }
         sendNotification(method: "textDocument/didClose", params: [
             "textDocument": ["uri": url.absoluteString],
         ])
@@ -497,6 +655,7 @@ final class AROLSPClient {
     private func sendInitialize() {
         let id = nextID
         nextID += 1
+        initializeID = id
         let initParams: [String: Any] = [
             "processId": Int(ProcessInfo.processInfo.processIdentifier),
             "rootUri": NSNull(),
@@ -650,20 +809,26 @@ final class AROLSPClient {
                 body: rawBody
             )
             requestTimeouts.removeValue(forKey: id)?.cancel()
-            if id == 1 && !isReady {
+            if id == initializeID, !isReady {
+                initializeID = nil
                 isReady = true
+                serverStatus = .running
                 sendNotification(method: "initialized", params: [:])
-                // Flush load-time backlog of didOpen / didChange. Without
-                // this every source file is invisible to the server and
-                // completion returns null.
+                // (Re)play the open documents. On first start this
+                // flushes the load-time backlog — without it every
+                // source file is invisible to the server and
+                // completion returns null. After a crash restart it
+                // hands the fresh server the same set of documents,
+                // at their current text, that the dead one had
+                // (GitLab #530).
                 InternalLogStore.shared.record(
                     category: .lsp, direction: .info,
-                    summary: "draining \(pendingDocOps.count) queued doc ops after initialize",
+                    summary: "replaying \(openDocuments.count) open documents after initialize",
                     body: ""
                 )
-                let ops = pendingDocOps
-                pendingDocOps.removeAll()
-                for op in ops { op() }
+                for (url, text) in openDocuments {
+                    sendDidOpen(url: url, text: text)
+                }
             }
             if let cb = pendingResults.removeValue(forKey: id) {
                 cb(obj["result"])
@@ -710,5 +875,35 @@ final class AROLSPClient {
             )
         }
         diagnostics[url] = parsed
+    }
+}
+
+/// Pure decision logic for restarting a crashed `aro lsp`
+/// (GitLab #530). Kept free of Process/Task so the backoff and the
+/// give-up cap are unit-testable headless.
+struct LSPRestartPolicy: Equatable, Sendable {
+    /// Consecutive crash-restarts before giving up.
+    var maxAttempts: Int = 3
+    /// Delay before the first restart; doubles per attempt.
+    var baseDelay: TimeInterval = 0.5
+    /// A server that stayed up at least this long before dying was
+    /// evidently healthy — its crash starts a fresh attempt series
+    /// instead of inheriting the count from some earlier hiccup.
+    var healthyUptime: TimeInterval = 30
+
+    enum Decision: Equatable {
+        case restart(afterDelay: TimeInterval, attempt: Int)
+        case giveUp
+    }
+
+    /// `attemptsSoFar` is the number of consecutive crash-restarts
+    /// already spent; `uptime` is how long the just-died process
+    /// lived.
+    func decision(attemptsSoFar: Int, uptime: TimeInterval) -> Decision {
+        let spent = uptime >= healthyUptime ? 0 : attemptsSoFar
+        let attempt = spent + 1
+        guard attempt <= maxAttempts else { return .giveUp }
+        let delay = baseDelay * pow(2, Double(attempt - 1))
+        return .restart(afterDelay: delay, attempt: attempt)
     }
 }

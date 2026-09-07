@@ -31,6 +31,7 @@ struct StatusBarView: View {
             filePathSegment
             Divider().frame(height: 14).background(SolaroColor.divider)
             parseStateSegment
+            lspHealthChip
 
             if controller.gitMonitor.isAvailable {
                 Divider().frame(height: 14).background(SolaroColor.divider)
@@ -85,6 +86,37 @@ struct StatusBarView: View {
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textTertiary)
             }
+        }
+    }
+
+    /// LSP health chip (GitLab #530). Hidden while the server is
+    /// healthy; visible when it crashed and is being restarted, or
+    /// when the client gave up — so a degraded session (frozen
+    /// diagnostics, empty completions) says so instead of features
+    /// silently going dark.
+    @ViewBuilder
+    private var lspHealthChip: some View {
+        switch controller.lsp.serverStatus {
+        case .restarting(let attempt):
+            Divider().frame(height: 14).background(SolaroColor.divider)
+            HStack(spacing: SolaroSpace.xs) {
+                statePip(color: SolaroColor.stateWarn)
+                Text("LSP restarting (\(attempt))")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+            }
+            .help("aro lsp crashed — restarting it, attempt \(attempt).")
+        case .failed(let message):
+            Divider().frame(height: 14).background(SolaroColor.divider)
+            HStack(spacing: SolaroSpace.xs) {
+                statePip(color: SolaroColor.stateError)
+                Text("LSP unavailable")
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.stateError)
+            }
+            .help(message)
+        case .stopped, .starting, .running:
+            EmptyView()
         }
     }
 
@@ -352,6 +384,13 @@ struct StatusBarView: View {
                 branchSwitchError = err
             } else {
                 showBranchPicker = false
+                // The working tree just changed under every open
+                // editor. Take the new checkout for clean buffers and
+                // raise the conflict bar for dirty ones, rather than
+                // waiting for the file watcher and hoping (GitLab
+                // #536) — this picker used to refresh git status and
+                // nothing else.
+                controller.reloadFromDisk()
             }
         }
     }

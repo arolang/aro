@@ -9,6 +9,7 @@
 // view can stay focused.
 
 import SwiftUI
+import AppKit
 import AROParser
 import Yams
 
@@ -321,6 +322,8 @@ struct CenterPaneView: View {
     @ViewBuilder
     private func editorView(for url: URL) -> some View {
         VStack(spacing: 0) {
+            externalChangeBanner(for: url)
+            saveFailureBanner(for: url)
             conflictBanner(for: url)
             largeFileBanner(for: url)
             editorWithGutters(for: url)
@@ -340,6 +343,111 @@ struct CenterPaneView: View {
                 }
             )
         }
+    }
+
+    /// This file changed on disk while the buffer held unsaved work
+    /// (GitLab #536) — after a `git checkout`, a pull, or an edit in
+    /// another editor. Autosave is suspended for the file until the
+    /// user picks a side; without that the next keystroke wrote the
+    /// stale buffer straight over the new checkout.
+    @ViewBuilder
+    private func externalChangeBanner(for url: URL) -> some View {
+        if controller.isConflicted(url) {
+            HStack(spacing: SolaroSpace.s) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(SolaroColor.stateWarn)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Changed on disk")
+                        .font(SolaroFont.bodyBold)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                    Text("\(url.lastPathComponent) was modified outside SOLARO and this buffer has unsaved changes. Autosave is paused until you choose.")
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Button("Reload") {
+                    controller.resolveConflictByReloading(url)
+                }
+                .buttonStyle(.plain)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.accent)
+                Button("Keep mine") {
+                    controller.resolveConflictByKeepingBuffer(url)
+                }
+                .buttonStyle(.plain)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.accent)
+            }
+            .padding(.horizontal, SolaroSpace.m)
+            .padding(.vertical, SolaroSpace.s)
+            .background(SolaroColor.stateWarn.opacity(0.16))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(SolaroColor.divider)
+                    .frame(height: 1)
+            }
+        }
+    }
+
+    /// Standing autosave failure for this file (GitLab #532). The
+    /// editor's save model is per-keystroke autosave, so there is no
+    /// dirty dot and no ⌘S to retry with — without this the user has
+    /// no signal at all that the file on disk stopped tracking the
+    /// buffer. Deliberately a banner and not an alert: autosave
+    /// retries on every keystroke, and a modal per keystroke would be
+    /// unusable. Every retry that lands takes the banner down.
+    @ViewBuilder
+    private func saveFailureBanner(for url: URL) -> some View {
+        if let failure = controller.saveState.failure(for: url) {
+            HStack(spacing: SolaroSpace.s) {
+                Image(systemName: "exclamationmark.octagon.fill")
+                    .foregroundStyle(SolaroColor.stateError)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Not saved to disk")
+                        .font(SolaroFont.bodyBold)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                    Text(EditorSaveState.bannerMessage(
+                        fileName: url.lastPathComponent,
+                        failure: failure))
+                        .font(SolaroFont.caption)
+                        .foregroundStyle(SolaroColor.textSecondary)
+                        .textSelection(.enabled)
+                }
+                Spacer(minLength: 0)
+                Button("Retry") {
+                    if controller.writeToDisk(cachedText(for: url), to: url) {
+                        reparse(url: url)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(SolaroFont.caption)
+                .foregroundStyle(SolaroColor.accent)
+                Button("Save As…") { saveACopy(of: url) }
+                    .buttonStyle(.plain)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.accent)
+            }
+            .padding(.horizontal, SolaroSpace.m)
+            .padding(.vertical, SolaroSpace.s)
+            .background(SolaroColor.stateError.opacity(0.14))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(SolaroColor.divider)
+                    .frame(height: 1)
+            }
+        }
+    }
+
+    /// Escape hatch from a standing save failure: write the in-memory
+    /// buffer somewhere the user *can* write. The original file (and
+    /// its failure banner) stay as they are — this is a rescue, not a
+    /// "Save As" that re-points the tab.
+    private func saveACopy(of url: URL) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = url.lastPathComponent
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let target = panel.url else { return }
+        controller.writeToDisk(cachedText(for: url), to: target)
     }
 
     /// Notice shown for files opened under the large-file guard
@@ -486,7 +594,7 @@ struct CenterPaneView: View {
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url),
-                    aiEdit: controller.pendingAIEdit.flatMap {
+                    bufferEdit: controller.pendingBufferEdit.flatMap {
                         $0.url == url.standardizedFileURL ? $0 : nil
                     }
                 )
@@ -496,8 +604,10 @@ struct CenterPaneView: View {
                         EditorFindBar(
                             controller: controller,
                             fileText: {
-                                (try? String(contentsOf: url, encoding: .utf8))
-                                    ?? ""
+                                // Live buffer, not disk (GitLab #535)
+                                // — find has to match what's on
+                                // screen.
+                                controller.liveText(for: url) ?? ""
                             }
                         )
                         .padding(.top, SolaroSpace.s)
@@ -712,7 +822,23 @@ struct CenterPaneView: View {
                 // caret onto the next line. Formatting runs only on
                 // explicit save (saveAndReparse) where the user
                 // actually meant to clean up the file.
-                try? newValue.write(to: url, atomically: true, encoding: .utf8)
+                //
+                // A failed write no longer disappears: `writeToDisk`
+                // records it, the editor grows a banner, and the next
+                // keystroke retries (GitLab #532). We still take the
+                // text into the in-memory caches — throwing away what
+                // the user typed because the disk said no would be a
+                // worse bug than the one being fixed.
+                //
+                // A file that changed on disk under a dirty buffer is
+                // the one case we refuse to write (GitLab #536):
+                // autosaving here is what overwrote a fresh `git
+                // checkout` with the pre-checkout text. Keep typing,
+                // keep the caches current, write nothing until the
+                // conflict bar is answered.
+                if !controller.isConflicted(url) {
+                    controller.writeToDisk(newValue, to: url)
+                }
                 if fileTextURL == url { fileText = newValue }
                 // Keep the controller's live-buffer mirror current so the AI
                 // co-pilot sees unsaved edits and so a co-pilot write that
@@ -783,8 +909,11 @@ struct CenterPaneView: View {
         guard LargeFilePolicy.allowsWriteBack(url) else { return }
         let oldText = cachedText(for: url)
         let formatted = formatIfEnabled(text, for: url)
-        try? formatted.write(to: url, atomically: true, encoding: .utf8)
+        // Same conflict guard as the keystroke path (GitLab #536).
+        guard !controller.isConflicted(url) else { return }
+        controller.writeToDisk(formatted, to: url)
         if fileTextURL == url { fileText = formatted }
+        controller.liveEditorText[url.standardizedFileURL] = formatted
         // Keep the LSP server's view of the document in sync so
         // diagnostics + go-to-definition pick up edits without
         // requiring a restart.
@@ -906,7 +1035,7 @@ struct CenterPaneView: View {
         controller: WorkspaceController
     ) -> Bool {
         guard
-            let source = try? String(contentsOf: url, encoding: .utf8),
+            let source = controller.liveText(for: url),
             let line = controller.currentLine,
             let result = SnippetSplice.apply(
                 body: snippet.body,
@@ -916,11 +1045,8 @@ struct CenterPaneView: View {
                 replacingTrigger: trigger)
         else { return false }
 
-        do {
-            try result.text.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            return false
-        }
+        guard controller.writeToDisk(result.text, to: url) else { return false }
+        controller.liveEditorText[url.standardizedFileURL] = result.text
         controller.lsp.didChange(url: url, text: result.text)
         controller.openFile(url)
 
@@ -950,7 +1076,7 @@ struct CenterPaneView: View {
         { [controller = controller] text in
             guard
                 let lineNumber = controller.currentLine,
-                let source = try? String(contentsOf: url, encoding: .utf8)
+                let source = controller.liveText(for: url)
             else { return }
             let ns = source as NSString
             // Recompute the line offsets so we don't rely on a stale
@@ -1004,7 +1130,8 @@ struct CenterPaneView: View {
             let updated = ns.replacingCharacters(
                 in: replaceRange, with: textWithSpace
             )
-            try? updated.write(to: url, atomically: true, encoding: .utf8)
+            controller.writeToDisk(updated, to: url)
+            controller.liveEditorText[url.standardizedFileURL] = updated
             controller.lsp.didChange(url: url, text: updated)
             controller.openFile(url)
             // Park the caret at the END of the current line in the
@@ -1239,7 +1366,8 @@ struct CenterPaneView: View {
             if !appended.hasSuffix("\n") { appended += "\n" }
             appended += "\n" + template
             if !appended.hasSuffix("\n") { appended += "\n" }
-            try? appended.write(to: url, atomically: true, encoding: .utf8)
+            controller.writeToDisk(appended, to: url)
+            controller.liveEditorText[url.standardizedFileURL] = appended
             reparse(url: url)
             return
         }
@@ -1257,7 +1385,8 @@ struct CenterPaneView: View {
             in: NSRange(location: insertAt, length: 0),
             with: snippet
         )
-        try? updated.write(to: url, atomically: true, encoding: .utf8)
+        controller.writeToDisk(updated, to: url)
+        controller.liveEditorText[url.standardizedFileURL] = updated
         reparse(url: url)
     }
 
@@ -1478,7 +1607,8 @@ struct CenterPaneView: View {
                 with: statementText
             )
         }
-        try? updated.write(to: url, atomically: true, encoding: .utf8)
+        controller.writeToDisk(updated, to: url)
+        controller.liveEditorText[url.standardizedFileURL] = updated
         reparse(url: url)
     }
 
@@ -1649,7 +1779,7 @@ struct CenterPaneView: View {
                     lastExecutedAt: controller.lastExecutedAt,
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url),
-                    aiEdit: controller.pendingAIEdit.flatMap {
+                    bufferEdit: controller.pendingBufferEdit.flatMap {
                         $0.url == url.standardizedFileURL ? $0 : nil
                     }
                 )
@@ -1659,8 +1789,10 @@ struct CenterPaneView: View {
                         EditorFindBar(
                             controller: controller,
                             fileText: {
-                                (try? String(contentsOf: url, encoding: .utf8))
-                                    ?? ""
+                                // Live buffer, not disk (GitLab #535)
+                                // — find has to match what's on
+                                // screen.
+                                controller.liveText(for: url) ?? ""
                             }
                         )
                         .padding(.top, SolaroSpace.s)
