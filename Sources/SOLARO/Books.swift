@@ -867,10 +867,15 @@ enum BookMarkdownParser {
                 while i < lines.count {
                     let inner = String(lines[i])
                         .trimmingCharacters(in: .whitespaces)
-                    if inner.hasPrefix("- ") {
+                    if inner.hasPrefix("- ") || inner.hasPrefix("* ") {
                         items.append(String(inner.dropFirst(2)))
-                    } else if inner.hasPrefix("* ") {
-                        items.append(String(inner.dropFirst(2)))
+                    } else if !items.isEmpty, isListContinuation(inner) {
+                        // A wrapped item: CommonMark folds the line into
+                        // the item above. Without this every prose bullet
+                        // long enough to wrap broke into a bullet plus a
+                        // stray paragraph, which is how most of the course
+                        // notebooks are written.
+                        items[items.count - 1] += " " + inner
                     } else { break }
                     i += 1
                 }
@@ -907,11 +912,12 @@ enum BookMarkdownParser {
                 while i < lines.count {
                     let inner = String(lines[i])
                         .trimmingCharacters(in: .whitespaces)
-                    guard isOrderedListLine(inner),
-                          let dot = inner.firstIndex(of: ".")
-                    else { break }
-                    items.append(String(inner[inner.index(after: dot)...])
-                        .trimmingCharacters(in: .whitespaces))
+                    if isOrderedListLine(inner), let dot = inner.firstIndex(of: ".") {
+                        items.append(String(inner[inner.index(after: dot)...])
+                            .trimmingCharacters(in: .whitespaces))
+                    } else if !items.isEmpty, isListContinuation(inner) {
+                        items[items.count - 1] += " " + inner
+                    } else { break }
                     i += 1
                 }
                 emit(.orderedList(items), from: start)
@@ -969,29 +975,70 @@ enum BookMarkdownParser {
         return blocks
     }
 
-    /// Heuristic: does the string contain something that looks
-    /// like an HTML tag (`<word…>` or `</word>` or `<word/>`)?
-    /// Plain `<x>` in code-comment-style prose still triggers,
-    /// which is OK — the HTML renderer leaves bare angle-bracket
-    /// content as text.
+    /// Is this line the wrapped continuation of the list item above?
+    ///
+    /// Anything that starts a block of its own ends the item; a plain
+    /// non-blank line continues it (CommonMark lazy continuation).
+    private static func isListContinuation(_ trimmed: String) -> Bool {
+        if trimmed.isEmpty { return false }
+        if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return false }
+        if trimmed.hasPrefix("```") || trimmed.hasPrefix("|") { return false }
+        if trimmed == "---" || trimmed == "***" || trimmed == "___" { return false }
+        return true
+    }
+
+    /// Tag names the block-level HTML renderer is here for. Anything
+    /// else between angle brackets is ARO, not markup.
+    private static let htmlBlockTagNames: Set<String> = [
+        "a", "abbr", "b", "blockquote", "br", "caption", "code", "col",
+        "colgroup", "dd", "details", "div", "dl", "dt", "em", "figcaption",
+        "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "iframe",
+        "img", "kbd", "li", "mark", "ol", "p", "picture", "pre", "q", "s",
+        "samp", "section", "small", "span", "strong", "sub", "summary",
+        "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u",
+        "ul", "var", "video"
+    ]
+
+    /// Does the string contain real block-level HTML?
+    ///
+    /// This decides whether a paragraph is handed to
+    /// `NSAttributedString`'s HTML importer, which silently DELETES
+    /// anything it reads as an unknown tag. ARO prose is full of
+    /// `<day-orders>`, `<status>`, `<new-name>` — every variable in the
+    /// language is written that way — so a name-blind heuristic sent
+    /// ordinary sentences through the importer and the variables
+    /// vanished from the rendered page, backticks and all.
+    ///
+    /// Only a known HTML tag name counts now, and only outside inline
+    /// code spans: inside backticks the author is showing text, never
+    /// asking for markup.
     private static func containsHTMLTag(_ s: String) -> Bool {
+        var inCode = false
         var i = s.startIndex
         while i < s.endIndex {
-            if s[i] == "<", s.index(after: i) < s.endIndex {
-                let next = s[s.index(after: i)]
-                if next.isLetter || next == "/" {
-                    // Look for a matching `>` within ~50 chars
-                    // to filter out things like `<my-variable>`
-                    // in prose, which are common in ARO text.
-                    var probe = s.index(after: i)
-                    var dist = 0
-                    while probe < s.endIndex, dist < 80 {
-                        if s[probe] == ">" { return true }
-                        if s[probe] == "<" { break }
-                        probe = s.index(after: probe)
-                        dist += 1
-                    }
-                }
+            let char = s[i]
+            if char == "`" {
+                inCode.toggle()
+                i = s.index(after: i)
+                continue
+            }
+            guard !inCode, char == "<" else {
+                i = s.index(after: i)
+                continue
+            }
+            var probe = s.index(after: i)
+            if probe < s.endIndex, s[probe] == "/" { probe = s.index(after: probe) }
+            var name = ""
+            while probe < s.endIndex, s[probe].isLetter || s[probe].isNumber {
+                name.append(s[probe])
+                probe = s.index(after: probe)
+            }
+            // The tag name must be followed by `>`, `/`, or whitespace
+            // (an attribute list) — `<day-orders>` fails on the hyphen.
+            if !name.isEmpty, htmlBlockTagNames.contains(name.lowercased()),
+               probe < s.endIndex,
+               s[probe] == ">" || s[probe] == "/" || s[probe].isWhitespace {
+                return true
             }
             i = s.index(after: i)
         }
