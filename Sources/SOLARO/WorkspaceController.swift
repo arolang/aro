@@ -846,6 +846,15 @@ final class WorkspaceController {
         // buffer mirror holding JSON that a text-editor write path
         // could later put back on disk.
         if ReplFile.isNotebook(std) {
+            // Not the text pipeline — a notebook has no text buffer and
+            // parsing its JSON as ARO is what made the language server
+            // complain about its own file format. It does still need to
+            // notice the file moving underneath it: an open notebook
+            // whose file changed on disk holds a stale model, and its
+            // next autosave would write that back over the new content.
+            if let notebook = replNotebooks[std] {
+                notebook.reloadFromDiskIfUnedited()
+            }
             gitMonitor.refresh(for: project)
             return
         }

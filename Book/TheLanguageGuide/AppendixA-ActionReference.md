@@ -1019,16 +1019,16 @@ Lists directory contents.
 ```aro
 Create the <dir-path> with "./path".
 List the <result> from the <directory: dir-path>.
-List the <result: "pattern"> from the <directory: dir-path>.
-List the <result: recursively> from the <directory: dir-path>.
+List the <result> from the <directory: dir-path> matching "pattern".
+List the <result> from the <directory: dir-path> recursively.
 ```
 
 **Examples:**
 ```aro
 Create the <uploads-path> with "./uploads".
 List the <entries> from the <directory: uploads-path>.
-List the <aro-files: "*.aro"> from the <directory: src-path>.
-List the <all-files: recursively> from the <directory: project-path>.
+List the <aro-files> from the <directory: src-path> matching "*.aro".
+List the <all-files> from the <directory: project-path> recursively.
 ```
 
 **Valid Prepositions:** `from`

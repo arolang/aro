@@ -54,6 +54,13 @@
     List the <final-files> from the <directory: demo-dir>.
     Log "   Final files listed" to the <console>.
 
+    (* 9. Filter the listing with a glob (ARO-0036 §6.2) *)
+    Log "9. Listing only *.txt files..." to the <console>.
+    List the <text-files> from the <directory: demo-dir> matching "*.txt".
+    Compute the <text-count: length> from the <text-files>.
+    Log "   .txt files found:" to the <console>.
+    Log <text-count> to the <console>.
+
     Log "" to the <console>.
     Log "=== Demo Complete ===" to the <console>.
 

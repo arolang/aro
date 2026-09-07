@@ -288,6 +288,28 @@ components:
         - status
 ```
 
+This enum is **normative, and checked before the program runs**. Both halves
+of a transition name must be members of it; a state that is not declared is a
+build error, reported by `aro check`, `aro run` and `aro build`
+(GitLab #507). Without
+it the set of states was implicitly "whatever transition names the code
+happened to spell", so `draft_to_teleported` compiled, ran, and left the order
+in a state no contract had ever heard of.
+
+What the enum declares is the **set of states**, not the set of edges. It says
+`shipped` exists; it does not say that only `paid` may reach it. Whether a
+particular move is allowed *from where the entity currently is* stays a
+run-time question, answered by the from-state check in §4.3.
+
+Enforcement follows ARO's contract-first rule: opt-in. A project with no
+`openapi.yaml` — or an entity whose state property carries no string enum —
+is not checked, exactly as it is not given an HTTP server. The contract is
+resolved per `Accept` statement by matching the entity against the schema
+names (`order`, `orders` and `picked-order` all reach `Order`); failing that,
+by the contract's single declaration of that property. If neither identifies
+one schema, nothing is checked — an unactionable build error is worse than
+none.
+
 ### 4.2 The Accept Action
 
 Syntax:
@@ -317,13 +339,30 @@ Accept the <transition: paid_to_shipped> on <order: status>.
 
 ### 4.3 Error Handling
 
-If the current state doesn't match the expected `from` state:
+Two checks, at two different times.
+
+**Build time — is this a state at all?** Each half of the transition name is
+looked up in the declared enum (§4.1). One that is missing stops the build:
+
+```
+main.aro:
+  12:17: error: State 'shiped' is not declared by the contract (transition 'paid_to_shiped' on <order: status>)
+    hint: Checked against components.schemas.Order.status in openapi.yaml
+    hint: Declared states: draft, placed, paid, shipped, delivered, cancelled
+    hint: Closest declared state: shipped
+    hint: Add 'shiped' to that enum, or transition to a declared state
+```
+
+**Run time — is the entity there?** If the current state doesn't match the
+expected `from` state:
 
 ```
 Cannot accept state draft->placed on order: status. Current state is "paid".
 ```
 
-This follows ARO's "Code Is The Error Message" philosophy.
+Both follow ARO's "Code Is The Error Message" philosophy: the diagnostic names
+the state, the transition it came out of, the schema it was checked against,
+and everything that schema does declare.
 
 ### 4.4 Complete State Example
 

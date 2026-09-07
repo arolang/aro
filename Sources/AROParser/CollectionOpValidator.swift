@@ -42,6 +42,49 @@ public struct CollectionOpValidator {
             validateMapWithClause(aro)
             validateSplitWithClause(aro)
             validateDeleteWhereCondition(aro)
+            validateListModifiers(aro)
+        }
+    }
+
+    // MARK: - List modifiers
+
+    /// Verbs that read `matching` / `recursively` (ARO-0036 §6).
+    private static let listVerbs: Set<String> = ["list"]
+
+    /// Errors when `matching` or `recursively` sits on a verb that never
+    /// reads it (GitLab #518).
+    ///
+    /// Both are directory-listing clauses: `ListAction` is the only action
+    /// that binds them. Anywhere else the runtime would bind the framework
+    /// variable, the action would ignore it, and the statement would return
+    /// the *unfiltered* value — the exact silent-wrong-answer shape this
+    /// validator exists to stop.
+    private func validateListModifiers(_ statement: AROStatement) {
+        let verb = statement.action.verb
+        guard !Self.listVerbs.contains(verb.lowercased()) else { return }
+
+        let result = statement.result.base
+        let source = statement.object.noun.base
+
+        if statement.queryModifiers.matchingPattern != nil {
+            diagnostics.error(
+                "'matching' is a List clause — \(verb) ignores it",
+                at: statement.span.start,
+                hints: [
+                    "Filter the listing at the source: List the <\(result)> from the <directory: \(source)> matching \"*.csv\".",
+                    "To filter a collection by a field, use where: Filter the <\(result)> from the <\(source)> where <status> is \"open\".",
+                ]
+            )
+        }
+
+        if statement.queryModifiers.recursive {
+            diagnostics.error(
+                "'recursively' is a List clause — \(verb) ignores it",
+                at: statement.span.start,
+                hints: [
+                    "List the <\(result)> from the <directory: \(source)> recursively. (ARO-0036 §6.3)",
+                ]
+            )
         }
     }
 

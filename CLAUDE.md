@@ -40,13 +40,22 @@ aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linu
 aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to the binary; rpath=$ORIGIN.
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
+# Testing `aro build` against local runtime changes: build the runtime
+# archive too, or the linker silently picks up the INSTALLED one.
+swift build --product aro --product ARORuntime
+#   `aro build` links libARORuntime.a by search order, and an installed
+#   /opt/homebrew/lib/libARORuntime.a wins over a worktree that never
+#   produced one. A runtime change then appears to have no effect —
+#   the binary was built against the release you have installed.
+
 aro repl                 # Start the interactive ARO REPL
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
                          # Jupyter then launches `aro kernel --connection-file …`
 aro test ./MyApp         # Run colocated tests (ARO-0015)
-aro new plugin foo       # Scaffold a new plugin
+aro new plugin foo --lang swift   # Scaffold a plugin (--lang is required:
+                                  # swift, rust, c, cpp, python, aro)
 aro add github:org/repo  # Install a plugin from Git
 aro plugins              # List installed plugins
 aro actions              # List built-in and plugin actions
@@ -442,7 +451,9 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
 - During `aro build`, plugins in `Plugins/` are compiled and bundled
 - Swift/C plugins are compiled to dynamic libraries
 - Python plugins are copied with their source files
-- The binary loads plugins from `Plugins/` directory at runtime
+- Native plugins are linked INTO the binary, their symbols renamed
+  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
+  Python plugins ship as source beside it
 
 ## ARO Syntax
 
@@ -507,8 +518,11 @@ The Compute action transforms data using built-in operations:
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
-collection/text qualifiers in §3.2. Always `html-escape` untrusted values before
-rendering them into an HTML template — the template engine does not escape for you.
+collection/text qualifiers in §3.2. A template whose path ends `.html` or `.htm`
+escapes what it prints; `.tpl`, `.txt` and `.md` do not, so a `.tpl` emitting HTML
+still needs `html-escape` (GitLab #476, `TemplateEscaping.forTemplate`). Opt one
+value out with `Print <x> to the <template: raw>.` — and do not hand-escape into
+an escaping template, or the reader sees `&amp;lt;`.
 
 **The qualifier namespace is closed** (§3.3, GitLab #486). A Compute qualifier must
 resolve to a built-in, a plugin qualifier (`handle.qualifier`), a chain (`a|b`), or a
@@ -676,13 +690,13 @@ Sources/
 ├── AROCompiler/        # Native compilation (LLVM code generation)
 │   ├── LLVMCodeGenerator.swift  # AST to LLVM IR transformation
 │   └── Linker.swift    # Compilation and linking
-├── AROCRuntime/        # C-callable Swift runtime bridge
-│   ├── RuntimeBridge.swift   # Core runtime C interface
-│   ├── ActionBridge.swift    # All 50+ actions via @_cdecl
-│   └── ServiceBridge.swift   # HTTP/File/Socket C interface
+│   └── Bridge/         # C-callable runtime for compiled binaries
+│       ├── ActionBridge.swift     # Actions via @_cdecl (245 exports across the dir)
+│       ├── FileSystemBridge.swift # File/watcher C interface
+│       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 65 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
 │
 │   # Getting Started
 ├── HelloWorld/         # Minimal single-file example

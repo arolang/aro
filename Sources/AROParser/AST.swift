@@ -276,6 +276,11 @@ public struct AROStatement: Statement {
         queryModifiers.byClause
     }
 
+    /// Optional matching clause (ARO-0036) - for List: `matching "*.csv"`
+    public var matchingPattern: (any Expression)? {
+        queryModifiers.matchingPattern
+    }
+
     /// Optional to clause (ARO-0041) - for date ranges: `from <start> to <end>`
     public var toClause: (any Expression)? {
         rangeModifiers.toClause
@@ -315,6 +320,12 @@ public struct AROStatement: Statement {
         }
         if let by = queryModifiers.byClause {
             desc += " \(by)"
+        }
+        if let matching = queryModifiers.matchingPattern {
+            desc += " matching \(matching)"
+        }
+        if queryModifiers.recursive {
+            desc += " recursively"
         }
         if let when = statementGuard.condition {
             desc += " when \(when)"
@@ -601,6 +612,14 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
     /// Default value when retrieve returns no results: `default ""`
     public let defaultValue: (any Expression)?
 
+    /// Glob filter on a directory listing: `matching "*.csv"` (ARO-0036 §6.2,
+    /// GitLab #518). An expression, so `matching <pattern>` reads the glob out
+    /// of a variable the same way `default <fallback>` reads its fallback.
+    public let matchingPattern: (any Expression)?
+
+    /// Trailing `recursively` on a directory listing (ARO-0036 §6.3).
+    public let recursive: Bool
+
     /// The where condition when it is a single predicate; nil when
     /// absent or compound. Kept for consumers that can only handle
     /// one field/op/value triple — anything walking variables or
@@ -613,24 +632,32 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
         whereClause: WhereClause? = nil,
         aggregation: AggregationClause? = nil,
         byClause: ByClause? = nil,
-        defaultValue: (any Expression)? = nil
+        defaultValue: (any Expression)? = nil,
+        matchingPattern: (any Expression)? = nil,
+        recursive: Bool = false
     ) {
         self.whereCondition = whereClause.map { .predicate($0) }
         self.aggregation = aggregation
         self.byClause = byClause
         self.defaultValue = defaultValue
+        self.matchingPattern = matchingPattern
+        self.recursive = recursive
     }
 
     public init(
         whereCondition: WhereCondition?,
         aggregation: AggregationClause? = nil,
         byClause: ByClause? = nil,
-        defaultValue: (any Expression)? = nil
+        defaultValue: (any Expression)? = nil,
+        matchingPattern: (any Expression)? = nil,
+        recursive: Bool = false
     ) {
         self.whereCondition = whereCondition
         self.aggregation = aggregation
         self.byClause = byClause
         self.defaultValue = defaultValue
+        self.matchingPattern = matchingPattern
+        self.recursive = recursive
     }
 
     /// Empty query modifiers
@@ -638,7 +665,8 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
 
     /// Check if any query modifier is present
     public var isEmpty: Bool {
-        whereCondition == nil && aggregation == nil && byClause == nil && defaultValue == nil
+        whereCondition == nil && aggregation == nil && byClause == nil
+            && defaultValue == nil && matchingPattern == nil && !recursive
     }
 
     public var description: String {
@@ -647,6 +675,8 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
         if let a = aggregation { parts.append("with \(a)") }
         if let b = byClause { parts.append("\(b)") }
         if defaultValue != nil { parts.append("default ...") }
+        if let m = matchingPattern { parts.append("matching \(m)") }
+        if recursive { parts.append("recursively") }
         return parts.isEmpty ? "none" : parts.joined(separator: " ")
     }
 }

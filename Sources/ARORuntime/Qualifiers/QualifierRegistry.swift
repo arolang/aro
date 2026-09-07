@@ -90,7 +90,7 @@ public struct QualifierRegistration: Sendable {
     /// Description of what the qualifier does (optional)
     public let description: String?
 
-    /// Whether this qualifier accepts parameters via the `with` clause (ARO-0073)
+    /// Whether this qualifier accepts parameters via the `with` clause (ARO-0087)
     public let acceptsParameters: Bool
 
     /// The plugin host that can execute this qualifier
@@ -137,7 +137,7 @@ public final class QualifierRegistry: @unchecked Sendable {
         registerBuiltIns()
     }
 
-    // MARK: - Built-in Qualifier Registration (ARO-0073)
+    // MARK: - Built-in Qualifier Registration (ARO-0087)
 
     /// Register built-in qualifiers so the registry is the single source of truth
     ///
@@ -171,7 +171,7 @@ public final class QualifierRegistry: @unchecked Sendable {
 
     // MARK: - Registration
 
-    /// Register a qualifier from a plugin (ARO-0073: with conflict detection)
+    /// Register a qualifier from a plugin (ARO-0087: with conflict detection)
     ///
     /// Qualifiers are registered exclusively under the namespaced form
     /// `handler.qualifier` (e.g., "collections.reverse"). This prevents
@@ -257,7 +257,7 @@ public final class QualifierRegistry: @unchecked Sendable {
 
     // MARK: - Resolution
 
-    /// Resolve a qualifier on a value (ARO-0073: with optional parameters)
+    /// Resolve a qualifier on a value (ARO-0087: with optional parameters)
     ///
     /// If the qualifier is registered by a plugin, validates the input type
     /// and executes the qualifier via the plugin host.
@@ -305,7 +305,7 @@ public final class QualifierRegistry: @unchecked Sendable {
         }
     }
 
-    /// Resolve a chain of qualifiers on a value (ARO-0073: qualifier chaining)
+    /// Resolve a chain of qualifiers on a value (ARO-0087: qualifier chaining)
     ///
     /// Applies qualifiers left-to-right. Each qualifier's output becomes
     /// the next qualifier's input.
@@ -346,7 +346,7 @@ public final class QualifierRegistry: @unchecked Sendable {
     }
 }
 
-// MARK: - Built-in Qualifier Host (ARO-0073)
+// MARK: - Built-in Qualifier Host (ARO-0087)
 
 /// Stub host for built-in qualifiers registered in QualifierRegistry
 ///

@@ -31,10 +31,9 @@ struct REPLEventDispatchTests {
         /// This used to filter letters out of a UUID's first eight
         /// characters — and those eight can be all digits, which left
         /// the token EMPTY. Two Playgrounds then shared one repository
-        /// name and saw each other's events, so a test could read a
-        /// payload another test had stored. Draw from two whole UUIDs
-        /// and keep a leading letter, so the token is never empty and
-        /// effectively never repeats.
+        /// name and saw each other's events, so a test read a payload
+        /// another test had stored. Draw from two whole UUIDs and keep
+        /// a leading letter: never empty, effectively never repeated.
         let token = "p" + String((UUID().uuidString + UUID().uuidString)
             .lowercased()
             .filter { $0.isLetter }

@@ -27,6 +27,13 @@
 //     error-collecting diagnostics bag.
 //   - Subsequent analyzers never throw; they refine the
 //     diagnostics in the same bag.
+//   - The static convenience has two forms (GitLab #543):
+//     `Parser.parse(source, diagnostics:)` recovers, as above;
+//     `Parser.parse(source)` throws instead, because a caller with
+//     no collector cannot otherwise tell a file that failed to
+//     parse from a file with no feature sets — both are a Program
+//     with zero feature sets, and reading a broken file as empty is
+//     how a graph diff once reported 144 feature sets rewritten.
 //
 // ------------------------------------------------------------
 // TokenKind dispatch map (#337)
@@ -693,6 +700,8 @@ public final class Parser {
         var whereCondition: WhereCondition? = nil
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
+        var matchingPattern: (any Expression)? = nil
+        var recursive = false
         var whenCondition: (any Expression)? = nil
 
         // `Map the <names> from the <users> with name.` — the field
@@ -814,6 +823,31 @@ public final class Parser {
             }
         }
 
+        // matching clause (ARO-0036 §6.2, GitLab #518) — the glob filter on a
+        // directory listing: `List the <exports> from the <directory: out>
+        // matching "*.csv".`  `matching` is not a reserved word, so it is
+        // recognised positionally, exactly like `default` below; a variable
+        // (`matching <pattern>`) works because the glob is parsed as an
+        // expression rather than a bare literal.
+        if case .identifier(let kw) = peek().kind, kw == "matching" {
+            advance()
+            guard isExpressionStart(peek()) else {
+                throw ParserError.unexpectedToken(
+                    expected: "glob pattern after 'matching' — a string like \"*.csv\" or a <variable>",
+                    got: peek())
+            }
+            matchingPattern = try parseExpression()
+        }
+
+        // trailing `recursively` (ARO-0036 §6.3) — the spelling the proposal
+        // documents next to `matching`, and the one people write after it:
+        // `… matching "*_test.aro" recursively.`  The older qualifier form
+        // (`List the <all: recursively> from …`) still works.
+        if case .identifier(let kw) = peek().kind, kw == "recursively" {
+            advance()
+            recursive = true
+        }
+
         // default clause (ARO-0072)
         if case .identifier(let kw) = peek().kind, kw == "default" {
             advance()
@@ -831,7 +865,9 @@ public final class Parser {
                 whereCondition: whereCondition,
                 aggregation: aggregation,
                 byClause: byClause,
-                defaultValue: defaultValue
+                defaultValue: defaultValue,
+                matchingPattern: matchingPattern,
+                recursive: recursive
             ),
             rangeModifiers: RangeModifiers(
                 toClause: toExpression,
@@ -2638,9 +2674,41 @@ extension Parser {
 // MARK: - Convenience Extension
 
 extension Parser {
-    /// Creates a parser from source code and parses it
-    public static func parse(_ source: String, diagnostics: DiagnosticCollector = DiagnosticCollector()) throws -> Program {
-        let tokens = try Lexer.tokenize(source)
+    /// Parses source, reporting recovery errors to `diagnostics`.
+    ///
+    /// The parser recovers: a feature set it cannot read is reported
+    /// and skipped, and parsing continues. The returned `Program`
+    /// therefore holds what *did* parse — possibly nothing — and the
+    /// collector holds why. Callers on this overload must read the
+    /// collector; the CLI does exactly that, which is how `aro check`
+    /// reports several errors in one pass.
+    public static func parse(_ source: String,
+                             diagnostics: DiagnosticCollector) throws -> Program {
+        let tokens = try Lexer.tokenize(source, diagnostics: diagnostics)
         return try Parser(tokens: tokens, diagnostics: diagnostics).parse()
+    }
+
+    /// Parses source, throwing if anything failed to parse.
+    ///
+    /// Without a collector there is nowhere for recovery errors to
+    /// go, and a caller could not tell "this file has no feature
+    /// sets" from "this file did not parse" — a `Program` with zero
+    /// feature sets means both. That ambiguity is what made a graph
+    /// diff over an unchanged tree report 144 feature sets rewritten
+    /// (GitLab #543): every broken file read as empty.
+    ///
+    /// So this overload is strict. Recovery still happens internally
+    /// — the thrown `ParserError.recovered` carries every diagnostic,
+    /// not just the first — but an unread failure cannot pass for an
+    /// empty file. Pass a collector when you want the recovering
+    /// contract.
+    public static func parse(_ source: String) throws -> Program {
+        let diagnostics = DiagnosticCollector()
+        let program = try parse(source, diagnostics: diagnostics)
+        let errors = diagnostics.diagnostics.filter { $0.severity == .error }
+        guard errors.isEmpty else {
+            throw ParserError.recovered(errors: errors)
+        }
+        return program
     }
 }

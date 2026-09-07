@@ -98,6 +98,25 @@ final class ReplNotebookController {
 
     // MARK: - Document
 
+    /// Take what is on disk when the file changed underneath us.
+    ///
+    /// A notebook is not a text document, so it does not travel the
+    /// editor's external-change pipeline — but it still needs the
+    /// answer that pipeline gives: after a `git checkout` (or a pull,
+    /// or an edit in another editor) the in-memory model is stale, and
+    /// the next autosave would write it back over the new file. That
+    /// is not hypothetical: it silently reordered two cells of a
+    /// course notebook while branches were being switched under an
+    /// open window.
+    ///
+    /// A notebook with a cell being edited keeps what the user has —
+    /// their unsaved work outranks a background change — and is left
+    /// for them to resolve by saving or reopening.
+    func reloadFromDiskIfUnedited() {
+        guard editingMarkdownIDs.isEmpty, saveTask == nil else { return }
+        load()
+    }
+
     private func load() {
         do {
             var doc = try ReplNotebookDocument.load(from: url)
