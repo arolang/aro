@@ -360,16 +360,13 @@ Special feature sets manage application lifecycle:
 
 ```ebnf
 string_literal = '"' , { dq_string_char } , '"'
-               | "'" , { sq_string_char } , "'"
-               | multiline_string ;          (* deprecated, GitLab #524 *)
+               | "'" , { sq_string_char } , "'" ;
 
 dq_string_char = any_char - ('"' | "\\")          (* newlines are content *)
                | escape_sequence ;
 
 sq_string_char = any_char - ("'" | "\\" | newline)
                | escape_sequence ;
-
-multiline_string = '"""' , newline , { any_char } , newline , indent , '"""' ;
 
 escape_sequence = "\\" , ( "n" | "r" | "t" | "\\" | '"' | "'" | "0" )
                 | "\\u{" , hex_digit , { hex_digit } , "}" ;
@@ -391,14 +388,11 @@ Welcome to Brew & Bytes.".
 Because every character between the quotes is kept, a multiline string is
 written flush with the margin it should have in the output.
 
-**Triple-quoted strings** (`"""…"""`) are **deprecated** (GitLab #523);
-they still lex, with a warning, and removal is tracked in GitLab #524.
-They open with `"""` followed immediately by a newline and close with
-`"""` on its own line; the closing delimiter's indentation is stripped
-from every line, the final newline before the closing delimiter is
-dropped, escape sequences work, and `${…}` interpolation is NOT
-performed. That dedent is the one migration hazard: a `"""` block written
-indented becomes a plain string written flush-left.
+Triple-quoted strings (`"""…"""`) were **removed** in GitLab #524; the
+lexer reports them with an error naming the replacement. They used to
+strip the closing delimiter's indentation, so migrating one is a rewrite
+rather than a change of delimiter: the text moves flush against the
+margin it should print at.
 
 **Examples:**
 ```

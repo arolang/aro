@@ -31,6 +31,10 @@ public enum LexerError: CompilerError {
     case invalidEscapeSequence(Character, at: SourceLocation)
     case invalidNumber(String, at: SourceLocation)
     case invalidUnicodeEscape(String, at: SourceLocation)
+    /// `"""…"""` was removed (GitLab #524). Kept as a case of its own so
+    /// the diagnostic names the replacement instead of leaving the lexer
+    /// to read `"""` as two empty strings and cascade from there.
+    case tripleQuotedStringRemoved(at: SourceLocation)
 
     public var location: SourceLocation? {
         switch self {
@@ -39,6 +43,7 @@ public enum LexerError: CompilerError {
         case .invalidEscapeSequence(_, let loc): return loc
         case .invalidNumber(_, let loc): return loc
         case .invalidUnicodeEscape(_, let loc): return loc
+        case .tripleQuotedStringRemoved(let loc): return loc
         }
     }
 
@@ -54,6 +59,8 @@ public enum LexerError: CompilerError {
             return "Invalid number literal '\(num)'"
         case .invalidUnicodeEscape(let hex, _):
             return "Invalid unicode escape sequence '\\u{\(hex)}'"
+        case .tripleQuotedStringRemoved:
+            return "Triple-quoted strings were removed — a plain \"…\" string spans multiple lines"
         }
     }
 }
