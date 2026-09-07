@@ -134,9 +134,10 @@ final class ReplNotebookController {
             // Trailing newlines are trimmed on the way to disk. The
             // text view normalises a cell it displays by appending
             // one, which came back as an edit and autosaved — so
-            // merely OPENING a notebook dirtied the file, and a
-            // course of 26 notebooks turned into 26 modified files
-            // in git. Trimming here and not in the buffer keeps
+            // merely OPENING a notebook dirtied the file, and
+            // browsing the course turned every notebook looked at
+            // into a modified file in git. Trimming here rather
+            // than in the buffer keeps
             // typing untouched: pressing Return still puts a newline
             // in the editor, it just does not end up in the file.
             let normalized = cells.map { cell -> ReplNotebookCell in
