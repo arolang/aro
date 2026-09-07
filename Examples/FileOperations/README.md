@@ -11,7 +11,7 @@ This example demonstrates the native file and directory operations introduced in
 - **Read** - Read file content
 - **Stat** - Get file metadata (size, dates, permissions)
 - **Copy** - Copy files or directories
-- **List** - List directory contents
+- **List** - List directory contents, plain or glob-filtered (`matching "*.txt"`)
 - **Move** - Move or rename files
 
 ## Running
@@ -48,6 +48,9 @@ This line was appended.
    Renamed to hello-copy.txt
 10. Final directory listing...
    Final files:
+11. Listing only *.txt files...
+   .txt files found:
+2
 
 === Demo Complete ===
 ```

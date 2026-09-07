@@ -197,6 +197,29 @@ struct ModifierBinder {
             }
         }
 
+        // Bind the listing glob and recursion flag (ARO-0036 §6, GitLab #518)
+        // so `aro build` filters exactly like `aro run`. The glob goes through
+        // evaluateAndBind because `matching <pattern>` may name a variable.
+        if let matchingExpr = modifiers.matchingPattern {
+            let matchingName = ctx.stringConstant("_matching_")
+            let matchingJSON = ctx.stringConstant(serializer.serializeExpression(matchingExpr))
+            _ = ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, matchingName, matchingJSON],
+                at: ip
+            )
+        }
+
+        if modifiers.recursive {
+            let recursiveName = ctx.stringConstant("_recursive_")
+            let recursiveValue = ctx.stringConstant("true")
+            _ = ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, recursiveName, recursiveValue],
+                at: ip
+            )
+        }
+
         // Bind default value if present (for optional retrieve with fallback)
         if let defaultExpr = modifiers.defaultValue {
             let defaultName = ctx.stringConstant("_default_value_")

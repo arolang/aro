@@ -1,6 +1,6 @@
 # Build a file and directory operations demo
 
-Create a single-file ARO application that demonstrates native file and directory operations: CreateDirectory, Write, Append, Read, Copy, List, and Move.
+Create a single-file ARO application that demonstrates native file and directory operations: CreateDirectory, Write, Append, Read, Copy, List (plain and glob-filtered), and Move.
 
 In the `Application-Start` feature set:
 
@@ -13,5 +13,6 @@ In the `Application-Start` feature set:
 7. List directory contents using `List the <files> from the <directory: demo-dir>`.
 8. Rename/move the backup using `Move the <moved-file: backup-file> to the <destination: copy-file>`.
 9. List the directory again to show the final state.
+10. List only the `.txt` files with `List the <text-files> from the <directory: demo-dir> matching "*.txt"` and log how many there are.
 
 Log progress at each step and return OK.

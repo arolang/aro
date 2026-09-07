@@ -693,6 +693,8 @@ public final class Parser {
         var whereCondition: WhereCondition? = nil
         var byClause: ByClause? = nil
         var defaultValue: (any Expression)? = nil
+        var matchingPattern: (any Expression)? = nil
+        var recursive = false
         var whenCondition: (any Expression)? = nil
 
         // `Map the <names> from the <users> with name.` — the field
@@ -814,6 +816,31 @@ public final class Parser {
             }
         }
 
+        // matching clause (ARO-0036 §6.2, GitLab #518) — the glob filter on a
+        // directory listing: `List the <exports> from the <directory: out>
+        // matching "*.csv".`  `matching` is not a reserved word, so it is
+        // recognised positionally, exactly like `default` below; a variable
+        // (`matching <pattern>`) works because the glob is parsed as an
+        // expression rather than a bare literal.
+        if case .identifier(let kw) = peek().kind, kw == "matching" {
+            advance()
+            guard isExpressionStart(peek()) else {
+                throw ParserError.unexpectedToken(
+                    expected: "glob pattern after 'matching' — a string like \"*.csv\" or a <variable>",
+                    got: peek())
+            }
+            matchingPattern = try parseExpression()
+        }
+
+        // trailing `recursively` (ARO-0036 §6.3) — the spelling the proposal
+        // documents next to `matching`, and the one people write after it:
+        // `… matching "*_test.aro" recursively.`  The older qualifier form
+        // (`List the <all: recursively> from …`) still works.
+        if case .identifier(let kw) = peek().kind, kw == "recursively" {
+            advance()
+            recursive = true
+        }
+
         // default clause (ARO-0072)
         if case .identifier(let kw) = peek().kind, kw == "default" {
             advance()
@@ -831,7 +858,9 @@ public final class Parser {
                 whereCondition: whereCondition,
                 aggregation: aggregation,
                 byClause: byClause,
-                defaultValue: defaultValue
+                defaultValue: defaultValue,
+                matchingPattern: matchingPattern,
+                recursive: recursive
             ),
             rangeModifiers: RangeModifiers(
                 toClause: toExpression,
