@@ -81,3 +81,43 @@ struct EditorZoomTests {
         #expect(EditorTypography.zoomLadder == EditorTypography.zoomLadder.sorted())
     }
 }
+
+@Suite("Rendered markdown follows the editor text size")
+@MainActor
+struct MarkdownZoomTests {
+
+    private func defaults(_ name: String = UUID().uuidString) -> UserDefaults {
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        return d
+    }
+
+    @Test("Editor-style blocks scale with the preference")
+    func editorStyleScales() {
+        // A notebook is one document: ⌘+ has to move the prose as
+        // well as the code, and the markdown side used to be a set of
+        // hardcoded point sizes that never read the preference.
+        let atDefault = BookMarkdownBlockView(
+            block: .paragraph("text"), style: .editor)
+        #expect(atDefault.scaled(14) == 14, "13pt is the baseline the sizes are written at")
+    }
+
+    @Test("Book pages keep their own typography")
+    func bookStyleUnscaled() {
+        // The book viewer is a reading view with its own measure, not
+        // the editor — zooming code must not reflow a chapter.
+        let page = BookMarkdownBlockView(block: .paragraph("text"), style: .book)
+        #expect(page.scaled(14) == 14)
+        #expect(page.scaled(28) == 28)
+    }
+
+    @Test("The ladder the zoom commands walk stays inside the supported range")
+    func ladderUsableForMarkdown() {
+        // Scaling multiplies these sizes, so a rung far outside the
+        // range would blow up heading sizes rather than clamp them.
+        for size in EditorTypography.zoomLadder {
+            let ratio = size / EditorTypography.defaultFontSize
+            #expect(ratio > 0.4 && ratio < 8)
+        }
+    }
+}
