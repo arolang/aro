@@ -21,5 +21,8 @@ Files in demo-output:
 Renamed to hello-copy.txt
 8. Final directory listing...
 Final files listed
+9. Listing only *.txt files...
+.txt files found:
+2
 === Demo Complete ===
 demo

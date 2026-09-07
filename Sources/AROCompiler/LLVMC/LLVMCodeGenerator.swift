@@ -584,7 +584,7 @@ public final class LLVMCodeGenerator {
         // disagreed for every action that reads them.
         for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
                              "_by_pattern_", "_by_flags_", "_by_field_",
-                             "_by_var_", "_by_order_",
+                             "_by_var_", "_by_order_", "_matching_", "_recursive_",
                              "_aggregation_type_", "_aggregation_field_", "_default_value_",
                              "_with_", "_to_"] {
             let keyStr = ctx.stringConstant(transientKey)
@@ -2045,7 +2045,7 @@ private final class StringConstantCollector {
                         "_aggregation_type_", "_aggregation_field_",
                         "_where_field_", "_where_op_", "_where_value_", "_where_tree_",
                         "_by_pattern_", "_by_flags_", "_by_field_",
-                        "_by_var_", "_by_order_",
+                        "_by_var_", "_by_order_", "_matching_", "_recursive_", "true",
                         "_with_", "_to_", "_publish_alias_", "_publish_variable_",
                         "_require_variable_", "_require_source_", "Application-Start"]
         for name in builtins {
@@ -2202,6 +2202,12 @@ private final class StringConstantCollector {
         if let byClause = modifiers.byClause {
             _ = ctx.stringConstant(byClause.pattern)
             _ = ctx.stringConstant(byClause.flags)
+        }
+
+        // ARO-0036 §6 (GitLab #518): the listing glob is serialized as an
+        // expression, so its string constants come from the expression walk.
+        if let matchingExpr = modifiers.matchingPattern {
+            collectFromExpression(matchingExpr)
         }
     }
 

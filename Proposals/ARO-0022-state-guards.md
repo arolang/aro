@@ -252,6 +252,19 @@ Non-string field values are converted to strings for comparison:
 }
 ```
 
+### 6.3 Both Sides Name Declared States
+
+Guard values and observer transitions name states, and the states an entity
+has are declared once, as a string `enum` on its state property in
+`openapi.yaml` (ARO-0007 §4.1). A transition naming a state that enum does
+not contain is a build error, refused by `aro check`, `aro run` and
+`aro build` alike (GitLab #507) — `paid_to_shiped` no longer
+becomes a seventh order state at run time.
+
+The enum bounds the state *set*, not the edge set: it says `shipped` exists,
+not that only `paid` may reach it. Which edge is legal from where the entity
+stands is still the `Accept` action's run-time from-state check.
+
 ---
 
 ## 7. Implementation

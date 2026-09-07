@@ -150,16 +150,24 @@ The List action retrieves the contents of a directory. You can filter by glob pa
 Create the <uploads-path> with "./uploads".
 List the <entries> from the <directory: uploads-path>.
 
-(* Filter with glob pattern *)
+(* Filter with a glob pattern *)
 Create the <src-path> with "./src".
-List the <aro-files: "*.aro"> from the <directory: src-path>.
+List the <aro-files> from the <directory: src-path> matching "*.aro".
 
 (* List recursively *)
 Create the <project-path> with "./project".
-List the <all-files: recursively> from the <directory: project-path>.
+List the <all-files> from the <directory: project-path> recursively.
+
+(* Both at once *)
+List the <all-tests> from the <directory: project-path> matching "*_test.aro" recursively.
 ```
 
 Each entry contains: name, path, size, isFile, isDirectory, and modified.
+
+The glob is `fnmatch(3)` — `*`, `?`, `[a-z]` — matched against the entry
+name and case-sensitively. It is anchored, so `"*.csv"` keeps `a.csv` and
+rejects `report.csvx`; a `Filter … contains ".csv"` afterwards would keep
+both. It filters directories as well as files.
 
 ### Creating Directories
 
