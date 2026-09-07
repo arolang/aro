@@ -118,18 +118,40 @@ aro diff --graph main..my-branch
 aro diff --graph main..my-branch --html report.html
 ```
 
-Feature sets are matched by name, so moving one within a file is not a change, and re-indentation does not register. The output reports each touched feature set with its added, removed and modified statements:
+An ARO application is not a pile of files, it is a graph, so the comparison is one graph against another. Every `.aro` file in the project folds into a single set of nodes — the runtime does the same, since there are no imports and every feature set is globally visible — and the wires between them are derived exactly the way the runtime registers them: an `Emit` reaching the feature set whose activity is `{Event} Handler`, an `Application.<Name>` call reaching the action of that name, a `Store` / `Update` / `Delete` reaching a `{repository} Observer`.
+
+Nodes are matched by name, so moving a feature set within a file is not a change, re-indentation does not register, and moving one to another file is a node with a new address rather than a deletion facing an insertion. The output groups nodes by what happened to them, and finishes with the wires:
 
 ```
-main.aro  —  2 feature sets touched · +3 −0 ~1
-  ~ (listUsers: User API)
-      ~ <Retrieve> the <users> from the <user-repository>.
-        → <Retrieve> the <users> from the <account-repository>.
-      + <Log> "listed" to the <console>.
-  + (getUser: User API)
+Graph diff main..my-branch
+──────────────────────────────────────────────────────────────
+3 feature sets touched · +4 −3 ~2 statements · +1 −1 wires
+
+Added (1)
+  + (NormalizeUser: Action)  [action]  users.aro
+      + Extract the <name> from the <input: user>.
+
+Removed (1)
+  - (listUsers: User API)  [feature]  users.aro
+      - Retrieve the <users> from the <user-repository>.
+
+Modified (1)
+  ~ (createUser: User API)  [feature]  users.aro
+      - Store the <data> to the <user-repository>.
+      ~ Return a <Created: status> with <data>.
+        → Return an <OK: status> with <clean>.
+
+Moved (1)
+  → (Send Welcome Email: UserCreated Handler)  events.aro → sources/events.aro
+
+Wires (+1 −1)
+  - createUser ──observes(user-repository)──▶ Audit Users
+  + createUser ──call(NormalizeUser)──▶ NormalizeUser
 ```
 
-A bare revision (`aro diff --graph main`) compares against the working tree. The `--html` flag writes a self-contained report — no external stylesheets or scripts — so a merge request can link it or CI can keep it as an artifact.
+The wire section is the part a textual diff cannot show. Deleting one `Store` line is one red line in `git diff`; here it is a whole observer that no longer runs.
+
+A bare revision (`aro diff --graph main`) compares against the working tree, and `--all` lists the untouched feature sets too. The `--html` flag writes a self-contained report — no external stylesheets, scripts or fonts — with both graphs drawn side by side, nodes bordered by what happened to them and a feature set absent from one revision drawn there as a dashed ghost so the two layouts stay aligned. Clicking a node scrolls to its statement diff. A merge request can link the file, or CI can keep it as an artifact.
 
 ---
 

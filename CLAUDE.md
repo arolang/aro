@@ -32,8 +32,8 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
-aro diff --graph main..my-branch          # Feature-set/statement diff between revisions
-aro diff --graph main..my-branch --html report.html   # Same comparison as a standalone report
+aro diff --graph main..my-branch          # Feature-graph diff: nodes, statements, wires
+aro diff --graph main..my-branch --html report.html   # Same comparison, two graphs side by side
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linux: Foundation still dynamic.)
@@ -206,6 +206,11 @@ Do not use it for production code, it is terribly insecure.
 - `AROStatement`: `Action [the] <Result> preposition [the] <Object>` (articles optional)
 - `SymbolTable`: Immutable, `Sendable` symbol storage per feature set
 - `GlobalSymbolRegistry`: Cross-feature-set symbol access for published variables
+- `FeatureGraph` / `FeatureGraphDiff`: The application as nodes (feature sets)
+  and wires (events, `Application.<Name>` calls, repository observers), and the
+  comparison of two revisions of it. Derived statically with the runtime's own
+  matching rules, so `aro diff --graph` and SOLARO's review sheet show the same
+  graph the EventBus will wire up (GitLab #443).
 
 **Runtime:**
 - `ActionImplementation`: Protocol for action implementations

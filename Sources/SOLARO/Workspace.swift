@@ -354,6 +354,9 @@ struct WorkspaceView: View {
     @State private var showCommandPalette = false
     @State private var showQuickOpen = false
     @State private var showCommitOverlay = false
+    /// Feature-graph diff sheet — the working tree against a
+    /// revision, node by node and wire by wire (#443).
+    @State private var showGraphDiff = false
     /// Set when the user hits ⌘⌫ with a file selected. The alert
     /// reads from this — non-nil = visible. Cleared on cancel or
     /// after the file is moved to Trash.
@@ -730,6 +733,12 @@ struct WorkspaceView: View {
                     onOpen: { url in controller.openFile(url) }
                 ),
                 onClose: { showQuickOpen = false }
+            )
+        }
+        .sheet(isPresented: $showGraphDiff) {
+            GraphDiffSheet(
+                project: project,
+                onClose: { showGraphDiff = false }
             )
         }
         .sheet(isPresented: $showCommitOverlay) {
@@ -1776,6 +1785,7 @@ struct WorkspaceView: View {
         case .runTimeTravel:     showTimeTravel = true
         // Git
         case .gitCommit:         openCommitOverlay()
+        case .gitGraphDiff:      showGraphDiff = true
         case .gitBlame:          showBlame()
         case .gitRevertFile:
             guard let url = controller.currentFile,

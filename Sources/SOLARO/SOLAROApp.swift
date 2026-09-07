@@ -387,6 +387,13 @@ struct SOLAROApp: App {
                 Label("Commit Changes…", systemImage: "checkmark.seal")
             }
             .keyboardShortcut("k", modifiers: [.command])
+            // The review view: which feature sets and which wires
+            // between them the working tree changed (#443).
+            Button {
+                postSolaroMenuAction(.gitGraphDiff)
+            } label: {
+                Label("Compare Feature Graph…", systemImage: "arrow.triangle.branch")
+            }
             Divider()
             Button {
                 postSolaroMenuAction(.gitBlame)
@@ -610,6 +617,7 @@ enum SolaroMenuAction: String {
     case runTimeTravel
     // Git
     case gitCommit
+    case gitGraphDiff
     case gitBlame
     case gitRevertFile
     // AI

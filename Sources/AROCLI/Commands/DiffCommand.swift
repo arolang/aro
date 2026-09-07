@@ -4,16 +4,22 @@
 // ============================================================
 //
 // `git diff` answers "which lines changed". Reviewing an ARO
-// change, the useful question is "which feature sets changed, and
-// what happened inside them" — a statement that moved because
-// something was inserted above it is noise, and a `Retrieve` whose
-// repository changed is not a deletion plus an insertion, it's one
-// edited step.
+// change, the useful question is "which feature sets changed, what
+// happened inside them, and which wires between them moved" — a
+// statement that shifted because something was inserted above it is
+// noise, a `Retrieve` whose repository changed is one edited step
+// rather than a deletion plus an insertion, and a feature set that
+// moved to another file is the same node at a new address.
 //
-// So this diffs the parsed programs (see `AROGraphDiff` in
-// AROParser) and reports per feature set. `--html` writes the same
-// comparison as a self-contained report, which is what a merge
-// request can link to.
+// So this builds the application graph at both revisions (see
+// `FeatureGraph` in AROParser — same wiring rules the runtime
+// registers by) and compares them. Every `.aro` file folds into one
+// graph because that is what the runtime does: no imports, every
+// feature set globally visible.
+//
+// `--html` writes the same comparison as a self-contained report
+// with the two graphs side by side, which is what a merge request
+// can link to.
 
 import ArgumentParser
 import Foundation
@@ -56,65 +62,113 @@ struct DiffCommand: ParsableCommand {
         let root = URL(fileURLWithPath: directory).standardizedFileURL
         let (beforeRef, afterRef) = try Self.parseRange(range)
 
-        let beforeFiles = try Self.aroSources(at: beforeRef, root: root)
-        let afterFiles = try Self.aroSources(at: afterRef, root: root)
+        let beforeSources = try Self.aroSources(at: beforeRef, root: root)
+        let afterSources = try Self.aroSources(at: afterRef, root: root)
 
-        let paths = Set(beforeFiles.keys).union(afterFiles.keys).sorted()
-        var results: [(path: String, diff: AROGraphDiff)] = []
-        for path in paths {
-            let before = beforeFiles[path].flatMap(Self.parse)
-            let after = afterFiles[path].flatMap(Self.parse)
-            let diff = AROGraphDiff.compare(before: before, after: after)
-            if all || !diff.isEmpty {
-                results.append((path, diff))
-            }
-        }
+        let diff = FeatureGraphDiff.compare(
+            before: FeatureGraph.build(files: beforeSources.mapValues(Self.file)),
+            after: FeatureGraph.build(files: afterSources.mapValues(Self.file)),
+            beforeLabel: beforeRef,
+            afterLabel: afterRef ?? "working tree")
 
         if let html {
             let report = GraphDiffHTMLReport.render(
-                range: range, results: results)
+                range: range, diff: diff, includeUnchanged: all)
             try report.write(to: URL(fileURLWithPath: html),
                              atomically: true, encoding: .utf8)
             print("Wrote \(html)")
         }
 
-        printSummary(results)
+        printSummary(diff)
     }
 
-    private func printSummary(_ results: [(path: String, diff: AROGraphDiff)]) {
-        guard !results.isEmpty else {
+    // MARK: - Terminal report
+
+    private func printSummary(_ diff: FeatureGraphDiff) {
+        guard !diff.isEmpty || all else {
             print("No feature-set changes between \(range).")
             return
         }
         print("Graph diff \(range)")
-        print(String(repeating: "─", count: 60))
-        for (path, diff) in results {
-            print("\n\(path)  —  \(diff.summaryLine)")
-            for set in diff.featureSets where all || !set.isUntouched {
-                print("  \(marker(set.change)) (\(set.name): \(set.businessActivity))")
-                for statement in set.statements where statement.change != .unchanged {
-                    switch statement.change {
-                    case .modified:
-                        print("      ~ \(statement.before ?? "")")
-                        print("        → \(statement.after ?? "")")
-                    case .added:
-                        print("      + \(statement.after ?? "")")
-                    case .removed:
-                        print("      - \(statement.before ?? "")")
-                    case .unchanged:
-                        break
-                    }
+        print(String(repeating: "─", count: 62))
+        print(diff.summaryLine)
+
+        section("Added", diff.nodes(.added), marker: "+")
+        section("Removed", diff.nodes(.removed), marker: "-")
+        section("Modified", diff.nodes(.modified), marker: "~")
+
+        // A move changes two files and nothing about the program.
+        // Worth naming, not worth a statement listing.
+        let moved = diff.nodes.filter { $0.movedFile && $0.change == .unchanged }
+        if !moved.isEmpty {
+            print("\nMoved (\(moved.count))")
+            for node in moved {
+                print("  → (\(node.name): \(node.businessActivity))"
+                      + "  \(node.beforeFile ?? "?") → \(node.afterFile ?? "?")")
+            }
+        }
+
+        if all {
+            let untouched = diff.nodes.filter { $0.isUntouched && !$0.movedFile }
+            if !untouched.isEmpty {
+                print("\nUnchanged (\(untouched.count))")
+                for node in untouched {
+                    print("    (\(node.name): \(node.businessActivity))  \(node.file)")
+                }
+            }
+        }
+
+        printWires(diff)
+    }
+
+    private func section(_ title: String,
+                         _ nodes: [FeatureGraphDiff.NodeDiff],
+                         marker: String)
+    {
+        guard !nodes.isEmpty else { return }
+        print("\n\(title) (\(nodes.count))")
+        for node in nodes {
+            print("  \(marker) (\(node.name): \(node.businessActivity))"
+                  + "  [\(node.kind.label)]  \(node.file)")
+            if let previous = node.previousBusinessActivity {
+                print("      activity: \(previous) → \(node.businessActivity)")
+            }
+            if node.movedFile {
+                print("      moved: \(node.beforeFile ?? "?") → \(node.afterFile ?? "?")")
+            }
+            for statement in node.statements where statement.change != .unchanged {
+                switch statement.change {
+                case .modified:
+                    print("      ~ \(statement.before ?? "")")
+                    print("        → \(statement.after ?? "")")
+                case .added:
+                    print("      + \(statement.after ?? "")")
+                case .removed:
+                    print("      - \(statement.before ?? "")")
+                case .unchanged:
+                    break
                 }
             }
         }
     }
 
-    private func marker(_ change: GraphChange) -> String {
-        switch change {
-        case .added:     return "+"
-        case .removed:   return "-"
-        case .modified:  return "~"
-        case .unchanged: return " "
+    /// The wires. This is the part a textual diff cannot show: one
+    /// deleted `Emit` line silences a whole handler, and that only
+    /// reads as a change if you print the edge that vanished.
+    private func printWires(_ diff: FeatureGraphDiff) {
+        let changed = diff.edges.filter { $0.change != .unchanged }
+        let shown = all ? diff.edges : changed
+        guard !shown.isEmpty else { return }
+        print("\nWires (+\(diff.edges(.added).count) −\(diff.edges(.removed).count))")
+        for entry in shown {
+            let marker: String
+            switch entry.change {
+            case .added:   marker = "+"
+            case .removed: marker = "-"
+            default:       marker = " "
+            }
+            print("  \(marker) \(entry.edge.from) ──\(entry.edge.kind.rawValue)"
+                  + "(\(entry.edge.label))──▶ \(entry.edge.to)")
         }
     }
 
@@ -157,11 +211,21 @@ struct DiffCommand: ParsableCommand {
         return sources
     }
 
+    /// Directories a build drops sources into. An `.aro` file under
+    /// `.build` belongs to a dependency's fixtures, not to this
+    /// application, and folding it into the graph would invent
+    /// feature sets that only one side of the comparison has.
+    static let skippedDirectories: Set<String> = [".git", ".build", "node_modules"]
+
     static func workingTreeSources(root: URL) throws -> [String: String] {
         var sources: [String: String] = [:]
         let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: nil)
         while let url = enumerator?.nextObject() as? URL {
+            if skippedDirectories.contains(url.lastPathComponent) {
+                enumerator?.skipDescendants()
+                continue
+            }
             guard url.pathExtension == "aro" else { continue }
             // Keep the key shape identical to `git ls-tree` output so
             // the two sides of the comparison line up.
@@ -172,11 +236,13 @@ struct DiffCommand: ParsableCommand {
         return sources
     }
 
-    /// Parse, tolerating a file that doesn't compile on one side —
-    /// a diff is exactly when half-finished code shows up, and
-    /// refusing to render the other side helps nobody.
-    static func parse(_ source: String) -> Program? {
-        try? Parser.parse(source)
+    /// One file of the application, parsed. Parsing is tolerant of
+    /// a file that doesn't compile on one side — a diff is exactly
+    /// when half-finished code shows up, and refusing to render the
+    /// other side helps nobody. The text rides along so statements
+    /// display as the code the author wrote.
+    static func file(_ source: String) -> FeatureGraph.Source {
+        FeatureGraph.Source(text: source, program: try? Parser.parse(source))
     }
 
     @discardableResult
@@ -200,90 +266,5 @@ struct DiffCommand: ParsableCommand {
                 + message.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return String(data: data, encoding: .utf8) ?? ""
-    }
-}
-
-// MARK: - HTML report
-
-/// Self-contained HTML — no external CSS or JS, so the file can be
-/// attached to a merge request or opened from a CI artifact
-/// without a network round trip.
-enum GraphDiffHTMLReport {
-    static func render(range: String,
-                       results: [(path: String, diff: AROGraphDiff)]) -> String
-    {
-        var body = ""
-        for (path, diff) in results {
-            body += "<section><h2>\(escape(path))</h2>"
-            body += "<p class=\"summary\">\(escape(diff.summaryLine))</p>"
-            for set in diff.featureSets where !set.isUntouched {
-                body += "<div class=\"fs \(set.change.rawValue)\">"
-                body += "<h3>\(escape(set.name))"
-                body += "<span class=\"activity\">\(escape(set.businessActivity))</span>"
-                body += "<span class=\"badge\">\(set.change.rawValue)</span></h3>"
-                for statement in set.statements {
-                    let cssClass = statement.change.rawValue
-                    switch statement.change {
-                    case .modified:
-                        body += "<div class=\"stmt modified\">"
-                        body += "<del>\(escape(statement.before ?? ""))</del>"
-                        body += "<ins>\(escape(statement.after ?? ""))</ins></div>"
-                    case .added:
-                        body += "<div class=\"stmt \(cssClass)\">+ \(escape(statement.after ?? ""))</div>"
-                    case .removed:
-                        body += "<div class=\"stmt \(cssClass)\">− \(escape(statement.before ?? ""))</div>"
-                    case .unchanged:
-                        body += "<div class=\"stmt \(cssClass)\">\(escape(statement.display))</div>"
-                    }
-                }
-                body += "</div>"
-            }
-            body += "</section>"
-        }
-        if results.isEmpty {
-            body = "<p class=\"empty\">No feature-set changes.</p>"
-        }
-
-        return """
-        <!doctype html>
-        <html lang="en"><head><meta charset="utf-8">
-        <title>ARO graph diff — \(escape(range))</title>
-        <style>
-        :root { color-scheme: light dark; }
-        body { font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
-               margin: 0 auto; max-width: 60rem; padding: 2rem; }
-        h1 { font-size: 1.3rem; }
-        h2 { font-size: 1rem; font-family: ui-monospace, monospace;
-             border-bottom: 1px solid #8884; padding-bottom: .3rem; }
-        h3 { font-size: .95rem; display: flex; gap: .5rem; align-items: baseline; }
-        .activity { font-weight: 400; opacity: .6; font-size: .8rem; }
-        .badge { margin-left: auto; font-size: .7rem; text-transform: uppercase;
-                 letter-spacing: .08em; opacity: .7; }
-        .summary { opacity: .7; font-size: .85rem; }
-        .fs { border-left: 3px solid #8886; padding-left: .8rem; margin: 1rem 0; }
-        .fs.added { border-color: #3fb950; }
-        .fs.removed { border-color: #f85149; }
-        .fs.modified { border-color: #d29922; }
-        .stmt { font-family: ui-monospace, monospace; font-size: .82rem;
-                padding: .15rem .4rem; border-radius: 3px; white-space: pre-wrap; }
-        .stmt.unchanged { opacity: .45; }
-        .stmt.added { background: #3fb95022; }
-        .stmt.removed { background: #f8514922; }
-        .stmt.modified del { display: block; background: #f8514922;
-                             text-decoration: none; opacity: .8; }
-        .stmt.modified ins { display: block; background: #3fb95022;
-                             text-decoration: none; }
-        .empty { opacity: .6; }
-        </style></head><body>
-        <h1>ARO graph diff <code>\(escape(range))</code></h1>
-        \(body)
-        </body></html>
-        """
-    }
-
-    static func escape(_ text: String) -> String {
-        text.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
     }
 }

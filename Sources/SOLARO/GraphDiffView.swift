@@ -1,32 +1,33 @@
 // ============================================================
 // GraphDiffView.swift
-// SOLARO — side-by-side feature-set graph diff (#443)
+// SOLARO — side-by-side feature-graph diff (#443)
 // ============================================================
 //
 // The textual diff (DiffRenderer) answers "which lines changed".
 // This answers the question a reviewer actually has: which feature
-// sets changed, and what happened inside them.
+// sets changed, what happened inside them, and which wires between
+// them moved — a deleted `Emit` line is one line of text and a
+// whole handler that no longer runs.
 //
-// Two columns — the base revision on the left, the branch on the
-// right — with nodes bordered by what happened to them. A
-// statement that only moved because something was inserted above
-// it renders unchanged on both sides, which is the entire point of
-// diffing the parsed graph rather than the bytes.
+// Two columns per feature set — the base revision on the left, the
+// working tree on the right — with nodes bordered by what happened
+// to them. A statement that only moved because something was
+// inserted above it renders unchanged on both sides, which is the
+// entire point of diffing the parsed graph rather than the bytes.
 //
-// Node-anchored comments live in the inspector rail on the right
-// and are keyed to the statement, so they survive the statement
-// moving. Per-node conflict resolution builds on the same anchor
-// and is not in this pass — see the MR description.
+// The comparison itself is `FeatureGraphDiff` in AROParser, the
+// same core `aro diff --graph` prints, so the IDE and the CLI
+// cannot drift apart.
+//
+// Node-anchored inline comments and per-node conflict resolution
+// are the far end of #443 and are not in this pass: selection here
+// establishes the anchor (`SelectedDiffNode`) they would hang off.
 
 import SwiftUI
 import AROParser
 
 struct GraphDiffView: View {
-    let path: String
-    let diff: AROGraphDiff
-    /// Base and branch labels for the column headers.
-    let beforeLabel: String
-    let afterLabel: String
+    let diff: FeatureGraphDiff
 
     @State private var showUnchanged = false
     @State private var selected: SelectedDiffNode?
@@ -35,13 +36,14 @@ struct GraphDiffView: View {
         VStack(spacing: 0) {
             header
             Divider().background(SolaroColor.divider)
-            if visibleSets.isEmpty {
+            if visibleNodes.isEmpty {
                 empty
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: SolaroSpace.l) {
-                        ForEach(visibleSets, id: \.name) { set in
-                            featureSetRow(set)
+                        if !changedWires.isEmpty { wireSection }
+                        ForEach(visibleNodes) { node in
+                            featureSetRow(node)
                         }
                     }
                     .padding(SolaroSpace.m)
@@ -51,15 +53,19 @@ struct GraphDiffView: View {
         .background(SolaroColor.backdrop)
     }
 
-    private var visibleSets: [FeatureSetDiff] {
-        showUnchanged ? diff.featureSets : diff.featureSets.filter { !$0.isUntouched }
+    private var visibleNodes: [FeatureGraphDiff.NodeDiff] {
+        showUnchanged ? diff.nodes : diff.touchedNodes
+    }
+
+    private var changedWires: [FeatureGraphDiff.EdgeDiff] {
+        diff.edges.filter { $0.change != .unchanged }
     }
 
     private var header: some View {
         HStack(spacing: SolaroSpace.s) {
             Image(systemName: "arrow.triangle.branch")
                 .foregroundStyle(SolaroColor.accent)
-            Text(path)
+            Text("\(diff.beforeLabel) → \(diff.afterLabel)")
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.textSecondary)
             Text(diff.summaryLine)
@@ -82,29 +88,68 @@ struct GraphDiffView: View {
             Text("No feature-set changes.")
                 .font(SolaroFont.body)
                 .foregroundStyle(SolaroColor.textSecondary)
-            Text("The files differ only in formatting, or not at all.")
+            Text("The revisions differ only in formatting, or not at all.")
                 .font(SolaroFont.caption)
                 .foregroundStyle(SolaroColor.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func featureSetRow(_ set: FeatureSetDiff) -> some View {
+    // MARK: - Wires
+
+    /// Events, `Application.<Name>` calls and repository observers
+    /// that appeared or vanished. Listed above the feature sets
+    /// because a wire is the change a line diff cannot show.
+    private var wireSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("WIRES")
+                .font(SolaroFont.sectionTitle)
+                .foregroundStyle(SolaroColor.textTertiary)
+                .tracking(1.5)
+            ForEach(changedWires, id: \.self) { entry in
+                HStack(spacing: SolaroSpace.xs) {
+                    Text(entry.change == .added ? "+" : "−")
+                        .foregroundStyle(borderColor(entry.change))
+                    Text(entry.edge.from)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                    Text("\(entry.edge.kind.rawValue)(\(entry.edge.label))")
+                        .foregroundStyle(SolaroColor.textTertiary)
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(SolaroColor.textTertiary)
+                    Text(entry.edge.to)
+                        .foregroundStyle(SolaroColor.textPrimary)
+                }
+                .font(SolaroFont.monoCaption)
+            }
+        }
+        .padding(SolaroSpace.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SolaroColor.surface.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
+    }
+
+    // MARK: - Feature sets
+
+    private func featureSetRow(_ node: FeatureGraphDiff.NodeDiff) -> some View {
         VStack(alignment: .leading, spacing: SolaroSpace.xs) {
             HStack(spacing: SolaroSpace.xs) {
-                changeBadge(set.change)
-                Text(set.name)
+                changeBadge(node.change)
+                Text(node.name)
                     .font(SolaroFont.bodyBold)
                     .foregroundStyle(SolaroColor.textPrimary)
-                Text(set.businessActivity)
+                Text(node.businessActivity)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                Text(node.kind.label)
                     .font(SolaroFont.caption)
                     .foregroundStyle(SolaroColor.textTertiary)
                 Spacer()
-                counts(set)
+                counts(node)
             }
+            location(node)
             HStack(alignment: .top, spacing: SolaroSpace.m) {
-                column(set, side: .before, label: beforeLabel)
-                column(set, side: .after, label: afterLabel)
+                column(node, side: .before, label: diff.beforeLabel)
+                column(node, side: .after, label: diff.afterLabel)
             }
         }
         .padding(SolaroSpace.s)
@@ -112,18 +157,33 @@ struct GraphDiffView: View {
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
     }
 
-    private func counts(_ set: FeatureSetDiff) -> some View {
+    /// Where the feature set lives — and, when it moved, that the
+    /// move is all that happened to it.
+    @ViewBuilder
+    private func location(_ node: FeatureGraphDiff.NodeDiff) -> some View {
+        if node.movedFile {
+            Text("moved: \(node.beforeFile ?? "?") → \(node.afterFile ?? "?")")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+        } else {
+            Text(node.file)
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+        }
+    }
+
+    private func counts(_ node: FeatureGraphDiff.NodeDiff) -> some View {
         HStack(spacing: SolaroSpace.xs) {
-            if set.count(of: .added) > 0 {
-                Text("+\(set.count(of: .added))")
+            if node.count(of: .added) > 0 {
+                Text("+\(node.count(of: .added))")
                     .foregroundStyle(SolaroColor.roleOwn)
             }
-            if set.count(of: .removed) > 0 {
-                Text("−\(set.count(of: .removed))")
+            if node.count(of: .removed) > 0 {
+                Text("−\(node.count(of: .removed))")
                     .foregroundStyle(SolaroColor.stateError)
             }
-            if set.count(of: .modified) > 0 {
-                Text("~\(set.count(of: .modified))")
+            if node.count(of: .modified) > 0 {
+                Text("~\(node.count(of: .modified))")
                     .foregroundStyle(SolaroColor.roleExport)
             }
         }
@@ -132,16 +192,19 @@ struct GraphDiffView: View {
 
     private enum Side { case before, after }
 
-    private func column(_ set: FeatureSetDiff, side: Side, label: String) -> some View {
+    private func column(_ node: FeatureGraphDiff.NodeDiff,
+                        side: Side,
+                        label: String) -> some View
+    {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(SolaroFont.sectionTitle)
                 .foregroundStyle(SolaroColor.textTertiary)
                 .tracking(1.5)
-            ForEach(Array(set.statements.enumerated()), id: \.offset) { index, statement in
+            ForEach(Array(node.statements.enumerated()), id: \.offset) { index, statement in
                 if let text = text(of: statement, side: side) {
-                    nodeCard(statement, text: text, side: side,
-                             id: SelectedDiffNode(set: set.name, index: index))
+                    nodeCard(statement, text: text,
+                             id: SelectedDiffNode(set: node.name, index: index))
                 } else {
                     // A gap keeps the two columns aligned so the eye
                     // can track a statement straight across.
@@ -161,12 +224,11 @@ struct GraphDiffView: View {
 
     private func nodeCard(_ statement: StatementDiff,
                           text: String,
-                          side: Side,
                           id: SelectedDiffNode) -> some View {
         // A modified statement is one node on each side, bordered
         // amber — not a delete facing an add. That's what keeps a
         // comment anchored to it from being orphaned by an edit.
-        let color = borderColor(statement.change, side: side)
+        let color = borderColor(statement.change)
         return Text(text)
             .font(SolaroFont.monoCaption)
             .foregroundStyle(statement.change == .unchanged
@@ -186,7 +248,7 @@ struct GraphDiffView: View {
             .onTapGesture { selected = (selected == id) ? nil : id }
     }
 
-    private func borderColor(_ change: GraphChange, side: Side) -> Color {
+    private func borderColor(_ change: GraphChange) -> Color {
         switch change {
         case .added:     return SolaroColor.roleOwn
         case .removed:   return SolaroColor.stateError
@@ -201,25 +263,86 @@ struct GraphDiffView: View {
             .foregroundStyle(SolaroColor.textPrimary)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(badgeColor(change).opacity(0.3))
+            .background(borderColor(change).opacity(0.3))
             .clipShape(Capsule())
-    }
-
-    private func badgeColor(_ change: GraphChange) -> Color {
-        switch change {
-        case .added:     return SolaroColor.roleOwn
-        case .removed:   return SolaroColor.stateError
-        case .modified:  return SolaroColor.roleExport
-        case .unchanged: return SolaroColor.divider
-        }
     }
 }
 
 /// Identity of a node in the diff. Feature-set name plus index
 /// within that set's statement list — stable while the user is
 /// looking at one comparison, and the anchor a node-level comment
-/// would hang off.
+/// or a per-node conflict resolution would hang off.
 struct SelectedDiffNode: Hashable {
     let set: String
     let index: Int
+}
+
+// MARK: - Sheet
+
+/// The Git menu's "Compare Feature Graph…" — pick a revision, see
+/// the graph the working tree changed.
+struct GraphDiffSheet: View {
+    let project: Project
+    var onClose: () -> Void
+
+    @State private var model = GraphDiffModel()
+    @FocusState private var revisionFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider().background(SolaroColor.divider)
+            content
+        }
+        .frame(minWidth: 880, minHeight: 560)
+        .background(SolaroColor.backdrop)
+        .task { await model.load(project: project) }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: SolaroSpace.s) {
+            Text("COMPARE FEATURE GRAPH")
+                .font(SolaroFont.sectionTitle)
+                .foregroundStyle(SolaroColor.textTertiary)
+                .tracking(1.5)
+            TextField("Revision", text: $model.baseRevision)
+                .textFieldStyle(.roundedBorder)
+                .font(SolaroFont.monoCaption)
+                .frame(width: 200)
+                .focused($revisionFocused)
+                .onSubmit { Task { await model.load(project: project) } }
+            Button("Compare") {
+                Task { await model.load(project: project) }
+            }
+            .disabled(model.isLoading)
+            Spacer()
+            Button("Close", action: onClose)
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(SolaroSpace.m)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if model.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = model.error {
+            VStack(spacing: SolaroSpace.s) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 26))
+                    .foregroundStyle(SolaroColor.stateError)
+                Text(error)
+                    .font(SolaroFont.monoCaption)
+                    .foregroundStyle(SolaroColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, SolaroSpace.l)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let diff = model.diff {
+            GraphDiffView(diff: diff)
+        } else {
+            Color.clear
+        }
+    }
 }

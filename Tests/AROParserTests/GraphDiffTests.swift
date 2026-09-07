@@ -155,6 +155,28 @@ struct GraphDiffTests {
         #expect(edited.verb.lowercased() == "retrieve")
     }
 
+    @Test("Two edits with an insertion between them are two edits, not six changes")
+    func editsPairAcrossARun() throws {
+        // LCS emits every deletion of a run before every insertion,
+        // so this used to read as three deletions facing three
+        // insertions — six churned nodes where two statements were
+        // edited and one was added (GitLab #443).
+        let after = """
+        (listUsers: User API) {
+            Retrieve the <users> from the <account-repository>.
+            Log "listed" to the <console>.
+            Return a <Created: status> with <users>.
+        }
+        """
+        let result = try diff(base, after)
+        let set = result.featureSets[0]
+        #expect(set.count(of: .modified) == 2)
+        #expect(set.count(of: .added) == 1)
+        #expect(set.count(of: .removed) == 0)
+        let added = try #require(set.statements.first { $0.change == .added })
+        #expect(added.verb.lowercased() == "log")
+    }
+
     @Test("A replaced statement with a different verb stays two entries")
     func differentVerbDoesNotCollapse() throws {
         let after = """
