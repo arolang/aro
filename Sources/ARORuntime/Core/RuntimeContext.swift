@@ -74,6 +74,13 @@ public actor RuntimeContext: ExecutionContext {
     /// Only user variables enforce immutability; framework variables can be rebound
     nonisolated(unsafe) private var immutableVariables: Set<String> = []
 
+    /// Categories written by the Configure action (ARO-0035). Reads of an
+    /// UNSET setting on a configured category return nil instead of the
+    /// happy-path error — §3.2's documented `when <x> = nil` idiom needs a
+    /// value to compare, and configuration is optional by definition, unlike
+    /// data (GitLab #506). Guarded by `storageLock`, mirrored nowhere.
+    nonisolated(unsafe) private var configuredCategories: Set<String> = []
+
     /// Statement-scope marker (ARO-0088 §2).
     ///
     /// A deferred statement runs after later statements have already rebound the
@@ -688,6 +695,25 @@ public actor RuntimeContext: ExecutionContext {
 
     public nonisolated func bind(_ name: String, value: any Sendable) {
         bind(name, value: value, allowRebind: false)
+    }
+
+    /// Record that `category` was written by Configure (ARO-0035), so
+    /// reads of its unset settings answer nil rather than erroring.
+    public nonisolated func markConfigured(_ category: String) {
+        storageLock.lock()
+        configuredCategories.insert(category)
+        storageLock.unlock()
+    }
+
+    /// Whether `category` was Configure-written in this context or any
+    /// ancestor (children read configuration through the parent chain,
+    /// like every other resolution).
+    public nonisolated func isConfigured(_ category: String) -> Bool {
+        storageLock.lock()
+        let local = configuredCategories.contains(category)
+        storageLock.unlock()
+        if local { return true }
+        return (parent as? RuntimeContext)?.isConfigured(category) ?? false
     }
 
     public nonisolated func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
