@@ -211,6 +211,49 @@ decimal point.
 **Empty collections**: `sum` of nothing is `0`. `avg` and `random` of nothing
 are runtime errors, because neither has a defensible answer.
 
+### 3.2.1 Money: the `fixed` Qualifier
+
+| Qualifier | Purpose | Example |
+|-----------|---------|---------|
+| `fixed` | Round to a fixed number of decimal places (2 by default) | `Compute the <total: fixed> from the <raw-total>.` |
+
+`Compute the <total> from <qty> * <price>.` with `3` and `2.40` produces
+`7.199999999999999`. Human-facing output has hidden that since GitLab #474 —
+console rendering is 15 significant digits, so it prints `7.2` — but files do
+not and must not: `Write` and HTTP response bodies serialize at full precision.
+A gold-layer CSV built from float arithmetic therefore shipped
+`99.94999999999999` in its revenue column, and the analyst who opened it had a
+question. That is GitLab #517, in the language's own core demographic.
+
+`fixed` moves the correction from the renderer to the *value*. It rounds through
+the decimal spelling, so the stored `Double` is the one nearest to `99.95` — and
+every downstream path then agrees about it: console, JSON, CSV, and any
+arithmetic that reads it back.
+
+```aro
+Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
+Compute the <revenue: fixed> from the <raw-revenue>.        (* 99.95 *)
+Compute the <precise: fixed> from the <rate> with { places: 4 }.
+```
+
+The place count comes from `with { places: N }` (or the bare `with N`), is 2
+without one, and must be 0…15. **The result stays numeric.** Returning a
+rendered string would print correctly and then quote itself into a JSON data
+product, which is a different wrong answer.
+
+Round each amount once, where it is produced, to the precision that amount
+actually has. Rounding the *same* quantity twice at different precisions is how
+two reports come to disagree by a penny; re-applying `fixed` after a `sum` of
+already-rounded values is not that — it is the cleanup floating-point addition
+still needs. Holding money in integer minor units through the pipeline and
+dividing at the end remains available and is the stricter choice for ledgers.
+
+`round`, `money`, `currency` and `precision` are not qualifiers; each redirects
+to `fixed` by name at check time, because edit distance would never find it
+from "money". Capitalisation decides which advice applies: `Money` written
+PascalCase is ARO-0014's domain *type*, and is still redirected to the `as`
+clause (`Compute the <cost> as Money from …`) rather than to `fixed`.
+
 ### 3.3 The Qualifier Namespace Is Closed
 
 A Compute qualifier resolves to exactly one of:

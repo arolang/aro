@@ -10,6 +10,13 @@ PDF_OUT="$OUTPUT_DIR/ARO-For-Data-Engineers.pdf"
 
 mkdir -p "$OUTPUT_DIR"
 cp "$CSS" "$OUTPUT_DIR/"
+# Carry the screenshots into the output so the HTML can resolve relative
+# image paths without breaking. The PDF engines embed them at render time;
+# the HTML keeps the link.
+if [ -d "$SCRIPT_DIR/screenshots" ]; then
+    rm -rf "$OUTPUT_DIR/screenshots"
+    cp -R "$SCRIPT_DIR/screenshots" "$OUTPUT_DIR/screenshots"
+fi
 
 echo "Building HTML..."
 pandoc \
@@ -36,6 +43,7 @@ elif command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
         --metadata-file="$SCRIPT_DIR/metadata.yaml" \
         --toc \
         --toc-depth=2 \
+        --resource-path="$SCRIPT_DIR" \
         -V geometry:margin=1in \
         -V fontsize=11pt \
         --highlight-style=kate \

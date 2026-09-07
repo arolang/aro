@@ -124,8 +124,13 @@
         Filter the <candidates> from the <customers> where <customer_id> = <cid>.
         Extract the <customer: first> from the <candidates>.
 
-        (* Qualified refs compute directly — no Extract per operand. *)
-        Compute the <line-total> from <order: quantity> * <order: unit_price>.
+        (* Qualified refs compute directly — no Extract per operand.
+         * `fixed` rounds to two places, so what lands in the file is
+         * 39.98 rather than IEEE 754's 39.979999999999997. Files
+         * serialize at full precision; the console does not, which is
+         * why this only shows up once someone opens the output. *)
+        Compute the <raw-total> from <order: quantity> * <order: unit_price>.
+        Compute the <line-total: fixed> from the <raw-total>.
 
         Create the <fact> with {
             order_id: <order: order_id>,
@@ -165,9 +170,11 @@
 
     for each <region-name> in <regions> {
         Filter the <rows> from the <facts> where <region> = <region-name>.
-        Reduce the <revenue> from the <rows> with sum(<line_total>).
+        Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
         Reduce the <order-count> from the <rows> with count().
-        Compute the <avg-order> from <revenue> / <order-count>.
+        Compute the <revenue: fixed> from the <raw-revenue>.
+        Compute the <raw-avg> from <revenue> / <order-count>.
+        Compute the <avg-order: fixed> from the <raw-avg>.
 
         Create the <row> with {
             id: <region-name>,

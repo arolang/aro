@@ -55,6 +55,8 @@ public enum ComputeQualifierCatalog {
         "json-escape",
         // Collections / text (GitLab #486)
         "lines", "join", "sum", "avg", "average", "unique", "random",
+        // Money (GitLab #517)
+        "fixed",
     ]
 
     /// Qualifiers people reach for that are real operations in ARO but
@@ -84,6 +86,21 @@ public enum ComputeQualifierCatalog {
                  + "Reduce the <\(result)> from the <\(object)> with \(qualifier.lowercased())()."
         case "split":
             return "Splitting is an action: Split the <\(result)> from the <\(object)> with \",\"."
+        case "round", "rounded", "money", "currency", "precision":
+            // GitLab #517: these are the names people reach for when a
+            // price prints as 7.199999999999999. `fixed` is one word
+            // away, and edit distance will never find it from "money".
+            //
+            // `Money` written PascalCase is the *other* thing — a domain
+            // type from ARO-0014 — and belongs in the `as` clause, so
+            // capitalisation decides which advice is right.
+            if looksLikeTypeName(qualifier) {
+                return "For a result type, use `as`: "
+                     + "Compute the <\(result)> as \(qualifier) from the <\(object)>."
+            }
+            return "Rounding to decimal places is the `fixed` qualifier: "
+                 + "Compute the <\(result): fixed> from the <\(object)> "
+                 + "(2 places; `with { places: 3 }` for more)."
         default:
             // A type name in the qualifier slot is the other common
             // confusion. The two are different things and GitLab #475
