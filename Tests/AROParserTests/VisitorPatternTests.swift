@@ -215,7 +215,7 @@ struct VariableCollectorVisitor: ASTVisitor {
     }
 
     func visit(_ node: ForEachLoop) throws -> Set<String> {
-        var vars: Set<String> = [node.itemVariable, node.collection.base]
+        var vars: Set<String> = [node.itemVariable, node.collection?.base ?? node.collectionLabel]
         if let index = node.indexVariable {
             vars.insert(index)
         }

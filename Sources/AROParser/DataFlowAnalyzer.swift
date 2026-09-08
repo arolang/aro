@@ -675,14 +675,33 @@ public struct DataFlowAnalyzer {
         var sideEffects: [String] = []
         var dependencies: Set<String> = []
 
-        let collectionName = statement.collection.base
-        if !definedSymbols.contains(collectionName) && !isKnownExternal(collectionName) {
-            diagnostics.warning(
-                "Collection '\(collectionName)' used in for-each before definition",
-                at: statement.collection.span.start
-            )
+        // The collection is either a noun or an expression (GitLab #519). A noun
+        // is one input and can be reported as undefined by name; an expression
+        // contributes every variable it reads.
+        let collectionName: String
+        if let noun = statement.collection {
+            collectionName = noun.base
+            if !definedSymbols.contains(collectionName) && !isKnownExternal(collectionName) {
+                diagnostics.warning(
+                    "Collection '\(collectionName)' used in for-each before definition",
+                    at: noun.span.start
+                )
+            }
+            inputs.insert(collectionName)
+        } else {
+            collectionName = statement.collectionLabel
+            if let expression = statement.collectionExpression {
+                for varName in extractVariables(from: expression) {
+                    if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                        diagnostics.warning(
+                            "Collection '\(varName)' used in for-each before definition",
+                            at: expression.span.start
+                        )
+                    }
+                    inputs.insert(varName)
+                }
+            }
         }
-        inputs.insert(collectionName)
 
         if let filter = statement.filter {
             let filterVars = extractVariables(from: filter)
@@ -989,9 +1008,18 @@ public struct DataFlowAnalyzer {
         expression.accept(VariableCollector())
     }
 
+    /// Variable base-names referenced anywhere in an expression tree.
+    ///
+    /// Module-internal so other analyses that meet a bare expression — the
+    /// for-each collection slot in `BodyMaterializationAnalyzer`, GitLab #519 —
+    /// read variables the same way rather than growing a second walker.
+    static func variables(in expression: any Expression) -> Set<String> {
+        expression.accept(VariableCollector())
+    }
+
     /// Collects the variable base-names referenced anywhere in an expression
     /// tree. Behaviour matches the previous `collectVariables` switch 1:1.
-    private struct VariableCollector: ExpressionVisitor {
+    struct VariableCollector: ExpressionVisitor {
         typealias Result = Set<String>
 
         func visit(_ node: LiteralExpression) -> Set<String> { [] }

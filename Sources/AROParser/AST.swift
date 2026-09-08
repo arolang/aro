@@ -858,10 +858,27 @@ public struct MatchStatement: Statement {
 
 /// For-each loop statement: for each <item> [at <index>] in <collection> [where <condition>] { ... }
 /// Also supports: parallel for each <item> in <collection> [with <concurrency: N>] { ... }
+///
+/// The collection slot takes either a plain noun (`<items>`, `<team: members>`) or
+/// a general expression (`[1, 2, 3]`, `(<a> + <b>)`, `<order>.lines`) — GitLab #519.
+/// Exactly one of `collection` / `collectionExpression` is non-nil.
 public struct ForEachLoop: Statement {
     public let itemVariable: String
     public let indexVariable: String?
-    public let collection: QualifiedNoun
+
+    /// The collection written as a noun: `<items>` or `<team: members>`.
+    ///
+    /// nil when the header carries a general expression — read
+    /// `collectionExpression` instead. The noun form is kept separate rather
+    /// than wrapped in a `VariableRefExpression` because it alone supports
+    /// specifier property access and the lazy-stream iteration path (ARO-0051),
+    /// both of which resolve a *name* in the context.
+    public let collection: QualifiedNoun?
+
+    /// The collection written as an expression (list literal, member access,
+    /// parenthesised arithmetic, …). nil for the noun form.
+    public let collectionExpression: (any Expression)?
+
     public let filter: (any Expression)?
     public let isParallel: Bool
     public let concurrency: Int?
@@ -881,11 +898,40 @@ public struct ForEachLoop: Statement {
         self.itemVariable = itemVariable
         self.indexVariable = indexVariable
         self.collection = collection
+        self.collectionExpression = nil
         self.filter = filter
         self.isParallel = isParallel
         self.concurrency = concurrency
         self.body = body
         self.span = span
+    }
+
+    public init(
+        itemVariable: String,
+        indexVariable: String? = nil,
+        collectionExpression: any Expression,
+        filter: (any Expression)? = nil,
+        isParallel: Bool = false,
+        concurrency: Int? = nil,
+        body: [Statement],
+        span: SourceSpan
+    ) {
+        self.itemVariable = itemVariable
+        self.indexVariable = indexVariable
+        self.collection = nil
+        self.collectionExpression = collectionExpression
+        self.filter = filter
+        self.isParallel = isParallel
+        self.concurrency = concurrency
+        self.body = body
+        self.span = span
+    }
+
+    /// How the collection reads back in a diagnostic or an outline label.
+    public var collectionLabel: String {
+        if let collection { return "<\(collection.fullName)>" }
+        if let collectionExpression { return String(describing: collectionExpression) }
+        return "<?>"
     }
 
     public var description: String {
@@ -894,7 +940,7 @@ public struct ForEachLoop: Statement {
         if let index = indexVariable {
             desc += " at <\(index)>"
         }
-        desc += " in <\(collection.fullName)>"
+        desc += " in \(collectionLabel)"
         if let concurrency = concurrency {
             desc += " with <concurrency: \(concurrency)>"
         }
@@ -2015,7 +2061,7 @@ public struct ASTPrinter: ASTVisitor {
         if let index = node.indexVariable {
             result += "\(indentation())  Index: <\(index)>\n"
         }
-        result += "\(indentation())  Collection: <\(node.collection.fullName)>\n"
+        result += "\(indentation())  Collection: \(node.collectionLabel)\n"
         result += "\(indentation())  Parallel: \(node.isParallel)\n"
         if let concurrency = node.concurrency {
             result += "\(indentation())  Concurrency: \(concurrency)\n"

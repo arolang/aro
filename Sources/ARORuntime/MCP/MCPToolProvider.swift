@@ -876,7 +876,7 @@ public struct MCPToolProvider: Sendable {
             return [
                 "type": "ForEachLoop",
                 "itemVariable": forEach.itemVariable,
-                "collection": forEach.collection.base,
+                "collection": forEach.collection?.base ?? forEach.collectionLabel,
                 "body": forEach.body.map { serializeStatement($0) }
             ]
         } else if let range = stmt as? RangeLoop {

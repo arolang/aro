@@ -337,13 +337,13 @@ ARO provides bounded, deterministic iteration over collections.
 ```ebnf
 foreach_loop = "for" , "each" , "<" , item_name , ">" ,
                [ "at" , "<" , index_name , ">" ] ,
-               "in" , "<" , collection , ">" ,
+               "in" , collection ,
                [ "where" , condition ] ,
                block ;
 
 item_name    = compound_identifier ;
 index_name   = compound_identifier ;
-collection   = qualified_noun ;
+collection   = "<" , qualified_noun , ">" | expression ;
 ```
 
 **Format:**
@@ -360,6 +360,35 @@ for each <item> at <index> in <collection> {
     <statements>
 }
 ```
+
+#### The Collection Slot
+
+The collection is either a **noun** — `<items>`, or `<team: members>` for a
+field — or any **expression**:
+
+```aro
+for each <n> in [1, 2, 3] {                 (* list literal — no Create needed *)
+    Log <n> to the <console>.
+}
+
+for each <line> in <order>.lines { … }      (* field access *)
+for each <n> in (<offsets>) { … }           (* parenthesised expression *)
+for each <n> in [<base>, <base-plus-one>] { … }   (* elements are expressions too *)
+```
+
+The expression is evaluated **once**, before the first iteration — never per
+element. A `where` filter and an `at <index>` clause apply either way.
+
+The noun form is not sugar for a one-element expression: only a name can carry
+specifiers, and only a name reaches the lazy-stream iteration path
+([ARO-0051](ARO-0051-streaming-execution.md)) that iterates a stream in O(1)
+memory. An expression that *evaluates* to a stream streams as well; a list
+literal is a value and is iterated as one.
+
+There is no range literal. `for each <n> in [1..10]` is not ARO — count with the
+range loop, `for <n> from 1 to 10 { … }`, whose upper bound is exclusive (it
+binds 1…9). A `..` / `..<` range syntax is deliberately not part of this
+proposal; GitLab #546 sketches one for its own proposal.
 
 #### Basic Iteration
 
@@ -439,7 +468,7 @@ For concurrent processing of independent items:
 
 ```ebnf
 parallel_foreach = "parallel" , "for" , "each" , "<" , item_name , ">" ,
-                   "in" , "<" , collection , ">" ,
+                   "in" , collection ,
                    [ "with" , "<" , "concurrency" , ":" , number , ">" ] ,
                    [ "where" , condition ] ,
                    block ;
@@ -454,7 +483,15 @@ parallel for each <item> in <items> {
 parallel for each <item> in <items> with <concurrency: 4> {
     Fetch the <data> from the <external-api>.
 }
+
+parallel for each <n> in [1, 2, 3] with <concurrency: 2> {
+    Send the <ping> to the <host>.
+}
 ```
+
+The collection slot is the same one the sequential form takes — a noun or an
+expression — and it is likewise evaluated once, on the loop's own thread,
+before any iteration starts.
 
 #### Parallel Processing
 

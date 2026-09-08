@@ -14,10 +14,11 @@ Iterates over collections of users and teams using various loop patterns: basic 
 - **Nested loops** - Loops within loops for hierarchical data
 - **Object property access** - `<user: name>` syntax in loops
 - **Compute in loops** - Arithmetic on index values
+- **Expression collections** - `for each <n> in [1, 2, 3]` and `in <alpha>.members`, with no `Create` first
 
 ## Related Proposals
 
-- [ARO-0005: Iteration](../../Proposals/ARO-0005-iteration.md)
+- [ARO-0002: Control Flow](../../Proposals/ARO-0002-control-flow.md)
 
 ## Usage
 
@@ -57,6 +58,15 @@ Bob
 Beta
 Charlie
 Diana
+
+=== Literal For-Each ===
+1
+2
+3
+
+=== Field For-Each ===
+Alice
+Bob
 ```
 
 ---

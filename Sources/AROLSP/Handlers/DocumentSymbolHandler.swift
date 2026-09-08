@@ -92,7 +92,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     let forSymbol: [String: Any] = [
                         "name": "for each \(forEachStmt.itemVariable)",
-                        "detail": "in \(forEachStmt.collection.base)",
+                        "detail": "in \(forEachStmt.collection?.base ?? forEachStmt.collectionLabel)",
                         "kind": 26,  // Struct
                         "range": rangeToDict(forRange),
                         "selectionRange": rangeToDict(forRange)
