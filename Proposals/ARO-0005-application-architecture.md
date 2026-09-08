@@ -72,6 +72,7 @@ Within an application:
 
 - All feature sets are globally visible
 - All published variables are accessible from any file
+- User-defined actions (ARO-0081) are callable as `Application.<Name>` from any file, wherever they are declared
 - No import statements needed between files in the same directory
 
 **users.aro:**

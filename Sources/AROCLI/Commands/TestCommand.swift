@@ -67,6 +67,10 @@ struct TestCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
+        // Cross-file `Application.<Name>` resolution (#587): a test feature set
+        // may call an action declared in any other file of the application.
+        let declaredActions = UserActionRegistry.declared(inFiles: appConfig.sourceFiles)
+
         for sourceFile in appConfig.sourceFiles {
             if verbose {
                 print("Compiling: \(sourceFile.lastPathComponent)")
@@ -80,7 +84,7 @@ struct TestCommand: AsyncParsableCommand {
                 throw ExitCode.failure
             }
 
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
             allDiagnostics.append(contentsOf: result.diagnostics)
 
             if result.isSuccess {

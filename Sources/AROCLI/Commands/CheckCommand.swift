@@ -93,8 +93,24 @@ struct SourceCheckSubcommand: ParsableCommand {
         // being the only one.
         let handledEvents = handledEventTypes(in: sourceFiles)
 
+        // Same seam, same reason, for `Application.<Name>` (GitLab #587): a
+        // user-defined action is visible application-wide, so a call answered
+        // by a declaration in a sibling file was reported unknown — under a
+        // hint that flatly denied any action was declared at all.
+        //
+        // `nil` for a single named file: that file may well be one of many in
+        // an application this invocation was never pointed at, so the
+        // diagnostic must not speak for the application.
+        let declaredActions: UserActionRegistry? = isDirectory.boolValue
+            ? UserActionRegistry.declared(inFiles: sourceFiles)
+            : nil
+
         for sourceFile in sourceFiles {
-            let (errors, warnings) = try checkFile(sourceFile, handledEvents: handledEvents)
+            let (errors, warnings) = try checkFile(
+                sourceFile,
+                handledEvents: handledEvents,
+                declaredActions: declaredActions
+            )
             totalErrors += errors
             totalWarnings += warnings
         }
@@ -481,11 +497,16 @@ struct SourceCheckSubcommand: ParsableCommand {
 
     private func checkFile(
         _ file: URL,
-        handledEvents: Set<String> = []
+        handledEvents: Set<String> = [],
+        declaredActions: UserActionRegistry? = nil
     ) throws -> (errors: Int, warnings: Int) {
         let source = try String(contentsOf: file, encoding: .utf8)
         let compiler = Compiler()
-        let result = compiler.compile(source, externallyHandledEvents: handledEvents)
+        let result = compiler.compile(
+            source,
+            externallyHandledEvents: handledEvents,
+            declaredUserActions: declaredActions
+        )
 
         let errors = result.diagnostics.filter { $0.severity == .error }
         let warningDiags = result.diagnostics.filter { $0.severity == .warning }

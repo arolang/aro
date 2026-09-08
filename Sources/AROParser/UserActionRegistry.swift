@@ -82,6 +82,123 @@ public struct UserActionRegistry: Sendable, Equatable {
     }
 
     public var isEmpty: Bool { actions.isEmpty }
+
+    // MARK: - Application-Wide Discovery (GitLab #587)
+
+    /// Union of two registries. Entries in `self` win on a name collision,
+    /// because `self` is the file being analysed and it carries the spans the
+    /// diagnostics point at.
+    public func merging(_ other: UserActionRegistry) -> UserActionRegistry {
+        guard !other.isEmpty else { return self }
+        guard !isEmpty else { return other }
+        var merged = other.actions
+        for (name, info) in actions { merged[name] = info }
+        return UserActionRegistry(actions: merged)
+    }
+
+    /// Actions declared by these feature sets, without running semantic
+    /// analysis. Duplicates are *not* reported here — that is
+    /// `UserActionAnalyzer.buildRegistry`'s job, and reporting them twice
+    /// would double every duplicate-name error.
+    public static func declared(in featureSets: [FeatureSet]) -> UserActionRegistry {
+        var actions: [String: UserActionInfo] = [:]
+        for fs in featureSets where fs.isUserAction {
+            if actions[fs.name] != nil { continue }
+            actions[fs.name] = UserActionInfo(
+                name: fs.name,
+                takesField: fs.userActionTakesField,
+                takesType: fs.userActionTakesType,
+                span: fs.span
+            )
+        }
+        return UserActionRegistry(actions: actions)
+    }
+
+    /// Actions declared anywhere in `program`.
+    public static func declared(in program: Program) -> UserActionRegistry {
+        declared(in: program.featureSets)
+    }
+
+    /// Actions declared anywhere in an application, given all of its sources.
+    ///
+    /// An ARO application has no imports — every feature set is visible to
+    /// every other one (ARO-0005) — so "does this action exist?" can only be
+    /// answered across the whole application. A caller that compiles one file
+    /// at a time collects this from all of them first and hands the union to
+    /// `Compiler.compile(_:externallyHandledEvents:declaredUserActions:)`.
+    ///
+    /// Parse-only: an `Action` header carries everything this needs, so no
+    /// semantic analysis runs here, and a source that does not parse simply
+    /// contributes nothing — its own errors are reported when it is compiled.
+    public static func declared(inSources sources: [String]) -> UserActionRegistry {
+        var actions: [String: UserActionInfo] = [:]
+        for source in sources {
+            guard let tokens = try? Lexer.tokenize(source),
+                  let program = try? Parser(tokens: tokens).parse()
+            else { continue }
+            for (name, info) in declared(in: program).actions where actions[name] == nil {
+                actions[name] = info
+            }
+        }
+        return UserActionRegistry(actions: actions)
+    }
+
+    /// Actions declared anywhere in an application, given its source files.
+    /// A file that cannot be read contributes nothing, for the same reason a
+    /// file that cannot be parsed does.
+    public static func declared(inFiles files: [URL]) -> UserActionRegistry {
+        declared(inSources: files.compactMap { try? String(contentsOf: $0, encoding: .utf8) })
+    }
+
+    /// The known names closest to `name`, for "did you mean" hints.
+    /// Same shape as `ComputeQualifierCatalog.closestBuiltIns(to:)`: plain
+    /// Levenshtein, distance ≤ 2, best three.
+    public func closestNames(to name: String, limit: Int = 3) -> [String] {
+        var scored: [(name: String, distance: Int)] = []
+        for candidate in actions.keys {
+            let distance = Self.editDistance(candidate.lowercased(), name.lowercased())
+            if distance <= 2 { scored.append((candidate, distance)) }
+        }
+        scored.sort { lhs, rhs in
+            lhs.distance == rhs.distance ? lhs.name < rhs.name : lhs.distance < rhs.distance
+        }
+        return scored.prefix(limit).map(\.name)
+    }
+
+    /// Plain Levenshtein distance over Characters.
+    private static func editDistance(_ a: String, _ b: String) -> Int {
+        let x = Array(a), y = Array(b)
+        if x.isEmpty { return y.count }
+        if y.isEmpty { return x.count }
+
+        var previous = Array(0...y.count)
+        var current = [Int](repeating: 0, count: y.count + 1)
+
+        for i in 1...x.count {
+            current[0] = i
+            for j in 1...y.count {
+                let substitution = previous[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1)
+                current[j] = Swift.min(previous[j] + 1, current[j - 1] + 1, substitution)
+            }
+            swap(&previous, &current)
+        }
+        return previous[y.count]
+    }
+}
+
+// MARK: - Analysis Scope
+
+/// How much of the application the analyser was given.
+///
+/// A user-defined action is visible application-wide, so an unknown-call
+/// diagnostic can only say "no actions are declared in this application" when
+/// it has actually seen the application. `aro check`, `aro run` and `aro build`
+/// scan every `.aro` file first and analyse with `.application`; the LSP, the
+/// REPL and a one-off `Compiler.compile(source)` see a single file and analyse
+/// with `.file`, where a declaration next door is genuinely out of sight.
+public enum UserActionScope: Sendable, Equatable {
+    case application
+    case file
 }
 
 // MARK: - Framework Variables

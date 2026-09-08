@@ -221,8 +221,14 @@ public final class Application: @unchecked Sendable {
         var programs: [AnalyzedProgram] = []
         var allDiagnostics: [Diagnostic] = []
 
+        // `Application.<Name>` is visible across every file of the application
+        // (ARO-0005, ARO-0081 §2), so the declarations are collected before the
+        // per-file compile loop that would otherwise only see one file's own
+        // actions (#587).
+        let declaredActions = UserActionRegistry.declared(inSources: sources.map { $0.1 })
+
         for (_, source) in sources {
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
             allDiagnostics.append(contentsOf: result.diagnostics)
 
             if result.isSuccess {
@@ -956,6 +962,10 @@ public final class Application: @unchecked Sendable {
         // Merge multiple programs into one
         var allFeatureSets: [AnalyzedFeatureSet] = []
         let globalRegistry = GlobalSymbolRegistry()
+        // User-defined actions merge the same way published symbols do, so the
+        // merged program can answer for the whole application rather than for
+        // whichever file happened to be first (#587).
+        var userActions = UserActionRegistry()
 
         for program in programs {
             allFeatureSets.append(contentsOf: program.featureSets)
@@ -964,6 +974,8 @@ public final class Application: @unchecked Sendable {
             for (_, info) in program.globalRegistry.allPublished {
                 globalRegistry.register(symbol: info.symbol, fromFeatureSet: info.featureSet)
             }
+
+            userActions = userActions.merging(program.userActions)
         }
 
         // Create merged AST program
@@ -976,7 +988,8 @@ public final class Application: @unchecked Sendable {
         return AnalyzedProgram(
             program: mergedAST,
             featureSets: allFeatureSets,
-            globalRegistry: globalRegistry
+            globalRegistry: globalRegistry,
+            userActions: userActions
         )
     }
 

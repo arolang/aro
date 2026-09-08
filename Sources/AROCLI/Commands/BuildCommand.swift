@@ -135,6 +135,11 @@ struct BuildCommand: AsyncParsableCommand {
 
         AROLogger.debug("Starting compilation of \(appConfig.sourceFiles.count) files", subsystem: "build")
 
+        // Application-wide user-defined actions, collected before the per-file
+        // compile loop so a cross-file `Application.<Name>` call compiles here
+        // exactly as it runs under `aro run` (#587).
+        let declaredActions = UserActionRegistry.declared(inFiles: appConfig.sourceFiles)
+
         for sourceFile in appConfig.sourceFiles {
             if verbose {
                 print("Parsing: \(sourceFile.lastPathComponent)")
@@ -148,7 +153,7 @@ struct BuildCommand: AsyncParsableCommand {
                 throw ExitCode.failure
             }
 
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
             allDiagnostics.append(contentsOf: result.diagnostics)
 
             if result.isSuccess {
@@ -429,6 +434,8 @@ struct BuildCommand: AsyncParsableCommand {
 
         var allFeatureSets: [AnalyzedFeatureSet] = []
         let globalRegistry = GlobalSymbolRegistry()
+        // Application-wide, like the published symbols beside it (#587).
+        var userActions = UserActionRegistry()
 
         for program in programs {
             allFeatureSets.append(contentsOf: program.featureSets)
@@ -436,6 +443,8 @@ struct BuildCommand: AsyncParsableCommand {
             for (_, info) in program.globalRegistry.allPublished {
                 globalRegistry.register(symbol: info.symbol, fromFeatureSet: info.featureSet)
             }
+
+            userActions = userActions.merging(program.userActions)
         }
 
         // Filter out test feature sets (ARO-0015: Tests run only in interpreter mode)
@@ -465,7 +474,8 @@ struct BuildCommand: AsyncParsableCommand {
         return AnalyzedProgram(
             program: mergedAST,
             featureSets: productionFeatureSets,
-            globalRegistry: globalRegistry
+            globalRegistry: globalRegistry,
+            userActions: userActions
         )
     }
 }
