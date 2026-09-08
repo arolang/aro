@@ -839,6 +839,26 @@ public actor RuntimeContext: ExecutionContext {
         return localVariable(name) != nil
     }
 
+    /// Whether a plain `bind(name, …)` from here would be refused as an
+    /// immutable rebind — the same decision `bindTyped(_:value:allowRebind:)`
+    /// makes, asked before the write instead of after it.
+    ///
+    /// An action that produces an effect *and* a binding needs this: Store
+    /// with an inline payload writes a row and then binds the stored record,
+    /// so discovering the conflict from the refusal would leave the row behind
+    /// (GitLab #515). Statement scopes forward, because that is where the bind
+    /// would land.
+    public nonisolated func wouldRefuseRebind(_ name: String) -> Bool {
+        if name.hasPrefix("_") { return false }
+        if _isStatementScope, let owner = parent as? RuntimeContext {
+            return owner.wouldRefuseRebind(name)
+        }
+        if localVariable(name)?.value is AROFuture { return false }
+        return withExclusiveMutation {
+            mutableScopeDepth == 0 && immutableVariables.contains(name)
+        }
+    }
+
     public nonisolated var variableNames: Set<String> {
         var names = Set<String>()
         var current: RuntimeContext = self

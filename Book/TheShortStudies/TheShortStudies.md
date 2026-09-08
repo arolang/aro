@@ -86,7 +86,7 @@ Pratt parsing handles expressions. The insight is that each token has a *binding
 | 4 | `==`, `!=`, `<`, `>`, `<=`, `>=` |
 | 5 | `+`, `-`, `++` (concat) |
 | 6 | `*`, `/`, `%` |
-| 7 (highest) | unary `-`, `not` |
+| 7 (highest) | unary `-` |
 
 The core statement shape that nearly everything reduces to:
 

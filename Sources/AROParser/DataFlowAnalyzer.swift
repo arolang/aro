@@ -429,6 +429,42 @@ public struct DataFlowAnalyzer {
             }
             sideEffects.append("\(statement.action.verb):\(resultName)")
 
+            // GitLab #515: `Store the <ticket> into the <ticket-repository>
+            // with { … }` binds the stored record to <ticket> — the payload is
+            // the value, so the result slot is an output here, not a read of
+            // something defined earlier. Without this the record is invisible
+            // to the analyzer and every later use reports "External dependency
+            // 'ticket' is not published by any feature set".
+            //
+            // Scoped to the payload form: the `<stored: user>` spelling reads a
+            // variable that already exists, and the bare spelling stores one, so
+            // neither defines a name.
+            // StoreAction.verbs, mirrored here because AROParser cannot see it.
+            let storeVerbs = ["store", "save", "persist"]
+            if storeVerbs.contains(statement.action.verb.lowercased()),
+               statement.rangeModifiers.withClause != nil,
+               statement.result.typeAnnotation == nil,
+               statement.object.preposition == .into || statement.object.preposition == .to {
+                // A name that already holds a value cannot also hold the stored
+                // record — the runtime refuses the rebind, so say so here where
+                // it is cheap to fix (ARO-0001 immutability).
+                checkImmutabilityViolation(
+                    name: resultName, verb: statement.action.verb,
+                    objectName: objectName, preposition: statement.object.preposition,
+                    span: statement.result.span,
+                    definedSymbols: definedSymbols, inMutableScope: inMutableScope
+                )
+                outputs.insert(resultName)
+                builder.define(
+                    name: resultName,
+                    definedAt: statement.span,
+                    visibility: .internal,
+                    source: .computed,
+                    dataType: TypeInferencer.inferResultType(statement)
+                )
+                definedSymbols.insert(resultName)
+            }
+
         case .export:
             break
 

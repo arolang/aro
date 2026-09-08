@@ -522,6 +522,40 @@ Store the <message> into the <message-repository>.
 Store the <order> to the <order-repository>.
 ```
 
+**Inline payload.** A `with` clause supplies the record directly, so a row
+that exists only to be stored needs no separate binding (GitLab #515):
+
+```aro
+Store the <ticket> into the <ticket-repository> with { id: 1, state: "new" }.
+```
+
+The payload *is* the value stored, and the result slot binds the stored
+record — the same thing `Store the <stored: ticket> …` binds — so `<ticket>`
+is usable afterwards exactly as `Create` then `Store` would have left it,
+identity field and all. This is the shape `Emit` has always accepted for its
+payload; before #515 the clause parsed, evaluated, and was then ignored, and
+the statement failed looking for a variable named after the result.
+
+The payload names the value, so nothing else may:
+
+| Written | Meaning |
+|---------|---------|
+| `Store the <t> into the <r> with { … }.` | Store the payload, bind it to `<t>` |
+| `Store the <t> into the <r>.` | Store the value already bound to `<t>` |
+| `Store the <s: t> into the <r>.` | Store `<t>`, bind the stored record to `<s>` |
+| `Store the <t> into the <r> with { … }.` where `<t>` is already bound | Error — one value, one name |
+| `Store the <s: t> into the <r> with { … }.` | Error — two things name the value |
+
+Both refusals are reported before the write, so a statement that fails leaves
+the repository untouched. The already-bound case is ARO's immutability rule
+(ARO-0001 §Immutability) and `aro check` reports it without running anything.
+
+A list payload stores one row per element, exactly as a bound list does:
+
+```aro
+Store the <rows> into the <audit-repository> with [ { id: 1 }, { id: 2 } ].
+```
+
 ### 5.5 Retrieve Operation
 
 The `<Retrieve>` action fetches data from a repository:

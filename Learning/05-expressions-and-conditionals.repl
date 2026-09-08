@@ -54,7 +54,7 @@
       "outputs" : [
 
       ],
-      "source" : "## Combining rules with logic\n\n`and`, `or`, `not` combine booleans, short-circuiting left to right.\nOne habit to adopt immediately: **parenthesize each comparison** when\nyou mix it with named boolean facts — `(<order-value> >= 15) or\n<happy-hour>` — both for the reader and for the parser, which\notherwise tries to read `15 or <happy-hour>` as one operand.\nThe `Validate` action is an alternative spelling for binding a boolean\ncheck — same result, reads as intent (\"validate that…\")."
+      "source" : "## Combining rules with logic\n\n`and`, `or`, `not` combine booleans, short-circuiting left to right.\nPrecedence is the one you already know: arithmetic binds tightest, then\ncomparisons, then `not`, then `and`, then `or`. So\n`<order-value> >= 15 or <happy-hour>` groups the way you read it aloud —\nno parentheses required. Reach for them when you want a *different*\ngrouping than the default, the way the next cell makes the `or` the\nsecond half of the `and`.\nThe `Validate` action is an alternative spelling for binding a boolean\ncheck — same result, reads as intent (\"validate that…\")."
     },
     {
       "id" : "nb05-c08",
@@ -62,7 +62,7 @@
       "outputs" : [
 
       ],
-      "source" : "Create the <loyalty-member> with true.\nCreate the <happy-hour> with false.\nCompute the <discount-eligible> from <loyalty-member> and ((<order-value> >= 15) or <happy-hour>).\nValidate the <can-order> for not <under-minimum>.\nLog <discount-eligible> to the <console>.\nLog <can-order> to the <console>."
+      "source" : "Create the <loyalty-member> with true.\nCreate the <happy-hour> with false.\nCompute the <discount-eligible> from <loyalty-member> and (<order-value> >= 15 or <happy-hour>).\nCompute the <no-fee-order> from <order-value> >= 15 or <loyalty-member>.\nValidate the <can-order> for not <under-minimum>.\nLog <discount-eligible> to the <console>.\nLog <no-fee-order> to the <console>.\nLog <can-order> to the <console>."
     },
     {
       "id" : "nb05-c09",
