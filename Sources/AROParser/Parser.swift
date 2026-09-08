@@ -2122,17 +2122,28 @@ public final class Parser {
 
 // MARK: - Expression Parsing (ARO-0002)
 
-/// Operator precedence levels for Pratt parsing
+/// Operator precedence levels for Pratt parsing.
+///
+/// The order is the one spelled out in ARO-0001 § Operator Precedence and it
+/// is the one every mainstream language uses: arithmetic binds tightest,
+/// then comparisons, then `not`, then `and`, then `or` (GitLab #520). Reading
+/// a rule aloud — "the order is at least fifteen, or the customer is a VIP" —
+/// must group the way the parser groups it.
+///
+/// `not` deliberately sits *below* the comparisons (as in Python, not C):
+/// `not <a> == <b>` is `not (<a> == <b>)`. Unary minus is the exception —
+/// it stays at `.unary`, above `*`, so `-<a> * <b>` is `(-<a>) * <b>`.
 private enum Precedence: Int, Comparable {
     case none = 0
     case or = 1           // or
     case and = 2          // and
-    case equality = 3     // == != is is_not
-    case comparison = 4   // < > <= >=
-    case term = 5         // + - ++
-    case factor = 6       // * / %
-    case unary = 7        // - not
-    case postfix = 8      // . []
+    case not = 3          // not (prefix)
+    case equality = 4     // == != is is_not contains matches
+    case comparison = 5   // < > <= >=
+    case term = 6         // + - ++
+    case factor = 7       // * / %
+    case unary = 8        // unary -
+    case postfix = 9      // . []
 
     static func < (lhs: Precedence, rhs: Precedence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -2227,9 +2238,12 @@ extension Parser {
             return UnaryExpression(op: .negate, operand: operand, span: span)
 
         // Unary not: not expr
+        // Binds looser than the comparisons, so `not <a> == <b>` negates the
+        // comparison instead of comparing a negated `<a>` (GitLab #520), and
+        // still stops before `and`/`or`: `not <a> and <b>` is `(not <a>) and <b>`.
         case .not:
             advance()
-            let operand = try parsePrecedence(.unary)
+            let operand = try parsePrecedence(.not)
             let span = token.span.merged(with: operand.span)
             return UnaryExpression(op: .not, operand: operand, span: span)
 
@@ -2437,28 +2451,25 @@ extension Parser {
                 return TypeCheckExpression(expression: left, typeName: typeToken.lexeme, hasArticle: hasArticle, span: span)
             }
 
-            // Parse right operand with higher precedence (left-associative)
+            // Parse right operand with higher precedence (left-associative).
+            //
+            // `and`/`or` used to rewrite their operands here: when the left
+            // side was a comparison and the right side was a bare value, the
+            // parser distributed the comparison's subject and operator across
+            // the connective, so `<x> == "a" or "b"` became
+            // `<x> == "a" or <x> == "b"`. That shorthand was never in
+            // ARO-0001, and it made precedence depend on the *shape* of the
+            // operands rather than on the operators — so
+            // `<n> >= 15 or <vip>` silently became `<n> >= 15 or <n> >= <vip>`
+            // and died on "Cannot convert Bool to number" (GitLab #520),
+            // while the same rule with `and` between two comparisons parsed
+            // fine. It had already produced a silent wrong *result* once
+            // (the crawler's `contains … and (…)`, patched by excluding
+            // grouped right-hand sides). The rewrite is gone: precedence is
+            // now exactly the table in ARO-0001, and nothing about an
+            // operand's shape can change the grouping.
             let right = try parsePrecedence(precedence)
             let span = left.span.merged(with: right.span)
-
-            // Short-hand logical: `<x> = "a" or "b"` → `<x> = "a" or <x> = "b"`
-            // When `or`/`and` joins a comparison on the left with a bare value on the right,
-            // distribute the left-hand comparison's subject and operator to the right side.
-            // Skip distribution when the right side is a GroupedExpression — the parens are
-            // an explicit signal from the user that this is a self-contained sub-expression
-            // (e.g. `<x> contains <y> and (<a> == 0 or <b> <= <a>)` must not become
-            // `<x> contains <y> and <x> contains (...)`, which silently evaluates to false).
-            if (actualOp == .or || actualOp == .and),
-               let leftBin = left as? BinaryExpression,
-               leftBin.op.isComparison,
-               !(right is GroupedExpression),
-               !((right as? BinaryExpression)?.op.isComparison ?? false),
-               !((right as? BinaryExpression)?.op.isLogical ?? false) {
-                let expandedRight = BinaryExpression(
-                    left: leftBin.left, op: leftBin.op, right: right, span: right.span
-                )
-                return BinaryExpression(left: left, op: actualOp, right: expandedRight, span: span)
-            }
 
             return BinaryExpression(left: left, op: actualOp, right: right, span: span)
         }

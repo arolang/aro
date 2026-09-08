@@ -467,6 +467,122 @@ struct OperatorPrecedenceTests {
     }
 }
 
+// MARK: - Comparison / Logical Precedence (GitLab #520)
+
+/// The grouping guarantee from ARO-0001 § Operator Precedence: comparisons
+/// bind tighter than `not`, which binds tighter than `and`, which binds
+/// tighter than `or` — and *nothing about the shape of an operand* changes
+/// that. The parser used to rewrite `<n> >= 15 or <vip>` into
+/// `<n> >= 15 or <n> >= <vip>` (distributing the comparison's subject across
+/// the connective), which turned an ordinary business rule into
+/// "Cannot convert Bool to number".
+@Suite("Comparison and logical precedence (GitLab #520)")
+struct ComparisonLogicalPrecedenceTests {
+
+    /// Parses one `Compute … from <expr>.` and hands back the expression.
+    private func expression(_ expr: String) throws -> any Expression {
+        let source = "(Test: Demo) { Compute the <result> from \(expr). }"
+        let program = try Parser.parse(source)
+        let statement = try #require(program.featureSets[0].statements[0] as? AROStatement)
+        return try #require(statement.expression)
+    }
+
+    /// A compact rendering of the parse tree, so a test asserts the *shape*
+    /// rather than "it did not throw".
+    private func shape(_ expr: any Expression) -> String {
+        switch expr {
+        case let binary as BinaryExpression:
+            return "(\(shape(binary.left)) \(binary.op.rawValue) \(shape(binary.right)))"
+        case let unary as UnaryExpression:
+            return "(\(unary.op.rawValue) \(shape(unary.operand)))"
+        case let grouped as GroupedExpression:
+            return shape(grouped.expression)
+        case let ref as VariableRefExpression:
+            return ref.noun.base
+        case let literal as LiteralExpression:
+            switch literal.value {
+            case .integer(let i): return "\(i)"
+            case .string(let s): return "\"\(s)\""
+            case .boolean(let b): return "\(b)"
+            default: return "lit"
+            }
+        default:
+            return String(describing: type(of: expr))
+        }
+    }
+
+    @Test("comparison or bare boolean groups as (comparison) or flag")
+    func testComparisonOrBool() throws {
+        #expect(try shape(expression("<n> >= 15 or <vip>")) == "((n >= 15) or vip)")
+    }
+
+    @Test("comparison and bare boolean groups as (comparison) and flag")
+    func testComparisonAndBool() throws {
+        #expect(try shape(expression("<n> >= 15 and <vip>")) == "((n >= 15) and vip)")
+    }
+
+    @Test("bare boolean or comparison groups as flag or (comparison)")
+    func testBoolOrComparison() throws {
+        #expect(try shape(expression("<vip> or <n> >= 15")) == "(vip or (n >= 15))")
+    }
+
+    @Test("comparison or comparison keeps both comparisons intact")
+    func testComparisonOrComparison() throws {
+        #expect(try shape(expression("<n> >= 15 or <n> < 5")) == "((n >= 15) or (n < 5))")
+    }
+
+    @Test("equality or bare value does not distribute the subject")
+    func testEqualityOrBareValueDoesNotDistribute() throws {
+        // Used to become `(s == "open") or (s == "closed")`.
+        #expect(try shape(expression("<s> == \"open\" or \"closed\"")) == "((s == \"open\") or \"closed\")")
+    }
+
+    @Test("and binds tighter than or across comparisons")
+    func testAndBindsTighterThanOr() throws {
+        #expect(
+            try shape(expression("<no> or <n> >= 15 and <vip>"))
+                == "(no or ((n >= 15) and vip))")
+    }
+
+    @Test("not applies to the whole comparison, not to its left operand")
+    func testNotOverComparison() throws {
+        #expect(try shape(expression("not <n> >= 15")) == "(not (n >= 15))")
+    }
+
+    @Test("not binds tighter than and")
+    func testNotBindsTighterThanAnd() throws {
+        #expect(try shape(expression("not <vip> and <n> >= 15")) == "((not vip) and (n >= 15))")
+    }
+
+    @Test("arithmetic binds tighter than comparison, comparison tighter than or")
+    func testArithmeticInsideComparison() throws {
+        #expect(try shape(expression("<n> + 5 >= 15 or <vip>")) == "(((n + 5) >= 15) or vip)")
+    }
+
+    @Test("parenthesised form parses identically to the bare form")
+    func testParenthesesAreRedundantNotLoadBearing() throws {
+        #expect(
+            try shape(expression("(<n> >= 15) or <vip>"))
+                == shape(expression("<n> >= 15 or <vip>")))
+    }
+
+    @Test("grouped right-hand side still parses as its own sub-expression")
+    func testGroupedRightHandSide() throws {
+        #expect(
+            try shape(expression("<n> >= 15 and (<no> or <vip>)"))
+                == "((n >= 15) and (no or vip))")
+    }
+
+    @Test("when guard uses the same grouping as an expression")
+    func testWhenGuardGrouping() throws {
+        let source = "(Test: Demo) { Log \"hit\" to the <console> when <n> >= 15 or <vip>. }"
+        let program = try Parser.parse(source)
+        let statement = try #require(program.featureSets[0].statements[0] as? AROStatement)
+        let guardExpr = try #require(statement.whenCondition)
+        #expect(shape(guardExpr) == "((n >= 15) or vip)")
+    }
+}
+
 // MARK: - Expression in Statement Tests
 
 @Suite("Expression in Statement Tests")
