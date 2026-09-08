@@ -198,6 +198,12 @@ struct RunCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
+        // Every user-defined action in the application, before any file is
+        // compiled: `Application.<Name>` resolves across files (ARO-0005,
+        // ARO-0081 §2), but files are compiled one at a time, so without this
+        // a call to an action declared next door failed to compile (#587).
+        let declaredActions = UserActionRegistry.declared(inFiles: appConfig.sourceFiles)
+
         for sourceFile in appConfig.sourceFiles {
             if verbose {
                 print("Compiling: \(sourceFile.lastPathComponent)")
@@ -215,7 +221,7 @@ struct RunCommand: AsyncParsableCommand {
                 throw ExitCode.failure
             }
 
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
             allDiagnostics.append(contentsOf: result.diagnostics)
 
             if result.isSuccess {

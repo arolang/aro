@@ -153,7 +153,13 @@ public struct AnalyzedProgram: Sendable {
     /// Feature sets indexed by name for O(1) lookup (e.g. by HTTP operationId).
     public let byName: [String: AnalyzedFeatureSet]
 
-    /// Catalog of user-defined actions discovered in this program (ARO-0081).
+    /// Catalog of user-defined actions visible to this program (ARO-0081).
+    ///
+    /// Application-wide, not file-wide: when the caller supplies the
+    /// application's declarations (`analyze(_:declaredUserActions:)`) this
+    /// holds the union, because `Application.<Name>` resolves across every
+    /// `.aro` file of the application (GitLab #587).
+    ///
     /// Built during `analyze()` and consumed by:
     /// - subsequent semantic-analysis passes (duplicate names, unknown calls,
     ///   `from <value>` against actions without a `takes` clause);
@@ -290,9 +296,15 @@ public final class SemanticAnalyzer {
     ///   the application. Only non-empty when the caller is analysing part of
     ///   an application in isolation — `aro check` walks a file at a time, and
     ///   without this every handler in a sibling file reads as missing.
+    /// - Parameter declaredUserActions: every user-defined action in the
+    ///   application, for the same reason (GitLab #587). `nil` means the
+    ///   caller has not scanned the application — a single-file compile — and
+    ///   the unknown-action diagnostic says so instead of claiming the
+    ///   application declares none.
     public func analyze(
         _ program: Program,
-        externallyHandledEvents: Set<String> = []
+        externallyHandledEvents: Set<String> = [],
+        declaredUserActions: UserActionRegistry? = nil
     ) -> AnalyzedProgram {
         let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
@@ -307,7 +319,17 @@ public final class SemanticAnalyzer {
 
         // ARO-0081: build the user-action registry before per-feature-set analysis
         // so subsequent passes can validate `Application.<Name>` calls.
-        let userActions = userActionAnalyzer.buildRegistry(program.featureSets)
+        //
+        // The local declarations win — they carry the spans this analysis will
+        // point diagnostics at — and the rest of the application is layered
+        // underneath, because `Application.<Name>` resolves across every .aro
+        // file in the application (ARO-0005, ARO-0081 §2, GitLab #587).
+        // Duplicate-name diagnostics stay local: the union includes this file,
+        // so comparing against it would report every action as a duplicate of
+        // itself.
+        let localActions = userActionAnalyzer.buildRegistry(program.featureSets)
+        let userActions = localActions.merging(declaredUserActions ?? UserActionRegistry())
+        let scope: UserActionScope = declaredUserActions == nil ? .file : .application
 
         // Second pass: analyze each feature set
         for featureSet in program.featureSets {
@@ -342,7 +364,7 @@ public final class SemanticAnalyzer {
         // ARO-0081: validate `Application.<Name>` calls and framework-variable
         // access inside Action bodies. Done last so duplicate-name diagnostics
         // emitted by `buildRegistry` come before call-site diagnostics.
-        userActionAnalyzer.validateCalls(in: program.featureSets, registry: userActions)
+        userActionAnalyzer.validateCalls(in: program.featureSets, registry: userActions, scope: scope)
 
         // ARO-0081: a recursion that can never reach a base case is always a
         // bug, and cheaper to find here than at runtime (GitLab #473).

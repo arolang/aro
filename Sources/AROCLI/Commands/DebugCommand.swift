@@ -218,6 +218,9 @@ struct DebugCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
+        // Cross-file `Application.<Name>` resolution (#587).
+        let declaredActions = UserActionRegistry.declared(inFiles: appConfig.sourceFiles)
+
         for sourceFile in appConfig.sourceFiles {
             let source: String
             do {
@@ -226,7 +229,7 @@ struct DebugCommand: AsyncParsableCommand {
                 print("Error reading \(sourceFile.lastPathComponent): \(error)")
                 throw ExitCode.failure
             }
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
             allDiagnostics.append(contentsOf: result.diagnostics)
             if result.isSuccess {
                 compiledPrograms.append(result.analyzedProgram)
