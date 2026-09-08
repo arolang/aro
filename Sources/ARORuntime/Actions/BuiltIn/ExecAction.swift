@@ -95,7 +95,14 @@ public struct ExecConfig: Sendable {
     /// Additional environment variables
     public let environment: [String: String]?
 
-    /// Timeout in milliseconds (default: 30000)
+    /// Timeout in milliseconds (default: 30000).
+    ///
+    /// When the child is still running after this many milliseconds it is
+    /// terminated (SIGTERM, then SIGKILL after a grace period) and the action
+    /// returns `exitCode: -1`. `0` — or any non-positive value — means *no
+    /// timeout*: the action waits for the child however long it takes, which is
+    /// the only honest setting for a command whose runtime cannot be guessed
+    /// (a full build, a large `rsync`).
     public let timeout: Int
 
     /// Shell to use (default: /bin/sh)
@@ -222,10 +229,28 @@ public struct ExecConfig: Sendable {
 ///     error: Boolean,     // true if command failed
 ///     message: String,    // Human-readable status
 ///     output: String,     // Command stdout/stderr
-///     exitCode: Int,      // Process exit code
+///     exitCode: Int,      // Process exit code (-1 = timed out)
 ///     command: String     // Executed command
 /// }
 /// ```
+///
+/// ## Timeout
+///
+/// Every command is bounded by `timeout` milliseconds — 30 000 (30s) unless the
+/// configuration object says otherwise. A command that outlives its timeout is
+/// terminated and the action returns `exitCode: -1` with `error: true` and
+/// whatever output the command produced before it was stopped. It does not
+/// throw: `when <r: exitCode> is -1` and `<r: error>` guards are how a program
+/// sees a timeout, exactly as `ExecResult` has always documented.
+///
+/// Termination escalates — SIGTERM first, then SIGKILL after a two-second
+/// grace period — and is aimed at the child's *process group* when the child
+/// leads one, so a shell command that backgrounded work
+/// (`"server & sleep 100"`) does not leave the grandchildren running and
+/// holding the output pipe open.
+///
+/// `timeout: 0` (or any non-positive value) disables the bound and waits for
+/// the child indefinitely.
 ///
 /// ## Verbs
 /// - `execute` (canonical)
@@ -342,7 +367,7 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
                     command: command,
                     workingDirectory: exprConfig["workingDirectory"] as? String,
                     environment: exprConfig["environment"] as? [String: String],
-                    timeout: (exprConfig["timeout"] as? Int) ?? 30000,
+                    timeout: Self.timeoutMilliseconds(exprConfig["timeout"]),
                     shell: (exprConfig["shell"] as? String) ?? "/bin/sh",
                     captureStderr: (exprConfig["captureStderr"] as? Bool) ?? true
                 )
@@ -380,6 +405,22 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
     /// avoidance can be asserted without going through the full action pipeline.
     static func runCommandSyncForTesting(_ config: ExecConfig) -> ExecResult {
         runCommandSync(config)
+    }
+
+    /// Reads a configuration object's `timeout` field, in milliseconds.
+    ///
+    /// An object literal can hand the number over as `Int`, as `Double`
+    /// (`timeout: 1500.0`) or as a `String` when it came from interpolation. A
+    /// timeout silently discarded because of its Swift type would be the same
+    /// bug this enforcement exists to fix (GitLab #586), so every numeric
+    /// spelling is accepted; anything else falls back to the 30s default.
+    static func timeoutMilliseconds(_ raw: (any Sendable)?) -> Int {
+        let fallback = 30000
+        guard let raw else { return fallback }
+        if let value = raw as? Int { return value }
+        if let value = raw as? Double { return Int(value) }
+        if let value = raw as? String, let parsed = Double(value) { return Int(parsed) }
+        return fallback
     }
 
     /// Splits a string into argv tokens on whitespace.
@@ -442,33 +483,68 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
         stderrPipe.fileHandleForWriting.closeFile()
 
         // Read pipes concurrently to prevent buffer deadlock for large output.
-        // nonisolated(unsafe) satisfies Swift 6 Sendable — DispatchGroup.wait()
-        // provides the synchronization guarantee.
-        nonisolated(unsafe) var stdoutData = Data()
-        nonisolated(unsafe) var stderrData = Data()
+        //
+        // Chunked rather than readDataToEndOfFile(): on a timeout the reader may
+        // never see EOF (a surviving grandchild can hold the write end open), and
+        // whatever the command printed before it was killed is still worth
+        // returning. The box's lock is what makes the partial read safe to take
+        // while the reader thread may still be appending.
+        //
+        // Dedicated threads rather than DispatchQueue.global(): every thread here
+        // blocks, and a run bounded by a deadline must not first queue for a
+        // worker that other blocked work is holding.
+        let stdoutBox = DataBox()
+        let stderrBox = DataBox()
         let readGroup = DispatchGroup()
 
         readGroup.enter()
-        DispatchQueue.global().async {
-            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        startThread(named: "aro.exec.stdout") {
+            drain(stdoutPipe.fileHandleForReading, into: stdoutBox)
             readGroup.leave()
         }
         readGroup.enter()
-        DispatchQueue.global().async {
-            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        startThread(named: "aro.exec.stderr") {
+            drain(stderrPipe.fileHandleForReading, into: stderrBox)
             readGroup.leave()
         }
 
-        // Wait for process exit
-        process.waitUntilExit()
+        // Bound the child by `config.timeout` milliseconds. A non-positive
+        // timeout means "no timeout" and just waits.
+        let exited = DispatchSemaphore(value: 0)
+        startThread(named: "aro.exec.wait") {
+            process.waitUntilExit()
+            exited.signal()
+        }
 
-        // Wait for pipe reads to complete
-        readGroup.wait()
+        var timedOut = false
+        if config.timeout > 0 {
+            if exited.wait(timeout: .now() + .milliseconds(config.timeout)) == .timedOut {
+                timedOut = true
+                terminateTimedOutChild(process, exited: exited)
+            }
+        } else {
+            exited.wait()
+        }
 
-        let stdout = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let stderr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Wait for pipe reads to complete. Unbounded on the normal path — the
+        // reads end at EOF once the child's descriptors are closed. Bounded once
+        // we have killed the child, because a grandchild that inherited the pipe
+        // and outlived the group kill would otherwise hang the feature set, which
+        // is precisely what the timeout exists to prevent.
+        if timedOut {
+            _ = readGroup.wait(timeout: .now() + orphanedPipeGrace)
+        } else {
+            readGroup.wait()
+        }
 
-        let exitCode = Int(process.terminationStatus)
+        let stdout = String(data: stdoutBox.take(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = String(data: stderrBox.take(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // -1 is the code `ExecResult` reserves for a timeout. Returning it rather
+        // than throwing keeps `when <r: exitCode> is …` guards working (GitLab #586).
+        // `terminationStatus` is only read on the path where the semaphore proved
+        // the process exited — reading it on a live process traps.
+        let exitCode = timedOut ? -1 : Int(process.terminationStatus)
         let hasError = exitCode != 0
 
         // Combine or select output based on error state
@@ -481,14 +557,107 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
             output = stdout.isEmpty ? stderr : stdout
         }
 
+        let message: String
+        if timedOut {
+            message = "Command timed out after \(config.timeout)ms"
+        } else if hasError {
+            message = "Command failed with exit code \(exitCode)"
+        } else {
+            message = "Command executed successfully"
+        }
+
         return ExecResult(
             error: hasError,
-            message: hasError ? "Command failed with exit code \(exitCode)" : "Command executed successfully",
+            message: message,
             output: output,
             exitCode: exitCode,
             command: config.command
         )
     }
+}
+
+// MARK: - Process Termination (GitLab #586)
+
+/// How long a timed-out child gets to honour SIGTERM before SIGKILL follows.
+///
+/// The same escalation, and the same two seconds, the runtime already uses for
+/// REPL kernels, LSP servers and MCP subprocesses.
+private let terminationGrace: TimeInterval = 2.0
+
+/// How long to wait for the output pipes after a kill before giving up on them.
+private let orphanedPipeGrace: DispatchTimeInterval = .seconds(2)
+
+/// Terminates a timed-out child: SIGTERM, then SIGKILL if it is still there.
+///
+/// The signal goes to the child's *process group* when the child leads one — a
+/// shell command can background work (`"server & sleep 100"`), and signalling
+/// only `/bin/sh` leaves those grandchildren running and holding the output pipe
+/// open. The group is only signalled when `getpgid(child) == child` and that
+/// group is not our own, so a runtime whose `Process` did not put the child in a
+/// fresh group can never end up signalling `aro` itself.
+///
+/// `exited` is signalled by the waiter thread when the child is reaped; it is
+/// what the grace period waits on, so no polling of `isRunning` is involved.
+private func terminateTimedOutChild(_ process: Process, exited: DispatchSemaphore) {
+    let pid = process.processIdentifier
+    let group = childProcessGroup(of: pid)
+
+    if let group { kill(-group, SIGTERM) }
+    // Also signal the child directly: with no group of its own that is the only
+    // reachable target, and with one it costs nothing.
+    kill(pid, SIGTERM)
+
+    if exited.wait(timeout: .now() + .milliseconds(Int(terminationGrace * 1000))) == .success {
+        // The child honoured SIGTERM. Backgrounded grandchildren may not have.
+        if let group { kill(-group, SIGKILL) }
+        return
+    }
+
+    if let group { kill(-group, SIGKILL) }
+    kill(pid, SIGKILL)
+    // SIGKILL cannot be caught, so this returns almost at once; the bound is
+    // there only so an unreapable child cannot hang the feature set.
+    _ = exited.wait(timeout: .now() + .milliseconds(Int(terminationGrace * 1000)))
+}
+
+/// The child's process group id, when the child leads a group of its own that is
+/// distinct from the runtime's. `nil` means "no group is safe to signal".
+private func childProcessGroup(of pid: pid_t) -> pid_t? {
+    let group = getpgid(pid)
+    guard group == pid, group != getpgrp() else { return nil }
+    return group
+}
+
+/// Reads a handle to EOF in chunks, appending to a lock-protected box so a
+/// partial read stays safe to take while the reader is still running.
+private func drain(_ handle: FileHandle, into box: DataBox) {
+    while true {
+        let chunk = handle.availableData
+        if chunk.isEmpty { return }
+        box.append(chunk)
+    }
+}
+
+/// Lock-protected accumulator for a pipe's bytes.
+private final class DataBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) { lock.lock(); data.append(chunk); lock.unlock() }
+    func take() -> Data { lock.lock(); defer { lock.unlock() }; return data }
+}
+
+/// Runs `body` on a thread of its own.
+///
+/// Every thread this file starts spends its life blocked — on a pipe read or on
+/// the child. Handing that to `DispatchQueue.global()` makes the timeout depend
+/// on a free worker in a pool that other blocked work can exhaust; under a
+/// parallel test run it did exactly that, and the deadline never fired.
+private func startThread(named name: String, _ body: @escaping @Sendable () -> Void) {
+    let thread = Thread(block: body)
+    thread.name = name
+    thread.stackSize = 512 * 1024
+    thread.start()
 }
 
 // MARK: - Action Error Extension
