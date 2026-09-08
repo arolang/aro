@@ -199,6 +199,12 @@ EXPORT actions make data available beyond the current execution scope.
 | **Store** | store, save, persist | into, to | Store data to repositories |
 | **Emit** | emit | with, to | Emit domain events |
 
+Store also accepts a trailing `with` *clause* — `Store the <ticket> into the
+<ticket-repository> with { id: 1, state: "new" }.` — which supplies the record
+inline and binds it to the result. `with` is not one of Store's object
+prepositions (the object is always the repository); see ARO-0007 §5.4 for the
+payload's semantics and the two shapes it refuses.
+
 #### 2.5 SERVER Actions (Service Management)
 
 SERVER actions manage long-running services and application lifecycle.

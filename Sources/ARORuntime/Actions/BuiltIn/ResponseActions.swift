@@ -598,6 +598,10 @@ public struct LogAction: ActionImplementation {
 /// // Immutable pattern: Capture stored value with generated ID
 /// <Store> the <stored-user: user> into the <user-repository>.
 /// // Now <stored-user> contains the user data WITH the generated ID
+///
+/// // Inline payload (GitLab #515): the `with` clause IS the record
+/// <Store> the <ticket> into the <ticket-repository> with { id: 1, state: "new" }.
+/// // Now <ticket> contains the stored record, exactly as Create-then-Store left it
 /// ```
 public struct StoreAction: ActionImplementation {
     public static let role: ActionRole = .response
@@ -622,7 +626,7 @@ public struct StoreAction: ActionImplementation {
         // - result.base = new variable to bind (e.g., "stored-user")
         // - result.specifiers[0] = data to store (e.g., "user")
         let dataVarName: String
-        let bindResultVar: Bool
+        var bindResultVar: Bool
 
         if !result.specifiers.isEmpty {
             // Immutable pattern: <Store> the <stored-user: user> into <repository>
@@ -637,8 +641,71 @@ public struct StoreAction: ActionImplementation {
         // Get repository name
         let repoName = object.base
 
-        // ARO-0051: Streaming support - only stream lazy values
-        if let runtimeContext = context as? RuntimeContext,
+        // GitLab #515: inline payload —
+        //   Store the <ticket> into the <ticket-repository> with { id: 1, state: "new" }.
+        //
+        // Emit has accepted an object literal for its payload since it existed;
+        // Store made you bind the record with Create first, for no reason other
+        // than that nobody read the clause. The parser has always produced the
+        // `with` expression (RangeModifiers.withClause) and FeatureSetExecutor
+        // has always bound it to `_with_` — the value simply never reached here,
+        // so the statement died on "Cannot store the ticket into the
+        // ticket-repository", naming a variable the author never meant to bind.
+        //
+        // The payload IS the value to store, and the result slot binds the
+        // stored record — the same thing the `<stored: user>` spelling binds,
+        // so `<ticket>` is usable afterwards exactly as Create-then-Store leaves
+        // it, generated id and all.
+        let inlinePayload = context.resolveAny("_with_")
+
+        if inlinePayload != nil {
+            // Both conflicts below are thrown as AROError rather than a plain
+            // ActionError: the statement-shaped wrapper in FeatureSetExecutor
+            // keeps only the shape ("Cannot store the ticket into the
+            // ticket-repository"), and here the shape is exactly what reads
+            // fine — what went wrong is which of two things names the value.
+            let statementText =
+                "<Store> the <\(result.fullName)> \(object.preposition.rawValue) the <\(repoName)> with { … }."
+
+            if !result.specifiers.isEmpty {
+                // `Store the <stored: ticket> into the <repo> with { … }` names
+                // the value to store twice, and the two names disagree. Refuse
+                // rather than silently picking one.
+                throw AROError(
+                    message: "The 'with' payload and the <\(result.base): \(result.specifiers[0])> "
+                        + "specifier both name the value to store — write one or the other.",
+                    featureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    statement: statementText
+                )
+            }
+
+            // A `<ticket>` that already holds a value cannot also hold the
+            // stored record. Refused here rather than at the bind below,
+            // because the bind happens after the write: letting the refusal
+            // report it would leave the row in the repository from a statement
+            // that failed. One value, one name — the payload never overwrites
+            // a record someone else built.
+            if let runtimeContext = context as? RuntimeContext,
+               runtimeContext.wouldRefuseRebind(result.base) {
+                throw AROError(
+                    message: "<\(result.base)> is already bound, and the payload would rebind it with "
+                        + "the stored record. Store the bound value (drop the 'with'), or give the "
+                        + "payload a name of its own.",
+                    featureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    statement: statementText
+                )
+            }
+
+            // The result names the stored record, so bind it.
+            bindResultVar = true
+        }
+
+        // ARO-0051: Streaming support - only stream lazy values.
+        // An inline payload is a value, never a stream, so it skips this.
+        if inlinePayload == nil,
+           let runtimeContext = context as? RuntimeContext,
            runtimeContext.isLazy(dataVarName),
            let stream = runtimeContext.resolveAsRowStream(dataVarName),
            InMemoryRepositoryStorage.isRepositoryName(repoName) {
@@ -664,8 +731,14 @@ public struct StoreAction: ActionImplementation {
             return count
         }
 
-        // Get data to store
-        guard let data = context.resolveAny(dataVarName) else {
+        // Get data to store — the inline payload when one was written, the
+        // named variable otherwise.
+        let data: any Sendable
+        if let inlinePayload {
+            data = inlinePayload
+        } else if let resolved = context.resolveAny(dataVarName) {
+            data = resolved
+        } else {
             throw ActionError.undefinedVariable(dataVarName)
         }
 
