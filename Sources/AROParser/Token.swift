@@ -265,6 +265,27 @@ extension TokenKind {
         return false
     }
 
+    /// True for reserved words — `when`, `while`, `and`, `is`, … — as opposed
+    /// to identifiers, literals, punctuation and articles.
+    ///
+    /// Diagnostics only (GitLab #548): a keyword's description is the bare
+    /// word, so "Expected identifier, but got while" read as if the parser had
+    /// disliked a perfectly ordinary name. Naming it a keyword tells the reader
+    /// what to change.
+    public var isKeyword: Bool {
+        switch self {
+        case .identifier, .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral,
+             .stringSegment, .interpolationStart, .interpolationEnd,
+             .true, .false, .nil, .null,
+             .article, .preposition, .eof:
+            return false
+        default:
+            // Everything else is either punctuation (described by its symbol)
+            // or a reserved word (described by the word itself).
+            return description.first?.isLetter == true
+        }
+    }
+
     /// Checks if this token can be used as an identifier in contexts like business activity names.
     /// Includes actual identifiers plus keywords that are valid words (e.g., "Error").
     public var isIdentifierLike: Bool {

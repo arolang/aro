@@ -84,7 +84,13 @@ public final class Parser {
     private let tokens: [Token]
     private var current: Int = 0
     private let diagnostics: DiagnosticCollector
-    
+
+    /// True while a where-condition is being parsed, where a trailing
+    /// `default` belongs to the query modifier (ARO-0018) rather than to the
+    /// expression-level defaulting operator (GitLab #547).
+    fileprivate var defaultOperatorSuppressed = false
+
+
     // MARK: - Initialization
     
     public init(tokens: [Token], diagnostics: DiagnosticCollector = DiagnosticCollector()) {
@@ -1001,6 +1007,27 @@ public final class Parser {
                          .plusPlus, .equalEqual, .bangEqual, .lessEqual,
                          .greaterEqual, .and, .or, .contains, .matches:
                         return true
+                    // `<params: count> default 3` is an expression, not an
+                    // object with a query modifier (GitLab #547): read as an
+                    // object it bound the whole record and dropped the
+                    // fallback, which is the misbehaviour #547 reported.
+                    // Inside a where-condition `default` still belongs to the
+                    // query (ARO-0018), and there the operator is suppressed.
+                    //
+                    // Framework objects stay objects. `<file: "notes.md">` is
+                    // an *address* an action resolves, not a value an
+                    // expression can read, so routing `Read the <c> from the
+                    // <file: "x"> default "y".` through the expression grammar
+                    // would find no variable called `file` and hand back the
+                    // default every time — a silent wrong answer, the very
+                    // thing #547 is about. `parameter` and `env` are the
+                    // exceptions: both evaluators resolve them, so a missing
+                    // `--port` really is an absent value.
+                    case .identifier("default"):
+                        guard !defaultOperatorSuppressed else { return false }
+                        let base = qualifiedRefBase().lowercased()
+                        return !SystemObjectCatalog.isSystemObject(base)
+                            || base == "parameter" || base == "env"
                     default:
                         return false
                     }
@@ -1011,6 +1038,29 @@ public final class Parser {
             index += 1
         }
         return false
+    }
+
+    /// The base name of the `<base: qualifier>` reference at the current `<`,
+    /// hyphenated segments joined (`user-repository`), or "" when the tokens
+    /// do not form one. Used to ask `SystemObjectCatalog` what kind of thing
+    /// the reference names.
+    private func qualifiedRefBase() -> String {
+        guard check(.leftAngle) else { return "" }
+        var index = current + 1
+        var base = ""
+        while index < tokens.count {
+            if case .identifier(let part) = tokens[index].kind {
+                base += part
+                index += 1
+                if index < tokens.count, case .hyphen = tokens[index].kind {
+                    base += "-"
+                    index += 1
+                    continue
+                }
+            }
+            break
+        }
+        return base
     }
 
     /// Check if the token is a literal value
@@ -1077,6 +1127,14 @@ public final class Parser {
     /// `and` binds tighter than `or`, so `a or b and c` reads as
     /// `a or (b and c)` — same precedence as the expression grammar.
     private func parseWhereCondition() throws -> WhereCondition {
+        // A `default` after a where-condition is the query modifier
+        // (`… where <id> is 5 default "none".`), never the expression-level
+        // defaulting operator — otherwise the predicate's value would swallow
+        // it and `_default_value_` would never be bound (GitLab #547).
+        let previouslySuppressed = defaultOperatorSuppressed
+        defaultOperatorSuppressed = true
+        defer { defaultOperatorSuppressed = previouslySuppressed }
+
         var left = try parseWhereAndCondition()
         while check(.or) {
             advance()
@@ -2170,8 +2228,11 @@ public final class Parser {
         // ARO-0015: Accept keywords that are also test action verbs
         // This allows <When>, <Then>, <Given>, <Assert> as action verbs
         // ARO-0036: Accept "exists" as action verb for file existence checks
+        // GitLab #548: `empty` is only a keyword after `is` (`<list> is empty`,
+        // handled before any type name is expected), so it stays a usable name:
+        // `<empty>`, `{ empty: 0 }` and `<x: empty>` are ordinary identifiers.
         switch token.kind {
-        case .when, .then, .exists:
+        case .when, .then, .exists, .empty:
             return advance()
         default:
             break
@@ -2254,6 +2315,10 @@ public final class Parser {
 /// `not` deliberately sits *below* the comparisons (as in Python, not C):
 /// `not <a> == <b>` is `not (<a> == <b>)`. Unary minus is the exception —
 /// it stays at `.unary`, above `*`, so `-<a> * <b>` is `(-<a>) * <b>`.
+///
+/// `default` (GitLab #547) sits between arithmetic and comparison, so
+/// `<a> default 1 + 2` defaults to the whole sum and `<a> default 3 > 2`
+/// compares the defaulted value instead of defaulting to a boolean.
 private enum Precedence: Int, Comparable {
     case none = 0
     case or = 1           // or
@@ -2261,10 +2326,11 @@ private enum Precedence: Int, Comparable {
     case not = 3          // not (prefix)
     case equality = 4     // == != is is_not contains matches
     case comparison = 5   // < > <= >=
-    case term = 6         // + - ++
-    case factor = 7       // * / %
-    case unary = 8        // unary -
-    case postfix = 9      // . []
+    case defaulting = 6   // default (GitLab #547)
+    case term = 7         // + - ++
+    case factor = 8       // * / %
+    case unary = 9        // unary -
+    case postfix = 10     // . []
 
     static func < (lhs: Precedence, rhs: Precedence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -2419,6 +2485,7 @@ extension Parser {
     private static let binaryPrecedence: [BinaryOperator: Precedence] = [
         .or:           .or,
         .and:          .and,
+        .defaulting:   .defaulting,
         .equal:        .equality,
         .notEqual:     .equality,
         .is:           .equality,
@@ -2477,6 +2544,14 @@ extension Parser {
         // Subscript.
         case .leftBracket:
             return .postfix
+
+        // Context-sensitive: `default` is a value-returning fallback operator
+        // (GitLab #547), not a reserved word — a variable or field may still be
+        // called `default`. It is suppressed inside a where-condition, where
+        // `default` is the query modifier of ARO-0018 (`Extract … where <id> is
+        // 5 default "none".`), so the statement-level clause keeps its meaning.
+        case .identifier(let name) where name == "default":
+            return defaultOperatorSuppressed ? nil : .defaulting
 
         // Every other binary operator: precedence comes from the table.
         default:
@@ -2629,6 +2704,7 @@ extension Parser {
         case .identifier(let name) where name == "after": return .after
         case .and: return .and
         case .or: return .or
+        case .identifier("default"): return .defaulting
         case .contains: return .contains
         case .matches: return .matches
         default: return nil
@@ -2720,6 +2796,11 @@ extension Parser {
     /// Parses a grouped (parenthesized) expression: (expr)
     private func parseGroupedExpression() throws -> GroupedExpression {
         let startToken = try expect(.leftParen, message: "'('")
+        // Parentheses end the where-clause ambiguity: inside them a `default`
+        // can only be the operator, so it is available again (GitLab #547).
+        let previouslySuppressed = defaultOperatorSuppressed
+        defaultOperatorSuppressed = false
+        defer { defaultOperatorSuppressed = previouslySuppressed }
         let expr = try parseExpression()
         let endToken = try expect(.rightParen, message: "')'")
         return GroupedExpression(expression: expr, span: startToken.span.merged(with: endToken.span))

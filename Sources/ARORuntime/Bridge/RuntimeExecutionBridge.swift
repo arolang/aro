@@ -731,6 +731,16 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             return ProcessInfo.processInfo.environment[envKey] ?? "" as any Sendable
         }
 
+        // ARO-0047: command-line parameters in an expression (GitLab #547).
+        // Mirrors ExpressionEvaluator; a parameter that was not passed reads as
+        // "" here, and the `default` path below sees it as absent instead.
+        if varName == "parameter" {
+            guard let name = specs.first else {
+                return ParameterStorage.shared.getAll()
+            }
+            return ParameterStorage.shared.get(name) ?? "" as any Sendable
+        }
+
         // Special handling for repository count access: <repository-name: count>
         if specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName) {
             // Get count synchronously using the actor's sync count method
@@ -809,6 +819,18 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
        let leftExpr = binary["left"] as? [String: Any],
        let rightExpr = binary["right"] as? [String: Any] {
 
+        // `<params: count> default 3` (GitLab #547): value-returning, and the
+        // left operand's *absence* is the normal case, so it cannot use the
+        // eager path below — an unresolved variable there yields "" and a
+        // missing field yields the record itself, both of which would look
+        // present. Mirrors `ExpressionEvaluator.evaluatePresentValue`.
+        if op == BinaryOperator.defaulting.rawValue {
+            if let present = evaluatePresentExpressionJSON(leftExpr, context: context) {
+                return present
+            }
+            return evaluateExpressionJSON(rightExpr, context: context)
+        }
+
         let left = evaluateExpressionJSON(leftExpr, context: context)
         let right = evaluateExpressionJSON(rightExpr, context: context)
 
@@ -866,6 +888,66 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unsupported expression node '\(marker)' evaluated as empty\n".utf8))
     }
     return ""
+}
+
+/// Evaluates the left operand of `default`, returning nil when the value is
+/// **absent** (GitLab #547).
+///
+/// Absent means an unbound variable, a missing field, or a `nil`/`null`
+/// literal — nothing else. `false`, `0`, `""` and `[]` are values and are
+/// returned, so the default does not fire on falsiness. This is the compiled
+/// counterpart of `ExpressionEvaluator.evaluatePresentValue`; the two must
+/// agree, because `aro run` and `aro build` run the same source.
+private func evaluatePresentExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> (any Sendable)? {
+    // A literal `nil` / `null` on the left is absent by definition. It has to
+    // be caught here: the JSON converter renders NSNull as the string "null".
+    if let lit = expr["$lit"], lit is NSNull {
+        return nil
+    }
+
+    if let varName = expr["$var"] as? String {
+        let specs = expr["$specs"] as? [String] ?? []
+
+        // A command-line parameter is present exactly when it was passed
+        // (ARO-0047) — the case `default` exists for.
+        if varName == "parameter" {
+            guard let name = specs.first else { return ParameterStorage.shared.getAll() }
+            return ParameterStorage.shared.get(name)
+        }
+
+        // Other magic sources are always present — let the general path answer.
+        if varName == "env" || (specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName)) {
+            return evaluateExpressionJSON(expr, context: context)
+        }
+
+        guard var value = context.resolveAny(varName) else { return nil }
+
+        // Namespaced qualifier form first, exactly as the general path does.
+        // try? is acceptable: a specifier that is not a registered qualifier is
+        // the common case and falls through to per-specifier resolution.
+        if specs.count > 1, let transformed = try? QualifierRegistry.shared.resolve(specs.joined(separator: "."), value: value) {
+            return transformed
+        }
+
+        for spec in specs {
+            // try? is acceptable: most specifiers are field names rather than
+            // registered qualifiers, and a failure falls through to the field
+            // access below — the same probe the general path performs.
+            if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
+                value = transformed
+            } else if let dict = value as? [String: any Sendable] {
+                // The one place the general path silently keeps the base value;
+                // here a missing key is precisely what `default` is asking about.
+                guard let propVal = dict[spec] else { return nil }
+                value = propVal
+            } else {
+                return nil
+            }
+        }
+        return value
+    }
+
+    return evaluateExpressionJSON(expr, context: context)
 }
 
 /// Interpolate a string template with ${varname} or ${<base: specifier>} placeholders

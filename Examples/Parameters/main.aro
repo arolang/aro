@@ -9,9 +9,17 @@
     Extract the <name> from the <parameter: name>.
     Extract the <count> from the <parameter: count>.
 
+    (* Optional parameters: read the dictionary, supply the fallback with
+     * `default`. Not `or` — `or` is boolean and would bind true (GitLab #547).
+     * The default fires only when the parameter is absent, so `--port 0` and
+     * `--host ""` are honoured. *)
+    Extract the <params> from the <parameter>.
+    Create the <port> with <params: port> default 8080.
+
     (* Use the parameters *)
     Log "Hello, ${<name>}!" to the <console>.
     Log "Count: ${<count>}" to the <console>.
+    Log "Port: ${<port>}" to the <console>.
 
     Return an <OK: status> with <name>.
 }

@@ -56,6 +56,13 @@ public enum TypeInferencer {
             case .equal, .notEqual, .lessThan, .greaterThan, .lessEqual, .greaterEqual,
                  .and, .or, .contains, .matches, .is, .isNot, .before, .after:
                 return .boolean
+            case .defaulting:
+                // `<a> default <b>` yields one of its operands, so its type is
+                // whichever side is present at runtime (GitLab #547). Only when
+                // both sides agree can it be known statically.
+                let leftType = inferExpressionType(binary.left)
+                let rightType = inferExpressionType(binary.right)
+                return leftType == rightType ? leftType : .unknown
             }
 
         case is UnaryExpression:

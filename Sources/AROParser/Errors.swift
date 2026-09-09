@@ -97,6 +97,12 @@ public enum ParserError: CompilerError {
     public var message: String {
         switch self {
         case .unexpectedToken(let expected, let got):
+            // A reserved word is named as one (GitLab #548): "but got empty"
+            // read like a rejected identifier, which sent readers looking for a
+            // typo instead of for the keyword they had used as a name.
+            if got.kind.isKeyword {
+                return "Expected \(expected), but got the keyword '\(got.kind)'"
+            }
             return "Expected \(expected), but got \(got.kind)"
         case .unexpectedEndOfFile(let expected):
             return "Unexpected end of file, expected \(expected)"
