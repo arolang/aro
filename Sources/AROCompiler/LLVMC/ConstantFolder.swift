@@ -139,6 +139,14 @@ public struct ConstantFolder {
         case .or:
             return logicalOr(left, right)
 
+        // Value-returning fallback (GitLab #547). Folded only when both sides
+        // are literals, where the left one is present by construction — so
+        // `"a" default "b"` folds to `"a"`, and a `nil` literal falls through
+        // to the default.
+        case .defaulting:
+            if case .null = left { return right }
+            return left
+
         // Not supported in constant folding. `before`/`after` order
         // instants, and a literal date is a string here — folding it
         // would mean parsing dates at compile time to answer a

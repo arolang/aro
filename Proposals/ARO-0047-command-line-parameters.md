@@ -158,9 +158,9 @@ aro run ./Crawler --url http://example.com --depth 3 --verbose
     (* Extract all parameters *)
     Extract the <params> from the <parameter>.
 
-    (* Use parameter or default *)
-    Create the <port> with <params: port> or 8080.
-    Create the <host> with <params: host> or "0.0.0.0".
+    (* Use the parameter when it was passed, the fallback otherwise *)
+    Create the <port> with <params: port> default 8080.
+    Create the <host> with <params: host> default "0.0.0.0".
 
     Log "Starting server on ${<host>}:${<port>}" to the <console>.
     Return an <OK: status> for the <startup>.
@@ -170,6 +170,16 @@ aro run ./Crawler --url http://example.com --depth 3 --verbose
 ```bash
 aro run . --port 3000  # Uses port 3000, host defaults to 0.0.0.0
 ```
+
+`default` is the defaulting operator (ARO-0001 §Expressions and Operators): it
+returns the parameter when it was passed and the fallback when it was not. It
+is *not* `or` — `or` is a boolean operator, so `<params: port> or 8080` binds
+`true` rather than a port number. This section taught the `or` spelling until
+GitLab #547; programs written from it bound `true` and failed later, wherever
+the value was used.
+
+A parameter that was passed empty (`--prefix ""`) counts as present and wins
+over the fallback: the default fires on absence, never on falsiness.
 
 ### Combined Flags
 

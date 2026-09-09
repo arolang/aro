@@ -1458,6 +1458,14 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     case and = "and"
     case or = "or"
 
+    /// Value-returning fallback: `<params: count> default 3` (GitLab #547).
+    ///
+    /// Distinct from `or`, which stays strictly boolean. The left operand wins
+    /// whenever it is *present* — an explicit `false`, `0` or `""` is a value
+    /// and wins; only a missing variable, a missing field, or `nil`/`null`
+    /// falls through to the right operand.
+    case defaulting = "default"
+
     // Collection
     case contains = "contains"
     case matches = "matches"
