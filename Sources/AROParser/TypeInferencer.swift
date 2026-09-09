@@ -54,7 +54,7 @@ public enum TypeInferencer {
             case .concat:
                 return .string
             case .equal, .notEqual, .lessThan, .greaterThan, .lessEqual, .greaterEqual,
-                 .and, .or, .contains, .matches, .is, .isNot:
+                 .and, .or, .contains, .matches, .is, .isNot, .before, .after:
                 return .boolean
             }
 

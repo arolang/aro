@@ -304,6 +304,7 @@ public final class Parser {
     /// keyword or `.preposition(.for)`.
     private static let statementDispatch: [(match: TokenKind, parse: StatementParselet)] = [
         (.match,             { try $0.parseMatchStatement() }),               // ARO-0004
+        (.when,              { try $0.parseWhenBlock() }),                     // GitLab #516
         (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
         (.preposition(.for), { try $0.parseForOrRangeLoop() }),
         (.parallel,          { try $0.parseParallelForEachLoop() }),
@@ -1453,6 +1454,38 @@ public final class Parser {
     // MARK: - Match Statement Parsing (ARO-0004)
 
     /// Parses: "match" "<" subject ">" "{" { case_clause } [ otherwise_clause ] "}"
+    /// Parses: `when` condition `{` { statement } `}`
+    ///
+    /// The suffix form (`Log … when <x> is <y>.`) is parsed inside a
+    /// statement and is untouched; this is the block spelling the
+    /// Language Guide uses when several statements share a condition.
+    private func parseWhenBlock() throws -> Statement {
+        // `When the <len> from the <get-length>.` is ARO-0015's test
+        // statement, where `When` is the action verb — not a guarded
+        // block. An article can only follow the verb; a block's
+        // condition starts with `<`, an identifier, a literal, `(` or
+        // `not`. Checking that one token keeps both spellings, which
+        // is what the Given/When/Then suites depend on.
+        if case .article = peekAt(1)?.kind {
+            return try parseAROStatement()
+        }
+        let startToken = try expect(.when, message: "'when'")
+        let condition = try parseExpression()
+        try expect(.leftBrace, message: "'{' to open the when block")
+
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}' to close the when block")
+
+        return WhenStatement(
+            condition: condition,
+            body: body,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
     private func parseMatchStatement() throws -> MatchStatement {
         let startToken = try expect(.match, message: "'match'")
 
@@ -2391,6 +2424,9 @@ extension Parser {
         .is:           .equality,
         .isNot:        .equality,
         .contains:     .equality,
+        // Temporal comparison sits with the other comparisons, so
+        // `when <a> before <b> and <c> after <d>` groups the way it
+        // reads (GitLab #516).
         .matches:      .equality,
         .lessThan:     .comparison,
         .greaterThan:  .comparison,
@@ -2406,6 +2442,16 @@ extension Parser {
 
     private func infixPrecedence(_ token: Token) -> Precedence? {
         switch token.kind {
+        // Context-sensitive: `before` / `after` are temporal comparisons
+        // in operator position and ordinary names everywhere else
+        // (GitLab #516). They are NOT lexer keywords, deliberately —
+        // `<after>`, `<before-tax>` are names people write, and
+        // reserving the words would break them the way #497 describes.
+        // Nothing else can follow a complete expression here, so the
+        // position tells them apart with no lookahead.
+        case .identifier(let name) where name == "before" || name == "after":
+            return .comparison
+
         // Context-sensitive: `<` / `>` are comparison operators here only when
         // they are not starting a `<variable>` reference.
         case .leftAngle, .rightAngle:
@@ -2579,6 +2625,8 @@ extension Parser {
         case .lessEqual: return .lessEqual
         case .greaterEqual: return .greaterEqual
         case .is: return .is
+        case .identifier(let name) where name == "before": return .before
+        case .identifier(let name) where name == "after": return .after
         case .and: return .and
         case .or: return .or
         case .contains: return .contains

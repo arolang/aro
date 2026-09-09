@@ -155,6 +155,21 @@ public enum WherePredicateMatcher {
             }
             return actualStr <= expectedStr
 
+        // Temporal comparison (GitLab #516). ISO-8601 strings order
+        // correctly lexicographically, which is why the string
+        // fallback below is not a lie for dates.
+        case "before":
+            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
+                return actualNum < expectedNum
+            }
+            return actualStr < expectedStr
+
+        case "after":
+            if let actualNum = asDouble(actual), let expectedNum = asDouble(expected) {
+                return actualNum > expectedNum
+            }
+            return actualStr > expectedStr
+
         case "contains":
             return actualStr.contains(expectedStr)
 

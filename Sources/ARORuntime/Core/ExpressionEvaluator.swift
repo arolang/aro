@@ -349,6 +349,18 @@ public struct ExpressionEvaluator: Sendable {
         case .or:
             return asBool(left) || asBool(right)
 
+        // Temporal comparison (Book ch. 42 §42.8, GitLab #516).
+        // `compareValues` already orders dates — and ISO strings,
+        // which is how dates arrive from JSON and HTTP — so `before`
+        // and `after` are `<` and `>` said the way the domain says
+        // them. Comparing two non-dates falls through to the numeric
+        // path, and comparing a date with something that is not one
+        // raises there, naming the value.
+        case .before:
+            return try compareValues(left, right, <)
+        case .after:
+            return try compareValues(left, right, >)
+
         // Collection operators
         case .contains:
             return containsValue(left, right)
