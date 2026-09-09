@@ -409,6 +409,10 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     case matches = "matches"
     case `in` = "in"          // ARO-0042: membership test
     case notIn = "not in"     // ARO-0042: negative membership test
+    // Temporal comparison (Book ch. 42 §42.8, GitLab #516) — the
+    // same ordering as `<` / `>`, said the way a domain says it.
+    case before = "before"
+    case after = "after"
 
     public var description: String { rawValue }
 }
@@ -827,6 +831,32 @@ public struct CaseClause: Sendable, CustomStringConvertible {
 }
 
 /// Match expression statement: match <subject> { case ... otherwise ... }
+/// A guarded block: `when <condition> { … }`.
+///
+/// ARO has always had `when` as a statement suffix. The block form is
+/// what the Language Guide writes when a whole group of statements
+/// shares one condition (Book ch. 42 §42.8, GitLab #516) — the same
+/// meaning, spelled once instead of once per line.
+public struct WhenStatement: Statement {
+    public let condition: any Expression
+    public let body: [Statement]
+    public let span: SourceSpan
+
+    public init(condition: any Expression, body: [Statement], span: SourceSpan) {
+        self.condition = condition
+        self.body = body
+        self.span = span
+    }
+
+    public var description: String {
+        "when \(condition) { \(body.count) statements }"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 public struct MatchStatement: Statement {
     public let subject: QualifiedNoun
     public let cases: [CaseClause]
@@ -1418,6 +1448,11 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     case greaterEqual = ">="
     case `is` = "is"
     case isNot = "is not"
+    /// Temporal comparison. Reads as the book writes it — `when
+    /// <deadline> before <now>` — and orders the two instants the
+    /// same way `<` and `>` order numbers (GitLab #516).
+    case before = "before"
+    case after = "after"
 
     // Logical
     case and = "and"
@@ -1690,6 +1725,7 @@ public protocol StatementVisitor {
     func visit(_ node: PublishStatement) -> Result
     func visit(_ node: RequireStatement) -> Result
     func visit(_ node: MatchStatement) -> Result
+    func visit(_ node: WhenStatement) -> Result
     func visit(_ node: ForEachLoop) -> Result
     func visit(_ node: WhileLoop) -> Result
     func visit(_ node: BreakStatement) -> Result
@@ -1708,6 +1744,9 @@ public extension RequireStatement {
     func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension MatchStatement {
+    func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension WhenStatement {
     func accept<V: StatementVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension ForEachLoop {
@@ -1738,6 +1777,7 @@ private struct AROStatementExtractor: StatementVisitor {
     func visit(_ node: PublishStatement) -> AROStatement? { nil }
     func visit(_ node: RequireStatement) -> AROStatement? { nil }
     func visit(_ node: MatchStatement) -> AROStatement? { nil }
+    func visit(_ node: WhenStatement) -> AROStatement? { nil }
     func visit(_ node: ForEachLoop) -> AROStatement? { nil }
     func visit(_ node: WhileLoop) -> AROStatement? { nil }
     func visit(_ node: BreakStatement) -> AROStatement? { nil }
@@ -1830,6 +1870,7 @@ public protocol ASTVisitor {
     func visit(_ node: PublishStatement) throws -> Result
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
+    func visit(_ node: WhenStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
     func visit(_ node: WhileLoop) throws -> Result
     func visit(_ node: BreakStatement) throws -> Result
@@ -1876,6 +1917,11 @@ public extension ASTVisitor where Result == Void {
     func visit(_ node: PublishStatement) throws {}
     func visit(_ node: RequireStatement) throws {}
     func visit(_ node: ErrorStatement) throws {}
+    func visit(_ node: WhenStatement) throws {
+        for statement in node.body {
+            try statement.accept(self)
+        }
+    }
     func visit(_ node: MatchStatement) throws {
         for caseClause in node.cases {
             for statement in caseClause.body {
@@ -2025,6 +2071,13 @@ public struct ASTPrinter: ASTVisitor {
         var result = "\(indentation())RequireStatement\n"
         result += "\(indentation())  Variable: \(node.variableName)\n"
         result += "\(indentation())  Source: \(node.source)\n"
+        return result
+    }
+
+    public func visit(_ node: WhenStatement) -> String {
+        var result = "\(indentation())WhenStatement\n"
+        result += "\(indentation())  Condition: \(node.condition)\n"
+        result += "\(indentation())  Body: \(node.body.count) statements\n"
         return result
     }
 

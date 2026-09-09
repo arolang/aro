@@ -391,6 +391,10 @@ public struct FeatureGraph: Sendable {
             }
         }
 
+        func visit(_ node: WhenStatement) {
+            for statement in node.body { statement.accept(self) }
+        }
+
         func visit(_ node: MatchStatement) {
             for clause in node.cases {
                 for statement in clause.body { statement.accept(self) }

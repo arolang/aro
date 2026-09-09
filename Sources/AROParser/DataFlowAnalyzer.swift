@@ -225,6 +225,12 @@ public struct DataFlowAnalyzer {
             analyzer.analyzeRequireStatement(node, builder: builder)
         }
 
+        func visit(_ node: WhenStatement) -> Result {
+            analyzer.analyzeWhenStatement(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
+        }
+
         func visit(_ node: MatchStatement) -> Result {
             analyzer.analyzeMatchStatement(
                 node, builder: builder, definedSymbols: &definedSymbols
@@ -850,6 +856,46 @@ public struct DataFlowAnalyzer {
 
         let condVars = extractVariables(from: statement.condition)
         for varName in condVars {
+            if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                dependencies.insert(varName)
+            }
+            inputs.insert(varName)
+        }
+
+        for bodyStatement in statement.body {
+            let (flow, newDeps) = analyzeStatement(
+                bodyStatement,
+                builder: builder,
+                definedSymbols: &definedSymbols,
+                inMutableScope: true
+            )
+            inputs.formUnion(flow.inputs)
+            outputs.formUnion(flow.outputs)
+            sideEffects.append(contentsOf: flow.sideEffects)
+            dependencies.formUnion(newDeps)
+        }
+
+        return (
+            DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+            dependencies
+        )
+    }
+
+    /// A guarded block reads its condition and whatever its body
+    /// reads; its body's bindings are conditional, so they are
+    /// treated like a loop body's — visible, but produced under a
+    /// guard (GitLab #516).
+    private func analyzeWhenStatement(
+        _ statement: WhenStatement,
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
+    ) -> (DataFlowInfo, Set<String>) {
+        var inputs: Set<String> = []
+        var outputs: Set<String> = []
+        var sideEffects: [String] = []
+        var dependencies: Set<String> = []
+
+        for varName in extractVariables(from: statement.condition) {
             if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
                 dependencies.insert(varName)
             }

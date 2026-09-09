@@ -342,6 +342,8 @@ public final class FeatureSetExecutor: Sendable {
                 try await executePublishStatement(publishStatement, context: context)
             } else if let matchStatement = statement as? MatchStatement {
                 try await executeMatchStatement(matchStatement, context: context)
+            } else if let whenStatement = statement as? WhenStatement {
+                try await executeWhenStatement(whenStatement, context: context)
             } else if let requireStatement = statement as? RequireStatement {
                 try await executeRequireStatement(requireStatement, context: context)
             } else if let forEachLoop = statement as? ForEachLoop {
@@ -1618,6 +1620,28 @@ public final class FeatureSetExecutor: Sendable {
     }
 
     // MARK: - While Loop Execution (GitLab #131)
+
+    /// `when <condition> { … }` — the block spelling of the guard
+    /// ARO has always had as a statement suffix (GitLab #516).
+    ///
+    /// The body runs in the enclosing scope, not a child one: a
+    /// guarded block groups statements, it does not introduce a new
+    /// place for names to live, so what it binds is visible after it
+    /// exactly as if the statements had carried the guard each.
+    private func executeWhenStatement(
+        _ statement: WhenStatement,
+        context: ExecutionContext
+    ) async throws {
+        let condition = try await expressionEvaluator.evaluate(statement.condition, context: context)
+        guard asBool(condition) else { return }
+
+        for bodyStatement in statement.body {
+            try await executeStatement(bodyStatement, context: context)
+            // A response inside the block ends the feature set, the
+            // same way it does inside a loop body.
+            if context.getResponse() != nil { return }
+        }
+    }
 
     private func executeWhileLoop(
         _ loop: WhileLoop,

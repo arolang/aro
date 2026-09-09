@@ -36,6 +36,7 @@ Guarded statements execute only when a condition is true.
 
 ```ebnf
 guarded_statement = aro_statement_base , "when" , condition , "." ;
+guarded_block     = "when" , condition , "{" , { statement } , "}" ;
 ```
 
 **Format:**
@@ -57,6 +58,41 @@ Throw a <NotFoundError> for the <user> when <user: record> is null.
 
 (* Log admin access *)
 Log "Admin access detected" to the <audit> when <user: role> == "admin".
+
+### Guarded blocks
+
+When several statements share one condition, `when` also takes a block
+(GitLab #516):
+
+```aro
+when <booking-date> before <deadline> {
+    Log "Booking accepted" to the <console>.
+    Store the <booking> into the <booking-repository>.
+}
+```
+
+This is the suffix form said once instead of once per statement, and it
+means exactly that: the block groups statements, it does not open a
+scope, so what it binds is visible afterwards. A `Return` inside it ends
+the feature set as it would anywhere else.
+
+### Temporal comparison
+
+`before` and `after` compare two instants — dates, or the ISO-8601
+strings dates arrive as over HTTP and in JSON — and sit at the same
+precedence as `<` and `>`:
+
+```aro
+when <event-date> after <now> {
+    Log "Event is upcoming" to the <console>.
+}
+
+Filter the <overdue> from the <invoices> where <due> before <now>.
+```
+
+They read as the domain says them and order as the comparisons they
+are; comparing something that is neither a date nor a number raises,
+rather than quietly answering false.
 ```
 
 ### 1.3 Semantics
