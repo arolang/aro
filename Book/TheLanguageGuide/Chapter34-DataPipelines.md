@@ -1,6 +1,6 @@
 # Chapter 34: Data Pipelines
 
-ARO provides a map/reduce style data pipeline for filtering, transforming, and aggregating collections. All operations are type-safe, with results typed via OpenAPI schemas.
+ARO provides a map/reduce style data pipeline for filtering, transforming, and aggregating collections. Results can carry a type annotation drawn from your OpenAPI schemas; the annotation documents intent and is not enforced, so treat it as a comment the tooling can read rather than a guarantee.
 
 ## Pipeline Operations
 
@@ -10,7 +10,7 @@ ARO supports five core data operations:
 |-----------|---------|---------|
 | **Retrieve** | Retrieve and filter data | `Retrieve the <users: List<User>> from the <repository>...` |
 | **Filter** | Filter existing collection | `Filter the <active: List<User>> from the <users>...` |
-| **Map** | Transform to different type | `Map the <summaries> as List<UserSummary> from the <users>.` |
+| **Map** | Extract one field from every element | `Map the <names: name> from the <users>.` |
 | **Reduce** | Aggregate to single value | `Reduce the <total> as Float from the <orders> with sum(<amount>).` |
 | **Group** | Partition by field value | `Group the <status-groups> from the <orders> by "status".` |
 
@@ -26,7 +26,7 @@ Filter the <active-users: List<User>> from the <users> where <active> is true.
 Filter the <active-users> as List<User> from the <users> where <active> is true.
 ```
 
-Both produce identical results. The `as Type` syntax (ARO-0038) can be more readable when the variable name is long, while the colon syntax keeps everything compact. Type annotations are optional since ARO infers types from the source collection.
+Both produce identical results. The `as Type` syntax (ARO-0003) can be more readable when the variable name is long, while the colon syntax keeps everything compact. Type annotations are optional since ARO infers types from the source collection.
 
 ---
 
@@ -66,11 +66,9 @@ Filter the <admins: List<User>> from the <users>
 Filter the <high-value: List<Order>> from the <orders>
     where <amount> > 1000.
 
-(* Filter with multiple conditions — chain one predicate per Filter *)
-Filter the <active: List<User>> from the <users>
-    where <status> is "active".
-Filter the <active-premium: List<User>> from the <active>
-    where <tier> is "premium".
+(* Filter with multiple conditions — one where clause *)
+Filter the <active-premium: List<User>> from the <users>
+    where <status> is "active" and <tier> is "premium".
 ```
 
 ### Comparison Operators
@@ -85,8 +83,23 @@ Filter the <active-premium: List<User>> from the <active>
 | `contains` | Substring | `<name> contains "test"` |
 | `matches` | Regex pattern | `<email> matches /^admin@/i` |
 
-A single `where` clause holds **one** predicate. To combine conditions, chain
-`Filter` statements — each stage narrows the previous result.
+A `where` clause combines predicates with `and` and `or`:
+
+```aro
+Filter the <closed: List<Order>> from the <orders>
+    where <status> = "delivered" or <status> = "cancelled".
+```
+
+Chaining `Filter` statements is the other way to write an `and`, and it is
+sometimes the clearer one, because each stage gets a name you can log:
+
+```aro
+Filter the <active> from the <users> where <status> is "active".
+Filter the <active-premium> from the <active> where <tier> is "premium".
+```
+
+`Delete` is the exception: it takes exactly one predicate, and a compound
+`where` on a repository delete is refused at check time (Chapter 36).
 
 ### Set Membership with `in` and `not in`
 
@@ -102,11 +115,9 @@ Create the <exclude-statuses> with ["cancelled", "refunded"].
 Filter the <active: List<Order>> from the <orders>
     where <status> not in <exclude-statuses>.
 
-(* Combining with other conditions — chain one predicate per Filter *)
-Filter the <positive-orders: List<Order>> from the <orders>
-    where <amount> > 0.
-Filter the <valid-orders: List<Order>> from the <positive-orders>
-    where <status> not in <exclude-statuses>.
+(* Combining with other conditions *)
+Filter the <valid-orders: List<Order>> from the <orders>
+    where <amount> > 0 and <status> not in <exclude-statuses>.
 ```
 
 The `matches` operator supports regex literals with flags:
@@ -125,43 +136,56 @@ Filter the <valid-emails: List<User>> from the <users>
 
 ## Map
 
-Transforms a collection to a different OpenAPI-defined type. The runtime automatically maps fields with matching names.
+`Map` pulls one field out of every element of a collection. The qualifier names
+the field, and the result is the list of that field's values:
 
 ```aro
-(* Map User to UserSummary *)
+Create the <users> with [
+    { id: "1", name: "Alice" },
+    { id: "2", name: "Bob" }
+].
+
+Map the <names: name> from the <users>.
+(* ["Alice", "Bob"] *)
+```
+
+The `with` spelling is the same statement written the other way round, and the
+two are interchangeable:
+
+```aro
+Map the <names> from the <users> with name.
+```
+
+**The qualifier is a field name, never a value or an expression.** There is no
+per-element binding, so `with <user> * 0.9` has nothing to range over and
+`with 3` has nothing to mean; both are check-time errors. To compute something
+per element, use `for each` (Chapter 33) and accumulate.
+
+### Map does not project onto a schema
+
+`Map` looks as though it should turn a `List<User>` into a `List<UserSummary>`
+by copying the fields the target schema declares, and ARO-0018 describes it
+that way. **It does not.** A schema name in the qualifier slot is read as a
+field name, so it finds nothing:
+
+```aro
 Map the <summaries: List<UserSummary>> from the <users>.
+(* [] — "UserSummary" was looked up as a field *)
 ```
 
-**Requirements:**
-- Target type must be defined in `openapi.yaml` components/schemas
-- Fields with matching names are automatically copied
-- Missing optional fields are omitted
-- Missing required fields cause an error
+And the `as` spelling is worse, because it looks like it worked — the rows pass
+through untouched, `password-hash` and all:
 
-### Example Types
-
-```yaml
-# openapi.yaml
-components:
-  schemas:
-    User:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        email: { type: string }
-        password-hash: { type: string }
-        created-at: { type: string }
-
-    UserSummary:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        email: { type: string }
+```aro
+Map the <summaries> as List<UserSummary> from the <users>.
+(* the full User records, nothing removed *)
 ```
 
-When mapping `List<User>` to `List<UserSummary>`, only `id`, `name`, and `email` are copied. Sensitive fields like `password-hash` are excluded.
+Do not reach for `Map` to keep sensitive fields out of a response. This is
+tracked as [GitLab #559](https://git.ausdertechnik.de/arolang/aro/-/issues/559).
+Until it is fixed, build the shape you want explicitly — inside a `for each`,
+`Create` the summary record from the fields you intend to expose, and `Store`
+it where the response reads it.
 
 ---
 
@@ -281,7 +305,7 @@ Reduce the <eu-total: Float> from the <eu-orders>
 `Group` is the multi-bucket equivalent of `Filter`. Where `Filter` selects items matching a single predicate, `Group` partitions the entire collection at once:
 
 ```aro
-(* Using Filter — one predicate at a time *)
+(* Using Filter — one bucket at a time *)
 Filter the <active> from the <orders> where <status> is "active".
 Filter the <pending> from the <orders> where <status> is "pending".
 
@@ -345,6 +369,8 @@ Chain operations to build complex data transformations:
 
 ```aro
 (Generate Report: Analytics) {
+    Retrieve the <orders: List<Order>> from the <order-repository>.
+
     (* Step 1: Filter high-value orders *)
     Filter the <high-value: List<Order>> from the <orders>
         where <amount> > 1000.
@@ -352,8 +378,8 @@ Chain operations to build complex data transformations:
     (* Step 2: Sort by amount, largest first *)
     Sort the <ranked: descending> from the <high-value> by "amount".
 
-    (* Step 3: Map to summaries *)
-    Map the <summaries: List<OrderSummary>> from the <ranked>.
+    (* Step 3: Pull out the customer names, largest order first *)
+    Map the <customer-names: customer-name> from the <ranked>.
 
     (* Step 4: Aggregate *)
     Reduce the <total: Float> from the <high-value>
@@ -362,7 +388,7 @@ Chain operations to build complex data transformations:
         with count().
 
     Return an <OK: status> with {
-        orders: <summaries>,
+        customers: <customer-names>,
         total: <total>,
         count: <count>
     }.
@@ -449,7 +475,7 @@ See **Chapter 46: Streaming Execution** for complete details on how ARO optimize
 ### Complete Specification
 
 For the complete design and implementation of automatic pipeline detection, see:
-- **Proposal**: `Proposals/ARO-0067-automatic-pipeline-detection.md`
+- **Proposal**: `Proposals/ARO-0086-automatic-pipeline-detection.md`
 - **Related**: ARO-0051 (Streaming Execution)
 - **Examples**: `Examples/DataPipeline/`, `Examples/StreamingPipeline/`
 
@@ -477,21 +503,32 @@ Sort the <sorted-scores> for the <scores>.
 ## Pagination
 
 There is no SQL-style `limit`/`offset` clause. Sort the collection first, then
-slice a page out of it with an `Extract` range specifier (see **Chapter 15 —
-List Element Access**). A range like `0-19` selects the elements at those
-positions:
+slice a page out of it with an `Extract` range specifier (see **Appendix A**).
+
+**Indices count backwards.** `0` is the *last* element, not the first (ARO-0038
+§2.2), and a range walks from there towards the front — so on
+`["a","b","c","d","e"]`, `<page: 0-2>` binds `["e", "d", "c"]`. Ranges are a
+"most recent N" tool, which is what repositories want, and it means a page one
+of `0-19` is the *end* of the list in reverse.
+
+So sort into the order you want the last page to be in, and read the pages
+backwards:
 
 ```aro
+(* Ascending by name; index 0 is therefore the last name alphabetically *)
 Sort the <ordered: List<User>> from the <users> by "name".
 
-(* First page: elements 0-19 *)
+(* The 20 names closest to the end of the alphabet, Z-first *)
 Extract the <page1: 0-19> from the <ordered>.
-
-(* Second page: elements 20-39 *)
 Extract the <page2: 20-39> from the <ordered>.
+```
 
-(* Third page: elements 40-59 *)
-Extract the <page3: 40-59> from the <ordered>.
+If you want page one to be A-first, sort descending instead, so that the
+reverse index and the reading order agree:
+
+```aro
+Sort the <ordered: descending> from the <users> by "name".
+Extract the <page1: 0-19> from the <ordered>.   (* A … T, in order *)
 ```
 
 ---
@@ -520,6 +557,12 @@ components:
         created-at: { type: string, format: date-time }
       required: [id, customer-id, amount, status]
 
+    # Note: `created-at` can be sorted by (the Sort key is a string) but not
+    # read with `<order: created-at>` — a hyphenated name ending in a
+    # preposition does not lex as an identifier (GitLab #579). Name fields you
+    # need to extract `createdAt`, or extract them before the hyphen problem
+    # arises.
+
     OrderSummary:
       type: object
       properties:
@@ -541,7 +584,7 @@ components:
 (* Analytics report generation *)
 (Generate Report: Order Analytics) {
     (* Retrieve orders, then order newest-first *)
-    Retrieve the <all-orders: List<Order>> from the <orders>.
+    Retrieve the <all-orders: List<Order>> from the <order-repository>.
     Sort the <recent: descending> from the <all-orders> by "created-at".
 
     (* Calculate metrics *)
@@ -561,11 +604,11 @@ components:
     Reduce the <pending-count: Integer> from the <pending>
         with count().
 
-    (* Map to summaries for response *)
-    Map the <summaries: List<OrderSummary>> from the <recent>.
+    (* Pull out the customer names for the response *)
+    Map the <customer-names: customer-name> from the <recent>.
 
     Return an <OK: status> with {
-        orders: <summaries>,
+        customers: <customer-names>,
         metrics: {
             total-revenue: <total-revenue>,
             order-count: <order-count>,
@@ -601,25 +644,24 @@ When working with data pipelines, keep these performance guidelines in mind:
 (* Good: Filter first, then transform *)
 Filter the <active: List<User>> from the <users>
     where <status> is "active".
-Map the <summaries: List<UserSummary>> from the <active>.
+Map the <active-names: name> from the <active>.
 
-(* Less efficient: Transform all, filter none *)
-Map the <all-summaries: List<UserSummary>> from the <users>.
+(* Less efficient: extract the field from every user, then discard most *)
+Map the <all-names: name> from the <users>.
 ```
 
 2. **Slice After Sorting**: Sort, then take only the elements you need with an `Extract` range instead of materialising and scanning the whole collection downstream.
 
-```aro
-(* Good: sort, then take the top 10 *)
-Sort the <ranked: descending> from the <orders> by "amount".
-Extract the <top-orders: 0-9> from the <ranked>.
+Remember that the range counts backwards, so "the ten largest" is an
+*ascending* sort read from index 0:
 
-(* Expensive: retrieve all, then filter in application *)
-Retrieve the <all-orders: List<Order>> from the <orders>.
-Sort the <sorted-orders: descending> from the <all-orders> by "amount".
+```aro
+(* Good: sort ascending, then take indices 0-9 — the ten largest, largest first *)
+Sort the <ranked> from the <orders> by "amount".
+Extract the <top-orders: 0-9> from the <ranked>.
 ```
 
-3. **Most-Selective Filter First**: A `where` clause holds a single predicate, so multiple conditions become a chain of `Filter` statements. Apply the most selective predicate first so later stages scan a smaller collection.
+3. **Most-Selective Filter First**: when you do split a compound condition into a chain of `Filter` statements — for the named intermediate values, or to log a stage — apply the most selective predicate first, so later stages scan a smaller collection.
 
 ```aro
 (* Good: the rarer predicate (premium) runs first *)
@@ -653,7 +695,7 @@ Note that `Compute <n: length>` is perfectly appropriate when the collection is 
 
 - For collections under 10,000 elements, each pipeline operation creates a new collection (immutability)
 - For collections of 10,000+ elements, `Filter` and `Map` return lazy streams — chained operations execute in O(1) memory per stage without materialising intermediate arrays (see Chapter 46)
-- For large datasets, use `limit` and `offset` for pagination
+- For pagination, sort and then slice with an `Extract` range — there is no `limit`/`offset`
 - Intermediate results are garbage-collected when no longer referenced
 - Map operations to smaller types reduce memory usage
 

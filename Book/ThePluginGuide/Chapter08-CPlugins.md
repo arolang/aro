@@ -106,6 +106,62 @@ Key points:
 - Qualifier-only plugins do **not** need to implement `aro_plugin_execute`.
 - Services route through `aro_plugin_execute` using the action name `"service:<method>"`. The old three-parameter service ABI (method, args, &result → Int32) is removed entirely.
 - `aro_plugin_init` returns `void`. The old form that returned `char*` with service metadata is removed.
+- `aro_plugin_info`'s return value is **freed by ARO**. Return a `strdup`'d
+  copy, never a `static const char*` — `free()` on static memory is undefined
+  behaviour.
+
+### The C SDK
+
+Everything above can be written by hand, and the rest of this chapter does
+exactly that so you can see what the runtime sees. For day-to-day work there is
+a shortcut: a single-header SDK that generates all four ABI entry points from
+declarative macros, which is what `aro new plugin --lang c` scaffolds against.
+
+```bash
+aro new plugin my-hash --lang c --actions --qualifiers
+```
+
+That writes `plugin.yaml`, a cross-platform `Makefile`, `src/plugin.c`, and
+downloads `include/aro_plugin_sdk.h`. The source is macros, not boilerplate:
+
+```c
+#define ARO_PLUGIN_SDK_IMPLEMENTATION
+#include "aro_plugin_sdk.h"
+
+ARO_PLUGIN("my-hash", "1.0.0")
+ARO_HANDLE("MyHash")
+
+ARO_INIT()     { /* one-time setup */ }
+ARO_SHUTDOWN() { /* release resources */ }
+
+/* Invoked as: MyHash.Digest the <d> from <text>. */
+ARO_ACTION("Digest", "own", "from,with") {
+    const char* text = aro_input_string(ctx, "data");
+    aro_output_string(ctx, "digest", djb2_hex(text));
+    return aro_ok(ctx);
+}
+
+/* Invoked as: Compute the <loud: MyHash.shout> from <text>. */
+ARO_QUALIFIER("shout", "String", "Uppercase a string") {
+    const char* value = aro_qualifier_string(ctx);
+    if (!value)
+        return aro_error(ctx, ARO_ERR_INVALID_INPUT, "shout requires a string");
+    /* ... uppercase into `upper` ... */
+    return aro_qualifier_result_string(ctx, upper);
+}
+```
+
+The macros populate registration tables through
+`__attribute__((constructor))`, and the SDK synthesises `aro_plugin_info`,
+`aro_plugin_execute`, `aro_plugin_qualifier` and `aro_plugin_free` from them —
+including the `{"result": …}` wrapper that qualifiers must return, which is
+easy to get wrong by hand. `make` produces the `.dylib`/`.so`; `aro run .`
+picks it up.
+
+The one thing the SDK gets wrong today: its generated info JSON keys system
+objects on `name`, while the runtime reads `identifier`, so
+`ARO_SYSTEM_OBJECT` declarations never register (GitLab #556). Write
+`aro_plugin_info` by hand if you need system objects.
 
 ## 8.4 Your First C Plugin: Custom Actions
 
@@ -361,7 +417,7 @@ gcc -O2 -shared -o hash_plugin.dll src/hash_plugin.c
 With custom actions registered, use native ARO syntax:
 
 ```aro
-(Hash Demo: Application-Start) {
+(Application-Start: Hash Demo) {
     Create the <message> with "Hello, World!".
 
     (* Use custom Hash action - feels native! *)
@@ -700,7 +756,7 @@ void aro_plugin_free(char* ptr) {
 Usage (with custom actions `<SystemInfo>`, `<FileStat>`, `<GetEnv>`):
 
 ```aro
-(System Info: Application-Start) {
+(Application-Start: System Info) {
     (* Get system information using custom action *)
     SystemInfo the <system> from the <uname>.
     Log "Running on: " ++ <system: system> to the <console>.

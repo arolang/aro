@@ -1,12 +1,14 @@
 # Chapter 24: Custom Actions
 
-*"When 61 actions aren't enough, write your own."*
+*"When 71 actions aren’t enough, write your own."*
 
 ---
 
 ## 24.1 When to Create Custom Actions
 
 ARO's built-in actions cover common operations, but real applications often need capabilities beyond the standard set. Custom actions extend the language with domain-specific operations while maintaining ARO's declarative style.
+
+Before reaching for Swift, check whether a **user-defined action** will do. A feature set whose business activity is `Action` is callable from anywhere as `Application.<Name>`, and the call site reads exactly like the one below — same shape, no build step, no registration. If what you need can be expressed as ARO statements, write it there instead (Chapter 6.4). What follows is for the cases that cannot: talking to something outside ARO, or doing work the statement model has no verb for.
 
 Create custom actions when you need to integrate with external services. Database drivers, message queues, third-party APIs, and specialized protocols all require code that cannot be expressed in ARO alone. A custom action wraps the integration logic and exposes it through a clean verb in your ARO code.
 
@@ -33,9 +35,9 @@ ARO provides two extension mechanisms:
 
 Custom actions, covered in this chapter, let you add new verbs to the language. When you implement a custom action, you can write statements like `Geocode the <coordinates> from the <address>` that feel native to ARO.
 
-Custom services, covered in Chapter 24, let you integrate external systems through the `Call` action. Services provide multiple methods under a single service name: `Call from <postgres: query>`, `Call from <postgres: insert>`.
+Custom services, covered in Chapter 25, let you integrate external systems through the `Call` action. Services provide multiple methods under a single service name: `Call from <postgres: query>`, `Call from <postgres: insert>`.
 
-Plugins, covered in Chapter 25, let you package and share both actions and services with the community.
+Plugins, covered in Chapter 26, let you package and share both actions and services with the community.
 
 The rest of this chapter focuses on implementing custom actions—the fundamental building block of ARO's extensibility.
 

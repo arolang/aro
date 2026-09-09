@@ -4,7 +4,7 @@
 
 ---
 
-*Language version: 0.11.0 · June 2026*
+*Language version: 0.12.0 · September 2026*
 
 ---
 
@@ -38,6 +38,12 @@ from a template, or jump back into something you had open before.
 
 ![Welcome](screenshots/01-welcome.png){ width=85% }
 
+*(A note on the screenshots in this book: they were captured at
+various points and the UI has moved under some of them — a pill has
+changed shape, a tab has been added. Where a screenshot and the prose
+disagree, the prose was checked against the source and the screenshot
+was not.)*
+
 There are four panes. The **sidebar** on the left shows the project
 tree and a search field; the **center pane** swaps between the
 canvas, the code editor, and a split view of both; the **inspector**
@@ -49,12 +55,17 @@ runtime is producing JSONL events, the timeline.
 ![Canvas overview](screenshots/02-canvas.png){ width=85% }
 
 The toolbar at the top groups its buttons into four pills: the
-**pane-mode picker** (canvas / text / split / map), the **search
-field**, the **run cluster** (Run, Debug, Test, status pip), and the
-**view cluster** (fold toggle, minimap toggle, inspector toggle). On
-narrow windows the pills collapse into the system `»` overflow one
-at a time, right-most first, so the run cluster stays visible longer
-than the toggles.
+**pane-mode picker** (map / canvas / text / split, in that order —
+the project overview leads), the **search field**, the **run
+cluster** (Run, Debug, Test, status pip), and the **view cluster**
+(fold toggle, minimap toggle, inspector toggle). On narrow windows
+the pills collapse into the system `»` overflow one at a time,
+right-most first, so the run cluster stays visible longer than the
+toggles.
+
+One file type ignores the picker entirely: a `.repl` notebook is a
+notebook in every pane mode, because cells have nothing a canvas
+could add. §1.6 is the tour.
 
 ### 1.1 The canvas
 
@@ -94,9 +105,15 @@ The inspector is a stack of cards. The top card is the file header
 — name, parse status, LSP status. Below that, when you have a
 canvas node selected, the **Selected Statement** card lets you edit
 the statement inline; the runtime reparses the change on every
-keystroke and reflows the canvas. The **Watches** card lets you pin
-variables; **Problems** lists LSP diagnostics; **Feature Sets**
-shows every FS in the current file with its role and signature.
+keystroke and reflows the canvas. A selected repository node gets a
+**Selected Repository** card instead, showing its rows as a live
+table. The **Watches** card lets you pin variables; **Problems**
+lists LSP diagnostics; **Feature Sets** shows every FS in the
+current file with its role and signature.
+
+The diagnostics come from `aro lsp` — SOLARO spawns the same
+language server VS Code and IntelliJ talk to, so a problem the
+inspector shows is a problem your teammate's editor shows.
 
 ![Inspector](screenshots/03-inspector.png){ width=85% }
 
@@ -106,14 +123,18 @@ writes back into the YAML on every change.
 
 ### 1.4 The console
 
-The console is at the bottom. Three tabs: **Output** (stdout +
-stderr from the running app), **Events** (the runtime's JSONL event
-stream, one line per statement fired), and **Metrics** (a Prometheus-
-style snapshot of the runtime's counters).
+The bottom pane has three tabs: **Console** (stdout + stderr from
+the running app), **Terminal** (a real shell, rooted at the project),
+and **Tests** (the run's pass/fail list — §8).
+
+The runtime's JSONL event stream does not get a tab of its own; it
+drives the canvas directly (§4), and the **time-travel scrubber** —
+opened as a sheet over the workspace — is where you scrub through a
+recorded run frame by frame. Metrics live in the right rail (§6).
 
 ### 1.5 The right rail
 
-The right rail is a four-tab strip above the inspector. Each tab
+The right rail is a five-tab strip above the inspector. Each tab
 swaps the entire right pane for a focused tool:
 
 - **Inspector** (default) — the cards described above.
@@ -122,13 +143,88 @@ swaps the entire right pane for a focused tool:
   built-ins separated from each loaded plugin's contributions. Each
   row is a drag source: drop it on a feature-set container in the
   canvas and SOLARO inserts a placeholder ARO statement at the
-  cursor. The header counts what's loaded ("48 built-in · 12 from 3
+  cursor. The header counts what's loaded ("71 built-in · 12 from 3
   plugins") and a tiny spinner blinks while `aro actions` is in
   flight.
+- **Snippets** — sits next to Actions on purpose: Actions drags one
+  statement, Snippets drags the multi-line pattern around it — a
+  feature-set skeleton, a for-each with a filter, an event handler
+  and its emitter. Same drag-to-insert gesture.
 - **Metrics** — see §6.
 - **Ask** — see §7.
 
 ![Actions panel](screenshots/06-actions-panel.png){ width=85% }
+
+### 1.6 Notebooks
+
+Open a `.repl` file and the centre pane becomes a notebook: markdown
+cells and ARO code cells, each code cell keeping the output it
+produced. The file on disk is JSON — structurally a small cousin of
+`.ipynb`, but with ARO's display bundle as first-class fields instead
+of a MIME dictionary, so a notebook diffs like source rather than
+like a minified blob.
+
+Cells run against `aro repl --json` — one subprocess per notebook,
+the same protocol and the same session engine the Jupyter kernel
+speaks (ARO-0091). So a cell behaves identically in SOLARO and in
+JupyterLab: definitions accumulate down the file, the last value is
+displayed, and a list of records renders as a table. A chip in the
+notebook's header shows the kernel's state and the `aro` version it
+reported.
+
+**Running.** The chords are Jupyter's, from inside a cell:
+
+| Key | Effect |
+|---|---|
+| ⇧⏎ | Run, select the cell below |
+| ⌥⏎ | Run, insert a new cell below |
+| ⌘⏎ | Run in place |
+| Esc | Leave the cell — drop to command mode |
+
+A markdown cell "runs" by rendering. Moving the selection renders any
+markdown cell you leave behind, the way clicking away does in Jupyter.
+The right-click menu adds **Run All Above** and **Run Cell and Below**;
+the notebook toolbar has **Run All**. Runs are queued and serialised —
+the JSON protocol is one request at a time — so Run All feeds cells to
+the kernel in order rather than racing them.
+
+**Command mode.** With a cell selected but not focused, single keys
+act on cells:
+
+| Key | Effect |
+|---|---|
+| ↑ / ↓ | Select the cell above / below |
+| ⏎ | Edit the selected cell |
+| A / B | Insert a cell above / below |
+| D D | Delete the cell (twice, within about a second) |
+| M / Y | Convert the cell to markdown / code |
+| ⇧M | Merge with the cell below |
+| ⌘D | Duplicate the cell |
+| ⌘X / ⌘C / ⌘V | Cut / copy / paste cells |
+
+Every one of those is a command in the keybinding registry, so it is
+remappable in Settings → Keybindings like the rest of the app. The
+clipboard carries whole cells — kind, source, and outputs — under a
+private pasteboard type, with a plain-text flavour alongside, so a
+copied cell pastes as source into any other editor and a copied cell
+from anywhere else pastes in as a code cell.
+
+**Interrupting.** A cell blocked inside the runtime cannot be
+unwound, so interrupt kills and replaces the kernel process, and says
+so. Bindings and definitions from earlier cells are gone; re-run from
+the top. Knowing that before you reach for the stop button on a long
+`Read` is worth the sentence.
+
+**Changing underneath you.** SOLARO watches open files for external
+writes. If a notebook changes on disk while the buffer has no unsaved
+work, it reloads; if both moved, you are asked rather than silently
+overwritten — which is what stops a `git checkout` from being
+autosaved over by the next keystroke.
+
+Use the notebook where the notebook fits: prototyping a stage against
+real data, teaching, a runnable explanation of a feature set. When the
+shape is right, the statements move into a `.aro` file unchanged, and
+the file tree they move into is one pane away.
 
 ---
 
@@ -176,6 +272,14 @@ launch and shows a banner if the CLI version disagrees with the app.
 - **Plugins** install from Git URLs via `aro add github:org/repo` or
   from the in-app marketplace (Help → Plugins). The runtime supports
   Swift, Rust, C/C++, and Python plugin SDKs.
+- **Jupyter**, if you want ARO notebooks outside SOLARO. `aro kernel
+  install` registers a kernelspec that runs the `aro` binary directly
+  over ZeroMQ — no Python, no `ipykernel` — and **New → ARO** then
+  appears in JupyterLab, VS Code and DataSpell. The kernelspec records
+  the *absolute path* of the binary that installed it, so run it from
+  the `aro` you want notebooks to use. `libzmq` is a system dependency
+  (`brew install zeromq`). SOLARO's own `.repl` notebooks need none of
+  this: they drive `aro repl --json` directly.
 - **The book viewer** (Help → Books) downloads PDFs of every book in
   this project, including this one, on demand from the latest release.
 
@@ -190,8 +294,12 @@ in different places.
 
 ### 3.1 Run
 
-`Run` (or Cmd+R) spawns the `aro run` subprocess against the open
-project. The canvas highlights the **Application-Start** feature
+`Run` spawns the `aro run` subprocess against the open project. (Run
+and Debug are toolbar buttons with no default keyboard shortcut —
+every shortcut SOLARO ships is in the keybinding registry, and those
+two are not in it, so bind them yourself in Settings → Keybindings if
+you want them. When the open file is a notebook the same button turns
+into **Run All** and runs its cells instead.) The canvas highlights the **Application-Start** feature
 set, then each statement node lights up briefly as the runtime fires
 it. Values produced by an action (the `<result>` slot) appear under
 the node and stay there until the next run.
@@ -204,12 +312,14 @@ archaeology — the program is the trace.
 
 ### 3.2 Debug
 
-`Debug` (or Cmd+Shift+R) launches the runtime in debug mode. Breakpoints
-toggle by clicking the gutter or pressing F9 on a line. The
-**Selected Statement** card in the inspector shows live
-variable values when paused. **Step Over** (F10) and **Step Into**
-(F11) advance one statement at a time; the canvas's pulse moves with
-the cursor.
+`Debug` launches the runtime in debug mode. Breakpoints toggle by
+clicking the gutter — they live in the file's `.layout.json` sidecar,
+so they survive a restart and travel with the project. The
+**Selected Statement** card in the inspector shows live variable
+values when paused, and **Continue**, **Step Over**, **Step Into**
+and **Step Out** appear in the toolbar while the runtime is stopped;
+the canvas's pulse moves with the cursor. They are buttons, not
+function keys — F9/F10/F11 are unbound.
 
 Because ARO statements are coarse compared to imperative steps,
 stepping is more productive than in most debuggers. Each step
@@ -218,7 +328,8 @@ of work — not an arbitrary lexical line.
 
 ### 3.3 Test
 
-`Test` (or Cmd+U) runs `aro test`. Test feature sets — any FS whose
+`Test` (⌃⌘U) runs `aro test`. (⇧⌘U shows the Tests pane at the
+bottom; the two are easy to swap by accident.) Test feature sets — any FS whose
 business activity ends in `Test` or `Tests` — are collected, run in
 isolation, and their pass/fail markers appear next to each FS header
 on the canvas. A test in progress shows a pulsing **T** chip; a
@@ -235,6 +346,8 @@ aro debug  ./Examples/UptimeMonitor
 aro test   ./Examples/UptimeMonitor
 aro check  ./Examples/UptimeMonitor        # syntax / semantic check
 aro build  ./Examples/UptimeMonitor        # compile to a native binary
+aro repl                                   # the prompt behind the notebook
+aro kernel install                         # register the Jupyter kernel
 ```
 
 The CLI's output is the input that drives SOLARO's canvas. SOLARO is
@@ -444,9 +557,10 @@ just finished warming caches and want a clean window for the next
 measurement.
 
 The same data is available externally: the runtime exposes a
-Prometheus-style scrape endpoint on a UNIX socket
-(`$XDG_RUNTIME_DIR/aro-metrics-<pid>.sock` by default) so any
-Grafana or VictoriaMetrics agent can pull from it. SOLARO uses the
+Prometheus-style scrape endpoint on a UNIX socket at
+`$TMPDIR/aro-metrics-<pid>.sock` — every `aro` process prints the
+path on startup — so any Grafana or VictoriaMetrics agent can pull
+from it. SOLARO uses the
 same socket; the Metrics tab is just a thin reader on top.
 
 ---
@@ -516,7 +630,7 @@ once.
   green row so the list stays readable on a project with dozens
   of tests.
 
-Hitting `Test` (or `Cmd+U`) re-runs the suite. Re-runs are
+Hitting `Test` (⌃⌘U) re-runs the suite. Re-runs are
 incremental — only test FSes whose source file has changed since
 the last green run actually execute. To force a full sweep, use
 View → Tests → Re-run all.
@@ -568,12 +682,20 @@ you exactly which slice of the business logic moved.
 
 ## 10. Settings
 
-Cmd+, opens Settings. The window is five tabs — Editor, Backends,
-Keybindings, Books, Privacy — each focused on one configurable surface;
+Cmd+, opens Settings. The window is six tabs — Editor, Backends,
+Keybindings, Books, Signing, Privacy — each focused on one configurable surface;
 everything is stored under the `solaro.*` keyspace in standard
 `UserDefaults` so backing it up is `defaults export com.arolang.SOLARO`.
 (The Plugins surface in §10.6 is a *separate* window opened from
 Help → Plugins, not a Settings tab.)
+
+**Signing** is the one tab this chapter does not give a section of its
+own, because most readers never open it: it picks the Apple Developer
+Team ID used to sign and notarize a release build, listing the
+codesigning certificates it finds in your login keychain so the
+normal path is "choose your certificate" rather than "go find a
+ten-character string". Manual entry stays available for a CI-only
+Team ID with no local certificate.
 
 ![Settings — Editor tab](screenshots/11-settings-editor.png){ width=85% }
 
@@ -581,9 +703,13 @@ Help → Plugins, not a Settings tab.)
 
 - **Theme** — Light, Dark, or System. Switches the entire app
   including syntax colours; no restart needed.
-- **Font size** (10–22 pt) and **Line height** (1.00–2.00×) — apply
-  to the code editor only; the canvas and inspector follow the
-  system text size.
+- **Font size** and **Line height** — the text size every reading
+  surface resolves against: the code editor, notebook cells, and
+  rendered markdown. ⌘+ and ⌘− step it live, wherever you are
+  reading, along a multiplicative ladder rather than one point at a
+  time (at 9 pt a point is a lot; at 40 pt it is invisible), and
+  ⇧⌘0 returns to the default 13 pt. ⌘0 is *not* the reset — that is
+  Toggle Sidebar.
 - **Default pane mode** — which of Canvas / Text / Split / Map a
   freshly-opened file lands in before its `.layout.json` overrides.
 - **Inspector visible by default** — whether the right rail starts
@@ -620,11 +746,13 @@ Help → Plugins, not a Settings tab.)
 
 ### 10.3 Keybindings
 
-A two-column editor for every command SOLARO exposes. The left
-column is the command name and its current shortcut; the right
-column lets you capture a new one. The Reset button clears a
-binding back to the default. The full mapping is saved to
-`~/.config/solaro/keybindings.json` so it's portable.
+A two-column editor for every command SOLARO exposes, grouped by
+category — navigation, editing, and the notebook's command-mode keys
+from §1.6, which are ordinary registry entries rather than a
+hardwired special case. The left column is the command name and its
+current shortcut; the right column lets you capture a new one. The
+Reset button clears a binding back to the default. The full mapping
+is saved to `~/.config/solaro/keybindings.json` so it's portable.
 
 ### 10.4 Books
 
@@ -662,6 +790,11 @@ github:owner/repo` and reloads the runtime.
   own editor integration.
 - **The Plugin Guide** covers writing Swift, Rust, C, and Python
   plugins that show up as native actions in the canvas.
+- **ARO for Data Engineers** builds a medallion pipeline in a
+  notebook and ships it as a directory — the best worked example of
+  the `.repl` editor from §1.6.
+- **The Interactive Dialog** is the tour of `aro repl`, which is the
+  engine those notebook cells run against.
 
 The book viewer (Help → Books) downloads every one of these PDFs on
 demand. They all build from this same repo via `Book/*/build-pdf.sh`

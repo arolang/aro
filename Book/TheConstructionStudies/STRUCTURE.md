@@ -9,13 +9,13 @@
 The constraint hypothesis. Data flow as organizing principle. Immutability by default. The "code is the error message" philosophy. Plugin system escape hatches. Trade-off analysis.
 
 ### [Chapter 2: Lexical Analysis](Chapter02-LexicalAnalysis.md)
-Character classification. Articles and prepositions as first-class tokens. String interpolation challenges. Regex vs division ambiguity. Source location tracking. Extended literal support (triple-quoted, raw, hex, binary).
+Character classification. Articles and prepositions as first-class tokens. String interpolation challenges. Regex vs division ambiguity. Source location tracking. Extended literal support (multiline plain strings, single-quoted raw strings, hex, binary).
 
 ### [Chapter 3: Syntactic Analysis](Chapter03-SyntacticAnalysis.md)
-Hybrid parser design: recursive descent + Pratt parsing. Nine statement types. Error recovery strategy. Single lookahead limitations.
+Hybrid parser design: recursive descent + Pratt parsing. The three dispatch tables. Operator precedence. Error recovery, and the two parse contracts. Single lookahead limitations.
 
 ### [Chapter 4: Abstract Syntax](Chapter04-AbstractSyntax.md)
-AST node hierarchy (9 statement types). Statement vs expression dichotomy. The QualifiedNoun pattern. Visitor pattern implementation. Sendable conformance.
+AST node hierarchy (nine writable statement types, plus ErrorStatement). Statement vs expression dichotomy. The QualifiedNoun pattern. The three visitor protocols. Sendable conformance.
 
 ### [Chapter 5: Semantic Analysis](Chapter05-SemanticAnalysis.md)
 Symbol table design. Visibility levels. Business activity isolation. Type system simplicity. Data flow classification. Immutability enforcement. VerbSets shared module. Plugin compatibility checking.
@@ -23,10 +23,10 @@ Symbol table design. Visibility levels. Business activity isolation. Type system
 ## Part II: Execution
 
 ### [Chapter 6: Interpreted Execution](Chapter06-InterpretedExecution.md)
-Execution engine architecture. ExecutionContext protocol. FeatureSetExecutor. ActionRegistry design. Descriptor-based invocation. Response short-circuit.
+Execution engine architecture. Actors vs. locks. ExecutionContext protocol. FeatureSetExecutor. Deferred execution (ARO-0088). ActionRegistry design. Descriptor-based invocation. Response short-circuit.
 
 ### [Chapter 7: Event Architecture](Chapter07-EventArchitecture.md)
-EventBus design. Handler registration. Seven handler types. State guards. In-flight tracking. Race condition prevention. AsyncStream integration.
+EventBus design. Handler registration order. Handler types by naming convention. State guards. In-flight tracking. Race condition prevention. AsyncStream integration.
 
 ## Part III: Native Compilation
 
@@ -34,12 +34,12 @@ EventBus design. Handler registration. Seven handler types. State guards. In-fli
 Swifty-LLVM C API strategy. Module structure. String constant collection. Feature set to function mapping with error_exit blocks. Descriptor allocation. Control flow generation (when, match, for-each, range-loop, while-loop, break).
 
 ### [Chapter 9: Runtime Bridge](Chapter09-RuntimeBridge.md)
-Swift-C-LLVM interoperability. @_cdecl functions (61 actions). Handle management. Descriptor conversion. Platform-specific linking. The swiftrt.o requirement.
+Swift-C-LLVM interoperability. 248 @_cdecl functions across `ARORuntime/Bridge/`. Handle management. Descriptor conversion. The async boundary: futures on an elastic executor. Two HTTP servers, and why.
 
 ## Part IV: Assessment
 
 ### [Chapter 10: Critical Assessment](Chapter10-CriticalAssessment.md)
-What works well. What doesn't work. Resolved issues (LLVM type checking now fixed via Swifty-LLVM). Design decisions we'd reconsider. Plugin system additions. Lessons for language implementers.
+What works well. What doesn't work. Resolved issues (LLVM type checking; the synchronous bridge). Design decisions we'd reconsider. Lessons for language implementers.
 
 ### [Chapter 11: Dual-Mode Execution Parity](Chapter11-DualModeExecutionParity.md)
 Sources of interpreter/binary divergence. VerbSets shared module. Integer division parity. DomainEvent co-publishing pattern. Handler registration template. Payload schema contracts. The `mode: both` test directive.

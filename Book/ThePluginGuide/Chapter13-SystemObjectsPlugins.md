@@ -1,11 +1,11 @@
-# Chapter 12: System Objects Plugins
+# Chapter 13: System Objects Plugins
 
 > *"The best abstractions feel inevitable—as if the system could work no other way."*
 > — Rob Pike
 
 Throughout this book, we've seen how plugins extend ARO with new actions. But there's another dimension to extensibility that we haven't yet explored: **system objects**. When you write `Log "Hello" to the <console>.` or `Read the <config> from the <file: "settings.yaml">.`, you're interacting with system objects—built-in I/O targets that ARO provides. This chapter reveals how plugins can contribute their own system objects, enabling syntax like `Read the <session> from the <redis: "user:123">.` or `Write <document> to the <elasticsearch: "products">.`
 
-## 12.1 Understanding System Objects
+## 13.1 Understanding System Objects
 
 Before we can extend the system objects mechanism, we need to understand what system objects are and how they work within ARO's I/O architecture.
 
@@ -78,7 +78,7 @@ This pattern is central to how custom system objects work. When you create a Red
 Read the <session> from the <redis: "session:user:123">.
 ```
 
-## 12.2 The System Objects Protocol
+## 13.2 The System Objects Protocol
 
 Plugins expose system objects by implementing a specific protocol. This section covers the architecture that makes custom system objects possible.
 
@@ -157,7 +157,7 @@ A Redis plugin might declare `readable, writable, enumerable`:
 - **writable**: Set keys
 - **enumerable**: Scan/list keys matching a pattern
 
-## 12.3 Building a Redis Plugin
+## 13.3 Building a Redis Plugin
 
 Let's build a complete Redis plugin in Rust that exposes a `<redis>` system object. This example demonstrates all the concepts we've discussed.
 
@@ -608,7 +608,7 @@ Once installed, the Redis plugin enables natural syntax for cache operations:
 }
 ```
 
-## 12.4 Building an Elasticsearch Plugin
+## 13.4 Building an Elasticsearch Plugin
 
 Elasticsearch makes an excellent companion to our Redis example. While Redis handles ephemeral data like sessions and caches, Elasticsearch excels at searchable document storage. Let's build a plugin that exposes `<elasticsearch>` as a system object.
 
@@ -1052,7 +1052,7 @@ The plugin enables powerful document operations with clean syntax:
 }
 ```
 
-## 12.5 Design Patterns for System Objects
+## 13.5 Design Patterns for System Objects
 
 Building effective system object plugins requires more than just implementing the protocol. This section covers patterns that make system objects feel native to ARO.
 
@@ -1166,7 +1166,7 @@ pub extern "C" fn aro_plugin_shutdown() {
 }
 ```
 
-## 12.6 Testing System Object Plugins
+## 13.6 Testing System Object Plugins
 
 System object plugins require careful testing across multiple dimensions.
 

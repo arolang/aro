@@ -460,7 +460,7 @@ void aro_plugin_free(char* ptr) {
 With custom actions registered, use native ARO syntax:
 
 ```aro
-(Math Demo: Application-Start) {
+(Application-Start: Math Demo) {
     (* Calculate statistics using custom action *)
     Statistics the <stats> from [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
     Log "Mean: " ++ <stats: mean> to the <console>.

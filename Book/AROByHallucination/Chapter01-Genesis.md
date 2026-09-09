@@ -18,7 +18,13 @@ That was the hallucination. A useful one. The next hour of conversation was spen
 Retrieve the <user> from the <user-repository> where id = <id>.
 ```
 
-It has barely changed since.
+It has barely changed since — though "barely" is doing a little work. That exact line no longer parses: the field in a `where` clause wears angle brackets like everything else, and the comparison is spelled `is` or `==`. What you would type today is
+
+```aro
+Retrieve the <user> from the <user-repository> where <id> is <id>.
+```
+
+Same shape, same reading, one pair of brackets more. It is a small thing, and it is the first entry in this book's running theme: a sentence that reads perfectly and does not compile. The model that produced the original guessed the grammar of the language before the grammar existed, and got it almost exactly right. Almost is where the whole book lives.
 
 ## 1.2 Letting the Machine Write
 
@@ -40,7 +46,7 @@ The important thing about that first application is not that it worked. It is th
 
 And yet — ARO has a problem with general models. The problem has two parts.
 
-The first part is vocabulary. There are five action roles, ten prepositions, and fifty-four built-in action verbs. The model that wrote the first version of ARO does not know any of them. It has to be reminded, every time, which verbs exist and which prepositions they take. It tends to invent new ones when it runs out of patience. Invented verbs do not parse. Feature sets with invented verbs fail silently in review and loudly in production.
+The first part is vocabulary. There are five action roles, ten prepositions, and — at the time of writing — seventy-one built-in actions, each with its own verbs and aliases. That last number goes up; run `aro actions` for today's. The model that wrote the first version of ARO does not know any of them. It has to be reminded, every time, which verbs exist and which prepositions they take. It tends to invent new ones when it runs out of patience. Invented verbs do not parse. Feature sets with invented verbs fail silently in review and loudly in production.
 
 The second part is privacy. Large general models live in a cloud. They see your source, your questions, and — if you're not careful — the production data you paste in when you're trying to debug something. That's a problem for teams that cannot ship their business logic to a vendor for analysis. It's a problem for people who simply do not want a transcript of every engineering decision leaving their machine.
 

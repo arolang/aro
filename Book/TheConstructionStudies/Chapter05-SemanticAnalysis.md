@@ -4,13 +4,31 @@
 
 The parser gives you a tree of tokens. Semantic analysis gives that tree *meaning*.
 
-The `SemanticAnalyzer` takes a parsed `Program` and produces an `AnalyzedProgram` — the same structure enriched with symbol tables, data flow info, and cross-feature-set dependency tracking. It runs four passes. Each pass builds on the last.
+The `SemanticAnalyzer` takes a parsed `Program` and produces an `AnalyzedProgram` — the same structure enriched with symbol tables, data flow info, and cross-feature-set dependency tracking.
 
-The four passes:
-1. Build symbol tables and detect duplicates
-2. Verify external dependencies
-3. Detect circular event chains
-4. Detect orphaned event emissions
+`SemanticAnalyzer` is small (under 400 lines) because it is a conductor, not a worker. It owns the *order*; five specialist analyzers own the checks:
+
+| Analyzer | Answers |
+|----------|---------|
+| `DataFlowAnalyzer` | what each statement reads and writes; duplicates; dependencies |
+| `CodeQualityValidator` | shape problems that are legal but wrong |
+| `CollectionOpValidator` | collection statements that parse clean and then no-op or crash (GitLab #465) |
+| `EventAnalyzer` | circular event chains; orphaned emissions |
+| `UserActionAnalyzer` | the `Application.<Name>` registry, its call sites, unavoidable recursion (ARO-0081) |
+
+The passes, in the order they run:
+
+1. Detect duplicate feature-set names
+2. Build the user-action registry, so later passes can validate `Application.<Name>` calls
+3. Per feature set: data flow, code quality, collection ops; register published symbols
+4. Verify external dependencies against the global registry
+5. Detect circular event chains
+6. Detect orphaned event emissions
+7. Validate user-action call sites, then unavoidable recursion
+
+Order is load-bearing in both directions. The registry has to exist before call sites are checked; the duplicate-name complaint has to be emitted before the call-site complaints that follow from it, or the reader is told the consequence before the cause.
+
+One pass is fused into another for cost rather than clarity: `DataFlowAnalyzer` already walks every statement to build `flattenedAROStatements`, so later passes consume that cached walk instead of re-traversing the tree (#339).
 
 ---
 
@@ -27,6 +45,7 @@ Each feature set gets its own symbol table, built during the first pass. Here's 
 | `exports` | Symbols published to the global registry |
 | `aggregationFusions` | Groups of Reduce operations on the same source that can be fused into a single pass (ARO-0051) |
 | `streamConsumers` | Variables consumed by multiple downstream statements, requiring stream teeing (ARO-0051) |
+| `flattenedAROStatements` | Every statement in source order, descending into `match` cases and loop bodies — one walk, shared by later passes (#339) |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -216,7 +235,7 @@ The analyzer tracks what each statement consumes and produces. Every statement g
 
   <!-- Statement -->
   <rect x="30" y="30" width="590" height="35" rx="5" class="box"/>
-  <text x="40" y="53" class="code">&lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;userId&gt;.</text>
+  <text x="40" y="53" class="code">Retrieve the &lt;user&gt; from the &lt;user-repository&gt; where &lt;id&gt; is &lt;userId&gt;.</text>
 
   <!-- Analysis -->
   <rect x="30" y="85" width="180" height="80" rx="5" class="box input"/>
@@ -366,32 +385,32 @@ program runs, and reported by `aro check` alongside the source that decided it.
 
 ## Multi-Pass Architecture
 
-The four passes serve specific purposes:
-
 ```
-Pass 1: Build Symbol Tables
+Build Symbol Tables
   - Create symbols for each statement
   - Track defined variables
   - Build data flow info
   - Register published symbols in global registry
 
-Pass 2: Verify Dependencies
+Verify Dependencies
   - Check that required variables exist
   - Validate cross-feature-set references
   - Enforce business activity boundaries
 
-Pass 3: Detect Circular Events
+Detect Circular Events
   - Build event emission graph
   - DFS for cycles
   - Report circular chains
 
-Pass 4: Detect Orphans
+Detect Orphans
   - Collect all emitted events
   - Collect all handled events
   - Warn about orphans
 ```
 
 Why multiple passes? Some checks require information from all feature sets — circular events and orphan detection can only work once every feature set has been analyzed. A single-pass approach would miss them.
+
+Orphan detection has a wrinkle worth noting, because it is where a whole-program check meets a one-file tool. `aro check` walks a file at a time, and a handler living in a sibling file would read as missing — every emission in the file would be reported as an orphan. So `analyze` takes an `externallyHandledEvents` set: non-empty only when the caller knows it is looking at part of an application. Whole-program analysis passes nothing and gets the strict answer.
 
 ---
 
@@ -418,20 +437,27 @@ Error: Circular event chain detected: UserCreated → NotificationSent → UserC
 
 The analyzer needs to know what a verb *does* — is it a mutation? A response? A server operation that must run even when its argument is a literal? These classifications live in a shared module: `Sources/ARORuntime/Core/VerbSets.swift`.
 
-| Category | Representative Verbs | Used For |
-|----------|---------------------|----------|
-| update | update, modify, change | Modify fields on data objects in repositories |
-| create | create, make, build, construct | New entity creation |
-| response | log, print, send, emit, notify | Skip expression shortcut |
-| server | start, stop, keepalive, schedule | Force execution even with literal arguments |
-| request | extract, retrieve, fetch, parse | Mark as REQUEST role |
-| own | compute, validate, compare, transform | Mark as OWN role |
-| export | publish, store | Mark as EXPORT role |
-| query | filter, sort, group | Collection processing |
-| io | read, write, copy, move | File operations |
-| state | accept | State transition (allow rebind) |
+Eleven sets, in 57 lines:
 
-**Why a shared module matters.** Before `VerbSets.swift` existed, verb classification was duplicated between the interpreter (`FeatureSetExecutor`) and the compiler (`LLVMCodeGenerator`). When someone added a new verb to one, the other diverged silently. Now there's one canonical list and both modes reference it.
+| Set | Verbs | Why it exists |
+|-----|-------|---------------|
+| `testVerbs` | then, assert | Fall through to execution so the test actions see bindings |
+| `requestVerbs` | call, invoke, request, probe, fetch, retrieve, listen, parse, exists | External invocation — must always run |
+| `updateVerbs` | update, modify, change, set, configure | Always run; they handle rebinding internally |
+| `createVerbs` | create, make, build, construct | Run when specifiers are present (typed entities need IDs) |
+| `mergeVerbs` | merge, combine, join, concat | Always run — transform and bind |
+| `computeVerbs` | compute, calculate, derive | Run when specifiers are present (`+7d`, `hash`, `format`) |
+| `extractVerbs` | extract, get | Run when specifiers are present |
+| `queryVerbs` | filter, map, reduce, aggregate, split, group | Always run — where-clauses and regex |
+| `deleteVerbs` | delete, remove, destroy, clear | Always run |
+| `responseVerbs` | write, read, store, save, persist, log, print, send, emit, notify, alert, signal, broadcast | Result must not be rebound to the expression value |
+| `serverVerbs` | start, stop, restart, keepalive, schedule, stream, subscribe, sleep, delay, pause | Always run, for the side effects |
+
+The sets are not a taxonomy of *what a verb means* — semantic role already does that. They answer one narrower question that the executor asks of every statement: **can this statement's expression fast path be taken, or must the action actually run?** Nearly every entry in the file carries a bug number in its comment, and they all have the same shape. `Exists the <flag> for "./path"` puts its path in expression position; skipping execution bound the path *string* to `<flag>` instead of the boolean the action computes (GitLab #494). `Delete the <gone> from "./f.txt"` did the same and deleted nothing while answering `[OK]` (GitLab #493). `parse` sits in `requestVerbs` rather than `extractVerbs` so dispatch stays qualifier-driven instead of statement-shape-driven (GitLab #521).
+
+Each of those was a *silently wrong answer*, not a crash — which is why the classification is data in one file rather than conditions spread through the executor.
+
+**How shared is shared.** `VerbSets` is genuinely the single source for the interpreter: `FeatureSetExecutor` mirrors all eleven onto instance properties and consults them per statement. The compiler's relationship is looser than it sounds. Binary mode emits direct LLVM action calls and has no `needsExecution` decision to make, so it does not consult these sets at all — the module's own header calls itself "the canonical vocabulary reference for both modes", which is the honest claim. The parity win was real, but it came from deleting a duplicate table, not from a shared runtime dependency. Where the two modes still keep their own lists — the transient framework variables cleared between statements — they have drifted, and drifted into a wrong answer (GitLab #552). Chapter 11 has that story.
 
 ### Plugin Compatibility Checking
 
@@ -460,7 +486,7 @@ ARO's semantic analysis enforces the language's design principles:
 
 5. **Event chain validation**: Circular event chains and orphaned events are detected.
 
-6. **Shared verb classification**: `VerbSets.swift` provides a single authoritative source for verb categories, keeping interpreter and compiler behavior synchronized.
+6. **Shared verb classification**: `VerbSets.swift` provides a single authoritative source for the eleven verb categories the interpreter consults, and the canonical vocabulary reference for both modes.
 
 The analyzer is designed for reporting, not aborting. Multiple errors can be collected and shown to the user at once.
 

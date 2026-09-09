@@ -2,20 +2,27 @@
 
 ## The Lexer Architecture
 
-ARO's lexer (`Lexer.swift`, ~962 lines) is hand-written — no lexer generator, no parser combinator library. It processes source characters one at a time and produces a flat list of tokens for the parser to consume.
+ARO's lexer (`Lexer.swift`, ~930 lines) is hand-written — no lexer generator, no parser combinator library. It processes source characters one at a time and produces a flat list of tokens for the parser to consume.
 
 You might wonder why hand-written. The short answer is control. A generated lexer would make the interesting bits — regex disambiguation, recursive string interpolation, article and preposition recognition — harder to customize. The hand-written approach lets us do unusual things where ARO's grammar is unusual.
 
-The lexer maintains four pieces of state as it scans:
+The lexer maintains this state as it scans:
 
 | Field | Purpose |
 |-------|---------|
-| `source` | The full source string being scanned |
-| `currentIndex` | Where we are right now |
-| `location` | Current line/column for error messages |
+| `utf8` | The source encoded once as a `[UInt8]` buffer |
+| `pos` / `nextPos` | The current byte position, and the next one, cached |
+| `location` | Current line/column/offset for error messages |
 | `lastTokenKind` | What we just emitted (needed for `/` disambiguation) |
+| `internTable` | Deduplicates repeated identifier and keyword lexemes |
+| `diagnostics` | Optional collector; when present, bad characters are reported and skipped instead of thrown |
 
-That last field — `lastTokenKind` — is subtle. Most lexers are purely forward-looking. ARO's needs one token of backwards context to resolve whether `/` starts a regex or is a division operator. More on that shortly.
+Scanning over a byte array rather than over `String.Index` is what makes every
+position operation O(1) (GitLab #115). `source` is still held, but only for the
+public initialiser's signature and for decoding the occasional multi-byte
+character.
+
+The `lastTokenKind` field is the subtle one. Most lexers are purely forward-looking. ARO's needs one token of backwards context to resolve whether `/` starts a regex or is a division operator. More on that shortly.
 
 ---
 
@@ -362,17 +369,26 @@ This location tracking happens on every single `advance()` call, which is every 
 
 ## Keyword Recognition
 
-After scanning an identifier, we do a quick table lookup: is this word a keyword, an article, or a preposition? The lookup order matters:
+After scanning an identifier, we do a quick table lookup: is this word a keyword, an article, or a preposition? All three live in one `reservedWords` dictionary that maps the lowercased word to a `ReservedWord` case:
 
 ```text
 scan word as identifier
-→ check keyword table (lowercased)   → if match, emit keyword token
-→ check article values               → if match, emit article token
-→ check preposition values           → if match, emit preposition token
-→ otherwise, emit identifier token
+→ look up the lowercased lexeme in reservedWords
+   → .keyword(kind)     → emit that keyword token
+   → .article(a)        → emit article token
+   → .preposition(p)    → emit preposition token
+→ no entry, emit identifier token
 ```
 
+It used to be three separate lookups — keywords, then articles, then prepositions. Folding them into one table is a small change that removes two dictionary probes from every identifier in the file.
+
 One important detail: the lookup is case-insensitive. `FROM`, `From`, and `from` all become `preposition(.from)`. But the original case is preserved in the lexeme field — so error messages can show you exactly what you wrote, not what the lexer normalized it to.
+
+Two words in that table are classified against the grain. `for` and `at` are
+stored as *prepositions*, not keywords, even though they also open a loop
+(`for each …`, `at <index>`). The parser accepts both spellings; the statement
+dispatch table has an entry for `.for` and one for `.preposition(.for)` for
+exactly this reason.
 
 This "scan then classify" approach also means that a word like `format` does not accidentally become a keyword just because it starts with `for`. The scanner greedily consumes the whole word before checking any lookup table.
 
@@ -400,8 +416,11 @@ When the lexer encounters something it cannot handle, it throws. The error types
 - **Invalid escape sequence** — something like `\q` inside a string
 - **Invalid unicode escape** — a malformed `\u{...}` sequence
 - **Invalid number** — something that looked like a number but was not (e.g., `0x` with no hex digits)
+- **Triple-quoted string removed** — a case of its own, so a `"""` gets one accurate message instead of a cascade
 
 Every error carries the source location where it occurred. The parser catches these and formats them with the line and column for display.
+
+Throwing is only half the story. When the lexer is constructed with a `DiagnosticCollector`, the unexpected-character and removed-delimiter paths *report and continue* instead of throwing, so one bad byte does not hide every error after it. Without a collector — the path a library caller takes — the same conditions throw. Same rules, two contracts, chosen by whether the caller has somewhere to put a list of errors. The parser makes the same distinction, for the same reason (Chapter 3).
 
 ---
 
@@ -418,17 +437,25 @@ Log "Hello,
 World!" to the <console>.
 ```
 
-In the scanner this is the *absence* of a rule: `scanString()` simply no longer treats a newline as a termination error. The cost is that a missing closing quote swallows the following lines, so an unterminated string is reported at its **opening** quote, where the typo is. The older triple-quote form (`"""…"""`, with dedent semantics in `scanTripleQuotedString()`) still lexes but is deprecated with a warning; its removal is tracked in GitLab #524.
+In the scanner this is the *absence* of a rule: `scanString()` simply no longer treats a newline as a termination error. The cost is that a missing closing quote swallows the following lines, so an unterminated string is reported at its **opening** quote, where the typo is.
+
+The older triple-quote form (`"""…"""`, with dedent semantics) is gone (GitLab #524). It is worth looking at what replaced it, because deleting a literal form is not the same as deleting its code. `scanToken` still watches for `"""` at the opening quote — not to scan it, but to produce one good diagnostic:
+
+```text
+Triple-quoted strings were removed — a plain "…" string spans multiple lines
+```
+
+Left alone, the lexer would read `"""` as an empty string followed by an unterminated one and report something unrecognisable. So the delimiter keeps a case of its own in `LexerError` (`tripleQuotedStringRemoved`), and `skipPastTripleQuoteBody()` walks to the closing delimiter so the body does not lex into a second, unrelated complaint. When a diagnostics collector is attached, an empty string literal stands in for the removed one, which keeps the parser from adding "Expected object" on a line that has nothing wrong with it. One mistake, one message.
 
 ### Raw Strings
 
-Raw string literals disable escape processing entirely:
+Raw string literals disable escape processing entirely, and the *quote character* is what selects them (ARO-0060):
 
 ```aro
-Create the <pattern> with r"\.aro$".
+Create the <pattern> with '\.aro$'.
 ```
 
-The `r` prefix signals `scanRawString()`, which emits the content verbatim. This is especially useful for regex patterns where backslashes are everywhere — without raw strings, `\.aro$` would require `\\.aro$`, which is unpleasant to read.
+A single-quoted literal routes to `scanRawString()`, which emits the content verbatim; only `\'` is special, so the closing quote can be escaped. There is no prefix form — no `r"…"` — because the opening character alone should tell you how the rest of the literal will be read. This matters most for regex patterns, where without raw strings `\.aro$` would have to be written `\\.aro$`.
 
 ### Hexadecimal and Binary Integer Literals
 
@@ -443,7 +470,7 @@ The `0x` and `0b` prefixes route to `scanHexNumber()` and `scanBinaryNumber()` r
 
 ## Chapter Summary
 
-The lexer is 962 lines for what seems like a simple job. It earns those lines with five interesting choices:
+The lexer is around 930 lines for what seems like a simple job. It earns those lines with five interesting choices:
 
 1. **Articles and prepositions as token types**: Not keywords — their own category. The parser matches grammar structure, not strings.
 
@@ -453,7 +480,7 @@ The lexer is 962 lines for what seems like a simple job. It earns those lines wi
 
 4. **Source location on every token**: Line, column, and byte offset, tracked on every character advance. These flow all the way to terminal error output.
 
-5. **Extended literal forms**: Triple-quoted strings, raw strings, hex and binary integers — all added in ARO 0.7 as new branches in the existing scanner without restructuring anything.
+5. **Extended literal forms**: Multiline plain strings, single-quoted raw strings, hex and binary integers — each a new branch in the existing scanner, none of them a restructuring. The triple-quote delimiter came and went the same way: one branch to add it, one branch to turn it into a diagnostic.
 
 The constrained syntax actually helps here. No user-defined operators means no new token types to worry about. No metaclass syntax means no special-casing. The scanner is longer than you might expect, but it is not complicated.
 

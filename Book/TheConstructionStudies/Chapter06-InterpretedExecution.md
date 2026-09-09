@@ -53,7 +53,7 @@ The engine is a Swift actor — which means the compiler ensures no two tasks to
   <rect x="530" y="30" width="140" height="80" rx="5" class="box"/>
   <text x="600" y="55" class="title" text-anchor="middle">ActionRegistry</text>
   <text x="540" y="75" class="label">verb → Action</text>
-  <text x="540" y="90" class="label">61 built-in</text>
+  <text x="540" y="90" class="label">71 built-in</text>
 
   <!-- Arrows -->
   <path d="M 350 110 L 350 140" class="arrow"/>
@@ -69,11 +69,17 @@ The engine is a Swift actor — which means the compiler ensures no two tasks to
 
 ## Actor-Based Concurrency
 
-ARO's runtime uses Swift actors for thread-safe shared state. `ExecutionEngine` and `ActionRegistry` are actors, not classes.
+ARO's runtime uses Swift actors for shared state that needs async coordination. `ExecutionEngine` and `EventBus` are actors. `ActionRegistry` and `FeatureSetExecutor` are not — they are `final class` with hand-managed thread safety, and the reason is instructive.
 
 ### Why Actors?
 
 Swift 6.3 made data races compile errors. Actors are the answer: the compiler enforces that mutable state is only touched by one task at a time. No manual locking, no `DispatchQueue` gymnastics — the type system does it.
+
+### Why Not Always Actors?
+
+An actor makes every access `await`. That is exactly right for the event bus, whose work is inherently asynchronous. It is exactly wrong for a lookup table consulted once per statement from code paths that include a C bridge which cannot `await` anything. So `ActionRegistry` is a `final class: @unchecked Sendable` — lock-guarded rather than actor-isolated — and `FeatureSetExecutor` is a `final class: Sendable` holding no mutable state of its own.
+
+The rule that emerged: reach for an actor when the state has async coordination to do. Reach for a lock when the state is a table and the callers are synchronous. Choosing the actor anyway pushes `await` into places that then have to bridge back out of it, and the bridge is where the deadlocks live (Chapter 9).
 
 ### Actor Isolation in Practice
 
@@ -89,36 +95,42 @@ EventBus is also an actor, but its `SubscriptionStore` is a lock-backed class so
 
 Actions access runtime services through the context. Think of it as the action's window into the world — variables, services, events, metadata.
 
-| Method Group | Methods | Purpose |
+`ExecutionContext` itself has an empty body. It is a composition of nine narrower protocols, and an action that only needs to read a variable can be written against `VariableBinding` alone:
+
+| Sub-protocol | Methods | Purpose |
 |-------------|---------|---------|
-| Variables | `resolve`, `require`, `bind`, `exists`, `unbind` | Read/write the variable space |
-| Type-Aware | `resolveTyped`, `bindTyped`, `typeOf` | Typed value management |
-| Services | `service`, `register` | Access HTTP, file, socket services |
-| Repositories | `repository`, `registerRepository` | CRUD storage access |
-| Response | `setResponse`, `getResponse` | Track the response for short-circuit |
-| Events | `emit` | Fire events into the bus |
-| Schema | `schemaRegistry` | OpenAPI schema access (ARO-0046) |
-| Wait State | `enterWaitState`, `waitForShutdown`, `signalShutdown` | Keepalive management |
-| Streaming | `bindLazy`, `resolveAsStream`, `isLazy`, `teeIfNeeded` | Lazy stream support (ARO-0051) |
-| Templates | `appendToTemplateBuffer`, `flushTemplateBuffer` | Template rendering (ARO-0050) |
-| Output | `outputContext`, `isDebugMode`, `isTestMode`, `isCompiled` | Execution mode |
-| Metadata | `featureSetName`, `businessActivity`, `executionId`, `parent` | Who am I? |
+| `VariableBinding` | `resolve`, `resolveAny`, `require`, `bind`, `unbind`, `exists`, `variableNames`, `enterMutableScope`, `exitMutableScope`, `resolveTyped`, `bindTyped`, `typeOf` | Read/write the variable space |
+| `ServiceRegistryAccess` | `service`, `register`, `registerWithTypeId`, `schemaRegistry` | HTTP, file, socket services; OpenAPI schemas (ARO-0046) |
+| `RepositoryAccess` | `repository`, `registerRepository` | CRUD storage access |
+| `ResponseManagement` | `setResponse`, `getResponse` | Track the response for short-circuit |
+| `EventEmission` | `eventBus`, `emit` | Fire events into the bus |
+| `ContextMetadata` | `featureSetName`, `businessActivity`, `executionId`, `parent`, `createChild`, `container`, `isDebugMode`, `isTestMode`, `isCompiled`, `suppressLogPrefix` | Who am I, and how am I running? |
+| `WaitStateSignaling` | `enterWaitState`, `waitForShutdown`, `isWaiting`, `signalShutdown` | Keepalive management |
+| `OutputFormatting` | `outputContext` | `.human` / `.machine` / `.developer` (ARO-0031) |
+| `TemplateBuffering` | `appendToTemplateBuffer`, `flushTemplateBuffer`, `isTemplateContext`, `templateEscaping` | Template rendering (ARO-0050) |
+
+Streaming (`bindLazy`, `resolveAsStream`, `isLazy`, `teeIfNeeded`, ARO-0051) is deliberately *not* in the protocol. Those live on the concrete `RuntimeContext`, so an action reaches them by asking for the concrete type. Lazy streams are an optimization the interpreter can offer, not a promise every context must keep.
 
 ---
 
 ## FeatureSetExecutor
 
-Each feature set gets an executor that processes statements sequentially. The loop is simple on purpose:
+Each feature set gets an executor that walks its statements in source order. The loop is simple on purpose:
 
 ```text
 execute:
   for each statement in featureSet:
     executeStatement(statement)
-    if response has been set:
+    if getResponse() != nil:
       break  ← short-circuit on Return/Throw
+  drainDeferredResults()   ← force anything still outstanding
 ```
 
 Once a `Return` or `Throw` runs, the response is set and the loop stops. Remaining statements are skipped.
+
+Before each statement runs, the executor opens a fresh statement scope and unbinds twenty-one framework variables — `_literal_`, `_expression_`, `_with_`, `_where_value_` and the rest. These are the channel through which a statement's modifiers reach its action, and they are statement-local by construction. Leaving one bound is how a `with { separator: "-" }` from one statement silently reappears in the next; the compiled path, which clears only fourteen of them and opens no scope, does exactly that (GitLab #552).
+
+That last line of the loop is not bookkeeping. It is the other half of the execution model.
 
 <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -138,13 +150,13 @@ Once a `Return` or `Throw` runs, the response is set and the loop stops. Remaini
 
   <!-- Statements -->
   <rect x="50" y="30" width="200" height="40" rx="5" class="box stmt"/>
-  <text x="150" y="55" class="label" text-anchor="middle">&lt;Extract&gt; the &lt;id&gt; from &lt;request&gt;.</text>
+  <text x="150" y="55" class="label" text-anchor="middle">Extract the &lt;id&gt; from &lt;request&gt;.</text>
 
   <rect x="50" y="90" width="200" height="40" rx="5" class="box stmt"/>
-  <text x="150" y="115" class="label" text-anchor="middle">&lt;Retrieve&gt; the &lt;user&gt; from &lt;repo&gt;.</text>
+  <text x="150" y="115" class="label" text-anchor="middle">Retrieve the &lt;user&gt; from &lt;repo&gt;.</text>
 
   <rect x="50" y="150" width="200" height="40" rx="5" class="box response"/>
-  <text x="150" y="175" class="label" text-anchor="middle">&lt;Return&gt; an &lt;OK&gt; with &lt;user&gt;.</text>
+  <text x="150" y="175" class="label" text-anchor="middle">Return an &lt;OK&gt; with &lt;user&gt;.</text>
 
   <rect x="50" y="210" width="200" height="40" rx="5" class="box" fill="#ddd"/>
   <text x="150" y="235" class="label" text-anchor="middle">(not executed - response set)</text>
@@ -165,13 +177,64 @@ Once a `Return` or `Throw` runs, the response is set and the loop stops. Remaini
 
 ---
 
+## Statements Start in Order. They Do Not Finish in Order.
+
+The loop above says "execute the statement". What that means changed, and it is the single most consequential thing about ARO's interpreter (ARO-0088).
+
+A statement *starts* where you wrote it. The program waits for it at the **first read of its result** — which may be several statements later, or never. Two independent two-second HTTP requests in one feature set therefore take about two seconds, not four, without anyone writing a single concurrency construct:
+
+```aro
+Request the <weather> from "https://api.example.com/weather".
+Request the <news> from "https://api.example.com/news".
+Log <weather> to the <console>.    (* forces the first *)
+Log <news> to the <console>.       (* the second is already in flight *)
+```
+
+### Deferral is an allowlist, not a heuristic
+
+The obvious way to build this is to defer everything and force on demand. ARO does the opposite: `LazyActionPolicy` names the thirty value-producing verbs that *may* defer — `retrieve`, `fetch`, `read`, `request`, `compute`, `filter`, `map`, `sort`, `format` and so on — and everything else runs at its own statement.
+
+Two lists, and the second one matters more:
+
+| List | Verbs | Effect |
+|------|-------|--------|
+| `deferrableVerbs` | 30 value-producers | may return a future |
+| `forceAtSiteVerbs` | `return`, `throw`, `log`, `publish`, `emit`, `compare`, `validate`, `accept` | always run here, forcing whatever they read |
+
+Effects never defer. That is what keeps the language honest: `Log` runs at its own statement, so console output stays in source order even though the values it prints were computed out of order. `Sleep` is deliberately *not* deferrable, because for `Sleep` the delay **is** the effect — deferring it would defer nothing.
+
+The allowlist is the conservative choice on purpose. A verb the policy has never heard of runs eagerly, which is always correct and sometimes slow. The reverse default would be sometimes fast and occasionally wrong.
+
+### Mechanics
+
+A deferred action returns an `AROFuture` whose `Task` runs on `ActionTaskExecutor` — a custom `TaskExecutor` over GCD's *elastic* global queue rather than Swift's fixed-size cooperative pool. That choice is load-bearing: a forcer blocks a thread, and if forcers and the work that would unblock them shared a fixed pool, a cascading chain could fill it with threads waiting on each other. GCD spawns more threads instead.
+
+Each statement gets its own scope for those framework variables precisely because of deferral — a deferred action that reads `_with_` when it finally runs must see *its* statement's modifiers, not whatever the loop has moved on to.
+
+Nothing gets lost at the end. `drainDeferredResults` forces everything still outstanding when the feature set exits, so a failure nobody read is still reported, attributed to the statement that caused it rather than to the exit.
+
+### The knobs
+
+| Variable | Default | Does |
+|----------|---------|------|
+| `ARO_NO_DEFER` | unset | Set to anything: every action runs at its statement |
+| `ARO_FORCE_WARN_SECONDS` | `5` | Warn when a force waits this long; `0` disables |
+| `ARO_STREAM_PREFETCH` | `2` | How far a stream producer may run ahead of its consumer |
+| `ARO_MAX_CALL_DEPTH` | `50000` | Recursion ceiling; `0` disables |
+
+`ARO_NO_DEFER=1` is the debugging tool worth remembering: if a suspected bug disappears under it, the bug is about ordering.
+
+---
+
 ## ActionRegistry Design
 
-The registry maps lowercase verb strings to action types. Registration happens at startup; lookup happens for every statement execution. Both operations are actor-protected.
+The registry maps lowercase verb strings to action types. Registration happens at startup; lookup happens for every statement execution.
 
-61 built-in actions are registered at startup. Each registers one or more verbs. Lookup is a dictionary hit on the lowercase verb string. A fresh action instance is created per invocation — actions are stateless.
+Actions are not registered one at a time. `createBuiltInActions()` calls eleven **modules** — Request, Own, Response, Server, Socket, File, DataPipeline, Test, Terminal, System, and (off Windows) Git — each handing back an array of action types. Adding an action is one entry in one module array.
 
-Because the registry and engine are actors, action protocols are defined as `async throws`. Every action can do async I/O — network calls, file reads, database queries — without blocking.
+That produces **71 built-in actions** on macOS and Linux, claiming about 130 verbs between them; `aro actions` prints the live list and `aro actions <verb>` the details of one. Lookup is a dictionary hit on the lowercase verb string, and a fresh action instance is created per invocation — actions are stateless.
+
+Action methods are `async throws` so every action can do network calls, file reads, or database queries without blocking. Under ARO-0088 most of them are not awaited where they are written; see the deferral section above.
 
 <svg viewBox="0 0 600 250" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -189,7 +252,7 @@ Because the registry and engine are actors, action protocols are defined as `asy
 
   <!-- Statement -->
   <rect x="30" y="30" width="220" height="40" rx="5" class="box"/>
-  <text x="140" y="55" class="label" text-anchor="middle">&lt;Extract&gt; the &lt;user&gt; from &lt;request&gt;.</text>
+  <text x="140" y="55" class="label" text-anchor="middle">Extract the &lt;user&gt; from &lt;request&gt;.</text>
 
   <!-- Verb lookup -->
   <rect x="30" y="100" width="100" height="30" rx="5" class="box"/>
@@ -201,7 +264,7 @@ Because the registry and engine are actors, action protocols are defined as `asy
   <text x="180" y="135" class="label">"extract" → ExtractAction</text>
   <text x="180" y="150" class="label">"compute" → ComputeAction</text>
   <text x="180" y="165" class="label">"return" → ReturnAction</text>
-  <text x="180" y="180" class="label">... (61 total)</text>
+  <text x="180" y="180" class="label">... (71 total)</text>
 
   <!-- Action instance -->
   <rect x="400" y="90" width="160" height="70" rx="5" class="box"/>
@@ -236,7 +299,7 @@ Actions receive structured information via descriptors. The executor builds thes
 For loops, child contexts are created per iteration. The loop variable is bound fresh each time. Parent variables are still visible — child contexts inherit from parent but have their own bindings.
 
 ```aro
-For each <item> in <items> {
+for each <item> in <items> {
     (* each iteration gets its own child context *)
     (* <item> is bound fresh *)
     (* <items> from parent is still visible *)
@@ -324,21 +387,22 @@ Implementation references:
 
 The interpreted execution model is straightforward:
 
-1. **ExecutionEngine** (actor) loads the program and registers feature sets with EventBus
-2. **ActionRegistry** (actor) maps verbs to action implementations with thread-safe access
+1. **ExecutionEngine** (actor) loads the program and, in a fixed order, registers ten kinds of handler with EventBus before running `Application-Start`
+2. **ActionRegistry** (lock-guarded class) maps ~130 verbs to 71 built-in actions, assembled from eleven modules
 3. **EventBus** (actor) routes events to matching handlers
-4. **FeatureSetExecutor** processes statements sequentially
+4. **FeatureSetExecutor** starts statements in source order and forces them at first read; effects never defer
 5. **Descriptors** carry structured information to actions
-6. **Context hierarchy** enables scoped variable binding for loops
+6. **Context hierarchy** enables scoped variable binding for loops — and per-statement scopes for framework variables, which deferral makes mandatory
 
-The use of Swift actors ensures thread safety without manual lock management. All action methods are async, enabling cooperative scheduling.
+Actors are used where state needs async coordination and locks where it does not; that boundary is a design decision, not an oversight. Action methods are `async throws`, which is what lets a statement's work outlive the statement.
 
 The interpreter is the reference implementation. Native compilation (Chapter 8) generates code that calls the same action implementations through a C bridge.
 
 Implementation references:
-- `Sources/ARORuntime/Core/ExecutionEngine.swift`
-- `Sources/ARORuntime/Core/FeatureSetExecutor.swift`
-- `Sources/ARORuntime/Actions/ActionRegistry.swift`
+- `Sources/ARORuntime/Core/ExecutionEngine.swift` (~1,640 lines)
+- `Sources/ARORuntime/Core/FeatureSetExecutor.swift` (~2,030 lines)
+- `Sources/ARORuntime/Actions/ActionRegistry.swift` (~490 lines)
+- `Sources/ARORuntime/Bridge/LazyActionPolicy.swift`, `Bridge/AROFuture.swift` (ARO-0088)
 
 ---
 

@@ -1,6 +1,11 @@
 # ARO Action Reference
 
-Complete reference of all 70 ARO actions organized by category.
+Complete reference of all 71 ARO actions organized by category. The names below
+are the verbs you write. A handful are registered under a longer internal name —
+`Checkout`/`Commit` under `GitCheckout`/`GitCommit`, `Keepalive` under
+`WaitForEvents`, `Parse` under `ParseDispatch` — which is what
+`aro actions` prints; the verb is what the parser accepts. Run `aro actions` for
+the live table and `aro actions --qualifiers` for the qualifier set.
 
 > Git actions (`Stage`, `Commit`, `Push`, `Pull`, `Clone`, `Checkout`, `Tag`) operate on the `<git>` system object and emit `git.commit`, `git.push`, `git.pull`, `git.checkout`, `git.tag`, `git.clone` events. See [ARO-0080](../../Proposals/ARO-0080-git-actions.md) and Chapter 48 of TheLanguageGuide.
 
@@ -22,7 +27,7 @@ Complete reference of all 70 ARO actions organized by category.
 | **Clone**     | Git               | REQUEST           | Clones a remote repository via `<git>`. Optional `branch:` checks out that ref at clone time. Emits `git.clone`.<br>`Clone the <repo> from the <git> with { url: "...", path: "./out", branch: "main" }.` |
 | **Close**     | Server            | SERVER            | Terminates a connection or handle.<br>`Close the <database-connections> for the <application>.` |
 | **Commit**    | Git               | EXPORT            | Creates a Git commit on `<git>`. Emits `git.commit`.<br>`Commit the <result> to the <git> with "feat: add feature".` |
-| **Compare**   | Evaluation        | OWN               | Compares two values or structures.<br>`Compare the <hash> against the <stored-hash>.` |
+| **Compare**   | Evaluation        | OWN               | Compares two values and binds a fresh result: `<r: matches>` is the boolean, `<r: result>` is `equal`/`less`/`greater`.<br>`Compare the <same> from the <hash> against the <stored-hash>.` |
 | **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`Compute the <total> from <price> * <quantity>.` |
 | **Connect**   | Server            | SERVER            | Establishes a link between endpoints.<br>`Connect the <socket> to the <host: "localhost">.` |
 | **Copy**      | File System       | SERVER            | Duplicates data from one location to another.<br>`Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
@@ -48,6 +53,7 @@ Complete reference of all 70 ARO actions organized by category.
 | **Notify**    | Communication     | RESPONSE          | Signals a change or event to observers.<br>`Notify the <alert> to the <admin>.` |
 | **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML. Specifiers: `links`, `markdown`, `title`.<br>`ParseHtml the <result: markdown> from the <html>.` |
 | **ParseLinkHeader** | Processing   | OWN               | Parses RFC 8288 Link headers for pagination.<br>`Parse the <links: link-header> from the <response>.` |
+| **Probe**     | Communication     | REQUEST           | Issues a lightweight liveness/metadata request without fetching a body.<br>`Probe the <health> from the <url>.` |
 | **Prompt**    | Terminal          | REQUEST           | Prompts the user for terminal input.<br>`Prompt the <answer> for the <question>.` |
 | **Publish**   | Communication     | EXPORT            | Makes a variable globally accessible across feature sets.<br>`Publish as <app-config> <config>.` |
 | **Pull**      | Git               | REQUEST           | Pulls remote changes into `<git>`. Emits `git.pull`.<br>`Pull the <updates> from the <git>.` |
@@ -60,6 +66,7 @@ Complete reference of all 70 ARO actions organized by category.
 | **Request**   | Communication     | REQUEST           | Makes an HTTP request. Returns response object with body, status, headers.<br>`Request the <response> from the <url>.`<br>`Request the <response> to the <url> with <data>.` |
 | **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier from a repository, or `<status>`/`<log>`/`<branch>` from `<git>`.<br>`Retrieve the <user> from the <user-repository> where <id> is <id>.`<br>`Retrieve the <status> from the <git>.` |
 | **Return**    | Control           | RESPONSE          | Sends back a result from a feature set.<br>`Return an <OK: status> with <data>.` |
+| **Reverse**   | Manipulation      | OWN               | Reverses a list or string. Reversing is an action, not a Compute qualifier.<br>`Reverse the <backwards> for the <items>.` |
 | **Schedule**  | Communication     | EXPORT            | Schedules a delayed or recurring action.<br>`Schedule the <task> for the <timer> with 5000.` |
 | **Select**    | Terminal          | REQUEST           | Presents a terminal selection menu.<br>`Select the <choice> from the <options>.` |
 | **Send**      | Communication     | RESPONSE          | Delivers data or message outward.<br>`Send the <message> to the <connection>.` |
@@ -84,15 +91,15 @@ Complete reference of all 70 ARO actions organized by category.
 
 ## Summary by Semantic Role
 
-- **REQUEST** (13 actions): Extract, Retrieve, Receive, Request, Read, Stream, List, Stat, Exists, Prompt, Select, Pull, Clone
-- **OWN** (30 actions): Compute, Validate, Compare, Transform, Create, Update, Delete, Filter, Group, Sort, Split, Merge, Join, Map, ParseHtml, ParseLinkHeader, Reduce, Accept, Given, When, Then, Assert, Call, Execute, Sleep, Clear, Show, Include, Stage, Checkout
+- **REQUEST** (15 actions): Extract, Retrieve, Receive, Request, Probe, Read, Stream, List, Stat, Exists, Prompt, Select, Pull, Clone, ParseLinkHeader
+- **OWN** (30 actions): Compute, Validate, Compare, Transform, Create, Update, Delete, Filter, Group, Sort, Reverse, Split, Merge, Join, Map, ParseHtml, Reduce, Accept, Given, When, Then, Assert, Call, Execute, Sleep, Clear, Show, Include, Stage, Checkout
 - **RESPONSE** (11 actions): Return, Throw, Send, Log, Write, Append, Store, Notify, Broadcast, Render, Repaint
 - **EXPORT** (6 actions): Publish, Emit, Schedule, Commit, Push, Tag
 - **SERVER** (9 actions): Start, Stop, Listen, Connect, Close, Keepalive, Make, Copy, Move
 
 ## Summary by Category
 
-- **Communication** (7): Send, Receive, Request, Notify, Publish, Emit, Schedule
+- **Communication** (8): Send, Receive, Request, Probe, Notify, Publish, Emit, Schedule
 - **Control** (4): Execute, Call, Return, Sleep
 - **Data Access** (2): Extract, Retrieve
 - **Enumeration** (3): List, Filter, Sort
@@ -102,7 +109,7 @@ Complete reference of all 70 ARO actions organized by category.
 - **Git** (7): Stage, Commit, Push, Pull, Clone, Checkout, Tag
 - **I/O** (4): Read, Stream, Write, Append
 - **Inspection** (1): Stat
-- **Manipulation** (3): Split, Merge, Join
+- **Manipulation** (4): Split, Merge, Join, Reverse
 - **Monitoring** (1): Log
 - **Mutation** (3): Create, Update, Delete
 - **Persistence** (1): Store

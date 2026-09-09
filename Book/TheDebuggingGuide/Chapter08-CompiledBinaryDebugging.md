@@ -8,11 +8,11 @@
 
 ARO runs two ways. `aro run` walks the AST in an interpreter; `aro build` compiles to LLVM IR and links a native binary. Both consume the same `.aro` source. From the source author's perspective, the two are interchangeable; from the debugger's perspective, they are dramatically different.
 
-`aro debug` drives the interpreter. Every feature in this book — statement-boundary stepping, the five breakpoint flavors, watches, record/replay, DAP — runs against the interpreter. If you want the full experience, debug from source.
+`aro debug` drives the interpreter. Every feature in this book — statement-boundary stepping, the six breakpoint flavors, watches, record/replay, DAP — runs against the interpreter. If you want the full experience, debug from source.
 
-The native binary is what you ship. It has function-level DWARF (chapter 8.3 below) so `lldb` can name your feature sets in a backtrace and read the source file each was defined in. That is the entire compiled-mode debugging story in v1; per-line breakpoints on `.aro` source inside a compiled binary are still a follow-up (issue #231).
+The native binary is what you ship. It carries real DWARF — a `DISubprogram` per feature set *and* a `DILocation` per statement — so `lldb` names your feature sets in a backtrace, reads the source file each was defined in, and resolves `breakpoint set --file main.aro --line 5` against your ARO source on both macOS and Linux (issue #231, both phases). What it does not carry is the rest of this book: watches, event and error-any breakpoints, record and replay, the causal call stack. Those live in the interpreter.
 
-The recommendation is the title of this chapter: **debug from source; ship the compile.**
+The recommendation is still the title of this chapter: **debug from source; ship the compile.** Not because the compiled binary is blind, but because the interpreter is where the debugger is.
 
 ## 8.2 What lldb does see in a compiled ARO binary
 
@@ -41,34 +41,44 @@ Under `lldb`, function-level DWARF gets you:
 
 The function's *name* and *source file* are visible. Backtraces during a crash report `Application-Start` instead of a raw address. That is the function-level DWARF working as designed.
 
-## 8.3 What lldb does not see (yet)
+## 8.3 Per-line breakpoints in a compiled binary
 
-Per-line breakpoints inside ARO source. If you try `breakpoint set --file main.aro --line 4`, `lldb` either refuses or sets a breakpoint that never resolves. The reason is technical: per-line breakpoints require LLVM `DILocation` metadata, which the codegen attaches via the LLVM IR builder's `setCurrentDebugLocation` call. The Swifty-LLVM dependency the compiler uses keeps the underlying builder handle internal; reaching it requires an upstream Swifty-LLVM change or a small bridge that we have not yet shipped.
+They work. The codegen sets the IR builder's current debug location before emitting the instructions for each statement, so every statement's instructions carry a `!dbg` reference back to `(file, line, column)` in the `.aro` source:
 
-Tracked in issue #231's second phase. Until it lands:
+```text
+(lldb) breakpoint set --file main.aro --line 5
+Breakpoint 1: where = HelloWorld`aro_fs_application_start_entry_point + 468 at main.aro:5:5, address = 0x0000000100001cd4
+```
+
+All four of these hold in a compiled binary:
 
 - **lldb backtraces work:** function names and source files are correct.
 - **`image lookup -n`** finds feature sets by name.
 - **`breakpoint set --name Application-Start`** by-function works.
-- **`breakpoint set --file --line`** does not.
+- **`breakpoint set --file --line`** resolves against the `.aro` file.
+
+What `lldb` still cannot show you is the ARO *bindings*. It sees the compiled program's machine state — the C-runtime calls each statement lowers to — not `<user>` and `<data>` as values. When you want to look at bindings, you want `aro debug` and the interpreter.
 
 ## 8.4 macOS-specific dSYM detail
 
-On macOS, Mach-O leaves DWARF in the `.o` files by design and points to them via OSO stab entries in the linked binary. `dsymutil` reads OSO entries and constructs a `.dSYM` bundle that `lldb` consumes.
+On macOS, Mach-O leaves DWARF in the `.o` files by design and points to them via OSO stab entries in the linked binary. `lldb` follows those entries straight to the object (the "debug map"), and `dsymutil` reads the same entries to build a self-contained `.dSYM`.
 
-`aro build` produces a `.o` with valid DWARF and links the executable. In v1, Apple's `ld` does not record an OSO entry for our `.o` because the `.o` lacks the Apple-flavored debug stab structure `ld` expects. Result: `dsymutil` produces a `.dSYM` that has DWARF for the bundled Swift runtime but not for the ARO functions.
+Two things in `aro build` make that chain work, and both were once broken. The compiler stamps a real absolute `DW_AT_comp_dir` on the compile unit, which is what persuades `ld64` to record an `N_OSO` stab for our object at all; and the object comes from `clang -c -g` on the IR rather than from `llc`, because `llc`'s output lacks the Apple-flavored stab structure `ld` expects. The link line carries `-g` for the same reason.
 
-Workaround if you need symbols today: launch `lldb` and add the intermediate `.o` directly:
+One wrinkle survives, and it is a housekeeping one: the debug map points at the intermediate `.o`, and `aro build` deletes that when the build finishes. A binary built without `--keep-intermediate` answers `Breakpoint 1: no locations (pending)` — which reads like missing debug info and is really a missing file. So for a debugging session, keep the object — or fold it into a `.dSYM`, which stands on its own afterwards (verified: `dsymutil` the binary, delete the `.o`, and the breakpoint still resolves):
 
 ```bash
 aro build Examples/HelloWorld --keep-intermediate
-lldb Examples/HelloWorld/HelloWorld
-(lldb) target symbols add Examples/HelloWorld/.build/HelloWorld.o
+dsymutil Examples/HelloWorld/HelloWorld     # optional; lldb then finds it by UUID
+lldb Examples/HelloWorld/HelloWorld \
+  -o 'breakpoint set --file main.aro --line 5' \
+  -o run
 ```
 
-The `--keep-intermediate` flag tells `aro build` to leave the `.o` on disk. Without it the build cleans up.
+Linux is simpler: ELF stores DWARF directly in the executable, no object-file indirection and no `.dSYM`, so a plain `aro build` is enough.
 
-Linux is different: ELF stores DWARF directly in the executable, no `.dSYM` indirection. Compiled-mode debugging should work end-to-end on Linux without the workaround. CI will confirm.
+The whole chain — `!dbg` in the IR, `DW_TAG_subprogram` and a line table in the object, `N_OSO` on macOS, a resolving `breakpoint set --file --line` — is asserted end to end by `Tests/IntegrationTestsRunner/test-dwarf-debug-info.sh` in CI, which is why this section can promise it.
+
 
 ## 8.5 What this means for daily workflow
 
@@ -80,25 +90,25 @@ aro debug ./MyApp
 
 is the right tool. You get the full debugger surface this book describes.
 
-When you specifically need to debug a *deployed* native binary — production crash, machine you can't run the interpreter on — `lldb` on the binary plus the source-name backtraces is what you have. It is not nothing; it's the same place a C codebase would be without `-g`.
+When you specifically need to debug a *deployed* native binary — production crash, machine you can't run the interpreter on — `lldb` on the binary is a real debugger with real line numbers. You get backtraces naming your feature sets, breakpoints on `.aro` lines, and everything else lldb does with a C program compiled `-g`. What you do not get is ARO's own vocabulary: no `<user>` in the variables view, no watch list, no replay.
 
-When per-line breakpoints in compiled mode are required, the path is:
+So the loop stays:
 
 1. Reproduce the issue under `aro debug` from source.
-2. Set the breakpoint there.
+2. Set the breakpoint there, where the bindings are legible.
 3. Fix and re-ship.
 
-That is the recommended loop for v1, and it works because ARO's interpreter and native binary share the same `.aro` source — there is no "this only happens in compiled mode" bug class that lazy/eager differences from chapter 4 don't already cover. (The two runtimes share the lazy-future semantics, so a force-order quirk you'd hit in production also hits in the interpreter.)
+That works because the interpreter and the native binary share both the same `.aro` source *and* the same `ARORuntime` — the compiled program reaches it through the C ABI in `Sources/ARORuntime/Bridge/` rather than through a second implementation. There is no "this only happens in compiled mode" bug class that the lazy/eager divergence from chapter 4 doesn't already cover, and the two runtimes share the lazy-future semantics, so a force-order quirk you'd hit in production also hits in the interpreter.
 
-## 8.6 What lands when #231 phase 2 ships
+## 8.6 What is still missing
 
-When the Swifty-LLVM upstream change (or our local bridge) opens up `LLVMSetCurrentDebugLocation2`, the compiler will emit per-instruction `!dbg` metadata. At that point:
+Not per-line breakpoints — those shipped. What's missing in compiled mode is everything above the line table:
 
-- `lldb breakpoint set --file main.aro --line 5` will resolve in compiled binaries.
-- VS Code / IntelliJ debug sessions launched against a compiled binary will hit source-level breakpoints.
-- The macOS dSYM gap from chapter 8.4 will be addressed in the same MR (the underlying problem is shared).
+- **Bindings.** lldb sees the machine state, not the symbol table. There is no compiled-mode equivalent of `p`.
+- **The debugger's own breakpoint kinds.** Verb, event, error-any and logpoints are controller features; the controller runs in the interpreter.
+- **Record and replay.** Same reason.
 
-Until then, this chapter is the honest answer to "can I debug a compiled binary?": yes for function names, no for per-line, and the recommendation is to use the interpreter.
+Whether a compiled binary should host a debug controller at all is a real design question rather than an oversight, and it is not answered yet. Meanwhile the honest answer to "can I debug a compiled binary?" is: yes for stepping and stack frames, no for ARO values — and if you want ARO values, use the interpreter.
 
 ---
 

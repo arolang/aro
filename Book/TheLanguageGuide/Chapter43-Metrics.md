@@ -4,28 +4,30 @@ ARO automatically tracks execution metrics for all feature sets. The `<metrics>`
 
 ## The Metrics Variable
 
-Access metrics like any variable:
+Access metrics like any variable — but always with a format qualifier:
 
 ```aro
-Log the <metrics> to the <console>.
+Log <metrics: plain> to the <console>.
 ```
 
-This outputs all collected metrics in a readable format.
+An unqualified `<metrics>` prints the runtime's snapshot structure verbatim
+(`MetricsSnapshot(featureSets: [ARORuntime.FeatureSetMetrics(name: …`), which
+is not what you want in a log. `plain` is the readable form.
 
 ## Format Qualifiers
 
 Use qualifiers to control output format:
 
 ```aro
-Log the <metrics: plain> to the <console>.       (* Full details *)
-Log the <metrics: short> to the <console>.       (* One-liner *)
-Log the <metrics: table> to the <console>.       (* ASCII table *)
-Log the <metrics: prometheus> to the <console>.  (* For monitoring *)
+Log <metrics: plain> to the <console>.       (* Full details *)
+Log <metrics: short> to the <console>.       (* One-liner *)
+Log <metrics: table> to the <console>.       (* ASCII table *)
+Log <metrics: prometheus> to the <console>.  (* For monitoring *)
 ```
 
 | Qualifier | Output |
 |-----------|--------|
-| `plain` | Detailed multi-line output (default) |
+| `plain` | Detailed multi-line output |
 | `short` | Single-line summary |
 | `table` | ASCII table format |
 | `prometheus` | Prometheus text format |
@@ -46,6 +48,12 @@ Application-Start (Entry Point)
 listUsers (User API)
   Executions: 2 (success: 2, failed: 0)
   Duration: avg=8.3ms, min=7.1ms, max=9.5ms
+
+System Metrics:
+  CPU: user=0.118s, system=0.011s, total=0.129s
+  Memory: virtual=425427.47MB, resident=78.34MB
+  File Descriptors: 40 / 1048576
+  Process Start: 2026-09-07 22:28:46
 ```
 
 ### Short Format
@@ -53,7 +61,7 @@ listUsers (User API)
 A quick summary for status checks:
 
 ```
-metrics: 3 executions, 2 featuresets, avg=10.4ms, uptime=5.2s
+metrics: 3 executions, 2 featuresets, avg=10.4ms, uptime=5.2s, cpu=0.12s, mem=78.4MB, fds=40/1048576
 ```
 
 ### Table Format
@@ -69,6 +77,19 @@ Terminal-friendly ASCII table:
 +-------------------+-------+---------+--------+---------+---------+
 | TOTAL             |     3 |       3 |      0 |   10.40 |   12.50 |
 +-------------------+-------+---------+--------+---------+---------+
+
++--------------------------+----------------------+
+| System Metrics           | Value                |
++--------------------------+----------------------+
+| CPU User Time            |               0.111s |
+| CPU System Time          |               0.009s |
+| CPU Total Time           |               0.121s |
+| Virtual Memory           |         425426.95 MB |
+| Resident Memory          |             78.39 MB |
+| File Descriptors         |         40 / 1048576 |
+| Process Start Time       |  2026-09-07 22:28:35 |
+| Uptime                   |                0.01s |
++--------------------------+----------------------+
 ```
 
 ### Prometheus Format
@@ -105,6 +126,20 @@ Plus global metrics:
 | **Total Executions** | Sum across all feature sets |
 | **Uptime** | Time since application started |
 
+And process metrics, collected at the moment you read `<metrics>`:
+
+| Metric | Description |
+|--------|-------------|
+| **CPU** | User, system and total process CPU time |
+| **Memory** | Virtual and resident set size |
+| **File Descriptors** | Open descriptors against the process limit |
+| **Process Start Time** | When the process began |
+
+The Prometheus export adds request-body accounting from ARO-0090
+(`aro_request_body_materialized_bytes_total` and its siblings), so you can see
+how much of your traffic became values in memory rather than streaming through
+— see Chapter 50.
+
 ## Practical Examples
 
 ### Development Debugging
@@ -114,7 +149,7 @@ Print metrics at shutdown to see what ran:
 ```aro
 (Application-End: Success) {
     Log "=== Final Metrics ===" to the <console>.
-    Log the <metrics: table> to the <console>.
+    Log <metrics: table> to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
 ```
@@ -124,7 +159,7 @@ Print metrics at shutdown to see what ran:
 A one-liner during execution:
 
 ```aro
-Log the <metrics: short> to the <console>.
+Log <metrics: short> to the <console>.
 ```
 
 Output:
@@ -167,7 +202,7 @@ Compare feature set performance:
 ```aro
 (analyzePerformance: Admin API) {
     Log "Performance Analysis:" to the <console>.
-    Log the <metrics: table> to the <console>.
+    Log <metrics: table> to the <console>.
     Return an <OK: status> with <metrics: plain>.
 }
 ```
@@ -203,9 +238,9 @@ Compare feature set performance:
 
   <!-- Collect box -->
   <rect x="310" y="30" width="130" height="60" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
-  <text x="375" y="52" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">Collect</text>
-  <text x="375" y="66" text-anchor="middle" font-size="9" fill="#166534">Collect the</text>
-  <text x="375" y="78" text-anchor="middle" font-size="9" fill="#166534">&lt;metrics&gt;</text>
+  <text x="375" y="52" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">Read</text>
+  <text x="375" y="66" text-anchor="middle" font-size="9" fill="#166534">&lt;metrics: plain&gt;</text>
+  <text x="375" y="78" text-anchor="middle" font-size="9" fill="#166534">&lt;metrics: prometheus&gt;</text>
 
   <!-- Arrow 3 (dashed) -->
   <line x1="440" y1="60" x2="468" y2="60" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrowMdash)"/>
@@ -257,4 +292,4 @@ For production monitoring, export to Prometheus and use Grafana for dashboards, 
 
 ---
 
-*Previous: Chapter 42 — Date and Time and Intervals*
+*Next: Chapter 44 — Template Engine*

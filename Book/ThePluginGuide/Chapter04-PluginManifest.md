@@ -32,9 +32,12 @@ provides:
     path: src/
 ```
 
-That's it. Name, version, and at least one provider. Everything else is optional.
+That's it. Name, version, and at least one provider. Everything else is optional
+to the *parser*.
 
-But optional doesn't mean unimportant. A well-crafted manifest makes your plugin easier to use, debug, and maintain.
+In practice a fourth field is close to mandatory: `handle`. Without it a plugin
+with qualifiers ships qualifiers nobody can reach, because a qualifier has no
+un-namespaced form. Section 4.4 covers it.
 
 ## 4.3 Complete Manifest Structure
 
@@ -44,6 +47,7 @@ Here's a fully-specified manifest showing all available fields:
 # Identity
 name: plugin-example
 version: 1.0.0
+handle: Example
 description: "An example plugin demonstrating the complete manifest format"
 author: "Your Name <your.email@example.com>"
 license: MIT
@@ -70,16 +74,14 @@ dependencies:
     git: "https://github.com/arolang/plugin-utils"
     ref: "v1.0.0"
 
-# Build configuration
-build:
-  swift:
-    minimum-version: "6.3"
-    targets:
-      - name: ExamplePlugin
-        path: Sources/
 ```
 
 Let's examine each section.
+
+> A top-level `build:` block is *not* read by the loader. The scaffolds emit
+> one for Swift plugins as documentation of the toolchain requirement; it has
+> no effect. Swift build settings belong in `Package.swift`, Rust's in
+> `Cargo.toml`, and C's in the `build:` block inside the `provides` entry.
 
 ## 4.4 Identity Fields
 
@@ -114,6 +116,28 @@ A semantic version number following the `major.minor.patch` convention:
 - **Patch**: Bug fixes and minor improvements
 
 Start at `1.0.0` when your plugin is ready for others to use. Use `0.x.y` during initial development when the interface is still in flux.
+
+### handle
+
+```yaml
+handle: Csv
+```
+
+The PascalCase namespace under which the plugin's actions and qualifiers are
+reached: `Csv.Parse the <records> from <text>.` and
+`<value: Csv.escape>`. This is the canonical way to declare a namespace.
+
+Handles are unique per application. If two plugins claim the same one, the
+second loads *without* a namespace, which silently costs it its qualifiers.
+The loader also warns if the handle is not PascalCase.
+
+A `handler:` key inside a `provides` entry is the deprecated predecessor. It
+still works, and root-level `handle` wins when both are present, but it logs a
+warning naming the replacement.
+
+Native plugins register each action twice — bare and namespaced — so
+`Parse the <records> from <text>.` works too. Qualifiers get no such courtesy:
+`<value: escape>` is a compile error, and only `<value: Csv.escape>` resolves.
 
 ### description
 
@@ -407,28 +431,17 @@ The top-level `build` section provides additional build configuration:
 
 ### Swift Build
 
-```yaml
-build:
-  swift:
-    minimum-version: "6.3"
-    targets:
-      - name: MyPlugin
-        path: Sources/
-```
-
-- `minimum-version`: Required Swift compiler version
-- `targets`: List of Swift targets to build
+Swift plugins are ordinary SwiftPM packages: everything the build needs lives
+in `Package.swift`, including the crucial `type: .dynamic` on the library
+product. The scaffold writes a top-level `build.swift` block into
+`plugin.yaml`, but the loader does not read it — treat it as a note to the
+reader about the toolchain, not a setting.
 
 ### Rust Build
 
-Rust builds are configured through `Cargo.toml`, but you can specify additional options:
-
-```yaml
-build:
-  rust:
-    edition: "2021"
-    features: ["json", "async"]
-```
+Rust builds are configured entirely through `Cargo.toml`. The manifest carries
+only `cargo-target` (the profile — `release` or `debug`) and `output`, both
+inside the `provides` entry. Editions and feature flags go in `Cargo.toml`.
 
 ### C/C++ Build
 
@@ -445,11 +458,13 @@ provides:
         - "-fPIC"
         - "-shared"
         - "-I/usr/local/include"
-      link:
         - "-L/usr/local/lib"
         - "-lsqlite3"
       output: libplugin.dylib
 ```
+
+`flags` is the only list; there is no separate `link:` array. Put linker flags
+in `flags` alongside the compiler ones.
 
 ## 4.9 Real-World Examples
 
@@ -590,7 +605,7 @@ Don't increment versions carelessly. Your users depend on semantic versioning to
 
 If your plugin depends on system libraries or external tools, document them in your README:
 
-```markdown
+````markdown
 ## Requirements
 
 - FFmpeg 5.0 or later
@@ -605,7 +620,7 @@ brew install ffmpeg
 ```bash
 apt install ffmpeg libavcodec-dev
 ```
-```
+````
 
 ### Keep Descriptions Accurate
 

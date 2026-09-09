@@ -401,13 +401,12 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
 #[no_mangle]
 pub extern "C" fn aro_plugin_execute(
     action_ptr: *const c_char,
-    input_ptr: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
+    input_ptr: *const c_char
+) -> *mut c_char {
     let action = unsafe { CStr::from_ptr(action_ptr).to_str().unwrap_or("") };
     let input_json = unsafe { CStr::from_ptr(input_ptr).to_str().unwrap_or("{}") };
 
-    // Input is the richer ARO-0073 structure:
+    // Input is the richer ARO-0087 structure:
     // {
     //   "result":      { "base": "hash", "specifiers": ["sha256"] },
     //   "source":      { "base": "password", "specifiers": [] },
@@ -424,16 +423,11 @@ pub extern "C" fn aro_plugin_execute(
         _ => Err(format!("Unknown action: {}", action))
     };
 
+    // Success and failure both come back as a JSON string. There is no
+    // status code — an error is a response object carrying an "error" key.
     match result {
-        Ok(value) => {
-            unsafe { *result_ptr = CString::new(value.to_string()).unwrap().into_raw(); }
-            0
-        }
-        Err(e) => {
-            let error = json!({"error": e});
-            unsafe { *result_ptr = CString::new(error.to_string()).unwrap().into_raw(); }
-            1
-        }
+        Ok(value) => CString::new(value.to_string()).unwrap().into_raw(),
+        Err(e)    => CString::new(json!({"error": e}).to_string()).unwrap().into_raw(),
     }
 }
 
@@ -784,15 +778,14 @@ In ARO, a `HashComputed Handler` feature set would then be triggered automatical
 
 ### Services via `aro_plugin_execute`
 
-System objects and services provided by plugins are also dispatched through `aro_plugin_execute`, using a `service:<method>` action name convention. There is no separate `_call` function:
+System objects and services provided by plugins are also dispatched through `aro_plugin_execute`, using a `service:<method>` action name convention. The service's own name is not part of the key — the runtime already knows which plugin it is calling. There is no separate `_call` function:
 
 ```rust
 // Service calls arrive as "service:<method>"
 pub extern "C" fn aro_plugin_execute(
     action_ptr: *const c_char,
-    input_ptr: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
+    input_ptr: *const c_char
+) -> *mut c_char {
     let action = unsafe { CStr::from_ptr(action_ptr).to_str().unwrap_or("") };
 
     let result = if action.starts_with("service:") {
@@ -814,13 +807,13 @@ Plugins can subscribe to domain events by exporting `aro_plugin_on_event`. The r
 
 ```rust
 /// Called by the ARO runtime when a domain event is emitted.
-/// Return 0 on success, non-zero on error.
+/// Returns nothing: the runtime does not wait on the plugin and has no
+/// channel for a reply. Do not block for long here.
 #[no_mangle]
 pub extern "C" fn aro_plugin_on_event(
     event_type_ptr: *const c_char,
-    event_json_ptr: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
+    event_json_ptr: *const c_char
+) {
     let event_type = unsafe { CStr::from_ptr(event_type_ptr).to_str().unwrap_or("") };
     let event_json = unsafe { CStr::from_ptr(event_json_ptr).to_str().unwrap_or("{}") };
 
@@ -831,19 +824,20 @@ pub extern "C" fn aro_plugin_on_event(
         "HashComputed" => handle_hash_computed(&event),
         _ => { /* ignore unknown events */ }
     }
-
-    unsafe { *result_ptr = CString::new("{}").unwrap().into_raw(); }
-    0
 }
 ```
 
-Declare the events your plugin subscribes to in `aro_plugin_info`:
+Declare the events your plugin subscribes to in `aro_plugin_info`, under
+`events.subscribes` — a top-level `subscribes` key is not read:
 
 ```json
 {
   "name": "audit-plugin",
   "version": "1.0.0",
-  "subscribes": ["UserCreated", "HashComputed"]
+  "events": {
+    "subscribes": ["UserCreated", "HashComputed"],
+    "emits": ["AuditRecorded"]
+  }
 }
 ```
 
@@ -880,7 +874,7 @@ Check if your action is registered:
 
 ```bash
 # List all registered actions
-aro actions list
+aro actions
 
 # Output:
 # Built-in actions:
@@ -920,7 +914,7 @@ mod tests {
 
     #[test]
     fn test_hash_sha256() {
-        // Use the ARO-0073 input structure: result/source descriptors + _with
+        // Use the ARO-0087 input structure: result/source descriptors + _with
         let input = json!({
             "result": { "base": "hash", "specifiers": ["sha256"] },
             "source": { "base": "hello world", "specifiers": [] },
@@ -1377,7 +1371,7 @@ Custom actions are the most powerful form of ARO extension. They let you add new
 - **Implement execution** in `aro_plugin_execute()` handling all registered verbs — this function is **optional** for qualifier-only or system-object-only plugins
 - **Use natural syntax** like `Hash the <result> from the <data>`
 
-**ARO-0073 input JSON** passes richer data to every plugin call:
+**The structured input JSON** (ARO-0087) passes richer data to every plugin call:
 - `result` and `source` are full descriptor objects (`base` + `specifiers`), not flat strings
 - `preposition` is an explicit top-level field
 - `_context` carries `requestId`, `featureSet`, and `businessActivity`

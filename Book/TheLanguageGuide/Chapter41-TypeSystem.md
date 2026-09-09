@@ -31,7 +31,7 @@ Compute the <color>   from 0xFF_00_FF.
 Compute the <flags>   from 0b1111_0000.
 ```
 
-Rules for underscore separators (ARO-0052 / ARO-0056):
+Rules for underscore separators (ARO-0082):
 
 - Underscores may appear **between digits**.
 - Underscores may **not** appear at the start or end of a numeric literal, immediately before or after the decimal point, or adjacent to the exponent marker.
@@ -107,9 +107,9 @@ Use single quotes when working with regex patterns, file paths, LaTeX commands, 
   <rect x="340" y="152" width="80" height="30" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
   <text x="380" y="171" text-anchor="middle" font-size="10" fill="#92400e">[K:V] Object</text>
 
-  <!-- T? Optional -->
+  <!-- Nested -->
   <rect x="400" y="152" width="80" height="30" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
-  <text x="440" y="171" text-anchor="middle" font-size="11" fill="#92400e">T? Optional</text>
+  <text x="440" y="171" text-anchor="middle" font-size="11" fill="#92400e">nested</text>
 
   <!-- OpenAPI bar -->
   <rect x="10" y="196" width="480" height="18" rx="4" fill="#1f2937" stroke="#1f2937" stroke-width="2"/>
@@ -258,23 +258,51 @@ Create the <price> with 19.99.           (* price: Float *)
 Create the <items> with [1, 2, 3].       (* items: List<Integer> *)
 ```
 
-## No Optionals
+## No Optional Types
 
-ARO has no optional types (`?`, `null`, `undefined`, `Option<T>`). Every variable has a value.
+There is no optional *type* in ARO — no `T?`, no `Option<T>`, nothing to
+unwrap. A binding either exists or the statement that would have read it fails
+with a message naming what it could not find.
 
 ### What Happens When Data Doesn't Exist?
 
-The runtime throws a descriptive error:
+For a field that isn't there, the runtime raises a descriptive error:
 
 ```aro
 (Get User: API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user: User> from the <user-repository> where <id> = <id>.
-    (* If user doesn't exist, runtime throws: *)
-    (* "Cannot retrieve the user from the user-repository where <id> = 123" *)
+    Extract the <nickname> from the <user: nickname>.
+    (* If the field is absent, the runtime says so:
+       "Cannot extract the nickname from the user: nickname" *)
 
-    Return an <OK: status> with <user>.
+    Return an <OK: status> with <nickname>.
 }
+```
+
+### A Filtered Retrieve Returns an Empty List
+
+The one case that is *not* an error is a repository query that matches nothing.
+It binds `[]`, and an empty list is a perfectly good value:
+
+```aro
+Retrieve the <user> from the <user-repository> where <id> = <id>.
+Compute the <n: length> from <user>.
+(* n = 0 — no error was raised *)
+```
+
+This matters because `when <user> is null` never fires for it: `is null` is a
+real guard operator, but `[]` is not null. Test the count, or use the `default`
+clause (Chapter 36):
+
+```aro
+(* Works *)
+Retrieve the <found> from the <user-repository> where <id> = <id>.
+Compute the <count: length> from <found>.
+Return a <NotFound: status> for the <missing: user> when <count> == 0.
+
+(* Or supply a fallback and skip the check entirely *)
+Retrieve the <user> from the <user-repository> where <id> = <id>
+    default { id: <id>, name: "unknown" }.
 ```
 
 ### No Null Checks Needed
@@ -292,7 +320,8 @@ console.log(user.name);
 ARO code:
 
 ```aro
-Retrieve the <user> from the <user-repository> where <id> = <id>.
+Retrieve the <user> from the <user-repository> where <id> = <id>
+    default { id: <id>, name: "unknown" }.
 Log <user: name> to the <console>.
 ```
 
@@ -303,14 +332,15 @@ The runtime error message IS the error handling. See the Error Handling chapter 
 You can use OpenAPI just for type definitions, without any HTTP routes:
 
 ```yaml
-# openapi.yaml - No paths, just types
+# openapi.yaml - empty paths, just types
 openapi: 3.0.3
 info:
   title: My Application Types
   version: 1.0.0
 
-# No paths section = No HTTP server
-# But types are still available!
+# `paths` is required by the loader, but an empty map starts no server.
+# Omitting the key entirely fails with "Missing key 'paths'".
+paths: {}
 
 components:
   schemas:
@@ -326,7 +356,8 @@ components:
 | openapi.yaml | paths | components | HTTP Server | Types Available |
 |--------------|-------|------------|-------------|-----------------|
 | Missing | - | - | No | Primitives only |
-| Present | Empty | Has schemas | No | Primitives + Schemas |
+| Present | Absent | Has schemas | — | Fails to load: `Missing key 'paths'` |
+| Present | `{}` | Has schemas | No | Primitives + Schemas |
 | Present | Has routes | Has schemas | Yes | Primitives + Schemas |
 
 ## Type Checking
@@ -356,7 +387,7 @@ components:
 | Primitives | `String`, `Integer`, `Float`, `Boolean` |
 | Collections | `List<T>`, `Map<K, V>` |
 | Complex types | Defined in `openapi.yaml` components/schemas |
-| Optionals | None - values exist or operations fail |
+| Optionals | No optional type; a missing field fails, an unmatched query binds `[]` |
 | Type annotations | `<name: Type>` |
 | Type inference | From literals and expressions |
 

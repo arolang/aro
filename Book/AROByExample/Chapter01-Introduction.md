@@ -82,7 +82,7 @@ Throughout this book, we will build a **concurrent web crawler**. When finished,
 7. Process multiple links in parallel
 8. Save each page as a Markdown file
 
-The complete application is about 200 lines of ARO code across four files. By the end of this book, you will understand every line.
+The complete application is about 190 lines of ARO code across four files, plus an `openapi.yaml` that describes the events. By the end of this book, you will understand every line.
 
 The source code is available at [github.com/arolang/example-web-crawler](https://github.com/arolang/example-web-crawler).
 
@@ -135,13 +135,16 @@ ARO is young, and some areas need work:
 
 **Error Messages.** When something goes wrong, the current error messages can be cryptic. Better diagnostics are on the roadmap.
 
-**Debugging Tools.** There is no debugger or step-through execution. You rely on `<Log>` statements to trace execution.
+**Silent Successes.** ARO's happy-path philosophy means a statement that cannot do anything useful sometimes does nothing at all, quietly, and the program still exits `[OK]`. We will point these out as we hit them.
 
 **Documentation.** The language is evolving, so documentation sometimes lags behind features.
 
-**Package Management.** There is no way to share or reuse code across projects yet.
-
 We mention these not to discourage you, but to set honest expectations. ARO is a beta language, and you are an early adopter.
+
+Two rough edges this book used to list here have since been filled in, and it is worth knowing they exist before you spend an evening working around them:
+
+- **There is a debugger.** `aro debug ./MyApp` pauses at every statement and gives you `step`, `continue`, breakpoints by line *or* by verb, conditional breakpoints, logpoints, and a `print` of the current symbol table. `--dap` speaks Debug Adapter Protocol for editors, and `--record`/`--replay` capture a session you can walk through afterwards.
+- **There is a package manager.** `aro add github:org/repo` installs a plugin from Git, `aro plugins` lists what you have, `aro new plugin foo` scaffolds one.
 
 ---
 
@@ -151,7 +154,8 @@ We mention these not to discourage you, but to set honest expectations. ARO is a
 - Applications are event-driven: feature sets respond to events and emit new ones
 - We will build a concurrent web crawler across 14 chapters
 - ARO excels at readability, concurrency, and event-driven design
-- The language is in beta; expect rough edges in tooling and documentation
+- The language is in beta; expect rough edges in error messages and documentation
+- `aro debug` steps through a program, and `aro add` installs plugins from Git
 
 ---
 

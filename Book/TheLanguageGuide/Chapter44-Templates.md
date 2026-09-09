@@ -9,24 +9,43 @@ The ARO template engine provides a powerful way to generate dynamic content by c
 
 Templates in ARO are files containing a mix of static content and execution blocks. The template engine processes these files, executing the ARO statements within execution blocks and combining the results with the static portions to produce the final output.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Template Processing                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   Template File              Rendered Output                 │
-│   ┌─────────────────┐       ┌─────────────────┐             │
-│   │ Hello {{ name }}│  ───► │ Hello Alice     │             │
-│   │ You have        │       │ You have        │             │
-│   │ {{ count }}     │       │ 5               │             │
-│   │ messages.       │       │ messages.       │             │
-│   └─────────────────┘       └─────────────────┘             │
-│                                                              │
-│   Static text passes through unchanged                       │
-│   Execution blocks are replaced with their output            │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+<div style="text-align: center; margin: 2em 0;">
+<svg width="520" height="180" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <defs>
+    <marker id="arrowTP" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#374151"/>
+    </marker>
+  </defs>
+
+  <text x="260" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#374151">Template Processing</text>
+
+  <!-- Template file -->
+  <rect x="20" y="32" width="190" height="96" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="115" y="52" text-anchor="middle" font-size="10" font-weight="bold" fill="#4338ca">Template File</text>
+  <text x="34" y="74" font-size="10" font-family="monospace" fill="#4338ca">Hello </text>
+  <rect x="76" y="63" width="98" height="14" rx="2" fill="#818cf8"/>
+  <text x="80" y="74" font-size="10" font-family="monospace" fill="#ffffff">{{ &lt;name&gt; }}</text>
+  <text x="34" y="92" font-size="10" font-family="monospace" fill="#4338ca">You have</text>
+  <rect x="34" y="99" width="104" height="14" rx="2" fill="#818cf8"/>
+  <text x="38" y="110" font-size="10" font-family="monospace" fill="#ffffff">{{ &lt;count&gt; }}</text>
+  <text x="34" y="126" font-size="10" font-family="monospace" fill="#4338ca">messages.</text>
+
+  <!-- Arrow -->
+  <line x1="212" y1="80" x2="298" y2="80" stroke="#374151" stroke-width="2" marker-end="url(#arrowTP)"/>
+  <text x="255" y="72" text-anchor="middle" font-size="9" fill="#374151">render</text>
+
+  <!-- Rendered output -->
+  <rect x="300" y="32" width="190" height="96" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
+  <text x="395" y="52" text-anchor="middle" font-size="10" font-weight="bold" fill="#166534">Rendered Output</text>
+  <text x="314" y="74" font-size="10" font-family="monospace" fill="#166534">Hello Alice</text>
+  <text x="314" y="92" font-size="10" font-family="monospace" fill="#166534">You have</text>
+  <text x="314" y="110" font-size="10" font-family="monospace" fill="#166534">5</text>
+  <text x="314" y="126" font-size="10" font-family="monospace" fill="#166534">messages.</text>
+
+  <text x="260" y="152" text-anchor="middle" font-size="9" fill="#374151">Static text passes through unchanged</text>
+  <text x="260" y="168" text-anchor="middle" font-size="9" fill="#374151">Execution blocks are replaced with their output</text>
+</svg>
+</div>
 
 ### Template Directory Convention
 
@@ -61,7 +80,7 @@ Template paths are always relative to the `templates/` directory. When you refer
 
   <!-- Template file box -->
   <rect x="10" y="20" width="150" height="110" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
-  <text x="85" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#4338ca">Template (.screen)</text>
+  <text x="85" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#4338ca">Template (.tpl)</text>
   <rect x="20" y="52" width="130" height="14" rx="2" fill="#c7d2fe" stroke="none"/>
   <text x="85" y="63" text-anchor="middle" font-size="9" fill="#4338ca">static text...</text>
   <rect x="20" y="70" width="130" height="14" rx="2" fill="#818cf8" stroke="none"/>
@@ -138,9 +157,15 @@ For simple variable output, ARO provides a shorthand syntax. When an execution b
 (* Full syntax *)
 {{ Print <username> to the <template>. }}
 
-(* Shorthand - equivalent to above *)
+(* Shorthand *)
 {{ <username> }}
 ```
+
+The shorthand takes a variable or an expression, never a bare literal:
+`{{ "some text" }}` does not parse. Static text belongs outside the braces.
+
+The two forms are *not* interchangeable in one respect — see
+Section 44.13 on escaping.
 
 The shorthand also works with expressions:
 
@@ -197,28 +222,47 @@ Templates execute in an isolated child context. This means:
 2. Variables created or modified inside templates **do not** affect the parent
 3. The only output from a template is the rendered string
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Context Isolation                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   Parent Context                Template Context             │
-│   ┌─────────────────┐          ┌─────────────────┐          │
-│   │ user: Alice     │ ──copy─► │ user: Alice     │          │
-│   │ count: 5        │          │ count: 5        │          │
-│   │                 │          │ temp: "..."     │  (local) │
-│   └─────────────────┘          └─────────────────┘          │
-│          │                              │                    │
-│          │                              ▼                    │
-│          │                     ┌─────────────────┐          │
-│          │  ◄── result ─────── │ Rendered String │          │
-│          │                     └─────────────────┘          │
-│          ▼                                                   │
-│   Only the rendered                                          │
-│   string returns                                             │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+<div style="text-align: center; margin: 2em 0;">
+<svg width="500" height="210" viewBox="0 0 500 210" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <defs>
+    <marker id="arrowCI" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#374151"/>
+    </marker>
+    <marker id="arrowCIg" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <text x="250" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#374151">Context Isolation</text>
+
+  <!-- Parent context -->
+  <rect x="20" y="34" width="170" height="86" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="105" y="53" text-anchor="middle" font-size="10" font-weight="bold" fill="#4338ca">Parent Context</text>
+  <text x="34" y="74" font-size="10" font-family="monospace" fill="#4338ca">user: Alice</text>
+  <text x="34" y="92" font-size="10" font-family="monospace" fill="#4338ca">count: 5</text>
+
+  <!-- copy arrow -->
+  <line x1="192" y1="72" x2="288" y2="72" stroke="#374151" stroke-width="2" marker-end="url(#arrowCI)"/>
+  <text x="240" y="64" text-anchor="middle" font-size="9" fill="#374151">copy</text>
+
+  <!-- Template context -->
+  <rect x="290" y="34" width="190" height="86" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="385" y="53" text-anchor="middle" font-size="10" font-weight="bold" fill="#92400e">Template Context</text>
+  <text x="304" y="74" font-size="10" font-family="monospace" fill="#92400e">user: Alice</text>
+  <text x="304" y="92" font-size="10" font-family="monospace" fill="#92400e">count: 5</text>
+  <text x="304" y="110" font-size="10" font-family="monospace" fill="#92400e">temp: "…"  (local)</text>
+
+  <!-- down to rendered string -->
+  <line x1="385" y1="122" x2="385" y2="146" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowCIg)"/>
+  <rect x="290" y="150" width="190" height="34" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
+  <text x="385" y="172" text-anchor="middle" font-size="10" font-weight="bold" fill="#166534">Rendered String</text>
+
+  <!-- result back to parent -->
+  <line x1="288" y1="167" x2="110" y2="167" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowCIg)"/>
+  <line x1="105" y1="167" x2="105" y2="124" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowCIg)"/>
+  <text x="200" y="160" text-anchor="middle" font-size="9" fill="#166534">only the string returns</text>
+</svg>
+</div>
 
 This isolation ensures templates are safe and predictable—they cannot accidentally modify your application state.
 
@@ -273,12 +317,12 @@ Use `when` guards for conditional output:
 (* Conditional print *)
 {{ Print "Premium Member" to the <template> when <user: isPremium>. }}
 
-(* With else using match *)
+(* Several outcomes: match, with the same case/otherwise syntax as Chapter 33 *)
 {{
     match <user: tier> {
-        "gold" => Print "Gold Member" to the <template>.
-        "silver" => Print "Silver Member" to the <template>.
-        _ => Print "Standard Member" to the <template>.
+        case "gold"   { Print "Gold Member" to the <template>. }
+        case "silver" { Print "Silver Member" to the <template>. }
+        otherwise     { Print "Standard Member" to the <template>. }
     }
 }}
 ```
@@ -293,7 +337,10 @@ For conditional sections, combine with for-each over a filtered collection or us
 
 ## 44.8 Nested Templates with Include
 
-The `<Include>` action embeds one template inside another:
+The `<Include>` action embeds one template inside another. Like every other
+ARO statement it needs a result binding and a preposition — `Include the
+<name> from the <template: path>.` The included text is written into the
+output at that point, and `<name>` also holds it.
 
 ```text
 (* templates/page.tpl *)
@@ -303,23 +350,29 @@ The `<Include>` action embeds one template inside another:
     <title>{{ <page: title> }}</title>
 </head>
 <body>
-    {{ Include the <template: partials/header.tpl>. }}
+    {{ Include the <header> from the <template: partials/header.tpl>. }}
 
     <main>
         {{ <content> }}
     </main>
 
-    {{ Include the <template: partials/footer.tpl>. }}
+    {{ Include the <footer> from the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
+
+> ARO-0050 §10 spells this without the binding — `{{ Include the <template:
+> header.tpl>. }}` — and that form does not parse
+> ([GitLab #563](https://git.ausdertechnik.de/arolang/aro/-/issues/563)). The
+> `with`-only form parses but renders nothing at all, which is worse. Use the
+> `from` form above.
 
 ### Passing Variables to Included Templates
 
 Use the `with` clause to pass additional variables:
 
 ```text
-{{ Include the <template: partials/user-card.tpl> with {
+{{ Include the <card> from the <template: partials/user-card.tpl> with {
     user: <current-user>,
     showEmail: true
 }. }}
@@ -340,7 +393,7 @@ This pattern enables component-style template composition:
 (* templates/form.tpl *)
 <form action="/submit">
     <input type="text" name="email" />
-    {{ Include the <template: components/button.tpl> with {
+    {{ Include the <button> from the <template: components/button.tpl> with {
         class: "primary",
         type: "submit",
         label: "Subscribe"
@@ -481,7 +534,7 @@ Here's a complete example showing a feature set that renders a user profile page
 </head>
 <body>
     <div class="profile">
-        {{ Include the <template: partials/header.tpl>. }}
+        {{ Include the <header> from the <template: partials/header.tpl>. }}
 
         <h1>{{ <user: name> }}</h1>
         <p>{{ <user: bio> }}</p>
@@ -495,7 +548,7 @@ Here's a complete example showing a feature set that renders a user profile page
         </article>
         {{ } }}
 
-        {{ Include the <template: partials/footer.tpl>. }}
+        {{ Include the <footer> from the <template: partials/footer.tpl>. }}
     </div>
 </body>
 </html>
@@ -566,17 +619,66 @@ Consider what happens when optional data is missing:
 {{ Print "No bio provided" to the <template> when not <user: bio>. }}
 ```
 
+## 44.13 Escaping: What the Extension Decides
+
+The `{{ }}` delimiters look like Mustache, which escapes by default and makes
+you write `{{{ }}}` to opt out. ARO does not work that way, and the difference
+is the one place a template can hurt you.
+
+**The template's file extension chooses the escaping.** A `.html` or `.htm`
+template HTML-escapes `& < > " '`; every other extension — `.tpl`, `.txt`,
+`.md`, `.screen` — escapes nothing, because those are not markup.
+
+So the practical rule is: **if a template produces HTML, name it `.html`.**
+The `profile.tpl` in Section 44.11 emits a full HTML document, and because of
+its extension nothing in it is escaped — a user whose name is
+`<script>…</script>` runs it in the reader's browser. Renaming it
+`profile.html` fixes that for free.
+
+The opt-out, for content you have already sanitised, qualifies the *target*:
+
+```text
+{{ Print <trusted-html> to the <template: raw>. }}
+```
+
+### The shorthand does not escape
+
+In an `.html` template the two forms Section 44.3 called equivalent are not:
+
+```text
+S1: {{ <user: name> }}                              → Alice <b>
+S2: {{ Print <user: name> to the <template>. }}     → Alice &lt;b&gt;
+S3: {{ Print <user: name> to the <template: raw>. }} → Alice <b>
+```
+
+The shorthand behaves like the deliberate opt-out. Until that is fixed
+([GitLab #560](https://git.ausdertechnik.de/arolang/aro/-/issues/560)), write
+untrusted values through `Print` in HTML templates, and keep the shorthand for
+values you produced yourself.
+
+Where escaping is not automatic — a `.tpl` file that happens to emit markup —
+escape in the feature set instead, with the `html-escape` qualifier of
+Chapter 9:
+
+```aro
+Compute the <safe-bio: html-escape> from <user-bio>.
+Transform the <page> from the <template: profile.html>.
+```
+
+---
+
 ## Summary
 
 | Feature | Syntax | Description |
 |---------|--------|-------------|
 | Execution block | `{{ ... }}` | Execute ARO statements |
-| Variable interpolation | `{{ <var> }}` | Print variable value |
+| Variable interpolation | `{{ <var> }}` | Print variable value (does **not** escape) |
+| HTML escaping | name the template `.html` | Escapes `Print`ed values; `.tpl` escapes nothing |
 | Print to template | `Print x to the <template>.` | Output to template buffer |
 | Render template | `Transform the <result> from the <template: path>.` | Render and capture output |
 | For-each loop | `{{ for each <x> in <list> { }} ... {{ } }}` | Iterate over collection |
-| Include template | `{{ Include the <template: path>. }}` | Embed another template |
-| Include with vars | `{{ Include the <template: path> with { k: v }. }}` | Pass variables to include |
+| Include template | `{{ Include the <x> from the <template: path>. }}` | Embed another template |
+| Include with vars | `{{ Include the <x> from the <template: path> with { k: v }. }}` | Pass variables to include |
 
 The template engine bridges ARO's action-oriented paradigm with the need for dynamic content generation. By maintaining context isolation and embracing the familiar `{{ }}` delimiter syntax, templates integrate naturally into ARO applications while preserving safety and predictability.
 

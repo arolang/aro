@@ -142,8 +142,11 @@ aro run .
 You should see:
 
 ```
-Hello from ARO!
+[Application-Start] Hello from ARO!
+[OK] startup
 ```
+
+Every line the runtime prints is tagged with the feature set that produced it, and the final `[OK]` is the `<Return>` statement reporting home. In a program with eight handlers running concurrently, those tags are the only thing that tells you who said what — get used to reading them now.
 
 If you see this message, your ARO installation is working and your project is ready.
 
@@ -159,9 +162,9 @@ If you see this message, your ARO installation is working and your project is re
 
 ## 2.7 What Could Be Better
 
-**No Package Management.** If we wanted to use someone else's ARO code, we would have to copy-paste it into our directory. A package manager would let us share and reuse code.
+**No Source-Level Imports.** Within an application, everything is global. That is a feature at this size and a problem at ten times it: two files cannot both define a feature set called `Save Page`, and there is no namespacing to fall back on.
 
-**No Dependency Handling.** Related to the above, there is no way to declare that our project depends on specific versions of external code.
+**Dependencies Are Plugins, Not Feature Sets.** Reusing someone else's code is a solved problem *if* it is packaged as a plugin: `aro add github:org/repo` clones it into `Plugins/`, `aro plugins` lists what is installed, and `aro remove` takes it out again. Pinning works too — `aro add … --ref v1.0.0`. What you cannot do is depend on somebody's plain `.aro` files; for those, copy-paste is still the mechanism.
 
 ---
 

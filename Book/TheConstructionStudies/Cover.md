@@ -26,6 +26,7 @@ This is not marketing material. We do not argue that ARO is better than other la
 - How a constrained domain-specific language differs architecturally from general-purpose languages
 - Practical trade-offs in lexer and parser design
 - Event-driven runtime architecture with pub-sub semantics
+- Deferred execution: what may run out of order, and what may never
 - LLVM IR generation using the Swifty-LLVM C API wrapper
 - Swift-C interoperability patterns for language runtimes
 - Honest assessment of design decisions that didn't work out
@@ -39,4 +40,4 @@ Chapters are designed to be read sequentially, following the compilation pipelin
 
 *ARO Language Project*
 *March 2026*
-*ARO Version: 0.7.1*
+*ARO Version: 0.9.x*

@@ -17,22 +17,24 @@ Built-in tools:
   edit_file         Apply a targeted edit to a file
   list_dir          List files and directories
   grep              Search file contents by pattern
-  search_project    Semantic search over the project index
   run_shell         Execute a shell command (requires approval)
   parse_aro         Parse ARO source and return diagnostics
   aro_check         Run aro check on a directory
   aro_run           Run aro run on a directory
   aro_test          Run aro test on a directory
+  aro_build         Compile an application to a native binary
+  aro_knowledge     Query the ARO knowledge base
+  list_actions      List available ARO actions and their verbs
+  list_proposals    List the ARO proposals
   read_proposal     Read an ARO proposal by number
   create_plugin     Scaffold a plugin directory
   write_openapi     Write or update an openapi.yaml file
-  write_plugin_yaml Write a plugin.yaml manifest
-  explain_error     Explain an ARO diagnostic in plain English
-  format_aro        Format ARO source to canonical style
-  list_actions      List available ARO actions and their verbs
+  generate_docs     Generate documentation for an application
 ```
 
 Eighteen tools. Some read. Some write. Some run code. Together they turn the model from something that generates text into something that modifies your project. That distinction matters more than anything else in this book.
+
+Note what is *not* in the list. There is no semantic-search tool: `/index` and `/search` are slash commands you drive yourself (section 3.4), not something the model can call mid-conversation. There is no `format_aro`, no `explain_error`, and no `write_plugin_yaml` — `create_plugin` writes the manifest as part of the scaffold, and explaining a diagnostic is just something the model does in prose. If you ask it to "run format_aro on this", it will politely fail; the schema will not let it invent a tool that does not exist.
 
 A model without tools can suggest a fix. A model with tools can *apply* the fix, check that it compiles, and tell you whether it worked. The difference is the difference between a code review and a pull request.
 
@@ -73,9 +75,9 @@ Not all tools are created equal. `read_file` is harmless — it reads a file and
 
 Tools are classified into three tiers:
 
-- **Read-only tools** (`read_file`, `list_dir`, `grep`, `search_project`, `read_proposal`, `list_actions`, `explain_error`): these run without asking. The model can read your project freely. This is by design — a model that has to ask permission to read a file is too slow to be useful.
-- **Write tools** (`write_file`, `edit_file`, `write_openapi`, `write_plugin_yaml`, `create_plugin`, `format_aro`): these run without asking in REPL mode, but every change is printed to the terminal so you can see what happened. In one-shot mode with `--yes`, they run silently. Without `--yes`, one-shot mode prints the change and asks for confirmation.
-- **Execution tools** (`run_shell`, `aro_run`, `aro_check`, `aro_test`, `parse_aro`): `aro_check`, `aro_test`, and `parse_aro` are considered safe and run without asking, because they do not modify anything. `aro_run` and `run_shell` always ask for approval unless `--yes` is set.
+- **Read-only tools** (`read_file`, `list_dir`, `grep`, `read_proposal`, `list_proposals`, `list_actions`, `aro_knowledge`): these run without asking. The model can read your project freely. This is by design — a model that has to ask permission to read a file is too slow to be useful.
+- **Write tools** (`write_file`, `edit_file`, `write_openapi`, `create_plugin`, `generate_docs`): these run without asking in REPL mode, but every change is printed to the terminal so you can see what happened. In one-shot mode with `--yes`, they run silently. Without `--yes`, one-shot mode prints the change and asks for confirmation.
+- **Execution tools** (`run_shell`, `aro_run`, `aro_build`, `aro_check`, `aro_test`, `parse_aro`): `aro_check`, `aro_test`, and `parse_aro` are considered safe and run without asking, because they do not modify anything. `aro_run`, `aro_build` and `run_shell` always ask for approval unless `--yes` is set.
 
 The dividing line is simple: tools that cannot change your project or execute arbitrary code run freely. Tools that can change files print what they did. Tools that can run your code ask first. If you want to move the line — make everything auto-approved — use `--yes`. If you want to move it the other way, there is no flag for that, because the default is already cautious.
 

@@ -13,7 +13,7 @@ Each chapter file matches its file name and a section heading inside the chapter
 ## Part II — Driving the Debugger
 
 4. **The Statement-Boundary Model** — what *pause* actually means, lazy futures, and why one verb is one step
-5. **Breakpoints — All Five Flavors** — location, verb, conditional, event, error-any
+5. **Breakpoints — All Six Flavors** — location, verb, conditional, logpoint, event, error-any
 6. **Watch Expressions** — typed predicates that survive every pause
 
 ## Part III — Editor Integration

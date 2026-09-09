@@ -61,6 +61,7 @@ The manifest is the contract between your plugin and ARO. Here's a complete exam
 ```yaml
 name: plugin-example
 version: 1.0.0
+handle: Example
 description: "An example plugin demonstrating the manifest format"
 author: "Your Name"
 license: MIT
@@ -89,10 +90,16 @@ Key fields:
 
 - **name**: Unique identifier, lowercase with hyphens
 - **version**: Semantic version (major.minor.patch)
+- **handle**: The PascalCase namespace the plugin's actions and qualifiers live under
 - **provides**: List of components the plugin provides
 - **dependencies**: Other plugins this one requires
 
-The `provides` section tells ARO what type of plugin this is and how to build it. We'll cover the details in Chapter 4.
+The `handle` is what callers actually type: a plugin with `handle: Example`
+exposes its actions as `Example.Verb` and its qualifiers as
+`<value: Example.qualifier>`. Handles are unique across an application — a
+second plugin claiming `Example` is loaded without a namespace and logs an
+error. The `provides` section tells ARO what type of plugin this is and how to
+build it. We'll cover both in Chapter 4.
 
 ## 2.4 Dependency Resolution
 
@@ -142,14 +149,26 @@ char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
 /* OPTIONAL — called when a subscribed event fires */
 void aro_plugin_on_event(const char* event_type, const char* data_json);
 
-/* OPTIONAL — system object read/write/list */
-char* aro_object_read(const char* object_id, const char* key);
-int32_t aro_object_write(const char* object_id, const char* key, const char* value_json);
-char* aro_object_list(const char* object_id);
+/* OPTIONAL — system object read/write/list.
+   All three return a heap-allocated JSON string; none returns a status code. */
+char* aro_object_read(const char* identifier, const char* qualifier);
+char* aro_object_write(const char* identifier, const char* qualifier, const char* value_json);
+char* aro_object_list(const char* pattern);
+
+/* OPTIONAL — forces file-scope initialisation before info is queried.
+   Swift SDK plugins need it, because a file-scope `let` is lazy. */
+void aro_plugin_register(void);
+
+/* OPTIONAL — receives a callback the plugin can use to invoke ARO feature sets */
+void aro_plugin_set_invoke(char* (*invoke)(const char* featureSet, const char* inputJson));
 
 /* REQUIRED if plugin allocates strings — free memory allocated by plugin */
 void aro_plugin_free(char* ptr);
 ```
+
+Those twelve names are the complete set: they are exactly the symbols
+`aro build` renames when it links plugins statically into a binary (see
+Section 2.16).
 
 `aro_plugin_info` is the **primary interface function** and is always required. Every other function is called only if declared in the metadata that `aro_plugin_info` returns.
 
@@ -211,11 +230,14 @@ When ARO loads a plugin library, it immediately calls `aro_plugin_info`. This is
 {
   "name": "plugin-hash",
   "version": "1.0.0",
-  "actions": ["Hash"],
+  "actions": [
+    { "name": "Hash", "verbs": ["Hash.Hash", "hash"],
+      "role": "own", "prepositions": ["from", "with"] }
+  ],
   "qualifiers": [
-    { "name": "djb2",  "accepts_parameters": false },
-    { "name": "fnv1a", "accepts_parameters": false },
-    { "name": "md5",   "accepts_parameters": false }
+    { "name": "djb2",  "inputTypes": ["String"], "accepts_parameters": false },
+    { "name": "fnv1a", "inputTypes": ["String"], "accepts_parameters": false },
+    { "name": "md5",   "inputTypes": ["String"], "accepts_parameters": false }
   ],
   "services": [
     {
@@ -223,13 +245,16 @@ When ARO loads a plugin library, it immediately calls `aro_plugin_info`. This is
       "methods": ["djb2", "fnv1a", "md5"]
     }
   ],
-  "system_objects": ["hash-cache"],
+  "system_objects": [
+    { "identifier": "hash-cache", "capabilities": ["readable", "writable"] }
+  ],
   "events": {
     "subscribes": ["AppStart"],
     "emits":      ["HashComputed"]
   },
   "deprecations": [
-    { "name": "crc32", "reason": "Use md5 instead", "removed_in": "2.0.0" }
+    { "feature": "crc32", "message": "Use md5 instead",
+      "since": "1.4.0", "remove_in": "2.0.0" }
   ]
 }
 ```
@@ -238,15 +263,15 @@ Top-level fields:
 
 - **name**: Plugin identifier (must match `plugin.yaml`)
 - **version**: Semantic version
-- **actions**: Verb names routed through `aro_plugin_execute("Hash", ...)`
-- **qualifiers**: Qualifier names routed through `aro_plugin_qualifier(name, ...)`. Each entry may declare `accepts_parameters: true` if the qualifier accepts inline arguments.
-- **services**: Named services with their methods, also routed through `aro_plugin_execute("service:<name>.<method>", ...)`
-- **system_objects**: System object IDs that this plugin manages via `aro_object_read/write/list`
+- **actions**: Action descriptors routed through `aro_plugin_execute("Hash", ...)`. The flat shorthand `"actions": ["hash"]` still parses, but the structured form carries the `verbs`, `role`, `prepositions` and `description` that the editor and `aro actions` display.
+- **qualifiers**: Qualifier names routed through `aro_plugin_qualifier(name, ...)`. `inputTypes` is camelCase — spell it `input_types` and the runtime silently accepts the qualifier for every type. Each entry may declare `accepts_parameters: true` if the qualifier accepts inline arguments.
+- **services**: Named services with their methods, also routed through `aro_plugin_execute("service:<method>", ...)`
+- **system_objects**: Objects this plugin manages via `aro_object_read/write/list`. The key is `identifier`, not `name` — an entry keyed on `name` is skipped.
 - **events.subscribes**: Event types the plugin wants to receive via `aro_plugin_on_event`
 - **events.emits**: Event types this plugin may emit (informational, for tooling)
-- **deprecations**: Identifiers scheduled for removal
+- **deprecations**: Identifiers scheduled for removal (`feature`, `message`, `since`, `remove_in`)
 
-ARO parses this metadata at load time and registers each capability in the appropriate runtime registry.
+ARO parses this metadata at load time and registers each capability in the appropriate runtime registry. Unrecognised keys are ignored silently, so a misspelled field costs you the feature rather than an error — check `aro actions` and `aro actions --qualifiers` after a change.
 
 ### aro_plugin_init — Optional
 
@@ -286,13 +311,15 @@ The dispatch key follows these conventions:
 | Caller intent | Dispatch key format | Example |
 |---------------|---------------------|---------|
 | Plugin action | Verb name | `"Hash"` |
-| Service method | `service:<name>.<method>` | `"service:hash.md5"` |
+| Service method | `service:<method>` | `"service:md5"` |
 
-For example, to invoke the `md5` method of the `hash` service:
+The service *name* does not appear in the key — the runtime already resolved
+which plugin to call before it dispatched, so only the method survives. To
+invoke the `md5` method of the `hash` service:
 
 ```c
 // ARO calls:
-aro_plugin_execute("service:hash.md5", "{\"data\":\"hello world\"}")
+aro_plugin_execute("service:md5", "{\"data\":\"hello world\"}")
 ```
 
 The function returns a newly allocated JSON string. On success it contains the result; on error it contains an `"error"` field (see Section 2.13). ARO calls `aro_plugin_free` on the returned pointer when it is done.
@@ -301,7 +328,7 @@ A minimal C implementation:
 
 ```c
 char* aro_plugin_execute(const char* action, const char* input_json) {
-    if (strcmp(action, "service:hash.md5") == 0) {
+    if (strcmp(action, "service:md5") == 0) {
         // Parse input, compute hash...
         return strdup("{\"hash\": \"5eb63bbbe01eeed093cb22bb8f5acdc3\"}");
     }
@@ -326,7 +353,7 @@ public func pluginExecute(
 
     let result: String
     switch action {
-    case "service:hash.md5":
+    case "service:md5":
         result = computeMD5(inputJSON)
     case "Hash":
         result = handleHashAction(inputJSON)
@@ -375,44 +402,53 @@ This function returns nothing. It is called asynchronously; do not block for lon
 
 Plugins that manage stateful resources—counters, caches, connection pools—can expose them as **system objects**. System objects are accessed from ARO code using the standard `<object-id: key>` qualifier syntax.
 
-Declare system object IDs in `aro_plugin_info`:
+Declare system objects in `aro_plugin_info`. Each entry is an object, and the
+identity key is `identifier` — an entry keyed on `name` parses into nothing and
+the object never registers:
 
 ```json
-"system_objects": ["hash-cache"]
+"system_objects": [
+  { "identifier": "hash-cache",
+    "capabilities": ["readable", "writable", "enumerable"] }
+]
 ```
 
-Then implement the three access functions:
+Then implement the three access functions. All three return a heap-allocated
+JSON string; none of them returns a status code:
 
 ```c
 /* Read a key from the object; return JSON value or null */
-char* aro_object_read(const char* object_id, const char* key) {
-    if (strcmp(object_id, "hash-cache") == 0) {
-        const char* value = cache_get(key);
+char* aro_object_read(const char* identifier, const char* qualifier) {
+    if (strcmp(identifier, "hash-cache") == 0) {
+        const char* value = cache_get(qualifier);
         return value ? strdup(value) : strdup("null");
     }
     return strdup("null");
 }
 
-/* Write a key into the object; return 0 on success */
-int32_t aro_object_write(const char* object_id, const char* key,
-                         const char* value_json) {
-    if (strcmp(object_id, "hash-cache") == 0) {
-        cache_set(key, value_json);
-        return 0;
+/* Write a key into the object; report status in the returned JSON */
+char* aro_object_write(const char* identifier, const char* qualifier,
+                       const char* value_json) {
+    if (strcmp(identifier, "hash-cache") == 0) {
+        cache_set(qualifier, value_json);
+        return strdup("{\"ok\": true}");
     }
-    return 1;
+    return strdup("{\"error\": \"Unknown object\"}");
 }
 
-/* List all keys in the object; return JSON array */
-char* aro_object_list(const char* object_id) {
-    if (strcmp(object_id, "hash-cache") == 0) {
-        return cache_list_keys_as_json();
-    }
-    return strdup("[]");
+/* List entries matching a pattern; return JSON array.
+   Note the single argument — the pattern, not the object id. */
+char* aro_object_list(const char* pattern) {
+    return cache_list_keys_as_json(pattern);
 }
 ```
 
 ARO calls `aro_plugin_free` on any pointer returned by these functions.
+
+> **Known gap.** The C SDK's info-JSON builder emits `"name"` rather than
+> `"identifier"`, so system objects declared through the SDK's macros do not
+> register with the runtime. Write `aro_plugin_info` by hand if you need system
+> objects, until that is fixed (GitLab #556).
 
 ## 2.10 JSON-Based Communication
 
@@ -475,7 +511,13 @@ void aro_plugin_free(char* ptr) {
 - `aro_plugin_execute`
 - `aro_plugin_qualifier`
 - `aro_object_read`
+- `aro_object_write`
 - `aro_object_list`
+
+**`aro_plugin_info` is on that list.** It is tempting to return a `static const
+char*` from it — the string never changes, after all — but ARO frees what it
+gets back, and `free()` on a static buffer is undefined behaviour. Return a
+fresh `strdup` (or a `CString::into_raw`) every time.
 
 Strings passed **into** your plugin (the `action`, `input_json`, `event_type`, `data_json`, `key`, and `value_json` parameters) are owned by ARO. Never free them.
 
@@ -485,17 +527,21 @@ Memory leaks in plugins are insidious—they affect the entire ARO runtime. Use 
 
 Python plugins follow the same conceptual model but use a different transport mechanism.
 
-Instead of loading a dynamic library, ARO spawns a Python subprocess. Communication happens through standard input/output with JSON messages:
+Instead of loading a dynamic library, ARO spawns `python3 -c` with a small
+generated driver script. The script inserts the plugin directory on
+`sys.path`, imports one function out of the plugin module, calls it with the
+input JSON, and prints the result:
 
+```python
+# What ARO actually runs, per call
+import sys, json, base64
+sys.path.insert(0, '/path/to/Plugins/plugin-text/src')
+from plugin import aro_action_analyze
+input_json = base64.b64decode('...').decode('utf-8')
+print(aro_action_analyze(input_json))
 ```
-ARO → Python subprocess:
-{"action": "analyze", "input": {"text": "hello world"}}
 
-Python subprocess → ARO:
-{"result": {"word_count": 2, "char_count": 11}}
-```
-
-The Python plugin must define functions following a naming convention:
+The Python plugin must define module-level functions following a naming convention:
 
 ```python
 def aro_plugin_info():
@@ -512,19 +558,42 @@ def aro_action_analyze(input_json):
     return json.dumps(result)
 ```
 
-The subprocess overhead (~50-100ms per call) makes Python plugins unsuitable for high-frequency operations. But for tasks like ML inference where the computation itself takes seconds, the overhead is negligible.
+**One process per call.** This is the single most important thing to know
+about Python plugins: ARO does not keep the interpreter alive between calls.
+Every action invocation, and every qualifier invocation, forks a fresh
+`python3`, re-imports the module, and tears it down. Module-level state does
+not survive — a cache populated on one call is empty on the next, and a model
+loaded on one call is reloaded on the next. Design Python plugins to be
+stateless, and push anything expensive into a process the plugin talks to
+rather than into the plugin's own globals.
+
+The per-call overhead (interpreter startup plus imports, easily 50–100 ms and
+much more once a heavy library is imported) makes Python plugins unsuitable
+for high-frequency operations. For tasks where the computation itself takes
+seconds and does not need warm state, the overhead is tolerable.
 
 ## 2.13 The UnifiedPluginLoader
 
-ARO uses a `UnifiedPluginLoader` that delegates to specialized hosts based on plugin type:
+ARO uses a `UnifiedPluginLoader` that delegates to specialized hosts based on the `provides` type:
 
 ```
 UnifiedPluginLoader
-    ├── NativePluginHost    → C, C++, Rust plugins
-    ├── SwiftPluginHost     → Swift plugins
+    ├── NativePluginHost    → C, C++, Rust AND Swift plugins
     ├── PythonPluginHost    → Python plugins
-    └── AROFilePlugin       → ARO feature set plugins
+    └── AROFilePlugin       → aro-files and aro-templates providers
 ```
+
+There is no separate Swift host. A Swift plugin's `@_cdecl` exports are
+binary-compatible with the C ABI, so Swift plugins are `dlopen`ed through
+`NativePluginHost` exactly like a C plugin — which is why everything this
+chapter says about the C ABI applies verbatim to Swift.
+
+**Lazy loading.** When a `provides` entry declares its `actions:` in
+`plugin.yaml`, the loader registers action *stubs* at startup and defers the
+`dlopen` (or the `cargo build`, or the first `python3`) until an ARO statement
+actually invokes one of them. Applications that ship several plugins but use
+one per request start much faster this way. Omit `actions:` and the plugin is
+loaded eagerly at startup.
 
 Each host knows how to:
 
@@ -575,6 +644,14 @@ Race conditions in plugins can cause subtle, hard-to-reproduce bugs. When in dou
 
 Errors in plugins are reported by returning a JSON object containing an `"error"` key from `aro_plugin_execute` or `aro_plugin_qualifier`:
 
+Qualifiers are stricter than actions here. `aro_plugin_qualifier` must return
+either `{"result": <value>}` or `{"error": "<message>"}` — nothing else. An
+action may return any JSON object and let the caller pick fields off it, but a
+qualifier that returns `{"value": "HELLO"}`, or a bare `"HELLO"`, fails with
+*Plugin returned neither result nor error*. Wrap the transformed value in
+`result` and nothing more; wrapping twice (`{"result": {"result": …}}`) binds
+the inner object rather than the value.
+
 ```c
 char* aro_plugin_execute(const char* action, const char* input_json) {
     if (invalid_input) {
@@ -610,20 +687,22 @@ Include enough context in error messages to diagnose problems:
 When an ARO application with `plugin-hash` starts:
 
 1. **Discovery**: ARO finds `Plugins/plugin-hash/plugin.yaml`
-2. **Loading**: `libhash.dylib` is loaded into memory via `dlopen`
-3. **Info**: ARO calls `aro_plugin_info()` → receives JSON declaring actions, qualifiers, services, and system objects
-4. **Init**: ARO calls `aro_plugin_init()` if present → plugin warms up its cache
-5. **Registration**: `Hash` action, `djb2`/`fnv1a`/`md5` qualifiers, `hash` service, and `hash-cache` system object are registered in their respective runtime registries
-6. **Event subscription**: ARO subscribes the plugin to `AppStart` events (as declared in `events.subscribes`)
+2. **Handle resolution**: the root-level `handle:` (or, with a deprecation warning, a legacy `handler:` inside `provides:`) becomes the plugin's namespace, and the loader checks no other plugin has claimed it
+3. **Loading**: `libhash.dylib` is loaded into memory via `dlopen`
+4. **Register**: if the library exports `aro_plugin_register`, ARO calls it so file-scope initialisation runs before the metadata is read
+5. **Info**: ARO calls `aro_plugin_info()` → receives JSON declaring actions, qualifiers, services, and system objects, then frees the returned pointer with `aro_plugin_free`
+6. **Init**: ARO calls `aro_plugin_init()` if present → plugin warms up its cache
+7. **Registration**: the `Hash` action (under both `hash` and `Hash.hash`), the `djb2`/`fnv1a`/`md5` qualifiers (as `Hash.djb2` and friends), the `hash` service, and the `hash-cache` system object are registered in their respective runtime registries
+8. **Event subscription**: ARO subscribes the plugin to `AppStart` events (as declared in `events.subscribes`)
 
 ### Execution trace
 
 When ARO executes `Call the <hash> from the <plugin-hash: djb2> with { data: "hello" }.`:
 
-1. **Action lookup**: ARO finds the `hash` service in the registry under `plugin-hash`
-2. **Method resolution**: `djb2` is a known method of the `hash` service
+1. **Service lookup**: ARO finds the service registered under `plugin-hash`
+2. **Method resolution**: `djb2` is the method named by the object qualifier
 3. **Argument serialization**: `{ data: "hello" }` becomes `{"data":"hello"}`
-4. **Dispatch**: ARO calls `aro_plugin_execute("service:hash.djb2", "{\"data\":\"hello\"}")`
+4. **Dispatch**: ARO calls `aro_plugin_execute("service:djb2", "{\"data\":\"hello\"}")`
 5. **Plugin processing**: Your code parses JSON, computes the hash, builds the result string
 6. **Result return**: Plugin returns `"{\"hash\":\"5d41402abc4b2a76\"}"` (a `strdup`-allocated pointer)
 7. **Memory cleanup**: ARO calls `aro_plugin_free` on the returned pointer after parsing
@@ -638,6 +717,18 @@ When the ARO application receives SIGINT or SIGTERM:
 1. **Event emission**: ARO fires `AppShutdown` event to all subscribed plugins
 2. **Shutdown hook**: ARO calls `aro_plugin_shutdown()` on each loaded plugin
 3. **Unload**: Libraries are closed in reverse dependency order
+
+### Compiled binaries
+
+`aro build` does not copy plugins next to the binary; it links them *into* it.
+Each plugin's object code is rewritten with `llvm-objcopy --redefine-sym` so
+its C ABI symbols carry a per-plugin prefix — `aro_plugin_info` becomes
+`aro_static_plugin_hash__aro_plugin_info` — and the runtime is handed the
+resulting function pointers at startup. That prefixing is why every plugin can
+export the same twelve names without colliding, and why the resulting binary
+needs no `Plugins/` directory beside it. Python plugins take the same route
+through an embedded `libpython3`: source and dependencies are baked into the
+binary and run in-process, so the target machine needs no Python installed.
 
 All execution happens in microseconds for native plugins. The JSON serialization and parsing, while not free, are typically dwarfed by the actual work the plugin does.
 

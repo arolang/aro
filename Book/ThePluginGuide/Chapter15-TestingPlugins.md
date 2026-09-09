@@ -1,11 +1,19 @@
-# Chapter 14: Testing Plugins
+# Chapter 15: Testing Plugins
 
 > *"Testing shows the presence, not the absence of bugs."*
 > — Edsger W. Dijkstra
 
 A plugin that works on your machine is a prototype. A plugin that works everywhere—across operating systems, ARO versions, and edge cases—is a product. This chapter covers the testing strategies that transform your plugin from one to the other.
 
-## 14.1 The Testing Pyramid for Plugins
+> **A note on the C ABI in this chapter.** The plugin code below still uses the
+> older three-parameter `aro_plugin_execute(action, args, char** result) ->
+> Int32` and its `setError`/`status == 0` idiom. That form was removed: the
+> current signature is `char* aro_plugin_execute(const char*, const char*)`,
+> with errors returned as a JSON object carrying an `error` key and no status
+> code at all. Read these examples for their structure and take the signature
+> from Chapter 8 or Appendix B.
+
+## 15.1 The Testing Pyramid for Plugins
 
 Effective plugin testing operates at multiple levels:
 
@@ -34,7 +42,7 @@ Each level catches different classes of bugs:
 | Component | Integration issues, protocol errors | Medium | Medium |
 | E2E | Real-world failures, system issues | Slow | Lower |
 
-## 14.2 Unit Testing Plugin Code
+## 15.2 Unit Testing Plugin Code
 
 Unit tests verify individual functions in isolation. The approach varies by language but follows common patterns.
 
@@ -421,7 +429,7 @@ pytest tests/ -v --benchmark-disable  # Without benchmarks
 pytest tests/ -v                       # With benchmarks
 ```
 
-## 14.3 Component Testing with ARO
+## 15.3 Component Testing with ARO
 
 Component tests verify your plugin works correctly with the ARO runtime.
 
@@ -565,7 +573,7 @@ echo "All tests passed!"
 echo "=========================================="
 ```
 
-## 14.4 Integration and E2E Testing
+## 15.4 Integration and E2E Testing
 
 Integration tests verify your plugin works in realistic scenarios with other components.
 
@@ -704,7 +712,7 @@ Test your plugin as part of a complete application:
 }
 ```
 
-## 14.5 Testing Edge Cases and Error Conditions
+## 15.5 Testing Edge Cases and Error Conditions
 
 Robust plugins handle edge cases gracefully.
 
@@ -819,7 +827,7 @@ gcc -fsanitize=address -g tests/test_plugin.c src/plugin.c -o test_asan
 valgrind --leak-check=full ./test_plugin
 ```
 
-## 14.6 Continuous Integration
+## 15.6 Continuous Integration
 
 Automate testing with CI/CD pipelines.
 

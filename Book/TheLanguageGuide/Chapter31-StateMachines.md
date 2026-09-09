@@ -446,7 +446,7 @@ State transitions naturally pair with events. When an order moves to a new state
     Extract the <customer-email> from the <order: customerEmail>.
     Extract the <tracking> from the <order: trackingNumber>.
 
-    Send the <shipping-notification: email> to <customer-email>
+    Send the <shipping-notification> to the <customer-email>
         with <tracking>.
 
     Return an <OK: status> for the <notification>.
@@ -457,7 +457,7 @@ The feature set that changes state is responsible for emitting events. Handlers 
 
 This pattern also supports saga-style workflows where a state change in one entity triggers state changes in others, each with its own validation.
 
-### 22.9.1 State-Guarded Handlers
+### 31.9.1 State-Guarded Handlers
 
 Sometimes you want handlers to only execute when an entity is in a specific state. Rather than checking the state inside the handler, you can filter events at the handler definition using state guards:
 
@@ -466,7 +466,7 @@ Sometimes you want handlers to only execute when an entity is in a specific stat
 (Process Paid Order: OrderUpdated Handler<status:paid>) {
     Extract the <order> from the <event: order>.
     (* This handler only runs when order.status = "paid" *)
-    Process the <fulfillment> for the <order>.
+    Emit a <FulfillmentRequested: event> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```
@@ -488,7 +488,7 @@ State guards use angle bracket syntax after "Handler":
 (* Only premium customers with delivered orders *)
 (VIP Reward: OrderUpdated Handler<status:delivered;tier:premium>) {
     Extract the <order> from the <event: order>.
-    Send the <reward> to the <order: email>.
+    Send the <reward> to the <order: email> with { kind: "vip" }.
     Return an <OK: status> for the <reward>.
 }
 ```

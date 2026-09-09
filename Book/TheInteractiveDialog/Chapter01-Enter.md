@@ -12,11 +12,11 @@ Every conversation begins with a greeting. With ARO, that greeting is a single c
 $ aro repl
 ```
 
-The screen clears. A message appears:
+Two lines appear, then a prompt:
 
 ```
 ARO REPL v1.0
-Type :help for commands, :quit to exit
+Type :help or /help for commands, :quit to exit
 
 aro> _
 ```
@@ -29,24 +29,48 @@ This is the REPL—the Read-Eval-Print Loop. It reads what you type, evaluates i
 
 The `aro>` prompt is your invitation to speak. Everything you type after it becomes a statement to ARO. Every statement gets a response.
 
-Try typing `:help`:
+Try typing `:help`. The full text is longer than this page; here is its spine:
 
 ```
 aro> :help
-ARO REPL Commands:
+ARO REPL Commands (use : or / prefix):
 
-  :help, :h, :?         Show this help message
-  :vars                 List all variables
-  :clear                Clear session state
-  :history              Show input history
-  :export               Export session as .aro file
-  :quit, :q, :exit      Exit the REPL
+Session:
+  :help, :h, :?           Show this help message
+  :vars, :v               List all session variables
+  :vars <name>            Show details of a specific variable
+  :type <name>, :t        Show the type of a variable
+  :clear, :c              Clear all session state
+  :history, :hist         Show input history
+  :history <n>            Show last n entries
 
-Type ARO statements directly, ending with .
-Example: Set the <x> to 42.
+Feature Sets:
+  :fs                     List defined feature sets
+  :invoke <name>, :i      Invoke a feature set
+  :invoke <name> <json>   Invoke with input data
+
+Data:
+  :set <name> <value>     Set a variable to a value
+  :load <file>            Load and execute a .aro file
+  :export, :e             Print session as .aro code
+  :export <file>          Save session to file
+  :export --test <file>   Export as test file
+
+Plugins:
+  :plugin add <git-url>   Install and load a plugin from Git
+  ...
+
+Control:
+  :quit, :q, :exit        Exit the REPL
 ```
 
 Commands that start with `:` talk to the REPL itself. Everything else is ARO.
+
+One warning about that help text: its worked examples still write verbs inside
+angle brackets — `<Set> the <x> to 42.` That spelling was removed from the
+language and no longer parses, so the first thing a new reader copies out of
+`:help` fails (GitLab issue #574). Write the verb bare, as this book does
+throughout: `Set the <x> to 42.`
 
 ## Leaving
 

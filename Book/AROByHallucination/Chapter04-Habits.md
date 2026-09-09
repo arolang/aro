@@ -46,7 +46,9 @@ Train yourself — and the model — to use this tool before writing files. "Par
 
 ## 4.5 Keep the Index Fresh
 
-The first time you run `aro ask /index` in a project, it walks every indexable file, chunks them, embeds them, and writes the result to `.context.index/vectors.json`. After that, the model has access to a search tool that can find a relevant piece of the project in one call.
+The first time you run `aro ask /index` in a project, it walks every indexable file, chunks them, embeds them, and writes the result to `.context.index/vectors.json`. After that, `/search <query>` finds the relevant piece of the project in one call.
+
+Be clear about who does the searching: `/index` and `/search` are yours, not the model's. There is no `search_project` in the tool list (Chapter 7), so the model cannot decide mid-conversation to go looking. What the index buys you is the ability to find the right file yourself in one command and then point the model at it — `/search repository observer`, then `/file links.aro` — instead of asking it to `grep` its way there over four tool calls.
 
 The index does not update itself. If you move a file, add a new proposal, or rewrite a large chunk of source, run `/index` again. It is fast. There is no reason not to.
 

@@ -289,6 +289,14 @@ You may have noticed we do not handle path-relative URLs like `../sibling` or `p
 
 For simplicity, our crawler skips them. They fall through the `match` without emitting an event. In a production crawler, you would add another case with proper path resolution.
 
+That is also why `aro check` reports one warning on `links.aro`:
+
+```
+16:5: warning: Variable 'source-url' is defined but never used
+```
+
+We extract the source page URL because path-relative resolution needs it, and then never resolve any path-relative URLs. The warning is correct and it is deliberate: it marks the exact line where the missing case would go. Delete the extraction if the warning bothers you — the `source` field is still carried on the event, so you can put the line back when you implement the case.
+
 ---
 
 ## 7.11 What ARO Does Well Here
@@ -307,7 +315,7 @@ For simplicity, our crawler skips them. They fall through the `match` without em
 
 **No URL Utilities.** ARO has no built-in URL parsing. We handle fragment stripping and trailing slashes with `<Split>`, but a proper URL type with methods like `resolve()`, `stripFragment()`, and `normalize()` would consolidate what currently takes four lines into one.
 
-**Limited Regex Features.** The regex syntax is basic. Advanced features like named groups are not available.
+**No Capture Groups.** The regex *syntax* is full-featured — `(?<host>[^/]+)` and every other construct you would expect compile and match fine. What is missing is any way to get a capture back out. There is no `Extract the <host> from <matches: host>`; a regex can tell you *whether* something matched, and `<Split>` can cut a string apart, but you cannot pull a named or numbered group into a variable. That is why the four `<Split>` lines above exist instead of one match against `^(https?://[^#]+?)/*(#.*)?$`.
 
 ---
 

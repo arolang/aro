@@ -139,16 +139,36 @@ Swifty-LLVM was the upgrade we needed.
 - More complex build setup (pkg-config, library paths)
 - Tighter coupling to a specific LLVM version
 
+### Where the text comes back
+
+One detail the diagram above hides: the IR is built as objects and *emitted* as text. The whole module is constructed through the C API, verified, and then serialized with a single `ctx.module.description` into a `.ll` file, which `llc` reads. So both representations exist — the typed one where the mistakes are made, the textual one at the tool boundary. The point was never to avoid text. It was to stop *authoring* in it.
+
+The API's coverage is not complete, either. Swifty-LLVM's bundled module covers `Core.h` only, so DWARF emission needed a second C target of its own (`AROCDebugInfo`) exposing `llvm-c/DebugInfo.h`. Worth knowing before you assume a wrapper removes the C API from your life.
+
+The dependency is pinned to a branch rather than a version:
+
+```swift
+.package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
+```
+
+and LLVM 20 is enforced not by the manifest but by the linker settings — `LLVM_PATH` defaulting to `/opt/homebrew/opt/llvm@20` or `/usr/lib/llvm-20`, plus `-lLLVM-20`. The whole block is compiled out on Windows, where native compilation is not available.
+
 ### Code Generator Architecture
 
-Four components work together to produce IR:
+`Sources/AROCompiler/` is eleven files, about 7,100 lines, and everything except `Linker.swift` lives under `LLVMC/`:
 
 | Component | Role |
 |-----------|------|
-| `LLVMCodeGenerator` | Main traversal: walks the AST, drives IR emission |
+| `LLVMCodeGenerator` | Main traversal: walks the AST, drives IR emission (~2,285 lines) |
 | `LLVMCodeGenContext` | Holds the LLVM module, current builder position, and type/string caches |
 | `LLVMTypeMapper` | Defines the `AROResultDescriptor` and `AROObjectDescriptor` struct types |
-| `LLVMExternalDeclEmitter` | Declares all 61 runtime action functions so the generated code can call them |
+| `DescriptorBuilder` | Fills those structs per statement |
+| `ExpressionSerializer` | Turns expression ASTs into the JSON the runtime evaluates |
+| `ConstantFolder` | Folds what it can before serialization |
+| `ModifierBinder` | Emits the framework-variable binds for a statement's clauses |
+| `LLVMDebugInfoEmitter` | DWARF, via the `AROCDebugInfo` C shim |
+| `LLVMErrorReporter` | Diagnostics from the code generator |
+| `LLVMExternalDeclEmitter` | Declares the runtime functions the generated code calls — actions, lifecycle, variable ops, handler registration |
 
 ---
 
@@ -208,10 +228,10 @@ declare ptr @aro_variable_resolve(ptr, ptr)
 declare ptr @aro_action_extract(ptr, ptr, ptr)
 declare ptr @aro_action_compute(ptr, ptr, ptr)
 declare ptr @aro_action_return(ptr, ptr, ptr)
-; ... 47 more action declarations
+; ... one per action verb, plus lifecycle and registration
 ```
 
-The generator emits declarations for all 61 built-in actions, plus runtime lifecycle and variable operations.
+The generator emits declarations for the built-in actions (71 of them, claiming about 130 verbs), plus runtime lifecycle, variable operations, and one `aro_runtime_register_*` / `aro_register_*` entry per kind of handler.
 
 ---
 
@@ -372,6 +392,10 @@ The descriptor structs are allocated on the stack within each feature set functi
 ## Control Flow: When Guards
 
 A `when` condition is serialized to JSON and passed to the runtime's `aro_evaluate_when_guard` function. This generates a conditional branch: if the guard passes, execute the statement body; if not, jump to the next statement.
+
+Note what that means: the basic-block structure is genuine LLVM control flow, but the *condition* is not compiled. `ExpressionSerializer` renders the expression AST as JSON (`ConstantFolder` first folding whatever it can), the string becomes a global constant, and a runtime call returns an `i32` that the generated code compares against zero. Same for `while` conditions.
+
+The cost of that design is that the serializer and the evaluator are two halves of one protocol maintained in separate modules, and they can disagree. They currently do: the serializer emits `{"$unary":{…}}` for a `not` or a negation, and the bridge's `evaluateExpressionJSON` knows only `$lit`, `$var`, `$binary` and `$interpolated`. Constant folding hides most cases — `not true` never reaches the wire — but a non-constant `not <flag>` in a compiled guard falls through to the default. A JSON protocol between two hand-written ends needs a shared schema and a round-trip test; this one has neither yet.
 
 ---
 
@@ -590,7 +614,7 @@ After `llc` produces the object file, the linker calls `clang` to combine it wit
 
 | Linked Component | Purpose |
 |-----------------|---------|
-| `libARORuntime` | All 61 actions, event bus, runtime lifecycle |
+| `libARORuntime` | All 71 actions, the C bridge, event bus, runtime lifecycle |
 | Swift runtime | `libswiftCore` and friends |
 | Foundation | Networking, file system, JSON |
 | Platform libc | Standard C runtime |

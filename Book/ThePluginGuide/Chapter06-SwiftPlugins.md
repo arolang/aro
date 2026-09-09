@@ -110,10 +110,16 @@ Every language has a native, idiomatic way to register plugins:
 
 | Language | Registration | Generated Exports |
 |----------|-------------|-------------------|
-| **Swift** | `@AROExport` macro | `aro_plugin_register` + all C ABI |
-| **Rust** | `#[no_mangle] extern "C"` functions | Manual C ABI |
-| **C** | `ARO_PLUGIN()` + `ARO_ACTION()` macros | Automatic via header |
-| **Python** | `@plugin` + `@action` decorators + `export_abi()` | Automatic via SDK |
+| **Swift** | `@AROExport` macro on an `AROPlugin` value | `aro_plugin_register` + all C ABI |
+| **C / C++** | `ARO_PLUGIN()` + `ARO_HANDLE()` + `ARO_ACTION()` / `ARO_QUALIFIER()` | Automatic via the single-header SDK |
+| **Python** | `@plugin` + `@action` / `@qualifier` decorators + `export_abi(globals())` | Module-level `aro_plugin_info` / `aro_action_*` / `aro_plugin_qualifier` |
+| **Rust** | `#[no_mangle] extern "C"` functions, written by hand | None — the Rust SDK's proc macros are still pass-through stubs (GitLab #549) |
+
+The Rust row is the odd one out and deliberately so: `aro new plugin --lang
+rust` currently scaffolds `#[action]` / `#[qualifier_attr]` attributes and an
+`aro_export!` block that the published Rust SDK does not implement, so the
+generated crate does not compile. Chapter 7 therefore teaches the hand-written
+FFI, which does work.
 
 ## 6.4 Your First Swift Plugin: Custom Actions
 
@@ -187,147 +193,24 @@ private let plugin = AROPlugin(name: "plugin-swift-greeting", version: "1.0.0", 
 
 That's it. No manual JSON, no `@_cdecl`, no memory management. The `@AROExport` macro and the SDK handle everything.
 
-// MARK: - Method Implementations
+### Step 4: Build the Plugin
 
-/// Format a date according to the specified format and locale.
-/// The primary value comes from the main input; options come from _with params.
-private func formatDate(_ args: [String: Any], params: [String: Any]) throws -> [String: Any] {
-    guard let timestamp = args["data"] as? TimeInterval ?? args["timestamp"] as? TimeInterval else {
-        throw PluginError.missingParameter("timestamp")
-    }
-
-    let format = params["format"] as? String ?? args["format"] as? String ?? "yyyy-MM-dd HH:mm:ss"
-    let localeIdentifier = params["locale"] as? String ?? args["locale"] as? String ?? "en_US"
-
-    let date = Date(timeIntervalSince1970: timestamp)
-    let formatter = DateFormatter()
-    formatter.dateFormat = format
-    formatter.locale = Locale(identifier: localeIdentifier)
-
-    let formatted = formatter.string(from: date)
-
-    return [
-        "formatted": formatted,
-        "timestamp": timestamp,
-        "format": format,
-        "locale": localeIdentifier
-    ]
-}
-
-/// Parse a date string into a timestamp.
-/// The primary value comes from the main input; format and locale from _with params.
-private func parseDate(_ args: [String: Any], params: [String: Any]) throws -> [String: Any] {
-    guard let dateString = args["data"] as? String ?? args["date"] as? String else {
-        throw PluginError.missingParameter("date")
-    }
-
-    let format = params["format"] as? String ?? args["format"] as? String ?? "yyyy-MM-dd"
-    let localeIdentifier = params["locale"] as? String ?? args["locale"] as? String ?? "en_US"
-
-    let formatter = DateFormatter()
-    formatter.dateFormat = format
-    formatter.locale = Locale(identifier: localeIdentifier)
-
-    guard let date = formatter.date(from: dateString) else {
-        throw PluginError.parseError("Could not parse '\(dateString)' with format '\(format)'")
-    }
-
-    return [
-        "timestamp": date.timeIntervalSince1970,
-        "date": dateString,
-        "format": format
-    ]
-}
-
-/// Generate a relative time description
-private func relativeDate(_ args: [String: Any]) throws -> [String: Any] {
-    guard let timestamp = args["data"] as? TimeInterval ?? args["timestamp"] as? TimeInterval else {
-        throw PluginError.missingParameter("timestamp")
-    }
-
-    let date = Date(timeIntervalSince1970: timestamp)
-    let now = Date()
-
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .full
-
-    if let localeIdentifier = args["locale"] as? String {
-        formatter.locale = Locale(identifier: localeIdentifier)
-    }
-
-    let relative = formatter.localizedString(for: date, relativeTo: now)
-
-    return [
-        "relative": relative,
-        "timestamp": timestamp,
-        "now": now.timeIntervalSince1970
-    ]
-}
-
-/// Get the current time
-private func getCurrentTime() -> [String: Any] {
-    let now = Date()
-    let formatter = ISO8601DateFormatter()
-
-    return [
-        "timestamp": now.timeIntervalSince1970,
-        "iso8601": formatter.string(from: now),
-        "unix": Int(now.timeIntervalSince1970)
-    ]
-}
-
-// MARK: - Free
-
-/// Frees memory allocated by the plugin. REQUIRED.
-@_cdecl("aro_plugin_free")
-public func pluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
-    ptr.map { free($0) }
-}
-
-// MARK: - Error Handling
-
-/// Plugin errors
-private enum PluginError: LocalizedError {
-    case missingParameter(String)
-    case parseError(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingParameter(let name):
-            return "Missing required parameter: \(name)"
-        case .parseError(let message):
-            return message
-        }
-    }
-}
+```bash
+cd Plugins/plugin-swift-greeting && swift build -c release
 ```
 
-### Step 4: Use the Plugin in ARO
+### Step 5: Use the Plugin in ARO
 
-With custom actions registered, use natural ARO syntax:
+With custom actions registered, use natural ARO syntax. The plugin's `handle`
+is `Greeting`, so its actions live under that namespace:
 
 ```aro
-(Show Timestamps: Application-Start) {
-    Create the <now> with { timestamp: 1707660600 }.
+(Application-Start: Greeting Demo) {
+    Greeting.Greet the <hello> from "World".
+    Log <hello: greeting> to the <console>.
 
-    (* Format using the FormatDate action - feels native! *)
-    FormatDate the <formatted> from the <now: timestamp> with {
-        format: "EEEE, MMMM d, yyyy",
-        locale: "en_US"
-    }.
-    Log "Formatted: " ++ <formatted: formatted> to the <console>.
-
-    (* Get relative time using RelativeDate action *)
-    Extract the <ts> from the <now: timestamp>.
-    Compute the <past> from <ts> - 7200.
-    RelativeDate the <relative> from the <past>.
-    Log <relative: relative> to the <console>.
-
-    (* Parse a date string back to timestamp *)
-    ParseDate the <parsed> from "2026-02-11" with {
-        format: "yyyy-MM-dd"
-    }.
-    Log "Parsed timestamp: " ++ <parsed: timestamp> to the <console>.
+    Greeting.Farewell the <bye> from "World".
+    Log <bye: farewell> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
@@ -335,12 +218,18 @@ With custom actions registered, use natural ARO syntax:
 
 Output:
 ```
-Formatted: Tuesday, February 11, 2026
-2 hours ago
-Parsed timestamp: 1707609600
+Hello, World!
+Goodbye, World!
 ```
 
-The `<FormatDate>`, `<ParseDate>`, and `<RelativeDate>` actions work exactly like built-in ARO verbs—no `<Call>` needed!
+For native plugins — which includes Swift — the runtime registers each verb
+twice: once namespaced and once bare. `Greet the <hello> from "World".` works
+too. Prefer the namespaced spelling anyway: it says which plugin the verb came
+from, and it is the only form that survives two plugins wanting the same verb.
+
+Qualifiers do **not** get that courtesy. A plugin qualifier is reachable only
+as `<value: Handle.qualifier>`; the bare name is a compile error with a hint
+pointing at the namespaced form.
 
 ## 6.5 Working with Foundation Types
 

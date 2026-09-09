@@ -62,7 +62,7 @@ The problem showed up when we started writing the compiler. The interpreter (`Fe
 
 These rules lived in the interpreter's execution logic. When we built the compiler, we duplicated them. When we added new verbs, we'd update one and forget the other. Bugs appeared that were impossible to reproduce in one mode but reliable in the other.
 
-The fix was `VerbSets.swift` — a shared module with ten named sets of verbs:
+The fix was `VerbSets.swift` — a shared module with eleven named sets of verbs:
 
 | Category | Role |
 |----------|------|
@@ -70,12 +70,12 @@ The fix was `VerbSets.swift` — a shared module with ten named sets of verbs:
 | `createVerbs` | New entity creation |
 | `responseVerbs` | Skip the expression shortcut |
 | `serverVerbs` | Force execution even with literals |
-| `storeVerbs` | Trigger repository observers |
-| … | |
+| `requestVerbs` | External invocation — always execute |
+| … | (eleven in total) |
 
-Both interpreter and compiler reference the same module. Adding a new verb means touching one file. The parity bugs stopped.
+Adding a new verb means touching one file. The parity bugs *of that kind* stopped.
 
-This is a tiny architectural change with outsized impact. Shared canonical vocabulary between two execution modes is not glamorous. It's also exactly right.
+This is a tiny architectural change with outsized impact. Shared canonical vocabulary between two execution modes is not glamorous. It's also exactly right — and it only fixes the lists you actually share. The framework variables cleared between statements are a second per-statement list that never got the same treatment, and they have drifted into a wrong answer (GitLab #552). One shared list is a habit, not a policy, until something enforces it.
 
 ---
 
@@ -96,7 +96,7 @@ The problem: text has no type system. You can emit `store i64 %x, ptr %y` when t
 
 Swifty-LLVM changed this. It's a Swift wrapper around LLVM's C API that gives you typed objects — `Function`, `BasicBlock`, `IRValue` — that the compiler checks at build time. The same bad store now fails when you write the generation code, not when you run it.
 
-The migration was non-trivial. The entire `LLVMCodeGenerator.swift` was rewritten — 2057 lines from scratch, using the API instead of strings. Worth it.
+The migration was non-trivial. The entire `LLVMCodeGenerator.swift` was rewritten from scratch, using the API instead of strings — over two thousand lines then, about 2,300 now. Worth it.
 
 The cost: LLVM 20 is now a build dependency. The build setup got more complex (`pkg-config`, library paths, platform-specific linkage). CI environments that don't have LLVM installed can't build the native compilation path.
 
@@ -142,16 +142,9 @@ The co-publishing pattern now covers:
 
 Every example has a `test.hint` file. Originally these specified `mode: interpreter` or `mode: binary`. As parity improved, examples were updated to `mode: both` — running the full test in both modes and comparing output.
 
-At the time of writing, 81 of 85 examples pass both modes. The remaining four have known root causes tracked as issues:
+`both` became the default rather than an option, which is the part that made it stick: an example now opts *out* of parity testing. Of 102 examples with a `test.hint`, four opt out — one because it builds and tests the binary itself, one because it drives a shell pipeline, one because it clones live remotes, and only `MultiService` for genuine parity gaps (socket welcome-line timing, and file events reported as `MODIFIED` where the interpreter says `CREATED`).
 
-| Example | Problem | Issue |
-|---------|---------|-------|
-| SocketClient | `ManagedAtomic` SIGSEGV in binary | #134 |
-| MultiService | Depends on SocketClient | #134 |
-| Scoping | AppReady Handler missing in binary | #135 |
-| EventReplay | C bridge gap for replay events | #136 |
-
-Four known problems, all tracked. That's actually a reasonable state for a 0.7 release.
+Chapter 11 has the current table. The number moves; the default is what holds.
 
 ---
 
@@ -192,7 +185,7 @@ The migration was two-line per plugin. The naming improvement was worth it.
 
 SwiftNIO, the async networking library used for ARO's HTTP server, relies on Swift type metadata that isn't properly initialized when the Swift runtime starts from LLVM-generated code. The crash happens in `_swift_allocObject_` when NIO tries to create socket channels.
 
-The workaround: compiled binaries use a native BSD socket HTTP server instead of NIO. It works for basic cases but lacks NIO's performance and robustness.
+The workaround: compiled binaries use a native BSD socket HTTP server instead of NIO. That server has since grown up — contract routing, WebSocket, streamed request bodies with per-route limits (ARO-0090) — so the gap is no longer "HTTP in binaries" but "two servers, and one of them cannot do chunked transfer encoding". The remaining cost is maintenance, not capability.
 
 The root cause isn't fully understood. It's somewhere in the Swift runtime initialization sequence — the order in which Swift's reflection metadata gets set up relative to when LLVM-generated main runs. Fixing it would require:
 
@@ -212,12 +205,12 @@ Building terminal applications with ARO revealed a gap in the binary mode event 
 2. Publishing a `DomainEvent("KeyPress")` for each keystroke
 3. Registering that event in the binary's handler registration table
 
-All three pieces had to be added together. The keyboard service had to be registered in `AROCContextHandle` (the binary's context object). The `readLoop` had to publish `DomainEvent` alongside any Swift events. The `LLVMCodeGenerator` had to learn to detect `KeyPress Handler` feature sets.
+All three pieces had to be added together. The keyboard service had to be held by `AROCRuntimeHandle` (the binary's runtime object) so it outlived the call that started it. The `readLoop` had to publish `DomainEvent` alongside any Swift events. The `LLVMCodeGenerator` had to learn to detect `KeyPress Handler` feature sets.
 
 The pattern that emerged: **when adding any new event source, touch four places**:
 
 1. The Swift-side service (publish DomainEvent)
-2. RuntimeBridge (register a `@_cdecl` handler registration function)
+2. `Bridge/RuntimeEventRecordingBridge.swift` (register a `@_cdecl` handler registration function)
 3. LLVMExternalDeclEmitter (declare the new C function)
 4. LLVMCodeGenerator (detect the handler pattern and call the registration function)
 
@@ -292,14 +285,14 @@ Looking back with honest eyes:
 
 ARO 0.1 was a proof of concept that could parse and execute five statement types.
 
-ARO 0.7 is a system with:
-- Nine statement types
-- 61 built-in actions
+Today it is a system with:
+- Nine statement types you can write, and one the parser produces from a mistake
+- 71 built-in actions across eleven modules, claiming about 130 verbs
 - A plugin system supporting four languages
-- Dual-mode execution (interpreter and native binary)
-- A native BSD HTTP server for binary mode
+- Dual-mode execution (interpreter and native binary), both serving HTTP
+- Deferred execution as the default, not a flag
 - Streaming execution for large datasets
-- Regex, dates, templates, WebSockets, metrics, CLI parameters
+- Regex, dates, templates, WebSockets, metrics, CLI parameters, native Git
 
 The gap between those two states is not clever design. It's iteration. Each use case revealed something missing. Each bug revealed an assumption. Each platform difference revealed something taken for granted.
 

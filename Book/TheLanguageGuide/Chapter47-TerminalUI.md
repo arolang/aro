@@ -9,23 +9,41 @@ ARO's Terminal UI system enables you to build beautiful, interactive terminal ap
 
 Terminal user interfaces remain the optimal choice for many scenarios: system monitors, development tools, dashboards, CLI utilities, and real-time data displays. ARO makes terminal UI development natural and intuitive by integrating terminal capabilities directly into the template system and event-driven architecture.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 Terminal UI Architecture                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   Data Changes          Watch Pattern        Terminal       │
-│   ┌──────────┐         ┌──────────┐         ┌──────────┐   │
-│   │  Store   │────────►│  Watch   │────────►│ Render   │   │
-│   │  Task    │  Event  │ Handler  │ Template│ Output   │   │
-│   └──────────┘         └──────────┘         └──────────┘   │
-│                                                              │
-│   Repository changes trigger Watch handlers                  │
-│   Templates apply ANSI styling filters                       │
-│   Output appears instantly in terminal                       │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+<div style="text-align: center; margin: 2em 0;">
+<svg width="540" height="150" viewBox="0 0 540 150" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <defs>
+    <marker id="arrowTU" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#374151"/>
+    </marker>
+  </defs>
+
+  <text x="270" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#374151">Terminal UI Architecture</text>
+
+  <!-- Data change -->
+  <rect x="20" y="34" width="130" height="56" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="85" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#4338ca">Store</text>
+  <text x="85" y="74" text-anchor="middle" font-size="9" fill="#4338ca">a repository changes</text>
+
+  <line x1="152" y1="62" x2="198" y2="62" stroke="#374151" stroke-width="2" marker-end="url(#arrowTU)"/>
+  <text x="175" y="54" text-anchor="middle" font-size="8" fill="#374151">event</text>
+
+  <!-- Watch -->
+  <rect x="200" y="34" width="140" height="56" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="270" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#92400e">Observer</text>
+  <text x="270" y="74" text-anchor="middle" font-size="9" fill="#92400e">renders a template</text>
+
+  <line x1="342" y1="62" x2="388" y2="62" stroke="#374151" stroke-width="2" marker-end="url(#arrowTU)"/>
+  <text x="365" y="54" text-anchor="middle" font-size="8" fill="#374151">text</text>
+
+  <!-- Render -->
+  <rect x="390" y="34" width="130" height="56" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
+  <text x="455" y="56" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">Render</text>
+  <text x="455" y="74" text-anchor="middle" font-size="9" fill="#166534">only changed lines</text>
+
+  <text x="270" y="112" text-anchor="middle" font-size="9" fill="#374151">No polling: handlers run only when data actually changes.</text>
+  <text x="270" y="128" text-anchor="middle" font-size="9" fill="#374151">Templates apply ANSI styling filters; the compositor diffs the section.</text>
+</svg>
+</div>
 
 ### Key Features
 
@@ -57,17 +75,17 @@ Templates automatically have access to a `terminal` object containing capability
 Terminal: {{ <terminal: columns> }}×{{ <terminal: rows> }}
 Color Support: {{ <terminal: supports_color> }}
 
-{{when <terminal: columns> > 120}}
-  (* Wide layout *)
-  {{ "=== Detailed Dashboard ===" | bold | color: "cyan" }}
-{{when <terminal: columns> > 80}}
-  (* Medium layout *)
-  {{ "=== Dashboard ===" | bold }}
-{{else}}
-  (* Narrow layout *)
-  {{ "=Dashboard=" }}
-{{end}}
+{{ Print "=== Detailed Dashboard ===" to the <template> when <terminal: columns> > 120. }}
+{{ Print "=== Dashboard ===" to the <template> when <terminal: columns> <= 120. }}
 ```
+
+There is no `{{when}} … {{else}} … {{end}}` block: the template engine has
+exactly four constructs — static text, the expression shorthand `{{ <x> }}`,
+a statement block, and the `for each` spanning block of Section 44.6.
+Conditionals are ordinary `when` guards on the statements inside a block, so
+alternatives are written as mutually exclusive guards, as above. For anything
+more branching than that, decide in the feature set and render a different
+template — Section 47.7.4 shows the pattern.
 
 This enables responsive terminal designs that adapt to the user's terminal size automatically.
 
@@ -75,17 +93,31 @@ This enables responsive terminal designs that adapt to the user's terminal size 
 
 ARO provides template filters for applying ANSI styling to text. These filters integrate seamlessly with the template engine you learned in Chapter 44.
 
+**Filters apply to a variable reference, not to a literal.** `{{ <heading> | bold }}`
+styles the value bound to `heading`; `{{ "Heading" | bold }}` is a parse error
+(`Expected action verb …, but got string`). Bind the text in the feature set
+and style the binding — which is also where the text belongs, since Section
+44.12 asks you to prepare data outside the template:
+
+```aro
+Create the <heading> with "=== Task List ===".
+Transform the <view> from the <template: task-list.screen>.
+```
+
+Static text that needs no styling is simply written as static text; it does not
+need a block at all.
+
 ### 47.3.1 Color Filters
 
 Apply foreground and background colors using the `color` and `bg` filters:
 
 ```text
-{{ "Success!" | color: "green" }}
-{{ "Error!" | color: "red" }}
-{{ "Warning" | color: "yellow" }}
+{{ <success-line> | color: "green" }}
+{{ <error-line> | color: "red" }}
+{{ <warning-line> | color: "yellow" }}
 
-{{ "Highlight" | bg: "blue" }}
-{{ "Alert" | color: "white" | bg: "red" }}
+{{ <highlight> | bg: "blue" }}
+{{ <alert> | color: "white" | bg: "red" }}
 ```
 
 **Named Colors**:
@@ -95,8 +127,8 @@ Apply foreground and background colors using the `color` and `bg` filters:
 
 **RGB Colors** (24-bit true color):
 ```text
-{{ "Custom Color" | color: "rgb(100, 200, 50)" }}
-{{ "Dark Background" | bg: "rgb(30, 30, 30)" }}
+{{ <label> | color: "rgb(100, 200, 50)" }}
+{{ <panel> | bg: "rgb(30, 30, 30)" }}
 ```
 
 ARO automatically converts RGB to the best available color mode:
@@ -110,33 +142,41 @@ ARO automatically converts RGB to the best available color mode:
 Apply text styles using simple filters:
 
 ```text
-{{ "Important" | bold }}
-{{ "Subdued" | dim }}
-{{ "Emphasis" | italic }}
-{{ "Link" | underline }}
-{{ "Removed" | strikethrough }}
+{{ <important> | bold }}
+{{ <subdued> | dim }}
+{{ <emphasis> | italic }}
+{{ <link> | underline }}
+{{ <removed> | strikethrough }}
 ```
+
+The seven filters above — `color`, `bg`, `bold`, `dim`, `italic`, `underline`,
+`strikethrough` — are the whole set. In particular there is no `length` filter:
+`{{ <tasks> | length }}` prints the collection, not its size. Count in the
+feature set (`Compute the <task-count: length> from <tasks>.`) and print the
+binding.
 
 ### 47.3.3 Chaining Filters
 
 Combine multiple filters for rich formatting:
 
 ```text
-{{ "SUCCESS" | color: "green" | bold }}
-{{ "ERROR" | color: "red" | bold | underline }}
-{{ "Debug Info" | color: "cyan" | dim }}
+{{ <status-line> | color: "green" | bold }}
+{{ <error-line> | color: "red" | bold | underline }}
+{{ <debug-line> | color: "cyan" | dim }}
 ```
 
 **Example Template (templates/task-list.screen)**:
 ```text
-{{ "=== Task List ===" | bold | color: "cyan" }}
+{{ <heading> | bold | color: "cyan" }}
 
-{{for task in tasks}}
-  [{{ <task: id> }}] {{ <task: title> | bold }} - {{ <task: status> | color: "yellow" }}
-{{end}}
-
-{{ "Total: " }}{{ <tasks> | length }} {{ "tasks" | dim }}
+{{ for each <task> in <tasks> { }}  [{{ <task: id> }}] {{ <task: title> | bold }} - {{ <task: status> | color: "yellow" }}
+{{ } }}
+Total: {{ <task-count> }} tasks
 ```
+
+The loop is the `for each` spanning block of Section 44.6 — an opening
+`{{ for each <x> in <xs> { }}` and a closing `{{ } }}`, both on lines of their
+own. The feature set binds `heading` and `task-count` before rendering.
 
 ## 47.4 Reactive Watch Pattern
 
@@ -187,14 +227,12 @@ The most common pattern: UI updates automatically when repository data changes.
 
 (* Watch handler - triggers on repository changes *)
 (Dashboard Watch: task-repository Observer) {
-    (* Optional: clear screen for clean render *)
-    Clear the <screen> for the <terminal>.
-
-    (* Retrieve current tasks *)
+    (* No Clear here — the compositor updates the section in place.
+       Clear belongs once in Application-Start; see Section 47.6.2. *)
     Retrieve the <tasks> from the <task-repository>.
 
     (* Render template with fresh data *)
-    Transform the <output> from the <template: templates/dashboard.screen>.
+    Transform the <output> from the <template: dashboard.screen>.
     Log <output> to the <console>.
 
     Return an <OK: status> for the <render>.
@@ -215,18 +253,20 @@ The most common pattern: UI updates automatically when repository data changes.
 
 **templates/dashboard.screen**:
 ```text
-{{ "=== Task Dashboard ===" | bold | color: "cyan" }}
+{{ <heading> | bold | color: "cyan" }}
 
-{{ "Active Tasks:" | bold }}
+Active Tasks:
 
-{{for task in tasks}}
-  {{ "[" }}{{ <task: id> }}{{ "] " }}{{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
-{{end}}
-
-{{ "---" }}
-{{ "Total: " }}{{ <tasks> | length }}{{ " tasks" }}
-{{ "Terminal: " }}{{ <terminal: columns> }}{{ "×" }}{{ <terminal: rows> }}
+{{ for each <task> in <tasks> { }}  [{{ <task: id> }}] {{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
+{{ } }}
+---
+Total: {{ <task-count> }} tasks
+Terminal: {{ <terminal: columns> }}×{{ <terminal: rows> }}
 ```
+
+The handler binds `heading` and `task-count` alongside `tasks` before it calls
+`Transform` — static labels stay static text, and anything styled or counted is
+a binding.
 
 **Flow**:
 1. `Application-Start` stores initial tasks
@@ -257,10 +297,8 @@ Watch handlers can also trigger on custom domain events:
 
 (* Watch handler - triggers on MetricsUpdated events *)
 (Dashboard Watch: MetricsUpdated Handler) {
-    Clear the <screen> for the <terminal>.
-
     (* In real app, you'd extract metrics from event *)
-    Transform the <output> from the <template: templates/monitor.screen>.
+    Transform the <output> from the <template: monitor.screen>.
     Log <output> to the <console>.
 
     Return an <OK: status> for the <render>.
@@ -343,12 +381,12 @@ Request text input from the user:
 ```aro
 (* Basic input *)
 Prompt the <name> from the <terminal>.
-Log "Hello, <name>!" to the <console>.
+Log "Hello, ${name}!" to the <console>.
 
 (* Hidden input for passwords *)
 Prompt the <password: hidden> from the <terminal>.
 Compute the <length: length> from <password>.
-Log "Password is <length> characters long" to the <console>.
+Log "Password is ${length} characters long" to the <console>.
 ```
 
 The `hidden` specifier disables echo for password entry.
@@ -363,11 +401,11 @@ Create the <options> with ["Red", "Green", "Blue", "Yellow"].
 
 (* Single selection *)
 Select the <choice> from the <options>.
-Log "You selected: <choice>" to the <console>.
+Log "You selected: ${choice}" to the <console>.
 
 (* Multi-selection *)
 Select the <choices: multi-select> from the <options>.
-Log "You selected: <choices>" to the <console>.
+Log "You selected: ${choices}" to the <console>.
 ```
 
 **Current implementation**: Numbered menu with user input.
@@ -436,18 +474,11 @@ The variable name (`menu`, `status-bar`, …) is the **section ID**. The composi
 
 ### 47.6.1 How the Section Compositor Works
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Section Compositor Model                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  First render of <name>   →  Appended below previous rows   │
-│  Re-render of same <name> →  Only changed lines rewritten   │
-│  Height grows / shrinks   →  Sections below shift and       │
-│                               re-render at new positions     │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+| Situation | What the compositor does |
+|---|---|
+| First render of `<name>` | Appends below the previous rows |
+| Re-render of the same `<name>` | Rewrites only the lines that changed |
+| The section grows or shrinks | Shifts every section below it and re-renders them at their new positions |
 
 Given a typical interactive application:
 
@@ -953,8 +984,6 @@ TaskDashboard/
 
 (* Reactive dashboard - updates on any task change *)
 (Dashboard Watch: task-repository Observer) {
-    Clear the <screen> for the <terminal>.
-
     Retrieve the <all-tasks> from the <task-repository>.
 
     (* Filter by status *)
@@ -968,9 +997,16 @@ TaskDashboard/
     Compute the <pending-count: length> from <pending>.
     Compute the <total-count: length> from <all-tasks>.
 
-    (* Render dashboard with statistics *)
-    Transform the <output> from the <template: templates/dashboard.screen>.
-    Log <output> to the <console>.
+    (* Styled headings are bindings — filters do not apply to literals *)
+    Create the <heading> with "TASK DASHBOARD".
+    Create the <active-heading> with "In Progress".
+    Create the <pending-heading> with "Pending".
+    Create the <done-heading> with "Completed".
+
+    (* Render dashboard with statistics — Render, not Log, so the
+       compositor rewrites only the lines that changed *)
+    Transform the <output> from the <template: dashboard.screen>.
+    Render the <output> to the <console>.
 
     Return an <OK: status> for the <render>.
 }
@@ -1007,37 +1043,37 @@ TaskDashboard/
 
 **templates/dashboard.screen**:
 ```text
-{{ "╔════════════════════════════════════════════════════════════╗" }}
-{{ "║ " }}{{ "TASK DASHBOARD" | bold | color: "cyan" }}{{ "                                            ║" }}
-{{ "╚════════════════════════════════════════════════════════════╝" }}
+╔════════════════════════════════════════════════════════════╗
+║ {{ <heading> | bold | color: "cyan" }}
+╚════════════════════════════════════════════════════════════╝
 
-{{ "Terminal: " }}{{ <terminal: columns> }}{{ "×" }}{{ <terminal: rows> }}{{ " | Color: " }}{{ <terminal: supports_color> }}
+Terminal: {{ <terminal: columns> }}×{{ <terminal: rows> }} | Color: {{ <terminal: supports_color> }}
 
-{{ "📊 Statistics:" | bold }}
-  {{ "✓ Done:        " }}{{ <done-count> | color: "green" }}
-  {{ "◷ In Progress: " }}{{ <progress-count> | color: "yellow" }}
-  {{ "○ Pending:     " }}{{ <pending-count> | color: "blue" }}
-  {{ "━━━━━━━━━━━━━" }}
-  {{ "  Total:       " }}{{ <total-count> | bold }}
+📊 Statistics:
+  ✓ Done:        {{ <done-count> | color: "green" }}
+  ◷ In Progress: {{ <progress-count> | color: "yellow" }}
+  ○ Pending:     {{ <pending-count> | color: "blue" }}
+  ━━━━━━━━━━━━━
+    Total:       {{ <total-count> | bold }}
 
-{{ "🔄 In Progress" | bold | color: "yellow" }}
-{{for task in in-progress}}
-  {{ "  [" }}{{ <task: id> }}{{ "] " }}{{ <task: title> | bold }} {{ "(" }}{{ <task: priority> | color: "magenta" }}{{ ")" }}
-{{end}}
-
-{{ "📋 Pending" | bold | color: "blue" }}
-{{for task in pending}}
-  {{ "  [" }}{{ <task: id> }}{{ "] " }}{{ <task: title> }} {{ "(" }}{{ <task: priority> | dim }}{{ ")" }}
-{{end}}
-
-{{ "✅ Completed" | bold | color: "green" }}
-{{for task in done}}
-  {{ "  [" }}{{ <task: id> }}{{ "] " }}{{ <task: title> | dim | strikethrough }}
-{{end}}
-
-{{ "────────────────────────────────────────────────────────────" | dim }}
-{{ "Last updated: reactively on data changes" | dim }}
+🔄 {{ <active-heading> | bold | color: "yellow" }}
+{{ for each <task> in <active> { }}    [{{ <task: id> }}] {{ <task: title> | bold }} ({{ <task: priority> | color: "magenta" }})
+{{ } }}
+📋 {{ <pending-heading> | bold | color: "blue" }}
+{{ for each <task> in <pending> { }}    [{{ <task: id> }}] {{ <task: title> }} ({{ <task: priority> | dim }})
+{{ } }}
+✅ {{ <done-heading> | bold | color: "green" }}
+{{ for each <task> in <done> { }}    [{{ <task: id> }}] {{ <task: title> | dim | strikethrough }}
+{{ } }}
+────────────────────────────────────────────────────────────
+Last updated: reactively on data changes
 ```
+
+Two things to notice. Everything that is *only* text — the box drawing, the
+labels, the rule — is static text outside any block; a block containing nothing
+but a literal (`{{ "Pending" }}`) does not parse. And the in-progress loop
+ranges over `<active>`, the binding the handler made, not over a name the
+template invents.
 
 **Running the Dashboard**:
 ```bash
@@ -1058,52 +1094,73 @@ aro run TaskDashboard
 
 ### 47.10.1 Responsive Design
 
-Adapt layouts to terminal size:
+Choosing a layout is a branch, and branches belong in the feature set, not in
+the template. Read the width from the `terminal` object there and render the
+template that fits. `match` is the construct to reach for: guards would each
+try to bind `view` and immutability rejects the second one, whereas only one
+`case` of a `match` ever runs.
 
-```text
-{{when <terminal: columns> > 120}}
-  (* Wide screen: show detailed 3-column layout *)
-  Transform the <view> from the <template: templates/wide.screen>.
-{{when <terminal: columns> > 80}}
-  (* Medium screen: show 2-column layout *)
-  Transform the <view> from the <template: templates/medium.screen>.
-{{else}}
-  (* Narrow screen: show stacked layout *)
-  Transform the <view> from the <template: templates/narrow.screen>.
-{{end}}
+```aro
+(Refresh View: layout-repository Observer) {
+    Extract the <cols> from the <terminal: columns>.
+    Compute the <wide> from <cols> > 120.
+    Compute the <medium> from <cols> > 80.
+
+    match <wide> {
+        case true  { Transform the <view> from the <template: wide.screen>. }
+        case false {
+            match <medium> {
+                case true  { Transform the <view> from the <template: medium.screen>. }
+                case false { Transform the <view> from the <template: narrow.screen>. }
+            }
+        }
+    }
+
+    Render the <view> to the <console>.
+    Return an <OK: status> for the <refresh>.
+}
 ```
+
+All three branches bind the same name, so the compositor treats them as one
+section (Section 47.6.3) and swaps the layout in place.
 
 ### 47.10.2 Graceful Degradation
 
-Check capabilities before using advanced features:
+You rarely need to check `supports_color` at all: when the terminal cannot
+display colour, the runtime strips the escape codes, so a styled template
+degrades to plain text on its own. Where the difference is the *content* rather
+than the styling — Unicode box drawing against ASCII — pick it in the feature
+set, the same way as a layout:
 
-```text
-{{when <terminal: supports_color>}}
-  {{ <error> | color: "red" | bold }}
-  {{ <success> | color: "green" | bold }}
-{{else}}
-  {{ "ERROR: " }}{{ <error> }}
-  {{ "SUCCESS: " }}{{ <success> }}
-{{end}}
-
-{{when <terminal: supports_unicode>}}
-  {{ "✓ ✗ ★ ▶ ◀" }}
-{{else}}
-  {{ "* X > <" }}
-{{end}}
+```aro
+Extract the <unicode> from the <terminal: encoding>.
+Compute the <utf8> from <unicode> == "UTF-8".
+match <utf8> {
+    case true  { Create the <marks> with "✓ ✗ ★ ▶ ◀". }
+    case false { Create the <marks> with "* X > <". }
+}
 ```
+
+The `terminal` object exposes `rows`, `columns`, `width`, `height`,
+`supports_color`, `supports_true_color`, `is_tty` and `encoding` — that is the
+whole set, so capability tests are written against `encoding`, not against a
+`supports_unicode` field.
 
 ### 47.10.3 Efficient Re-Rendering
 
-Only clear and re-render when necessary:
+`Clear` + `Log` redraws the whole screen every time, and that is the flicker
+the section compositor exists to avoid. Prefer `Render`: it diffs the section
+against what is already on screen and rewrites only the lines that changed.
+`Clear` belongs once, in `Application-Start`, as Section 47.6.2 explains —
+inside an observer it throws away the compositor's map of where every section
+lives.
 
 ```aro
-(* Good: Clear before full re-render *)
+(* Good: Render diffs the section, no clearing *)
 (Dashboard Watch: data-repository Observer) {
-    Clear the <screen> for the <terminal>.
     Retrieve the <data> from the <data-repository>.
     Transform the <view> from the <template: dashboard.screen>.
-    Log <view> to the <console>.
+    Render the <view> to the <console>.
     Return an <OK: status> for the <render>.
 }
 
@@ -1111,7 +1168,7 @@ Only clear and re-render when necessary:
 (Status Watch: status-repository Observer) {
     (* Don't clear - just update status line *)
     Retrieve the <status> from the <status-repository>.
-    Log "Status: <status>" to the <console>.
+    Log "Status: ${status}" to the <console>.
     Return an <OK: status> for the <status-line>.
 }
 ```
@@ -1171,19 +1228,26 @@ ARO's Terminal UI system brings together several powerful features:
 |---------|--------|---------|
 | Watch (Repository) | `(Name Watch: repository Observer)` | `(Dashboard Watch: task-repository Observer)` |
 | Watch (Event) | `(Name Watch: EventType Handler)` | `(Monitor Watch: MetricsUpdated Handler)` |
-| Color Filter | `{{ <text> | color: "name" }}` | `{{ "Error" | color: "red" }}` |
-| Style Filter | `{{ <text> | style }}` | `{{ "Title" | bold }}` |
+| Color Filter | `{{ <text> | color: "name" }}` | `{{ <error-line> | color: "red" }}` |
+| Style Filter | `{{ <text> | style }}` | `{{ <heading> | bold }}` |
+| Template Loop | `{{ for each <x> in <xs> { }} … {{ } }}` | Section 47.3.3 |
 | Terminal Object | `{{ <terminal: property> }}` | `{{ <terminal: columns> }}` |
-| Clear Screen | `Clear the <screen> for the <terminal>.` | - |
+| Clear Screen | `Clear the <screen> for the <terminal>.` | once, at startup — Section 47.6.2 |
+| Render Section | `Render the <name> to the <console>.` | `name` is the section ID |
 | Prompt Input | `Prompt the <input> from the <terminal>.` | - |
-| Select Menu | `Select the <choice> from <options> from the <terminal>.` | - |
+| Select Menu | `Select the <choice> from the <options>.` | - |
 
 The Watch pattern is ARO's key innovation: by triggering on actual changes rather than polling, your terminal UIs are both highly responsive and efficient. Combined with template styling and capability detection, you can build professional terminal applications that adapt to any environment.
 
 ## What's Next
 
-- **Chapter 42**: Advanced Topics (if available)
+- **Chapter 44**: The template engine these screens are written in
 - **Appendix A**: Complete Action Reference
-- **Examples**: See `Examples/TerminalUI/` for working applications
+- **Examples**: `Examples/TerminalSimpleMenu`, `Examples/TerminalTaskManager`,
+  `Examples/TerminalSystemMonitor` and `Examples/TerminalUI` are working applications
 
-For more details, see Proposal ARO-0052: Terminal UI System.
+For more details, see [ARO-0083](../../Proposals/ARO-0083-terminal-ui.md), the Terminal UI proposal.
+
+---
+
+*Next: Chapter 48 — Git Actions*

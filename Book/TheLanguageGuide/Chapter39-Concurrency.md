@@ -15,22 +15,8 @@ You don't think about threads, locks, race conditions, or async/await. You think
 
 Every feature set runs asynchronously when triggered by an event:
 
-```
-+-----------------------------------------------------+
-|                    Event Bus                         |
-|                                                      |
-|  HTTP Request --+---> (listUsers: User API)          |
-|                 |                                    |
-|  Socket Data ---+---> (Handle Data: Socket Handler)  |
-|                 |                                    |
-|  File Changed --+---> (Process File: File Handler)   |
-|                 |                                    |
-|  UserCreated ---+---> (Send Email: Notification)     |
-|                                                      |
-|  (Multiple events trigger multiple feature sets     |
-|   running concurrently)                              |
-+-----------------------------------------------------+
-```
+An HTTP request, socket data, a file change and a `UserCreated` event each
+reach their own feature set, and those executions do not wait for one another.
 
 When multiple events arrive, multiple feature sets execute simultaneously. 100 HTTP requests = 100 concurrent feature set executions.
 
@@ -73,14 +59,14 @@ When multiple events arrive, multiple feature sets execute simultaneously. 100 H
 
   <!-- Sequential bar (gray) spanning all three handlers -->
   <rect x="212" y="150" width="130" height="30" rx="4" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/>
-  <text x="277" y="169" text-anchor="middle" font-size="9" fill="#374151">statements execute</text>
+  <text x="277" y="169" text-anchor="middle" font-size="9" fill="#374151">statements overlap</text>
 
   <!-- Title: sequential within each -->
-  <text x="277" y="192" text-anchor="middle" font-size="9" fill="#374151" font-style="italic">ordered within each</text>
+  <text x="277" y="192" text-anchor="middle" font-size="9" fill="#374151" font-style="italic">effects still in source order</text>
 </svg>
 </div>
 
-## Statements Are Ordered
+## Statements Start In Order
 
 Inside a feature set, statements are written and read in order:
 
@@ -103,6 +89,7 @@ A statement's action starts where it is written; the program waits for it at the
 
 ```aro
 (Report: Analytics) {
+    Create the <seed> with 3.
     Read the <content> from "./big.csv".        (* starts *)
     Compute the <token> from <seed> * 7919.     (* starts — does not wait for the read *)
     Compute the <lines: count> from <content>.  (* waits for the read, here *)
@@ -466,14 +453,15 @@ The deduplication store is bounded to **100 000 URLs** (FIFO eviction) so that v
 | Concept | Behavior |
 |---------|----------|
 | Feature sets | Run concurrently — every trigger is an independent execution |
-| Statements | Sequential, in source order; independent statements do **not** overlap |
-| `parallel for each` | The one place you ask for concurrency; bounded, non-deterministic order |
+| Statements | Start in source order; each waits at the first read of its result, so independent ones **do** overlap |
+| Effects (`Log`, `Store`, `Emit`, `Send`, `Sleep`, …) | Never defer — observable order is the written order |
+| `parallel for each` | Where you ask for fan-out explicitly; bounded, non-deterministic order |
 | Events | `Emit` does not block; handlers run on their own |
 | Shared state | Repositories and published symbols, each operation atomic |
 | Concurrency primitives | None in the language; the runtime has them all |
 | CrawlPage dedup | Automatic, bounded to 100K URLs |
 
-Write sequential code per feature set. Let events and `parallel for each` provide the concurrency. The full specification is ARO-0088.
+Write your feature sets in the order the story reads. The runtime overlaps what is independent, keeps effects where you put them, and gives you `parallel for each` for the fan-out you want on purpose. `ARO_NO_DEFER=1` turns the overlap off if you need to know whether a bug is order-related. The full specification is ARO-0088.
 
 ---
 

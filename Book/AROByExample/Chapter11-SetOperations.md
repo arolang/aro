@@ -107,9 +107,11 @@ Repository names are arbitrary identifiers. In our crawler, we use `crawled-repo
 
 Repositories are:
 
-- **In-memory** — Data is lost when the application stops
+- **In-memory by default** — Data is lost when the application stops
 - **Shared** — All handlers can access the same repository
 - **Persistent within a run** — Data survives across handler executions
+
+The default is not the only option. Put a file named `crawled.store` in the application directory and it backs `<crawled-repository>` automatically: its YAML contents seed the repository before `Application-Start` runs, and if the file's other-write bit is set (`chmod o+w crawled.store`), everything the application stores is written back (ARO-0073). That is a resumable crawl in one `touch` and one `chmod`, with no code change — the repository name is the only wiring.
 
 ---
 
@@ -164,7 +166,7 @@ Here is the pattern our crawler actually uses:
     Extract the <base-domain> from the <event: base>.
 
     (* Atomic store - the repository Actor serializes concurrent access,
-       so only the first caller for a given URL gets is-new-entry = 1 *)
+       so only the first caller for a given URL gets new-entry = 1 *)
     Store the <url> into the <crawled-repository>.
 
     (* Only emit CrawlPage if this URL was newly stored *)
@@ -210,9 +212,11 @@ No double-checking is needed. A single `<Store>` in the queue handler is suffici
 
 ## 11.10 What Could Be Better
 
-**No Persistent Storage.** Repositories are in-memory only. If the crawler crashes, progress is lost. A persistent option would enable resumable crawls.
+**Persistence Is All-Or-Nothing.** A `.store` file makes a repository survive restarts, but it is a whole-repository decision made by a file permission bit, not something a handler can ask for. There is no "checkpoint now", no transaction, and no way to keep some entries and drop others. Values also round-trip through YAML on the way out and back, which currently adds a trailing newline to every string (GitLab #582) — enough to break dedup on a restarted crawl until it is fixed.
 
 **Limited Set Operations.** We have intersect, union, and difference. Operations like subset checking or symmetric difference would be useful.
+
+**Filter Does Not Reach Scalars.** `Filter … where` matches fields on records. Over a list of plain strings it matches nothing and returns an empty list, with no error (GitLab #569). Set operations are the tool for scalar collections; `<Filter>` is the tool for records.
 
 ---
 

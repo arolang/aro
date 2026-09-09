@@ -83,6 +83,13 @@ Aggregating a list, deduplicating it, or counting the lines of a file are things
 | `unique` | Remove duplicates, first occurrence wins | `Compute the <tags: unique> from <all-tags>.` |
 | `random` | A random element, or a random Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 digest, hex-encoded (alias of `hash`) | `Compute the <digest: sha256> from <payload>.` |
+| `trim` | Strip surrounding whitespace | `Compute the <clean: trim> from <field>.` |
+| `replace` | Substring replacement | `Compute the <id: replace> from <t> with { find: "-", replace: "_" }.` |
+| `fixed` | Round to a fixed number of decimals | `Compute the <price: fixed> from <amount> with { digits: 2 }.` |
+
+`fixed` is the one to reach for with money. `Compute the <price: fixed> from
+3.14159 with { digits: 2 }.` binds `3.14`, and it accepts a String as readily as
+a number, so a value that arrived from a request body needs no conversion first.
 
 Counting the lines of a file is `lines` then `length`:
 
@@ -111,6 +118,17 @@ Compute the <total: linecount> from the <content>.
 
 `aro check` reports it too, so the program never gets as far as running (GitLab #465). The diagnostic names the qualifier and suggests the closest registered one, so a typo is recoverable without consulting a table. To see the live set, run `aro actions --qualifiers`.
 
+Qualifiers **chain** with `|`, evaluated left to right — each one's output is the next one's input:
+
+```aro
+Create the <t> with " a b ".
+Compute the <r: trim|uppercase> from <t>.   (* "A B" *)
+```
+
+A chain is checked link by link, so a typo anywhere in it produces the same
+"unknown qualifier" error. Parameters from a `with` clause reach every link;
+each reads what it recognises and ignores the rest.
+
 Two things are commonly mistaken for qualifiers. Sorting, reversing and element access are **actions**:
 
 ```aro
@@ -119,11 +137,30 @@ Reverse the <flipped> for the <numbers>.      (* not <flipped: reverse> *)
 Extract the <head: first> from the <numbers>. (* the qualifier goes on Extract *)
 ```
 
-And a result **type** is requested with `as`. The qualifier slot selects an operation, so putting a type there asks for an operation by that name and gets the error above:
+And a result **type** is requested with `as`, in the result position — before
+the preposition, not after the object. The qualifier slot selects an operation,
+so putting a type there asks for an operation by that name and gets the error
+above:
 
 ```aro
-Compute the <count> as Float from the <items>.   (* not <count: Float> *)
+Transform the <count-text> as String from <count>.   (* not <count-text: String> *)
 ```
+
+### Sorting by a Field
+
+`Sort` orders a list of plain values on its own. A list of records has no
+single value to compare, so it needs the field named after `by`:
+
+```aro
+Create the <users> with [{ name: "Bob", age: 41 }, { name: "Ann", age: 29 }].
+Sort the <youngest-first> for the <users> by "age".           (* Ann, then Bob *)
+Sort the <oldest-first: descending> for the <users> by "age". (* Bob, then Ann *)
+```
+
+The field name is a quoted string. Sorting records **without** `by` is an
+error — "Cannot sort the youngest-first for the users" — rather than a silent
+pass-through of the original order, so a forgotten `by` shows up at the
+statement that caused it.
 
 ---
 
@@ -218,7 +255,7 @@ Compute the <working-age> from <age> >= 18 and <age> < 65.
 Use parentheses to override precedence:
 
 ```aro
-Compute the <with-tax> from <price> * (1 + <tax-rate>).
+Compute the <taxed-price> from <price> * (1 + <tax-rate>).
 Compute the <result> from (<a> + <b>) * <c>.
 ```
 
@@ -244,12 +281,16 @@ Compute the <result> from "5" + 3.
 Compute the <result> from "Count: " ++ <count>.
 ```
 
-For explicit type conversion, use the Transform action:
+For explicit type conversion, use the Transform action. The `as` clause sits in
+the *result* position, before the preposition:
 
 ```aro
-Transform the <count-string> from <count> as String.
-Transform the <amount-int> from <amount> as Integer.
+Transform the <count-string> as String from <count>.
+Transform the <amount-int> as Integer from <amount>.
 ```
+
+The qualifier spelling does the same job: `Transform the <count-string: string>
+from <count>.`
 
 ### Short-Circuit Evaluation
 
@@ -314,8 +355,16 @@ Compute the <farewell-length: length> from the <farewell>.
 Now both lengths exist with distinct names. You can compare them:
 
 ```aro
-Compare the <greeting-length> against the <farewell-length>.
+Compare the <same-length> from the <greeting-length> against the <farewell-length>.
+Log <same-length: matches> to the <console>.    (* true or false *)
 ```
+
+`Compare` takes both operands as inputs and binds a *fresh* result. The older
+two-operand spelling — `Compare the <greeting-length> against the
+<farewell-length>.` — tried to rebind its own first operand, which
+immutability forbids, so it now fails with "Cannot rebind variable
+'greeting-length'". Read `<result: matches>` for the boolean and
+`<result: result>` for `equal` / `less` / `greater`.
 
 This syntax separates two concerns that were previously conflated:
 - The **base** (`greeting-length`) is what you want to call the result
@@ -482,7 +531,7 @@ Compute the <money-display: Format.currency> from the <amount>.
 
 The shape of the statement is the same whether the operation is built-in or plugin-provided, so you can start with built-in operations and add plugins later without changing how your code reads. The one difference is the namespace: plugin qualifiers are always written `handle.qualifier`, which is what keeps two plugins from claiming the same name — and what lets `aro check` tell "this qualifier does not exist" apart from "this qualifier comes from a plugin I have not loaded".
 
-See Chapter 20 for the full plugin development guide.
+See Chapter 26 for the full plugin development guide.
 
 ---
 
@@ -574,7 +623,7 @@ Compute the <normalized-email: lowercase> from the <email>.
 ```aro
 Compute the <base> from <quantity> * <unit-price>.
 Compute the <discounted> from <base> * (1 - <discount-rate>).
-Compute the <with-tax> from <discounted> * (1 + <tax-rate>).
+Compute the <taxed-total> from <discounted> * (1 + <tax-rate>).
 ```
 
 **Aggregation** combines collection data:

@@ -314,7 +314,7 @@ A CLI tool that reads a file, counts its words, and optionally shows verbose out
     Log <path> to the <console> when <verbose> is true.
 
     Read the <content> from the <file: path>.
-    Split the <words> from <content> with " ".
+    Split the <words> from <content> by " ".
     Compute the <word-count: count> from <words>.
 
     (* "text" is the default: the otherwise branch handles a missing --format *)

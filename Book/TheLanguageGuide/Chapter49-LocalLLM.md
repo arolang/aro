@@ -252,3 +252,7 @@ ARO_ASK_ENDPOINT=http://192.168.1.42:8080 aro ask --yes "check examples/"
 - Works one-shot or in a REPL with LineNoise history
 
 You now have a coding assistant that lives in the same directory as the code it's helping you write. Use it the same way you'd use a coworker sitting next to you: give it context, let it read the project, and ask it to do the boring parts.
+
+---
+
+*Next: Chapter 50 — Request Bodies*

@@ -67,7 +67,7 @@ Repositories solve this by providing shared storage:
 
   <!-- Persistent Store (gray, dashed) -->
   <rect x="150" y="178" width="180" height="26" rx="4" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2" stroke-dasharray="4,2"/>
-  <text x="240" y="196" text-anchor="middle" font-size="10" fill="#374151">Persistent Store (SQLite)</text>
+  <text x="240" y="196" text-anchor="middle" font-size="10" fill="#374151">.store file (YAML seed)</text>
 </svg>
 </div>
 
@@ -90,7 +90,7 @@ Repository names **must** end with `-repository`. This is how ARO distinguishes 
 
 The naming convention:
 - Makes repositories visually distinct in code
-- Enables automatic persistence by the runtime
+- Lets the runtime recognise the repository, seed it from a `.store` file, and route observers
 - Follows ARO's self-documenting code philosophy
 
 ## Storing Data
@@ -180,7 +180,7 @@ Because repository operations are serialized by the runtime's Actor model, both 
     Create the <message> with {
         text: <text>,
         author: <author>,
-        timestamp: now
+        timestamp: <now>
     }.
 
     Store the <message> into the <message-repository>.
@@ -281,6 +281,44 @@ Retrieve the <label> from the <labels-repository> where <id> = <label-id> defaul
 ```
 
 The default value is only used when the where-filtered result is **empty**. If the where clause matches at least one record, the default is ignored.
+
+## Updating a Record
+
+`Store` appends. To *replace* a record instead, use `Update`, which matches on
+`id` and swaps the row in place:
+
+```aro
+Create the <a> with { id: "x", sum: 0 }.
+Store the <a> into the <acc-repository>.
+
+Create the <b> with { id: "x", sum: 42 }.
+Update the <b> into the <acc-repository>.
+
+Retrieve the <r> from the <acc-repository> where <id> = "x".
+(* { id: "x", sum: 42 } — one row, not two *)
+```
+
+The difference is the row count. `Store` here would leave two records with the
+same `id`, and a later `Retrieve … where <id> = "x"` would return both. `Update`
+leaves one.
+
+This is what makes an accumulator work inside a loop: read the current value,
+compute the next one, `Update` it back. Chapter 46 uses exactly this shape to
+sum a streamed file in constant memory — bindings are immutable, so a
+repository row is where a running total lives.
+
+```aro
+for each <line> in <lines> {
+    Retrieve the <cur> from the <acc-repository> where <id> = <acc-id>.
+    Extract the <prev> from the <cur: sum>.
+    Compute the <next> from <prev> + 1.
+    Create the <upd> with { id: <acc-id>, sum: <next> }.
+    Update the <upd> into the <acc-repository>.
+}
+```
+
+`Update` fires the observer with `changeType` `"updated"` and both `oldValue`
+and `newValue`, where `Store` on a new record fires `"created"`.
 
 ## Business Activity Scoping
 
@@ -399,6 +437,36 @@ Delete the <user> from the <user-repository> where <id> = <userId>.
 
 The deleted item(s) are bound to the result variable (`user` in this example).
 
+### One Predicate Only
+
+Unlike `Filter` and `Retrieve`, which accept `and`/`or` in a `where` clause,
+`Delete` takes exactly one predicate. A compound one is refused at check time
+rather than at run time, because the alternative — falling through to "no where
+clause" — would empty the whole repository:
+
+```
+4:53: error: Delete supports a single where predicate — and/or chaining is not
+             available for repository deletes
+  hint: Chain deletes: one Delete statement per predicate (AND semantics).
+  hint: Or Filter what should remain and Store it back.
+```
+
+Both hints work. Chained deletes narrow the same way an `and` would, and the
+Filter-and-restore shape is the one to reach for when the condition is an `or`.
+
+### Deleting Everything
+
+Omit the `where` clause and the repository is emptied:
+
+```aro
+Delete the <all> from the <message-repository>.
+```
+
+Use `Delete`, not `Clear`, for this. `Clear` is claimed by the terminal action
+(Chapter 47) and never reaches the repository — it fails at run time with
+`Cannot clear the all from the message-repository`
+([GitLab #562](https://git.ausdertechnik.de/arolang/aro/-/issues/562)).
+
 ## Repository Observers
 
 Repository observers are feature sets that automatically react to repository changes. They receive access to both old and new values, enabling audit logging, synchronization, and reactive patterns.
@@ -446,7 +514,10 @@ Observers are triggered for three types of changes:
     Extract the <changeType> from the <event: changeType>.
     Extract the <entityId> from the <event: entityId>.
 
-    (* Act only on updates — guard each dependent statement.
+    (* Act only on updates — guard *every* dependent statement, the Compute
+       included. An unguarded Compute reading <old-name> raises "Undefined
+       variable: old-name" on the created and deleted events, where the
+       guarded Extracts above it never ran.
        There is no `Compare ... equals`; use a `when` expression guard.
        To read a nested field, extract the object first, then the field. *)
     Extract the <old> from the <event: oldValue> when <changeType> == "updated".
@@ -454,7 +525,7 @@ Observers are triggered for three types of changes:
     Extract the <old-name> from the <old: name> when <changeType> == "updated".
     Extract the <new-name> from the <new: name> when <changeType> == "updated".
 
-    Compute the <message> from "User " ++ <entityId> ++ " renamed from " ++ <old-name> ++ " to " ++ <new-name>.
+    Compute the <message> from "User " ++ <entityId> ++ " renamed from " ++ <old-name> ++ " to " ++ <new-name> when <changeType> == "updated".
     Log <message> to the <console> when <changeType> == "updated".
 
     Return an <OK: status> for the <tracking>.
@@ -489,8 +560,9 @@ Add a `when` clause to trigger observers only when a condition is met. This is u
 (* Only triggers when message count exceeds 100 *)
 (Cleanup Messages: message-repository Observer) when <message-repository: count> > 100 {
     Retrieve the <all-messages> from the <message-repository>.
+    (* Indices count backwards, so 0-49 is the 50 most recent *)
     Extract the <keep-messages: 0-49> from the <all-messages>.
-    Clear the <all> from the <message-repository>.
+    Delete the <all> from the <message-repository>.
     Store the <keep-messages> into the <message-repository>.
     Log "Cleaned up messages, kept last 50" to the <console>.
     Return an <OK: status> for the <cleanup>.
@@ -837,15 +909,19 @@ Repositories persist for the **lifetime of the application**:
 - Survive across all HTTP requests
 - Cleared when application restarts
 
-### No Disk Persistence
+### Persistence Is Opt-In
 
-Repositories are **in-memory only**:
+A repository is in-memory by default:
 
 - Data is lost when the application stops
 - No external database required
 - Fast and simple for prototyping
 
-For persistent storage, use a database integration (future ARO feature).
+It does not have to stay that way. A `.store` file next to your source seeds a
+repository at startup, and a store file with the other-write bit set persists
+runtime changes back to disk — see **Store Files** at the end of this chapter.
+That covers configuration, reference data, sessions and small-scale
+persistence without a database.
 
 ## Memory Limits: TTL and maxSize
 
@@ -885,9 +961,16 @@ returns an empty list instead. No error is raised, which is consistent with ARO'
 }
 ```
 
-Both constraints can be set together:
+To set both, use the object form. Two `Configure` statements on the same
+repository in one feature set are rejected as a rebinding — the immutability
+check keys on the result base and ignores the qualifier
+([GitLab #564](https://git.ausdertechnik.de/arolang/aro/-/issues/564)):
 
 ```aro
+(* Works *)
+Configure the <cache-repository> with { ttl: 60, maxSize: 500 }.
+
+(* Does not — "Cannot rebind variable 'cache-repository'" *)
 Configure the <cache-repository: ttl> with 60.
 Configure the <cache-repository: maxSize> with 500.
 ```
@@ -1109,7 +1192,7 @@ Read-only `.store` files are embedded as seed data in compiled binaries.
 | Session or cache data | Writable |
 | Simple persistence (no database needed) | Writable |
 
-For full details, see the [Store Files proposal (ARO-0073)](../Proposals/ARO-0073-store-files.md).
+For full details, see the [Store Files proposal (ARO-0073)](../../Proposals/ARO-0073-store-files.md).
 
 ---
 

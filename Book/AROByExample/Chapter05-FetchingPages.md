@@ -121,6 +121,8 @@ The `<ParseHtml>` action with the `markdown` specifier returns an object contain
 
 We extract both for saving.
 
+> **A shortcut we are not taking yet.** In Chapter 6 the `ExtractLinks` handler parses the same HTML a second time to pull out the links. There is a `page` specifier that returns `title`, `markdown` *and* `links` from a single DOM parse — it exists precisely for crawlers. We keep the two passes here because they belong to two different handlers, and separating them is the whole point of the event pipeline. If you later merge the two handlers, `page` is the specifier you want.
+
 ---
 
 ## 5.7 Emitting Downstream Events
@@ -203,9 +205,18 @@ Extract, log, fetch, parse, emit, return. Every line does exactly one thing, and
 
 ## 5.10 What Could Be Better
 
-**No Request Configuration.** We cannot set timeouts, headers, or authentication. For simple crawling this is fine, but complex scenarios need more control.
-
 **No Retry Logic.** If a request fails, the handler fails. Built-in retry with backoff would make the crawler more robust.
+
+**No Redirect Or Status Policy.** `<Request>` follows redirects and hands you whatever came back. There is no way to say "treat a 404 as an empty page" or "stop after three hops" — you get the response, and the error philosophy takes over from there.
+
+We used the bare form, `Request the <response> from the <url>.`, because a crawler that only reads public pages needs nothing else. It is worth knowing that the configured form exists: a `with { … }` clause on `<Request>` takes `headers`, `method`, `body`, and `timeout` (ARO-0008 §"Request Configuration"), so identifying your crawler politely is one clause away:
+
+```aro
+Request the <response> from the <event-data: url> with {
+    headers: { "User-Agent": "aro-crawler/1.0" },
+    timeout: 10
+}.
+```
 
 ---
 

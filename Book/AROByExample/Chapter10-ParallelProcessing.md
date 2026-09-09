@@ -45,11 +45,19 @@ The syntax is simple:
 
 ```aro
 parallel for each <item> in <list> {
-    (* This block runs concurrently for all items *)
+    (* This block runs concurrently *)
 }
 ```
 
-Instead of processing items one by one, ARO processes all items simultaneously. The block executes once per item, but all executions happen in parallel.
+Instead of processing items one by one, ARO runs the block for many items at once. "Many" is not "all": the runtime keeps a bounded number of iterations in flight — four, or four per CPU core, whichever is larger — and starts the next one as each finishes. You can name the bound yourself:
+
+```aro
+parallel for each <item> in <list> with <concurrency: 4> {
+    (* At most four iterations run at a time *)
+}
+```
+
+That clause is how you rate-limit a crawler, and we return to it in section 10.10.
 
 ---
 
@@ -87,7 +95,7 @@ That is the only change: `for each` becomes `parallel for each`.
 When you use `parallel for each`, ARO:
 
 1. Creates a task for each item in the list
-2. Executes all tasks concurrently
+2. Keeps up to the concurrency limit of them running at once, starting a new task as each finishes
 3. Waits for all tasks to complete before continuing
 4. Handles any errors from individual tasks
 
@@ -135,7 +143,7 @@ For our crawler, links are independent, crawling is I/O-bound, and order does no
 
 Parallel processing is powerful but has considerations:
 
-**Resource Limits.** Too many concurrent requests can overwhelm the target server or exhaust system resources. Our crawler does not limit concurrency—a production crawler would.
+**Resource Limits.** Too many concurrent requests can overwhelm the target server. The loop's own bound (four per core by default) keeps the *process* healthy, but it is not a politeness budget — each iteration only emits an event, and the handlers those events wake up are not covered by it. Our crawler can still have far more HTTP requests in flight than the loop has iterations.
 
 **Non-Deterministic Order.** With parallel execution, you cannot predict which task finishes first. Log output may appear in any order.
 
@@ -155,11 +163,15 @@ Parallel processing is powerful but has considerations:
 
 ## 10.10 What Could Be Better
 
-**No Concurrency Limits.** You cannot limit how many parallel tasks run. For a web crawler, rate limiting is important to avoid overwhelming servers.
+**Concurrency Limits Bound Loops, Not Pipelines.** `with <concurrency: N>` caps one loop. It does not cap the event bus, so a crawler whose loop emits at four-at-a-time can still be fetching fifty pages, because each emit hands off to a handler and returns. There is no application-wide "at most N HTTP requests in flight" setting. The honest way to slow a crawler down today is a `<Sleep>` in the fetch handler:
 
-**No Progress Tracking.** With many parallel tasks, there is no built-in way to track progress or know how many are complete.
+```aro
+Sleep the <pause> for 500ms.
+```
 
-**Limited Debugging.** Debugging parallel execution is harder than sequential. ARO does not provide tools for tracing concurrent operations.
+**No Progress Tracking.** With many parallel tasks, there is no built-in way to track progress or know how many are complete. The `<metrics: table>` we print at shutdown tells you what happened, not what is happening.
+
+**Debugging Is Sequential.** `aro debug` steps one statement at a time, which is exactly the wrong shape for a race. `aro run --record events.json` is the better tool here: it captures the event order so you can look at what actually interleaved after the fact.
 
 ---
 

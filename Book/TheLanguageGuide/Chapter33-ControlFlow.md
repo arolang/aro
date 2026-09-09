@@ -17,12 +17,14 @@ Action the <result> preposition the <object> when <condition>.
 ```aro
 (getUser: User API) {
     Extract the <user-id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where <id> = <user-id>.
+    Retrieve the <found> from the <user-repository> where <id> = <user-id>.
 
-    (* Return NotFound only when user is null *)
-    Return a <NotFound: status> for the <missing: user> when <user> is null.
+    (* A filtered Retrieve that matches nothing binds [], not null — so test
+       the count. See the note under Comparison Operators. *)
+    Compute the <match-count: length> from <found>.
+    Return a <NotFound: status> for the <missing: user> when <match-count> == 0.
 
-    Return an <OK: status> with <user>.
+    Return an <OK: status> with <found>.
 }
 ```
 
@@ -61,9 +63,16 @@ Return a <BadRequest: status> for the <invalid: input> when <validation> is fail
 
 > **Note:** In a `when` guard, `is` only works for `is true`, `is false`,
 > `is null`, and type checks. For value equality use `==` (or `=`), not
-> `is`. There is no `is empty` operator — use `is null`, or check `exists`
-> for presence. (Inside a repository `where` clause the `is` keyword *does*
+> `is`. (Inside a repository `where` clause the `is` keyword *does*
 > read as equality, e.g. `where <status> is "active"`.)
+>
+> **`is null` does not catch an empty query result.** A filtered `Retrieve`
+> that matches nothing binds an empty list, and `[]` is neither null nor
+> absent — so `when <user> is null` never fires for it, and neither does
+> `exists`. To branch on "no rows", compute the length and compare it to
+> zero, or give the `Retrieve` a `default` clause (Chapter 36) so there is
+> always something to work with. `is null` remains the right test for a
+> value that really can be null, such as an absent field in a parsed body.
 
 ### Boolean Operators
 
@@ -76,11 +85,12 @@ Return an <OK: status> with <user> when <user: active> is true and <user: verifi
 (* Either condition with or *)
 Return a <BadRequest: status> for the <unavailable: product> when <stock> is null or <stock> < <required>.
 
-(* Negation *)
-Allow the <access> for the <user> when not <user: banned>.
+(* Negation — the field has to exist; reading an absent one is an error,
+   not a false *)
+Log "access granted" to the <console> when not <user: banned>.
 
 (* Complex condition *)
-Grant the <admin-features> for the <user> when (<user: role> == "admin" or <user: owner> is true) and <resource: public> is false.
+Emit an <AdminAccess: event> with <user> when (<user: role> == "admin" or <user: owner> is true) and <resource: public> is false.
 ```
 
 ## Match Expressions
@@ -214,23 +224,24 @@ match <http: method> {
 }
 ```
 
-### Pattern Matching with Guards
+### Matching a Field
+
+The subject of a `match` is a variable, so extract the field you want to branch
+on first. Cases match *values* — string, number or boolean literals — and
+`otherwise` catches the rest.
 
 ```aro
-match <user: subscription> {
-    case <premium> where <user: credits> > 0 {
-        Grant the <premium-features> for the <user>.
-        Deduct the <credit> from the <user: account>.
+Extract the <tier> from the <user: subscription>.
+
+match <tier> {
+    case "premium" {
+        Emit a <PremiumFeaturesGranted: event> with <user>.
     }
-    case <premium> {
-        Notify the <user> with <low-credits>.
-        Grant the <basic-features> for the <user>.
-    }
-    case <basic> {
-        Grant the <basic-features> for the <user>.
+    case "basic" {
+        Emit a <BasicFeaturesGranted: event> with <user>.
     }
     otherwise {
-        Redirect the <user> to the <subscription-page>.
+        Emit a <SubscriptionRequired: event> with <user>.
     }
 }
 ```
@@ -258,7 +269,7 @@ match <status-code> {
 
 ### Regular Expression Patterns
 
-Match statements support regex patterns for flexible string matching (see **Section 27.4** for comprehensive regex documentation):
+Match statements support regex patterns for flexible string matching (the **Regular Expression Matching** section below covers regex in full):
 
 ```aro
 match <message: text> {
@@ -271,7 +282,7 @@ match <message: text> {
     }
     case /^[A-Z]{3}-\d{4}$/ {
         (* Matches ticket IDs like "ABC-1234" *)
-        Process the <ticket-reference> from the <message>.
+        Emit a <TicketReferenced: event> with <message>.
     }
     otherwise {
         Log <message: text> to the <console>.
@@ -279,7 +290,7 @@ match <message: text> {
 }
 ```
 
-Regex patterns use forward slashes (`/pattern/flags`) and support flags like `i` (case insensitive), `s` (dot matches newlines), and `m` (multiline). See Section 27.4 for more details and additional use cases.
+Regex patterns use forward slashes (`/pattern/flags`) and support flags like `i` (case insensitive), `s` (dot matches newlines), and `m` (multiline). The next section covers the flags and the other places regex appears.
 
 ## Regular Expression Matching
 
@@ -329,7 +340,7 @@ Match statements are the primary place to use regex for branching logic:
         }
         case /https?:\/\/[\w.-]+/i {
             (* Contains a URL *)
-            Scan the <link> for the <security-check>.
+            Emit a <LinkPosted: event> with { text: <text> }.
         }
         otherwise {
             Store the <text> into the <message-repository>.
@@ -426,7 +437,7 @@ match <text> {
         Validate the <checked-url> for the <url>.
     }
     otherwise {
-        Process the <plain-message> from the <text>.
+        Log <text> to the <console>.
     }
 }
 ```
@@ -613,7 +624,8 @@ ARO's syntax prioritizes readability and inline usage within statements.
     Extract the <product-id> from the <pathParameters: id>.
     Retrieve the <product> from the <product-repository> where <id> = <product-id>.
 
-    Return a <NotFound: status> for the <missing: product> when <product> is null.
+    Compute the <match-count: length> from <product>.
+    Return a <NotFound: status> for the <missing: product> when <match-count> == 0.
 
     Return an <OK: status> with <product>.
 }
@@ -624,12 +636,14 @@ ARO's syntax prioritizes readability and inline usage within statements.
 ```aro
 (deletePost: Post API) {
     Extract the <post-id> from the <pathParameters: id>.
-    Retrieve the <post> from the <post-repository> where <id> = <post-id>.
+    Retrieve the <post> from the <post-repository> where <id> = <post-id>
+        default { authorId: "" }.
 
-    Return a <NotFound: status> for the <missing: post> when <post> is null.
+    Extract the <author> from the <post: authorId>.
+    Return a <NotFound: status> for the <missing: post> when <author> == "".
 
     Return a <Forbidden: status> for the <unauthorized: deletion>
-        when <post: authorId> != <current-user: id> and <current-user: role> != "admin".
+        when <author> != <current-user: id> and <current-user: role> != "admin".
 
     Delete the <removed-post> from the <post-repository> where <id> = <post-id>.
     Return a <NoContent: status> for the <deletion>.
@@ -650,14 +664,18 @@ Check error conditions early with guarded returns:
     Return a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
     Return a <BadRequest: status> for the <same: accounts> when <source-id> == <target-id>.
 
-    Retrieve the <source> from the <account-repository> where <id> = <source-id>.
+    Retrieve the <source> from the <account-repository> where <id> = <source-id>
+        default { balance: -1 }.
 
-    Return a <NotFound: status> for the <missing: source-account> when <source> is null.
-    Return a <BadRequest: status> for the <insufficient: funds> when <source: balance> < <amount>.
+    Extract the <balance> from the <source: balance>.
+    Return a <NotFound: status> for the <missing: source-account> when <balance> < 0.
+    Return a <BadRequest: status> for the <insufficient: funds> when <balance> < <amount>.
 
     (* Now proceed with transfer *)
     Retrieve the <destination> from the <account-repository> where <id> = <target-id>.
-    Transfer the <receipt> to the <destination> with <amount>.
+    Emit a <FundsTransferred: event> with {
+        source: <source-id>, target: <target-id>, amount: <amount>
+    }.
     Return an <OK: status> for the <transfer>.
 }
 ```
@@ -690,24 +708,27 @@ Check error conditions early with guarded returns:
 ## Complete Example
 
 ```aro
-(User Authentication: Security) {
-    Require the <request> from the <framework>.
-    Require the <user-repository> from the <framework>.
-
+(loginUser: Security) {
     (* Extract credentials *)
-    Extract the <username> from the <request: body>.
-    Extract the <password> from the <request: body>.
+    Extract the <body> from the <request: body>.
+    Extract the <username> from the <body: username>.
+    Extract the <password> from the <body: password>.
 
     (* Validate input - guarded return *)
     Return a <BadRequest: error> for the <request>
         when <username> is null or <password> is null.
 
     (* Look up user *)
-    Retrieve the <user> from the <user-repository>.
+    Retrieve the <found> from the <user-repository> where <name> = <username>.
 
-    (* Handle user not found - guarded statements *)
-    Log <username> to the <console> when <user> is null.
-    Return an <Unauthorized: error> for the <request> when <user> is null.
+    (* Handle user not found - an unmatched query binds [], so count it *)
+    Compute the <match-count: length> from <found>.
+    Log <username> to the <console> when <match-count> == 0.
+    Return an <Unauthorized: error> for the <request> when <match-count> == 0.
+
+    (* A where-filtered Retrieve that matches one row binds that row, not a
+       one-element list, so read it directly. *)
+    Create the <user> with <found>.
 
     (* Check account status with match *)
     match <user: status> {
@@ -729,9 +750,7 @@ Check error conditions early with guarded returns:
                     Return an <OK: status> with the <session-token>.
                 }
                 otherwise {
-                    Increment the <failed-attempts> for the <user>.
-                    Lock the <account-lock> for the <user>
-                        when <failed-attempts> >= 5.
+                    Emit a <LoginFailed: event> with <user>.
                     Return an <Unauthorized: error> for the <request>.
                 }
             }
@@ -817,8 +836,8 @@ Guards with `when` are ideal for:
 
 ```aro
 (* Good - guards for early exit *)
-Return a <BadRequest: status> for the <missing: id> when <user-id> is null.
-Return a <NotFound: status> for the <missing: user> when <user> is null.
+Return a <BadRequest: status> for the <missing: id> when <user-id> == "".
+Return a <NotFound: status> for the <missing: user> when <match-count> == 0.
 Return a <Forbidden: status> for the <private: profile> when <user: private> is true.
 
 (* Continue with main logic *)
@@ -848,10 +867,10 @@ match <order: status> {
 
 ```aro
 (* Good - explicit conditions *)
-Grant the <access> for the <user> when <user: active> is true and <user: verified> is true.
+Log "access granted" to the <console> when <user: active> is true and <user: verified> is true.
 
 (* Avoid - implicit truthiness *)
-Grant the <access> for the <user> when <user: active> and <user: verified>.
+Log "access granted" to the <console> when <user: active> and <user: verified>.
 ```
 
 ---

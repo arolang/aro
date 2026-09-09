@@ -13,12 +13,18 @@ ARO communicates with native plugins through a C-compatible Application Binary I
 | `aro_plugin_info` | **Required** | Returns plugin metadata as JSON |
 | `aro_plugin_free` | **Required** | Frees memory allocated by the plugin |
 | `aro_plugin_execute` | Optional | Executes actions and service calls |
+| `aro_plugin_qualifier` | Optional | Executes a qualifier transformation |
 | `aro_plugin_init` | Optional | One-time initialization on load |
 | `aro_plugin_shutdown` | Optional | Cleanup on unload |
 | `aro_plugin_on_event` | Optional | Receives subscribed events |
+| `aro_plugin_register` | Optional | Forces file-scope initialisation before info is read |
+| `aro_plugin_set_invoke` | Optional | Receives a callback for invoking ARO feature sets |
 | `aro_object_read` | Optional | Reads from a system object |
 | `aro_object_write` | Optional | Writes to a system object |
 | `aro_object_list` | Optional | Lists entries from a system object |
+
+These twelve are the complete set the runtime looks for, and the exact set
+`aro build` renames when it statically links a plugin into a binary.
 
 ## Required Functions
 
@@ -27,12 +33,18 @@ ARO communicates with native plugins through a C-compatible Application Binary I
 Returns plugin metadata as a JSON string. **This function is required.** ARO calls it immediately after loading the plugin to discover what the plugin provides. If this function is absent, the plugin will fail to load.
 
 ```c
-const char* aro_plugin_info(void);
+char* aro_plugin_info(void);
 ```
 
 **Returns:**
-- Pointer to a null-terminated JSON string (plugin retains ownership)
-- The returned string must remain valid for the lifetime of the plugin
+- Pointer to a heap-allocated, null-terminated JSON string
+- **Ownership transfers to ARO**, which calls `aro_plugin_free` on it as soon
+  as the metadata is parsed
+
+This is the trap in this appendix. It is natural to return a `static const
+char*` — the metadata never changes — but ARO frees what it gets back, and
+`free()` on a static buffer is undefined behaviour. Allocate a fresh copy on
+every call (`strdup` in C, `CString::into_raw` in Rust, `strdup` in Swift).
 
 **JSON Schema:**
 ```json
@@ -42,7 +54,6 @@ const char* aro_plugin_info(void);
   "actions": [
     {
       "name": "string",
-      "symbol": "string",
       "role": "own | request | response | export",
       "verbs": ["verb1", "verb2"],
       "prepositions": ["from", "to", "with", "for", "into", "as"]
@@ -51,19 +62,22 @@ const char* aro_plugin_info(void);
   "qualifiers": [
     {
       "name": "string",
+      "inputTypes": ["String", "List"],
+      "description": "string",
       "accepts_parameters": false
     }
   ],
   "services": [
     {
       "name": "string",
-      "method": "string"
+      "methods": ["method1", "method2"]
     }
   ],
   "system_objects": [
     {
-      "name": "string",
-      "capabilities": ["readable", "writable", "enumerable"]
+      "identifier": "string",
+      "capabilities": ["readable", "writable", "enumerable"],
+      "description": "string"
     }
   ],
   "events": {
@@ -72,20 +86,33 @@ const char* aro_plugin_info(void);
   },
   "deprecations": [
     {
-      "name": "string",
+      "feature": "string",
+      "message": "string",
       "since": "string",
-      "replacement": "string"
+      "remove_in": "string"
     }
   ]
 }
 ```
+
+The parser ignores keys it does not recognise, so every one of those spellings
+matters and a typo costs you the feature silently rather than raising an error.
+Three are easy to get wrong:
+
+- `services[].methods` is a **plural array**, not a singular `method` string.
+- `system_objects[].identifier` — not `name`. An entry keyed on `name` is dropped.
+- `qualifiers[].inputTypes` is **camelCase** while `accepts_parameters` beside
+  it is snake_case. That is inconsistent, and it is what the runtime reads;
+  spelling it `input_types` makes the qualifier accept every type instead.
+
+After changing metadata, confirm what actually registered with `aro actions`
+and `aro actions --qualifiers`.
 
 **Action Metadata Fields:**
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Action identifier |
-| `symbol` | No | C function symbol (defaults to `aro_plugin_execute`) |
 | `role` | No | Semantic role: `request`, `own`, `response`, or `export` |
 | `verbs` | No | Array of verbs that trigger this action (e.g., `["hash", "digest"]`) |
 | `prepositions` | No | Valid prepositions: `from`, `to`, `with`, `for`, `into`, `as`, `against`, `via` |
@@ -94,8 +121,10 @@ const char* aro_plugin_info(void);
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Qualifier identifier (plain name, no namespace prefix) |
-| `accepts_parameters` | No | Whether the qualifier accepts inline parameters (default: `false`) |
+| `name` | Yes | Qualifier identifier (plain name, no namespace prefix — the handle from `plugin.yaml` is prepended by the runtime) |
+| `inputTypes` | No | Types this qualifier accepts: `String`, `Int`, `Double`, `Bool`, `List`, `Object`. Camel-cased. Omitted or misspelled means "all types" |
+| `description` | No | Shown by `aro actions --qualifiers`, in editor hover, and in the MCP tools |
+| `accepts_parameters` | No | Whether the qualifier accepts an inline `with { }` clause (default: `false`) |
 
 **Action Roles:**
 
@@ -143,17 +172,19 @@ const char* aro_plugin_info(void);
   "qualifiers": [
     {
       "name": "sha256",
+      "inputTypes": ["String"],
       "accepts_parameters": false
     },
     {
       "name": "truncate",
+      "inputTypes": ["String"],
       "accepts_parameters": true
     }
   ],
   "services": [
     {
       "name": "key-store",
-      "method": "keystore"
+      "methods": ["get", "put", "rotate"]
     }
   ],
   "events": {
@@ -162,9 +193,10 @@ const char* aro_plugin_info(void);
   },
   "deprecations": [
     {
-      "name": "md5",
-      "since": "2.0.0",
-      "replacement": "sha256"
+      "feature": "md5",
+      "message": "Use sha256 instead",
+      "since": "1.4.0",
+      "remove_in": "2.0.0"
     }
   ]
 }
@@ -173,36 +205,38 @@ const char* aro_plugin_info(void);
 This enables ARO code like:
 ```aro
 Hash the <result: sha256> from the <password>.
-Encrypt the <ciphertext> with <data> using <key>.
+Encrypt the <ciphertext> from <data> with { key: <key> }.
 ```
 
 **Example Implementation (C):**
 ```c
-static const char* plugin_info_json =
+static const char* PLUGIN_INFO_JSON =
     "{"
     "  \"name\": \"my-plugin\","
     "  \"version\": \"1.0.0\","
     "  \"actions\": ["
-    "    {\"name\": \"myAction\", \"symbol\": \"aro_plugin_execute\"}"
+    "    {\"name\": \"myAction\", \"verbs\": [\"myaction\"],"
+    "     \"role\": \"own\", \"prepositions\": [\"from\"]}"
     "  ]"
     "}";
 
-const char* aro_plugin_info(void) {
-    return plugin_info_json;
+char* aro_plugin_info(void) {
+    /* strdup, not the static pointer: ARO frees what we return. */
+    return strdup(PLUGIN_INFO_JSON);
 }
 ```
 
 **Example Implementation (Rust):**
 ```rust
 #[no_mangle]
-pub extern "C" fn aro_plugin_info() -> *const c_char {
-    static INFO: &str = r#"{
+pub extern "C" fn aro_plugin_info() -> *mut c_char {
+    const INFO: &str = r#"{
         "name": "my-plugin",
         "version": "1.0.0",
-        "actions": [{"name": "myAction", "symbol": "aro_plugin_execute"}]
+        "actions": [{"name": "myAction", "verbs": ["myaction"], "role": "own"}]
     }"#;
 
-    // Use a leaked CString for static lifetime
+    // into_raw hands ownership to ARO, which frees it via aro_plugin_free.
     CString::new(INFO).unwrap().into_raw()
 }
 ```
@@ -210,11 +244,11 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
 **Example Implementation (Swift):**
 ```swift
 @_cdecl("aro_plugin_info")
-public func pluginInfo() -> UnsafePointer<CChar> {
+public func pluginInfo() -> UnsafeMutablePointer<CChar> {
     let info = """
     {"name": "my-plugin", "version": "1.0.0", "actions": [...]}
     """
-    return UnsafePointer(strdup(info)!)
+    return strdup(info)!
 }
 ```
 
@@ -223,7 +257,7 @@ public func pluginInfo() -> UnsafePointer<CChar> {
 Frees memory allocated by the plugin. **This function is required.** ARO calls it to release any heap-allocated string returned by plugin functions.
 
 ```c
-void aro_plugin_free(void* ptr);
+void aro_plugin_free(char* ptr);
 ```
 
 **Parameters:**
@@ -231,7 +265,7 @@ void aro_plugin_free(void* ptr);
 
 **Example Implementation (C):**
 ```c
-void aro_plugin_free(void* ptr) {
+void aro_plugin_free(char* ptr) {
     free(ptr);
 }
 ```
@@ -336,6 +370,58 @@ pub extern "C" fn aro_plugin_execute(
     };
 
     CString::new(result).unwrap().into_raw()
+}
+```
+
+### aro_plugin_qualifier
+
+Executes a qualifier transformation. **This function is optional.** Implement it
+only if `aro_plugin_info` declares qualifiers — the runtime registers a
+plugin's qualifiers only when this symbol is present.
+
+```c
+char* aro_plugin_qualifier(
+    const char* qualifier_name,
+    const char* input_json
+);
+```
+
+**Parameters:**
+- `qualifier_name`: The qualifier's plain name, without the handle prefix. ARO
+  code writes `<value: Hash.sha256>`; your function receives `"sha256"`.
+- `input_json`: `{"value": <the value>, "type": "String", "_with": { … }}`.
+  `type` is the runtime's detected type of the value; `_with` carries the
+  qualifier's inline parameters and is present only for qualifiers that
+  declared `accepts_parameters: true`.
+
+**Returns:** a heap-allocated JSON string in exactly one of two shapes:
+
+```json
+{"result": "the transformed value"}
+```
+```json
+{"error": "what went wrong"}
+```
+
+Nothing else is accepted. This is stricter than `aro_plugin_execute`, which may
+return any object. A qualifier that returns the bare value, or wraps it under a
+different key such as `{"value": …}`, fails with *Plugin returned neither
+result nor error*; one that wraps twice, `{"result": {"result": …}}`, binds the
+inner object rather than the value. Both mistakes are live in the shipped SDKs
+— see GitLab #551 (Python) and #554 (Rust).
+
+**Example Implementation (C):**
+```c
+char* aro_plugin_qualifier(const char* qualifier_name, const char* input_json) {
+    if (strcmp(qualifier_name, "sha256") == 0) {
+        char* digest = compute_sha256_of_value(input_json);   /* your code */
+        char* out = malloc(strlen(digest) + 32);
+        if (!out) { free(digest); return strdup("{\"error\":\"out of memory\"}"); }
+        snprintf(out, strlen(digest) + 32, "{\"result\":\"%s\"}", digest);
+        free(digest);
+        return out;
+    }
+    return strdup("{\"error\": \"Unknown qualifier\"}");
 }
 ```
 
@@ -602,9 +688,13 @@ Or simply the result value directly:
 
 ## Error Codes
 
-Standard integer return codes apply only in contexts where a function returns `int32_t` (see legacy notes). The primary `aro_plugin_execute` function returns a JSON string and communicates errors via the `error` field in the response body.
+No ABI function returns a status code. Every function that can fail returns a
+JSON string and communicates the failure through an `error` field in it. The
+older three-parameter form of `aro_plugin_execute` — an out-pointer plus an
+`int32_t` return — was removed; if you meet it in an older plugin, port it.
 
-For reference, the conventional error semantics in the JSON `code` field are:
+The `code` field below is an optional string in the error body, useful for
+callers that want to branch on a category rather than parse a message:
 
 | Code | Meaning |
 |------|---------|
@@ -629,9 +719,9 @@ For reference, the conventional error semantics in the JSON `code` field are:
    - Ownership transfers to ARO
    - ARO will call `aro_plugin_free` when done
 
-3. **Static strings** (from `aro_plugin_info`):
-   - May be static or leaked (never freed)
-   - Must remain valid for plugin lifetime
+3. **`aro_plugin_info` is not an exception.** Its return value is freed like
+   every other. Do not return a static or otherwise non-`free()`able pointer
+   from it.
 
 ## Thread Safety
 
@@ -673,13 +763,14 @@ static const char* PLUGIN_INFO =
     "  \"name\": \"my-plugin\","
     "  \"version\": \"1.0.0\","
     "  \"actions\": ["
-    "    {\"name\": \"myAction\", \"symbol\": \"aro_plugin_execute\"}"
+    "    {\"name\": \"myAction\", \"verbs\": [\"myaction\"], \"role\": \"own\"}"
     "  ]"
     "}";
 
 // Plugin info (required)
-const char* aro_plugin_info(void) {
-    return PLUGIN_INFO;
+char* aro_plugin_info(void) {
+    /* ARO frees what we return, so hand back a fresh copy. */
+    return strdup(PLUGIN_INFO);
 }
 
 // Plugin initialization (optional)
@@ -722,7 +813,7 @@ char* aro_plugin_execute(const char* action_name, const char* input_json) {
 }
 
 // Memory cleanup (required)
-void aro_plugin_free(void* ptr) {
+void aro_plugin_free(char* ptr) {
     free(ptr);
 }
 ```
@@ -738,7 +829,7 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
     let info = r#"{
         "name": "my-plugin",
         "version": "1.0.0",
-        "actions": [{"name": "myAction"}]
+        "actions": [{"name": "myAction", "verbs": ["myaction"], "role": "own"}]
     }"#;
     // Leak the CString so it lives for the plugin's lifetime
     CString::new(info).unwrap().into_raw()

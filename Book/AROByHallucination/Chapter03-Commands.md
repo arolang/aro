@@ -19,7 +19,7 @@ Model 'ARO-Lang/aro-coder-6bit' (~4.5 GB) is not installed.
 Download from Hugging Face? [y/N]
 ```
 
-Say yes. The weights land in `~/.cache/aro/models/ARO-Lang/aro-coder-6bit/`. Subsequent invocations find them there and skip the download.
+Say yes. The weights land in `~/.cache/aro/ask/`. Subsequent invocations find them there and skip the download.
 
 If you would rather put the cache somewhere else — a shared network drive, an external SSD — set the `HF_HOME` environment variable before running `aro ask`. If the model is gated and you have a token, set `HF_TOKEN`. Neither is required for the default model.
 
@@ -60,30 +60,34 @@ The REPL is built on LineNoise, so arrow keys, history, and Ctrl+R search all wo
 Slash commands are how you talk to `aro ask` itself, instead of to the model. They work in both modes: pass them as the first argument in one-shot, or type them at the REPL prompt.
 
 ```
+/help                Show the command list.
 /clean               Delete .context in the current directory.
+/file <path>         Focus a file: its content is injected into every request.
 /show                Print a short summary of the current conversation.
 /tools               List every tool the model can call.
 /model               Print the active model, its path, and the backend.
 /mcp                 List the MCP servers currently bridged into the session.
 /index               Walk the project and (re)build the retrieval index.
 /search <query>      Debug retrieval: print the top 5 matches for a query.
-/fix                 Run aro check, feed diagnostics to the model, auto-repair.
-/explain <file>      Ask the model to explain a file or feature set in plain English.
-/docs <topic>        Generate documentation for a topic from the current project.
+/fix <path>          Run aro check, feed diagnostics to the model, auto-repair.
+/explain <path>      Ask the model to explain a file or feature set in plain English.
+/docs <path>         Generate documentation for an ARO application.
 /plugin <name>       Scaffold a new plugin directory with plugin.yaml and stubs.
 /openapi <spec>      Generate or update openapi.yaml from a natural-language description.
-/quit                Leave the REPL.
+/quit                Leave the REPL (also /exit, Ctrl-D).
 ```
 
 A few of these are worth a paragraph of their own.
+
+**`/file`** is the one nobody discovers on their own. `/file users.aro` pins that file's current content into every subsequent request, so the model treats it as "the open file" and stops re-reading it on every turn. `/file off` clears it. There is a `--file` flag that does the same thing for one-shot mode.
 
 **`/clean`** deletes the `.context` file in the current directory. Contexts drift over long conversations — the model starts to "remember" things from three tasks ago and applies them to the thing in front of it. When a conversation has clearly lost the plot, `/clean` and start again.
 
 **`/tools`** is how you discover what the model can actually do. The built-in tools are listed, plus any tool the bridged MCP servers expose. If a colleague ships a new ARO plugin that registers an MCP tool, you'll see it here without any extra configuration on your side.
 
-**`/index`** walks the project and builds a retrieval index at `.context.index/vectors.json`. Run this once after a fresh clone, and then again any time you move or add a lot of files. Chapter 5 explains what the index is used for.
+**`/index`** walks the project and builds a retrieval index at `.context.index/vectors.json`. Run this once after a fresh clone, and then again any time you move or add a lot of files. Section 4.5 explains what the index is used for — and, importantly, who uses it.
 
-**`/search`** is a debugging tool. It shows you which chunks of the project the model would see if it called `search_project` with the same query. Use it to understand why the model did or did not find the thing you expected it to find.
+**`/search`** prints the top five chunks matching a query, with file, line range, and score. It is how you find the right file to point the model at — the model has no search tool of its own (Chapter 7), so retrieval is a thing you drive, not something it does behind your back.
 
 **`/fix`** is the one you will reach for most often. It works deterministically — no tool-calling loop, no hoping the model picks the right tool. It runs `aro check` directly, reads the source files, builds a focused prompt with the code and the exact error, asks the model for a fix, validates the fix with `aro check` in a temp directory, and writes the corrected files back only if validation passes. It repeats up to five times with decreasing temperature. You can pass a file or a directory: `/fix ./MyApp/users.aro` or `/fix ./MyApp`. The workflow it replaces — read error, open file, find line, fix it, re-run check — takes minutes by hand and seconds with `/fix`.
 
@@ -97,12 +101,15 @@ A few of these are worth a paragraph of their own.
 
 ## 3.5 Flags
 
-`aro ask` has four flags, and you will probably only ever use two of them.
+`aro ask` has seven flags, and you will probably only ever use two of them.
 
 - **`--model <id>`** — override the default model. Only useful if you have trained your own variant.
 - **`--yes`** — auto-approve every shell tool call. Use this in scripts and in CI. Never use it when you are about to walk away from the terminal.
 - **`--no-mcp`** — skip the MCP bridge bootstrap. Faster startup for slash commands that don't need tools.
 - **`--temperature <value>`** — sampling temperature. Defaults to `0.2`, which is deliberately low; the fine-tune was trained to be confident about ARO syntax, and high temperatures make it start inventing verbs again. Raise it only if you want the model to be more creative in non-code explanations.
+- **`--file <path>`** — pin a file's content into every request, the one-shot equivalent of `/file`.
+- **`--verbose`** (or `-v`) — print backend chatter: model loading, runner output, and the raw reply including the `<think>` block the CLI normally strips. This is the flag to reach for when the model appears to hang.
+- **`--no-think`** — disable the base model's thinking mode for this turn. Worth trying when a simple prompt burns its whole token budget reasoning and never gets to an answer.
 
 ## 3.6 The Context File
 
@@ -139,4 +146,6 @@ mcp_servers:
     args: [--stdio]
 ```
 
-The file is written atomically — the CLI writes a `.context.tmp` sibling and renames it into place — and its permissions are restricted to `0600` on Unix systems. It is yours, not the world's.
+The file is written in place with your umask's default permissions, so if you keep anything sensitive in a conversation, `chmod 600 .context` yourself. It never leaves the machine — but it is a plain file in your working directory, and it will be picked up by a `git add .` that is not paying attention. Put `.context` in `.gitignore` unless you have decided otherwise (section 4.5).
+
+A sibling file, `.context.repairs.jsonl`, accumulates the read/fix/verify conversations that `/fix` produces. Same rules apply.
