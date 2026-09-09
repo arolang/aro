@@ -10,7 +10,7 @@ Every programmer eventually discovers a counterintuitive truth: simplicity isn't
 
 General-purpose languages like Python, JavaScript, and Go are magnificent tools. They let you express almost anything. But "almost anything" is precisely the problem. When a language permits infinite variation, every codebase becomes a unique dialect. Reading someone else's Express.js handler requires decoding their personal philosophy of error handling, their opinions on async/await versus callbacks, their stance on mutation.
 
-ARO takes a different path. It deliberately limits what you can express. No loops. No conditionals. No arbitrary function definitions. Just 61 verbs, a fixed grammar, and a commitment to the happy path.
+ARO takes a different path. It deliberately limits what you can express. No `while`. No `if`/`else`. No free-standing functions. Just 71 verbs, a fixed grammar, and a commitment to the happy path.
 
 This isn't a limitation born of laziness or naivety. It's a design philosophy with historical precedent:
 
@@ -28,7 +28,7 @@ These languages succeeded not despite their constraints but because of them. Whe
 ARO makes specific choices about what it will and won't express:
 
 **What ARO Has:**
-- 61 built-in actions (verbs like Extract, Compute, Return, Emit)
+- 71 built-in actions (verbs like Extract, Compute, Return, Emit)
 - A fixed sentence structure: `Action the <Result> preposition the <Object>`
 - Feature sets that respond to events
 - First-class support for HTTP, files, and sockets
@@ -36,12 +36,12 @@ ARO makes specific choices about what it will and won't express:
 
 **What ARO Deliberately Lacks:**
 - Traditional if/else (uses `when` guards and `match` expressions instead)
-- Traditional loops (uses `for each` and collection actions instead of while/recursion)
-- User-defined functions (feature sets aren't functions)
+- Traditional `while` loops (uses `for each` and collection actions instead)
+- Free-standing functions — but a feature set whose activity is `Action` *is* callable, application-wide, as `Application.<Name>` (Chapter 6.4)
 - Complex type system (primitives built-in, complex types from OpenAPI schemas)
 - Exception handling (happy path only)
 
-This sounds limiting because it is. But limitation is the point. When the 61 built-in actions aren't enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
+This sounds limiting because it is. But limitation is the point. When the 71 built-in actions aren’t enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
 
 ---
 
@@ -59,7 +59,7 @@ This sounds limiting because it is. But limitation is the point. When the 61 bui
   <rect x="200" y="20" width="155" height="80" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
   <text x="277" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#166534">Declarative</text>
   <text x="277" y="66" text-anchor="middle" font-size="9" fill="#166534">Say what, not how</text>
-  <text x="277" y="80" text-anchor="middle" font-size="9" fill="#166534">No loops · No control flow</text>
+  <text x="277" y="80" text-anchor="middle" font-size="9" fill="#166534">No branches · No mutation</text>
   <text x="277" y="94" text-anchor="middle" font-size="9" fill="#166534">runtime handles the rest</text>
   <!-- Event-driven pillar -->
   <rect x="380" y="20" width="155" height="80" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
@@ -130,13 +130,17 @@ If your domain is inherently conditional, you'll spend more time writing extensi
 
 **Extension Overhead**
 
-When you need a custom action, you need to:
+Reusable logic that can be *expressed* in ARO is cheap: a feature set with the
+business activity `Action` is callable as `Application.<Name>` from anywhere,
+with no build step. The overhead starts where ARO's vocabulary ends. A custom
+action means:
+
 1. Write Swift code
 2. Understand ARO's action protocol
 3. Register the action
 4. Rebuild
 
-This is more friction than adding a function in a general-purpose language. For rapid prototyping, this overhead hurts.
+This is more friction than adding a function in a general-purpose language. For rapid prototyping, this overhead hurts — and it is what you pay every time the domain needs a verb the runtime does not have.
 
 **Learning Curve**
 
@@ -185,7 +189,7 @@ Bugs ∝ (API Surface) × (Complexity) × (Mutability)
 ```
 
 ARO attacks all three factors:
-- **Smaller API surface**: 61 actions vs. infinite function possibilities
+- **Smaller API surface**: 71 actions vs. infinite function possibilities
 - **Reduced complexity**: No control flow means fewer execution paths
 - **Limited mutability**: Actions transform and return; they don't mutate shared state (though explicit shared repositories exist for business domain data and can be safely used across feature sets)
 
@@ -221,7 +225,11 @@ Sorting algorithms. Graph traversal. Machine learning training loops. These need
 
 **Exploratory Programming**
 
-Some domains benefit from REPL-driven experimentation. Data analysis. Prototyping. Research. ARO's compile-run cycle creates friction that hurts exploration.
+ARO does have a REPL (`aro repl`) and a Jupyter kernel, so statement-at-a-time
+experimentation is available. What it lacks is the *library* half of an
+exploratory workflow — the plotting, dataframe and numerical ecosystems that
+make data analysis and research productive. Prototyping a pipeline in ARO
+works; exploring a dataset in it does not.
 
 **Teams with Strong Existing Patterns**
 
@@ -249,11 +257,17 @@ ARO has four built-in primitive types (String, Integer, Float, Boolean) and coll
 
 **Debugging Tools**
 
-No step debugger exists. Limited introspection. Debugging means reading logs and error messages. IDE integration includes syntax highlighting, an LSP server with diagnostics, completions, and hover, plus IntelliJ and VS Code extensions.
+`aro debug` steps through an application, and `aro repl` evaluates statements
+interactively — including over line-delimited JSON, which is how the Jupyter
+kernel (`aro kernel install`) drives it. Introspection is still thin: there is
+no watch-expression language and no time-travel, so most debugging remains
+reading logs and error messages. IDE integration includes syntax highlighting,
+an LSP server with diagnostics, completions, and hover, plus IntelliJ and VS
+Code extensions.
 
 **Standard Library**
 
-61 actions is a starting point. The vocabulary will grow. Database abstractions. Authentication patterns. These need to be built.
+71 actions is a starting point. The vocabulary will grow. Database abstractions. Authentication patterns. These need to be built.
 
 **Documentation**
 
@@ -278,7 +292,7 @@ For the latest version, check the repository. For the authoritative specificatio
 ---
 
 ```
-This chapter reflects ARO as of March 2026.
+This chapter reflects ARO as of September 2026.
 Language version: 0.8.0
 ```
 

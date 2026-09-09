@@ -137,7 +137,15 @@ Log <result: message> to the <console> when <result: error> = true.
 
 ### Timeout Handling
 
-Commands that exceed the timeout return with `exitCode: -1`:
+> **The `timeout` field is currently ignored.** `ExecConfig` carries it and
+> `ExecResult` reserves `exitCode: -1` for it, but nothing bounds the child
+> process — `{ command: "sleep 5", timeout: 1000 }` runs for the full five
+> seconds and returns `0`
+> ([GitLab #586](https://git.ausdertechnik.de/arolang/aro/-/issues/586)).
+> Keep writing it, so your intent is recorded and your code works when the
+> gap is closed, but do not rely on it to bound a hung command today.
+
+Once it is enforced, a command that exceeds its timeout returns `exitCode: -1`:
 
 ```aro
 Exec the <result> for the <long-task> with {
@@ -168,7 +176,7 @@ Exec the <result> on the <system> with {
 |--------|------|---------|-------------|
 | `command` | String | (required) | The shell command to execute |
 | `workingDirectory` | String | current | Working directory for the command |
-| `timeout` | Int | 30000 | Timeout in milliseconds |
+| `timeout` | Int | 30000 | Timeout in milliseconds — accepted, not yet enforced (#586) |
 | `shell` | String | /bin/sh | Shell to use for execution |
 | `environment` | Object | (inherited) | Additional environment variables |
 | `captureStderr` | Boolean | true | Include stderr in output |
@@ -326,7 +334,7 @@ Exec the <result> for the <command> with "ls ${userInput}".
 1. **Never trust user input** - Always validate and sanitize before using in commands
 2. **Use allowlists** - Define allowed commands or patterns rather than blocking bad ones
 3. **Limit permissions** - Run the ARO application with minimal required privileges
-4. **Set timeouts** - Always specify reasonable timeouts to prevent hanging
+4. **Set timeouts** - Always specify reasonable timeouts, and until #586 lands, treat a command that can hang as one that will
 5. **Log commands** - Keep audit logs of executed commands for security review
 
 ### Sandboxing (Future)

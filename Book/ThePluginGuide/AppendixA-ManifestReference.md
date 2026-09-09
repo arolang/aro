@@ -9,6 +9,7 @@ The `plugin.yaml` file is the manifest that describes your plugin to ARO. It mus
 ```yaml
 name: my-plugin
 version: 1.0.0
+handle: MyPlugin
 description: A description of what this plugin does
 author: Your Name <your.email@example.com>
 license: MIT
@@ -23,14 +24,38 @@ provides:
   - type: swift-plugin
     path: Sources/
     actions:
-      - formatDate
-      - formatCurrency
+      - name: FormatDate
+        verbs: [formatdate]
+        role: own
+        prepositions: [from, with]
 
 dependencies:
   some-other-plugin:
     git: https://github.com/other/plugin
     ref: v2.0.0
 ```
+
+## What the loader reads
+
+The manifest is decoded into a fixed set of fields, and **anything else is
+silently ignored**. That is worth stating plainly, because a plausible-looking
+key that the loader does not know about costs you the behaviour without an
+error message.
+
+The recognised top-level keys are exactly: `name`, `version`, `handle`,
+`description`, `author`, `license`, `aro-version`, `source`, `provides`,
+`dependencies`, `platforms`.
+
+Inside a `provides` entry: `type`, `path`, `handler`, `build`, `python`,
+`actions`.
+
+Inside `build`: `cargo-target`, `compiler`, `flags`, `output`.
+
+Popular fields from other package managers — `homepage`, `repository`,
+`keywords`, `authors`, `dev-dependencies` — are **not** read. Neither is a
+top-level `build:` block, nor `system-objects`, `include`, `libs`, `standard`,
+`features` or `profile` inside `build`. Include them for human readers if you
+like; do not expect them to do anything.
 
 ## Top-Level Fields
 
@@ -57,6 +82,43 @@ The plugin version using [Semantic Versioning](https://semver.org/):
 - Pre-release: `1.0.0-alpha.1`, `1.0.0-beta.2`, `1.0.0-rc.1`
 - Build metadata: `1.0.0+build.123`
 
+### handle
+
+```yaml
+handle: MyPlugin
+```
+
+The plugin's namespace: the name callers actually type. A plugin with
+`handle: Markdown` exposes its actions as `Markdown.ToHTML` and its qualifiers
+as `<value: Markdown.escape>`.
+
+Conventions the loader checks and warns about:
+
+- **PascalCase.** It must start with an uppercase letter, and contain no
+  hyphens or underscores. `markdown` or `my-plugin` load, but log a warning
+  suggesting the PascalCase form.
+- **Unique across the application.** If a second plugin claims a handle
+  already taken, the loader logs an error and loads that plugin *without a
+  namespace* — its qualifiers then become unreachable, since qualifiers have
+  no bare form.
+
+Omitting `handle` is legal only for plugins with no native or Python actions —
+a pure `aro-files` plugin, for instance.
+
+**Legacy form.** Before the root-level `handle`, the namespace was a `handler`
+key inside a `provides` entry, lowercase:
+
+```yaml
+provides:
+  - type: c-plugin
+    path: src/
+    handler: collections     # deprecated
+```
+
+That still works and is still honoured, but it logs a deprecation warning
+naming the PascalCase replacement. Root-level `handle` wins when both are
+present. New plugins should use `handle` only.
+
 ### description
 
 ```yaml
@@ -71,12 +133,10 @@ A brief description (recommended: one sentence, max 200 characters).
 author: Jane Developer <jane@example.com>
 ```
 
-Or multiple authors:
+A single string. There is no plural `authors` list; for a team, name the team:
 
 ```yaml
-authors:
-  - Jane Developer <jane@example.com>
-  - John Contributor <john@example.com>
+author: ARO Core Team
 ```
 
 ### license
@@ -93,33 +153,10 @@ SPDX license identifier. Common values:
 - `ISC`
 - `Unlicense`
 
-### homepage
+### homepage, repository, keywords
 
-```yaml
-homepage: https://my-plugin.example.com
-```
-
-URL to the plugin's homepage or documentation site.
-
-### repository
-
-```yaml
-repository: https://github.com/username/my-plugin
-```
-
-URL to the source repository.
-
-### keywords
-
-```yaml
-keywords:
-  - formatting
-  - dates
-  - currency
-  - localization
-```
-
-Tags for discoverability (max 10 keywords).
+Not read by the loader. Put your homepage and repository in the README, and
+the canonical repository URL in `source.git`, where `aro add` writes it.
 
 ## ARO Compatibility
 
@@ -162,8 +199,11 @@ source:
 
 Fields:
 - `git`: Repository URL (required)
-- `ref`: Git reference - tag, branch, or commit (recommended: use tags)
+- `ref`: Git reference — tag, branch, or commit (recommended: use tags)
 - `commit`: Specific commit SHA (for pinning)
+
+`aro add` writes all three for you; hand-written local plugins can omit
+`source` entirely.
 
 ## Provides Section
 
@@ -176,9 +216,11 @@ provides:
   - type: swift-plugin
     path: Sources/MyPlugin/
     actions:
-      - name: formatDate
+      - name: FormatDate
+        verbs: [formatdate]
         description: Format a date according to a pattern
-      - name: formatCurrency
+      - name: FormatCurrency
+        verbs: [formatcurrency]
         description: Format a number as currency
 ```
 
@@ -189,29 +231,22 @@ Fields:
 
 ### Action Specification
 
-Actions can be declared with full metadata for native ARO integration:
+Declaring `actions` in the manifest is optional, and it does something specific:
+it lets the loader register action **stubs** at startup and defer the actual
+`dlopen` (or `cargo build`, or first `python3`) to the first time an ARO
+statement invokes one of them. Omit `actions` and the plugin loads eagerly,
+taking its action list from `aro_plugin_info` instead. An application shipping
+several plugins that uses one per request starts noticeably faster with them
+declared.
 
 ```yaml
 actions:
-  # Simple form - service via <Call>
-  - name: processData
-    description: Process data
-
-  # Full form - custom action verb
   - name: Hash
-    role: own
     verbs: [hash, digest, checksum]
+    role: own
     prepositions: [from, with]
     description: Compute cryptographic hash
-    arguments:
-      algorithm:
-        type: string
-        default: sha256
-        values: [sha256, sha512, md5]
-      encoding:
-        type: string
-        default: hex
-        values: [hex, base64]
+    since: "1.2.0"
 ```
 
 **Action Fields:**
@@ -219,12 +254,26 @@ actions:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Action identifier |
+| `verbs` | **Yes** | Verbs that trigger this action |
 | `description` | No | Human-readable description (shown in editor hover and `aro_actions` MCP output) |
-| `role` | No | Semantic role: `request`, `own`, `response`, `export`, `server` |
-| `verbs` | No | Verbs that trigger this action (enables `<Hash>` syntax) |
+| `role` | No | Semantic role: `request`, `own`, `response`, `export` |
 | `prepositions` | No | Valid prepositions for this action |
 | `since` | No | Version when the action was introduced (informational, surfaced in tooling) |
-| `arguments` | No | Argument schema with types and defaults |
+
+**`verbs` is required, and getting it wrong is fatal to the whole plugin.** An
+entry without it fails to decode, and because the manifest decodes as a unit,
+the plugin does not load at all:
+
+```
+warning: Failed to load my-plugin: DecodingError.keyNotFound: Key 'verbs' not
+found in keyed decoding container. Path: provides[0].actions[0].
+```
+
+The same applies to the bare-string shorthand — `actions: [formatDate,
+formatCurrency]` is not accepted here. (It *is* accepted in the JSON returned
+by `aro_plugin_info`, which is a different parser; do not carry the habit
+across.) There is no `arguments` field: argument schemas are not read from the
+manifest.
 
 The `description`, `role`, `prepositions`, and `since` fields are also consumed by the LSP and the MCP `aro_actions` / `aro_qualifiers` tools — the richer the manifest, the better the editor experience for downstream users.
 
@@ -261,19 +310,22 @@ provides:
   - type: rust-plugin
     path: src/
     build:
-      cargo-target: cdylib
+      cargo-target: release
+      output: target/release/libmy_plugin.dylib
     actions:
-      - validate
-      - transform
+      - name: Validate
+        verbs: [validate]
+      - name: Transform
+        verbs: [transform]
 ```
 
 Fields:
 - `type`: `rust-plugin`
 - `path`: Path to Cargo project
 - `build`:
-  - `cargo-target`: Library type (`cdylib` for dynamic library)
-  - `features`: Optional Cargo features to enable
-  - `profile`: Build profile (`release` or `debug`)
+  - `cargo-target`: Build profile — `release` or `debug`. (Not the crate type;
+    set `crate-type = ["cdylib"]` in `Cargo.toml`.)
+  - `output`: Path to the produced library, relative to the plugin directory
 
 ### C Plugin
 
@@ -286,12 +338,9 @@ provides:
       flags:
         - "-O2"
         - "-Wall"
-      include:
-        - /opt/homebrew/include
-      libs:
+        - "-Iinclude"
         - "-lz"
-        - "-lpthread"
-      output: libmyplugin
+      output: libmyplugin.dylib
 ```
 
 Fields:
@@ -299,10 +348,9 @@ Fields:
 - `path`: Path to C sources
 - `build`:
   - `compiler`: Compiler to use (`clang`, `gcc`)
-  - `flags`: Compiler flags
-  - `include`: Include directories
-  - `libs`: Libraries to link
-  - `output`: Output library name (without extension)
+  - `flags`: Compiler flags — the only list there is. There are no separate
+    `include` or `libs` keys; put `-I` and `-l` flags here.
+  - `output`: Output library file name, **with** the platform extension
 
 ### C++ Plugin
 
@@ -312,18 +360,16 @@ provides:
     path: src/
     build:
       compiler: clang++
-      standard: c++17
       flags:
         - "-O2"
         - "-Wall"
-      libs:
+        - "-std=c++17"
         - "-lstdc++"
 ```
 
 Fields:
 - `type`: `cpp-plugin`
-- Same as C plugin, plus:
-  - `standard`: C++ standard (`c++11`, `c++14`, `c++17`, `c++20`)
+- Same as C plugin. There is no `standard` key — pass `-std=c++17` in `flags`.
 
 ### Python Plugin
 
@@ -335,8 +381,10 @@ provides:
       min-version: "3.9"
       requirements: requirements.txt
     actions:
-      - generate
-      - summarize
+      - name: Generate
+        verbs: [generate]
+      - name: Summarize
+        verbs: [summarize]
 ```
 
 Fields:
@@ -345,7 +393,8 @@ Fields:
 - `python`:
   - `min-version`: Minimum Python version
   - `requirements`: Path to requirements.txt
-  - `venv`: Virtual environment path (optional)
+
+  There is no `venv` key — the loader runs whichever `python3` it finds.
 
 ### ARO Files
 
@@ -376,28 +425,20 @@ A plugin with only `aro-files` providers (no native code) is called a **pure ARO
 
 ### System Objects
 
-```yaml
-provides:
-  - type: rust-plugin
-    path: src/
-    system-objects:
-      - name: redis
-        capabilities: [readable, writable, enumerable]
-        config:
-          connection-url: REDIS_URL
-          default-url: "redis://127.0.0.1:6379"
+System objects are **not** declared in `plugin.yaml`. The loader has no
+`system-objects` key inside a `provides` entry and ignores one if present.
+Declare them at runtime instead, in the `system_objects` array your
+`aro_plugin_info` returns:
+
+```json
+"system_objects": [
+  { "identifier": "redis",
+    "capabilities": ["readable", "writable", "enumerable"],
+    "description": "Redis key-value store" }
+]
 ```
 
-Fields:
-- `system-objects`: Array of system object definitions
-  - `name`: Object identifier (used as `<redis: ...>`)
-  - `capabilities`: Array of supported operations
-    - `readable`: Supports `<Read>`, `<Get>`, `<Extract>`
-    - `writable`: Supports `<Write>`, `<Send>`
-    - `enumerable`: Supports `<List>`
-    - `watchable`: Supports `<Watch>`
-  - `config`: Configuration options
-    - Key-value pairs where value is environment variable name or default
+The key is `identifier`, not `name`. See Chapter 13 and Appendix B.
 
 ## Dependencies
 
@@ -417,20 +458,16 @@ dependencies:
 Declares other ARO plugins this plugin depends on.
 
 Fields per dependency:
-- `git`: Repository URL
+- `git`: Repository URL (required)
 - `ref`: Git reference (tag recommended)
-- `commit`: Specific commit (optional, for pinning)
+
+A dependency has no `commit` field — only `source` (which records where *this*
+plugin came from) carries one.
 
 ### dev-dependencies
 
-```yaml
-dev-dependencies:
-  plugin-test-utils:
-    git: https://github.com/aro-plugins/test-utils
-    ref: v1.0.0
-```
-
-Dependencies only needed for development/testing.
+Not supported. There is no separate development dependency set; the loader
+reads only `dependencies`. Document test-only plugins in your README.
 
 ## Platform-Specific Configuration
 
@@ -455,21 +492,10 @@ Declares supported platforms and requirements.
 
 ### platform-specific provides
 
-```yaml
-provides:
-  - type: c-plugin
-    path: src/
-    platforms:
-      macos:
-        build:
-          libs:
-            - "-framework CoreFoundation"
-      linux:
-        build:
-          libs:
-            - "-lpthread"
-            - "-ldl"
-```
+`platforms` is a **top-level** key only. A `platforms` block nested inside a
+`provides` entry is ignored, so per-platform link flags cannot be expressed in
+the manifest today. Select them in your Makefile or `build.rs` from `uname`,
+the way the scaffolded C Makefile does.
 
 ## Complete Example
 
@@ -479,15 +505,7 @@ version: 2.1.0
 description: Date, time, number, and currency formatting utilities
 author: ARO Community <community@arolang.dev>
 license: MIT
-homepage: https://github.com/aro-plugins/formatter
-repository: https://github.com/aro-plugins/formatter
-
-keywords:
-  - formatting
-  - dates
-  - currency
-  - localization
-  - i18n
+handle: Formatter
 
 aro-version: ">=0.9.0 <2.0.0"
 
@@ -499,30 +517,29 @@ provides:
   - type: swift-plugin
     path: Sources/FormatterPlugin/
     actions:
-      - name: formatDate
+      - name: FormatDate
+        verbs: [formatdate]
         description: Format a date according to a pattern and locale
-      - name: formatTime
+      - name: FormatTime
+        verbs: [formattime]
         description: Format a time with timezone support
-      - name: formatNumber
+      - name: FormatNumber
+        verbs: [formatnumber]
         description: Format a number with grouping and decimals
-      - name: formatCurrency
+      - name: FormatCurrency
+        verbs: [formatcurrency]
         description: Format a number as currency
-      - name: formatDuration
+      - name: FormatDuration
+        verbs: [formatduration]
         description: Format a duration in human-readable form
 
   - type: aro-files
     path: features/
-    description: High-level formatting utilities
 
 dependencies:
   plugin-locale:
     git: https://github.com/aro-plugins/locale
     ref: v1.2.0
-
-dev-dependencies:
-  plugin-test-utils:
-    git: https://github.com/aro-plugins/test-utils
-    ref: v1.0.0
 
 platforms:
   macos:

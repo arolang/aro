@@ -28,7 +28,7 @@ The Interactive Dialog is intentionally short. You don't read about conversation
 | 03 | **Remember** | 3 | Variables persist, sessions accumulate |
 | 04 | **Define** | 4 | Feature sets within the REPL |
 | 05 | **Command** | 3 | Meta-commands: :vars, :clear, :export |
-| 06 | **Extend** | 3 | Services and plugins in the REPL |
+| 06 | **Extend** | 3 | Events, git and plugins in the REPL |
 | 07 | **Depart** | 2 | Exporting your work, leaving the loop |
 
 ### Appendix

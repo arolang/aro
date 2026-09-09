@@ -72,14 +72,16 @@ If you see something materially different, the version on your machine is older 
 
 ## 2.3 Smoke-test against HelloWorld
 
-The repository's `Examples/HelloWorld` directory is the smallest meaningful ARO program. It is a single feature set with three statements:
+The repository's `Examples/HelloWorld` directory is the smallest meaningful ARO program. It is a single feature set with three statements — shown here with its line numbers, because the debugger will quote them back at you:
 
 ```aro
-(Application-Start: Entry Point) {
-    Create the <greeting: String> with "Hello, ARO World!".
-    Log <greeting> to the <console>.
-    Return an <OK: status> for the <application>.
-}
+1  (* HelloWorld - The simplest ARO application *)
+2
+3  (Application-Start: Entry Point) {
+4      Create the <greeting: String> with "Hello, ARO World!".
+5      Log <greeting> to the <console>.
+6      Return an <OK: status> for the <application>.
+7  }
 ```
 
 Run it under the debugger:
@@ -93,11 +95,14 @@ You should see:
 ```
 aro debug · 1.0.0 · HelloWorld
 Use 'h' for help, 'q' to quit, 's' to step.
+Metrics socket: /tmp/aro-metrics-8691.sock
 
-⏸  paused (entry) at main.aro:2 — Application-Start
+⏸  paused (entry) at main.aro:4 — Application-Start
    <Create> the <greeting: String> with the <_expression_> = "Hello, ARO World!".
 (aro-dbg)
 ```
+
+(The version in the banner is whatever binary you are running; a source build says `dev`. The metrics-socket line is the runtime announcing its Prometheus scrape endpoint — every `aro` process prints it, debugger or not.)
 
 This is the *entry pause* — the very first checkpoint before any user code runs. If you got here, the debugger is installed correctly. Type `c` and press Enter to let the program finish:
 
@@ -112,16 +117,22 @@ You now have a working debugger and a known-good project to practice on. Chapter
 
 ## 2.3b Debugging a compiled binary with lldb
 
-`aro debug` steps the interpreter. When you want to debug the *native* binary that `aro build` produces, use `lldb` directly — compiled binaries now carry DWARF source-mapping (issue #231), so lldb resolves breakpoints against your `.aro` files by name and line on both macOS and Linux.
+`aro debug` steps the interpreter. When you want to debug the *native* binary that `aro build` produces, use `lldb` directly — compiled binaries carry per-statement DWARF (issue #231), so lldb resolves breakpoints against your `.aro` files by name and line on both macOS and Linux.
+
+On macOS there is one flag you must not forget:
 
 ```bash
-aro build ./Examples/HelloWorld
+aro build ./Examples/HelloWorld --keep-intermediate
 lldb ./Examples/HelloWorld/HelloWorld \
   -o 'breakpoint set --file main.aro --line 5' \
   -o run
 ```
 
-On macOS the source line tables live in the object file's `__DWARF` segment; the linker records them so `dsymutil` can build a `.dSYM` next to the binary. lldb finds that `.dSYM` automatically by UUID — you do not have to run `dsymutil` yourself for a debug session, and breakpoints set by `--file X.aro --line N` resolve to the true source file (for multi-file apps, each feature set maps back to the `.aro` file it was written in).
+```
+Breakpoint 1: where = HelloWorld`aro_fs_application_start_entry_point + 468 at main.aro:5:5, address = 0x0000000100001cd4
+```
+
+The source line tables live in the object file's `__DWARF` segment and the linked binary only points at them, so lldb needs the `.o` still on disk — and a plain `aro build` deletes it. Without `--keep-intermediate` the same command answers `Breakpoint 1: no locations (pending)`, which looks like missing debug info and is really a missing file. Run `dsymutil` on the binary once and the `.dSYM` it produces stands alone; you can delete the object then. Chapter 8.4 has the whole story. Linux needs none of this: the DWARF is in the executable.
 
 ## 2.4 Where the binary looks for things
 

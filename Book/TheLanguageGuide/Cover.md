@@ -23,10 +23,10 @@ Business Logic as Language
 <a href="https://social.uitsmijter.io/@aro" style="color: #888; text-decoration: none;">@aro@social.uitsmijter.io</a>
 </div>
 <div style="font-size: 12pt; color: #888;">
-December 2025
+September 2026
 </div>
 <div style="font-size: 11pt; color: #aaa; margin-top: 1em;">
-Version 1.0
+ARO 0.8.0
 </div>
 </div>
 

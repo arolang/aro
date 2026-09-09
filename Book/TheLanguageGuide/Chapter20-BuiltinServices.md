@@ -6,7 +6,7 @@
 
 ## 20.1 Available Services
 
-ARO provides five built-in services that handle common infrastructure concerns: an HTTP server for serving web requests, an HTTP client for making outbound requests, a file system service for reading and writing files, and socket services for TCP communication.
+ARO provides six built-in services that handle common infrastructure concerns: an HTTP server for serving web requests, an HTTP client for making outbound requests, a file system service for reading and writing files, a socket server and a socket client for TCP communication, and a Git service backed by libgit2 (Chapter 48).
 
 These services are available without additional configuration or dependencies. When you need to serve HTTP requests, you start the HTTP server. When you need to make outbound API calls, you use the HTTP client. When you need to read configuration files or write data, you use the file system service. When you need low-level TCP communication, you use the socket services.
 
@@ -211,7 +211,15 @@ File watching monitors a directory for changes and emits events when files are c
 Start the <file-monitor> with "./data".
 ```
 
-Event handlers are named according to the event type: `Handle File Created`, `Handle File Modified`, or `Handle File Deleted`.
+File handlers are the one place in ARO where the **feature name** carries routing information rather than just documentation. The business activity `File Event Handler` says "this reacts to the file monitor"; which of the three events it subscribes to is taken from the feature name, which must contain `created`, `modified`, or `deleted` (case-insensitive):
+
+```aro
+(Handle File Created: File Event Handler)  { ... }   (* FileCreated  *)
+(Handle File Modified: File Event Handler) { ... }   (* FileModified *)
+(Handle File Deleted: File Event Handler)  { ... }   (* FileDeleted  *)
+```
+
+A `File Event Handler` whose name contains none of the three words subscribes to nothing. It compiles, `aro check` reports no problem, and it never runs — so if a file handler seems inert, read its name before you read its body.
 
 ### Cross-Platform Behavior
 
@@ -285,7 +293,8 @@ Here is a complete example demonstrating multiple built-in services working toge
     Return an <OK: status> for the <startup>.
 }
 
-(Report Config Change: File Event Handler) {
+(* The name must say which file event this handles — see 20.4 *)
+(Report Modified Config: File Event Handler) {
     (* Extract the changed file path *)
     Extract the <path> from the <event: path>.
 
@@ -314,10 +323,10 @@ Here is a complete example demonstrating multiple built-in services working toge
 
 This example shows:
 
-- **File system service**: The `Watch` action starts monitoring the `./config` directory
+- **File system service**: `Start the <file-monitor> with "./config"` begins monitoring the directory
 - **HTTP client**: The `Send` action posts change notifications to an external webhook
 - **Lifecycle management**: `Keepalive` keeps the app running, `Application-End` provides graceful shutdown
-- **Event handling**: The File Event Handler processes each file change event
+- **Event handling**: the handler's name contains "Modified", so it receives file-modification events
 
 > **See also:** `Examples/FileWatcher` and `Examples/HTTPClient` for standalone examples of each service.
 

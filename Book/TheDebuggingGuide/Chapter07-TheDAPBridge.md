@@ -47,7 +47,7 @@ A minimal launch.json:
 
 Press F5. The extension spawns `aro debug --dap` with your `program` path, the runtime hits the entry pause, VS Code's Debug pane lights up. Set breakpoints by clicking in the gutter; the gutter dots are sent over DAP as `setBreakpoints` requests, mapped to location breakpoints (chapter 5.2) on the controller.
 
-Variables show the current `PauseInfo.symbols` snapshot. Call Stack shows the causal chain (chapter 4.5).
+Variables show the current `PauseInfo.symbols` snapshot. The Call Stack pane stays empty — the bridge answers `stackTrace` with no frames, for the reason chapter 4.5 gives.
 
 The extension also adds a command **"ARO: Start Debugging"** that creates a launch config on the fly if none exists — useful for quick "I just want to debug this one file" sessions.
 

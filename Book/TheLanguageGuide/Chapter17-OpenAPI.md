@@ -43,19 +43,25 @@ Multiple methods can be defined for the same path. The /users path might support
 Requests that do not match any path receive a 404 response. Requests that match a path but use an undefined method receive a 405 Method Not Allowed response. These responses are generated automatically based on the specification; you do not write code to handle unmatched routes.
 ---
 
-## 17.5 Automatic Server Startup
+## 17.5 Starting the Server
 
-The HTTP server starts automatically when an `openapi.yaml` file is present in your application directory. There is no explicit Start action required for HTTP services. When the runtime discovers the OpenAPI specification during application initialization, it reads the file, configures routing based on its contents, and begins accepting requests on the default port (8080).
-After the server starts, you use the Keepalive action to keep the application running and processing requests. Without Keepalive, the application would start the server and immediately terminate:
+The contract makes a server *possible*; a `Start` statement makes it *happen*. Two things are needed, and each fails quietly in its own way if you leave it out.
+
 ```aro
 (Application-Start: User API) {
     Log "API starting..." to the <console>.
+    Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
     Return an <OK: status> for the <startup>.
 }
 ```
+
+`Start the <http-server> with <contract>.` reads the specification the runtime discovered, configures routing from it, and binds the port — the default is 8080. Without this statement no port is opened at all: connections are refused, and the only clue is the absence of the `HTTP Server started on port 8080` line in the startup output.
+
+`Keepalive the <application> for the <events>.` then blocks until a shutdown signal arrives. Without it the feature set runs to its `Return` and the process exits, taking the server with it. Omitting the `Start` has a second-order effect here too: with no service running, there is nothing for Keepalive to wait on, so the application exits immediately even though the Keepalive statement is present.
+
 You can configure the port on which the server listens using environment variables or configuration files. This flexibility allows you to run multiple services on different ports or to conform to container orchestration requirements.
-The server starts synchronously during initialization. If the port is already in use or binding fails for any other reason, the startup fails with an appropriate error. This fail-fast behavior ensures you know immediately if the server cannot start, rather than discovering the problem later when requests fail.
+The server starts synchronously at the `Start` statement. If the port is already in use or binding fails for any other reason, the startup fails with an appropriate error. This fail-fast behavior ensures you know immediately if the server cannot start, rather than discovering the problem later when requests fail.
 ---
 
 ## 17.6 Request Context

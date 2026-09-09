@@ -29,10 +29,16 @@ You can have several:
 ```
 (aro-dbg) w <count>
 (aro-dbg) w <user>
-(aro-dbg) w <users-repository: count>
+(aro-dbg) w <total>
 ```
 
-Every pause from then on prints each one.
+Every pause from then on prints each one, in the order you added them:
+
+```
+   watch <count> = 42
+   watch <user> = ["id": 530, "name": "Ada"]
+   watch <total> = 99.95
+```
 
 To list:
 
@@ -40,7 +46,7 @@ To list:
 (aro-dbg) w
   0: <count>
   1: <user>
-  2: <users-repository: count>
+  2: <total>
 ```
 
 To delete by index:
@@ -56,23 +62,25 @@ Three workflows show up over and over.
 
 **Tracking a value across many statements.** You suspect `<count>` is being mutated unexpectedly. Step through the feature set; if `<count>` ever changes between two pauses, the watch makes it visible without you having to print on every line.
 
-**Confirming an invariant.** A `<user: role>` should always be `"admin"` in this feature set. Watch it; if it ever isn't, you see at a glance.
+**Confirming an invariant.** A `<role>` should always be `"admin"` in this feature set. Watch it; if it ever isn't, you see at a glance.
 
-**Comparing two values over time.** Watch `<users-repository: count>` and `<expected-count>` simultaneously. If they drift, you see the drift.
+**Comparing two values over time.** Watch `<actual-count>` and `<expected-count>` simultaneously. If they drift, you see the drift.
 
 The watch list is part of the session state — it goes away when you quit. The recording / replay flow in Chapter 9 lets you reproduce a session against an existing trace; the watches you set during replay are independent of the watches you set during the original run.
 
 ## 6.3 The current evaluator
 
-Phase 1's watch implementation is intentionally simple. A watch expression of the form `<name>` looks up the binding's *string preview* from the most recent snapshot and prints it. The label can include a qualifier (`<user: id>`) but the resolution does not currently walk through ARO's full expression grammar — that lands when watch expressions adopt the same path as conditional-breakpoint predicates (chapter 5).
+The watch evaluator is a string match, and knowing that saves you a confusing session. At every pause the frontend looks for a snapshot entry whose name, wrapped in angle brackets, is exactly what you typed, and prints that entry's *string preview*. Nothing is parsed.
 
-Until then:
+So:
 
-- `<name>` and `<name: qualifier>` work.
-- Arithmetic and comparisons (`<a> == <b>`, `<count> + 1`) do not.
-- Repository navigation (`<users-repository: count>`) works because the snapshot captures it as a string already.
+- **`<name>` works.** This is the whole supported surface.
+- **`<name: qualifier>` does not.** A snapshot entry is named for the bare binding, so `<user: id>` matches nothing and prints `(unresolved)` at every pause — accepted at `w` time without complaint, then silently useless (GitLab issue #567). The same goes for repository navigation like `<users-repository: count>`.
+- **Arithmetic and comparisons** (`<a> == <b>`, `<count> + 1`) do not work either, for the same reason.
 
-When the predicate-evaluator path opens up to watches (issue #230 follow-up), this chapter will gain examples of arbitrary expression watches.
+If you want a field, watch the binding that holds it and read the field off the preview — the preview of a record shows its keys. If you want a computed value, bind it in the source with a `Compute` and watch that; a name in the program is a name the watch list can find.
+
+Conditional breakpoints *do* evaluate the full expression grammar (chapter 5.4), against the live context rather than a snapshot. Routing watches through the same evaluator is the obvious fix and is part of the #230 follow-up; when it lands this chapter gains the examples above.
 
 ## 6.4 What watches do not do
 
@@ -92,9 +100,11 @@ The print command `p` is the third member of the family. It is a one-shot, all-b
 
 ## 6.6 Watches across DAP
 
-When the debugger speaks DAP (chapter 7), watch expressions get their own column in VS Code and IntelliJ's debug pane. The CLI watch and the IDE watch share the same controller state — set a watch in the CLI then connect a DAP client, the watch is there. Set a watch in VS Code then quit and reattach, the watch is *not* preserved (the DAP session is the storage scope, not the project).
+They don't, yet. Watches live on the controller, and the controller is shared between the CLI and DAP frontends — but the bridge has no `evaluate` handler, so nothing pushes them to the editor's Watch pane, and the editor has no way to add one (chapter 7.7). A watch you set at the CLI prompt prints at CLI pauses only.
 
-This is consistent with the CLI's session-scope rule: watch state lives in the controller, not on disk.
+What an editor does get is the full `variables` response: every binding at the pause, which for most sessions is the same information less selectively. Wiring `evaluate` through to the watch list is part of the DAP-parity follow-up in issue #230.
+
+Either way the CLI's session-scope rule holds: watch state lives in the controller, not on disk. Quit the debugger and the watches are gone.
 
 ---
 

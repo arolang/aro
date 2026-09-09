@@ -57,7 +57,7 @@ The practical implication: **debug from source, ship the compile**. The same `.a
 ## 1.5 What this book covers
 
 - **Part I (you are here)**: foundations. Why the debugger looks the way it does, getting it installed, and walking your first session.
-- **Part II**: driving the debugger. The five kinds of breakpoint, watches, and the statement-boundary model in detail.
+- **Part II**: driving the debugger. The six kinds of breakpoint, watches, and the statement-boundary model in detail.
 - **Part III**: editor integration. VS Code, IntelliJ, Neovim — what works, what doesn't.
 - **Part IV**: time and distance. Recording sessions, replaying them, attaching to running programs.
 

@@ -150,16 +150,30 @@ In another terminal:
 
 ```bash
 $ curl -s localhost:8080/users
-[]
-$ curl -s -X POST localhost:8080/users -H 'Content-Type: application/json' -d '{"name":"Ada","email":"ada@example.com"}'
-{"id":"1","name":"Ada","email":"ada@example.com"}
+{"data":[]}
+$ curl -s -X POST localhost:8080/users \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"Ada","email":"ada@example.com"}'
+{"email":"ada@example.com","name":"Ada"}
 $ curl -s localhost:8080/users
-[{"id":"1","name":"Ada","email":"ada@example.com"}]
-$ curl -s localhost:8080/users/1
-{"id":"1","name":"Ada","email":"ada@example.com"}
+{"data":[{"email":"ada@example.com","id":"7238552A-548A-4A2D-A932-4C00BFB7D86B","name":"Ada"}]}
+$ curl -s localhost:8080/users/7238552A-548A-4A2D-A932-4C00BFB7D86B
+{"id":"7238552A-548A-4A2D-A932-4C00BFB7D86B","name":"Ada"}
+$ curl -s -X DELETE localhost:8080/users/7238552A-548A-4A2D-A932-4C00BFB7D86B -o /dev/null -w '%{http_code}\n'
+204
+$ curl -s localhost:8080/users
+{"data":[]}
 ```
 
 Three files. Two minutes. A working REST API.
+
+Look closely at that session, because three things in it will surprise you and none of them are bugs.
+
+**A list comes back wrapped.** `Return an <OK: status> with <users>.` produces `{"data": [...]}`, not a bare array. The envelope is the runtime's, not yours.
+
+**Ids are UUIDs, and the create response does not have one.** The repository assigns the id when the value is stored. `<user>` was bound by `Create` before that happened, so the `Created` response carries only the fields you sent. If you want the id back, retrieve the stored record and return that instead.
+
+**`where <id> is <id>` compares against the real id.** Which means `GET /users/1` returns `{"data":[]}` — not a 404, an empty result — and `DELETE /users/1` returns `204` having deleted nothing. Both are the happy path doing exactly what it was asked. If you sketch this API from memory and test it with `/users/1`, you will conclude that delete is broken. It is not; your id is.
 
 ---
 
@@ -204,7 +218,7 @@ The model replies: "Created `main.aro` with two feature sets. `Application-Start
 
 ```bash
 $ aro run .
-File watcher starting...
+[Application-Start] File watcher starting...
 ```
 
 In another terminal:
@@ -218,12 +232,57 @@ $ rm test.txt
 Back in the first terminal:
 
 ```
-[created] ./test.txt
-[modified] ./test.txt
-[deleted] ./test.txt
 ```
 
-One file. One prompt. A working file watcher.
+Nothing. Not an error — nothing at all. This is the best example in the book of a hallucination that survives every check you have.
+
+Two things are wrong, and neither is visible.
+
+**A `File Event Handler` subscribes by its own name.** The runtime looks for the words `created`, `modified` or `deleted` *in the feature-set name* and wires it to that event. A handler called `File Changed` matches none of the three, subscribes to nothing, and is dead code. `aro check` does not warn (GitLab #570).
+
+**There is no `kind` field.** The event payload is `{ path }` and nothing else, so one handler could not distinguish the three events even if it did fire. `[created]` was never going to be printable.
+
+The working version needs one feature set per event:
+
+```aro
+(Application-Start: File Watcher) {
+    Log "File watcher starting..." to the <console>.
+    Start the <file-monitor> with ".".
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+
+(Handle File Created: File Event Handler) {
+    Extract the <path> from the <event: path>.
+    Compute the <message> from "[created] " ++ <path>.
+    Log <message> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+
+(Handle File Modified: File Event Handler) {
+    Extract the <path> from the <event: path>.
+    Compute the <message> from "[modified] " ++ <path>.
+    Log <message> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+
+(Handle File Deleted: File Event Handler) {
+    Extract the <path> from the <event: path>.
+    Compute the <message> from "[deleted] " ++ <path>.
+    Log <message> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+Now the terminal says what you expected — noting that `path` is absolute, not the `./test.txt` you typed:
+
+```
+[Handle File Created] [created] /home/you/FileWatcher/test.txt
+[Handle File Modified] [modified] /home/you/FileWatcher/test.txt
+[Handle File Deleted] [deleted] /home/you/FileWatcher/test.txt
+```
+
+One file. One prompt. One convention the model did not know, that no tool in the loop could have caught, and that only running the thing revealed. Chapter 8's advice — *run it yourself, do not just have the model check it* — is this example.
 
 ---
 
@@ -344,11 +403,32 @@ The model calls `write_file` to create `slugify.aro`:
 }
 ```
 
-The model calls `aro_check`. Passes. The qualifier is referenced as `SlugGenerator.slug` — the handle from `plugin.yaml` dot the qualifier name from `aro_plugin_info`.
+The model calls `aro_check`. Passes. The qualifier is referenced as `SlugGenerator.slug` — the handle from `plugin.yaml` dot the qualifier name from `aro_plugin_info`. That part is right.
+
+Two of the other five lines are not, and the check cannot see either.
+
+`Extract the <title> from the <request: body>.` binds the *whole* body, not its `title` field. You get an object where you wanted a string, and the slug qualifier is handed something it was not written for.
+
+`Compute the <post> from <title> and <slug>.` is worse. `and` is a boolean operator, so `<post>` is the literal value `true`. That is what gets stored, and that is what `Return a <Created: status> with <post>.` sends to the client. A `201` with `true` in the body, from a feature set that checks clean.
+
+Here is the version that does what the sentence claims:
+
+```aro
+(createPost: Blog API) {
+    Extract the <body> from the <request: body>.
+    Extract the <title> from the <body: title>.
+    Compute the <slug: SlugGenerator.slug> from the <title>.
+    Create the <post> with { title: <title>, slug: <slug> }.
+    Store the <post> into the <post-repository>.
+    Return a <Created: status> with <post>.
+}
+```
+
+`Create … with { … }` builds a record; `Compute … from <a> and <b>` computes a boolean. The two read almost identically in English and share no behaviour at all, which is precisely why a model trained on English prose reaches for the wrong one.
 
 ### The Full Picture
 
-Three prompts. A plugin directory with a manifest and source. A feature set that uses the plugin's qualifier. Everything checked, everything parseable, everything following the conventions documented in the proposals.
+Three prompts. A plugin directory with a manifest and source. A feature set that uses the plugin's qualifier. Everything checked, everything parseable — and, until you read it, two lines that would have shipped `true` as a blog post.
 
 The model did not memorise the C ABI for ARO plugins. It was trained on the proposals and the examples in the `Examples/` directory, and it applied that knowledge through its tools. The `create_plugin` tool gave it the scaffold. The `read_file` tool let it see the stub. The `edit_file` tool let it fill in the implementation. The `aro_check` tool confirmed it worked.
 
@@ -359,6 +439,10 @@ That is the tool-call loop doing what it was designed to do: turning a descripti
 ## 9.4 What the Examples Show
 
 All three examples follow the same arc. You describe what you want. The model reads the project, writes files, and checks its work. You review the result and run it. The conversation is short — three to five turns — because the model has tools that let it act instead of explain.
+
+They also show, three times in a row, the same thing going wrong. `aro check` passed in every one of them. The API returned a `204` for a delete that deleted nothing; the file watcher printed nothing at all; the blog endpoint stored `true`. Not one of those is a syntax error, so not one of them was catchable by the tool the model reaches for.
+
+That is the boundary. The model is reliable on grammar and unreliable on semantics, and `aro check` is a grammar checker. The review you owe the code is the semantic one — *does this statement mean what its sentence says?* — and you cannot delegate it to the same system that wrote the sentence.
 
 The examples also show what the model does *not* do. It does not write tests unless you ask. It does not set up deployment. It does not make architectural decisions about things you did not mention. It stays in its lane: ARO code, ARO tooling, ARO conventions. Everything else is yours.
 

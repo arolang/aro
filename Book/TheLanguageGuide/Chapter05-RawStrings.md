@@ -102,15 +102,19 @@ Log "\u{1F600}" to the <console>.          (* 😀 *)
 Log "\u{2603}" to the <console>.           (* ☃ snowman *)
 ```
 
-### Single-Line Constraint
+### Newlines Are Content
 
-Regular strings must fit on a single line. A newline character inside a double-quoted string is a lexer error. Use `\n` to embed a newline:
+A regular string spans as many lines as you like. A newline between the
+quotes is content, exactly like any other character, so both of these are
+valid and produce the same two lines:
 
 ```aro
-Log "line one\nline two" to the <console>.   (* correct *)
+Log "line one\nline two" to the <console>.
 Log "line one
-line two" to the <console>.                  (* ERROR: unterminated string *)
+line two" to the <console>.
 ```
+
+Section 5.9 covers what follows from that rule.
 
 ---
 
@@ -119,7 +123,7 @@ line two" to the <console>.                  (* ERROR: unterminated string *)
 Raw strings, enclosed in single quotes, treat backslashes as ordinary characters. The parser does not interpret any escape sequence except `\'`, which produces a literal single quote so the string can contain the quote character without ending prematurely.
 
 ```aro
-Create the <pattern> with '\d+\.\d+'.        (* stored as: \d+\.\d+   *)
+Create the <marker> with '\note{x}'.          (* stored as: \note{x}     *)
 Create the <path> with 'C:\Users\Admin'.      (* stored as: C:\Users\Admin *)
 Create the <formula> with '\frac{1}{2}'.      (* stored as: \frac{1}{2}    *)
 ```
@@ -137,6 +141,18 @@ Create the <message> with 'it\'s a raw string'.
 
 Every other backslash sequence is stored verbatim. `'\n'` is two characters: a backslash and the letter `n`. `'\t'` is two characters: a backslash and the letter `t`.
 
+The one place this bites is a backslash immediately before the closing
+quote: the lexer reads it as the `\'` escape, swallows the quote, and the
+string runs on until it hits the end of the file.
+
+```aro
+Create the <base> with 'C:\Users\'.   (* ERROR: Unterminated string literal *)
+```
+
+There is no raw spelling for a trailing backslash. Put the separator on the
+other segment instead — `'\Documents'` rather than `'C:\Users\'` — or write
+that one string with double quotes and `"\\"`.
+
 ### No Interpolation
 
 Raw strings do **not** support `${...}` interpolation. The `$` character is always treated as a literal dollar sign:
@@ -151,15 +167,15 @@ Log "${<name>}" to the <console>.    (* Prints: Alice               *)
 This is the most significant practical difference between the two string types. If you need to embed a variable into a string, you must use a double-quoted string for the parts that contain the interpolation, then concatenate with `++` if needed:
 
 ```aro
-Create the <path-prefix> with 'C:\Users\'.
+Create the <path-prefix> with 'C:\Users'.
 Create the <username> with "Alice".
-Compute the <full-path> from <path-prefix> ++ <username> ++ '\Documents'.
-(* Result: C:\Users\AliceDocuments *)
+Compute the <full-path> from <path-prefix> ++ "\\" ++ <username> ++ '\Documents'.
+(* Result: C:\Users\Alice\Documents *)
 ```
 
-### Single-Line Constraint
+### Single-Line Only
 
-Like regular strings, raw strings must fit on one line. A newline inside a raw string is a lexer error.
+Unlike regular strings, raw strings must fit on one line. A newline inside a raw string is a lexer error. They exist to avoid escape processing, and a multi-line raw block has no reader.
 
 ---
 
@@ -169,7 +185,6 @@ The decision is simple:
 
 **Use single quotes (`'...'`) when:**
 - The string contains backslashes that should be literal
-- You are writing a regex pattern
 - You are writing a Windows or UNC file path
 - You are writing LaTeX, TeX, or troff content
 - You are writing a SQL query with backslash escapes
@@ -178,7 +193,11 @@ The decision is simple:
 **Use double quotes (`"..."`) when:**
 - The string needs escape sequences (`\n`, `\t`, etc.)
 - The string uses `${...}` interpolation
+- The string spans more than one line
+- The string ends with a backslash — no raw string can
 - The string contains no backslashes at all (either type works; convention favours double quotes)
+
+**Use neither** when the content is a regex: patterns have their own `/…/` literal (5.5).
 
 When in doubt: if you see a backslash in the content, use single quotes. If you need a newline or tab, use double quotes. If the string is plain text with no special characters, either works — the community convention is double quotes for plain text.
 
@@ -186,31 +205,21 @@ When in doubt: if you see a backslash in the content, use single quotes. If you 
 
 ## 5.5 Use Cases for Raw Strings
 
-### Regex Patterns
+### Not Regex Patterns
 
-Regex syntax uses backslashes heavily — `\d` for digits, `\w` for word characters, `\.` for a literal dot. With raw strings, you write the pattern exactly as it appears in a regex reference:
+Regex syntax uses backslashes heavily — `\d` for digits, `\w` for word characters, `\.` for a literal dot — so a raw string looks like the obvious home for one. It is not. ARO has a **separate literal** for patterns, written between slashes, and the places that take a pattern take that:
 
 ```aro
-(* Without raw strings: every backslash must be doubled *)
-Transform the <version> from <text> with regex "\\d+\\.\\d+\\.\\d+".
+(* Regex literal: no escaping of any kind, backslashes included *)
+Split the <parts> from <text> by /\d+\.\d+\.\d+/.
 
-(* With raw strings: pattern is readable *)
-Transform the <version> from <text> with regex '\d+\.\d+\.\d+'.
-
-(* Email pattern *)
-Transform the <emails> from <body> with regex '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'.
-
-(* ISO date: YYYY-MM-DD *)
-Transform the <dates> from <text> with regex '\d{4}-\d{2}-\d{2}'.
-
-(* Match or not match inside a match expression *)
 match <input> {
-    case '\d+' { Log "number" to the <console>. }
-    case '\w+' { Log "word" to the <console>. }
+    case /\d+/ { Log "number" to the <console>. }
+    case /\w+/ { Log "word" to the <console>. }
 }
 ```
 
-Regex is the most common reason to reach for raw strings. The readability improvement is substantial for any non-trivial pattern.
+Passing a *string* where a pattern is expected is not an error — it is a literal match. `case '\d+'` tests whether the input is the four characters `\d+`, which is almost never what you meant, and it fails silently rather than complaining. Reach for `/…/` whenever the content is a pattern, and reserve raw strings for the cases below, where the content is data that happens to contain backslashes.
 
 ### Windows File Paths
 
@@ -263,7 +272,12 @@ When building shell command strings for the `Exec` action, backslash is used for
 
 ```aro
 Create the <cmd> with 'grep -E "\d+\.\d+" /var/log/app.log'.
-Create the <awk-cmd> with 'awk -F: '\''{ print $1 }'\'' /etc/passwd'.
+```
+
+The shell's own `'\''` idiom for embedding a quote does **not** carry over: in a raw string, `\'` produces one quote and the next `'` closes the string, so `'awk -F: '\''{ print $1 }'\'' /etc/passwd'` is a syntax error rather than an awk program. Build a command containing single quotes from a double-quoted string, where `\'` and `\"` both work:
+
+```aro
+Create the <awk-cmd> with "awk -F: \'{ print \$1 }\' /etc/passwd".
 ```
 
 ---
@@ -273,20 +287,18 @@ Create the <awk-cmd> with 'awk -F: '\''{ print $1 }'\'' /etc/passwd'.
 Both string types produce the same runtime type — a plain string value. You can use them side by side and concatenate them freely:
 
 ```aro
-Create the <base-path> with 'C:\Users\'.
+Create the <base-path> with 'C:\Users'.
 Create the <username> with "Alice".
 Create the <file> with '\Documents\report.txt'.
-Compute the <full-path> from <base-path> ++ <username> ++ <file>.
+Compute the <full-path> from <base-path> ++ "\\" ++ <username> ++ <file>.
 (* C:\Users\Alice\Documents\report.txt *)
 ```
 
 ```aro
-(* A regex pattern built from parts *)
-Create the <prefix> with '\d{4}-'.
-Create the <month> with '\d{2}-'.
-Create the <day> with '\d{2}'.
-Compute the <date-pattern> from <prefix> ++ <month> ++ <day>.
-(* \d{4}-\d{2}-\d{2} *)
+(* A LaTeX preamble built from parts *)
+Create the <class> with '\documentclass{article}'.
+Create the <package> with '\usepackage{amsmath}'.
+Compute the <preamble> from <class> ++ "\n" ++ <package>.
 ```
 
 Mixing is valid and sometimes the clearest choice — raw strings for backslash-heavy segments, regular strings for parts that need escapes or interpolation.
@@ -313,15 +325,14 @@ Log 'Hello, ${<user>}!' to the <console>.   (* Logs: Hello, ${<user>}! *)
 Log "Hello, ${<user>}!" to the <console>.   (* Logs: Hello, Alice!     *)
 ```
 
-**Doubling backslashes in a context that doesn't need it:**
+**Reaching for a raw string where a pattern literal belongs:**
 
 ```aro
-(* Unnecessary — raw string already keeps backslashes literal *)
-Transform <result> from <text> with regex '\\d+\\.\\d+'.
-(* Matches: \\d+\\.\\d+ — probably not what you wanted *)
+(* Matches the literal five characters \d+\. — quoting does not make it a regex *)
+Split the <parts> from <text> by '\d+\.'.
 
-(* Correct *)
-Transform <result> from <text> with regex '\d+\.\d+'.
+(* Correct: a pattern literal *)
+Split the <parts> from <text> by /\d+\./.
 ```
 
 **Using the wrong type for template content:**
@@ -343,18 +354,19 @@ Compute the <header> from <class> ++ "\n" ++ <begin>.
 ```
 "regular string"   — escape sequences active: \n \t \\ \" \u{XXXX}
                    — ${<var>} interpolation supported
-                   — single-line only
+                   — spans as many lines as you like
 
 'raw string'       — all backslashes literal except \'
                    — no ${} interpolation
                    — single-line only
+                   — cannot end with a backslash
 ```
 
 | Need | Use |
 |------|-----|
-| Newlines, tabs | `"..."` with `\n`, `\t` |
+| Newlines, tabs | `"..."` with `\n`, `\t`, or a literal line break |
 | Variable interpolation | `"..."` with `${<var>}` |
-| Regex patterns | `'...'` |
+| Regex patterns | `/.../` — not a string at all |
 | Windows paths | `'...'` |
 | UNC paths | `'...'` |
 | LaTeX / TeX | `'...'` |
@@ -363,9 +375,7 @@ Compute the <header> from <class> ++ "\n" ++ <begin>.
 
 ---
 
-*Next: Chapter 6 — Feature Sets*
-
-## Multi-line strings
+## 5.9 Multi-line strings
 
 A double-quoted string spans as many lines as you like. A newline
 between the quotes is content, exactly like any other character:
@@ -415,3 +425,7 @@ Create the <sign> with """         Create the <sign> with "BREW & BYTES
     Mon-Fri 7-18
     """.
 ```
+
+---
+
+*Next: Chapter 6 — Feature Sets*

@@ -46,9 +46,27 @@ The emitter does not know who is listening. The handler does not know who emitte
 
 **Our Choice:** Full event-driven architecture. Every piece of our crawler communicates through events.
 
-**Alternative Considered:** ARO does not actually support direct calls between feature sets, so this is not really a choice—it is the only way. But we could minimize events by putting more logic in each handler. Instead, we choose many small handlers with clear responsibilities.
+**Alternative Considered:** ARO does support direct calls. A feature set whose business activity is the word `Action` becomes callable from anywhere in the application as `Application.<Name>` (ARO-0081):
 
-**Why This Approach:** Small, focused handlers are easier to understand, test, and modify. When we add rate limiting later, we add a new handler in the pipeline. We do not touch existing code. The event-driven model makes this natural.
+```aro
+(NormalizeSlashes: Action takes <url>) {
+    Extract the <u> from the <input: url>.
+    Split the <parts> from the <u> by /\/+$/.
+    Extract the <clean: first> from the <parts>.
+    Return an <OK: status> with { url: <clean> }.
+}
+```
+
+Any other feature set calls it by name:
+
+```aro
+Application.NormalizeSlashes the <result> from <raw-url>.
+Extract the <clean-url> from the <result: url>.
+```
+
+That is the right tool for a pure transformation you want to reuse — no event type to name, no handler to register, and the result comes straight back to the caller. We do not use it for the pipeline stages, because a pipeline stage is not a function call: we want to be able to insert rate limiting between two stages later without touching either of them.
+
+**Why This Approach:** Small, focused handlers are easier to understand, test, and modify. When we add rate limiting later, we add a new handler in the pipeline. We do not touch existing code. The event-driven model makes this natural. Use `Application.<Name>` when you want a value back; use an event when you want to be able to add a listener later.
 
 ---
 
@@ -217,12 +235,13 @@ aro run .
 Output:
 
 ```
-Starting event demo...
-Greet handler triggered!
-Hello, World!
-Farewell handler triggered!
-Goodbye, World!
-All events processed!
+[Application-Start] Starting event demo...
+[Say Hello] Greet handler triggered!
+[Say Hello] Hello, World!
+[Say Goodbye] Farewell handler triggered!
+[Say Goodbye] Goodbye, World!
+[Application-Start] All events processed!
+[OK] startup
 ```
 
 Notice the flow: Start → Greet event → Hello handler → Farewell event → Goodbye handler → back to Start. The `<Emit>` blocks until the entire chain completes, so "All events processed!" appears last.
@@ -241,7 +260,7 @@ Notice the flow: Start → Greet event → Hello handler → Farewell event → 
 
 ## 4.9 What Could Be Better
 
-**No Event Tracing.** When something goes wrong, there is no built-in way to trace which events led to the error. You add `<Log>` statements manually.
+**Tracing Is Opt-In, Not On.** When something goes wrong, the console shows you the failing statement but not the chain of events that produced it. The chain is recoverable — `aro run . --record events.json` writes every event to a file you can read afterwards, and `--replay events.json` feeds them back in so you can re-run a failure deterministically — but you have to have thought to record it. There is no "why did this handler run?" answer after the fact.
 
 **Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `Extract the <data: SchemaName> from the <event>.`
 

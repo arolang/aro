@@ -1,4 +1,4 @@
-# Chapter 10: Plugins with Dependencies
+# Chapter 11: Plugins with Dependencies
 
 *"Standing on the shoulders of giants—one package at a time."*
 
@@ -6,7 +6,7 @@
 
 Real-world plugins rarely exist in isolation. They depend on libraries, frameworks, and system services. This chapter shows you how to manage dependencies across all plugin types: Swift packages, Cargo crates, system libraries, and Python packages.
 
-## 10.1 The Dependency Challenge
+## 11.1 The Dependency Challenge
 
 Dependencies introduce complexity:
 
@@ -17,7 +17,7 @@ Dependencies introduce complexity:
 
 But dependencies also enable incredible functionality. SQLite gives you a full database. FFmpeg handles any media format. NumPy powers numerical computing. The trick is managing them well.
 
-## 10.2 Swift Package Manager Dependencies
+## 11.2 Swift Package Manager Dependencies
 
 Swift plugins use SPM for dependency management. Let's build a SQLite database plugin.
 
@@ -80,13 +80,17 @@ private let dbLock = NSLock()
 
 // MARK: - Plugin Interface
 
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
+// Services are declared in aro_plugin_info, and every method arrives through
+// aro_plugin_execute under the key "service:<method>". There is no per-service
+// symbol and no separate call function.
+@_cdecl("aro_plugin_info")
+public func pluginInfo() -> UnsafeMutablePointer<CChar> {
     let metadata = """
     {
+        "name": "plugin-swift-sqlite",
+        "version": "1.0.0",
         "services": [{
             "name": "sqlite",
-            "symbol": "sqlite_call",
             "methods": ["open", "close", "execute", "query", "insert"]
         }]
     }
@@ -94,19 +98,29 @@ public func pluginInit() -> UnsafePointer<CChar> {
     return strdup(metadata)!
 }
 
-@_cdecl("sqlite_call")
-public func sqliteCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+// Lifecycle hooks take nothing and return nothing.
+@_cdecl("aro_plugin_init")
+public func pluginInit() {
+    // One-time setup, if you need it.
+}
+
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let argsJSON = String(cString: inputPtr)
 
     guard let argsData = argsJSON.data(using: .utf8),
           let args = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] else {
-        return setError(resultPtr, "Invalid JSON")
+        return errorResult("Invalid JSON")
     }
+
+    guard action.hasPrefix("service:") else {
+        return errorResult("Unknown action: \(action)")
+    }
+    let method = String(action.dropFirst("service:".count))
 
     do {
         let result: [String: Any]
@@ -123,16 +137,14 @@ public func sqliteCall(
         case "insert":
             result = try insertRow(args)
         default:
-            return setError(resultPtr, "Unknown method: \(method)")
+            return errorResult("Unknown method: \(method)")
         }
 
         let resultData = try JSONSerialization.data(withJSONObject: result)
-        let resultJSON = String(data: resultData, encoding: .utf8)!
-        resultPtr.pointee = strdup(resultJSON)
-        return 0
+        return strdup(String(data: resultData, encoding: .utf8)!)!
 
     } catch {
-        return setError(resultPtr, error.localizedDescription)
+        return errorResult(error.localizedDescription)
     }
 }
 
@@ -252,10 +264,9 @@ private func insertRow(_ args: [String: Any]) throws -> [String: Any] {
 
 // MARK: - Helpers
 
-private func setError(_ ptr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-                      _ message: String) -> Int32 {
-    ptr.pointee = strdup("{\"error\":\"\(message)\"}")
-    return 1
+private func errorResult(_ message: String) -> UnsafeMutablePointer<CChar> {
+    let escaped = message.replacingOccurrences(of: "\"", with: "\\\"")
+    return strdup("{\"error\":\"\(escaped)\"}")!
 }
 
 private enum PluginError: LocalizedError {
@@ -294,7 +305,7 @@ build:
 ### Usage in ARO
 
 ```aro
-(Database Demo: Application-Start) {
+(Application-Start: Database Demo) {
     (* Open database *)
     Call the <db> from the <sqlite: open> with {
         path: "users.db",
@@ -329,7 +340,7 @@ build:
 }
 ```
 
-## 10.3 Cargo Dependencies for Rust
+## 11.3 Cargo Dependencies for Rust
 
 Rust plugins use Cargo.toml for dependency management.
 
@@ -502,7 +513,7 @@ pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
 }
 ```
 
-## 10.4 System Library Dependencies
+## 11.4 System Library Dependencies
 
 Some plugins need system libraries that must be installed separately.
 
@@ -613,7 +624,7 @@ char* aro_plugin_execute(const char* action, const char* input_json) {
 
 Always document system dependencies in your README:
 
-```markdown
+````markdown
 # plugin-c-http
 
 HTTP client plugin using libcurl.
@@ -639,9 +650,9 @@ yum install libcurl-devel
 
 ### Windows
 Download from https://curl.se/windows/ and add to PATH.
-```
+````
 
-## 10.5 Python Package Dependencies
+## 11.5 Python Package Dependencies
 
 Python plugins use `requirements.txt`:
 
@@ -710,7 +721,7 @@ PyTorch can be 2GB+. Strategies:
    First run will download models (~500MB).
    ```
 
-## 10.6 Handling Dependency Conflicts
+## 11.6 Handling Dependency Conflicts
 
 When multiple plugins need different versions of the same library:
 
@@ -749,7 +760,7 @@ Plugins/
     └── requirements.txt
 ```
 
-## 10.7 Building Portable Plugins
+## 11.7 Building Portable Plugins
 
 For plugins that should work across systems:
 
@@ -787,7 +798,7 @@ Use platform-specific wheels:
 pip download --platform manylinux2014_x86_64 --only-binary=:all: torch
 ```
 
-## 10.8 Dependency Checklist
+## 11.8 Dependency Checklist
 
 Before publishing a plugin with dependencies:
 
@@ -799,7 +810,7 @@ Before publishing a plugin with dependencies:
 - [ ] **Note disk/memory requirements** for large dependencies
 - [ ] **Handle missing dependencies gracefully** with clear error messages
 
-## 10.9 Summary
+## 11.9 Summary
 
 Managing dependencies requires attention but enables powerful plugins:
 

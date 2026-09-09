@@ -36,9 +36,11 @@ The name after `Application-Start:` is your application's identifier. It appears
 
 **Our Choice:** Read the starting URL from an environment variable.
 
-**Alternative Considered:** We could read the URL from a configuration file, or accept it as a command-line argument. Environment variables are simpler and work well with Docker and CI/CD systems. For a crawler that runs in containers, passing `CRAWL_URL=https://example.com` is natural.
+**Alternative Considered:** We could read the URL from a configuration file, or accept it as a command-line argument. ARO supports the latter directly — `Extract the <url> from the <parameter: url>.` picks up `aro run . --url https://example.com` (ARO-0047). Environment variables still win for a crawler that runs in containers, where passing `CRAWL_URL=https://example.com` is natural and needs no change to the invocation.
 
 **Why This Approach:** Environment variables require no parsing logic. The `<Extract>` action retrieves them directly. This keeps our entry point focused on initialization rather than argument handling.
+
+There is one trap, and it is worth knowing now: **an unset environment variable is not an error.** `<env: NAME>` binds the empty string when the variable is missing, exactly like a shell would. `<parameter: name>` is the opposite — it fails loudly if the flag was not passed. We come back to this in section 3.7.
 
 ---
 
@@ -198,9 +200,35 @@ Here is the complete entry point file:
 
 ## 3.7 What Could Be Better
 
-**No Command-Line Arguments.** Reading from environment variables works, but sometimes you want `./crawler https://example.com`. ARO has no built-in argument parsing.
+**Missing Environment Variables Fail Silently.** This is the sharp one. If `CRAWL_URL` is not set, `<start-url>` binds the empty string and the crawler cheerfully tries to fetch nothing:
 
-**No Default Values.** If `CRAWL_URL` is not set, the application fails. We cannot specify a fallback value in the Extract action.
+```bash
+$ aro run .
+Starting Web Crawler...
+Starting URL:
+Output directory created
+[OK] startup
+```
+
+No error, no exit code, no output files. If you want the application to stop, take the URL from a flag instead — `<parameter: …>` raises `Cannot extract the url from the parameter: url.` when the flag is absent:
+
+```aro
+Extract the <start-url> from the <parameter: url>.
+```
+
+```bash
+$ aro run . --url https://example.com
+```
+
+**No Default Values in Extract.** Neither form lets you write a fallback into the `<Extract>` statement itself. What you can do is branch on the empty string that `<env: …>` leaves behind:
+
+```aro
+Extract the <configured-url> from the <env: CRAWL_URL>.
+Log "no CRAWL_URL set - nothing to crawl" to the <console> when <configured-url> == "".
+Emit a <QueueUrl: event> with { url: <configured-url> } when not (<configured-url> == "").
+```
+
+**No Positional Arguments.** `--url https://example.com` works; bare `./crawler https://example.com` does not. Every parameter needs a flag name.
 
 ---
 

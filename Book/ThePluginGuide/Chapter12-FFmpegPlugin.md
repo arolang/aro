@@ -1,4 +1,4 @@
-# Chapter 11: The FFmpeg Plugin - A Complete Example
+# Chapter 12: The FFmpeg Plugin - A Complete Example
 
 *"FFmpeg: Because media is complicated, but using it shouldn't be."*
 
@@ -6,7 +6,7 @@
 
 FFmpeg is the Swiss Army knife of multimedia. It handles virtually every audio and video format ever created. This chapter walks through building a complete, production-ready FFmpeg plugin for ARO—from installation to implementation to real-world usage.
 
-## 11.1 What We're Building
+## 12.1 What We're Building
 
 By the end of this chapter, you'll have a plugin that can:
 
@@ -18,7 +18,7 @@ By the end of this chapter, you'll have a plugin that can:
 
 This is a substantial plugin—the kind you'd actually use in production.
 
-## 11.2 Installing FFmpeg
+## 12.2 Installing FFmpeg
 
 FFmpeg must be installed on your system before building the plugin.
 
@@ -68,7 +68,7 @@ ffmpeg -version
 pkg-config --cflags --libs libavcodec libavformat libavutil libswscale
 ```
 
-## 11.3 Project Structure
+## 12.3 Project Structure
 
 ```
 Plugins/
@@ -84,7 +84,7 @@ Plugins/
         └── utils.c
 ```
 
-## 11.4 Plugin Manifest
+## 12.4 Plugin Manifest
 
 ```yaml
 # plugin.yaml
@@ -126,7 +126,7 @@ requirements:
         ubuntu: "apt install ffmpeg libavcodec-dev libavformat-dev libavutil-dev"
 ```
 
-## 11.5 Header File
+## 12.5 Header File
 
 ```c
 // ffmpeg_plugin.h
@@ -159,7 +159,7 @@ char* action_clip(const char* input_json);
 #endif // FFMPEG_PLUGIN_H
 ```
 
-## 11.6 Main Plugin Implementation
+## 12.6 Main Plugin Implementation
 
 ```c
 // ffmpeg_plugin.c
@@ -296,7 +296,7 @@ char* error_result(const char* message) {
 }
 ```
 
-## 11.7 Media Info Action
+## 12.7 Media Info Action
 
 ```c
 // info.c
@@ -401,7 +401,7 @@ char* action_info(const char* input_json) {
 }
 ```
 
-## 11.8 Thumbnail Generation
+## 12.8 Thumbnail Generation
 
 ```c
 // thumbnail.c
@@ -549,7 +549,7 @@ char* action_thumbnail(const char* input_json) {
 }
 ```
 
-## 11.9 Video Transcoding
+## 12.9 Video Transcoding
 
 ```c
 // transcode.c
@@ -663,7 +663,7 @@ char* action_transcode(const char* input_json) {
 }
 ```
 
-## 11.10 Audio Extraction
+## 12.10 Audio Extraction
 
 ```c
 // In utils.c or extract_audio.c
@@ -721,10 +721,10 @@ char* action_extract_audio(const char* input_json) {
 }
 ```
 
-## 11.11 Using the Plugin in ARO
+## 12.11 Using the Plugin in ARO
 
 ```aro
-(Video Processing: Application-Start) {
+(Application-Start: Video Processing) {
     Log "Starting video processing demo..." to the <console>.
 
     (* Get media information *)
@@ -770,7 +770,7 @@ char* action_extract_audio(const char* input_json) {
 }
 ```
 
-## 11.12 Production Considerations
+## 12.12 Production Considerations
 
 ### Error Handling
 
@@ -827,7 +827,7 @@ snprintf(command, sizeof(command),
          input_path);
 ```
 
-## 11.13 Building the Plugin
+## 12.13 Building the Plugin
 
 ### Makefile
 
@@ -871,7 +871,7 @@ gcc -O2 -fPIC -shared \
     $(pkg-config --libs libavcodec libavformat libavutil libswscale libswresample)
 ```
 
-## 11.14 Summary
+## 12.14 Summary
 
 Building a production FFmpeg plugin teaches several important lessons:
 

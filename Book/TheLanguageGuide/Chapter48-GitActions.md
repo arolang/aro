@@ -46,7 +46,7 @@ Extract the <clean> from the <status: clean>.
 Extract the <files> from the <status: files>.
 
 Log "On branch ${branch}" to the <console>.
-For each <change> in <files> {
+for each <change> in <files> {
     Extract the <path> from the <change: path>.
     Extract the <state> from the <change: status>.
     Log "${state} ${path}" to the <console>.
@@ -65,7 +65,7 @@ The `status` object exposes:
 
 ```aro
 Retrieve the <log> from the <git>.
-For each <entry> in <log> {
+for each <entry> in <log> {
     Extract the <hash>    from the <entry: short>.
     Extract the <message> from the <entry: message>.
     Extract the <author>  from the <entry: author>.
@@ -97,7 +97,7 @@ The `with` clause for `Stage` accepts:
 - A path string: `"src/main.aro"`
 - A list of paths: `["a.txt", "b.txt"]`
 
-`Commit` returns a commit object containing `hash`, `short`, `message`, and `author`. It also emits a `git.commit` event.
+`Commit` returns a commit object containing `hash`, `short`, `message`, and `author`. It also emits a `GitCommit` event.
 
 ## Push, Pull, Clone
 
@@ -149,12 +149,12 @@ Tag the <release> for the <git> with {
 |------------|---------|--------------|-------|
 | `Retrieve` | REQUEST | `from`       | `<status>`, `<log>`, `<branch>` |
 | `Stage`    | OWN     | `to`, `for`  | `with` accepts `"."`, path, or list |
-| `Commit`   | EXPORT  | `to`, `with` | Emits `git.commit`               |
-| `Pull`     | REQUEST | `from`       | Shells out; emits `git.pull`     |
-| `Push`     | EXPORT  | `to`, `with` | Shells out; emits `git.push`     |
-| `Clone`    | REQUEST | `from`, `with` | Shells out; emits `git.clone`  |
-| `Checkout` | OWN     | `from`, `to`, `with` | Emits `git.checkout`     |
-| `Tag`      | EXPORT  | `for`, `with` | Emits `git.tag`                  |
+| `Commit`   | EXPORT  | `to`, `with` | Emits `GitCommit`                |
+| `Pull`     | REQUEST | `from`       | Shells out; emits `GitPull`      |
+| `Push`     | EXPORT  | `to`, `with` | Shells out; emits `GitPush`      |
+| `Clone`    | REQUEST | `from`, `with` | Shells out; emits `GitClone`   |
+| `Checkout` | OWN     | `from`, `to`, `with` | Emits `GitCheckout`      |
+| `Tag`      | EXPORT  | `for`, `with` | Emits `GitTag`                   |
 
 ## Git Events
 
@@ -172,7 +172,8 @@ Every mutating Git action emits a runtime event. You can write feature sets that
 ```aro
 (Notify Release: GitTag Handler) {
     Extract the <name> from the <event: name>.
-    Send the <release-note> to the <slack-channel> with "Released ${name}".
+    Compute the <note> from "Released " ++ <name>.
+    Send the <note> to the <slack-channel> with { channel: "#releases" }.
     Return an <OK: status> for the <notification>.
 }
 ```
@@ -197,4 +198,4 @@ Use `Exec` only when the native action set really doesn't fit; native actions ar
 
 ---
 
-*Next: Appendix A — Action Reference*
+*Next: Chapter 49 — The Local Coding Assistant*

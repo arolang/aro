@@ -47,10 +47,21 @@ Create the <absolute-url> with "${<base>}${<path>}".
 | Operation | Description | Example |
 |-----------|-------------|---------|
 | length | String or list length | `Compute the <len: length> from <text>.` |
-| count | Count items in list | `Compute the <count: count> from <list>.` |
-| hash | Compute hash value | `Compute the <hash: hash> from <url>.` |
+| count | Count items in list (alias of length) | `Compute the <count: count> from <list>.` |
+| hash / sha256 | SHA-256 digest, 64 hex characters | `Compute the <hash: hash> from <url>.` |
+| take / clip | First N characters or elements | `Compute the <short: hash\|take> from <url> with 12.` |
+| sum | Total of a numeric collection | `Compute the <total: sum> from <amounts>.` |
+| lines | Split text into a list of lines | `Compute the <ls: lines> from <content>.` |
 | union | Combine two lists (set union) | `Compute the <all: union> from <a> with <b>.` |
 | difference | Items in first but not second | `Compute the <new: difference> from <a> with <b>.` |
+| intersect | Items present in both | `Compute the <both: intersect> from <a> with <b>.` |
+
+Two rules about this slot are worth memorising:
+
+- **The qualifier namespace is closed.** An unrecognised name is an error at check time, not a silent pass-through. `aro actions --qualifiers` prints the live set.
+- **Some things that look like qualifiers are actions.** Sorting is `Sort the <s> for the <x>.`; reversing is `Reverse the <r> for the <x>.`; first and last are `Extract the <f: first> from the <x>.`. `Compute the <s: sort>` is rejected, and the error names the action you wanted.
+
+Qualifiers chain with `|`, left to right: `hash|take` hashes and then truncates.
 
 ---
 
@@ -76,13 +87,17 @@ The response object contains `body` (parsed content), `status` (HTTP status code
 |--------|--------|-------------|
 | ParseHtml | `ParseHtml the <result: specifier> from the <html>.` | Parse HTML content |
 
-**Specifiers:**
+**Specifiers** — these five and no others; anything else is a runtime error:
 
 | Specifier | Returns | Example |
 |-----------|---------|---------|
-| markdown | Object with title and markdown | `ParseHtml the <result: markdown> from <html>.` |
+| markdown | Object with `title` and `markdown` | `ParseHtml the <result: markdown> from <html>.` |
 | links | List of href values | `ParseHtml the <links: links> from <html>.` |
-| title | Page title string | `ParseHtml the <title: title> from <html>.` |
+| page | Object with `title`, `markdown` and `links`, from one parse | `ParseHtml the <page: page> from <html>.` |
+| text | Text of every element matching a CSS selector | `ParseHtml the <headings: text> from <html> with "h1, h2".` |
+| content | Object with `title` and flattened `content` text | `ParseHtml the <c: content> from <html>.` |
+
+There is no `title` specifier. Take the `title` field off a `markdown` or `page` result instead.
 
 ---
 
@@ -126,12 +141,29 @@ Extract the <trimmed: first> from the <slash-parts>.
 | Action | Syntax | Description |
 |--------|--------|-------------|
 | Make | `Make the <result> to the <directory: path>.` | Create a directory |
-| Write | `Write the <content> to the <file: path>.` | Write content to a file |
+| Write | `Write the <content> to the <file: path>.` | Write content to a file (overwrites) |
+| Append | `Append the <result> to the <file: path> with <content>.` | Add to the end of a file |
+| Read | `Read the <content> from the <file: path>.` | Read a file's contents |
+| List | `List the <entries> from the <directory: path>.` | List a directory as records |
+| Stat | `Stat the <info> for the <file: path>.` | Size, permissions, timestamps |
 
 **Examples:**
 ```aro
 Make the <output-dir> to the <directory: output-path>.
 Write the <file-content> to the <file: file-path>.
+Append the <log-entry> to the <file: "./crawl.log"> with "crawled ${<url>}\n".
+```
+
+Note the shape of `<Append>`: the content goes in the `with` clause, and the result name must be one that is not already bound. Putting the content in the result slot — `Append the <log-line> to the <file: …>.` — trips the immutability check (GitLab #580).
+
+`<List>` returns a record per entry, not a list of paths. Take the path off it before reading:
+
+```aro
+List the <entries> from the <directory: "./logs">.
+for each <entry> in <entries> {
+    Extract the <path> from the <entry: path>.
+    Read the <content> from the <file: path>.
+}
 ```
 
 ---
@@ -212,8 +244,17 @@ Emit a <CrawlPage: event> with { url: <url> } when <new-entry> > 0.
 | Type | Syntax | Example |
 |------|--------|---------|
 | Contains | `<a> contains <b>` | `when <url> contains <domain>` |
-| Greater than | `<a> > <b>` | `when <count> > 0` |
-| Equals | `<a> = <b>` | `when <status> = "active"` |
+| Comparison | `<a> > <b>`, `>=`, `<`, `<=` | `when <count> > 0` |
+| Equals | `<a> == <b>` (also `=`) | `when <status> == "active"` |
+| Not equals | `<a> != <b>` | `when <status> != "archived"` |
+| Regex | `<a> matches /pattern/` | `when <url> matches /\.pdf$/` |
+| Negation | `not (<condition>)` | `when not (<url> contains <domain>)` |
+| Conjunction | `<c1> and <c2>`, `or` | `when <count> > 0 and <url> contains <domain>` |
+
+Two traps:
+
+- **Parenthesise what you negate.** `when not <url> contains <domain>` parses as `(not <url>) contains <domain>` and is silently always false (GitLab #572).
+- **Guards and `where` clauses differ.** `starts-with` and `ends-with` work in a `where` clause on `<Filter>`, `<Retrieve>` or `<Delete>`; in a `when` guard they are a parse error.
 
 ---
 
@@ -249,7 +290,11 @@ for each <item> in <list> {
 }
 
 parallel for each <item> in <list> {
-    (* statements - run concurrently *)
+    (* statements - run concurrently, up to 4 per CPU core at a time *)
+}
+
+parallel for each <item> in <list> with <concurrency: 4> {
+    (* statements - at most four in flight *)
 }
 ```
 

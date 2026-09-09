@@ -28,25 +28,25 @@ What `aro ask` will do, if you let it:
 4. Call `aro_check` on the resulting directory.
 5. Report back with a short explanation and the path to the new file.
 
-You can read the resulting `main.aro`, and so can the person sitting next to you who does not write software. It will look like this:
+You can read the resulting `main.aro`, and so can the person sitting next to you who does not write software:
 
 ```aro
 (Application-Start: Nightly Report) {
     List the <log-files> from the <directory: "./logs">.
 
-    for each <file> in <log-files> {
-        Read the <content> from the <file>.
-        Filter the <error-lines> from the <content>
-            where <line> contains "ERROR".
-        Compute the <error-count: length>
-            from the <error-lines>.
-        Store the <error-count> into the <counts-repository>.
+    for each <entry> in <log-files> {
+        Extract the <path> from the <entry: path>.
+        Read the <content> from the <file: path>.
+        Compute the <lines: lines> from the <content>.
+        for each <line> in <lines> {
+            Store the <line> into the <error-repository>
+                when <line> contains "ERROR".
+        }
     }
 
-    Retrieve the <all-counts> from the <counts-repository>.
-    Reduce the <total: sum> from the <all-counts>.
-    Compute the <report-text>
-        from "Total errors: " ++ <total>.
+    Retrieve the <errors> from the <error-repository>.
+    Compute the <total: length> from the <errors>.
+    Compute the <report-text> from "Total errors: " ++ <total>.
     Write the <report-text> to the <file: "./report.md">.
 
     Return an <OK: status> for the <report>.
@@ -54,6 +54,12 @@ You can read the resulting `main.aro`, and so can the person sitting next to you
 ```
 
 Anyone on the team can read that. Anyone on the team can edit it. The automation is no longer hidden behind someone's personal Python library.
+
+Two details in there are the exact places the model — and you — will get it wrong the first time, so they are worth naming.
+
+`<List>` hands back a *record* per directory entry, not a path string. `Read the <content> from the <file>` where `<file>` is the loop variable does not read the file; it looks for a system object called `file`, fails, and (because the failure is in a deferred action nobody reads) leaves the loop to carry on. Pull `path` off the record first.
+
+The inner `for each` with a guard is doing what a `Filter` should be doing. It is not there for style. `Filter … where <line> contains "ERROR"` over a list of strings matches nothing and returns an empty list, silently, because `Filter` only compares *fields of records* — and a string has no fields (GitLab #569). The version with `Filter` in it passes `aro check`, runs to completion, exits `[OK]`, and writes `Total errors: 0` into your report. That is the failure mode this whole book is about: not code that breaks, code that quietly agrees with you.
 
 ## 5.3 CI-style Invocations
 

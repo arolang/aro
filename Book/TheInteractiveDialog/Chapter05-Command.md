@@ -11,7 +11,7 @@ Commands start with `:` or `/`. They control the REPL, not ARO:
 ```
 aro> :help      # Talk to the REPL
 aro> /help      # Same thing, different prefix
-aro> <Set>...   # Talk to ARO
+aro> Set ...    # Talk to ARO
 ```
 
 Two languages. One prompt. The prefix is the switch.
@@ -29,7 +29,7 @@ aro> :type user         # Show variable type
 ### Session Control
 
 ```
-aro> :clear             # Wipe all variables
+aro> :clear             # Wipe all session state
 aro> :history           # Show command history
 aro> :history 10        # Last 10 commands
 ```
@@ -41,9 +41,11 @@ aro> :fs                # List feature sets
 aro> :invoke Name       # Run a feature set
 ```
 
-### Export
+### Data and Export
 
 ```
+aro> :set x 42          # Bind a variable directly
+aro> :load ./setup.aro  # Load and execute a file
 aro> :export            # Print as .aro code
 aro> :export file.aro   # Save to file
 ```
@@ -56,44 +58,47 @@ aro> :quit              # Leave the REPL
 
 ## History Navigation
 
-The REPL remembers everything you've typed. Navigate with arrow keys:
+The REPL remembers everything you've typed. Navigate with the arrow keys, or
+with the emacs bindings the line editor provides:
 
 | Key | Action |
 |-----|--------|
-| `Up` | Previous command |
-| `Down` | Next command |
-| `Ctrl+R` | Search history |
+| `Up` / `Ctrl+P` | Previous command |
+| `Down` / `Ctrl+N` | Next command |
 
-Find a command, press Enter, it runs again.
+There is no incremental history search — `Ctrl+R` is not bound. Scroll, or
+re-type.
 
 ## Tab Completion
 
-Press `Tab` for intelligent completion:
+Press `Tab` for completion. On a `:` or `/` prefix it completes command names;
+anywhere else it goes through the same LSP-backed engine the JSON protocol
+serves, so Tab at the terminal and Tab in a notebook agree.
 
 ```
-aro> <Com[TAB]
-Compute  Compare  <Connect>
+aro> Com[TAB]
+Combine  Commit  Compare  Compute
 
 aro> :h[TAB]
 :help     :history
 ```
 
-The REPL knows ARO. It knows your variables. It helps.
+The REPL knows ARO's verbs. It knows your variables. It helps.
 
 ## The History Command
 
 See what you've done:
 
 ```
-aro> :history 5
-1. [ok]  Set the <x> to 10.           2ms
-2. [ok]  Set the <y> to 20.           1ms
-3. [ok]  Compute the <sum> from...    3ms
-4. [err] Get the <missing> from...   --
-5. [ok]  Log "test" to <console>.    1ms
+aro> :history
+1. [ok]  Set the <x> to 10. 2.1ms
+2. [ok]  Set the <y> to 20. 0.9ms
+3. [ok]  Compute the <sum> from <x> + <y>. 3.2ms
+4. [err] Get the <missing> from... 0.4ms
 ```
 
-Status, statement, timing. A record of your conversation.
+Status, statement, timing. A record of your conversation — failures included,
+with the time they took to fail.
 
 ## Aliases
 
@@ -102,14 +107,17 @@ Most commands have short forms:
 | Full | Short |
 |------|-------|
 | `:help` | `:h` or `:?` |
-| `:vars` | `:v` |
-| `:clear` | `:c` |
+| `:vars` | `:v` or `:variables` |
+| `:type` | `:t` |
+| `:clear` | `:c` or `:reset` |
 | `:history` | `:hist` |
+| `:fs` | `:featuresets` |
 | `:export` | `:e` |
-| `:invoke` | `:i` |
-| `:quit` | `:q` |
+| `:invoke` | `:i` or `:run` |
+| `:plugin` | `:plugins` |
+| `:quit` | `:q` or `:exit` |
 
-Less typing. Same power.
+Less typing. Same power. `:set` and `:load` have no short forms.
 
 ## The Slash Alternative
 

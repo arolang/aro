@@ -40,13 +40,17 @@ This chapter covers the first stage: extraction.
 
 ## 6.3 ParseHtml Specifiers
 
-The `<ParseHtml>` action supports multiple specifiers:
+The `<ParseHtml>` action supports five specifiers, and no others — anything else is a runtime error:
 
 | Specifier | Returns |
 |-----------|---------|
 | `markdown` | Object with `title` and `markdown` fields |
 | `links` | List of all `href` values from anchor tags |
-| `title` | Just the page title |
+| `page` | Object with `title`, `markdown` **and** `links`, from one DOM parse |
+| `text` | List of the text of every element matching a CSS selector |
+| `content` | Object with `title` and the page's flattened text as `content` |
+
+There is no `title` specifier. If you only want the title, ask for `markdown` (or `page`) and take the `title` field off the result.
 
 We have already used `markdown` in the crawl handler. Now we will use `links`:
 
@@ -279,9 +283,16 @@ Notice how typed extraction makes the handler more concise. We access `<event-da
 
 ## 6.11 What Could Be Better
 
-**No Custom Selectors.** We can only extract links. What if we wanted all images? Or specific CSS classes? A more flexible selector system would help.
-
 **No Link Context.** We get the `href` but not the link text or surrounding context. Sometimes that information is useful for deciding what to crawl.
+
+**Selectors Only Yield Text.** The `text` specifier takes a CSS selector through a `with` clause, so narrowing to part of a page is easy:
+
+```aro
+ParseHtml the <headings: text> from the <html> with "h1, h2".
+ParseHtml the <prices: text> from the <html> with ".product .price".
+```
+
+What comes back is a list of the *text* of each matching element. There is no way to ask a selector for an attribute — `img[src]` matches the images but hands you their (usually empty) text, not the `src` values. Links are the one attribute with a dedicated specifier; every other attribute is out of reach.
 
 ---
 

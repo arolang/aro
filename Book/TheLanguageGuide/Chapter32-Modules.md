@@ -166,7 +166,7 @@ For development, you might run the gateway monolith. For production, you might r
 
 ## 32.7 Sharing Data Between Applications
 
-When you import an application, you get access to its published variables within the same business activity. The Publish action (see ARO-0003) makes values available to feature sets sharing that business activity:
+When you import an application, you get access to its published variables within the same business activity. The Publish action (see ARO-0001) makes values available to feature sets sharing that business activity:
 ```aro
 (* In auth-service/auth.aro *)
 (Authenticate User: Security) {
@@ -176,13 +176,16 @@ When you import an application, you get access to its published variables within
     Return an <OK: status> with <user>.
 }
 ```
-After importing auth-service, other feature sets can access the published variable:
+A published symbol is visible to feature sets that share its **business
+activity**, so the reader must carry the same activity name — here `Security`,
+not `Gateway`. After importing auth-service:
 ```aro
 (* In gateway/main.aro *)
 import ../auth-service
-(Process Request: Gateway) {
+(Process Request: Security) {
     (* Access published variable from imported application *)
-    Use the <authenticated-user> for the <authorization-check>.
+    Extract the <caller-id> from the <authenticated-user: id>.
+    Log <caller-id> to the <console>.
     Return an <OK: status> for the <request>.
 }
 ```
@@ -221,7 +224,14 @@ ARO deliberately omits many features found in other module systems:
 - **Package manifests** - No `Package.yaml` or `aro.config`
 - **Version constraints** - No `^1.0.0` or `~2.1.0`
 - **Remote package repositories** - No central registry
+
 These are implementation concerns that add complexity without matching how ARO applications are designed to work. If you need versioning, use git. If you need remote packages, use git submodules or symbolic links.
+
+All of that is about `.aro` *applications*. **Plugins are a different story**:
+they do have a manifest (`plugin.yaml`), and `aro add github:org/repo` installs
+one from Git — see Chapter 26 and ARO-0045. The two mechanisms are deliberately
+separate. Importing an application composes ARO source; installing a plugin
+adds a native, Rust, C or Python extension.
 ---
 
 ## 32.11 Summary

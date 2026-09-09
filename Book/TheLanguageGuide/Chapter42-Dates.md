@@ -50,7 +50,16 @@ Extract the <minute> from the <now: minute>.
 Extract the <second> from the <now: second>.
 ```
 
-Each extraction produces an integer. The month is 1-indexed (January = 1, December = 12). The hour uses 24-hour format (0-23). The day of week follows ISO convention: Sunday = 1, Monday = 2, through Saturday = 7.
+Each of those six extractions produces an integer. The month is 1-indexed (January = 1, December = 12). The hour uses 24-hour format (0-23).
+
+`dayOfWeek` is the exception: it yields the weekday *name*, not a number.
+
+```aro
+Extract the <weekday> from the <now: dayOfWeek>.
+Log <weekday> to the <console>.        (* Monday *)
+```
+
+Compare it against a name (`when <weekday> == "Saturday"`), not against an index.
 
 <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 1em; margin: 2em 0;">
 
@@ -179,37 +188,56 @@ Create the <q4: date-range> from <oct-first> to <dec-thirty-first>.
 Ranges expose useful properties:
 
 ```aro
-Extract the <duration: days> from <q4>.
-Extract the <duration: hours> from <q4>.
+Extract the <span-days: days> from <q4>.
+Extract the <span-hours: hours> from <q4>.
 Extract the <start> from the <q4: start>.
 Extract the <end> from the <q4: end>.
 ```
 
-The range membership operator `in` enables temporal queries in when clauses:
-
-```aro
-when <order-date> in <sale-period> {
-    Compute the <discount> from <price> * 0.2.
-}
-```
+Each span binds a fresh name — two `Extract`s onto one `<duration>` would be a
+rebinding, and bindings are immutable (Chapter 11).
 
 ---
 
 ## 42.8 Date Comparisons
 
-Dates can be compared using `before` and `after` operators in when clauses:
+ARO-0010 §3 specifies `before` and `after` as guard operators, and a range
+membership test `when <order-date> in <sale-period>`. **None of the three is
+implemented** — each is a parse error, not a wrong answer:
 
-```aro
-when <booking-date> before <deadline> {
-    Log "Booking accepted" to the <console>.
-}
-
-when <event-date> after <now> {
-    Log "Event is upcoming" to the <console>.
-}
+```
+3:52: error: Expected '.', but got identifier(before)
+  hint: Statements must end with a period (.)
 ```
 
-These temporal comparisons read naturally and express intent clearly. The runtime handles the underlying timestamp comparison.
+This is tracked as [GitLab #558](https://git.ausdertechnik.de/arolang/aro/-/issues/558).
+
+Until it lands, compare the timestamps, which are plain integers and work with
+every operator you already have:
+
+```aro
+Extract the <booking-ts> from the <booking-date: timestamp>.
+Extract the <deadline-ts> from the <deadline: timestamp>.
+
+Log "Booking accepted" to the <console> when <booking-ts> < <deadline-ts>.
+```
+
+Because `timestamp` is Unix epoch seconds, `<` reads as "before" and `>` reads
+as "after", and a range test is the two comparisons written out:
+
+```aro
+Extract the <order-ts> from the <order-date: timestamp>.
+Extract the <sale-start> from the <sale-period: start>.
+Extract the <sale-end> from the <sale-period: end>.
+Extract the <start-ts> from the <sale-start: timestamp>.
+Extract the <end-ts> from the <sale-end: timestamp>.
+
+Compute the <discount> from <price> * 0.2
+    when <order-ts> >= <start-ts> and <order-ts> <= <end-ts>.
+```
+
+Verbose, but it runs — and the arithmetic is the same comparison the operators
+would have performed.
 
 ---
 
@@ -305,17 +333,18 @@ ARO's date handling embodies several principles:
 Time handling in ARO provides:
 
 - **`<now>`**: Magic variable for current UTC time
-- **Properties**: `year`, `month`, `day`, `hour`, `minute`, `second`, `dayOfWeek`, `timestamp`, `iso`
+- **Properties**: `year`, `month`, `day`, `hour`, `minute`, `second`, `timestamp`, `iso`, `timezone` (integers and strings), plus `dayOfWeek` (a weekday name)
 - **Parsing**: Convert ISO 8601 strings to dates
 - **Formatting**: Convert dates to strings with custom patterns
 - **Offsets**: Calculate relative dates with `+/-` notation
-- **Ranges**: Represent periods with start and end dates
-- **Comparisons**: `before` and `after` operators
+- **Ranges**: Represent periods with start and end dates, with `days`/`hours` spans
+- **Comparisons**: through `timestamp` — the `before`/`after` operators are unimplemented ([#558](https://git.ausdertechnik.de/arolang/aro/-/issues/558))
 - **Distance**: Calculate intervals between dates
-- **Recurrence**: Define repeating patterns
+- **Recurrence**: Define repeating patterns, with `next` and `previous`
+- **Sleep**: Pause for a spelled interval — `for 500ms`, `for 30 seconds`
 
 With these tools, ARO handles the temporal dimension of business logic clearly and consistently.
 
 ---
 
-*Next: Appendix A — Action Reference*
+*Next: Chapter 43 — Runtime Metrics*

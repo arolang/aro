@@ -91,8 +91,8 @@ Compute the <revenue-display: uppercase> from "monthly: ".
 **Relationship-describing names** work well when combining data from multiple sources:
 
 ```aro
-Retrieve the <user> from the <user-repository> where id = <user-id>.
-Retrieve the <orders> from the <order-repository> where user-id = <user-id>.
+Retrieve the <user> from the <user-repository> where <id> = <user-id>.
+Retrieve the <orders> from the <order-repository> where <user-id> = <user-id>.
 Create the <user-profile> with { user: <user>, orders: <orders> }.
 ```
 
@@ -268,7 +268,7 @@ The `identity` qualifier returns its input unchanged — it is a no-op transform
 
 Immutability applies within a single feature set. Across feature sets, ARO provides scoped mechanisms for sharing state:
 
-- **Published variables** are bound once during Application-Start (or another feature set in the same business activity) and read by other feature sets. They are effectively immutable from the consumer's perspective—you can only read them, not write to them.
+- **Published variables** are bound once — typically during Application-Start — and read by other feature sets *that share the publisher's business activity*. Reading one from a different activity is a runtime error naming both activities. They are effectively immutable from the consumer's perspective: you can only read them, not write to them.
 
 - **Repositories** are mutable stores that sit outside any feature set. A `Store` operation appends to a repository; a `Retrieve` operation reads from it. The per-feature-set symbol table is still immutable, but you can express change by storing new entries and retrieving the latest state.
 

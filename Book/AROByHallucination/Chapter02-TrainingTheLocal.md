@@ -16,7 +16,7 @@ A large model trained on ARO would be impressive. It would also be useless, beca
 
 ## 2.2 What the Pipeline Does
 
-The training pipeline lives in the sibling project `ARO-Train`. It is a sequence of Jupyter notebooks — numbered `00` through `24` — that collect data, shape it into pairs, fine-tune a teacher model, distil it into a student, and package the result. You do not need to run it to use `aro ask`. You only need to run it if you want to train your own variant.
+The training pipeline lives in the ARO repository itself, under `Train/`. It is a sequence of Jupyter notebooks in `Train/script/` — numbered `00` through `27` — that collect data, shape it into pairs, fine-tune a teacher model, distil it into a student, and package the result. A meta notebook, `00_META_PIPELINE.ipynb`, runs the rest in order in isolated kernels. You do not need to run any of it to use `aro ask`. You only need to run it if you want to train your own variant.
 
 In prose, the pipeline does the following:
 
@@ -45,7 +45,9 @@ The fine-tuned model learned five things, in roughly decreasing order of how muc
 
 **The error philosophy.** ARO feature sets contain only the happy case. Errors are handled by the runtime. The model learned to resist adding defensive `when` guards, try/catch constructs, or error returns — because none of those exist in ARO.
 
-**What does not exist.** A model trained only on correct examples will cheerfully invent plausible-sounding actions — Tail, Scan, Update, Query — that are not part of the language. The training pipeline includes explicit correction data: pairs where the user asks for a non-existent action and the model explains which real action to use instead. The validation pass rejects any generated sample that uses a verb not in the canonical action list.
+**What does not exist.** A model trained only on correct examples will cheerfully invent plausible-sounding actions — Tail, Scan, Query, Process — that are not part of the language. The training pipeline includes explicit correction data: pairs where the user asks for a non-existent action and the model explains which real action to use instead. The validation pass rejects any generated sample that uses a verb not in the canonical action list.
+
+This is also the lesson with the shortest shelf life in the book, and it is worth saying why. Earlier printings listed `Update` alongside `Tail` and `Scan` as a verb the model hallucinates. `Update` is a real action now — `own` role, prepositions `for`, `from`, `into`, `to`, `with`, with `change`, `configure`, `modify` and `set` as aliases. The model's guess was right; the language caught up with it. A correction pair that teaches "Update does not exist" is now teaching a falsehood, which is why the canonical action list is regenerated from the runtime on every pipeline run (`aro actions`, currently 71 built-ins) rather than written down anywhere. Any list of what ARO lacks decays. Check it against the binary before you believe it — including the ones in this book.
 
 It was also taught, almost as an afterthought, how to wrap its output in markdown fences and how to cite the proposal number when asked about a design decision. These are small things. They compound into the difference between a useful assistant and an exasperating one.
 
@@ -61,13 +63,13 @@ It was not taught general web knowledge. The corpus is *just* the ARO project. A
 
 ## 2.5 Running the Model
 
-The distilled student is published as `ARO-Lang/aro-coder-6bit` on Hugging Face. It is loaded automatically the first time you run `aro ask`. You do not need to run the training pipeline to use the model — the first `aro ask` invocation will offer to download the weights to `~/.cache/aro/ask/`.
+The distilled student is published as `ARO-Lang/aro-coder-6bit` on Hugging Face. Ignore the `6bit` in the name — it is a leftover from an early experiment, and the packaging notebook quantises to 4 bits. The model is loaded automatically the first time you run `aro ask`; you do not need to run the training pipeline to use it, and the first invocation will offer to download the weights to `~/.cache/aro/ask/`.
 
-The interactive loop inside the training pipeline (notebook `24_chat.ipynb`) is the same loop that `aro ask` uses, in spirit: load the model, build a system prompt from the ARO knowledge base, pass user turns through the tokenizer, and stream back a reply. The difference is that `aro ask` does not require Python, does not require MLX, and does not require you to start Jupyter. It is the same brain in a simpler body.
+The last notebooks in the pipeline (`26_post_release_validation`, `27_package`) exercise the packaged model the same way `aro ask` does, in spirit: load the model, build a system prompt from the ARO knowledge base, pass user turns through the tokenizer, and stream back a reply. The difference is that `aro ask` does not require Python, does not require MLX, and does not require you to start Jupyter. It is the same brain in a simpler body.
 
 ## 2.6 A Note on Iteration
 
-One of the later notebooks in the pipeline is `20_iterative_loop.ipynb`. It does something that is easy to describe and hard to do well: it uses the *current* fine-tune to generate new training data for the *next* fine-tune. Every cycle, the model is asked to produce ARO programs for a list of prompts; the ones that pass `aro check` are added to the training set; the ones that fail are added to the DPO negative set. The next round of training learns from both.
+One of the later notebooks in the pipeline is `21_iterative_loop.ipynb`. It does something that is easy to describe and hard to do well: it uses the *current* fine-tune to generate new training data for the *next* fine-tune. Every cycle, the model is asked to produce ARO programs for a list of prompts; the ones that pass `aro check` are added to the training set; the ones that fail are added to the DPO negative set. The next round of training learns from both.
 
 This is a feedback loop. It is also the point where the story becomes recursive: the model is now helping train its own successor. Not autonomously — a human still runs the notebooks, reviews the outputs, and decides what to keep. But the leverage is enormous. A morning of curation turns into a weekend of training, which turns into a model that is better at helping you curate.
 

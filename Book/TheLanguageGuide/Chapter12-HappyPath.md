@@ -157,7 +157,7 @@ Custom error messages are difficult when validation rules require specific feedb
 
 Conditional error handling becomes awkward when different failures require different responses. If duplicate email and invalid email format both fail validation but require different instructions to the user, ARO cannot distinguish between them at the language level. The runtime treats all validation failures identically.
 
-Retry logic has no direct expression in ARO because there are no loops. If an external service is temporarily unavailable and the operation should be retried with exponential backoff, that logic must be implemented in a custom action. The ARO statement sees only success or failure; it cannot express "try again."
+Retry logic has no direct expression in ARO. `for each` iterates a collection and a user-defined action can recurse, but neither can react to a *failure* — a failed statement ends the feature set before any retry decision could be made. If an external service is temporarily unavailable and the operation should be retried with exponential backoff, that logic belongs in a custom action, which can see the failure and decide. The ARO statement sees only the eventual outcome; it cannot express "try again."
 
 Partial failures present a fundamental mismatch with the happy path model. If you need to send an email, update analytics, and sync with a CRM, and you want to continue even if some of these fail, ARO's approach of stopping on first failure does not work. All-or-nothing semantics are built into the model.
 

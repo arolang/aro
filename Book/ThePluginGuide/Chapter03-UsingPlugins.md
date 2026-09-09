@@ -24,20 +24,30 @@ This shows all installed plugins:
 
 ```
 Managed Plugins (from Plugins/):
-───────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────
  Name                   Version   Source        Provides
- plugin-crypto          1.0.0     github.com    Hash, Encrypt, Decrypt
- plugin-csv             1.0.0     github.com    ParseCSV, FormatCSV
- plugin-transformer     1.0.0     github.com    Summarize, Classify, Embed
-───────────────────────────────────────────────────
+ plugin-crypto          1.0.0     github.com    1 rust
+ plugin-csv             1.0.0     github.com    1 rust
+ plugin-transformer     1.0.0     github.com    1 python
+──────────────────────────────────────────────────────────────────
  3 managed plugins
 ```
+
+The `Provides` column counts `provides` entries and names their type — it is
+about how the plugin is built, not what it exposes. For the verbs and
+qualifiers, use `aro actions` and `aro actions --qualifiers`.
 
 For detailed information about a specific plugin:
 
 ```bash
 aro plugins list --verbose
 ```
+
+`aro plugins` has more subcommands than this chapter uses: `update`,
+`rebuild`, `validate`, `check` (compatibility and lockfile integrity),
+`docs` (generate a plugin's documentation), and `export` / `restore`, which
+write and replay an `.aro-sources` file so a checkout can rebuild its plugin
+set. Run `aro plugins --help` for the current set.
 
 ## 3.2 Installing Plugins
 
@@ -101,17 +111,57 @@ Plugins provide **custom actions** that work like built-in ARO verbs. Once insta
 
 ```aro
 (* Plugin actions feel native *)
-Hash the <digest: sha256> from the <password>.
-Encrypt the <ciphertext> from the <secret-data> with <key>.
-ParseCSV the <records> from the <csv-file>.
-Summarize the <summary> from the <document> with { maxLength: 200 }.
+Crypto.Hash the <digest> from the <password>.
+Crypto.Encrypt the <ciphertext> from the <secret-data> with { key: <key> }.
+Csv.Parse the <records> from the <csv-file>.
+Llm.Summarize the <summary> from the <document> with { maxLength: 200 }.
 ```
 
 This is the primary way to use plugins. Each action follows the standard ARO pattern:
 
 ```
-Action the <result> preposition the <object>.
+Handle.Action the <result> preposition the <object>.
 ```
+
+### Handles: the plugin's namespace
+
+`Crypto`, `Csv` and `Llm` above are **handles** — the PascalCase namespace each
+plugin declares in its `plugin.yaml`:
+
+```yaml
+name: plugin-crypto
+handle: Crypto
+```
+
+Two things follow, and the asymmetry between them trips people up:
+
+**Actions work with or without the handle.** A native plugin (C, C++, Rust or
+Swift) registers each verb twice, so `Hash the <digest> from the <password>.`
+also resolves. Prefer the namespaced form anyway — it says where the verb came
+from, and it is the only spelling that survives two plugins wanting `Hash`.
+Python plugins register *only* the namespaced form, so there the handle is not
+optional.
+
+**Qualifiers only work with the handle.** There is no bare form:
+
+```aro
+Compute the <sorted: Collections.sort> from the <numbers>.   (* resolves *)
+Compute the <sorted: sort> from the <numbers>.               (* error *)
+```
+
+```
+error: Unknown Compute qualifier 'sort'
+hint: Plugin qualifiers are namespaced: <sorted: handle.sort>
+hint: Run `aro actions --qualifiers` for the full set
+```
+
+A plugin whose `plugin.yaml` omits `handle` therefore ships qualifiers nobody
+can reach. Chapter 4 covers declaring one, including the deprecated `handler:`
+form you will meet in older plugins.
+
+`aro actions` and `aro actions --qualifiers`, run from your application
+directory, print everything that actually registered — the fastest way to find
+out what a freshly installed plugin gave you.
 
 ### Example: Crypto Plugin
 
@@ -120,7 +170,7 @@ Action the <result> preposition the <object>.
     Extract the <password> from the <request: body.password>.
 
     (* Hash the password using the plugin's Hash action *)
-    Hash the <password-hash: argon2> from the <password>.
+    Crypto.Hash the <password-hash> from the <password> with { algorithm: "argon2" }.
 
     (* Store the hashed password *)
     Create the <user> with {
@@ -139,8 +189,8 @@ Action the <result> preposition the <object>.
 (Ingest Data: Data Handler) {
     Read the <csv-content> from the <file: "./data/users.csv">.
 
-    (* Parse CSV using the plugin's ParseCSV action *)
-    ParseCSV the <records> from the <csv-content> with {
+    (* Parse CSV using the plugin's Parse action *)
+    Csv.Parse the <records> from the <csv-content> with {
         headers: true,
         delimiter: ","
     }.
@@ -162,11 +212,11 @@ Action the <result> preposition the <object>.
     Extract the <text> from the <feedback: content>.
 
     (* Use plugin actions for AI analysis *)
-    Summarize the <summary> from the <text> with { maxLength: 100 }.
-    Classify the <sentiment> from the <text> with {
+    Llm.Summarize the <summary> from the <text> with { maxLength: 100 }.
+    Llm.Classify the <sentiment> from the <text> with {
         labels: ["positive", "negative", "neutral"]
     }.
-    Embed the <embedding> from the <text>.
+    Llm.Embed the <embedding> from the <text>.
 
     Create the <analysis> with {
         original: <text>,
@@ -185,18 +235,21 @@ Plugin actions support qualifiers and options for fine-grained control.
 
 ### Qualifiers
 
-Use qualifiers to specify variants or algorithms:
+A plugin can also register **qualifiers**, which transform a value in place
+rather than introducing a verb. These are always reached through the handle:
 
 ```aro
-(* Qualifier specifies the hash algorithm *)
-Hash the <md5-hash: md5> from the <data>.
-Hash the <sha256-hash: sha256> from the <data>.
-Hash the <sha512-hash: sha512> from the <data>.
+(* Qualifiers registered by a plugin with handle: Crypto *)
+Compute the <md5-hash: Crypto.md5> from the <data>.
+Compute the <sha256-hash: Crypto.sha256> from the <data>.
 
-(* Qualifier specifies output format *)
-Encode the <base64: base64> from the <binary-data>.
-Encode the <hex: hex> from the <binary-data>.
+(* Chain them with | *)
+Compute the <fingerprint: Crypto.sha256|Crypto.base32> from the <data>.
 ```
+
+The base name on the left is the variable; the qualifier on the right selects
+the operation. That is how you get several results of the same kind in one
+feature set without colliding on names.
 
 ### Options with `with { }`
 
@@ -438,7 +491,9 @@ Error: Unknown action 'Hashh'
 **Solutions:**
 - Check spelling of the action verb
 - Verify the plugin is installed: `aro plugins list`
-- Ensure the plugin registers that action
+- Confirm it registered: `aro actions` lists every verb the runtime knows
+- For a qualifier, remember it must be namespaced: `<value: Handle.name>`, and
+  check `aro actions --qualifiers`
 
 ### Plugin Not Loaded
 

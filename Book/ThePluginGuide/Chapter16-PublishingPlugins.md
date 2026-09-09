@@ -1,11 +1,11 @@
-# Chapter 15: Publishing Plugins
+# Chapter 16: Publishing Plugins
 
 > *"The purpose of software engineering is to control complexity, not to create it."*
 > — Pamela Zave
 
 You've written a plugin, tested it thoroughly, and it works beautifully. Now comes the final step: sharing it with the world. This chapter covers everything from repository structure to documentation standards, versioning strategies to community engagement. Publishing well is an act of respect—for your users, for your future self, and for the ARO ecosystem you're helping to build.
 
-## 15.1 Repository Structure
+## 16.1 Repository Structure
 
 A well-organized repository makes your plugin approachable. Users can find what they need quickly, contributors can understand the codebase, and automated tools can do their job.
 
@@ -43,7 +43,7 @@ Your README is your plugin's front door. It should answer:
 
 A template:
 
-```markdown
+````markdown
 # plugin-name
 
 Brief description of what the plugin does and why it's useful.
@@ -51,7 +51,7 @@ Brief description of what the plugin does and why it's useful.
 ## Installation
 
 ```bash
-aro add github.com/username/plugin-name
+aro add https://github.com/username/plugin-name.git
 ```
 
 ## Quick Start
@@ -105,7 +105,7 @@ Call the <result> from the <my-plugin: actionName> with {
 ## License
 
 MIT License - see LICENSE file
-```
+````
 
 ### The CHANGELOG
 
@@ -153,7 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `validatePassword` action with strength checking
 ```
 
-## 15.2 Versioning Strategy
+## 16.2 Versioning Strategy
 
 Version numbers communicate compatibility. ARO plugins use [Semantic Versioning](https://semver.org/):
 
@@ -211,7 +211,7 @@ Common patterns:
 - `^0.9.0`: Works with 0.9.x (equivalent to >=0.9.0 <0.10.0)
 - `~0.9.0`: Works with 0.9.x patch releases (equivalent to >=0.9.0 <0.10.0)
 
-## 15.3 Documentation Standards
+## 16.3 Documentation Standards
 
 Good documentation has layers—quick reference for experts, detailed guides for learners.
 
@@ -219,7 +219,7 @@ Good documentation has layers—quick reference for experts, detailed guides for
 
 Document every action thoroughly:
 
-```markdown
+````markdown
 ## Actions
 
 ### validateEmail
@@ -298,7 +298,7 @@ Call the <result> from the <validation: validateEmail> with {
     maxLength: 100
 }.
 ```
-```
+````
 
 ### Examples Directory
 
@@ -359,7 +359,7 @@ Each example should be runnable:
 }
 ```
 
-## 15.4 Publishing to Git Repositories
+## 16.4 Publishing to Git Repositories
 
 ARO's package manager installs plugins directly from Git repositories.
 
@@ -382,7 +382,7 @@ git tag -a v1.2.0 -m "Version 1.2.0"
 git push origin main --tags
 
 # Users install specific versions
-aro add github.com/username/my-plugin@v1.2.0
+aro add https://github.com/username/my-plugin.git --ref v1.2.0
 ```
 
 ### GitHub Release Workflow
@@ -435,7 +435,7 @@ aro add git@github.com:company/private-plugin.git
 aro add https://token:x-oauth-basic@github.com/company/private-plugin.git
 ```
 
-## 15.5 Community Guidelines
+## 16.5 Community Guidelines
 
 Building a friendly ecosystem means being a good community member.
 
@@ -479,7 +479,7 @@ response to any instances of unacceptable behavior.
 
 Make it easy for others to contribute:
 
-```markdown
+````markdown
 # Contributing
 
 Thank you for your interest in contributing!
@@ -524,7 +524,7 @@ Please include:
 - Operating system
 - Steps to reproduce
 - Expected vs actual behavior
-```
+````
 
 ### Responding to Issues
 
@@ -566,7 +566,7 @@ Before implementing, I'd like to understand the use case better:
 This will help me design the feature to fit your needs.
 ```
 
-## 15.6 Maintenance and Long-term Support
+## 16.6 Maintenance and Long-term Support
 
 Publishing is the beginning, not the end.
 
@@ -611,12 +611,16 @@ We ask that you:
 
 When removing features, give users time to migrate:
 
-```yaml
-# plugin.yaml - Version 1.3.0
-deprecations:
-  - action: oldActionName
-    message: "Use newActionName instead. Will be removed in 2.0.0"
-    replacement: newActionName
+Deprecations are declared in the JSON your `aro_plugin_info` returns, not in
+`plugin.yaml` — the manifest has no `deprecations:` key and ignores one:
+
+```json
+"deprecations": [
+  { "feature": "oldActionName",
+    "message": "Use newActionName instead.",
+    "since": "1.3.0",
+    "remove_in": "2.0.0" }
+]
 ```
 
 ```markdown
@@ -648,7 +652,7 @@ The code remains available under the MIT license.
 Feel free to fork if you'd like to continue development.
 ```
 
-## 15.7 Building Your Reputation
+## 16.7 Building Your Reputation
 
 Quality plugins build trust in the ecosystem.
 

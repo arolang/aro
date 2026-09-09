@@ -64,7 +64,7 @@ Compute the <length> from the <greeting>.
 Compute the <length> from the <farewell>.
 ```
 
-Both statements attempt to bind to `length`. Since ARO variables are immutable within a scope, the second overwrites the first. You lose the greeting's length.
+Both statements attempt to bind to `length`. Since ARO variables are immutable within a scope, the second is rejected: `Cannot rebind variable 'length' — variables are immutable`. The program does not compile, so there is no silent overwrite to discover later.
 
 ### The Solution: Qualifier-as-Name
 
@@ -78,17 +78,32 @@ Compute the <farewell-length: length> from the <farewell>.
 Now `greeting-length` holds 12 and `farewell-length` holds 8. Both values exist simultaneously, ready for comparison:
 
 ```aro
-Compare the <greeting-length> against the <farewell-length>.
+Compare the <same-length> from the <greeting-length> against the <farewell-length>.
 ```
+
+`Compare` reads both operands and binds a *third* name. It cannot write back
+into `greeting-length` — that would be a rebind, which immutability forbids.
 
 ### Available Operations by Action
 
 | Action | Operations |
 |--------|-----------|
-| **Compute** | `length`, `count`, `hash`, `uppercase`, `lowercase`, `identity` |
+| **Compute** | the closed built-in set — `length`, `count`, `hash`/`sha256`, `uppercase`, `lowercase`, `trim`, `replace`, `fixed`, `lines`, `join`, `sum`, `avg`, `unique`, `random`, the encoding pair set, `identity`, … |
 | **Validate** | `required`, `exists`, `nonempty`, `email`, `numeric` |
 | **Transform** | `string`, `int`, `integer`, `double`, `float`, `bool`, `boolean`, `json`, `identity` |
 | **Sort** | `ascending`, `descending` |
+
+The Compute row is deliberately open-ended here and closed in the
+implementation: run `aro actions --qualifiers` for the live list, which is the
+only authoritative one. Anything outside it is an error rather than a
+pass-through (Chapter 9).
+
+`Sort`'s qualifier picks the *direction*; a list of records also needs the field
+to order on, named after `by`:
+
+```aro
+Sort the <oldest-first: descending> for the <users> by "age".
+```
 
 ### Examples
 
@@ -134,17 +149,38 @@ For nested structures, use dot-separated paths:
 (* Access deeply nested data *)
 Extract the <city> from the <user: address.city>.
 Extract the <zip> from the <user: address.postal-code>.
-
-(* Navigate through arrays and objects *)
-Extract the <first-name> from the <response: data.users.0.name>.
 ```
 
+A dotted path names object fields only. An index is not a path segment —
+`<response: data.users.0.name>` does not parse — so reach a list element in its
+own statement, with an element specifier or a bare index:
+
+```aro
+Extract the <users> from the <response: data.users>.
+Extract the <first-user: first> from the <users>.
+Extract the <first-name> from the <first-user: name>.
+```
+
+**A bare index counts from the end.** `<users: 0>` is the most recently added
+element, `<users: 1>` the one before it. That suits the common case — reading
+the latest entry of a repository-backed list — but it is the opposite of what
+most languages mean by `0`, so prefer the `first` and `last` specifiers when
+you mean either end.
+
 ### Common Patterns
+
+A path segment is an identifier, so it obeys the identifier rule from Chapter 4: no segment may be a reserved word. `headers.Content-Type` therefore does not parse — `type` is reserved. **Quote the segment** to take it literally:
+
+```aro
+Extract the <headers> from the <request: headers>.
+Extract the <content-header> from the <headers: "Content-Type">.
+```
+
+A quoted qualifier is matched as a plain key, so it also handles field names containing spaces, dots or anything else the lexer would otherwise read as syntax.
 
 ```aro
 (* HTTP request handling *)
 Extract the <auth-token> from the <request: headers.Authorization>.
-Extract the <content-type> from the <request: headers.Content-Type>.
 
 (* Event handling *)
 Extract the <order> from the <event: payload.order>.
@@ -239,7 +275,7 @@ Type annotations are **optional** because ARO infers result types from the opera
 2. You want documentation in the code
 3. You're overriding default inference
 
-See ARO-0038 for the full specification.
+See ARO-0003 §6 for the full specification.
 
 ---
 
@@ -298,11 +334,11 @@ Deeply nested paths become hard to read and maintain. Consider flattening data s
 
 ```aro
 (* Hard to read *)
-Extract the <name> from the <response: data.results.0.user.profile.name>.
+Extract the <name> from the <response: data.results.summary.profile.name>.
 
 (* Clearer with intermediate steps *)
-Extract the <user> from the <response: data.results.0.user>.
-Extract the <profile> from the <user: profile>.
+Extract the <summary> from the <response: data.results.summary>.
+Extract the <profile> from the <summary: profile>.
 Extract the <name> from the <profile: name>.
 ```
 

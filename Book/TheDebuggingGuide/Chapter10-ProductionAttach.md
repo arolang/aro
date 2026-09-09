@@ -32,7 +32,7 @@ The right sample stride depends on your statement rate. Rules of thumb:
 Breakpoint matches are unaffected by `N`. If you want to *only* see breakpoints (no step-mode pauses at all), set a giant `N`:
 
 ```bash
-aro debug --sample 1000000 --breakpoint Emit ./MyApp
+aro debug ./MyApp --sample 1000000 --breakpoint Emit
 ```
 
 The runtime effectively never step-pauses; it only stops on `Emit`.
@@ -53,7 +53,9 @@ ssh -L 4711:localhost:4711 prod-host
 { "type": "aro", "request": "attach", "host": "127.0.0.1", "port": 4711 }
 ```
 
-The client speaks DAP exactly as it would for a local session. The runtime is the only thing that lives on the production host; the editor stays on your laptop.
+The client speaks DAP exactly as it would for a local session — the bridge handles `attach` and `launch` identically. The runtime is the only thing that lives on the production host; the editor stays on your laptop.
+
+One packaging wrinkle: the VS Code extension declares `configurationAttributes` for `launch` only, so the editor may reject an `attach` block as an unknown configuration even though the bridge would answer it. `nvim-dap`, which does not validate against a contributed schema, attaches without complaint.
 
 One client at a time. If a second `attach` arrives while the first is connected, the second sees the TCP `accept` block — you have to disconnect the first to free the listener. (v1 limitation. Multi-client attach is on the v2 backlog.)
 

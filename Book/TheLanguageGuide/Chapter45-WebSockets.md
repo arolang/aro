@@ -70,21 +70,6 @@ WebSocket shares the HTTP server port via the HTTP Upgrade mechanism:
 </svg>
 </div>
 
-```
-Browser                           ARO Application
-   |                                    |
-   |  GET /ws HTTP/1.1                 |
-   |  Upgrade: websocket               |
-   |  Connection: Upgrade              |
-   |----------------------------------->|
-   |                                    |
-   |  HTTP/1.1 101 Switching Protocols |
-   |<-----------------------------------|
-   |                                    |
-   |  <-- WebSocket frames -->         |
-   |                                    |
-```
-
 ## WebSocket Events
 
 WebSocket lifecycle is managed through three event types:
@@ -171,11 +156,19 @@ This is commonly used when new data should be pushed to all clients, such as a n
 
 ### Send to Specific Client
 
-Send a message to a single connection (future extension):
+There is no per-connection WebSocket send. `Send` routes to a TCP socket
+client by connection id (Chapter 20), but the WebSocket path only has
+`Broadcast`. To address one client, broadcast an envelope carrying the target
+id and let the client ignore what is not for it:
 
 ```aro
-Send the <message> to the <websocket-connection: connectionId>.
+Create the <envelope> with { to: <connection-id>, body: <message> }.
+Broadcast the <envelope> to the <websocket>.
 ```
+
+That is not privacy — every connected client receives the frame — so do not
+put anything secret in it. For a genuinely private channel, use an HTTP
+response, which is addressed to exactly one caller by construction.
 
 ## Complete Example: Web Chat
 
@@ -370,4 +363,4 @@ Start the <http-server> with {}.
 
 ---
 
-*Next: Appendix A — Action Reference*
+*Next: Chapter 46 — Streaming Execution*

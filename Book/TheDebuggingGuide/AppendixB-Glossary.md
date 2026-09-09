@@ -20,7 +20,7 @@ Terms unique to (or used in a specific way by) the ARO debugger.
 
 **Entry pause.** The unconditional first pause of every debug session, before any user statement runs. Provides a starting prompt where you can set breakpoints before execution begins.
 
-**Event breakpoint.** A breakpoint that matches a published event by name. Fires in `EventBus.publish`'s hook, before subscribers fan out (best-effort — see chapter 5.5 caveat).
+**Event breakpoint.** A breakpoint that matches a published event by name. Its hook lives in `EventBus.publish`; an `Emit` statement publishes through `publishAndTrack`, which has no hook, so the case does not fire today (chapter 5.5, GitLab #557). Use a verb breakpoint on `Emit`.
 
 **Force.** Reading a lazy `AROFuture` to obtain its value. The line that triggers the force is not always the line that *defined* the action that produced the future.
 
@@ -28,7 +28,9 @@ Terms unique to (or used in a specific way by) the ARO debugger.
 
 **JSONL event log.** The `.jsonl` file produced by `--record` and consumed by `--replay`. One JSON record per line. Same format the SOLARO time-travel scrubber uses.
 
-**Location breakpoint.** A breakpoint matched on file basename suffix + line number. The simplest case.
+**Location breakpoint.** A breakpoint matched on file basename suffix + line number. An empty file matches every file, which is what a launch-time `--breakpoint N` sets. The simplest case.
+
+**Logpoint.** A breakpoint that prints an interpolated message and continues instead of pausing. Launch-only (`--logpoint "LINE=MESSAGE"`); `{name}` tokens resolve against the bindings visible at that statement.
 
 **OSO stab.** A Mach-O symbol entry that the macOS linker emits to record "this object file contained DWARF for this address range." `dsymutil` reads OSO entries to build `.dSYM` bundles. Currently missing for ARO-compiled `.o` files (chapter 8.4).
 

@@ -54,9 +54,18 @@ Action ... when <string> contains <substring>.
 (* Numeric comparison *)
 Action ... when <count> > 0.
 
-(* Equality *)
-Action ... when <status> = "active".
+(* Equality and inequality *)
+Action ... when <status> == "active".
+Action ... when <status> != "archived".
+
+(* Regex *)
+Action ... when <url> matches /\.pdf$/.
+
+(* Negation - note the parentheses *)
+Action ... when not (<url> contains <base-domain>).
 ```
+
+Those parentheses are not decoration. `not` binds tighter than the comparison, so `when not <url> contains <base>` is read as `(not <url>) contains <base>`, which is always false and never warns. Always parenthesise the comparison you mean to negate (GitLab #572).
 
 ---
 
@@ -308,9 +317,11 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 
 ## 8.11 What Could Be Better
 
-**No Negation.** You cannot write `when not`. To skip certain URLs, you would need a different pattern.
+**Negation Is A Trap.** `when not (<url> contains <base-domain>)` works and is the right way to write a skip rule. Drop the parentheses and the guard silently becomes dead — no error, no warning, no diagnostic (GitLab #572). Of all the ways ARO can be quietly wrong, this is the one you will hit.
 
-**Limited Comparisons.** String operations are limited to `contains`. Operations like `startsWith` or `endsWith` would be useful.
+**The Guard And `where` Vocabularies Differ.** A `where` clause on `<Filter>`, `<Retrieve>`, or `<Delete>` understands `starts-with`, `ends-with`, `matches`, `in`, and `not in` in addition to `contains`. A `when` guard understands `contains`, `matches`, the comparison operators, and `not (…)` — but not `starts-with` or `ends-with`; those are a parse error in a guard. For a domain filter, `contains` is what we want anyway, but the asymmetry catches people.
+
+**Repeating The Guard.** Our handler writes `when <url> contains <base-domain>` twice — once on the `<Log>` and once on the `<Emit>` — because a guard attaches to one statement, not to a block. Guards do compose (`when <count> > 0 and <url> contains <base>` is a single valid guard), but there is no `when … { … }` block form, so a condition shared by three statements is written three times. `match` with one `case` is the workaround, and it reads worse than the repetition.
 
 ---
 

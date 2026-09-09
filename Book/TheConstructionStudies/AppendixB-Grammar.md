@@ -20,10 +20,15 @@ This appendix provides the complete formal grammar specification for ARO using E
 
 ```ebnf
 (* Top-level program *)
-program = { feature_set } ;
+program = { import_declaration } , { feature_set } ;
 
-(* Feature set definition *)
-feature_set = "(" , feature_name , ":" , business_activity , ")" , block ;
+import_declaration = "import" , import_path ;
+import_path = path_segment , { "/" , path_segment | "." | "-" } ;
+path_segment = identifier | "." | ".." ;
+
+(* Feature set definition.  The optional guard filters event handlers. *)
+feature_set = "(" , feature_name , ":" , business_activity , ")" ,
+              [ ( "when" | "where" ) , expression ] , block ;
 
 feature_name = identifier , { identifier } ;
 business_activity = identifier , { identifier } ;
@@ -39,6 +44,7 @@ block = "{" , { statement } , "}" ;
 statement = aro_statement
           | guarded_statement
           | publish_statement
+          | require_statement
           | match_statement
           | for_each_loop
           | range_loop
@@ -46,11 +52,16 @@ statement = aro_statement
           | break_statement
           | pipeline_statement ;
 
-(* Core ARO statement: Action-Result-Object *)
+(* Core ARO statement: Action-Result-Object.
+   The action verb is a BARE identifier — angle brackets mark nouns,
+   never verbs. *)
 aro_statement = action , [ article ] , result , preposition , [ article ] , object , [ modifiers ] , "." ;
 
 (* Publish statement *)
-publish_statement = "<Publish>" , "as" , alias , variable , "." ;
+publish_statement = "Publish" , "as" , alias , variable , "." ;
+
+(* Require statement (ARO-0003) *)
+require_statement = "Require" , [ article ] , variable , preposition , [ article ] , object , "." ;
 
 (* Guarded statement - ARO statement with conditional suffix *)
 guarded_statement = aro_statement_base , "when" , condition , "." ;
@@ -60,10 +71,14 @@ aro_statement_base = action , [ article ] , result , preposition , [ article ] ,
 match_statement = "match" , variable , "{" , { match_case } , [ default_case ] , "}" ;
 match_case = "case" , pattern , block ;
 pattern = literal | regex_literal | variable ;
-default_case = "default" , block | "otherwise" , block ;
+default_case = "otherwise" , block ;
 
-(* For-each loop — collection iteration *)
-for_each_loop = "for" , "each" , variable , "in" , variable , block ;
+(* For-each loop — collection iteration.  `parallel` and the concurrency
+   limit are ARO-0088; `at <index>` and the `when` filter are ARO-0005. *)
+for_each_loop = [ "parallel" ] , "for" , "each" , variable ,
+                [ "at" , variable ] , "in" , variable ,
+                [ "when" , condition ] ,
+                [ "with" , "<" , "concurrency" , ":" , number , ">" ] , block ;
 
 (* Range loop — numeric iteration (ARO 0.7) *)
 range_loop = "for" , variable , "from" , expression , "to" , expression , block ;
@@ -81,8 +96,10 @@ pipeline_statement = aro_statement , { "|>" , aro_statement } , "." ;
 ## Actions and Objects
 
 ```ebnf
-(* Action - the verb *)
-action = "<" , action_verb , ">" ;
+(* Action - the verb.  A bare identifier, optionally namespaced for
+   plugin actions (`Markdown.ToHTML`) and user-defined actions
+   (`Application.SumAndDouble`, ARO-0081). *)
+action = [ identifier , "." ] , action_verb ;
 action_verb = identifier ;
 
 (* Result - what is produced *)
@@ -168,14 +185,24 @@ negation = "not" , condition ;
 (* Literal values *)
 literal = string_literal | number | boolean | object_literal ;
 
-(* String literal *)
+(* String literal.  A newline inside "..." is content: plain strings span
+   lines (GitLab #523).  Triple-quoted strings were removed (GitLab #524). *)
 string_literal = '"' , { string_char | interpolation } , '"' ;
 string_char = (* any character except " and $ *) | escape_sequence ;
-escape_sequence = "\\" , ( '"' | "\\" | "n" | "t" | "r" ) ;
-interpolation = "${" , ( identifier | qualified_variable ) , "}" ;
+escape_sequence = "\\" , ( '"' | "'" | "\\" | "n" | "t" | "r" | "0" | "$" | unicode_escape ) ;
+unicode_escape = "u" , "{" , hex_digit , { hex_digit } , "}" ;
+interpolation = "${" , expression , "}" ;
 
-(* Number literal *)
-number = [ "-" ] , digit , { digit } , [ "." , digit , { digit } ] ;
+(* Raw string literal (ARO-0060).  The quote character selects the mode;
+   there is no `r` prefix.  Only \' is an escape. *)
+raw_string_literal = "'" , { raw_char } , "'" ;
+
+(* Number literal.  Underscores are permitted as separators in decimal
+   literals (ARO-0082); hex and binary forms carry a prefix. *)
+number = decimal | hex_number | binary_number ;
+decimal = [ "-" ] , digit , { digit | "_" } , [ "." , digit , { digit | "_" } ] ;
+hex_number = "0x" , hex_digit , { hex_digit } ;
+binary_number = "0b" , ( "0" | "1" ) , { "0" | "1" } ;
 
 (* Boolean literal *)
 boolean = "true" | "false" ;
@@ -211,8 +238,10 @@ identifier = letter , { letter | digit | "-" } ;
 (* Article *)
 article = "a" | "an" | "the" ;
 
-(* Preposition *)
-preposition = "from" | "to" | "for" | "with" | "into" | "against" | "via" | "on" | "as" ;
+(* Preposition — exactly ten, and `as` is not one of them: it is a
+   keyword introducing a result type. *)
+preposition = "from" | "for" | "against" | "to" | "into"
+            | "via" | "with" | "on" | "at" | "by" ;
 
 (* Basic character classes *)
 letter = "a" | "b" | ... | "z" | "A" | "B" | ... | "Z" ;
@@ -257,7 +286,7 @@ program = feature_set
         = "(" , "Application-Start" , ":" , "Test" , ")" , "{" , statement , "}"
         = "(" , "Application-Start" , ":" , "Test" , ")" , "{" , aro_statement , "}"
         = "(" , "Application-Start" , ":" , "Test" , ")" , "{" ,
-            "<Return>" , "an" , "<OK: status>" , "for" , "the" , "<startup>" , "." ,
+            "Return" , "an" , "<OK: status>" , "for" , "the" , "<startup>" , "." ,
           "}"
 ```
 
@@ -268,7 +297,7 @@ program = feature_set
 
 = aro_statement
 = action , article , result , preposition , article , object , "."
-= "<Extract>" , "the" , "<user-id>" , "from" , "the" , "<request: parameters>" , "."
+= "Extract" , "the" , "<user-id>" , "from" , "the" , "<request: parameters>" , "."
 ```
 
 ### Guarded Statement Parse
@@ -279,18 +308,25 @@ program = feature_set
 = guarded_statement
 = aro_statement_base , "when" , condition , "."
 = action , result , preposition , object , "when" , existence_check , "."
-= "<Return>" , "a" , "<NotFound: status>" , "for" , "the" , "<user>" , "when" , "<user>" , "is empty" , "."
+= "Return" , "a" , "<NotFound: status>" , "for" , "the" , "<user>" , "when" , "<user>" , "is empty" , "."
 ```
 
 ## Precedence
 
 Operator precedence (highest to lowest):
 
-1. Parentheses `( )`
-2. `not`
-3. Comparisons (`is`, `is not`, `>`, `<`, `>=`, `<=`)
-4. `and`
-5. `or`
+1. Parentheses `( )`, member access `.`, subscript `[ ]`
+2. Unary `-`, `not`
+3. `*`, `/`, `%`
+4. `+`, `-`, `++`
+5. Comparisons (`<`, `>`, `<=`, `>=`)
+6. Equality (`==`, `!=`, `is`, `is not`, `contains`, `matches`)
+7. `and`
+8. `or`
+
+`not` is a *prefix* operator at level 2, which binds tighter than any
+comparison: `not <n> >= 3` groups as `(not <n>) >= 3`. Parenthesize when
+you mean to negate a comparison.
 
 ## Reserved Words
 
@@ -298,11 +334,22 @@ The following identifiers are reserved:
 
 **Articles:** `a`, `an`, `the`
 
-**Prepositions:** `from`, `to`, `for`, `with`, `into`, `against`, `via`, `on`, `as`
+**Prepositions:** `from`, `for`, `against`, `to`, `into`, `via`, `with`, `on`, `at`, `by`
 
-**Control Flow:** `when`, `match`, `case`, `default`, `otherwise`, `where`, `and`, `or`, `not`, `is`
+**Core:** `publish`, `require`, `import`, `as`
 
-**Literals:** `true`, `false`, `empty`
+**Control Flow:** `if`, `then`, `else`, `when`, `match`, `case`, `otherwise`, `where`
+
+**Iteration:** `each`, `in`, `parallel`, `concurrency`, `while`, `break`
+(`for` and `at` are tokenized as prepositions and accepted in both roles)
+
+**Types:** `type`, `enum`, `protocol`
+
+**Error handling:** `error`, `guard`, `defer`, `assert`, `precondition`
+
+**Operators:** `and`, `or`, `not`, `is`, `exists`, `defined`, `contains`, `matches`
+
+**Literals:** `true`, `false`, `empty`, `nil`, `null`, `none`
 
 **Status Codes:** `OK`, `Created`, `Accepted`, `NoContent`, `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `InternalError`, `ServiceUnavailable`
 

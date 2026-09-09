@@ -22,21 +22,43 @@ The trade-off is performance. Python is interpreted, with significant overhead c
 
 ## 10.2 How Python Plugins Work
 
-Unlike native plugins that load as dynamic libraries, Python plugins run as subprocesses:
+Unlike native plugins that load as dynamic libraries, Python plugins run out of process:
 
 ```
-ARO Runtime ←→ JSON messages ←→ Python subprocess
+ARO Runtime → python3 -c <driver script> → stdout → ARO Runtime
 ```
 
-1. ARO spawns a Python process
-2. Commands are sent as JSON over stdin
-3. Results come back as JSON over stdout
+Per call, ARO writes a small driver script, spawns `python3 -c` with it, and
+reads the single JSON document the script prints:
+
+```python
+# What ARO actually runs, once per invocation
+import sys, json, base64
+sys.path.insert(0, '/path/to/Plugins/plugin-python-text/src')
+from plugin import aro_action_analyze
+input_json = base64.b64decode('...').decode('utf-8')
+print(aro_action_analyze(input_json))
+```
 
 This architecture has implications:
 
-**Startup Overhead**: First call to a Python plugin incurs ~50-100ms to spawn Python and import modules. Subsequent calls reuse the process.
+**A fresh interpreter every call.** This is the one thing to internalise.
+There is no long-lived Python process and no stdin/stdout dialogue. Every
+action invocation and every qualifier invocation pays the full cost of
+starting Python and importing your module, and every one of them starts with
+empty globals. A module-level cache is a cache of exactly one call.
 
-**Memory Isolation**: Python runs in its own memory space. Crashes in Python don't crash ARO.
+**Startup Overhead**: ~50–100 ms per call for a bare module, and far more once
+a heavy library is imported at module scope — `import torch` alone can dominate.
+Import expensive things lazily, inside the handler, so a call that does not
+need them does not pay for them.
+
+**Memory Isolation**: Python runs in its own memory space, and it is torn down
+between calls. A crash in Python does not crash ARO; it surfaces as a plugin
+error with the Python traceback attached.
+
+**Timeouts**: A call that hangs is killed. The limit comes from
+`RuntimeDefaults.pythonPluginTimeout`.
 
 **Library Freedom**: Python uses its own package ecosystem. `pip install` works as expected.
 
@@ -109,7 +131,7 @@ def aro_plugin_info() -> dict:
         "qualifiers": [
             {
                 "name": "truncate",
-                "input_types": ["String"],
+                "inputTypes": ["String"],
                 "accepts_parameters": True,
                 "description": "Truncate a string to a maximum length"
             }
@@ -119,7 +141,11 @@ def aro_plugin_info() -> dict:
 
 The `actions` list now uses the same rich format as native plugins: each action declares its name, role, verbs, and prepositions. The flat `"actions": ["generate", "summarize"]` shorthand is still accepted for backward compatibility, but the structured form is preferred.
 
-The `qualifiers` list can declare `"accepts_parameters": true` to indicate that the qualifier accepts a `with { }` clause.
+The `qualifiers` list can declare `"accepts_parameters": true` to indicate that
+the qualifier accepts a `with { }` clause. Note the casing: `inputTypes` is
+camelCase while `accepts_parameters` next to it is snake_case. That is
+inconsistent and it is what the runtime reads — spell it `input_types` and the
+declaration is ignored, leaving the qualifier accepting every type.
 
 ### aro_action_{name}(input_json: str) -> str
 
@@ -146,28 +172,81 @@ def aro_action_generate(input_json: str) -> str:
 
 The naming convention is important: `aro_action_` prefix + action name (lowercased, with hyphens replaced by underscores). Input parameters from the `with { }` clause are **nested under `"_with"`**, not flat-merged with the primary value.
 
-### aro_qualifier_{name}(input_json: str) -> str
+### aro_plugin_qualifier(name: str, input_json: str) -> str
 
-Qualifier functions follow a similar naming convention:
+Qualifiers do **not** follow the `aro_action_` naming pattern. Actions get one
+module function each; qualifiers all share a single dispatcher named
+`aro_plugin_qualifier`, which receives the qualifier name as its first
+argument:
 
 ```python
-def aro_qualifier_truncate(input_json: str) -> str:
-    """Truncate a string to a maximum length."""
+def aro_plugin_qualifier(name: str, input_json: str) -> str:
+    """Dispatch a qualifier by name. One function for all qualifiers."""
     params = json.loads(input_json)
     value = params.get("value", "")
     with_params = params.get("_with", {})
-    max_length = with_params.get("maxLength", 100)
-    suffix = with_params.get("suffix", "...")
-    if len(value) <= max_length:
-        return json.dumps(value)
-    return json.dumps(value[:max_length] + suffix)
+
+    if name == "truncate":
+        max_length = with_params.get("maxLength", 100)
+        suffix = with_params.get("suffix", "...")
+        if len(value) <= max_length:
+            return json.dumps({"result": value})
+        return json.dumps({"result": value[:max_length] + suffix})
+
+    return json.dumps({"error": f"Unknown qualifier: {name}"})
 ```
 
-### Persistent Mode
+Two rules the runtime enforces strictly:
 
-Python plugins run as long-lived subprocesses. The process is spawned once and reused for all calls—this is why model loading in the LLM example only happens on the first call. This persistent architecture also means you can maintain module-level state safely (within a single plugin process).
+**The response shape is `{"result": <value>}` or `{"error": "<message>"}`** —
+nothing else. Returning the bare value (`json.dumps(value)`) fails with
+*Plugin returned neither result nor error*, and wrapping twice
+(`{"result": {"result": …}}`) binds the inner object instead of the value.
 
-ARO communicates with the Python process via JSON messages over stdin/stdout. Your plugin's `main()` loop handles this communication.
+**Keep qualifier names to a single lowercase word.** The runtime snake-cases
+the name before handing it to your dispatcher, so a qualifier declared as
+`pick-random` or `toHtml` arrives as `pick_random` / `to_html`. Handle both
+spellings, or stick to names the transformation leaves alone (GitLab #553).
+
+### The Python Plugin SDK
+
+Writing those module functions by hand is optional. `aro new plugin --lang
+python` scaffolds against the `aro-plugin-sdk` package, which generates them
+from decorated handlers:
+
+```python
+from typing import Any, Dict
+from aro_plugin_sdk import AROInput, action, export_abi, plugin, qualifier, run
+
+@plugin(name="plugin-python-text", version="1.0.0", handle="Text")
+class TextPlugin:
+    pass
+
+@action(name="analyze", verbs=["analyze"], role="own",
+        prepositions=["from"], description="Analyze text statistics.")
+def handle_analyze(input: AROInput) -> Dict[str, Any]:
+    return {"words": len(input.get("data", "").split())}
+
+@qualifier(name="shout", description="Uppercase a string")
+def qualifier_shout(input: AROInput) -> str:
+    return input.get("value", "").upper()
+
+# Generates aro_plugin_info, aro_action_analyze and aro_plugin_qualifier.
+export_abi(globals())
+
+if __name__ == "__main__":
+    run()
+```
+
+Note what the qualifier handler returns: the **bare transformed value**. The
+SDK's `export_abi` adds the `{"result": …}` wrapper for you. Return a dict —
+as the SDK's own README and its `ok()` helper both do — and you get the
+double-wrapped shape the runtime mis-binds (GitLab #551). Until that is
+resolved, return bare values from `@qualifier` handlers.
+
+The `run()` call at the bottom starts the SDK's persistent JSON-line loop. ARO
+does not use it — it imports your module and calls one function, as shown
+above — so it is harmless, but do not design around it.
 
 ## 10.5 Building an LLM Inference Plugin: Custom Actions
 
@@ -605,7 +684,7 @@ sentencepiece>=0.1.99
 With custom actions registered, use native ARO syntax for AI operations:
 
 ```aro
-(AI Demo: Application-Start) {
+(Application-Start: AI Demo) {
     Log "Starting LLM inference demo..." to the <console>.
 
     (* Generate text using custom action *)
@@ -644,18 +723,28 @@ The `<Generate>`, `<Summarize>`, `<Classify>`, and `<Answer>` actions integrate 
 
 ### Model Caching
 
-Models are cached after first load:
+The `_models` dict above caches within a single call — and a single call is all
+the process lives for. Because ARO spawns a fresh `python3` per invocation,
+this pattern does **not** amortise loading across calls the way it would in a
+long-lived server:
 
 ```python
-_models = {}  # Global cache
+_models = {}  # Global cache — empty again on the next invocation
 
 def _load_model(task: str, model_name: Optional[str] = None):
     key = f"{task}:{model_name or 'default'}"
     if key not in _models:
-        # Load model (slow, happens once)
+        # Slow. Happens on EVERY ARO statement that calls this plugin.
         _models[key] = pipeline(task, model=model_name, device_map="auto")
-    return _models[key]  # Return cached (fast)
+    return _models[key]
 ```
+
+It still earns its keep inside one call — an action that classifies a batch
+loads the model once rather than per item — and it costs nothing. But a plugin
+whose model takes thirty seconds to load takes thirty seconds *per statement*.
+If that is unacceptable, run the model behind a long-lived process (an HTTP
+server, or a socket daemon started from `Application-Start`) and make the
+plugin a thin client.
 
 ### Batch Processing
 
@@ -968,9 +1057,9 @@ Python plugins open the entire Python ecosystem to ARO:
 
 - **`aro_plugin_info()`** is **required**—returns a dict with structured action declarations matching the unified schema
 - **`aro_action_{name}(input_json: str) -> str`** for each action the plugin provides
-- **`aro_qualifier_{name}(input_json: str) -> str`** for qualifier implementations; declare `"accepts_parameters": True` in `aro_plugin_info` to support `with { }` clauses
+- **`aro_plugin_qualifier(name: str, input_json: str) -> str`** — one dispatcher for all qualifiers, not one function each. It must return `{"result": <value>}` or `{"error": "..."}`; keep qualifier names to a single lowercase word, since the runtime snake-cases the name before dispatch
 - **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`, execution context under `"_context"`
-- **Communication (interpreter mode)**: JSON over stdin/stdout via a persistent subprocess (models/state cached across calls)
+- **Communication (interpreter mode)**: a fresh `python3 -c` process per call. No persistent process, no stdin/stdout dialogue, no state carried between calls — design for statelessness and import heavy libraries lazily
 - **Communication (binary mode)**: In-process execution via embedded `libpython3` — no subprocess, no Python installation needed on the target machine. `aro build` links `libpython3` into the binary and embeds plugin source as string constants.
 - **Dependencies**: Standard `requirements.txt` with pip. In binary mode, dependencies are installed at build time and bundled.
 - **ML/AI**: Hugging Face Transformers for LLM inference

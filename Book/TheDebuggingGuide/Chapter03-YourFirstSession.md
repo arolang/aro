@@ -21,7 +21,7 @@ The debugger pauses at the entry — before any of your statements has run. This
 The prompt:
 
 ```
-⏸  paused (entry) at main.aro:2 — Application-Start
+⏸  paused (entry) at main.aro:4 — Application-Start
    <Create> the <greeting: String> with the <_expression_> = "Hello, ARO World!".
 (aro-dbg)
 ```
@@ -31,15 +31,15 @@ tells you the file, the line, the feature set, and the statement about to execut
 ```
 (aro-dbg) bt
   Application-Start · Entry Point
-  at main.aro:2
-  <Create> the <greeting: String> with "Hello, ARO World!".
+  at main.aro:4
+  <Create> the <greeting: String> with the <_expression_> = "Hello, ARO World!".
 ```
 
 Right now, no user bindings exist. Type `p` (for "print") to confirm:
 
 ```
 (aro-dbg) p
-  <terminal> : Map<String, Unknown> = ["columns": 120, "rows": 36, …]
+  <terminal> : Map<String, Unknown> = ["rows": 24, "columns": 80, "height": 24, "width": 80, "is_tty": false, "support…
 ```
 
 The `<terminal>` you see is a framework-supplied dict the runtime binds for every feature set; the user-visible bindings start empty. Underscore-prefixed bookkeeping names (`<_expression_>`, `<_with_>`, etc.) are filtered out of `p` output by default — they exist but they are not interesting to a debugger user.
@@ -53,7 +53,7 @@ For HelloWorld, type `s`:
 ```
 (aro-dbg) s
 
-⏸  paused (step) at main.aro:3 — Application-Start
+⏸  paused (step) at main.aro:5 — Application-Start
    <Log> <greeting> to the <console>.
 (aro-dbg)
 ```
@@ -63,7 +63,7 @@ You moved one line. The `Create` ran. Print the bindings again:
 ```
 (aro-dbg) p
   <greeting> : String = Hello, ARO World!
-  <terminal> : Map<String, Unknown> = ["columns": 120, …]
+  <terminal> : Map<String, Unknown> = ["rows": 24, "columns": 80, …]
 ```
 
 `<greeting>` is now bound. The value is the literal string the `Create` produced. The line we are paused on (`Log <greeting>`) has not run — that is the convention: a checkpoint fires *before* the statement it points at executes.
@@ -88,10 +88,12 @@ That is the full loop. The rest of this chapter walks the same loop with a break
 Quit the debugger if you are still in it (`q`) and restart with a pre-set breakpoint:
 
 ```bash
-aro debug --breakpoint 3 ./Examples/HelloWorld
+aro debug ./Examples/HelloWorld --breakpoint 5
 ```
 
-This sets a location breakpoint on line 3 before execution begins. You can also set the same breakpoint interactively from inside the debugger — see Chapter 5 for the syntax.
+**Put the path first.** `--breakpoint` takes a list, so it swallows whatever follows it — write `--breakpoint 5 ./Examples/HelloWorld` and the directory is read as a second breakpoint, leaving the debugger with no project and an error about a missing path. The same holds for `--break-condition` and `--logpoint`. Path first, flags after (GitLab issue #550).
+
+This sets a location breakpoint on line 5 before execution begins. You can also set the same breakpoint interactively from inside the debugger — see Chapter 5 for the syntax.
 
 Run it:
 
@@ -99,15 +101,15 @@ Run it:
 aro debug · 1.0.0 · HelloWorld
 Use 'h' for help, 'q' to quit, 's' to step.
 
-⏸  paused (entry) at main.aro:2 — Application-Start
-   <Create> the <greeting: String> with "Hello, ARO World!".
+⏸  paused (entry) at main.aro:4 — Application-Start
+   <Create> the <greeting: String> with the <_expression_> = "Hello, ARO World!".
 (aro-dbg) c
 ```
 
 The entry pause still fires — that one is unconditional. Type `c` and we go to the breakpoint:
 
 ```
-⏸  paused (breakpoint (main.aro:3)) at main.aro:3 — Application-Start
+⏸  paused (breakpoint (:5)) at main.aro:5 — Application-Start
    <Log> <greeting> to the <console>.
 (aro-dbg) p
   <greeting> : String = Hello, ARO World!
@@ -117,7 +119,7 @@ The entry pause still fires — that one is unconditional. Type `c` and we go to
 Program ended cleanly.
 ```
 
-Notice the pause reason — `(main.aro:3)`. The debugger tells you *why* it paused. This matters more when you have several breakpoints and want to know which one matched.
+Notice the pause reason — `(:5)`. The debugger tells you *why* it paused, which matters more when you have several breakpoints and want to know which one matched. The empty half before the colon is the file, and a launch-time `--breakpoint` doesn't have one: the numeric form means "line 5 in *whatever* file," so it matches that line in every source file in the project. Set the breakpoint from the prompt instead (`b 5`) and the current pause's file comes with it — the reason then reads `breakpoint (main.aro:5)`.
 
 ## 3.6 The shape of every session ahead
 
@@ -129,7 +131,7 @@ Every session in this book — and almost every real one you will run on your ow
 4. Step or continue based on what you learned.
 5. Exit, either by hitting the program's natural end or by typing `q`.
 
-You now have all four moves. The chapters that follow extend each one — Chapter 4 explains what a statement boundary really is, Chapter 5 walks the five kinds of breakpoint, Chapter 6 adds watch expressions. By Chapter 7 you are doing the same loop through an IDE; by Chapter 9 you are scrubbing through a recording of a session that already finished.
+You now have all four moves. The chapters that follow extend each one — Chapter 4 explains what a statement boundary really is, Chapter 5 walks the six kinds of breakpoint, Chapter 6 adds watch expressions. By Chapter 7 you are doing the same loop through an IDE; by Chapter 9 you are scrubbing through a recording of a session that already finished.
 
 ---
 
