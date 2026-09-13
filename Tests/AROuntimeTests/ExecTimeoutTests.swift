@@ -62,13 +62,30 @@ struct ExecTimeoutTests {
 
     @Test("A command that finishes inside its timeout is unaffected")
     func testFastCommandUnaffected() {
-        let (result, seconds) = timed(ExecConfig(command: "echo inside", timeout: 5000))
+        let timeoutMilliseconds = 5000
+        let (result, seconds) = timed(
+            ExecConfig(command: "echo inside", timeout: timeoutMilliseconds)
+        )
 
         #expect(result.exitCode == 0)
         #expect(!result.error)
         #expect(result.output == "inside")
         #expect(result.message == "Command executed successfully")
-        #expect(seconds < 2.0)
+
+        // Bounded by the *timeout*, not by how fast the host can spawn a
+        // process. The four assertions above already prove the command ran to
+        // completion and was not killed — had the timeout fired, the exit code
+        // would be -1 and `error` true. What is left to rule out is an
+        // implementation that always waits the timeout out before reporting,
+        // so the bound only has to sit below 5s with room to spare.
+        //
+        // `< 2.0` did not: `echo` took 2.20s on a loaded Linux runner and
+        // failed the job on an unrelated branch. Process-spawn latency under
+        // load is not the contract, the same lesson `enforcementCeiling`
+        // above records for the other direction.
+        let waitedOutTheTimeout = Double(timeoutMilliseconds) / 1000.0 - 1.0
+        #expect(seconds < waitedOutTheTimeout,
+                "took \(seconds)s — the caller looks held until the timeout")
     }
 
     @Test("Output produced before the timeout is still returned")
