@@ -38,9 +38,10 @@ path (GitLab #550).
 | `n` | `next` | Advance over the next statement. |
 | `f` | `finish`, `stepout` | Run until the current feature set returns. |
 | `c` | `continue` | Resume until next breakpoint or program end. |
-| `b <line>` | — | Location breakpoint. |
+| `b <line>` | — | Location breakpoint in the file of the current pause. |
+| `b <file>:<line>` | — | Location breakpoint in that file (basename suffix match; empty file ⇒ any file). |
 | `b <Verb>` | — | Verb breakpoint. |
-| `b <line> if <pred>` | — | Conditional location breakpoint. |
+| `b <line> if <pred>` | — | Conditional location breakpoint; `b <file>:<line> if <pred>` scopes it to a file. |
 | `be <Event>` | `breakevent` | Event breakpoint — registers, never fires (GitLab #557). |
 | `berror` | — | Error-any breakpoint; pair with `ARO_NO_DEFER=1` (GitLab #561). |
 | `bl` | `list` | List active breakpoints. |

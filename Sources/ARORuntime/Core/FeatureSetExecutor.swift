@@ -329,7 +329,7 @@ public final class FeatureSetExecutor: Sendable {
                 statement: statement,
                 featureSetName: context.featureSetName,
                 businessActivity: context.businessActivity,
-                sourceFile: Debug.currentSourceFile,
+                sourceFile: Debug.sourceFile(forFeatureSet: context.featureSetName),
                 symbols: symbols,
                 context: context
             )
@@ -382,8 +382,9 @@ public final class FeatureSetExecutor: Sendable {
                 // checkpoints that actually called `didPause`, and a
                 // .continue / sampled run skips most of them.
                 let span = statement.span
-                let basename = Debug.currentSourceFile.isEmpty
-                    ? "" : URL(fileURLWithPath: Debug.currentSourceFile).lastPathComponent
+                let resolvedSourceFile = Debug.sourceFile(forFeatureSet: context.featureSetName)
+                let basename = resolvedSourceFile.isEmpty
+                    ? "" : URL(fileURLWithPath: resolvedSourceFile).lastPathComponent
                 await controller.errorCheckpoint(
                     message: "\(error)",
                     featureSetName: context.featureSetName,
