@@ -10,9 +10,9 @@ The authoritative source is `aro debug --help`. This appendix is a curated subse
 aro debug [<options>] [<path>] [<application-arguments> ...]
 ```
 
-Write the path *before* the list-valued flags (`--breakpoint`, `--break-condition`,
-`--logpoint`): they parse up to the next option and will otherwise consume the
-path (GitLab #550).
+`--breakpoint`, `--break-condition` and `--logpoint` each take one value and are
+repeatable (`--breakpoint 5 --breakpoint Emit`), so the path may go before or
+after them.
 
 | Flag | Meaning |
 |---|---|
