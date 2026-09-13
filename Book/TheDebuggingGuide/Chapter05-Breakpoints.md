@@ -38,7 +38,21 @@ aro debug ./MyApp --breakpoint 5
 
 A launch-time breakpoint carries no file, and an empty file matches every one — so the numeric form means "line 5 in *any* source file in the project," not "line 5 in the entry file." In a single-file example that is the same thing; in a multi-file application it is usually more stops than you wanted.
 
-**Targeting another file does not work yet.** `b orders.aro:12` looks like it should, and the debugger even answers "breakpoint set" — but the `b` command decides between a location and a verb by asking whether its argument is a bare integer, so `orders.aro:12` registers as a *verb* named `orders.aro:12`, which nothing can match. It is silent and it never fires (GitLab issue #555). Until that is fixed, the way to reach a line in another file is to `c` until you are paused somewhere in that file and then set `b <line>` from there.
+**Targeting another file.** `b orders.aro:12` scopes the breakpoint to that file, whichever file you happen to be paused in:
+
+```
+(aro-dbg) b orders.aro:12
+breakpoint set at orders.aro:12
+```
+
+The file is matched on basename suffix, so `orders.aro:12` and `sources/orders/orders.aro:12` both reach the same statement. Leave the file half empty — `b :12` — to match line 12 of *every* file, which is what a launch-time `--breakpoint 12` does. The conditional form takes a file too: `b orders.aro:12 if <qty> > 5`.
+
+A verb never contains a colon, so there is nothing to disambiguate; an argument with a colon whose tail is not a number is reported as a typo rather than quietly registered as a verb nothing can match:
+
+```
+(aro-dbg) b orders.aro:x
+not a line number: orders.aro:x — use `b <file>:<line>`
+```
 
 To list:
 
@@ -189,8 +203,10 @@ The taxonomy stays small on purpose. Location + verb + conditional + logpoint + 
 
 ```text
 (aro-dbg) b <line>             location bp at this file
+(aro-dbg) b <file>:<line>      location bp at that file (empty file ⇒ any)
 (aro-dbg) b <Verb>             verb bp (capital V)
 (aro-dbg) b <line> if <pred>   conditional location bp
+(aro-dbg) b <file>:<l> if <p>  conditional, scoped to a file
 (aro-dbg) be <Event>           event bp
 (aro-dbg) berror               error-any bp
 (aro-dbg) bl                   list

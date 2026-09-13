@@ -52,22 +52,35 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
                 return .stepOut
             case "b", "break":
                 if arg.isEmpty {
-                    print("usage: b <line> | b <Verb> | b <line> if <pred>")
+                    print("usage: b <line> | b <file>:<line> | b <Verb> | b [<file>:]<line> if <pred>")
                 } else if let ifRange = arg.range(of: " if ") {
                     let lhs = String(arg[..<ifRange.lowerBound]).trimmingCharacters(in: .whitespaces)
                     let pred = String(arg[ifRange.upperBound...]).trimmingCharacters(in: .whitespaces)
-                    if let line = Int(lhs) {
-                        await controller.addBreakpoint(.conditionalLocation(file: pause.file, line: line, predicate: pred))
-                        print("conditional breakpoint at \(pause.file.isEmpty ? "*" : pause.file):\(line) if \(pred)")
-                    } else {
+                    switch Self.parseLocation(lhs, currentFile: pause.file) {
+                    case .location(let file, let line):
+                        await controller.addBreakpoint(
+                            .conditionalLocation(file: file, line: line, predicate: pred))
+                        print("conditional breakpoint at \(file.isEmpty ? "*" : file):\(line) if \(pred)")
+                    case .malformed(let text):
+                        print("not a line number: \(text) — use `b <file>:<line> if <pred>` or `b <line> if <pred>`")
+                    case .notALocation:
                         print("conditional breakpoints require a line number")
                     }
-                } else if let line = Int(arg) {
-                    await controller.addBreakpoint(.location(file: pause.file, line: line))
-                    print("breakpoint set at \(pause.file.isEmpty ? "*" : pause.file):\(line)")
                 } else {
-                    await controller.addBreakpoint(.verb(arg))
-                    print("breakpoint set on verb \(arg)")
+                    switch Self.parseLocation(arg, currentFile: pause.file) {
+                    case .location(let file, let line):
+                        await controller.addBreakpoint(.location(file: file, line: line))
+                        print("breakpoint set at \(file.isEmpty ? "*" : file):\(line)")
+                    case .malformed(let text):
+                        // A verb never contains a colon, so this is a mistyped
+                        // location rather than a verb. Saying so beats
+                        // registering `.verb("main.aro:x")`, which nothing can
+                        // ever match (GitLab #555).
+                        print("not a line number: \(text) — use `b <file>:<line>`")
+                    case .notALocation:
+                        await controller.addBreakpoint(.verb(arg))
+                        print("breakpoint set on verb \(arg)")
+                    }
                 }
             case "be", "breakevent":
                 if arg.isEmpty { print("usage: be <EventName>"); continue }
@@ -168,9 +181,11 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
           n, next       advance over the next statement
           f, finish     run until current feature set returns
           c, continue   resume until next breakpoint or program end
-          b <line>      add breakpoint at source line
+          b <line>      add breakpoint at that line of the current file
+          b <f>:<line>  add breakpoint at that line of file f (any file if f is empty)
           b <Verb>      add breakpoint on every statement using that verb
           b <l> if X    conditional breakpoint at line l (predicate: ==, !=, &&, ||)
+                        (also b <f>:<l> if X)
           be <Event>    add breakpoint on every emit of Event
                         (note: pause is best-effort vs. handler fan-out;
                          for strict pre-handler stop, use a verb bp on
@@ -185,5 +200,42 @@ final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
           h, help       this help text
           q, quit       terminate the program and exit the debugger
         """)
+    }
+
+    // MARK: - Breakpoint location parsing (GitLab #555)
+
+    /// What `b`'s argument turned out to be.
+    ///
+    /// `b` has to tell three things apart from one token: a line in the file
+    /// we are paused in (`5`), a line in a named file (`orders.aro:12`), and a
+    /// verb (`Emit`). It used to decide with `Int(arg)` alone, so every
+    /// `file:line` fell through to `.verb("orders.aro:12")` — a breakpoint no
+    /// statement can match, registered and listed without complaint. That was
+    /// the only way to scope a breakpoint to a file other than the current one,
+    /// since a launch-time `--breakpoint N` carries an empty file and matches
+    /// line N everywhere.
+    enum ParsedLocation: Equatable {
+        /// A location. An empty `file` means "any file", as `.location` reads it.
+        case location(file: String, line: Int)
+        /// Contained a colon, but the part after it was not a line number.
+        /// A verb never contains a colon, so this is a typo, not a verb.
+        case malformed(String)
+        /// No colon and not a number — the caller decides (a verb, for `b`).
+        case notALocation
+    }
+
+    /// Parse `b`'s argument as `[<file>:]<line>`.
+    ///
+    /// Splits on the *last* colon so a path with more than one behaves, and
+    /// falls back to `currentFile` for the bare-line form.
+    static func parseLocation(_ arg: String, currentFile: String) -> ParsedLocation {
+        if let line = Int(arg) {
+            return .location(file: currentFile, line: line)
+        }
+        guard let colon = arg.lastIndex(of: ":") else { return .notALocation }
+        let file = String(arg[arg.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
+        let lineText = String(arg[arg.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        guard let line = Int(lineText) else { return .malformed(arg) }
+        return .location(file: file, line: line)
     }
 }

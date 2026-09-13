@@ -232,6 +232,9 @@ struct DebugCommand: AsyncParsableCommand {
         // Cross-file `Application.<Name>` resolution (#587).
         let declaredActions = UserActionRegistry.declared(inFiles: appConfig.sourceFiles)
 
+        // Feature-set name → the file that declared it (GitLab #555).
+        var sourceFileIndex: [String: String] = [:]
+
         for sourceFile in appConfig.sourceFiles {
             let source: String
             do {
@@ -244,6 +247,13 @@ struct DebugCommand: AsyncParsableCommand {
             allDiagnostics.append(contentsOf: result.diagnostics)
             if result.isSuccess {
                 compiledPrograms.append(result.analyzedProgram)
+                // Remember which file each feature set came from, so a
+                // breakpoint can name a file other than the entry one
+                // (GitLab #555). This loop is the only place that knows;
+                // once the programs are merged the association is gone.
+                for featureSet in result.analyzedProgram.program.featureSets {
+                    sourceFileIndex[featureSet.name] = sourceFile.lastPathComponent
+                }
             }
         }
 
@@ -370,6 +380,11 @@ struct DebugCommand: AsyncParsableCommand {
         // file that declared it; finding the exact one would require walking
         // the AST. Phase 1 uses the rootPath basename as a stand-in so
         // breakpoints set by file name still show meaningful context.
+        // Fallback only: used for a feature set that is not in the index
+        // (a plugin's .aro files, say). Per-feature-set attribution comes
+        // from `sourceFileIndex` — this one value cannot describe a
+        // multi-file application, which is what made `b orders.aro:12`
+        // unmatchable and `b 12` pick up the wrong file (GitLab #555).
         let sourceFileHint = appConfig.sourceFiles.first?.path ?? ""
 
         if !dap {
@@ -389,7 +404,9 @@ struct DebugCommand: AsyncParsableCommand {
         do {
             try await Debug.$controller.withValue(controller) {
                 try await Debug.$currentSourceFile.withValue(sourceFileHint) {
-                    _ = try await application.run()
+                    try await Debug.$sourceFileIndex.withValue(sourceFileIndex) {
+                        _ = try await application.run()
+                    }
                 }
             }
             await controller.didEnd(error: nil)
