@@ -75,8 +75,11 @@ Every `<Execute>` action returns a structured result object:
 +------------------+----------------------------------------+
 | error            | Boolean - true if command failed       |
 | message          | Human-readable status message          |
-| output           | Command stdout (or stderr if error)    |
-| exitCode         | Process exit code (0 = success)        |
+| output           | Command stdout (or stderr if error),   |
+|                  | including whatever a timed-out command |
+|                  | printed before it was stopped          |
+| exitCode         | Process exit code (0 = success,        |
+|                  | -1 = timed out)                        |
 | command          | The executed command (for debugging)   |
 +------------------+----------------------------------------+
 ```
@@ -92,13 +95,58 @@ Every `<Execute>` action returns a structured result object:
 |                  | current)                               |
 | environment      | Optional: additional environment vars  |
 | timeout          | Optional: timeout in ms (default:      |
-|                  | 30000)                                 |
+|                  | 30000; 0 disables it) — see 1.5        |
 | shell            | Optional: shell to use (default:       |
 |                  | /bin/sh)                               |
 +------------------+----------------------------------------+
 ```
 
-### 1.5 Examples
+### 1.5 Timeouts
+
+Every command is bounded. A command still running after `timeout` milliseconds
+is terminated, and the action returns `exitCode: -1` — the code the result
+structure reserves — with `error: true` and a `message` naming the timeout. It
+does **not** throw: a timeout is a result to be guarded on, the same as any
+other failing exit code.
+
+```aro
+(Fetch Metrics: Monitoring) {
+    Execute the <probe> with {
+        command: "curl -s http://localhost:8080/metrics",
+        timeout: 5000
+    }.
+
+    Return an <Error: status> with "metrics probe timed out"
+        when <probe: exitCode> is -1.
+
+    Return an <OK: status> with <probe: output>.
+}
+```
+
+`-1` says the command produced no exit status of its own: it either timed out
+or never started. `message` distinguishes them (`Command timed out after
+5000ms` versus `Failed to start process: …`).
+
+The default is 30 000 ms (30 seconds), so a command that names no timeout is
+still bounded. `timeout: 0` — or any non-positive value — disables the bound
+and waits for the command however long it takes; that is the honest setting for
+work whose duration cannot be guessed, such as a full build.
+
+**Termination.** The runtime sends `SIGTERM` first and escalates to `SIGKILL`
+after a two-second grace period, so a command that installs a `SIGTERM` handler
+gets a chance to clean up and a command that ignores the signal is stopped
+anyway. The signals are aimed at the child's process group whenever the child
+leads one, because a shell command can background work
+(`"worker & sleep 100"`) that would otherwise outlive the shell and keep
+holding the output pipe open. Output already produced is returned; the
+partially-drained pipes are given two seconds to close and then abandoned, so
+an unkillable grandchild cannot hang the feature set.
+
+**Ordering.** `Execute` is not in the deferrable set (ARO-0088 §2): it runs at
+its own statement, so a timeout is reported where the command is written rather
+than at some later read of its result.
+
+### 1.6 Examples
 
 #### Basic Command Execution
 
@@ -161,7 +209,7 @@ Every `<Execute>` action returns a structured result object:
 }
 ```
 
-### 1.6 Error Handling
+### 1.7 Error Handling
 
 When a command fails, the result captures the error state:
 
@@ -183,7 +231,7 @@ When a command fails, the result captures the error state:
 }
 ```
 
-### 1.7 Security Considerations
+### 1.8 Security Considerations
 
 #### Command Injection Prevention
 

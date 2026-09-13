@@ -86,7 +86,7 @@ Every `<Exec>` action returns a structured result object:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `error` | Boolean | `true` if command failed (non-zero exit code) |
+| `error` | Boolean | `true` if command failed (non-zero exit code, or timed out) |
 | `message` | String | Human-readable status message |
 | `output` | String | Command stdout (or stderr if error) |
 | `exitCode` | Int | Process exit code (0 = success, -1 = timeout) |
@@ -137,15 +137,8 @@ Log <result: message> to the <console> when <result: error> = true.
 
 ### Timeout Handling
 
-> **The `timeout` field is currently ignored.** `ExecConfig` carries it and
-> `ExecResult` reserves `exitCode: -1` for it, but nothing bounds the child
-> process — `{ command: "sleep 5", timeout: 1000 }` runs for the full five
-> seconds and returns `0`
-> ([GitLab #586](https://git.ausdertechnik.de/arolang/aro/-/issues/586)).
-> Keep writing it, so your intent is recorded and your code works when the
-> gap is closed, but do not rely on it to bound a hung command today.
-
-Once it is enforced, a command that exceeds its timeout returns `exitCode: -1`:
+Every command is bounded. One that is still running when its timeout expires is
+terminated, and the result comes back with `exitCode: -1` and `error: true`:
 
 ```aro
 Exec the <result> for the <long-task> with {
@@ -155,6 +148,23 @@ Exec the <result> for the <long-task> with {
 
 Log "Command timed out" to the <console> when <result: exitCode> = -1.
 ```
+
+A timeout is a *result*, not an exception — the feature set continues and your
+guard decides what a timed-out command means. Whatever the command printed
+before it was stopped is still in `<result: output>`. A command that could not
+be launched at all also reports `-1`; `<result: message>` tells the two apart
+(`Command timed out after 5000ms` versus `Failed to start process: …`).
+
+The default is 30 000 milliseconds, so a command that names no timeout is still
+bounded at thirty seconds. Set `timeout: 0` when a command genuinely must not be
+cut short — a full build, a large `rsync` — and accept that nothing will
+interrupt it.
+
+Termination escalates: `SIGTERM` first, so a command with a cleanup handler can
+run it, then `SIGKILL` two seconds later if the command is still there. Work the
+command backgrounded goes with it — the runtime signals the child's whole
+process group, so `"worker & sleep 100"` does not leave `worker` running after
+the timeout.
 
 ## Configuration Options
 
@@ -176,7 +186,7 @@ Exec the <result> on the <system> with {
 |--------|------|---------|-------------|
 | `command` | String | (required) | The shell command to execute |
 | `workingDirectory` | String | current | Working directory for the command |
-| `timeout` | Int | 30000 | Timeout in milliseconds — accepted, not yet enforced (#586) |
+| `timeout` | Int | 30000 | Timeout in milliseconds; `0` waits indefinitely |
 | `shell` | String | /bin/sh | Shell to use for execution |
 | `environment` | Object | (inherited) | Additional environment variables |
 | `captureStderr` | Boolean | true | Include stderr in output |
@@ -334,7 +344,7 @@ Exec the <result> for the <command> with "ls ${userInput}".
 1. **Never trust user input** - Always validate and sanitize before using in commands
 2. **Use allowlists** - Define allowed commands or patterns rather than blocking bad ones
 3. **Limit permissions** - Run the ARO application with minimal required privileges
-4. **Set timeouts** - Always specify reasonable timeouts, and until #586 lands, treat a command that can hang as one that will
+4. **Set timeouts** - The 30-second default is a backstop, not a plan: give a command the timeout its own work deserves
 5. **Log commands** - Keep audit logs of executed commands for security review
 
 ### Sandboxing (Future)
