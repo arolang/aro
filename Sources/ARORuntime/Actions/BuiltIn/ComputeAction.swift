@@ -760,9 +760,34 @@ public struct ComputeAction: SynchronousAction {
         guard let date = ComputeAction().getARODate(from: input) else {
             throw ActionError.typeMismatch(expected: "ARODate or ISO 8601 String", actual: String(describing: type(of: input)))
         }
-        let pattern = context.resolveAny("_expression_") as? String ?? DateFormatPattern.fullDate
+        // The pattern comes from the statement's `with` clause:
+        //
+        //     Compute the <f: format> from <date> with "dd.MM.yyyy".
+        //
+        // It used to be read from `_expression_`, which is the *object* —
+        // `<date>` — so the `as? String` cast failed and every call silently
+        // fell back to `fullDate`. Whatever pattern you asked for, you got
+        // "January 15, 2026", with no diagnostic (GitLab #577). `opDistance`
+        // reads `_to_` and `opIntersect` reads `_with_`; this one was the
+        // outlier.
+        //
+        // `_with_` and `_literal_` are both consulted because a bare string
+        // literal and an object literal land in different slots, and
+        // `_expression_` is kept last so a pattern that did arrive there
+        // still works.
+        let pattern = Self.formatPattern(from: context) ?? DateFormatPattern.fullDate
         let dateService = context.service(DateService.self) ?? DefaultDateService()
         return dateService.format(date, pattern: pattern)
+    }
+
+    /// The date pattern a `format` statement asked for, if it asked for one.
+    private static func formatPattern(from context: ExecutionContext) -> String? {
+        for slot in ["_with_", "_literal_", "_expression_"] {
+            if let pattern = context.resolveAny(slot) as? String, !pattern.isEmpty {
+                return pattern
+            }
+        }
+        return nil
     }
 
     private static func opDistance(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
