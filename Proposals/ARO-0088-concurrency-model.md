@@ -121,6 +121,8 @@ Deliberately excluded, with reasons:
 
 Each statement gets its own scope for the framework variables that carry its modifiers (`_with_`, `_where_value_`, `_literal_`, …). Without it a deferred action would read the *next* statement's modifiers, because the next statement rebinds them before the deferred one runs. Everything else an action binds — its result, and any auxiliary name — writes through to the feature set, where consumers look for it.
 
+The guarantee this exists to give is narrower than the mechanism and applies to both execution modes: **a statement's modifiers do not outlive the statement.** `aro build` reaches it differently — the compiled bridge keeps one context per feature set and clears the modifiers at the top of every statement, with a deferred action taking its own copy before the clear — but a program must not be able to tell the two apart. It could: compiled mode swept a shorter list, so a second `join` with no `with` clause inherited the first one's separator and the same source printed `cd` interpreted and `c-d` compiled (GitLab #552). Both modes now sweep `FrameworkVariables.transientKeys`, one list, so the set cannot drift again.
+
 ## 3. Force Points
 
 A **force point** is where the program waits for a deferred result:

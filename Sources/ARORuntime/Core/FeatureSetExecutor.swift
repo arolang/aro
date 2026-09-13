@@ -535,29 +535,23 @@ public final class FeatureSetExecutor: Sendable {
             context = outerContext
         }
 
-        // Clear transient bindings from previous statements
-        // These are statement-local and should not persist between statements
-        context.unbind("_literal_")
-        context.unbind("_expression_")
-        context.bind("_expression_name_", value: "")  // bind empty to shadow any parent binding
-        context.unbind("_result_expression_")
-        context.unbind("_aggregation_type_")
-        context.unbind("_aggregation_field_")
-        context.unbind("_where_field_")
-        context.unbind("_where_op_")
-        context.unbind("_where_value_")
-        context.unbind("_where_tree_")
-        context.unbind("_by_pattern_")
-        context.unbind("_by_flags_")
-        context.unbind("_by_field_")
-        context.unbind("_by_var_")
-        context.unbind("_by_order_")
-        context.unbind("_default_value_")
-        context.unbind("_matching_")
-        context.unbind("_recursive_")
-        context.unbind("_to_")
-        context.unbind("_with_")
-        context.unbind("_against_")
+        // Clear transient bindings from previous statements. These are
+        // statement-local and must not persist between statements — a `with`
+        // clause nobody cleared is a modifier the next statement inherits.
+        //
+        // The names come from `FrameworkVariables.transientKeys` rather than a
+        // list written out here, because the compiled path
+        // (`LLVMCodeGenerator.generateAROStatement`) has to sweep exactly the
+        // same set and a second hand-maintained copy drifted for seven of them
+        // (GitLab #552).
+        for key in FrameworkVariables.transientKeys {
+            context.unbind(key)
+        }
+        // `unbind` only removes a binding from this scope, so it cannot hide an
+        // inherited one. `_expression_name_` is the one name a parent scope may
+        // legitimately still hold (EmitAction reads it to key its payload), so
+        // it is additionally shadowed with an empty value.
+        context.bind("_expression_name_", value: "")
 
         // ARO-0004: Evaluate when condition before processing statement
         // If condition is present and evaluates to false, skip this statement entirely
