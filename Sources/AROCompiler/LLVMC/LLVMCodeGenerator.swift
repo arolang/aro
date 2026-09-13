@@ -568,25 +568,22 @@ public final class LLVMCodeGenerator {
         // Build object descriptor
         let objectDesc = descriptors.buildObjectDescriptor(statement.object, prefix: prefix)
 
-        // Clear transient query modifiers before binding fresh ones (mirrors FeatureSetExecutor lines 248-256)
-        // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
-        // subsequent Retrieve calls (e.g. "Retrieve all" after "Retrieve where key = X" would
-        // incorrectly still filter by key = X).
-        // `_where_tree_` gates the numbered `_where_*_N_` binds, so clearing
-        // the tree alone is enough to disarm a stale compound condition.
+        // Clear this statement's framework variables before binding fresh ones.
+        // Without this, a modifier from an earlier statement persists and
+        // contaminates the next one — "Retrieve all" after "Retrieve where key
+        // is X" would still filter by key = X, and a `join` with no `with`
+        // clause would reuse the previous `join`'s separator (GitLab #552).
+        // `_with_` carries the same risk for payloads: Store reads it to decide
+        // whether the statement named an inline record, so a leftover binding
+        // would make the next `Store the <x> into the <repo>.` store the wrong
+        // value (GitLab #515).
         //
-        // `_with_` and `_to_` join the list with GitLab #515: Store now reads
-        // `_with_` to decide whether the statement carried an inline payload,
-        // so a leftover binding from an earlier `with` clause would make the
-        // next `Store the <x> into the <repo>.` store the wrong value. The
-        // interpreter has always cleared both (FeatureSetExecutor); the
-        // compiled path only ever cleared the query modifiers, so the two
-        // disagreed for every action that reads them.
-        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
-                             "_by_pattern_", "_by_flags_", "_by_field_",
-                             "_by_var_", "_by_order_", "_matching_", "_recursive_",
-                             "_aggregation_type_", "_aggregation_field_", "_default_value_",
-                             "_with_", "_to_"] {
+        // The names come from `FrameworkVariables.transientKeys`, the same
+        // constant `FeatureSetExecutor.executeAROStatement` iterates. This list
+        // used to be written out here by hand and covered 14 of the
+        // interpreter's 21 names, so seven modifiers leaked in compiled mode
+        // only and the two modes printed different answers for one program.
+        for transientKey in FrameworkVariables.transientKeys {
             let keyStr = ctx.stringConstant(transientKey)
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
         }
@@ -2072,14 +2069,13 @@ private final class StringConstantCollector {
     }
 
     func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil) {
-        // Register built-in variable names
-        let builtins = ["_literal_", "_expression_", "_result_expression_",
-                        "_aggregation_type_", "_aggregation_field_",
-                        "_where_field_", "_where_op_", "_where_value_", "_where_tree_",
-                        "_by_pattern_", "_by_flags_", "_by_field_",
-                        "_by_var_", "_by_order_", "_matching_", "_recursive_", "true",
-                        "_with_", "_to_", "_publish_alias_", "_publish_variable_",
-                        "_require_variable_", "_require_source_", "Application-Start"]
+        // Register built-in variable names. The framework variables come from
+        // `FrameworkVariables` — the same constant the statement generator
+        // sweeps — so a name added there is pre-registered here without a
+        // second list to remember (GitLab #552).
+        let builtins = FrameworkVariables.transientKeys
+            + FrameworkVariables.statementLocalKeys
+            + ["true", "Application-Start"]
         for name in builtins {
             _ = ctx.stringConstant(name)
         }
