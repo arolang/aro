@@ -203,7 +203,7 @@ public enum PluginInfoParser {
             throw QualifierError.executionFailed(qualifier: qualifier, message: error)
         }
 
-        guard let result = output.result else {
+        guard let result = output.resultValue else {
             throw QualifierError.executionFailed(
                 qualifier: qualifier,
                 message: "Plugin returned neither result nor error"

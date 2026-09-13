@@ -97,10 +97,13 @@ Interface). Three attributes make this work.
 > scaffolded crate does not compile (GitLab #549). Until that lands, write the
 > exports by hand. That is what this chapter teaches, and it works today.
 >
-> One more trap if you do reach for the SDK's helpers: `Output::value(v)`
-> produces `{"value": v}`, which the runtime's *qualifier* decoder rejects. A
-> qualifier must return `{"result": v}` — use `Output::new().set("result", v)`
-> (GitLab #554). Actions are unaffected; their responses are free-form objects.
+> One note if you reach for the SDK's helpers: `Output::value(v)` produces
+> `{"value": v}` rather than the documented `{"result": v}`. The runtime's
+> qualifier decoder accepts both, so the SDK's README pattern —
+> `Ok(Output::value(json!(value)))` — works (GitLab #554). Prefer
+> `Output::new().set("result", v)` in new code: `result` is the documented key,
+> and it is the one that wins if a plugin ever sends both. Actions were never
+> affected; their responses are free-form objects the caller picks fields off.
 
 ### Required and Optional Exports
 

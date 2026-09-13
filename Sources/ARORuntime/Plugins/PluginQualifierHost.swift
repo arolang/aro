@@ -56,11 +56,31 @@ public struct QualifierOutput: Codable, Sendable {
     /// The transformed result (on success)
     public let result: AnyCodable?
 
+    /// The transformed result under the other key the SDKs use.
+    ///
+    /// `result` is the documented key, but the Rust SDK's constructor *named
+    /// after this very case* builds the other one —
+    /// `Output::value(v)` is `{"value": v}` (`output.rs:34`), and its README's
+    /// qualifier example is `Ok(Output::value(json!(value)))`. Nothing
+    /// downstream compensated: `ffi::wrap_qualifier` passes the `Output`
+    /// through verbatim, so a plugin written from the SDK's own README failed
+    /// at run time with *Plugin returned neither result nor error*
+    /// (GitLab #554).
+    ///
+    /// Accepting it here is unambiguous, because this envelope has only ever
+    /// had two keys. A qualifier whose result genuinely *is* an object with a
+    /// `value` field still sends `{"result": {"value": …}}` and is untouched —
+    /// the alias is read at the top level only.
+    public let value: AnyCodable?
+
     /// Error message (on failure)
     public let error: String?
 
+    /// The result, under whichever of the two keys the plugin used.
+    public var resultValue: AnyCodable? { result ?? value }
+
     public var isSuccess: Bool {
-        error == nil && result != nil
+        error == nil && resultValue != nil
     }
 }
 
