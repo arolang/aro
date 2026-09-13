@@ -3,7 +3,24 @@
 # Note: occurrence-check. Requires the Python plugin SDK — since GitLab #486
 # closed the qualifier namespace, an unresolved `stats.*` is a hard error, not
 # a silent pass-through, so this example no longer "passes" without the plugin.
+#
+# Every qualifier's *value* is pinned, not just the headings. The plugin used
+# to return `{"result": x}`, which `export_abi` wrapped again, so each line
+# read `result: 1, 2, 3, 5, 8, 9` — the dict bound instead of the list
+# (GitLab #551). Two heading lines could not tell the difference; these can.
 ---
 Original list:
 [5, 2, 8, 1, 9, 3]
+Sorted:
+[1, 2, 3, 5, 8, 9]
+Min:
+1
+Max:
+9
+Sum of [10, 20, 30, 40, 50]:
+150
+Average:
+30
+Unique of [1, 2, 2, 3, 3, 3, 4]:
+[1, 2, 3, 4]
 demo
