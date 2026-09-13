@@ -56,15 +56,26 @@ struct DebugCommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Override the entry point feature set")
     var entryPoint: String = "Application-Start"
 
-    @Option(name: .long, parsing: .upToNextOption, help: "Initial breakpoints (line numbers or verb names)")
+    // These three take one value per occurrence and are repeatable
+    // (`--breakpoint 5 --breakpoint Emit`). They must NOT be
+    // `.upToNextOption`: that spelling keeps consuming bare words until
+    // the next `-`-prefixed token, so a flag written *before* the path —
+    // `aro debug --breakpoint 5 ./MyApp` — ate the path as a second
+    // breakpoint and the command died with "Missing path", naming the
+    // argument it lost rather than the flag that took it (GitLab #550).
+    // Flag-before-path is the conventional spelling and the one every
+    // other `aro` subcommand accepts, and repeatable is what the
+    // debugging guide has always documented, so one value per
+    // occurrence is both the compatible and the expected reading.
+    @Option(name: .long, help: "Initial breakpoint (line number or verb name); repeatable")
     var breakpoint: [String] = []
 
-    @Option(name: .long, parsing: .upToNextOption,
-            help: "Conditional breakpoint(s) as \"LINE=EXPRESSION\" — pauses only when EXPRESSION is truthy (issue #259)")
+    @Option(name: .long,
+            help: "Conditional breakpoint as \"LINE=EXPRESSION\" — pauses only when EXPRESSION is truthy; repeatable (issue #259)")
     var breakCondition: [String] = []
 
-    @Option(name: .long, parsing: .upToNextOption,
-            help: "Logpoint(s) as \"LINE=MESSAGE\" — logs MESSAGE (with {var} interpolation) without pausing (issue #259)")
+    @Option(name: .long,
+            help: "Logpoint as \"LINE=MESSAGE\" — logs MESSAGE (with {var} interpolation) without pausing; repeatable (issue #259)")
     var logpoint: [String] = []
 
     @Flag(name: .long, help: "Speak Debug Adapter Protocol over stdio (issue #229 Phase 2)")

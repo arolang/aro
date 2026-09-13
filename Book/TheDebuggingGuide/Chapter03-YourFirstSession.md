@@ -91,7 +91,7 @@ Quit the debugger if you are still in it (`q`) and restart with a pre-set breakp
 aro debug ./Examples/HelloWorld --breakpoint 5
 ```
 
-**Put the path first.** `--breakpoint` takes a list, so it swallows whatever follows it — write `--breakpoint 5 ./Examples/HelloWorld` and the directory is read as a second breakpoint, leaving the debugger with no project and an error about a missing path. The same holds for `--break-condition` and `--logpoint`. Path first, flags after (GitLab issue #550).
+Flag order does not matter — `aro debug --breakpoint 5 ./Examples/HelloWorld` reads the same as the spelling above. The flag takes exactly one value and is repeatable, so `--breakpoint 5 --breakpoint Log` sets two.
 
 This sets a location breakpoint on line 5 before execution begins. You can also set the same breakpoint interactively from inside the debugger — see Chapter 5 for the syntax.
 
