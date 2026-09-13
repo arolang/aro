@@ -84,6 +84,17 @@ public struct QualifierRegistration: Sendable {
     /// Accepted input types for this qualifier
     public let inputTypes: Set<QualifierInputType>
 
+    /// The qualifier's name exactly as the plugin declared it.
+    ///
+    /// `qualifier` above is lowercased, because ARO source resolves
+    /// `<x: Handle.Qualifier>` case-insensitively and the registry keys on it.
+    /// That key must not be what gets sent to the plugin: an SDK keys its own
+    /// registry by the declared name and looks it up exactly, so a qualifier
+    /// declared `toHtml` was asked for as `tohtml` and reported back as
+    /// unknown — a qualifier the author declared, told them did not exist
+    /// (GitLab #553). Every host receives this one instead.
+    public let declaredQualifier: String
+
     /// Name of the plugin providing this qualifier (used for unregistration)
     public let pluginName: String
 
@@ -106,6 +117,7 @@ public struct QualifierRegistration: Sendable {
         pluginHost: any PluginQualifierHost
     ) {
         self.qualifier = qualifier.lowercased()
+        self.declaredQualifier = qualifier
         // Use provided namespace, fall back to plugin name for backward compatibility
         self.namespace = (namespace ?? pluginName).lowercased()
         self.inputTypes = inputTypes
@@ -288,10 +300,11 @@ public final class QualifierRegistry: @unchecked Sendable {
             )
         }
 
-        // Execute via plugin host using the plain qualifier name (not the namespaced key)
+        // Execute via plugin host using the name the plugin declared — neither
+        // the namespaced key nor the lowercased form the registry keys on.
         do {
             return try registration.pluginHost.executeQualifier(
-                registration.qualifier,
+                registration.declaredQualifier,
                 input: value,
                 withParams: withParams
             )
