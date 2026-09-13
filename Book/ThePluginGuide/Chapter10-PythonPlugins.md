@@ -203,10 +203,16 @@ nothing else. Returning the bare value (`json.dumps(value)`) fails with
 *Plugin returned neither result nor error*, and wrapping twice
 (`{"result": {"result": …}}`) binds the inner object instead of the value.
 
-**Keep qualifier names to a single lowercase word.** The runtime snake-cases
-the name before handing it to your dispatcher, so a qualifier declared as
-`pick-random` or `toHtml` arrives as `pick_random` / `to_html`. Handle both
-spellings, or stick to names the transformation leaves alone (GitLab #553).
+**A qualifier arrives under the name you declared.** `pick-random` reaches your
+dispatcher as `pick-random` and `toHtml` as `toHtml`, so key your registry on
+the declared spelling and look it up exactly — which is what the SDK's
+`@qualifier` decorator does. ARO source stays case-insensitive: `<x:
+Stats.TOHTML>` resolves the same qualifier, and your dispatcher is still asked
+for `toHtml` (GitLab #553).
+
+Actions are the other way round, and this catches people: an action's name
+becomes a *function* name, and both the SDK and the runtime snake-case it, so
+`Pick-Random` is dispatched as `aro_action_pick_random`.
 
 ### The Python Plugin SDK
 
@@ -1057,7 +1063,7 @@ Python plugins open the entire Python ecosystem to ARO:
 
 - **`aro_plugin_info()`** is **required**—returns a dict with structured action declarations matching the unified schema
 - **`aro_action_{name}(input_json: str) -> str`** for each action the plugin provides
-- **`aro_plugin_qualifier(name: str, input_json: str) -> str`** — one dispatcher for all qualifiers, not one function each. It must return `{"result": <value>}` or `{"error": "..."}`; keep qualifier names to a single lowercase word, since the runtime snake-cases the name before dispatch
+- **`aro_plugin_qualifier(name: str, input_json: str) -> str`** — one dispatcher for all qualifiers, not one function each. It must return `{"result": <value>}` or `{"error": "..."}`; the qualifier name arrives exactly as declared, so look it up exactly (unlike actions, whose names are snake-cased into `aro_action_<name>`)
 - **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`, execution context under `"_context"`
 - **Communication (interpreter mode)**: a fresh `python3 -c` process per call. No persistent process, no stdin/stdout dialogue, no state carried between calls — design for statelessness and import heavy libraries lazily
 - **Communication (binary mode)**: In-process execution via embedded `libpython3` — no subprocess, no Python installation needed on the target machine. `aro build` links `libpython3` into the binary and embeds plugin source as string constants.

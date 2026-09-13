@@ -450,8 +450,25 @@ extension PythonPluginHost {
         let inputData = try encoder.encode(qualifierInput)
         let base64Input = inputData.base64EncodedString()
 
-        // Convert qualifier name to snake_case for Python function
-        let pythonQualifierName = toSnakeCase(qualifier)
+        // The qualifier name goes to the plugin exactly as declared.
+        //
+        // Actions and qualifiers cross this boundary differently. An action
+        // becomes a *function name* that `export_abi` generates
+        // (`aro_action_pick_random`), and `export_abi` snake-cases it — so the
+        // host has to snake-case too, and `execute` does. A qualifier is a
+        // *string argument* looked up in a registry the SDK keys by the
+        // declared name (`decorators.py`: `_qualifier_registry[name] = fn`,
+        // read back by an exact `get_qualifier(name)`), so transforming it can
+        // only ever miss: `pick-random` was sent as `pick_random` and came
+        // back `{"error": "Unknown qualifier: pick_random"}` — the user was
+        // told their own declared qualifier did not exist (GitLab #553).
+        //
+        // Any qualifier name that is not one all-lowercase word was therefore
+        // unreachable; `Examples/QualifierPluginPython` only escaped it because
+        // `sort`, `unique`, `sum`, `avg`, `min` and `max` are all single words.
+        // `NativePluginHost.executeQualifier` has always passed the name
+        // through untouched, so this also makes the two hosts agree.
+        let pythonQualifierName = qualifier
 
         // Language-specific: call via Python subprocess
         let script = """
