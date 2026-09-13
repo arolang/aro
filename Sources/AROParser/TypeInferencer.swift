@@ -54,7 +54,7 @@ public enum TypeInferencer {
             case .concat:
                 return .string
             case .equal, .notEqual, .lessThan, .greaterThan, .lessEqual, .greaterEqual,
-                 .and, .or, .contains, .matches, .is, .isNot, .before, .after:
+                 .and, .or, .contains, .matches, .is, .isNot, .before, .after, .in:
                 return .boolean
             case .defaulting:
                 // `<a> default <b>` yields one of its operands, so its type is

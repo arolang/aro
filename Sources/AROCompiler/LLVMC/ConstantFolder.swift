@@ -150,8 +150,10 @@ public struct ConstantFolder {
         // Not supported in constant folding. `before`/`after` order
         // instants, and a literal date is a string here — folding it
         // would mean parsing dates at compile time to answer a
-        // question the runtime answers correctly (GitLab #516).
-        case .concat, .is, .isNot, .contains, .matches, .before, .after:
+        // question the runtime answers correctly (GitLab #516). `in`
+        // is membership, whose container is a range or a collection
+        // rather than a scalar literal (GitLab #558).
+        case .concat, .is, .isNot, .contains, .matches, .before, .after, .in:
             return nil
         }
     }

@@ -1095,7 +1095,14 @@ private func checkedInt(
     return result.partialValue
 }
 
-private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
+/// Apply a binary operator in compiled code.
+///
+/// Internal rather than private so a test can assert it covers every
+/// `BinaryOperator` the parser can produce. It did not: `before`, `after` and
+/// `in` all fell through to `default`, which returns "" — read as false by a
+/// guard, so `aro build` silently skipped statements `aro run` executed
+/// (GitLab #516, #558).
+func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
     switch op {
     // Arithmetic
     case "+":
@@ -1165,7 +1172,11 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         }
         return asString(left) == asString(right)
 
-    case "!=", "isNot":
+    // "is not" is `BinaryOperator.isNot.rawValue`, which is what the
+    // serializer emits (`binary.op.rawValue`); "isNot" is the case *label*
+    // and never appears on the wire. Both are matched so the two spellings
+    // cannot drift apart again.
+    case "!=", "isNot", "is not":
         if let lb = left as? Bool, let rb = right as? Bool {
             return lb != rb
         }
@@ -1236,6 +1247,48 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         }
         return false
 
+    // Temporal comparison (GitLab #516) and membership (GitLab #558).
+    //
+    // These reached `default` and returned "", which `asBool` reads as false —
+    // so a compiled `when <a> before <b>` silently skipped its statement while
+    // the interpreter ran it. The two modes disagreed about the same program,
+    // with no diagnostic either way.
+    case "before":
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date < rightDate.date
+        }
+        if let l = asDouble(left), let r = asDouble(right) { return l < r }
+        return asString(left) < asString(right)
+
+    case "after":
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date > rightDate.date
+        }
+        if let l = asDouble(left), let r = asDouble(right) { return l > r }
+        return asString(left) > asString(right)
+
+    // `a in b` is `b contains a`. Mirrors the interpreter's `containsValue`,
+    // including date-range membership in either operand order (ARO-0041 §7).
+    case "in":
+        if let range = right as? ARODateRange, let date = parseARODate(left) {
+            return range.contains(date)
+        }
+        if let range = left as? ARODateRange, let date = parseARODate(right) {
+            return range.contains(date)
+        }
+        if let array = right as? [any Sendable] {
+            let leftStr = asString(left)
+            return array.contains { asString($0) == leftStr }
+        }
+        if let str = right as? String, let substr = left as? String {
+            // Every string contains the empty string (issue #296).
+            return substr.isEmpty || str.contains(substr)
+        }
+        if let dict = right as? [String: any Sendable], let key = left as? String {
+            return dict[key] != nil
+        }
+        return false
+
     // Regex matching
     case "matches":
         let str = asString(left)
@@ -1249,6 +1302,14 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         }
 
     default:
+        // The operator string is compiler-generated, so an unrecognised one is
+        // a codegen gap, not bad input. Returning "" made it invisible: a
+        // guard read it as false and skipped its statement, so `aro build`
+        // quietly did less than `aro run` for the same source — which is how
+        // `before`, `after` and `in` each shipped broken in compiled mode
+        // (GitLab #516, #558). Say so instead.
+        FileHandle.standardError.write(Data(
+            "[RuntimeBridge] Warning: unsupported binary operator '\(op)' in compiled expression; treating as empty\n".utf8))
         return ""
     }
 }

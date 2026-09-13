@@ -2519,6 +2519,14 @@ extension Parser {
         case .identifier(let name) where name == "before" || name == "after":
             return .comparison
 
+        // `in` is a membership comparison in operator position. It is a
+        // lexer keyword because `for each <x> in <xs>` needs it, but every
+        // place that uses it as a delimiter consumes it with `expect(.in)`
+        // before any expression parsing starts, so giving it a precedence
+        // here cannot swallow one of those (GitLab #558).
+        case .in:
+            return .comparison
+
         // Context-sensitive: `<` / `>` are comparison operators here only when
         // they are not starting a `<variable>` reference.
         case .leftAngle, .rightAngle:
@@ -2702,6 +2710,7 @@ extension Parser {
         case .is: return .is
         case .identifier(let name) where name == "before": return .before
         case .identifier(let name) where name == "after": return .after
+        case .in: return .in
         case .and: return .and
         case .or: return .or
         case .identifier("default"): return .defaulting
