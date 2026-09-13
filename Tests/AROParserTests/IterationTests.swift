@@ -36,7 +36,7 @@ struct ForEachLoopParsingTests {
         #expect(forEach != nil)
         #expect(forEach?.itemVariable == "item")
         #expect(forEach?.indexVariable == nil)
-        #expect(forEach?.collection.base == "items")
+        #expect(forEach?.collection?.base == "items")
         #expect(forEach?.filter == nil)
         #expect(forEach?.isParallel == false)
         #expect(forEach?.concurrency == nil)
@@ -64,7 +64,7 @@ struct ForEachLoopParsingTests {
         #expect(forEach != nil)
         #expect(forEach?.itemVariable == "item")
         #expect(forEach?.indexVariable == "index")
-        #expect(forEach?.collection.base == "items")
+        #expect(forEach?.collection?.base == "items")
     }
 
     @Test("Parses for-each loop with where filter")
@@ -166,7 +166,7 @@ struct ForEachLoopParsingTests {
         let innerForEach = outerForEach?.body[0] as? ForEachLoop
         #expect(innerForEach != nil)
         #expect(innerForEach?.itemVariable == "cell")
-        #expect(innerForEach?.collection.base == "row")
+        #expect(innerForEach?.collection?.base == "row")
     }
 }
 
@@ -237,5 +237,120 @@ struct ForEachLoopSemanticTests {
         let forEachFlow = dataFlows[1]
         let hasParallelEffect = forEachFlow.sideEffects.contains { $0.contains("parallel") }
         #expect(hasParallelEffect)
+    }
+}
+
+// MARK: - Expression Collections (GitLab #519)
+
+/// The for-each collection slot used to accept only `<name>`, so every quick
+/// loop needed a `Create` first. It now accepts any expression, while the noun
+/// form keeps its own path (specifiers, lazy streams).
+@Suite("For-Each Expression Collections")
+struct ForEachExpressionCollectionTests {
+
+    private func parseLoop(_ header: String, body: String = "Log <n> to the <console>.") throws -> ForEachLoop? {
+        let source = """
+        (Test: Demo) {
+            \(header) {
+                \(body)
+            }
+            Return an <OK: status> for the <test>.
+        }
+        """
+        let lexer = Lexer(source: source)
+        let parser = Parser(tokens: try lexer.tokenize())
+        let program = try parser.parse()
+        return program.featureSets.first?.statements.first as? ForEachLoop
+    }
+
+    @Test("Inline list literal parses as an expression collection")
+    func testListLiteralCollection() throws {
+        let loop = try parseLoop("for each <n> in [1, 2, 3]")
+        #expect(loop?.collection == nil)
+        let array = loop?.collectionExpression as? ArrayLiteralExpression
+        #expect(array?.elements.count == 3)
+    }
+
+    @Test("parallel for each takes a list literal too")
+    func testParallelListLiteralCollection() throws {
+        let loop = try parseLoop("parallel for each <n> in [1, 2, 3]")
+        #expect(loop?.isParallel == true)
+        #expect(loop?.collection == nil)
+        #expect(loop?.collectionExpression is ArrayLiteralExpression)
+    }
+
+    @Test("parallel concurrency clause survives an expression collection")
+    func testParallelConcurrencyWithLiteral() throws {
+        let loop = try parseLoop("parallel for each <n> in [1, 2, 3] with <concurrency: 2>")
+        #expect(loop?.concurrency == 2)
+        #expect(loop?.collectionExpression is ArrayLiteralExpression)
+    }
+
+    @Test("A plain variable still parses as a noun, not an expression")
+    func testVariableStaysNoun() throws {
+        let loop = try parseLoop("for each <n> in <items>")
+        #expect(loop?.collection?.base == "items")
+        #expect(loop?.collectionExpression == nil)
+    }
+
+    @Test("A qualified noun keeps its specifiers")
+    func testQualifiedNounStaysNoun() throws {
+        let loop = try parseLoop("for each <m> in <team: members>", body: "Log <m> to the <console>.")
+        #expect(loop?.collection?.base == "team")
+        #expect(loop?.collection?.specifiers == ["members"])
+        #expect(loop?.collectionExpression == nil)
+    }
+
+    @Test("Dotted field access parses as a member-access expression")
+    func testMemberAccessCollection() throws {
+        let loop = try parseLoop("for each <m> in <team>.members", body: "Log <m> to the <console>.")
+        #expect(loop?.collection == nil)
+        let member = loop?.collectionExpression as? MemberAccessExpression
+        #expect(member?.member == "members")
+    }
+
+    @Test("Parenthesised expression collection")
+    func testParenthesisedCollection() throws {
+        let loop = try parseLoop("for each <n> in (<a>)")
+        #expect(loop?.collection == nil)
+        #expect(loop?.collectionExpression != nil)
+    }
+
+    @Test("Index and where clauses still parse after an expression collection")
+    func testIndexAndFilterWithLiteral() throws {
+        let loop = try parseLoop("for each <n> at <i> in [1, 2, 3] where <n> > 1")
+        #expect(loop?.indexVariable == "i")
+        #expect(loop?.filter != nil)
+        #expect(loop?.collectionExpression is ArrayLiteralExpression)
+    }
+
+    @Test("An expression collection reports its own undefined variables")
+    func testExpressionCollectionChecksVariables() throws {
+        let source = """
+        (Test: Demo) {
+            for each <n> in [<missing-thing>, 2] {
+                Log <n> to the <console>.
+            }
+            Return an <OK: status> for the <test>.
+        }
+        """
+        let result = Compiler().compile(source)
+        let warning = result.diagnostics.first { $0.message.contains("missing-thing") }
+        #expect(warning != nil)
+    }
+
+    @Test("A list literal collection needs no Create and analyses clean")
+    func testListLiteralCompilesClean() throws {
+        let source = """
+        (Test: Demo) {
+            for each <n> in [1, 2, 3] {
+                Log <n> to the <console>.
+            }
+            Return an <OK: status> for the <test>.
+        }
+        """
+        let result = Compiler().compile(source)
+        #expect(result.isSuccess)
+        #expect(result.diagnostics.filter { $0.severity == .error }.isEmpty)
     }
 }

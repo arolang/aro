@@ -749,14 +749,19 @@ you want inside a container.
 
 ### 8.1 Calling a stage from another file
 
-The three stages live in one file, and that is deliberate. A
-user-defined action is currently resolvable only from the file that
-declares it: put `IngestOrders` in `bronze.aro` and call it from
-`main.aro` and you get *"Unknown user-defined action"*, even though the
-documentation says feature sets are globally visible. Events do cross
-files — a handler in one file receives an event emitted from another —
-so for now, either keep an action and its callers together, or use an
-event to cross the boundary.
+The three stages live in one file here, but they do not have to. A
+user-defined action is visible application-wide: put `IngestOrders` in
+`bronze.aro` and call it from `main.aro` and it resolves, the same way a
+handler in one file receives an event emitted from another. There are no
+imports to write — every `.aro` file under the application directory is
+discovered and its actions join one flat `Application.` namespace, so a
+name may be declared only once across the whole application.
+
+One place still sees a single file at a time: analysing one file on its
+own — the LSP, the REPL, `aro check bronze.aro` naming the file rather
+than the directory. There a call into a sibling file is reported unknown,
+and the diagnostic says so. Point the tool at the directory and it
+resolves.
 
 ### 8.2 Passing arguments
 

@@ -64,37 +64,46 @@ public final class UserActionAnalyzer {
     /// Walk every statement in every feature set and check `Application.<Name>`
     /// calls against the registry. Also enforces the body restrictions for
     /// Action feature sets (no framework variables).
-    public func validateCalls(in featureSets: [FeatureSet], registry: UserActionRegistry) {
+    public func validateCalls(
+        in featureSets: [FeatureSet],
+        registry: UserActionRegistry,
+        scope: UserActionScope = .application
+    ) {
         for fs in featureSets {
             let isInsideAction = fs.isUserAction
-            visit(fs.statements, isInsideAction: isInsideAction, registry: registry)
+            visit(fs.statements, isInsideAction: isInsideAction, registry: registry, scope: scope)
         }
     }
 
-    private func visit(_ statements: [Statement], isInsideAction: Bool, registry: UserActionRegistry) {
+    private func visit(
+        _ statements: [Statement],
+        isInsideAction: Bool,
+        registry: UserActionRegistry,
+        scope: UserActionScope
+    ) {
         for statement in statements {
             switch statement {
             case let aro as AROStatement:
-                validateApplicationCall(aro, registry: registry)
+                validateApplicationCall(aro, registry: registry, scope: scope)
                 if isInsideAction {
                     validateNoFrameworkVariables(aro)
                 }
             case let pipeline as PipelineStatement:
                 for stage in pipeline.stages {
-                    validateApplicationCall(stage, registry: registry)
+                    validateApplicationCall(stage, registry: registry, scope: scope)
                     if isInsideAction {
                         validateNoFrameworkVariables(stage)
                     }
                 }
             case let forEach as ForEachLoop:
-                visit(forEach.body, isInsideAction: isInsideAction, registry: registry)
+                visit(forEach.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
             case let rangeLoop as RangeLoop:
-                visit(rangeLoop.body, isInsideAction: isInsideAction, registry: registry)
+                visit(rangeLoop.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
             case let whileLoop as WhileLoop:
-                visit(whileLoop.body, isInsideAction: isInsideAction, registry: registry)
+                visit(whileLoop.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
             case let match as MatchStatement:
                 for clause in match.cases {
-                    visit(clause.body, isInsideAction: isInsideAction, registry: registry)
+                    visit(clause.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
                 }
             default:
                 break
@@ -103,23 +112,19 @@ public final class UserActionAnalyzer {
     }
 
     /// Validate an `Application.<Name>` call. Non-Application calls fall through.
-    private func validateApplicationCall(_ statement: AROStatement, registry: UserActionRegistry) {
+    private func validateApplicationCall(
+        _ statement: AROStatement,
+        registry: UserActionRegistry,
+        scope: UserActionScope
+    ) {
         let verb = statement.action.verb
         guard let actionName = UserActionRegistry.actionName(fromCallVerb: verb) else { return }
 
         guard let info = registry.info(for: actionName) else {
-            let known = registry.allNames
-            var hints: [String] = []
-            if !known.isEmpty {
-                hints.append("Known user-defined actions: " + known.map { "Application.\($0)" }.joined(separator: ", "))
-            } else {
-                hints.append("No user-defined actions are declared in this application")
-                hints.append("Declare one with `(MyAction: Action) { ... }`")
-            }
             diagnostics.error(
                 "Unknown user-defined action 'Application.\(actionName)'",
                 at: statement.action.span.start,
-                hints: hints
+                hints: unknownActionHints(for: actionName, registry: registry, scope: scope)
             )
             return
         }
@@ -137,6 +142,49 @@ public final class UserActionAnalyzer {
                 ]
             )
         }
+    }
+
+    /// Hints for a call that resolved to nothing.
+    ///
+    /// The old text asserted "No user-defined actions are declared in this
+    /// application" whenever the registry was empty — and the registry was
+    /// built per file, so a declaration one file over made that a lie and sent
+    /// the author hunting for a missing declaration instead of a missing file
+    /// scope (GitLab #587). Now the claim is only made when the analyser has
+    /// actually seen the whole application, and near-misses come first.
+    private func unknownActionHints(
+        for actionName: String,
+        registry: UserActionRegistry,
+        scope: UserActionScope
+    ) -> [String] {
+        var hints: [String] = []
+
+        let close = registry.closestNames(to: actionName)
+        if close.count == 1 {
+            hints.append("Did you mean 'Application.\(close[0])'?")
+        } else if close.count > 1 {
+            hints.append(
+                "Did you mean one of: " + close.map { "Application.\($0)" }.joined(separator: ", ") + "?"
+            )
+        }
+
+        let known = registry.allNames
+        if !known.isEmpty {
+            hints.append(
+                "Known user-defined actions: " + known.map { "Application.\($0)" }.joined(separator: ", ")
+            )
+            return hints
+        }
+
+        switch scope {
+        case .application:
+            hints.append("No user-defined actions are declared in this application")
+        case .file:
+            hints.append("No user-defined actions are declared in this file, and only this file was analysed")
+            hints.append("A `(\(actionName): Action)` feature set in another .aro file of the application does resolve when the whole directory is compiled")
+        }
+        hints.append("Declare one with `(MyAction: Action) { ... }`")
+        return hints
     }
 
     // MARK: - Unavoidable Recursion (GitLab #473)

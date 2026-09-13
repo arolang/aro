@@ -50,5 +50,19 @@
         }
     }
 
+    (* 5. Inline collection — the loop takes an expression, so a quick *)
+    (*    loop needs no Create first (GitLab #519) *)
+    Log "=== Literal For-Each ===" to the <console>.
+    for each <n> in [1, 2, 3] {
+        Log <n> to the <console>.
+    }
+
+    (* 6. Dotted field access is an expression too *)
+    Log "=== Field For-Each ===" to the <console>.
+    Create the <alpha> with { name: "Alpha", members: ["Alice", "Bob"] }.
+    for each <member> in <alpha>.members {
+        Log <member> to the <console>.
+    }
+
     Return an <OK: status> for the <demo>.
 }

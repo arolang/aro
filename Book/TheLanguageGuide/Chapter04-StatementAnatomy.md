@@ -17,7 +17,7 @@ Let us examine each component in detail, understanding not just what it is but w
 ## 4.2 Actions: The Verb of Your Sentence
 
 An action is a verb enclosed in angle brackets. It tells the reader what operation the statement performs. Actions are the most prominent part of any ARO statement because they appear at the beginning and because they carry semantic meaning that affects how the runtime behaves.
-When you write an action, you are choosing from a vocabulary of sixty-one built-in verbs, each representing a fundamental operation. The choice of verb is significant because each verb carries a semantic role that determines the direction of data flow. When you choose Extract, you are telling the runtime that you want to pull data from an external source into the current context. When you choose Return, you are telling the runtime that you want to send data out to the caller and terminate execution.
+When you write an action, you are choosing from a vocabulary of seventy-one built-in verbs, each representing a fundamental operation. The choice of verb is significant because each verb carries a semantic role that determines the direction of data flow. When you choose Extract, you are telling the runtime that you want to pull data from an external source into the current context. When you choose Return, you are telling the runtime that you want to send data out to the caller and terminate execution.
 The verbs are case-sensitive. Extract is a valid action. extract is not. This case sensitivity is deliberate: it makes actions visually distinctive from other identifiers in your code, and it aligns with the convention that actions are proper verbs deserving of capitalization.
 The built-in actions cover the operations that virtually every business application needs. You can extract data from requests, retrieve data from repositories, create new values, validate inputs against schemas, transform data between formats, store data persistently, emit events for other handlers, and return responses to callers. When these built-in actions are insufficient for your needs, you can create custom actions in Swift, extending the vocabulary of the language for your specific domain.
 The power of actions comes from their abstraction. When you write a Retrieve action, you are not specifying whether the data comes from an in-memory store, a relational database, a document database, or an external service. You are expressing the intent to retrieve data from a named repository. The runtime, or a custom action implementation, handles the details. This abstraction allows your ARO code to remain focused on business logic while technical concerns are handled elsewhere.
@@ -29,6 +29,9 @@ Choosing good result names is one of the most important skills in writing ARO co
 Consider the difference between naming a result "x" versus naming it "user-email-address." The first name tells you nothing about what the value represents. The second name tells you exactly what you are dealing with. Because ARO does not allow you to rebind names, you cannot use generic names for everything. This constraint pushes you toward descriptive names, which in turn makes your code more readable.
 Results can include type qualifiers, written after a colon. When you write a result like "user-id: String" you are documenting that the result is expected to be a string. Currently, ARO uses runtime typing, so these qualifiers do not affect execution. However, they serve as documentation for readers and may enable static type checking in future versions of the language. Using qualifiers is optional but recommended for results whose types are not obvious from context.
 ARO allows hyphenated identifiers, which is unusual among programming languages. This feature exists because hyphenated names often read more naturally than camelCase or snake_case for business concepts. "user-email-address" reads more like natural language than "userEmailAddress" or "user_email_address." You can choose whichever style you prefer, but the language supports hyphens for those who want them.
+
+One consequence catches people out. The lexer splits a hyphenated name into segments, and **no segment may be a keyword or a preposition**. `with-tax`, `tax-with`, `content-type`, `by-age` and `from-date` are all parse errors, because `with`, `type`, `by` and `from` are reserved; `taxed-price`, `youngest-first` and `user-email-address` are fine. The diagnostic names the offending word — "Expected identifier after '-', but got preposition(with)" — so when a name that reads perfectly well is rejected, look for the reserved word inside it.
+The same rule governs the segments of a qualifier path, where you do not get to choose the name: `<request: headers.Content-Type>` is rejected for the `type` in it. There the escape is to quote the segment — `<headers: "Content-Type">` — which matches it as a plain key (Chapter 10).
 
 ## 4.4 Objects: The Context You Operate On
 
@@ -51,8 +54,9 @@ Prepositions are small words that carry large meaning. In ARO, prepositions conn
 | `via` | Intermediate channel | Request (with proxy) |
 | `on` | Location/attachment | Listen, Start |
 | `at` | Position/placement | CreateDirectory, Make |
-| `as` | Type annotation | Filter, Reduce, Map |
+| `by` | Delimiter/ordering key | Split, Sort |
 Choosing the right preposition makes your code clearer and more accurate. When you extract a user identifier from the path parameters, "from" is the natural choice. When you create a user with provided data, "with" is the natural choice. When you store a user into a repository, "into" is the natural choice. Let the semantics of your operation guide your choice of preposition.
+`as` is not on this list, and that is deliberate: it introduces a result *type* rather than an object, so it belongs in the result position — `Filter the <active> as List<User> from the <users>` — before whichever preposition the statement uses.
 > **See Appendix B** for complete preposition semantics with examples.
 
 ## 4.6 Articles: The Grammar Connectors
@@ -77,18 +81,27 @@ ARO provides two types of string literals:
 - `\"` for literal quote
 - Other standard escape sequences
 
-**Raw strings** are enclosed in single quotes and treat backslashes literally, with only `\'` requiring escaping. Raw strings are ideal for regex patterns, file paths, LaTeX commands, and other backslash-heavy content.
+**Raw strings** are enclosed in single quotes and treat backslashes literally, with only `\'` requiring escaping. Raw strings are ideal for file paths, LaTeX commands, and other backslash-heavy content.
 
 ```aro
 (* Regular string with escape sequences *)
 Log "Hello\nWorld" to the <console>.
 
 (* Raw string - backslashes are literal *)
-Transform the <versions> from the <text> with regex '\d+\.\d+\.\d+'.
 Read the <config> from 'C:\Program Files\MyApp\config.json'.
 ```
 
 Use single quotes when backslashes should be preserved literally. Use double quotes when you need escape sequence processing.
+
+### Regex Literals
+
+A pattern is a third kind of literal, written between slashes. It is not a string: `Split` and `match` treat `/…/` as a pattern to match and a quoted string as text to match *literally*.
+
+```aro
+Split the <parts> from <text> by /[0-9]+/.
+```
+
+Backslashes inside `/…/` need no escaping, which is why raw strings are not the tool for patterns.
 
 ### Number Literals
 
@@ -114,9 +127,10 @@ Create the <user> with { name: "Alice", email: "alice@example.com", active: true
 The where clause allows you to filter or constrain operations. It appears after the object clause and begins with the keyword "where," followed by a condition.
 Where clauses are most commonly used with Retrieve actions to specify which records to fetch from a repository. When you write a where clause, you are expressing a constraint that the retrieved data must satisfy. The repository implementation uses this constraint to filter results, often translating it into a database query.
 Conditions in where clauses can use equality checks with "is" or "=" and inequality checks with "!=". They can use comparison operators for numeric values. They can combine multiple conditions with "and" and "or." The expressive power is similar to the WHERE clause in SQL, which is intentional—many repositories are backed by databases, and the mapping should be straightforward.
+Both sides of the condition are written in angle brackets, including the field name on the left: `where <status> = "pending"`, not `where status = "pending"`. A bare identifier there is a parse error, and the diagnostic says so — "Object identifiers must be wrapped in angle brackets."
 Where clauses can also appear with Filter actions, where they specify which elements of a collection to include in the result. The semantics are the same: only elements satisfying the condition are included.
 ```aro
-Retrieve the <order> from the <order-repository> where id = <order-id>.
+Retrieve the <order> from the <order-repository> where <id> = <order-id>.
 ```
 
 ## 4.9 When Conditions

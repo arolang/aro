@@ -36,4 +36,11 @@ Bob
 Beta
 Charlie
 Diana
+=== Literal For-Each ===
+1
+2
+3
+=== Field For-Each ===
+Alice
+Bob
 demo

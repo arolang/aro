@@ -44,11 +44,24 @@ Emit a <CrawlPage: event> with { url: <url>, base: <base>, depth: <current-depth
 
 **Rate Limiting**
 
-Add delays between requests to avoid overwhelming servers. ARO has a `<Wait>` action:
+Add delays between requests to avoid overwhelming servers. The action is `<Sleep>`, and it takes a unit:
 
 ```aro
-Wait for 1000.  (* milliseconds *)
+Sleep the <pause> for 500ms.
 ```
+
+The unit suffixes are `ms`, `s`, `m` and `h`, spaced or not — `for 2 seconds` and `for 2s` are the same statement. Give each `<Sleep>` in a feature set its own result name; `<pause>` twice is a rebinding error like any other.
+
+A bare number means *seconds*, not milliseconds — `Sleep the <pause> for 300.` sleeps five minutes, and `aro check` warns you about exactly that:
+
+```
+warning: Sleep sleeps in seconds — 300 is 5 minutes
+  hint: Write 300s if you mean it, or 300ms for milliseconds
+```
+
+Do not confuse `<Sleep>` with `<Wait>`, which is an alias for `<Keepalive>` and blocks until shutdown.
+
+Because `<Sleep>` suspends only the current feature set, putting one in the crawl handler slows each fetch without stalling the rest of the pipeline. Combine it with `with <concurrency: N>` on the link loop (Chapter 10) for a crawler that is genuinely polite.
 
 **Content Filtering**
 
@@ -129,11 +142,14 @@ Watch a directory for new files and process them:
     Return an <OK: status> for the <startup>.
 }
 
-(Process File: File Event Handler) {
+(Handle File Created: File Event Handler) {
     Extract the <path> from the <event: path>.
-    (* Process the file *)
+    Log "new file: ${<path>}" to the <console>.
+    Return an <OK: status> for the <event>.
 }
 ```
+
+Read that feature-set name carefully: a `File Event Handler` picks which of the three file events it subscribes to by looking for `created`, `modified`, or `deleted` **in its own name**. A handler called `Process File` matches none of them, subscribes to nothing, and never runs — and `aro check` will not tell you (GitLab #570). Write one handler per event you care about. The payload is `{ path }` and nothing else, so a single handler could not distinguish the three anyway.
 
 **Metrics and Monitoring**
 
@@ -153,11 +169,14 @@ With the OpenAPI contract specifying `text/plain`:
     operationId: getMetrics
     responses:
       '200':
+        description: Prometheus metrics
         content:
           text/plain:
             schema:
               type: string
 ```
+
+`description` is not optional. ARO's OpenAPI loader rejects a response object without one — `Failed to parse OpenAPI specification: Missing key 'description'` — and it refuses before the server binds a port, so the whole application fails to start.
 
 This outputs standard Prometheus format that can be scraped by monitoring systems.
 
@@ -232,9 +251,12 @@ ARO is young, but the surface is filling in fast. Since this book was first writ
 - **Lazy execution** — actions return future handles and are forced the first time something reads the value. Independent results overlap automatically; effects keep source order. No `await` to type, no async colour to manage.
 - **`aro ask`** — an in-process AI coding assistant with tool calling. Runs natively on Apple Silicon via MLX, on Linux via auto-downloaded `llama-server`, or against any OpenAI-compatible endpoint via `$ARO_LM_ENDPOINT`.
 - **Editor & agent integration** — `aro lsp` ships language-server support, `aro mcp` exposes the same data over Model Context Protocol; both pick up workspace plugin actions and qualifiers on `initialized`.
-- **Piped source** — `echo '<Log> "Hi" to the <console>.' | aro` evaluates piped ARO on stdin. Handy for one-liners and pipelines.
+- **Piped source** — `echo 'Log "Hi" to the <console>.' | aro` evaluates piped ARO on stdin. Handy for one-liners and pipelines. (Verbs are bare words; `<Log>` in angle brackets is a parse error, however often you see it written that way in older prose.)
+- **A step debugger** (`aro debug`) — breakpoints by line or by verb, conditional breakpoints, logpoints, `--dap` for editors, and `--record`/`--replay` to walk a captured session. `aro run --record events.json` does the same for the event stream.
+- **A package manager** (ARO-0045) — `aro add github:org/repo` installs a plugin from Git, `aro plugins` lists them, `aro new plugin foo` scaffolds one.
+- **Persistent repositories** (ARO-0073) — a `<name>.store` YAML file seeds `<name>-repository` at startup and, if it is other-writable, receives everything the application stores.
 
-Other directions still in progress: better error messages and debugging, package management for code sharing, more built-in actions, persistent storage options. By learning ARO now, you are part of shaping its future. Your feedback matters.
+Other directions still in progress: better error messages, more built-in actions, and closing the gap between what `aro check` catches and what fails only at run time. By learning ARO now, you are part of shaping its future. Your feedback matters.
 
 ---
 
@@ -250,7 +272,7 @@ Thank you for taking this journey. We hope ARO serves you well.
 
 ## Chapter Recap
 
-- You built a complete web crawler in ~200 lines of ARO (plus event schemas)
+- You built a complete web crawler in 186 lines of ARO (plus event schemas)
 - Extensions like rate limiting and depth limiting are straightforward
 - ARO supports many patterns: APIs, file processing, event sourcing
 - Documentation and examples are available on GitHub

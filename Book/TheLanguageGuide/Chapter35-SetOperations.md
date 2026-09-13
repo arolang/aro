@@ -234,15 +234,15 @@ Filter the <safe-orders> from <orders> where <id> not in <blocked-ids>.
 The right-hand side can be a list variable or a literal list. This is often more readable than a long chain of `or` conditions:
 
 ```aro
-(* Without in: verbose *)
-Filter the <terminal> from <orders>
+(* With or: works, but grows one clause per value *)
+Filter the <closed> from <orders>
     where <status> = "delivered"
        or <status> = "cancelled"
        or <status> = "refunded".
 
-(* With in: concise *)
+(* With in: the set is a value you can name, reuse, and change in one place *)
 Create the <terminal-statuses> with ["delivered", "cancelled", "refunded"].
-Filter the <terminal> from <orders> where <status> in <terminal-statuses>.
+Filter the <closed> from <orders> where <status> in <terminal-statuses>.
 ```
 
 ### `in` vs `intersect`
@@ -275,10 +275,12 @@ Filter the <terminal> from <orders> where <status> in <terminal-statuses>.
     (* What the user has that wasn't asked for *)
     Compute the <extra: difference> from <user-perms> with <required-perms>.
 
+    Compute the <missing-count: length> from <missing>.
+
     Return an <OK: status> with {
         granted: <granted>,
         missing: <missing>,
-        hasAll: <missing>
+        missing-count: <missing-count>
     }.
 }
 ```
@@ -403,14 +405,17 @@ Set operations and the Filter action both work with collections but serve differ
 A Filter runs a predicate on each element. A set operation compares two collections element-by-element. When your problem is "keep only items from A that appear in B," both approaches work, but the intent is different:
 
 ```aro
-(* Filter approach: for each item in orders, check if its status is in terminal-statuses *)
+(* Filter approach: for each order, check whether its status is in the set *)
 Create the <terminal-statuses> with ["delivered", "cancelled"].
 Filter the <closed> from <orders> where <status> in <terminal-statuses>.
 
-(* Set approach: find the overlap between order status values and terminal-statuses *)
-Compute the <order-statuses> from <orders>.   (* not applicable directly *)
+(* Set approach: project the statuses first, then compare the two collections *)
+Map the <order-statuses: status> from <orders>.
+Compute the <seen-terminal: intersect> from <order-statuses> with <terminal-statuses>.
 ```
 
+The two answer different questions. The `Filter` gives you the *orders* that
+are closed; the `intersect` gives you *which terminal statuses actually occur*.
 For field-based membership tests on objects, `Filter ... where <field> in <list>` is usually the right tool. For direct comparison of two collections of values, `intersect` and `difference` are more expressive.
 
 ---

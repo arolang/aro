@@ -143,6 +143,36 @@ reduce_statement = "<Reduce>" , "the" , typed_result , "from" , "the" , source ,
 
 ## 2. Where Clause (Filtering)
 
+### 2.0 Field References: Two Spellings
+
+A where clause's left-hand side is a **field of the row being tested**
+— never a variable, never an expression — so it may be written with or
+without angle brackets. Both spellings parse to the same clause and
+select the same rows:
+
+```aro
+Filter the <active-users> from the <users> where status = "active".
+Filter the <active-users> from the <users> where <status> = "active".
+```
+
+Hyphenated field names work bare as well:
+`where customer-id = <id>`. The right-hand side is unaffected — it is
+an expression, so a variable there still needs its brackets
+(`where id = <uid>`).
+
+**Recommendation:** prefer the bracketed `<status>` form in new code.
+It matches how every other name in ARO is written, and it keeps field
+and value visually symmetric in comparisons like
+`where <status> is <wanted>`. The bare form is fully supported and
+reads well in query-shaped statements, which is why the examples
+throughout the proposals use it (GitLab #545).
+
+This applies to the `where` clause of a query statement only. The
+`where` that guards a `for each` header, a `match` case, or a feature
+set header is an ordinary boolean expression over variables in scope,
+not a field predicate, and there a bare name would mean something
+else — those keep requiring `<…>`.
+
 ### 2.1 Comparison Operators
 
 | Operator | Description | Example |
@@ -299,7 +329,14 @@ predicate_or = predicate_and , { "or" , predicate_and } ;
 predicate_and = predicate_atom , { "and" , predicate_atom } ;
 predicate_atom = comparison | "(" , predicate , ")" ;
 
-comparison = field_reference , operator , value ;
+comparison = where_field , operator , value ;
+
+(* A where-clause field may be bracketed or bare (§2.0); order-by and
+   aggregate field references keep requiring the brackets. *)
+where_field     = "<" , field_name , ">" | field_name ;
+field_reference = "<" , field_name , ">" ;
+field_name      = identifier , { "-" , identifier } ;
+
 operator = "is" | "is" , "not" | "==" | "!="
          | "<" | "<=" | ">" | ">="
          | "in" | "between" | "contains" | "starts" , "with" | "ends" , "with" ;
@@ -423,3 +460,4 @@ components:
 | 2.1 | 2026-04-02 | Added Group action for partitioning collections by field value. |
 | 2.2 | 2026-08 | §1.3: documents the `with <field>` projection spelling and states that Map has no per-element binding — a `with` expression is a check-time error (GitLab #465). |
 | 2.3 | 2026-09 | §2.2: where clauses implement the documented `and`/`or` chaining with parentheses (`and` binds tighter), `between` desugars to two inclusive comparisons, malformed clauses fail `aro check`, and `Delete … where` stays single-predicate (GitLab #498). |
+| 2.4 | 2026-09 | §2.0: a where-clause field may be written bare (`where status = "active"`) or bracketed (`where <status> = "active"`) — the spelling the proposals have always printed now parses. Order-by and aggregate field references stay bracketed (GitLab #545). |

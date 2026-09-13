@@ -7,14 +7,21 @@ The authoritative source is `aro debug --help`. This appendix is a curated subse
 ## A.1 CLI flags
 
 ```text
-aro debug [<options>] [<path>]
+aro debug [<options>] [<path>] [<application-arguments> ...]
 ```
+
+Write the path *before* the list-valued flags (`--breakpoint`, `--break-condition`,
+`--logpoint`): they parse up to the next option and will otherwise consume the
+path (GitLab #550).
 
 | Flag | Meaning |
 |---|---|
 | `<path>` | Application directory or `.aro` file. Omit only with `--replay`. |
-| `--entry-point <name>` | Override the entry feature set (default: `Application-Start`). |
+| *(trailing args)* | Passed through to the application as `<parameter: NAME>` values. |
+| `--entry-point <name>`, `-e` | Override the entry feature set (default: `Application-Start`). |
 | `--breakpoint <line\|verb>` | Initial breakpoint(s); repeatable. |
+| `--break-condition "<line>=<expr>"` | Conditional breakpoint(s); repeatable. |
+| `--logpoint "<line>=<message>"` | Logpoint(s) — print with `{var}` interpolation, never pause; repeatable. |
 | `--dap` | Speak Debug Adapter Protocol over stdio. |
 | `--dap-port <port>` | Bind a TCP listener on `127.0.0.1:port` and serve DAP to one client. |
 | `--dap-log <path>` | Mirror every DAP message to a file (debugging the bridge itself). |
@@ -34,8 +41,8 @@ aro debug [<options>] [<path>]
 | `b <line>` | — | Location breakpoint. |
 | `b <Verb>` | — | Verb breakpoint. |
 | `b <line> if <pred>` | — | Conditional location breakpoint. |
-| `be <Event>` | `breakevent` | Event breakpoint. |
-| `berror` | — | Error-any breakpoint. |
+| `be <Event>` | `breakevent` | Event breakpoint — registers, never fires (GitLab #557). |
+| `berror` | — | Error-any breakpoint; pair with `ARO_NO_DEFER=1` (GitLab #561). |
 | `bl` | `list` | List active breakpoints. |
 | `d <n>` | `delete` | Delete breakpoint by index. |
 | `w <expr>` | `watch` | Add a watch expression. |
@@ -64,18 +71,21 @@ aro debug [<options>] [<path>]
 | `.location(file, line)` | File suffix + line equality |
 | `.verb(name)` | `AROStatement.action.verb == name` |
 | `.conditionalLocation(file, line, predicate)` | File + line + predicate truthy |
-| `.event(name)` | `EventBus.publish`'s event type |
-| `.errorAny` | Any runtime error before the message is formatted |
+| `.logpoint(file, line, message)` | File + line — prints and continues, never pauses |
+| `.event(name)` | `EventBus.publish`'s event type — not reached by `Emit` (GitLab #557) |
+| `.errorAny` | Any *thrown* runtime error, before the message is formatted; deferred-action failures do not throw here (GitLab #561) |
 
 ## A.5 Pause reasons
 
+As printed by the CLI frontend, in `⏸  paused (<reason>) at …`:
+
 | Reason | When |
 |---|---|
-| `entry` | First checkpoint of a feature set (unconditional) |
+| `entry` | First checkpoint of the run (unconditional) |
 | `step` | Step / next / finish chose to pause |
-| `breakpoint(<bp>)` | A registered breakpoint matched |
-| `event(<name>)` | An event-name breakpoint matched a `publish` call |
-| `error(<msg>)` | An error-any breakpoint matched a pre-error checkpoint |
+| `breakpoint (<bp>)` | A registered breakpoint matched; `<bp>` is its description — `main.aro:5`, `:5` for a launch-set one, `verb Emit`, `main.aro:5 if <x> == 1`, `any error` |
+| `event <name>` | An event-name breakpoint matched a `publish` call (does not currently fire for `Emit` — GitLab #557) |
+| `error: <msg>` | An error-any breakpoint matched a thrown error (misses deferred failures — GitLab #561) |
 
 ## A.6 DAP requests handled
 
@@ -125,10 +135,12 @@ line    String — line number (string for flat-record compatibility)
 col     String — column
 verb    String — action verb (optional)
 stmt    String — human-readable statement summary
-syms    String — JSON-encoded array of {n, ty, v}
+syms    String — JSON-encoded array of {n, ty, v} — a repository symbol
+        also carries `recs`, itself a JSON-encoded array of flat row
+        dictionaries, so a reader can draw the table without parsing `v`
 ```
 
-For `k="event"`: `name`, `payload`.
+For `k="event"`: `name`, `payload` — or, for a logpoint hit, `logpoint`, `file`, `line`.
 For `k="error"`: `msg`.
 For `k="end"`: optional `err`.
 

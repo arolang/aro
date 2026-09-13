@@ -21,14 +21,10 @@ So far, we have run our crawler with `aro run .`, which interprets the ARO code.
 aro build . -o crawler
 ```
 
-This produces a standalone executable:
+This produces a standalone executable that behaves exactly like `aro run .` — including reading `CRAWL_URL` from the environment, and including doing nothing quietly when it is not set:
 
 ```bash
-./crawler
-# Error: Cannot extract start-url from env CRAWL_URL
-
 CRAWL_URL="https://example.com" ./crawler
-# Runs the crawler
 ```
 
 For optimized builds:
@@ -37,7 +33,9 @@ For optimized builds:
 aro build . --release -o crawler
 ```
 
-The release build is smaller and faster.
+`--release` is shorthand for `--optimize --size --strip`: optimized, tuned for size rather than speed, and with debug symbols removed. Each of the three is available on its own if you want a different mix — `--optimize` alone keeps symbols, which is what you want if you intend to attach `lldb` to the binary later.
+
+By default the Swift runtime is linked statically, so the output is a single self-contained file. `--dynamic` links it dynamically instead and copies the required libraries next to the binary with `rpath=$ORIGIN` — useful when several ARO binaries ship in the same image and you would rather not pay for the runtime in each of them.
 
 ---
 
@@ -60,7 +58,7 @@ Create a `Dockerfile`:
 FROM ghcr.io/arolang/aro-buildsystem:latest AS builder
 
 WORKDIR /app
-COPY *.aro ./
+COPY *.aro openapi.yaml ./
 
 # Compile to native binary
 RUN aro build . --release -o crawler
@@ -81,9 +79,10 @@ ENTRYPOINT ["./crawler"]
 This Dockerfile:
 
 1. Uses the ARO build system image to compile
-2. Copies only the binary to a minimal runtime image
-3. Creates the output directory
-4. Sets the binary as the entrypoint
+2. Copies the sources **and** `openapi.yaml` — the contract is a build input, not an afterthought
+3. Copies only the binary to a minimal runtime image
+4. Creates the output directory
+5. Sets the binary as the entrypoint
 
 ---
 
@@ -214,9 +213,9 @@ The native binary approach is a good balance between size and simplicity.
 
 ## 13.9 What Could Be Better
 
-**No Cross-Compilation.** You cannot build a Linux binary on macOS directly. You need Docker or a Linux machine for Linux targets.
+**No Cross-Compilation.** You cannot build a Linux binary on macOS directly. You need Docker or a Linux machine for Linux targets — which is the main reason the multi-stage Dockerfile above exists.
 
-**Limited Build Options.** There is no way to customize linking, strip debug symbols, or optimize for size vs. speed.
+**The Build Inputs Are Not Just `.aro`.** `aro build` needs the whole application directory — `openapi.yaml` and any `.store` files as much as the source. It is easy to write a `COPY *.aro ./` that builds cleanly and then fails at runtime because the contract was left behind on the host. Copy the directory, not a glob.
 
 ---
 

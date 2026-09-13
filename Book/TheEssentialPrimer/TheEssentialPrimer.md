@@ -4,7 +4,7 @@
 
 ---
 
-*Language version: 0.8.0 · March 2026*
+*Language version: 0.12.0 · September 2026*
 
 ---
 
@@ -50,7 +50,7 @@ Every ARO statement follows one grammatical pattern without exception:
 Action [article] <Result> preposition [article] <Object>.
 ```
 
-The *Action* is a verb drawn from a vocabulary of sixty-one built-in words. The *Result* is a named binding that will hold the produced value, written in angle brackets. The *Object*, introduced by a preposition, is the input to the action. Articles (`the`, `a`, `an`) are optional syntactic sugar that improve readability without affecting semantics.
+The *Action* is a verb drawn from a vocabulary of seventy-one built-in words (`aro actions` lists them). The *Result* is a named binding that will hold the produced value, written in angle brackets. The *Object*, introduced by a preposition, is the input to the action. Articles (`the`, `a`, `an`) are optional syntactic sugar that improve readability without affecting semantics.
 
 A representative statement:
 
@@ -133,7 +133,18 @@ For iteration, `for each` iterates over collections (with an optional `parallel`
 
 ARO source code contains only the success path. There is no error handling syntax because there is no error handling responsibility. When an action fails — the database returns no record, the schema validation rejects the input, the HTTP request times out — the runtime generates a structured error response describing exactly what failed and why, in business terms.
 
-A failed `Retrieve` produces: *"Cannot retrieve the user from the user-repository where id = 530."* That message is the error. The developer need not write code to produce it.
+A failed `Extract` produces the whole diagnostic, without a line of error-handling code:
+
+```
+Runtime Error: Cannot extract the email from the user: email.
+  Feature: Application-Start
+  Business Activity: Primer
+  Statement: <Extract> the <email> from the <user: email>.
+          Trace:
+            user = ["name": "Ada", "id": 1]
+```
+
+The first line is the failing statement read back as a sentence. Under it are the feature set, the business activity, and the bindings that reached the statement. That message *is* the error handling.
 
 This design is deliberately opinionated and deliberately incomplete. Complex conditional error handling — retry logic, fallback strategies, partial failures — must be implemented as custom actions or plugins. The language handles the common case; the extension mechanism handles everything else.
 
@@ -260,17 +271,17 @@ Custom events follow the same subscription model as built-in events:
 Emit a <UserCreated: event> with <user>.
 ```
 
-Any feature set with the activity `UserCreated Handler` will receive this event. Handler guards allow filtering at the feature set level:
+Any feature set with the activity `UserCreated Handler` will receive this event. State guards (ARO-0022) filter at the feature-set level, written immediately after `Handler` with no space:
 
 ```aro
-(Send Welcome Email: UserCreated Handler) where <event: role> == "customer" {
-    Extract the <user> from the <event: user>.
-    Send the <welcome-email> to the <user: email>.
+(Send Welcome Email: UserCreated Handler<role:customer>) {
+    Extract the <email> from the <event: email>.
+    Send the <welcome-email> to the <email>.
     Return an <OK: status> for the <notification>.
 }
 ```
 
-The guard is evaluated before the feature set body executes. If the condition is false, the handler is silently skipped. Multiple handlers for the same event type are all invoked; the order is not guaranteed.
+A comma lists alternatives (`<status:paid,shipped>`), a semicolon adds a second field (`<status:paid;tier:premium>`), and a dot reaches into a nested one (`<customer.address.region:premium>`). The guard is evaluated before the feature set body executes; if it does not match, the handler is silently skipped. Multiple handlers for the same event type are all invoked, and the order is not guaranteed — this is the one place where output ordering is genuinely non-deterministic.
 
 ---
 
@@ -278,17 +289,24 @@ The guard is evaluated before the feature set body executes. If the condition is
 
 ARO applications can be compiled to standalone native executables with `aro build`. The interpreter is the development workflow; native binaries are the deployment artefact.
 
-The compilation path replaces the interpreter with an LLVM code generator. Each ARO statement becomes a call to the ARO C runtime, a precompiled library that exposes the full action vocabulary through `@_cdecl` Swift functions callable from LLVM-generated code:
+The compilation path replaces the interpreter with an LLVM code generator. Each ARO statement becomes a call into the same `ARORuntime` the interpreter uses, reached through the C ABI its `Bridge/` directory exports — around 260 `@_cdecl` Swift functions covering actions, the execution context, and every service:
 
 ```swift
-// The bridge interface (simplified)
+// Sources/ARORuntime/Bridge/ActionBridge.swift
 @_cdecl("aro_action_extract")
-func aro_action_extract(_ ctx: UnsafeRawPointer,
-                        _ result: UnsafePointer<CChar>,
-                        _ object: UnsafePointer<CChar>) -> UnsafeRawPointer?
+public func aro_action_extract(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "extract", contextPtr: contextPtr,
+                         resultPtr: resultPtr, objectPtr: objectPtr)
+}
 ```
 
-The LLVM IR generator (`LLVMCodeGenerator.swift`) uses the Swifty-LLVM C API for type-safe IR generation. It emits a `main` function that initialises the context, registers all feature sets as event handlers, and starts the event loop. Feature set bodies are emitted as LLVM functions that call into the C runtime sequentially.
+That the two modes share one runtime rather than two implementations is the reason parity holds: `AROHTTPServer`, `AROFileSystemService` and the rest are the same objects in both.
+
+The LLVM IR generator (`Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift`) uses the Swifty-LLVM C API for type-safe IR generation. It emits a `main` function that initialises the context, registers all feature sets as event handlers, and starts the event loop. Feature set bodies are emitted as LLVM functions that call into the runtime sequentially, each statement carrying `DILocation` metadata so `lldb` can set a breakpoint on an `.aro` line in the finished binary.
 
 The output is a self-contained binary. The `openapi.yaml` specification file, if present, is embedded or read at startup to configure HTTP routing.
 
@@ -348,7 +366,7 @@ Each Git action emits a corresponding event (`git.commit`, `git.push`, `git.pull
 
 ## 9. The Plugin System
 
-When the built-in vocabulary of sixty-one actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory, either manually or via the package manager (`aro add`).
+When the built-in vocabulary of seventy-one actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory, either manually or via the package manager (`aro add`).
 
 ARO supports plugins written in Swift, Rust, C, C++, and Python. All native plugins communicate through a C ABI. Only two functions are required:
 
@@ -395,7 +413,7 @@ ARO's constraints are not universally beneficial. Understanding where they help 
 
 **DevOps and Build Systems.** Declarative actions like Provision, Deploy, and Configure map to infrastructure operations. ARO's event-driven model suits pipeline triggers. The precedent set by Make and Terraform suggests this domain is viable, though the ecosystem has not yet developed the necessary action vocabulary.
 
-**Data Science and Machine Learning.** This is a poor fit. Iterative experimentation, REPL-driven workflows, and matrix operations require the flexibility and ecosystem depth that Python provides. ARO would impose cost with no corresponding benefit.
+**Data Science and Machine Learning.** A poor fit for the analysis itself: matrix operations, plotting and statistics need the ecosystem depth Python provides, and ARO has none of it. The REPL objection has weakened, though — `aro repl` and a native Jupyter kernel (`aro kernel install`, ARO-0091) make the notebook loop available, and *transformation* pipelines written there read the way this primer claims code should. `Book/AROForDataEngineers` makes that case and marks the same boundary from the other side.
 
 **Systems Programming.** The abstraction layer, the runtime overhead, and the absence of low-level memory control make ARO unsuitable for operating system components, device drivers, or performance-critical inner loops.
 
@@ -408,7 +426,7 @@ The following table summarises the assessment:
 | Internal Tools and CLIs | Good | Rapid development with native compilation |
 | Terminal Applications | Good | Shadow buffer UI, keyboard handlers, screen templates |
 | DevOps / Infrastructure | Moderate | Declarative style fits; vocabulary incomplete |
-| Data Science / ML | Poor | Iteration-heavy; ecosystem dependency |
+| Data Science / ML | Mixed | Notebook-native pipelines yes; analysis and plotting no |
 | Systems / Embedded | Poor | No low-level control; abstraction overhead |
 
 ---
@@ -417,13 +435,13 @@ The following table summarises the assessment:
 
 ARO is beta software. The following limitations are current facts, not future risks.
 
-**No step debugger.** Errors are reported by the runtime in business terms, which is useful for production but insufficient for complex development scenarios. The approach is to add logging and redeploy — a workflow familiar from early-stage distributed systems, but friction for complex business logic. An LSP server provides diagnostics, completions, and hover information in supported editors.
+**A young debugger.** `aro debug` exists and does the things a step debugger does — statement-boundary stepping, location / verb / conditional / logpoint breakpoints, watches, session recording and replay, and a DAP bridge for VS Code, IntelliJ and Neovim. What it does not do yet is show a causal backtrace across event hops, and two of its breakpoint kinds have holes: an event breakpoint does not fire for an `Emit`, and an error-any breakpoint misses failures inside deferred actions unless you run with `ARO_NO_DEFER=1`. The Debugging Guide covers the working surface and names the gaps. An LSP server provides diagnostics, completions, and hover information in supported editors.
 
 **Growing ecosystem.** The package manager (`aro add`, `aro remove`) enables plugin installation from git repositories. However, there is no centralised package index comparable to npm or PyPI. The action vocabulary covers common cases; unusual requirements need custom implementations via plugins in Swift, Rust, C, or Python.
 
 **Limited conditional branching.** The `when` guard, `match` expression, and `while` loop handle common cases. Complex nested conditionals require escape to plugins or custom actions. Applications with fundamentally conditional logic — tax calculations, permission systems with many rules — will spend more time in the extension layer than in ARO itself.
 
-**HTTP disabled in compiled binaries.** The SwiftNIO HTTP server does not initialise correctly in LLVM-generated binaries due to type metadata issues. A native BSD socket HTTP server provides a workaround, but with reduced functionality compared to the interpreter's SwiftNIO-based server.
+**Cross-file user-defined actions.** An `Action` feature set is callable as `Application.<Name>` from the file that declares it, but not from another file in the same application, and not at all from the `aro repl` prompt. Events do cross both boundaries. Keep an action and its callers in one file, or hop through an event.
 
 **Breaking changes.** Action signatures, preposition semantics, and the plugin ABI are stabilising but not yet frozen. Applications built today may require updates as the language matures toward 1.0.
 
@@ -480,6 +498,18 @@ aro add git@github.com:arolang/plugin-sqlite.git
 
 The plugin is compiled on installation and available to all feature sets in the application.
 
+Before any of that, though, there is a prompt. `aro repl` evaluates statements one at a time against a session that remembers what you bound, which is the cheapest way to find out what a verb does:
+
+```
+$ aro repl
+aro> Compute the <sum> from 21 + 21.
+=> OK
+aro> Log <sum> to the <console>.
+[_repl_session_] 42
+```
+
+Piping works too — `echo 'Log "hi" to the <console>.' | aro` evaluates and exits. The same engine drives a native Jupyter kernel: `aro kernel install` registers a kernelspec (ZeroMQ, no Python in the loop) and **New → ARO** in JupyterLab, VS Code or DataSpell gives you a notebook where a cell is a feature-set body. SOLARO, ARO's own IDE, edits `.repl` notebooks against the same engine. ARO-0091 is the specification; `Book/TheInteractiveDialog` is the tour of the prompt.
+
 ---
 
 ## 13. Summary
@@ -499,5 +529,5 @@ For teams building event-driven business services, for organisations that need c
 ---
 
 ```
-ARO · 0.8.0 · March 2026
+ARO · 0.12.0 · September 2026
 ```

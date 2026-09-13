@@ -1,4 +1,4 @@
-# Chapter 13: Hybrid Plugins
+# Chapter 14: Hybrid Plugins
 
 > *"The best tool is the one that lets you use the right tool for each job."*
 > — Pragmatic wisdom
@@ -7,7 +7,15 @@ Throughout this book, we've explored plugins written entirely in one language—
 
 This chapter explores when and how to build hybrid plugins—plugins that speak two languages.
 
-## 13.1 The Case for Hybrid Architecture
+> **A note on the C ABI in this chapter.** The plugin code below still uses the
+> older three-parameter `aro_plugin_execute(action, args, char** result) ->
+> Int32` and its `setError`/`status == 0` idiom. That form was removed: the
+> current signature is `char* aro_plugin_execute(const char*, const char*)`,
+> with errors returned as a JSON object carrying an `error` key and no status
+> code at all. Read these examples for their structure and take the signature
+> from Chapter 8 or Appendix B.
+
+## 14.1 The Case for Hybrid Architecture
 
 Before diving into implementation, let's understand when hybrid architecture makes sense.
 
@@ -187,7 +195,7 @@ Pure ARO plugins have limitations:
 
 When you hit these limits, it's time to go hybrid—add native code for the capabilities you need while keeping ARO for orchestration.
 
-## 13.2 Hybrid Plugin Architecture
+## 14.2 Hybrid Plugin Architecture
 
 A hybrid plugin contains both native code and ARO files, with a manifest that declares both:
 
@@ -276,7 +284,7 @@ The strict ordering—native first, then `aro-files`, then `aro-templates`—ens
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## 13.3 Building a Complete Authentication Plugin
+## 14.3 Building a Complete Authentication Plugin
 
 Let's build a production-quality authentication plugin that demonstrates hybrid architecture. This plugin provides:
 
@@ -925,7 +933,7 @@ Now the ARO layer that orchestrates these native capabilities:
 }
 ```
 
-## 13.4 State Sharing Between Layers
+## 14.4 State Sharing Between Layers
 
 One of the trickier aspects of hybrid plugins is sharing state between native code and ARO files. Let's explore the patterns that make this work.
 
@@ -1034,7 +1042,7 @@ func generateToken(args: [String: Any], ...) -> Int32 {
 
 ### Pattern 5: Calling ARO Feature Sets from Native Code
 
-Sometimes native code needs to trigger ARO logic—for example, a background timer fires in native code and should emit an event processed by an ARO handler. The `aro_plugin_invoke` callback makes this possible.
+Sometimes native code needs to trigger ARO logic—for example, a background timer fires in native code and should emit an event processed by an ARO handler. The `aro_plugin_set_invoke` export makes this possible: the runtime hands your plugin a function pointer, and you call it whenever you want to run an ARO feature set.
 
 ARO passes the callback pointer to the plugin during initialisation. The plugin stores it and can call it at any time to invoke a named ARO feature set:
 
@@ -1067,7 +1075,7 @@ func notifyARO(event: String, payload: [String: Any]) {
 ```
 
 ```aro
-(* The feature set invoked by native code via aro_plugin_invoke *)
+(* The feature set invoked by native code via the invoke callback *)
 (Token Expired: Auth Handler) {
     Extract the <token-id> from the <event: tokenId>.
     Delete the <removed-session> from the <session-repository> where <tokenId> is <token-id>.
@@ -1075,9 +1083,14 @@ func notifyARO(event: String, payload: [String: Any]) {
 }
 ```
 
-The `aro_plugin_invoke` mechanism is one-way: native code fires and does not block waiting for the ARO result. Use it for notifications and side-effects, not for request/response flows.
+The callback is **synchronous and two-way**: it returns the feature set's result
+as a `char*` that your plugin owns and must free. The signature is
+`char* (*)(const char* featureSet, const char* inputJson)`, and the export the
+runtime looks for is `aro_plugin_set_invoke`, not `aro_plugin_invoke`. Because
+the call blocks, keep the invoked feature set short — you are holding up
+whatever native thread you called from.
 
-## 13.5 Testing Hybrid Plugins
+## 14.5 Testing Hybrid Plugins
 
 Testing hybrid plugins requires coverage at multiple levels.
 
@@ -1241,7 +1254,7 @@ Test the full authentication flow:
 }
 ```
 
-## 13.6 Best Practices for Hybrid Plugins
+## 14.6 Best Practices for Hybrid Plugins
 
 ### Clear Separation of Concerns
 
@@ -1314,7 +1327,7 @@ Hybrid plugins combine the best of both worlds: native performance and security 
 - **Clear boundaries**: Native code for crypto and performance; ARO for workflows
 - **Loading order**: Native first, then `aro-files`, then `aro-templates`
 - **`aro_plugin_init` is void**: Use it for one-time setup only; metadata belongs in `aro_plugin_info`
-- **`aro_plugin_invoke` callback**: Allows native code to call ARO feature sets for notifications and side-effects
+- **`aro_plugin_set_invoke`**: hands the plugin a callback for invoking ARO feature sets synchronously; the plugin frees the returned result
 - **State management**: Choose the right pattern for your needs
 - **Testing at all levels**: Unit tests for native, integration tests for ARO, E2E for workflows
 - **Consistent interfaces**: Structured JSON communication between layers

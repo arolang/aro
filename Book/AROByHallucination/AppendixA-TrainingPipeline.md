@@ -2,7 +2,7 @@
 
 # Appendix A: The Training Pipeline
 
-> "The pipeline is twenty-four notebooks, a config file, and a great deal of patience."
+> "The pipeline is twenty-eight notebooks, a config file, and a great deal of patience."
 
 ---
 
@@ -16,102 +16,120 @@ The pipeline runs on Apple Silicon (M1 or later) with at least 16 GB of unified 
 - The `aro` binary on your PATH (for `aro check` and `aro run` validation)
 - A HuggingFace account and `huggingface-cli login` (for model upload)
 
-The pipeline lives in `ARO-Train/Train/script/`. All notebooks share a common configuration through `config.py`.
+The pipeline lives in the ARO repository itself, at `Train/script/`. All notebooks share a common configuration through `config.py`.
 
 ## A.2 The Notebooks
 
-### Data Collection (NB00-NB02)
+The notebooks are numbered by filename, and `00_META_PIPELINE.ipynb` runs `01` through `27` in order, each in its own isolated kernel. One warning before you read further: the markdown heading *inside* several notebooks still carries an older number from before the files were renumbered, so `18_finetune.ipynb` opens with "# 17 — Full Fine-Tune". Trust the filename; that is what the meta notebook orders by.
 
-**NB00 (init)** sets up the directory structure and configuration.
+Counts below (actions, examples, proposals) are what the corpus held when this appendix was written. They are not constants — the pipeline re-derives them from the repository on every run, which is the point.
 
-**NB01 (corpus collection)** indexes every source of truth: the 65 Examples, the Language Guide, the Book, the Proposals, the Wiki, and the runtime's Swift source code for action metadata. Output: a manifest of ~400 items.
+### Setup and corpus (01–04)
 
-**NB02 (knowledge extraction)** parses the manifest into structured knowledge: 54 actions with their verbs and prepositions, 115 examples with their source code, 61 proposals with Q&A seeds. Output: `knowledge.json`.
+**01 (init)** wipes pipeline artifacts and sets up the directory structure for a clean run.
 
-### Training Pair Generation (NB03-NB13)
+**02 (action reference)** builds the comprehensive reference for every ARO action, organised by semantic role.
 
-**NB03 (LLM knowledge extraction)** is the first notebook that calls the model. For each real example, book chapter, and proposal, it generates instruction/response pairs. It validates every generated code block with `aro check`, and when validation fails, feeds the error back to the model for up to two repair attempts. Bare code snippets from proposals are auto-wrapped in feature sets before checking. Output: ~700 pairs.
+**03 (corpus collection)** walks the repository and indexes every source of truth: the Examples directory (109 applications at the time of writing), the Book, the Proposals (67), the wiki, and the runtime's Swift source for action metadata.
 
-**NB04 (warm-start fine-tune)** trains the base model on all pairs collected so far. This gives the model enough ARO knowledge to generate useful code in later notebooks. The adapter is saved and loaded by every subsequent notebook. Training runs for two full epochs with batch size 4.
+**04 (knowledge extraction)** turns the raw corpus into `knowledge.json` — the canonical action/syntax reference that every later system prompt is built from.
 
-**NB05 (actions training)** generates pairs for every ARO action: usage examples, alias mappings, explanations, "which action" questions, and in-context feature sets. Also includes 16 static error-pattern pairs covering common mistakes (++ vs +, reserved prefixes, wrong prepositions). Output: ~350 pairs across 59 verbs.
+### Training pair generation (05–14)
 
-**NB06 (execution-grounded pairs)** generates code that must actually *run*, not just parse. Four strategies: mutation of existing examples, recombination of two examples into one, spec-to-code from proposals, and readme-to-code from example descriptions. Every pair is validated with both `aro check` and `aro run`. Output: ~300 pairs.
+**05 (material seeding)** reads `Train/Material/curated.jsonl`, the hand-curated and `aro check`-validated pairs, into the knowledge stream. Hand-written data goes in first so everything generated later has something correct to imitate.
 
-**NB07 (book Q&A)** extracts question/answer pairs from the Language Guide chapters.
+**06 (LLM knowledge extraction)** is the first notebook that calls the model. For each real example, book chapter, and proposal, it generates instruction/response pairs, validates every generated code block with `aro check`, and feeds failures back for up to two repair attempts. Bare snippets from proposals are auto-wrapped in feature sets before checking.
 
-**NB08 (wiki training)** mines the project wiki for training pairs.
+**07 (warm-start fine-tune)** trains the base model on everything collected so far, so the later generation steps already speak the DSL. The adapter is saved to `data/adapters/warm_start/` and loaded by every subsequent notebook.
 
-**NB09 (git training)** mines real fix and refactor commits from the git history of ARO applications. A sanitisation step removes old-style `<Verb>` syntax and validates all code blocks with `aro check`.
+**08 (actions training)** generates pairs for every ARO action: usage examples, alias mappings, explanations, "which action" questions, and in-context feature sets. It also includes static error-pattern pairs covering common mistakes (`++` versus `+`, reserved prefixes, wrong prepositions).
 
-**NB10 (synthetic data generation)** is the largest notebook. It generates 3,500+ samples across seven task types: code generation, debugging, correction, full application, fill-in-the-middle, syntax Q&A, and code explanation. It also generates multi-feature-set "architecture" applications. A self-repair loop with targeted error hints fixes common syntax mistakes.
+**09 (REPL execution training)** generates code that must actually *run*, not merely parse. Every pair is validated with `aro run` as well as `aro check`.
 
-**NB11 (function calling)** teaches the model to invoke `aro ask` tools correctly. Training pairs cover direct tool calls (with correct JSON arguments), the `/fix` workflow chain (read → check → edit → verify), and tool selection for common tasks.
+**10 (book Q&A)** extracts question/answer pairs from the Book, so the model can explain as well as write.
 
-**NB12-NB13 (application prompts, external repos)** generate additional training pairs from application plan files and external ARO repositories.
+**11 (synthetic data generation)** is the largest notebook: thousands of samples across code generation, debugging, correction, full applications, fill-in-the-middle, syntax Q&A, and code explanation, with a self-repair loop driven by targeted error hints.
 
-### Validation & Assembly (NB14-NB17)
+**12 (function calling)** teaches the model to invoke the eighteen `aro ask` tools correctly — direct calls with valid JSON arguments, the `/fix` chain (read → check → edit → verify), and tool selection.
 
-**NB14-NB15 (comment extraction, validation)** extract comments from existing code and validate all collected pairs.
+**13 (external repo training)** clones external ARO repositories — plugins, applications, bundles — and extracts pairs from them.
 
-**NB16 (dataset assembly)** combines all pairs into a single training dataset with train/validation/test splits.
+**14 (comment extraction)** mines every `(* … *)` comment from `.aro` files, pairing intent with implementation.
 
-**NB17 (fine-tune)** runs the full LoRA fine-tune on the assembled dataset.
+### Validation and assembly (15–17)
 
-### Optimisation & Evaluation (NB18-NB20)
+**15 (validation)** runs `aro check` over every collected pair. Code that looks plausible and fails to check is worse than no data, because it teaches the model to write it.
 
-**NB18 (DPO)** runs Direct Preference Optimisation using chosen/rejected pairs built from `aro check` validation.
+**16 (eval-derived merge)** folds the evaluation feedback, gap-fill and reasoning traces back into the curated stream.
 
-**NB19 (evaluation)** evaluates the model against a fixed set of probe prompts and reports syntax pass rates.
+**17 (dataset assembly)** merges every source into one balanced dataset with train/validation/test splits, and writes `stats.json` and a dataset report.
 
-**NB20 (iterative loop)** uses the current model to generate new training data, validates it, adds passing samples to the training set and failing samples to the DPO negatives, then retrains. Multiple rounds.
+### Fine-tuning and evaluation (18–21)
 
-### Distillation & Release (NB21-NB24)
+**18 (fine-tune)** runs the full LoRA fine-tune on the assembled dataset, resuming from the warm-start adapter.
 
-**NB21 (distillation)** distils the 30B teacher model into an 8B student. The teacher generates 5,000 validated outputs; the student is fine-tuned on the merged dataset.
+**19 (preference SFT)** makes a second pass over preference pairs — chosen/rejected built from `aro check` outcomes — so the model learns which of two plausible answers a human would want.
 
-**NB22 (package)** quantises the best model to 4-bit, generates a README, smoke-tests the output, and uploads both the distilled student (`ARO-Lang/aro-coder-6bit`) and the teacher (`ARO-Lang/aro-teacher-30b-4bit`) to HuggingFace.
+**20 (evaluation)** measures the model across several dimensions, syntax pass rate against `aro check` first among them.
 
-**NB23 (chat)** is a live test environment for the packaged model.
+**21 (iterative loop)** uses the current model to generate new training data, adds what passes to the training set and what fails to the preference negatives, then retrains. Multiple rounds.
+
+### Distillation and release (22–27)
+
+**22 (distillation)** transfers the 30B MoE teacher's ARO expertise into an 8B dense student.
+
+**23 (material fine-tune)** trains a focused LoRA adapter on the curated `Train/Material/` set as a final booster.
+
+**24 (thinking fine-tune)** teaches the model to reason before it answers — understand the request, restate it, then write.
+
+**25 (conversation fine-tune)** trains multi-turn behaviour, which is what the `aro ask` REPL actually is.
+
+**26 (post-release validation)** downloads the *published* model from Hugging Face and validates it the way a user consumes it, rather than trusting the local artifact.
+
+**27 (package)** quantises the best model to 4-bit, generates a README, smoke-tests it, and uploads the distilled student (`ARO-Lang/aro-coder-6bit`) and the teacher (`ARO-Lang/aro-teacher-30b-bf16`) to Hugging Face. The `6bit` in the student's repository name is historical; the quantisation is 4-bit.
 
 ## A.3 The Model Lifecycle
 
 The lifecycle flows top-to-bottom:
 
-1. **Base model** (Qwen 30B or previous teacher from HF)
-2. **Warm-start** (NB04: LoRA on ~4,000 pairs)
-3. **Full fine-tune** (NB17: LoRA on full dataset)
-4. **DPO** (NB18: preference optimisation)
-5. **Iterative loop** (NB20: generate, validate, retrain)
-6. **Upload teacher** to `ARO-Lang/aro-teacher-30b-4bit`
-7. **Distil** 30B teacher into 8B student (NB21)
-8. **Upload student** to `ARO-Lang/aro-coder-6bit`
-9. **End user** downloads `aro-coder-6bit` via `aro ask`
+1. **Base model** (`mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16`, or the previous teacher from Hugging Face)
+2. **Warm-start** (07: LoRA on the action/syntax reference)
+3. **Full fine-tune** (18: LoRA on the assembled dataset)
+4. **Preference SFT** (19: chosen/rejected pairs from `aro check`)
+5. **Iterative loop** (21: generate, validate, retrain)
+6. **Distil** 30B teacher into 8B student (22)
+7. **Boosters** (23 material, 24 thinking, 25 conversation)
+8. **Upload** teacher to `ARO-Lang/aro-teacher-30b-bf16` and student to `ARO-Lang/aro-coder-6bit` (27)
+9. **Validate the published artifact** the way a user gets it (26)
+10. **End user** downloads `aro-coder-6bit` via `aro ask`
 
 ## A.4 Iterative Improvement
 
 After the first complete pipeline run, set `TRAIN_ON_BASE = False` in `config.py`. On the next run, the pipeline will download the teacher model from HuggingFace instead of starting from vanilla Qwen. Each cycle builds on the previous one.
 
-The teacher model (`ARO-Lang/aro-teacher-30b-4bit`) is the full 30B model after all fine-tuning and DPO. The student model (`ARO-Lang/aro-coder-6bit`) is the distilled 8B version for everyday inference. Both are uploaded after each training cycle.
+The teacher model (`ARO-Lang/aro-teacher-30b-bf16`) is the full 30B model after all fine-tuning. The student model (`ARO-Lang/aro-coder-6bit`) is the distilled 8B version for everyday inference. Both are uploaded after each training cycle.
 
 ## A.5 Key Configuration
 
 `TRAIN_ON_BASE`
-:   `True` for fresh start, `False` to resume from the HF teacher.
+:   `True` always uses `BASE_MODEL_ID` (fresh training, or a new base model). `False` resumes from `TEACHER_MODEL_ID` if it exists on Hugging Face, falling back to the base otherwise.
 
 `MODEL_ID`
-:   Resolved at import time. Used by all notebooks.
-
-`TEACHER_MODEL_ID`
-:   `ARO-Lang/aro-teacher-30b-4bit`
-
-`PREFERRED_MODEL_ID`
-:   `ARO-Lang/aro-coder-6bit` (distilled student)
-
-`STUDENT_MODEL_ID`
-:   `mlx-community/Qwen3-8B-4bit`
+:   Resolved once at import time by `resolve_model_id()`. Used by all notebooks.
 
 `BASE_MODEL_ID`
-:   Vanilla Qwen 30B MoE (fallback)
+:   `mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16`
 
-All configuration lives in `Train/script/config.py`.
+`TEACHER_MODEL_ID`
+:   `ARO-Lang/aro-teacher-30b-bf16`
+
+`STUDENT_MODEL_ID`
+:   `mlx-community/Qwen3-8B-bf16` — the base the distilled student is trained from
+
+`PREFERRED_MODEL_ID`
+:   `ARO-Lang/aro-coder-6bit` — the published, 4-bit-quantised student
+
+`CLEAN_ON_RESTART`
+:   `True` by default. Every notebook tags the rows it writes to `knowledge_pairs.jsonl` with its own number, and re-running a notebook removes its previous rows first, so reruns replace rather than duplicate.
+
+All configuration lives in `Train/script/config.py`, with unit tests for the pure-Python helpers in `Train/script/tests/`.

@@ -55,6 +55,7 @@ Application.DoubleValue the <d> with { number: 5 }.
 **Rules:**
 
 - Action names are unique application-wide. Defining two `(DoubleValue: Action)` feature sets is a compile error, regardless of file.
+- **A call resolves across every `.aro` file of the application.** The declaration may live in any file, at any depth under the application directory, and the caller in any other; no import declares the relationship, exactly as for event handlers and HTTP routes (ARO-0005). A tool that is handed one file rather than an application — the LSP, the REPL, `aro check some.aro` — can only see that file, and reports a call into a sibling file as unknown; its diagnostic says which of the two situations it is in, and never claims the application declares no actions when it has not looked at the application.
 - The `Application` handle is reserved exclusively for user-defined actions. Plugin handles (`Greeting`, `Markdown`) and built-in verbs (`Compute`, `Extract`) cannot use it.
 - Built-in verbs remain unprefixed and never collide with `Application.<Name>`.
 
@@ -190,6 +191,8 @@ Because all `.aro` files are discovered and parsed before execution (see `Applic
 User-defined actions are discovered by the same mechanism that discovers feature sets today — every `.aro` file in the application directory and its subdirectories is scanned. Any feature set whose activity is `Action` is registered with the `ActionRegistry` under the `Application` handle before `Application-Start` executes.
 
 No imports, no manifests, no aro.yaml entries are required. This matches how event handlers and HTTP routes are wired up.
+
+Compilation is per file, so the declarations have to be gathered before it starts. `aro run`, `aro build`, `aro check <dir>`, `aro test` and `aro debug` scan every source for `Action` headers first — a parse, no semantic analysis — and hand the union to each file's compile via `Compiler.compile(_:declaredUserActions:)`, the same seam `externallyHandledEvents` uses for orphan-event detection. Passing nothing means "one file, no application context": in-file calls still resolve, and an unresolved one is reported as out of the analyser's sight rather than as absent from the application (GitLab #587).
 
 ### 9. Recursion
 

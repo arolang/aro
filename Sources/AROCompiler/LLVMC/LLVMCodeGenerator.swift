@@ -574,10 +574,19 @@ public final class LLVMCodeGenerator {
         // incorrectly still filter by key = X).
         // `_where_tree_` gates the numbered `_where_*_N_` binds, so clearing
         // the tree alone is enough to disarm a stale compound condition.
+        //
+        // `_with_` and `_to_` join the list with GitLab #515: Store now reads
+        // `_with_` to decide whether the statement carried an inline payload,
+        // so a leftover binding from an earlier `with` clause would make the
+        // next `Store the <x> into the <repo>.` store the wrong value. The
+        // interpreter has always cleared both (FeatureSetExecutor); the
+        // compiled path only ever cleared the query modifiers, so the two
+        // disagreed for every action that reads them.
         for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
                              "_by_pattern_", "_by_flags_", "_by_field_",
                              "_by_var_", "_by_order_", "_matching_", "_recursive_",
-                             "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
+                             "_aggregation_type_", "_aggregation_field_", "_default_value_",
+                             "_with_", "_to_"] {
             let keyStr = ctx.stringConstant(transientKey)
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
         }
@@ -799,8 +808,39 @@ public final class LLVMCodeGenerator {
         // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
     }
 
+    /// The name the compiled loop resolves its collection from, plus the
+    /// specifiers to walk after resolving it.
+    ///
+    /// A noun collection resolves its own name. An expression collection
+    /// (GitLab #519) has no name, so it is evaluated once — before the loop
+    /// blocks, matching the interpreter — and bound to a per-loop framework
+    /// variable the rest of the codegen then treats as an ordinary name.
+    /// The `_` prefix marks it as a framework variable, which is what makes
+    /// re-entering the loop (an outer loop, a re-triggered feature set) legal
+    /// under immutability.
+    private func bindForEachCollection(_ loop: ForEachLoop, index: Int) -> (base: String, specifiers: [String]) {
+        if let noun = loop.collection {
+            return (noun.base, noun.specifiers)
+        }
+        let temp = "_foreach\(index)_collection_"
+        if let expression = loop.collectionExpression {
+            let tempName = ctx.stringConstant(temp)
+            let exprJSON = ctx.stringConstant(serializer.serializeExpression(expression))
+            _ = ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, tempName, exprJSON],
+                at: ctx.insertionPoint
+            )
+        }
+        return (temp, [])
+    }
+
     private func generateForEachLoop(_ loop: ForEachLoop, index: Int, errorBlock: BasicBlock) {
         let prefix = "foreach\(index)"
+
+        // Evaluate an expression collection into a temporary before any loop
+        // block exists, so it runs exactly once on entry.
+        let source = bindForEachCollection(loop, index: index)
 
         // Create loop blocks
         let condBlock = ctx.module.appendBlock(named: "\(prefix)_cond", to: ctx.currentFunction!)
@@ -817,10 +857,10 @@ public final class LLVMCodeGenerator {
         // `arrayEndBlock` that frees `collection` and then falls through to `endBlock`.
         // The stream path jumps directly to `endBlock` (no collection box to free).
         var arrayEndBlock: BasicBlock? = nil
-        if loop.collection.specifiers.isEmpty {
+        if source.specifiers.isEmpty {
             arrayEndBlock = ctx.module.appendBlock(named: "\(prefix)_aend", to: ctx.currentFunction!)
 
-            let collVarName = ctx.stringConstant(loop.collection.base)
+            let collVarName = ctx.stringConstant(source.base)
             let isStreamResult = ctx.module.insertCall(
                 externals.isStream,
                 on: [ctx.currentContextVar!, collVarName],
@@ -835,14 +875,14 @@ public final class LLVMCodeGenerator {
 
             // === Stream path ===
             ctx.setInsertionPoint(atEndOf: streamPath)
-            generateStreamForEachLoop(loop, index: index, endBlock: endBlock, errorBlock: errorBlock)
+            generateStreamForEachLoop(loop, collectionName: source.base, index: index, endBlock: endBlock, errorBlock: errorBlock)
 
             // === Array path (fall-through to existing logic) ===
             ctx.setInsertionPoint(atEndOf: arrayPath)
         }
 
         // Resolve collection (with optional specifier for nested properties like <team: members>)
-        let collectionName = ctx.stringConstant(loop.collection.base)
+        let collectionName = ctx.stringConstant(source.base)
         var collection = ctx.module.insertCall(
             externals.variableResolve,
             on: [ctx.currentContextVar!, collectionName],
@@ -852,7 +892,7 @@ public final class LLVMCodeGenerator {
         // Handle specifiers to access nested properties.
         // Each aro_dict_get call returns a NEW passRetained box wrapping the nested value,
         // making the previous box unreachable — free it before reassigning.
-        for spec in loop.collection.specifiers {
+        for spec in source.specifiers {
             let specName = ctx.stringConstant(spec)
             let prevCollection = collection
             collection = ctx.module.insertCall(
@@ -1033,6 +1073,7 @@ public final class LLVMCodeGenerator {
     /// which drives iteration from within a Task while blocking the calling thread.
     private func generateStreamForEachLoop(
         _ loop: ForEachLoop,
+        collectionName: String,
         index: Int,
         endBlock: BasicBlock,
         errorBlock: BasicBlock
@@ -1131,7 +1172,7 @@ public final class LLVMCodeGenerator {
         ctx.currentEarlyReturnBlock = outerEarlyReturn
 
         // --- Call aro_runtime_foreach_stream in the outer function ---
-        let collVarName = ctx.stringConstant(loop.collection.base)
+        let collVarName = ctx.stringConstant(collectionName)
         _ = ctx.module.insertCall(
             externals.foreachStream,
             on: [ctx.currentContextVar!, collVarName, bodyFunc],
@@ -2124,7 +2165,11 @@ private final class StringConstantCollector {
             if let index = loop.indexVariable {
                 _ = ctx.stringConstant(index)
             }
-            _ = ctx.stringConstant(loop.collection.base)
+            // An expression collection has no name to intern; its temporary is
+            // interned on demand when the loop is generated (GitLab #519).
+            if let noun = loop.collection {
+                _ = ctx.stringConstant(noun.base)
+            }
             for stmt in loop.body {
                 collectFromStatement(stmt)
             }

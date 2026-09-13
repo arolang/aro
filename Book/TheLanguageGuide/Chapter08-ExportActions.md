@@ -264,18 +264,25 @@ The alias (`app-config`) becomes the name other feature sets use to access the v
 
 ### Accessing Published Values
 
-Published values can be referenced directly by their alias:
+Published values can be referenced directly by their alias — from a feature set with the **same business activity**:
 
 ```aro
-(getApiUrl: Configuration Handler) {
-    (* app-config was published at startup *)
+(getApiUrl: Config Loader) {
+    (* app-config was published by (Application-Start: Config Loader) *)
     Extract the <url> from the <app-config: apiUrl>.
 
     Return an <OK: status> with <url>.
 }
 ```
 
-Published values are scoped to the business activity. Feature sets in different business activities cannot access each other's published values.
+The activity match is the whole access rule, and it is enforced at runtime rather than being a convention. A feature set with a different activity that reads `<app-config>` fails with:
+
+```
+Variable 'app-config' is not accessible from 'Configuration Handler':
+it was published in 'Config Loader'
+```
+
+This is the trap in mixing Publish with event handlers: a handler's activity is `{EventName} Handler`, which is by construction *not* the publisher's activity. Configuration that startup published cannot be read from a handler at all. Either give the reading feature set the publisher's activity, as above, or put the value in the event payload — or, for anything that outlives a single request, in a repository.
 
 ### Symbol Lifetime
 
@@ -487,14 +494,22 @@ Here is a realistic example that uses all three export actions appropriately. Th
     Read the <config-data> from the <file: "./config.json">.
     Parse the <config: JSON> from the <config-data>.
 
-    (* Publish config for all feature sets *)
+    (* Publish config for feature sets whose activity is "User Service" *)
     Publish as <app-config> <config>.
+
+    (* Store it too, so handlers in other activities can read it *)
+    Store the <config> into the <config-repository>.
 
     Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
     Return an <OK: status> for the <startup>.
 }
 ```
+
+The double bookkeeping is deliberate, and it is the point of this example.
+`app-config` reaches anything with the `User Service` activity. It does *not*
+reach the handlers below, whose activity is `UserCreated Handler` — those read
+the same configuration back out of the repository.
 
 **users.aro** — User creation:
 
@@ -537,8 +552,12 @@ Here is a realistic example that uses all three export actions appropriately. Th
     Extract the <user> from the <event: user>.
     Extract the <email> from the <user: email>.
 
-    (* Access published config *)
-    Extract the <sender-address> from the <app-config: email.fromAddress>.
+    (* A handler's activity is "UserCreated Handler", so <app-config> is
+       out of reach — read the config back from the repository instead.
+       Retrieve yields the repository's list, so take the entry off it. *)
+    Retrieve the <configs> from the <config-repository>.
+    Extract the <config: first> from the <configs>.
+    Extract the <sender-address> from the <config: email.fromAddress>.
 
     Send the <welcome-email> to the <email-service> with {
         recipient: <email>,
@@ -554,8 +573,10 @@ Here is a realistic example that uses all three export actions appropriately. Th
 (Track Signup: UserCreated Handler) {
     Extract the <user> from the <event: user>.
 
-    (* Access published config *)
-    Extract the <analytics-key> from the <app-config: analytics.apiKey>.
+    (* Same reason as above: the published alias does not cross activities *)
+    Retrieve the <configs> from the <config-repository>.
+    Extract the <config: first> from the <configs>.
+    Extract the <analytics-key> from the <config: analytics.apiKey>.
 
     Send the <analytics-event> to the <analytics-service> with {
         apiKey: <analytics-key>,
@@ -589,8 +610,8 @@ Here is a realistic example that uses all three export actions appropriately. Th
 
 This example demonstrates:
 
-- **Publish** for shared configuration loaded at startup
-- **Store** for user data that needs to be retrieved later
+- **Publish** for shared configuration, within one business activity
+- **Store** for user data that needs to be retrieved later — and for configuration that has to cross an activity boundary
 - **Emit** for triggering welcome emails and analytics
 - **Repository observers** for audit logging
 

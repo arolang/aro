@@ -12,7 +12,9 @@ The simplest way to get ARO is to build it from source. Clone the repository and
 
 After building, you will find the `aro` executable in the `.build` directory. To use it conveniently from any directory, add this location to your shell's PATH environment variable. Once configured, running `aro --help` should display the available subcommands, confirming that the installation was successful.
 
-The ARO command-line tool provides four primary subcommands. The `run` command compiles and executes an application in a single step, which is what you will use most during development. The `check` command validates source files without running them, useful for catching errors before execution. The `build` command compiles an application to a native binary for deployment. The `compile` command produces intermediate output for tooling integration.
+Four subcommands carry most of the daily work. The `run` command compiles and executes an application in a single step, which is what you will use most during development. The `check` command validates source files without running them, useful for catching errors before execution. The `build` command compiles an application to a native binary for deployment. The `compile` command produces intermediate output for tooling integration.
+
+`aro --help` lists the rest, and they are worth knowing about early: `repl` and `debug` for interactive work, `test` for colocated tests, `diff` for comparing feature-set graphs between revisions, `lsp` and `mcp` for editor and agent integration, `new`/`add`/`plugins`/`actions` for extensions, `kernel` for Jupyter, and `ask` for the built-in assistant.
 
 ---
 
@@ -89,7 +91,7 @@ The automatic discovery has an important implication: all feature sets are globa
 </svg>
 </div>
 
-There is one constraint on this freedom: exactly one `Application-Start` must exist across all files. The runtime enforces this during startup and reports an error if the constraint is violated. Similarly, you can have at most one `Application-End: Success` for handling graceful shutdown and at most one `Application-End: Error` for handling crash scenarios. See Chapter 12 for complete lifecycle details.
+There is one constraint on this freedom: exactly one `Application-Start` must exist across all files. The runtime enforces this during startup and reports an error if the constraint is violated. Similarly, you can have at most one `Application-End: Success` for handling graceful shutdown and at most one `Application-End: Error` for handling crash scenarios. See Chapter 14 for complete lifecycle details.
 
 For applications that expose HTTP APIs, you will typically include an `openapi.yaml` file in the application directory. This file defines the API contract using the OpenAPI specification. When present, the runtime uses it to configure HTTP routing, matching incoming requests to feature sets based on operation identifiers defined in the contract. Without this file, no HTTP server starts. This is deliberate: ARO follows a contract-first approach where the API specification drives the implementation rather than the other way around.
 
@@ -185,7 +187,7 @@ When debugging complex issues, the debug flag provides additional internal infor
 
 You now understand how to install ARO, create applications, and use the command-line tools. You have seen the basic structure of an ARO program and understand why applications are directories rather than single files.
 
-The next chapter examines the syntax of statements in detail, explaining each component of the action-result-object pattern. Understanding this pattern deeply is essential because every statement you write follows it. After that, chapter five covers feature sets, exploring how they are triggered, how they communicate through events, and how they form the building blocks of applications.
+The next chapter examines the syntax of statements in detail, explaining each component of the action-result-object pattern. Understanding this pattern deeply is essential because every statement you write follows it. After that, chapter six covers feature sets, exploring how they are triggered, how they communicate through events, and how they form the building blocks of applications.
 
 The best way to proceed is to experiment. Create a small application, add feature sets, emit events, and observe what happens. The language is designed to be discoverable. If you try something that does not work, the error message should guide you toward what does.
 

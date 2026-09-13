@@ -53,6 +53,16 @@ final class ReplNotebookController {
         guard !leaving.isEmpty else { return }
         editingMarkdownIDs.subtract(leaving)
     }
+    /// The cell the view should scroll into view, once.
+    ///
+    /// Selection alone must NOT scroll: clicking a cell you can
+    /// already see would yank the notebook out from under you, which
+    /// is what happened when the view watched `selectedCellID`.
+    /// Scrolling is a response to the notebook moving the selection
+    /// FOR you — keyboard navigation, run-and-advance, a cell just
+    /// inserted — so those set this and the view clears it.
+    var scrollTarget: String?
+
     /// Markdown cells currently showing raw source. Everything
     /// else renders. A brand-new markdown cell starts here so the
     /// user can type immediately.
@@ -260,6 +270,7 @@ final class ReplNotebookController {
                 cells.append(cell)
             }
             selectedCellID = cell.id
+            scrollTarget = cell.id
             if kind == .markdown { editingMarkdownIDs.insert(cell.id) }
         }
         return cell.id
@@ -275,6 +286,7 @@ final class ReplNotebookController {
                 cells.append(cell)
             }
             selectedCellID = cell.id
+            scrollTarget = cell.id
             if kind == .markdown { editingMarkdownIDs.insert(cell.id) }
         }
         return cell.id
@@ -378,6 +390,7 @@ final class ReplNotebookController {
         }
         let target = min(max(idx + offset, 0), cells.count - 1)
         selectedCellID = cells[target].id
+        scrollTarget = cells[target].id
     }
 
     func clearAllOutputs() {
@@ -417,6 +430,7 @@ final class ReplNotebookController {
         guard let idx = cellIndex(of: id) else { return }
         if idx + 1 < cells.count {
             selectedCellID = cells[idx + 1].id
+            scrollTarget = cells[idx + 1].id
         } else {
             addCell(kind: .code, after: id)
         }

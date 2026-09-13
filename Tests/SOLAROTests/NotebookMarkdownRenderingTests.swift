@@ -360,3 +360,54 @@ struct NotebookExternalChangeTests {
         #expect(nb.cells.count == 2, "the user's open editor is not discarded")
     }
 }
+
+@Suite("Clicking a cell does not scroll the notebook")
+@MainActor
+struct NotebookScrollTargetTests {
+
+    private func notebook(_ count: Int) throws -> ReplNotebookController {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scroll-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notes.repl")
+        let cells = (0..<count).map { ReplNotebookCell(kind: .code, source: "Compute the <n\($0)> from \($0).") }
+        try ReplNotebookDocument(cells: cells).save(to: url)
+        return ReplNotebookController(url: url, project: Project(rootPath: dir))
+    }
+
+    @Test("Selecting a cell directly requests no scroll")
+    func clickDoesNotScroll() throws {
+        // What a click does. The view used to watch selectedCellID, so
+        // this yanked the reader back up the notebook.
+        let nb = try notebook(5)
+        nb.scrollTarget = nil
+        nb.selectedCellID = nb.cells[3].id
+        #expect(nb.scrollTarget == nil)
+    }
+
+    @Test("Keyboard navigation does request a scroll")
+    func navigationScrolls() throws {
+        let nb = try notebook(5)
+        nb.selectedCellID = nb.cells[0].id
+        nb.scrollTarget = nil
+        nb.selectCell(offset: 2)
+        #expect(nb.selectedCellID == nb.cells[2].id)
+        #expect(nb.scrollTarget == nb.cells[2].id, "the notebook moved the selection, so reveal it")
+    }
+
+    @Test("A newly inserted cell is revealed")
+    func insertScrolls() throws {
+        let nb = try notebook(3)
+        nb.scrollTarget = nil
+        let newID = nb.addCell(kind: .code, after: nb.cells[0].id)
+        #expect(nb.scrollTarget == newID)
+    }
+
+    @Test("Run-and-advance reveals the cell it lands on")
+    func advanceScrolls() throws {
+        let nb = try notebook(3)
+        nb.scrollTarget = nil
+        nb.runCellAndAdvance(nb.cells[0].id)
+        #expect(nb.scrollTarget == nb.cells[1].id)
+    }
+}

@@ -125,9 +125,15 @@ struct ReplNotebookView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, SolaroSpace.l)
             }
-            .onChange(of: notebook.selectedCellID) { _, newID in
-                guard let newID else { return }
-                proxy.scrollTo(newID, anchor: nil)
+            // Scroll only when the notebook moved the selection for
+            // the user (keyboard navigation, run-and-advance, a new
+            // cell), never when they clicked a cell themselves — a
+            // click means they can already see it, and scrolling then
+            // threw the reader back to the top of the notebook.
+            .onChange(of: notebook.scrollTarget) { _, target in
+                guard let target else { return }
+                proxy.scrollTo(target, anchor: nil)
+                notebook.scrollTarget = nil
             }
         }
         // Command mode's keyboard. It only takes first responder

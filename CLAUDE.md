@@ -42,7 +42,9 @@ echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 # Testing `aro build` against local runtime changes: build the runtime
 # archive too, or the linker silently picks up the INSTALLED one.
-swift build --product aro --product ARORuntime
+swift build --product ARORuntime && swift build --product aro
+#   Two invocations: SwiftPM honours only the LAST --product, so
+#   `--product aro --product ARORuntime` silently builds just the runtime.
 #   `aro build` links libARORuntime.a by search order, and an installed
 #   /opt/homebrew/lib/libARORuntime.a wins over a worktree that never
 #   produced one. A runtime change then appears to have no effect —

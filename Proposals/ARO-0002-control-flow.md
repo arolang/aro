@@ -36,6 +36,7 @@ Guarded statements execute only when a condition is true.
 
 ```ebnf
 guarded_statement = aro_statement_base , "when" , condition , "." ;
+guarded_block     = "when" , condition , "{" , { statement } , "}" ;
 ```
 
 **Format:**
@@ -57,6 +58,41 @@ Throw a <NotFoundError> for the <user> when <user: record> is null.
 
 (* Log admin access *)
 Log "Admin access detected" to the <audit> when <user: role> == "admin".
+
+### Guarded blocks
+
+When several statements share one condition, `when` also takes a block
+(GitLab #516):
+
+```aro
+when <booking-date> before <deadline> {
+    Log "Booking accepted" to the <console>.
+    Store the <booking> into the <booking-repository>.
+}
+```
+
+This is the suffix form said once instead of once per statement, and it
+means exactly that: the block groups statements, it does not open a
+scope, so what it binds is visible afterwards. A `Return` inside it ends
+the feature set as it would anywhere else.
+
+### Temporal comparison
+
+`before` and `after` compare two instants — dates, or the ISO-8601
+strings dates arrive as over HTTP and in JSON — and sit at the same
+precedence as `<` and `>`:
+
+```aro
+when <event-date> after <now> {
+    Log "Event is upcoming" to the <console>.
+}
+
+Filter the <overdue> from the <invoices> where <due> before <now>.
+```
+
+They read as the domain says them and order as the comparisons they
+are; comparing something that is neither a date nor a number raises,
+rather than quietly answering false.
 ```
 
 ### 1.3 Semantics
@@ -337,13 +373,13 @@ ARO provides bounded, deterministic iteration over collections.
 ```ebnf
 foreach_loop = "for" , "each" , "<" , item_name , ">" ,
                [ "at" , "<" , index_name , ">" ] ,
-               "in" , "<" , collection , ">" ,
+               "in" , collection ,
                [ "where" , condition ] ,
                block ;
 
 item_name    = compound_identifier ;
 index_name   = compound_identifier ;
-collection   = qualified_noun ;
+collection   = "<" , qualified_noun , ">" | expression ;
 ```
 
 **Format:**
@@ -360,6 +396,35 @@ for each <item> at <index> in <collection> {
     <statements>
 }
 ```
+
+#### The Collection Slot
+
+The collection is either a **noun** — `<items>`, or `<team: members>` for a
+field — or any **expression**:
+
+```aro
+for each <n> in [1, 2, 3] {                 (* list literal — no Create needed *)
+    Log <n> to the <console>.
+}
+
+for each <line> in <order>.lines { … }      (* field access *)
+for each <n> in (<offsets>) { … }           (* parenthesised expression *)
+for each <n> in [<base>, <base-plus-one>] { … }   (* elements are expressions too *)
+```
+
+The expression is evaluated **once**, before the first iteration — never per
+element. A `where` filter and an `at <index>` clause apply either way.
+
+The noun form is not sugar for a one-element expression: only a name can carry
+specifiers, and only a name reaches the lazy-stream iteration path
+([ARO-0051](ARO-0051-streaming-execution.md)) that iterates a stream in O(1)
+memory. An expression that *evaluates* to a stream streams as well; a list
+literal is a value and is iterated as one.
+
+There is no range literal. `for each <n> in [1..10]` is not ARO — count with the
+range loop, `for <n> from 1 to 10 { … }`, whose upper bound is exclusive (it
+binds 1…9). A `..` / `..<` range syntax is deliberately not part of this
+proposal; GitLab #546 sketches one for its own proposal.
 
 #### Basic Iteration
 
@@ -439,7 +504,7 @@ For concurrent processing of independent items:
 
 ```ebnf
 parallel_foreach = "parallel" , "for" , "each" , "<" , item_name , ">" ,
-                   "in" , "<" , collection , ">" ,
+                   "in" , collection ,
                    [ "with" , "<" , "concurrency" , ":" , number , ">" ] ,
                    [ "where" , condition ] ,
                    block ;
@@ -454,7 +519,15 @@ parallel for each <item> in <items> {
 parallel for each <item> in <items> with <concurrency: 4> {
     Fetch the <data> from the <external-api>.
 }
+
+parallel for each <n> in [1, 2, 3] with <concurrency: 2> {
+    Send the <ping> to the <host>.
+}
 ```
+
+The collection slot is the same one the sequential form takes — a noun or an
+expression — and it is likewise evaluated once, on the loop's own thread,
+before any iteration starts.
 
 #### Parallel Processing
 

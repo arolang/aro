@@ -574,6 +574,42 @@ logical_op = "and" | "or" | "not" ;
 | `or` | Logical OR |
 | `not` | Logical NOT |
 
+The logical operators evaluate truthiness and yield a **boolean**. `or` is
+therefore not a way to supply a fallback value: `<params: port> or 8080` is
+`true`, not the port. Use `default` for that.
+
+### The `default` Operator
+
+```ebnf
+default_expression = expression , "default" , expression ;
+```
+
+Yields the left operand when it is **present**, the right one otherwise:
+
+```aro
+Create the <port> with <params: port> default 8080.
+Create the <host> with <params: host> default "0.0.0.0".
+```
+
+Present has exactly one meaning: the value exists. A missing variable, a
+missing field on a record, and an explicit `nil`/`null` are absent; everything
+else is present, **including `false`, `0`, `""` and `[]`** — those are values
+the author wrote, and defaulting on falsiness rather than on absence is a
+well-known source of bugs. Anything that is a genuine error (a type mismatch,
+an out-of-bounds index) stays an error; `default` does not swallow it.
+
+Defaults chain left-associatively, so the first present value wins:
+
+```aro
+Create the <region> with <params: region> default <config: region> default "eu".
+```
+
+`default` is contextual, not reserved: a variable or field may still be called
+`default`. Inside a `where`-clause it keeps its query meaning as the fallback
+for a lookup that found nothing (ARO-0018) — `Extract the <u> from the
+<user-repository> where <id> is 99 default "nobody".` — because there it
+follows the query, not an expression.
+
 ### String Concatenation
 
 ```ebnf
@@ -588,11 +624,17 @@ string_concat = "++" ;
 | 2 | unary `-` | Right |
 | 3 | `*` `/` `%` | Left |
 | 4 | `+` `-` `++` | Left |
-| 5 | `<` `>` `<=` `>=` | Left |
-| 6 | `==` `!=` `is` `is not` `contains` `matches` | Left |
-| 7 | `not` | Right |
-| 8 | `and` | Left |
-| 9 (lowest) | `or` | Left |
+| 5 | `default` | Left |
+| 6 | `<` `>` `<=` `>=` | Left |
+| 7 | `==` `!=` `is` `is not` `contains` `matches` | Left |
+| 8 | `not` | Right |
+| 9 | `and` | Left |
+| 10 (lowest) | `or` | Left |
+
+`default` sits between arithmetic and comparison so that both readings people
+expect hold: `<a> default 1 + 2` defaults to three (the fallback is the whole
+sum), and `<a> default 3 > 2` compares the defaulted value rather than
+defaulting to a boolean.
 
 This table is the whole story. **Grouping depends only on the operators, never
 on the shape of the operands** — a rule that combines a comparison with a

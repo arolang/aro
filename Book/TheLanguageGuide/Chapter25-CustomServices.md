@@ -2,7 +2,7 @@
 
 *"When you need to talk to the outside world."*
 
-> **Deprecation notice:** The `AROService` protocol and `ServiceRegistry` described in this chapter are deprecated as of ARO-0073. Services are now declared in `aro_plugin_info` and routed through `aro_plugin_execute("service:<method>", input_json)`. The old pattern still works but will be removed before the 1.0 release. See Section 25.10 for the new approach and Chapter 26 for the full plugin ABI.
+> **Deprecation notice:** The `AROService` protocol and `ServiceRegistry` described in this chapter are deprecated as of ARO-0087. Services are now declared in `aro_plugin_info` and routed through `aro_plugin_execute("service:<method>", input_json)`. The old pattern still works but will be removed before the 1.0 release. See Section 25.10 for the new approach and Chapter 26 for the full plugin ABI.
 
 ---
 
@@ -460,9 +460,9 @@ The distinction: built-in actions are part of the ARO language and have dedicate
 
 ---
 
-## 25.10 The New Service Pattern (ARO-0073)
+## 25.10 The New Service Pattern (ARO-0087)
 
-As of ARO-0073, services are declared in `aro_plugin_info` alongside actions and qualifiers. The runtime routes `Call the <result> from the <postgres: query>` to `aro_plugin_execute("service:query", input_json)`. No separate `AROService` protocol, no `ServiceRegistry`, no `aro_plugin_init` returning service metadata.
+As of ARO-0087, services are declared in `aro_plugin_info` alongside actions and qualifiers. The runtime routes `Call the <result> from the <postgres: query>` to `aro_plugin_execute("service:query", input_json)`. No separate `AROService` protocol, no `ServiceRegistry`, no `aro_plugin_init` returning service metadata.
 
 ### Declaring a Service in plugin.yaml and aro_plugin_info
 

@@ -120,6 +120,22 @@ public struct ExpressionEvaluator: Sendable {
                 return ProcessInfo.processInfo.environment[varName] ?? ""
             }
 
+            // ARO-0047: command-line parameters in an expression, so
+            // `Create the <port> with <parameter: port> default 8080.` reads
+            // the argument rather than an unbound name (GitLab #547). A
+            // parameter that was not passed is *absent*, which is what
+            // `default` asks about — hence the throw rather than an empty
+            // string. Extract keeps its own path for the noun spelling.
+            if varRef.noun.base == "parameter" {
+                guard let name = varRef.noun.specifiers.first else {
+                    return context.container.parameterStorage.getAll()
+                }
+                guard let value = context.container.parameterStorage.get(name) else {
+                    throw ExpressionError.undefinedVariable("parameter: \(name)")
+                }
+                return value
+            }
+
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }
@@ -269,6 +285,17 @@ public struct ExpressionEvaluator: Sendable {
     // MARK: - Binary Expression Evaluation
 
     private func evaluateBinary(_ expr: BinaryExpression, context: ExecutionContext) async throws -> any Sendable {
+        // `<params: count> default 3` (GitLab #547) returns a *value*, so it
+        // cannot go through the eager both-sides evaluation below: a missing
+        // left operand is the normal case, not a failure, and the right operand
+        // must not be evaluated when the left one is there.
+        if expr.op == .defaulting {
+            if let present = try await evaluatePresentValue(expr.left, context: context) {
+                return present
+            }
+            return try await evaluate(expr.right, context: context)
+        }
+
         let left = try await evaluate(expr.left, context: context)
         let right = try await evaluate(expr.right, context: context)
 
@@ -349,6 +376,18 @@ public struct ExpressionEvaluator: Sendable {
         case .or:
             return asBool(left) || asBool(right)
 
+        // Temporal comparison (Book ch. 42 §42.8, GitLab #516).
+        // `compareValues` already orders dates — and ISO strings,
+        // which is how dates arrive from JSON and HTTP — so `before`
+        // and `after` are `<` and `>` said the way the domain says
+        // them. Comparing two non-dates falls through to the numeric
+        // path, and comparing a date with something that is not one
+        // raises there, naming the value.
+        case .before:
+            return try compareValues(left, right, <)
+        case .after:
+            return try compareValues(left, right, >)
+
         // Collection operators
         case .contains:
             return containsValue(left, right)
@@ -358,7 +397,45 @@ public struct ExpressionEvaluator: Sendable {
         // Type operators (handled in type check expression)
         case .is, .isNot:
             return false // Should not reach here
+
+        // Handled above, before either operand is evaluated.
+        case .defaulting:
+            return left
         }
+    }
+
+    /// Evaluates an expression for the `default` operator's left side,
+    /// returning `nil` when the value is **absent** rather than failing.
+    ///
+    /// Absent means one of three things, and nothing else (GitLab #547):
+    /// an unbound variable, a missing field on a record, or an explicit
+    /// `nil`/`null`. A present-but-falsy value — `false`, `0`, `""`, `[]` —
+    /// is a value the author wrote, so it wins over the default; defaulting on
+    /// falsiness is the classic footgun and ARO does not do it.
+    ///
+    /// Genuine errors still propagate: a type mismatch (`<count: name>` on an
+    /// Int), an out-of-bounds index or a failing qualifier is a program bug,
+    /// not a missing value, and `default` must not paper over it.
+    private func evaluatePresentValue(
+        _ expression: any AROParser.Expression,
+        context: ExecutionContext
+    ) async throws -> (any Sendable)? {
+        let value: any Sendable
+        do {
+            value = try await evaluate(expression, context: context)
+        } catch ExpressionError.undefinedVariable, ExpressionError.undefinedMember {
+            return nil
+        }
+        return Self.isAbsentValue(value) ? nil : value
+    }
+
+    /// True for the runtime's spellings of "no value": the `NullValue`
+    /// sentinel a `nil`/`null` literal evaluates to, and `NSNull` as it arrives
+    /// from decoded JSON.
+    static func isAbsentValue(_ value: any Sendable) -> Bool {
+        if value is NullValue { return true }
+        if value is NSNull { return true }
+        return false
     }
 
     // MARK: - Unary Expression Evaluation

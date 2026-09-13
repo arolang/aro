@@ -40,6 +40,24 @@ The fine-tune is good. It is not perfect. Here are the mistakes you will see mos
 
 **Confusing feature set triggers.** The model sometimes writes a feature set named `createUser` and assigns it to a business activity that does not match the OpenAPI operationId. The feature set will parse but will never be triggered. Check that the name in parentheses matches the operationId in `openapi.yaml`.
 
+## 8.2a The Mistakes `aro check` Cannot Catch
+
+Everything in the previous section is a syntax error, which means `aro check` finds it and `/fix` repairs it. The mistakes worth your attention are the other kind: statements that parse, check clean, run to completion, and do the wrong thing quietly. There is no tool for these. There is only reading the code.
+
+Four you will meet:
+
+**`Filter … where` over a list of strings returns nothing.** `Filter` compares fields on records. A list of plain strings has no fields, so nothing matches and the result is `[]` — no error, no warning (GitLab #569). Counting lines that contain "ERROR" this way reports zero every time. Use `for each` with a `when` guard.
+
+**`when not <a> contains <b>` is always false.** `not` binds to the left operand, so the guard becomes `(not <a>) contains <b>`, which is false whatever the values are. Parenthesise: `when not (<a> contains <b>)` (GitLab #572).
+
+**`Compute … from <a> and <b>` is a boolean.** It reads like "combine these two", and it computes logical AND. If you wanted a record, that is `Create the <x> with { a: <a>, b: <b> }.`
+
+**A `File Event Handler` subscribes by its own name.** The runtime matches `created`, `modified` or `deleted` inside the feature-set name. `(File Changed: File Event Handler)` matches none of them and never runs (GitLab #570).
+
+What these have in common is that the English sentence is right and the ARO is wrong. That is the specific hazard of a language designed to read like prose, being written by a model trained on prose. The model is a fluent speaker of ARO's surface and an unreliable one of its semantics — and so, at first, are you.
+
+The defence is not more tool calls. It is the same discipline as any code review: read each statement and ask what it *does*, not what it says.
+
 ## 8.3 Using /fix vs. Manual Editing
 
 `/fix` is the fastest path from "broken" to "working". It runs the check, reads the diagnostics, and applies edits. For simple errors — typos, missing brackets, wrong prepositions — it is nearly always right on the first try.
@@ -99,7 +117,7 @@ After `/clean`, the model starts fresh. It re-reads the system prompt, re-discov
 
 **`aro test`** runs colocated tests. If your project has test feature sets, run them after every change. The model can run them via `aro_test`, but the habit of running tests yourself — not just having the model run them — is what keeps you honest.
 
-**`aro build`** compiles to a native binary. The model does not have a tool for this, because building is a deployment decision, not a development one. Build when you are ready to ship, not when the model tells you to.
+**`aro build`** compiles to a native binary. The model *can* call this one — `aro_build` is in the tool list — but it asks for approval first, and it should. Building is a deployment decision. Let the model build when you want to know whether the application compiles; do the release build yourself.
 
 The pattern is: use `aro ask` for generation and debugging, use the other commands for verification and deployment. The model is good at writing code and finding bugs. You are good at deciding whether the code does the right thing.
 
@@ -133,8 +151,10 @@ Run it either way:
 echo 'Create the <numbers> with [10, 20, 30].
 Reduce the <total: Integer> from the <numbers> with sum().
 Log <total> to the <console>.' | aro
-# => 60.00
+# => 60
 ```
+
+`Compute the <total: sum> from the <numbers>.` gets you the same 60 in one statement fewer, and is what you will see more often.
 
 ```
 $ aro repl
@@ -166,7 +186,7 @@ The fine-tune runs locally, and local inference has constraints that cloud infer
 
 **Context length.** Keep conversations short. The model's context window is 8192 tokens. A long conversation does not just degrade quality — it also slows inference, because every token of context has to be processed on every turn. `/clean` is a performance optimisation as much as a quality one.
 
-**Indexing.** Run `/index` once after cloning a project. The retrieval index lets the model find relevant files without scanning the whole directory tree, which saves tool calls and time. A project with an index gets better answers faster than one without.
+**Indexing.** Run `/index` once after cloning a project, then use `/search` to find the file you care about and `/file` to pin it. Doing the retrieval yourself is faster than watching the model `list_dir` and `grep` its way across the tree, and it costs no context window at all.
 
 ## 8.9 Asking About New Language Features
 
@@ -175,4 +195,6 @@ The training corpus only covers the language up to the snapshot the model was di
 - **User-defined actions** (ARO-0081). A feature set whose business activity is `Action` is callable as `Application.<Name>`. If the model writes `Call the <r> via Application.MyAction with …` it is hallucinating — show it Chapter 6 of TheLanguageGuide.
 - **Native Git actions** (ARO-0080). `<Retrieve> the <status> from the <git>`, `<Stage>`, `<Commit>`, `<Push>`, etc., run via libgit2. The model may try to `<Execute>` git as a shell command — that still works but is no longer the idiomatic form.
 - **Ordered statements, overlapping work**. Statements are read in order and effects happen in order, but an action is only awaited where its result is read — so independent statements overlap. The model may volunteer `await` annotations or promise-chaining from other languages; neither exists in ARO, and neither is needed (ARO-0088).
-- **Piped source.** `echo '<Log> "x" to the <console>.' | aro` evaluates piped source. Handy for one-liners; the model rarely suggests it on its own.
+- **Piped source.** `echo 'Log "x" to the <console>.' | aro` evaluates piped source. Handy for one-liners; the model rarely suggests it on its own. Note the bare verb: `<Log>` in angle brackets is a parse error, and it is one of the model's more persistent tics — angle brackets are for the result and the object, never the action.
+- **Concurrency limits on loops.** `parallel for each <x> in <xs> with <concurrency: 4> { … }` caps how many iterations run at once. The model tends not to know the clause exists and will suggest restructuring the loop instead.
+- **`.store` files** (ARO-0073). A `users.store` YAML file seeds `<user-repository>` before `Application-Start`, and persists writes back if the file is other-writable. If the model tells you repositories are in-memory only, it is repeating an old truth.

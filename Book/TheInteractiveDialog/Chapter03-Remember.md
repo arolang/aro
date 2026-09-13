@@ -16,7 +16,7 @@ aro> Set the <y> to 20.
 => OK
 
 aro> Compute the <sum> from <x> + <y>.
-=> 30
+=> OK
 ```
 
 Three statements. Three variables. All alive in the session.
@@ -27,16 +27,19 @@ To see what you've created, use `:vars`:
 
 ```
 aro> :vars
-┌──────┬─────────┬───────┐
-│ Name │ Type    │ Value │
-├──────┼─────────┼───────┤
-│ x    │ Integer │ 10    │
-│ y    │ Integer │ 20    │
-│ sum  │ Integer │ 30    │
-└──────┴─────────┴───────┘
+Name     | Type    | Value
+-------- | ------- | ---------------------
+sum      | Integer | 30
+terminal | Object  | { rows, is_tty, ... }
+x        | Integer | 10
+y        | Integer | 20
 ```
 
-A table of your world. Every variable, its type, its value.
+A table of your world: every variable, its type, its value, sorted by name.
+
+`terminal` is not yours. The runtime binds it for every feature set — screen
+size, TTY status, colour support — and the REPL is a feature set like any
+other, so it shows up here from the first statement you run. Ignore it.
 
 ## Deep Inspection
 
@@ -44,18 +47,19 @@ For complex objects, inspect them individually:
 
 ```
 aro> Create the <user> with { name: "Alice", age: 30 }.
-=> { name: "Alice", age: 30 }
+=> OK
 
 aro> :vars user
 user
   Type:  Object
   Value: {
-    name: "Alice",
     age: 30
+    name: "Alice"
   }
 ```
 
-The `:vars` command with a name dives deeper.
+The `:vars` command with a name dives deeper. Fields come back in alphabetical
+order, not the order you wrote them.
 
 ## Type Checking
 
@@ -63,7 +67,7 @@ Curious about a type? Use `:type`:
 
 ```
 aro> :type user
-Object { name: String, age: Integer }
+Object { age: Integer, name: String }
 ```
 
 The structure revealed.
@@ -77,22 +81,23 @@ aro> Set the <base-price> to 100.
 => OK
 
 aro> Compute the <tax> from <base-price> * 0.2.
-=> 20
+=> OK
 
 aro> Compute the <total> from <base-price> + <tax>.
-=> 120
+=> OK
 
 aro> :vars
-┌────────────┬─────────┬───────┐
-│ Name       │ Type    │ Value │
-├────────────┼─────────┼───────┤
-│ base-price │ Integer │ 100   │
-│ tax        │ Double  │ 20.0  │
-│ total      │ Double  │ 120.0 │
-└────────────┴─────────┴───────┘
+Name       | Type    | Value
+---------- | ------- | ----------------------
+base-price | Integer | 100
+tax        | Double  | 20.0
+terminal   | Object  | { width, is_tty, ... }
+total      | Double  | 120.0
 ```
 
-Step by step, your data grows.
+Step by step, your data grows — and the type column earns its keep here. One
+`Integer` times `0.2` gave a `Double`, and that `Double` carried into `total`.
+Nothing announced the conversion; `:vars` is where you notice it.
 
 ## Starting Fresh
 
@@ -106,7 +111,9 @@ aro> :vars
 No variables defined
 ```
 
-A blank slate. The conversation begins anew.
+A blank slate. The conversation begins anew. `:clear` also drops every feature
+set you defined and unsubscribes their event handlers — it is the whole
+session, not just the variables.
 
 ---
 

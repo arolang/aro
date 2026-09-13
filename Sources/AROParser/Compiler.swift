@@ -43,9 +43,16 @@ public final class Compiler {
     ///
     /// - Parameter externallyHandledEvents: event types handled elsewhere in
     ///   the application, for callers compiling one file of it at a time.
+    /// - Parameter declaredUserActions: every user-defined action declared in
+    ///   the application, for the same callers — `Application.<Name>` resolves
+    ///   across files (GitLab #587). Collect it with
+    ///   `UserActionRegistry.declared(inFiles:)` before the compile loop.
+    ///   `nil` means "one file, no application context", and the unknown-action
+    ///   diagnostic then says so rather than claiming nothing is declared.
     public func compile(
         _ source: String,
-        externallyHandledEvents: Set<String> = []
+        externallyHandledEvents: Set<String> = [],
+        declaredUserActions: UserActionRegistry? = nil
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -61,7 +68,9 @@ public final class Compiler {
             // Phase 3: Semantic Analysis
             let analyzer = SemanticAnalyzer(diagnostics: diagnostics)
             let analyzedProgram = analyzer.analyze(
-                program, externallyHandledEvents: externallyHandledEvents)
+                program,
+                externallyHandledEvents: externallyHandledEvents,
+                declaredUserActions: declaredUserActions)
             
             return CompilationResult(
                 program: program,

@@ -342,6 +342,8 @@ public final class FeatureSetExecutor: Sendable {
                 try await executePublishStatement(publishStatement, context: context)
             } else if let matchStatement = statement as? MatchStatement {
                 try await executeMatchStatement(matchStatement, context: context)
+            } else if let whenStatement = statement as? WhenStatement {
+                try await executeWhenStatement(whenStatement, context: context)
             } else if let requireStatement = statement as? RequireStatement {
                 try await executeRequireStatement(requireStatement, context: context)
             } else if let forEachLoop = statement as? ForEachLoop {
@@ -1434,21 +1436,32 @@ public final class FeatureSetExecutor: Sendable {
         _ loop: ForEachLoop,
         context: ExecutionContext
     ) async throws {
-        // Resolve the collection (with specifier support for property access)
-        guard var collectionValue: any Sendable = context.resolveAny(loop.collection.base) else {
-            throw ActionError.undefinedVariable(loop.collection.base)
-        }
+        // Resolve the collection: either a noun (with specifier support for
+        // property access) or a general expression (GitLab #519).
+        var collectionValue: any Sendable
+        if let noun = loop.collection {
+            guard let resolved: any Sendable = context.resolveAny(noun.base) else {
+                throw ActionError.undefinedVariable(noun.base)
+            }
+            collectionValue = resolved
 
-        // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
-        // Specifiers are not supported on streams — they require an in-memory value.
-        if let anyStream = collectionValue as? AnyStreamingValue, loop.collection.specifiers.isEmpty {
-            try await executeForEachLazy(loop, stream: anyStream.asStream(), context: context)
-            return
-        }
+            // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
+            // Specifiers are not supported on streams — they require an in-memory value.
+            if let anyStream = collectionValue as? AnyStreamingValue, noun.specifiers.isEmpty {
+                try await executeForEachLazy(loop, stream: anyStream.asStream(), context: context)
+                return
+            }
 
-        // Handle specifiers as property access (e.g., <team: members> -> team.members)
-        for specifier in loop.collection.specifiers {
-            collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
+            // Handle specifiers as property access (e.g., <team: members> -> team.members)
+            for specifier in noun.specifiers {
+                collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
+            }
+        } else if let expression = loop.collectionExpression {
+            // Evaluated exactly once, before the first iteration — re-evaluating
+            // per element would change both the semantics and the cost.
+            collectionValue = try await expressionEvaluator.evaluate(expression, context: context)
+        } else {
+            throw ActionError.undefinedVariable("for-each collection")
         }
 
         // ARO-0051: Streaming support — iterate lazy streams without materializing
@@ -1607,6 +1620,28 @@ public final class FeatureSetExecutor: Sendable {
     }
 
     // MARK: - While Loop Execution (GitLab #131)
+
+    /// `when <condition> { … }` — the block spelling of the guard
+    /// ARO has always had as a statement suffix (GitLab #516).
+    ///
+    /// The body runs in the enclosing scope, not a child one: a
+    /// guarded block groups statements, it does not introduce a new
+    /// place for names to live, so what it binds is visible after it
+    /// exactly as if the statements had carried the guard each.
+    private func executeWhenStatement(
+        _ statement: WhenStatement,
+        context: ExecutionContext
+    ) async throws {
+        let condition = try await expressionEvaluator.evaluate(statement.condition, context: context)
+        guard asBool(condition) else { return }
+
+        for bodyStatement in statement.body {
+            try await executeStatement(bodyStatement, context: context)
+            // A response inside the block ends the feature set, the
+            // same way it does inside a loop body.
+            if context.getResponse() != nil { return }
+        }
+    }
 
     private func executeWhileLoop(
         _ loop: WhileLoop,

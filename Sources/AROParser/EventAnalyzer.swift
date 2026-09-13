@@ -157,6 +157,10 @@ public struct EventAnalyzer {
             }
         }
 
+        func visit(_ node: WhenStatement) {
+            for bodyStatement in node.body { bodyStatement.accept(self) }
+        }
+
         func visit(_ node: MatchStatement) {
             for caseClause in node.cases {
                 for bodyStatement in caseClause.body {

@@ -85,7 +85,22 @@ provides:
 
 ## 7.3 The FFI Interface
 
-Rust plugins communicate with ARO through a C-compatible FFI (Foreign Function Interface). Three attributes make this work.
+Rust plugins communicate with ARO through a C-compatible FFI (Foreign Function
+Interface). Three attributes make this work.
+
+> **A word about the Rust SDK.** Swift, C, C++ and Python each have an SDK that
+> generates the C ABI for you from decorated handlers, and `aro new plugin`
+> scaffolds against it. Rust is the exception. `aro new plugin --lang rust`
+> emits `#[action]` / `#[qualifier_attr]` attributes and an `aro_export!` block,
+> but the published `aro-plugin-sdk-rust` implements none of them — its proc
+> macros are pass-through stubs and `aro_export!` does not exist, so the
+> scaffolded crate does not compile (GitLab #549). Until that lands, write the
+> exports by hand. That is what this chapter teaches, and it works today.
+>
+> One more trap if you do reach for the SDK's helpers: `Output::value(v)`
+> produces `{"value": v}`, which the runtime's *qualifier* decoder rejects. A
+> qualifier must return `{"result": v}` — use `Output::new().set("result", v)`
+> (GitLab #554). Actions are unaffected; their responses are free-form objects.
 
 ### Required and Optional Exports
 
@@ -329,19 +344,19 @@ pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
 // MARK: - Validation Actions
 
 /// Compiled regex patterns (created once, reused for each call)
-static EMAIL_REGEX: LazyRegex = Lazy::new(|| {
+static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
 });
 
-static URL_REGEX: LazyRegex = Lazy::new(|| {
+static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^https?://[^\s/$.?#].[^\s]*$").unwrap()
 });
 
-static PHONE_REGEX: LazyRegex = Lazy::new(|| {
+static PHONE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^\+?[1-9]\d{1,14}$").unwrap()
 });
 
-static UUID_REGEX: LazyRegex = Lazy::new(|| {
+static UUID_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$").unwrap()
 });
 
@@ -631,6 +646,67 @@ With custom actions registered, you use native ARO syntax:
 
 The `<ValidateEmail>`, `<ValidatePhone>`, and `<ValidateCreditCard>` actions work exactly like built-in ARO verbs—no `<Call>` required!
 
+## 7.4a Qualifiers
+
+Actions get a verb; qualifiers modify a value in place —
+`Compute the <loud: Validator.shout> from <name>.`. A Rust plugin provides them
+by declaring them in `aro_plugin_info` and exporting `aro_plugin_qualifier`:
+
+```rust
+// In aro_plugin_info's JSON:
+//   "qualifiers": [
+//     { "name": "normalize", "inputTypes": ["String"],
+//       "description": "Trim and lowercase", "accepts_parameters": false }
+//   ]
+//
+// Note inputTypes is camelCase while accepts_parameters is snake_case.
+// Spell it input_types and the qualifier silently accepts every type.
+
+#[no_mangle]
+pub extern "C" fn aro_plugin_qualifier(
+    name: *const c_char,
+    input_json: *const c_char,
+) -> *mut c_char {
+    let name = match parse_cstr(name) {
+        Ok(s) => s,
+        Err(e) => return error_result(&e),
+    };
+    let input: Value = match parse_cstr(input_json)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+    {
+        Some(v) => v,
+        None => return error_result("Invalid JSON"),
+    };
+
+    // { "value": <the value>, "type": "String", "_with": { ... } }
+    let value = input.get("value").and_then(|v| v.as_str()).unwrap_or("");
+
+    let out = match name.as_str() {
+        "normalize" => json!({ "result": value.trim().to_lowercase() }),
+        other       => json!({ "error": format!("Unknown qualifier: {}", other) }),
+    };
+
+    CString::new(out.to_string()).unwrap().into_raw()
+}
+```
+
+Three things the runtime insists on, and none of them is negotiable:
+
+1. **The name arrives without its handle.** ARO code writes
+   `<value: Validator.normalize>`; your function receives `"normalize"`.
+2. **The response is `{"result": <value>}` or `{"error": "<message>"}`.**
+   Nothing else. A bare value fails with *Plugin returned neither result nor
+   error*; `{"result": {"result": …}}` binds the inner object.
+3. **Qualifiers are only reachable namespaced.** Unlike actions, which the
+   runtime registers under both the bare verb and `Handle.verb`, a qualifier
+   exists only as `Handle.qualifier`. Declare a `handle:` in `plugin.yaml` or
+   the qualifier is unreachable.
+
+A qualifier-only plugin does not need `aro_plugin_execute` at all — but it does
+need `aro_plugin_qualifier` to exist, because the runtime registers a plugin's
+qualifiers only when it finds that symbol.
+
 ## 7.5 Performance Optimization
 
 Rust plugins excel at performance-critical tasks. Here are techniques to maximize speed:
@@ -644,7 +720,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 // Compiled once at first use, reused for all calls
-static PATTERN: LazyRegex = Lazy::new(|| {
+static PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"complex pattern").unwrap()
 });
 ```

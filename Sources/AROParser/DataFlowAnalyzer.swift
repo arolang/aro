@@ -225,6 +225,12 @@ public struct DataFlowAnalyzer {
             analyzer.analyzeRequireStatement(node, builder: builder)
         }
 
+        func visit(_ node: WhenStatement) -> Result {
+            analyzer.analyzeWhenStatement(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
+        }
+
         func visit(_ node: MatchStatement) -> Result {
             analyzer.analyzeMatchStatement(
                 node, builder: builder, definedSymbols: &definedSymbols
@@ -428,6 +434,42 @@ public struct DataFlowAnalyzer {
                 }
             }
             sideEffects.append("\(statement.action.verb):\(resultName)")
+
+            // GitLab #515: `Store the <ticket> into the <ticket-repository>
+            // with { … }` binds the stored record to <ticket> — the payload is
+            // the value, so the result slot is an output here, not a read of
+            // something defined earlier. Without this the record is invisible
+            // to the analyzer and every later use reports "External dependency
+            // 'ticket' is not published by any feature set".
+            //
+            // Scoped to the payload form: the `<stored: user>` spelling reads a
+            // variable that already exists, and the bare spelling stores one, so
+            // neither defines a name.
+            // StoreAction.verbs, mirrored here because AROParser cannot see it.
+            let storeVerbs = ["store", "save", "persist"]
+            if storeVerbs.contains(statement.action.verb.lowercased()),
+               statement.rangeModifiers.withClause != nil,
+               statement.result.typeAnnotation == nil,
+               statement.object.preposition == .into || statement.object.preposition == .to {
+                // A name that already holds a value cannot also hold the stored
+                // record — the runtime refuses the rebind, so say so here where
+                // it is cheap to fix (ARO-0001 immutability).
+                checkImmutabilityViolation(
+                    name: resultName, verb: statement.action.verb,
+                    objectName: objectName, preposition: statement.object.preposition,
+                    span: statement.result.span,
+                    definedSymbols: definedSymbols, inMutableScope: inMutableScope
+                )
+                outputs.insert(resultName)
+                builder.define(
+                    name: resultName,
+                    definedAt: statement.span,
+                    visibility: .internal,
+                    source: .computed,
+                    dataType: TypeInferencer.inferResultType(statement)
+                )
+                definedSymbols.insert(resultName)
+            }
 
         case .export:
             break
@@ -639,14 +681,33 @@ public struct DataFlowAnalyzer {
         var sideEffects: [String] = []
         var dependencies: Set<String> = []
 
-        let collectionName = statement.collection.base
-        if !definedSymbols.contains(collectionName) && !isKnownExternal(collectionName) {
-            diagnostics.warning(
-                "Collection '\(collectionName)' used in for-each before definition",
-                at: statement.collection.span.start
-            )
+        // The collection is either a noun or an expression (GitLab #519). A noun
+        // is one input and can be reported as undefined by name; an expression
+        // contributes every variable it reads.
+        let collectionName: String
+        if let noun = statement.collection {
+            collectionName = noun.base
+            if !definedSymbols.contains(collectionName) && !isKnownExternal(collectionName) {
+                diagnostics.warning(
+                    "Collection '\(collectionName)' used in for-each before definition",
+                    at: noun.span.start
+                )
+            }
+            inputs.insert(collectionName)
+        } else {
+            collectionName = statement.collectionLabel
+            if let expression = statement.collectionExpression {
+                for varName in extractVariables(from: expression) {
+                    if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                        diagnostics.warning(
+                            "Collection '\(varName)' used in for-each before definition",
+                            at: expression.span.start
+                        )
+                    }
+                    inputs.insert(varName)
+                }
+            }
         }
-        inputs.insert(collectionName)
 
         if let filter = statement.filter {
             let filterVars = extractVariables(from: filter)
@@ -820,6 +881,46 @@ public struct DataFlowAnalyzer {
         )
     }
 
+    /// A guarded block reads its condition and whatever its body
+    /// reads; its body's bindings are conditional, so they are
+    /// treated like a loop body's — visible, but produced under a
+    /// guard (GitLab #516).
+    private func analyzeWhenStatement(
+        _ statement: WhenStatement,
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
+    ) -> (DataFlowInfo, Set<String>) {
+        var inputs: Set<String> = []
+        var outputs: Set<String> = []
+        var sideEffects: [String] = []
+        var dependencies: Set<String> = []
+
+        for varName in extractVariables(from: statement.condition) {
+            if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                dependencies.insert(varName)
+            }
+            inputs.insert(varName)
+        }
+
+        for bodyStatement in statement.body {
+            let (flow, newDeps) = analyzeStatement(
+                bodyStatement,
+                builder: builder,
+                definedSymbols: &definedSymbols,
+                inMutableScope: true
+            )
+            inputs.formUnion(flow.inputs)
+            outputs.formUnion(flow.outputs)
+            sideEffects.append(contentsOf: flow.sideEffects)
+            dependencies.formUnion(newDeps)
+        }
+
+        return (
+            DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+            dependencies
+        )
+    }
+
     // MARK: - Dependency Verification
 
     /// Verifies that external dependencies are published by some feature set
@@ -953,9 +1054,18 @@ public struct DataFlowAnalyzer {
         expression.accept(VariableCollector())
     }
 
+    /// Variable base-names referenced anywhere in an expression tree.
+    ///
+    /// Module-internal so other analyses that meet a bare expression — the
+    /// for-each collection slot in `BodyMaterializationAnalyzer`, GitLab #519 —
+    /// read variables the same way rather than growing a second walker.
+    static func variables(in expression: any Expression) -> Set<String> {
+        expression.accept(VariableCollector())
+    }
+
     /// Collects the variable base-names referenced anywhere in an expression
     /// tree. Behaviour matches the previous `collectVariables` switch 1:1.
-    private struct VariableCollector: ExpressionVisitor {
+    struct VariableCollector: ExpressionVisitor {
         typealias Result = Set<String>
 
         func visit(_ node: LiteralExpression) -> Set<String> { [] }

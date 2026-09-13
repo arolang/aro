@@ -8,13 +8,20 @@ Compiled ARO binaries need to call Swift runtime code. LLVM generates native cod
 - **Layer 2**: `@_cdecl` wrappers receive C types, convert to Swift, and call Swift actions
 - **Layer 3**: Swift actions execute with full runtime access
 
+The bridge used to be its own module, `AROCRuntime`, with one large `RuntimeBridge.swift` at its head. Both are gone: the C surface was folded into `ARORuntime` — which is now a static library exporting C symbols — and the monolith was split by concern. Fourteen files, about 9,400 lines, and **248 `@_cdecl` functions** across the module. The name survives only as a `[RuntimeBridge]` log prefix.
+
 The bridge code lives in `Sources/ARORuntime/Bridge/`:
 
 | File | Purpose |
 |------|---------|
-| `RuntimeBridge.swift` | Lifecycle: init, shutdown, context management |
-| `ActionBridge.swift` | All 61 actions exposed via `@_cdecl` |
-| `ServiceBridge.swift` | HTTP server, file system, socket services |
+| `RuntimeCoreBridge.swift` | Handles: `AROCRuntimeHandle`, `AROCContextHandle`, `AROCValue`; lifecycle |
+| `RuntimeExecutionBridge.swift` | Feature-set entry, variable ops, expression-JSON evaluation |
+| `ActionBridge.swift` | The action verbs exposed via `@_cdecl` — 68 of the module's 248 |
+| `ServiceBridge.swift` | The native HTTP server, static-plugin registration, file/socket services |
+| `RuntimeEventRecordingBridge.swift` | Handler registration and event recording |
+| `AROFuture.swift` | The async/sync boundary: futures and `ActionTaskExecutor` |
+| `LazyActionPolicy.swift` | Which verbs may defer (ARO-0088) |
+| `SocketBridge.swift`, `FileSystemBridge.swift`, `FileWatcherBridge.swift`, `HTTPClientBridge.swift`, `HTTPServerBridge.swift` | Per-service C surfaces |
 
 ```
 LLVM-Generated Code (native)
@@ -94,7 +101,7 @@ LLVM-Generated Code (native)
 
 Every action in the runtime is exposed as a `@_cdecl` function — a C-callable Swift function. The name mangling follows a simple pattern: `aro_action_{verbname}`. This is what the generated LLVM IR calls.
 
-All 61 actions have thin wrappers that delegate to a shared `ActionRunner`. The wrapper's job is to receive C pointers, convert them to Swift types, invoke the action, and box the result for return.
+The action verbs have thin wrappers that delegate to a shared `ActionRunner`. The wrapper's job is to receive C pointers, convert them to Swift types, invoke the action, and box the result for return.
 
 ---
 
@@ -102,11 +109,15 @@ All 61 actions have thin wrappers that delegate to a shared `ActionRunner`. The 
 
 The bridge uses opaque `UnsafeRawPointer` handles to pass Swift objects to C. There are three kinds:
 
-| Handle | Wraps |
-|--------|-------|
-| Runtime handle | The entire runtime state (event bus, registries, context map) |
-| Context handle | One feature set's execution context |
-| Value handle | A boxed `any Sendable` value |
+| Handle | Type | Wraps |
+|--------|------|-------|
+| Runtime handle | `AROCRuntimeHandle` | The `Runtime`, the context table, the store-flush service, a lazy `MultiThreadedEventLoopGroup` |
+| Context handle | `AROCContextHandle` | One `RuntimeContext`, a back-reference to the runtime, a per-invocation `ActionDriverChannel`, and strong refs to the services it must keep alive |
+| Value box | `AROCValue` | A lock-guarded `any Sendable` |
+
+Descriptors are *not* on that list, which is easy to get wrong. `ResultDescriptor` and `ObjectDescriptor` never cross as handles — they cross as stack-allocated C structs the code generator fills in per statement (`DescriptorBuilder`). Only things with lifetimes get handles.
+
+Per-service handles follow the same pattern where a service must outlive a call: `HTTPServerHandle`, `HTTPRequestHandle`, `HTTPResponseHandle`, `SocketHandle`, and three platform-gated definitions of `FileWatcherHandle`.
 
 Swift objects cannot be passed to C directly — C doesn't know their size or layout. So we allocate them with `Unmanaged.passRetained()`, which hands us an opaque pointer the C side can store and pass back. A global registry keeps those objects alive (prevents ARC from freeing them). When the C side is done, it calls a cleanup function, which releases the retain.
 
@@ -191,15 +202,33 @@ Complex types (dictionaries, arrays) cross the boundary as JSON strings. The bri
 
 ## Synchronous Execution
 
-`@_cdecl` functions cannot be `async` — C has no concept of Swift concurrency. When an action needs to do async work (network call, file read), it spins up the work on the cooperative executor and blocks the calling thread with a semaphore. This is the fundamental tension of the C bridge — a synchronous wrapper around an async action.
+`@_cdecl` functions cannot be `async` — C has no concept of Swift concurrency. This is the fundamental tension of the C bridge: a synchronous wrapper around an async action.
 
-This works, but it has a real risk: if the executor pool is exhausted, the blocking thread and the async task can deadlock waiting on each other. To prevent this, event handlers run on GCD threads rather than the Swift cooperative executor.
+The first answer was the obvious one — start the work on the cooperative executor, block the calling thread on a `DispatchSemaphore`. It worked and it deadlocked. Swift's cooperative pool has a fixed thread count; a cascading event chain could fill it with blocked pthreads, each waiting for a continuation that needed one of those very threads to run.
+
+Two changes fixed it, and they are separable.
+
+**Change the pool.** `AROFuture`'s underlying `Task` is created with `executorPreference: ActionTaskExecutor.shared`, a custom `TaskExecutor` over GCD's `global(qos: .userInitiated)` queue. GCD's pool is elastic: under load it spawns more threads. So a blocked forcer can no longer starve the work that would unblock it — which is the property the cooperative pool cannot offer and the reason for the whole exercise.
+
+**Change the wait primitive.** Results are handed over through a `DispatchGroup`, not a semaphore, and the difference is not stylistic. `group.enter()` happens in the future's `init`; `group.leave()` happens exactly once when the result lands; `group.wait()` wakes *every* current and future waiter. A `DispatchSemaphore.signal()` releases one. For a value any number of consumers may force — including from C pthreads — the group is the correct primitive and the semaphore is a bug waiting for a second reader.
+
+Semaphores have not vanished. They are still the mechanism at the older one-shot call sites across `RuntimeExecutionBridge`, `ServiceBridge`, `HTTPClientBridge` and `FileWatcherBridge`, where a single caller waits for a single answer and the fan-out problem does not arise. Describing the bridge as "semaphore-based" is a half-truth worth avoiding: futures resolve through a group on an elastic executor, and semaphores bridge the simple calls that never needed more.
 
 ---
 
 ## Handler Registration
 
-Compiled binaries register event handlers by passing function pointers to the runtime. The runtime subscribes to the event bus, and when a matching event arrives, it reconstructs the function pointer and calls the compiled handler on a GCD thread. The calling convention for all handlers is the same: receive a context pointer, return a result pointer.
+Compiled binaries register event handlers by passing function pointers to the runtime. The runtime subscribes to the event bus, and when a matching event arrives, it reconstructs the function pointer and calls the compiled handler. The calling convention for all handlers is the same: receive a context pointer, return a result pointer.
+
+There are exactly three `aro_runtime_register_*` entry points, all in `RuntimeEventRecordingBridge.swift`:
+
+| Function | Registers |
+|----------|-----------|
+| `aro_runtime_register_handler` | a domain event type by name |
+| `aro_runtime_register_state_transition_handler` | a state transition, with an optional guard key/value |
+| `aro_runtime_register_notification_handler` | a notification handler, with an optional `when`-condition string |
+
+Alongside them sit the `aro_register_*` family for everything that is not an event subscription: `aro_register_user_action` (ARO-0081), `aro_register_repository_observer` and its guarded variant, `aro_register_feature_set_metadata`, `aro_http_register_route`, and three plugin-registration entries.
 
 This is the most fragile part of the bridge. Function pointer casting through `unsafeBitCast` is not checked at runtime. A mismatch in calling convention or parameter count will silently corrupt memory or crash.
 
@@ -226,15 +255,17 @@ On Darwin, JSON booleans can be identified by checking their Core Foundation typ
 
 ---
 
-## Service Registration Limitations
+## Two HTTP Servers, and Why
 
-There is one major limitation that shapes the entire binary mode story: SwiftNIO does not work in compiled binaries.
+SwiftNIO does not work in compiled binaries. Swift's type metadata for NIO's internal socket channel types is not available when the Swift runtime is initialized from LLVM-compiled code, and the crash lands in `_swift_allocObject_` with a null metadata pointer.
 
-SwiftNIO crashes because Swift's type metadata for NIO's internal socket channel types is not available when the Swift runtime is initialized from LLVM-compiled code. The metadata registration that normally happens at program startup does not run correctly in this context.
+The bridge does not try to survive this; it refuses to walk into it. `AROCRuntimeHandle` deliberately leaves `httpServer` and `socketServer` `nil`, with the reasoning written above the assignment. Compiled binaries get `NativeHTTPServer` instead — a BSD-socket server living in `ServiceBridge.swift`, started by `aro_native_http_server_start_with_openapi()`, which `StartAction` calls when it finds no `HTTPServerService` registered.
 
-The consequence: compiled ARO binaries use a native BSD socket HTTP server instead of SwiftNIO. This is why there are two HTTP server implementations — one for the interpreter, one for binaries. The native server is simpler and more limited, but it is stable.
+So there are two HTTP server implementations, one per mode, and it is worth being precise about what that costs, because "HTTP doesn't work in compiled binaries" is a claim this book used to make and it is not true. The native server routes from the embedded OpenAPI contract, speaks WebSocket, streams request bodies through a bounded channel with backpressure, enforces per-route `x-aro-max-body` limits, and answers `413` with the same wording as the NIO server (ARO-0090 §10). The `FileUpload` example builds a binary and runs every one of those checks against it.
 
-Similarly, `ManagedAtomic` from `swift-atomics` causes SIGSEGV in compiled binaries (see the note on SocketClient in the memory file). Any library that relies on Swift's concurrency metadata infrastructure may hit similar issues.
+The honest gaps are narrower and specific: `Transfer-Encoding: chunked` request bodies are not implemented in the native server, which frames by `Content-Length` only; and on Windows the FlyingFox path cannot stream a body at all. Both are recorded in ARO-0090 §11.
+
+The related constraint is the same family of problem. `ManagedAtomic` from `swift-atomics` causes SIGSEGV in compiled binaries. Any library that leans on Swift's metadata infrastructure at initialization time may hit this, and the pattern for dealing with it is the one above: detect at bring-up, substitute a plainer implementation, and write down which capability you gave up.
 
 ---
 
@@ -245,18 +276,20 @@ The runtime bridge is the most mechanically complex part of ARO's native compila
 1. **`@_cdecl`** exports Swift functions with C calling conventions — one per action verb
 2. **Opaque pointer handles** wrap Swift objects so C code can hold and pass them
 3. **Manual offset calculations** convert C structs to Swift `ResultDescriptor`/`ObjectDescriptor` values
-4. **Semaphore blocking** makes async actions synchronous at the boundary
+4. **Futures on an elastic executor** make async actions synchronous at the boundary — a `DispatchGroup` for fan-out, GCD rather than the cooperative pool so a blocked forcer cannot starve its own unblocking
 5. **Function pointer casting** enables compiled handler callbacks
 6. **Value boxing** provides reference-counted return values to the C side
 7. **Platform-specific code** handles Darwin/Linux boolean representation differences
-8. **Native socket HTTP** replaces SwiftNIO, which cannot initialize correctly in this context
+8. **Native socket HTTP** replaces SwiftNIO, which cannot initialize correctly in this context — with contract routing, WebSocket, and streamed bodies, but no chunked transfer encoding
 
 The bridge is the most fragile part of native compilation. Memory layout assumptions, pointer casting, and synchronization all create potential failure modes that the interpreter path avoids entirely. If stability matters more than startup time, use the interpreter. If you need a self-contained binary, the bridge is the price of admission.
 
 Implementation references:
-- `Sources/ARORuntime/Bridge/RuntimeBridge.swift` — Core lifecycle and context management
-- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 61 action `@_cdecl` exports
-- `Sources/ARORuntime/Bridge/ServiceBridge.swift` — HTTP/File/Socket service bridges
+- `Sources/ARORuntime/Bridge/RuntimeCoreBridge.swift` — handles, lifecycle, context management
+- `Sources/ARORuntime/Bridge/RuntimeExecutionBridge.swift` — feature-set entry, variables, expression JSON
+- `Sources/ARORuntime/Bridge/ActionBridge.swift` — the action `@_cdecl` exports
+- `Sources/ARORuntime/Bridge/AROFuture.swift` — futures and `ActionTaskExecutor`
+- `Sources/ARORuntime/Bridge/ServiceBridge.swift` — the native HTTP server and service bridges
 
 ---
 

@@ -7,60 +7,58 @@ All commands work with both `:` and `/` prefix (e.g., `:help` or `/help`).
 | Command | Aliases | Description |
 |---------|---------|-------------|
 | `:help` | `:h`, `:?` | Show help message |
-| `:vars` | `:v` | List all session variables |
+| `:vars` | `:v`, `:variables` | List all session variables |
 | `:vars <name>` | | Show details of specific variable |
 | `:type <name>` | `:t` | Show type of variable |
-| `:clear` | `:c` | Clear all session state |
+| `:clear` | `:c`, `:reset` | Clear all session state |
 | `:history` | `:hist` | Show full command history |
 | `:history <n>` | | Show last n commands |
-| `:fs` | | List defined feature sets |
-| `:invoke <name>` | `:i` | Invoke a feature set |
-| `:invoke <name> <json>` | | Invoke with input data |
+| `:fs` | `:featuresets` | List defined feature sets |
+| `:invoke <name>` | `:i`, `:run` | Invoke a feature set |
+| `:invoke <name> <json>` | | Invoke with input data (quotes must be escaped — §4) |
 | `:set <name> <value>` | | Set a variable |
-| `:save <file>` | | Save session to file |
-| `:load <file>` | | Load and execute file |
+| `:load <file>` | | Load and execute a `.aro` file |
 | `:export` | `:e` | Print session as .aro code |
 | `:export <file>` | | Save session to .aro file |
 | `:export --test <file>` | | Export as test file |
-| `:services` | `:svc` | List active services |
-| `:service start <type>` | | Start a service |
-| `:service stop <name>` | | Stop a service |
-| `:plugin add <git-url>` | | Install and load a plugin from Git |
+| `:plugin add <git-url>` | `:plugins` | Install and load a plugin from Git |
 | `:plugin add <url> --ref <ref>` | | Install specific version |
-| `:plugin list` | `:plugins` | List loaded plugins |
-| `:plugin remove <name>` | | Unload a plugin |
+| `:plugin update <name>` | | Update a plugin (`--ref` to pin) |
+| `:plugin list` | | List loaded plugins |
+| `:plugin remove <name>` | | Unload and delete a plugin |
 | `:quit` | `:q`, `:exit` | Exit the REPL |
+
+There is no `:save`, and no `:service` / `:services`. Services start with an
+ordinary ARO statement (`Start the <file-monitor> with "./data".`), which is
+chapter 6.
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
 | `Tab` | Auto-complete |
-| `Up` | Previous command |
-| `Down` | Next command |
-| `Ctrl+R` | Reverse search history |
+| `Up` / `Ctrl+P` | Previous command |
+| `Down` / `Ctrl+N` | Next command |
+| `Ctrl+A` / `Ctrl+E` | Start / end of line |
+| `Ctrl+B` / `Ctrl+F` | Left / right one character |
 | `Ctrl+C` | Cancel current input |
 | `Ctrl+D` | Exit REPL (on empty line) |
 | `Ctrl+L` | Clear screen |
 | `Ctrl+U` | Clear line |
+| `Ctrl+K` | Delete to end of line |
 | `Ctrl+W` | Delete word backward |
+| `Ctrl+T` | Transpose characters |
 
-## Service Types
-
-| Type | Option | Description |
-|------|--------|-------------|
-| `http` | `--port <n>` | HTTP server |
-| `http` | `--contract <file>` | OpenAPI contract |
-| `file-watcher` | `--path <dir>` | File monitor |
-| `socket` | `--port <n>` | TCP socket server |
+`Ctrl+R` reverse history search is *not* bound.
 
 ## Result Display
 
 | Symbol | Meaning |
 |--------|---------|
-| `=> <value>` | Statement returned a value |
-| `=> OK` | Statement succeeded (no value) |
+| `=> <value>` | A bare expression evaluated to a value |
+| `=> OK` | Statement succeeded (a binding statement always reports this) |
 | `Error: ...` | Statement failed |
 | `+` | Statement added to feature set |
-| `...>` | Continuation (incomplete input) |
+| `...>` | Continuation (unclosed brace, bracket, paren or string) |
 | `(Name)>` | Inside feature set definition |
+| `[Name] ...` | Program output, prefixed with the feature set that logged it |

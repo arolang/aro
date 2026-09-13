@@ -84,7 +84,13 @@ public final class Parser {
     private let tokens: [Token]
     private var current: Int = 0
     private let diagnostics: DiagnosticCollector
-    
+
+    /// True while a where-condition is being parsed, where a trailing
+    /// `default` belongs to the query modifier (ARO-0018) rather than to the
+    /// expression-level defaulting operator (GitLab #547).
+    fileprivate var defaultOperatorSuppressed = false
+
+
     // MARK: - Initialization
     
     public init(tokens: [Token], diagnostics: DiagnosticCollector = DiagnosticCollector()) {
@@ -304,6 +310,7 @@ public final class Parser {
     /// keyword or `.preposition(.for)`.
     private static let statementDispatch: [(match: TokenKind, parse: StatementParselet)] = [
         (.match,             { try $0.parseMatchStatement() }),               // ARO-0004
+        (.when,              { try $0.parseWhenBlock() }),                     // GitLab #516
         (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
         (.preposition(.for), { try $0.parseForOrRangeLoop() }),
         (.parallel,          { try $0.parseParallelForEachLoop() }),
@@ -1000,6 +1007,27 @@ public final class Parser {
                          .plusPlus, .equalEqual, .bangEqual, .lessEqual,
                          .greaterEqual, .and, .or, .contains, .matches:
                         return true
+                    // `<params: count> default 3` is an expression, not an
+                    // object with a query modifier (GitLab #547): read as an
+                    // object it bound the whole record and dropped the
+                    // fallback, which is the misbehaviour #547 reported.
+                    // Inside a where-condition `default` still belongs to the
+                    // query (ARO-0018), and there the operator is suppressed.
+                    //
+                    // Framework objects stay objects. `<file: "notes.md">` is
+                    // an *address* an action resolves, not a value an
+                    // expression can read, so routing `Read the <c> from the
+                    // <file: "x"> default "y".` through the expression grammar
+                    // would find no variable called `file` and hand back the
+                    // default every time — a silent wrong answer, the very
+                    // thing #547 is about. `parameter` and `env` are the
+                    // exceptions: both evaluators resolve them, so a missing
+                    // `--port` really is an absent value.
+                    case .identifier("default"):
+                        guard !defaultOperatorSuppressed else { return false }
+                        let base = qualifiedRefBase().lowercased()
+                        return !SystemObjectCatalog.isSystemObject(base)
+                            || base == "parameter" || base == "env"
                     default:
                         return false
                     }
@@ -1010,6 +1038,29 @@ public final class Parser {
             index += 1
         }
         return false
+    }
+
+    /// The base name of the `<base: qualifier>` reference at the current `<`,
+    /// hyphenated segments joined (`user-repository`), or "" when the tokens
+    /// do not form one. Used to ask `SystemObjectCatalog` what kind of thing
+    /// the reference names.
+    private func qualifiedRefBase() -> String {
+        guard check(.leftAngle) else { return "" }
+        var index = current + 1
+        var base = ""
+        while index < tokens.count {
+            if case .identifier(let part) = tokens[index].kind {
+                base += part
+                index += 1
+                if index < tokens.count, case .hyphen = tokens[index].kind {
+                    base += "-"
+                    index += 1
+                    continue
+                }
+            }
+            break
+        }
+        return base
     }
 
     /// Check if the token is a literal value
@@ -1076,6 +1127,14 @@ public final class Parser {
     /// `and` binds tighter than `or`, so `a or b and c` reads as
     /// `a or (b and c)` — same precedence as the expression grammar.
     private func parseWhereCondition() throws -> WhereCondition {
+        // A `default` after a where-condition is the query modifier
+        // (`… where <id> is 5 default "none".`), never the expression-level
+        // defaulting operator — otherwise the predicate's value would swallow
+        // it and `_default_value_` would never be bound (GitLab #547).
+        let previouslySuppressed = defaultOperatorSuppressed
+        defaultOperatorSuppressed = true
+        defer { defaultOperatorSuppressed = previouslySuppressed }
+
         var left = try parseWhereAndCondition()
         while check(.or) {
             advance()
@@ -1118,13 +1177,19 @@ public final class Parser {
     ///
     /// `between lo and hi` (ARO-0018 §2.1) desugars right here into
     /// `field >= lo and field <= hi` — the runtime never sees it.
+    ///
+    /// The field may be written `<status>` or bare `status` (ARO-0018
+    /// §7, GitLab #545). Every proposal has printed the bare spelling
+    /// for years — ARO-0019 §2.1, ARO-0003, ARO-0006's whole worked
+    /// example — while the parser demanded the brackets, so the
+    /// documented examples did not parse. A where clause's left-hand
+    /// side is a field of the row being tested and nothing else, so
+    /// there is nothing for a bare name to be confused with here.
     private func parseWherePredicate() throws -> WhereCondition {
         let startSpan = peek().span
 
-        // Parse field: <field>
-        try expect(.leftAngle, message: "'<'")
-        let field = try parseCompoundIdentifier()
-        try expect(.rightAngle, message: "'>'")
+        // Parse field: <field> or bare field (GitLab #545)
+        let field = try parseWhereFieldReference()
 
         // between: desugared into two predicates on the same field
         if case .identifier(let word) = peek().kind, word.lowercased() == "between" {
@@ -1213,6 +1278,43 @@ public final class Parser {
         let value = try parsePrecedence(.and)
 
         return .predicate(WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span)))
+    }
+
+    /// Parses a where-clause field reference — ARO-0018 §7's
+    /// `field_reference`, in either spelling (GitLab #545):
+    ///
+    ///     field_reference = "<" , field_name , ">" | field_name ;
+    ///
+    /// `where <status> is "active"` and `where status is "active"` are
+    /// the same clause and produce the same `WhereClause`, so the
+    /// interpreter and the compiled binary — which bind the identical
+    /// tree through `ModifierBinder` — cannot disagree about them.
+    ///
+    /// Hyphenated names work bare too (`where customer-id = <id>`):
+    /// outside a number, `-` always lexes as `.hyphen`, so the same
+    /// `parseCompoundIdentifier` serves both spellings.
+    ///
+    /// This bare form is confined to the ARO-0018 where clause, whose
+    /// left-hand side can only ever be a field of the row under test.
+    /// The `where` that guards a `for each` header, a `match` case, or
+    /// a feature-set header is an ordinary boolean *expression*, where
+    /// a bare name would be a variable reference rather than a field —
+    /// those stay angle-only.
+    private func parseWhereFieldReference() throws -> String {
+        if check(.leftAngle) {
+            advance()
+            let field = try parseCompoundIdentifier()
+            try expect(.rightAngle, message: "'>'")
+            return field
+        }
+
+        guard peek().kind.isIdentifierLike else {
+            throw ParserError.unexpectedToken(
+                expected: "a field name in the where clause — `<status>` or `status`",
+                got: peek()
+            )
+        }
+        return try parseCompoundIdentifier()
     }
 
     /// Parses a literal value (string, number, boolean, null, regex)
@@ -1410,6 +1512,38 @@ public final class Parser {
     // MARK: - Match Statement Parsing (ARO-0004)
 
     /// Parses: "match" "<" subject ">" "{" { case_clause } [ otherwise_clause ] "}"
+    /// Parses: `when` condition `{` { statement } `}`
+    ///
+    /// The suffix form (`Log … when <x> is <y>.`) is parsed inside a
+    /// statement and is untouched; this is the block spelling the
+    /// Language Guide uses when several statements share a condition.
+    private func parseWhenBlock() throws -> Statement {
+        // `When the <len> from the <get-length>.` is ARO-0015's test
+        // statement, where `When` is the action verb — not a guarded
+        // block. An article can only follow the verb; a block's
+        // condition starts with `<`, an identifier, a literal, `(` or
+        // `not`. Checking that one token keeps both spellings, which
+        // is what the Given/When/Then suites depend on.
+        if case .article = peekAt(1)?.kind {
+            return try parseAROStatement()
+        }
+        let startToken = try expect(.when, message: "'when'")
+        let condition = try parseExpression()
+        try expect(.leftBrace, message: "'{' to open the when block")
+
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}' to close the when block")
+
+        return WhenStatement(
+            condition: condition,
+            body: body,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
     private func parseMatchStatement() throws -> MatchStatement {
         let startToken = try expect(.match, message: "'match'")
 
@@ -1559,11 +1693,31 @@ public final class Parser {
             try expect(.rightAngle, message: "'>'")
         }
 
-        // Parse collection: in <collection>
+        // Parse collection: `in <collection>` or `in <expression>` (GitLab #519).
+        //
+        // The noun form is tried first and kept whenever the header ends right
+        // after it, because only a name can carry specifiers (<team: members>)
+        // and reach the lazy-stream iteration path (ARO-0051). Anything else —
+        // a list literal, a parenthesised expression, `<a>.field`, `<a> + <b>` —
+        // rewinds and re-parses the whole slot as an expression, so a quick loop
+        // no longer needs a Create first.
         try expect(.in, message: "'in'")
-        try expect(.leftAngle, message: "'<'")
-        let collection = try parseQualifiedNoun()
-        try expect(.rightAngle, message: "'>'")
+        var collection: QualifiedNoun? = nil
+        var collectionExpression: (any Expression)? = nil
+        let collectionStart = current
+        if check(.leftAngle) {
+            advance()
+            let noun = try parseQualifiedNoun()
+            try expect(.rightAngle, message: "'>'")
+            if forEachHeaderEndsHere(isParallel: isParallel) {
+                collection = noun
+            } else {
+                current = collectionStart
+            }
+        }
+        if collection == nil {
+            collectionExpression = try parseExpression()
+        }
 
         // Parse optional concurrency limit (only for parallel): with <concurrency: N>
         var concurrency: Int? = nil
@@ -1600,16 +1754,41 @@ public final class Parser {
         }
         let endToken = try expect(.rightBrace, message: "'}'")
 
+        if let collection {
+            return ForEachLoop(
+                itemVariable: itemVariable,
+                indexVariable: indexVariable,
+                collection: collection,
+                filter: filter,
+                isParallel: isParallel,
+                concurrency: concurrency,
+                body: body,
+                span: startToken.span.merged(with: endToken.span)
+            )
+        }
         return ForEachLoop(
             itemVariable: itemVariable,
             indexVariable: indexVariable,
-            collection: collection,
+            // Safe: `collectionExpression` is assigned whenever `collection` is nil.
+            collectionExpression: collectionExpression!,
             filter: filter,
             isParallel: isParallel,
             concurrency: concurrency,
             body: body,
             span: startToken.span.merged(with: endToken.span)
         )
+    }
+
+    /// Whether the for-each header is complete at the current token — i.e. what
+    /// was just parsed as `<noun>` really was the whole collection slot.
+    ///
+    /// `with` only ends the header for a parallel loop, where it introduces the
+    /// concurrency clause; on a sequential loop it can only be an operator-ish
+    /// continuation, so the slot is re-read as an expression.
+    private func forEachHeaderEndsHere(isParallel: Bool) -> Bool {
+        if check(.leftBrace) || check(.where) { return true }
+        if isParallel && check(.preposition(.with)) { return true }
+        return false
     }
 
     // MARK: - While Loop Parsing (ARO-0002 extension, GitLab #131)
@@ -2049,8 +2228,11 @@ public final class Parser {
         // ARO-0015: Accept keywords that are also test action verbs
         // This allows <When>, <Then>, <Given>, <Assert> as action verbs
         // ARO-0036: Accept "exists" as action verb for file existence checks
+        // GitLab #548: `empty` is only a keyword after `is` (`<list> is empty`,
+        // handled before any type name is expected), so it stays a usable name:
+        // `<empty>`, `{ empty: 0 }` and `<x: empty>` are ordinary identifiers.
         switch token.kind {
-        case .when, .then, .exists:
+        case .when, .then, .exists, .empty:
             return advance()
         default:
             break
@@ -2133,6 +2315,10 @@ public final class Parser {
 /// `not` deliberately sits *below* the comparisons (as in Python, not C):
 /// `not <a> == <b>` is `not (<a> == <b>)`. Unary minus is the exception —
 /// it stays at `.unary`, above `*`, so `-<a> * <b>` is `(-<a>) * <b>`.
+///
+/// `default` (GitLab #547) sits between arithmetic and comparison, so
+/// `<a> default 1 + 2` defaults to the whole sum and `<a> default 3 > 2`
+/// compares the defaulted value instead of defaulting to a boolean.
 private enum Precedence: Int, Comparable {
     case none = 0
     case or = 1           // or
@@ -2140,10 +2326,11 @@ private enum Precedence: Int, Comparable {
     case not = 3          // not (prefix)
     case equality = 4     // == != is is_not contains matches
     case comparison = 5   // < > <= >=
-    case term = 6         // + - ++
-    case factor = 7       // * / %
-    case unary = 8        // unary -
-    case postfix = 9      // . []
+    case defaulting = 6   // default (GitLab #547)
+    case term = 7         // + - ++
+    case factor = 8       // * / %
+    case unary = 9        // unary -
+    case postfix = 10     // . []
 
     static func < (lhs: Precedence, rhs: Precedence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -2298,11 +2485,15 @@ extension Parser {
     private static let binaryPrecedence: [BinaryOperator: Precedence] = [
         .or:           .or,
         .and:          .and,
+        .defaulting:   .defaulting,
         .equal:        .equality,
         .notEqual:     .equality,
         .is:           .equality,
         .isNot:        .equality,
         .contains:     .equality,
+        // Temporal comparison sits with the other comparisons, so
+        // `when <a> before <b> and <c> after <d>` groups the way it
+        // reads (GitLab #516).
         .matches:      .equality,
         .lessThan:     .comparison,
         .greaterThan:  .comparison,
@@ -2318,6 +2509,16 @@ extension Parser {
 
     private func infixPrecedence(_ token: Token) -> Precedence? {
         switch token.kind {
+        // Context-sensitive: `before` / `after` are temporal comparisons
+        // in operator position and ordinary names everywhere else
+        // (GitLab #516). They are NOT lexer keywords, deliberately —
+        // `<after>`, `<before-tax>` are names people write, and
+        // reserving the words would break them the way #497 describes.
+        // Nothing else can follow a complete expression here, so the
+        // position tells them apart with no lookahead.
+        case .identifier(let name) where name == "before" || name == "after":
+            return .comparison
+
         // Context-sensitive: `<` / `>` are comparison operators here only when
         // they are not starting a `<variable>` reference.
         case .leftAngle, .rightAngle:
@@ -2343,6 +2544,14 @@ extension Parser {
         // Subscript.
         case .leftBracket:
             return .postfix
+
+        // Context-sensitive: `default` is a value-returning fallback operator
+        // (GitLab #547), not a reserved word — a variable or field may still be
+        // called `default`. It is suppressed inside a where-condition, where
+        // `default` is the query modifier of ARO-0018 (`Extract … where <id> is
+        // 5 default "none".`), so the statement-level clause keeps its meaning.
+        case .identifier(let name) where name == "default":
+            return defaultOperatorSuppressed ? nil : .defaulting
 
         // Every other binary operator: precedence comes from the table.
         default:
@@ -2491,8 +2700,11 @@ extension Parser {
         case .lessEqual: return .lessEqual
         case .greaterEqual: return .greaterEqual
         case .is: return .is
+        case .identifier(let name) where name == "before": return .before
+        case .identifier(let name) where name == "after": return .after
         case .and: return .and
         case .or: return .or
+        case .identifier("default"): return .defaulting
         case .contains: return .contains
         case .matches: return .matches
         default: return nil
@@ -2584,6 +2796,11 @@ extension Parser {
     /// Parses a grouped (parenthesized) expression: (expr)
     private func parseGroupedExpression() throws -> GroupedExpression {
         let startToken = try expect(.leftParen, message: "'('")
+        // Parentheses end the where-clause ambiguity: inside them a `default`
+        // can only be the operator, so it is available again (GitLab #547).
+        let previouslySuppressed = defaultOperatorSuppressed
+        defaultOperatorSuppressed = false
+        defer { defaultOperatorSuppressed = previouslySuppressed }
         let expr = try parseExpression()
         let endToken = try expect(.rightParen, message: "')'")
         return GroupedExpression(expression: expr, span: startToken.span.merged(with: endToken.span))

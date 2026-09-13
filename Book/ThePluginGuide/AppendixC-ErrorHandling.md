@@ -17,23 +17,46 @@ Bad error:
 Error code 1003
 ```
 
+## There is no return code
+
+The single most important thing in this appendix: **no ABI function returns a
+status code.** `aro_plugin_execute` and `aro_plugin_qualifier` return a
+`char*`, and a failure is a JSON object carrying an `error` key. Success and
+failure travel the same channel.
+
+```c
+char* aro_plugin_execute(const char* action, const char* input_json);
+```
+
+An older ABI took a `char** result` out-parameter and returned `int32_t`, with
+`0` for success. It was removed. **The C, Rust and Swift examples in the
+remainder of this appendix still show that older form** — read them for the
+error *structure* they build, not for their signatures, and take the signature
+from Chapter 8 or Appendix B. The same caveat applies to the plugin code in
+Chapters 14 and 15.
+
 ## Standard Error Codes
 
-Plugins should use these numeric error codes for the function return value:
+Since there is no numeric return, these names live in an optional `code`
+**string** field inside the error body — useful when a caller wants to branch
+on a category rather than parse a message:
 
-| Code | Name | Description |
-|------|------|-------------|
-| 0 | SUCCESS | Operation completed successfully |
-| 1 | GENERAL_ERROR | Unspecified error (see error message) |
-| 2 | INVALID_ARGUMENTS | Missing or malformed arguments |
-| 3 | ACTION_NOT_FOUND | Requested action doesn't exist |
-| 4 | RESOURCE_UNAVAILABLE | External resource not accessible |
-| 5 | PERMISSION_DENIED | Operation not permitted |
-| 6 | TIMEOUT | Operation timed out |
-| 7 | INTERNAL_ERROR | Unexpected plugin error |
-| 8 | NOT_IMPLEMENTED | Feature not yet implemented |
-| 9 | INVALID_STATE | Operation invalid in current state |
-| 10 | RATE_LIMITED | Too many requests |
+| Name | Description |
+|------|-------------|
+| `GENERAL_ERROR` | Unspecified error (see error message) |
+| `INVALID_ARGUMENTS` | Missing or malformed arguments |
+| `ACTION_NOT_FOUND` | Requested action doesn't exist |
+| `RESOURCE_UNAVAILABLE` | External resource not accessible |
+| `PERMISSION_DENIED` | Operation not permitted |
+| `TIMEOUT` | Operation timed out |
+| `INTERNAL_ERROR` | Unexpected plugin error |
+| `NOT_IMPLEMENTED` | Feature not implemented |
+| `INVALID_STATE` | Operation invalid in current state |
+| `RATE_LIMITED` | Too many requests |
+
+`code` is a convention, not a contract: nothing in the runtime reads it. The
+`error` message is what reaches the user, so make it say what could not be
+done and why.
 
 ## Error Response Format
 

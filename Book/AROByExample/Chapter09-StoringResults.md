@@ -86,7 +86,7 @@ Add the hash computation:
 }
 ```
 
-The `Compute ... hash` operation generates a hash from the URL string. We then build the file path using string interpolation.
+The `Compute ... hash` operation generates a SHA-256 digest of the URL string, rendered as 64 hexadecimal characters. (`sha256` is an alias for the same operation, if you prefer the explicit name.) We then build the file path using string interpolation.
 
 ---
 
@@ -175,10 +175,17 @@ After running the crawler, your output directory might contain:
 
 ```
 output/
-├── 5d41402a.md
-├── 7b52009b.md
-├── 2c624232.md
+├── 2733da759eed786d5aceffe088a9dd10699d92cd75b6149e423cc3a35a031642.md
+├── 6821b9d32a493617aa39555bd4be1979a7c36e085416eb031a5a0db3744ad950.md
+├── 32a28882cd1a78ea9b8f7c463350d402cb55f602b6ff5115a9fa3db3ae8a0122.md
 └── ...
+```
+
+Those names are long because the digest is a full SHA-256. If you want something shorter, chain `take` onto the qualifier with `|` rather than reaching for a weaker hash:
+
+```aro
+Compute the <url-hash: hash|take> from the <url> with 12.
+(* 037ab55168fe *)
 ```
 
 Each file contains:
@@ -211,11 +218,17 @@ The hash filename is not human-readable, but the content preserves the source UR
 
 ## 9.10 What Could Be Better
 
-**No File Metadata.** We cannot set file permissions, timestamps, or other metadata. The file is written with default settings.
-
-**No Append Mode.** `<Write>` always overwrites. If we wanted to append to a log file, we would need a different approach.
+**Metadata Is Read-Only.** `Stat the <info> for the <file: path>.` reads back size, permissions, and timestamps, but nothing writes them. Every file `<Write>` creates gets the process default; you cannot mark a file executable or backdate it from ARO.
 
 **Limited Path Operations.** Joining paths with string concatenation works, but a proper path API would be safer.
+
+`<Write>` overwrites, which is what we want for a page snapshot. When you want the other behaviour — a crawl log, an audit trail — reach for `<Append>` rather than reading, concatenating, and writing back. Note the shape carefully: the content goes in the `with` clause and the result name must be *fresh*, because `<Append>` binds its own result there.
+
+```aro
+Append the <log-entry> to the <file: "./output/crawl.log"> with "crawled ${<url>}\n".
+```
+
+The form you would expect — putting the content in the result slot, `Append the <log-line> to the <file: …>.` — is rejected by the immutability rule, since `<log-line>` is already bound (GitLab #580).
 
 ---
 

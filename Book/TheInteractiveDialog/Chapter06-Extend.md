@@ -6,57 +6,85 @@
 
 ## Beyond the Prompt
 
-The REPL isn't just for local calculations. It connects to the outside world:
+The REPL isn't just for local calculations. It reaches:
 
-- HTTP servers
-- File watchers
-- Plugins
-- External services
+- The event bus, with handlers you define at the prompt
+- Git, with no setup
+- Plugins, installed from a Git URL mid-session
+- Files, sockets and HTTP, through ordinary ARO statements
 
-All from the same prompt.
+There are no `:service` meta-commands. Services start the way they start in a
+program — with a statement — because the prompt runs the same runtime.
 
-## Starting an HTTP Server
+## Events, and handlers that answer them
 
-```
-aro> :service start http --port 3000
-HTTP server started on http://localhost:3000
-```
-
-That's it. A server is running. Now define handlers:
+Define a handler, emit its event, watch it fire:
 
 ```
-aro> (healthCheck: API) {
-(healthCheck)> Return an <OK: status> with { status: "healthy" }.
-(healthCheck)> }
-Feature set 'healthCheck' defined
+aro> (Greet: UserCreated Handler) {
+Defining feature set: Greet
+(Greet)> Extract the <name> from the <event: name>.
+  +
+(Greet)> Log "welcome ${<name>}" to the <console>.
+  +
+(Greet)> Return an <OK: status> for the <greeting>.
+  +
+(Greet)> }
+Feature set 'Greet' defined
+
+aro> Emit a <UserCreated: event> with { name: "Ada" }.
+[Greet] welcome Ada
+=> OK
 ```
 
-The feature set becomes an endpoint. Call it from anywhere:
+The `[Greet]` prefix is the handler naming itself — this is the clearest way to
+see the event bus working, because the log line comes from a different feature
+set than the one you typed into.
 
-```bash
-$ curl http://localhost:3000/health
-{"status":"healthy"}
-```
+`${<name>}` interpolates a binding into a string literal. It works anywhere a
+string does.
 
-## Managing Services
-
-See what's running:
-
-```
-aro> :services
-┌────────────┬─────────────┬─────────┬──────────┐
-│ Name       │ Type        │ Status  │ Details  │
-├────────────┼─────────────┼─────────┼──────────┤
-│ http-a1b2  │ http-server │ running │ :3000    │
-└────────────┴─────────────┴─────────┴──────────┘
-```
-
-Stop when done:
+**Only domain handlers subscribe.** A feature set whose activity is
+`{EventName} Handler` is wired to the session's event bus when you define it.
+The service-bound families — `File Event Handler`, `Socket Event Handler`,
+`WebSocket Event Handler`, `KeyPress Handler` — are deliberately not, because
+their events belong to a service the session does not own. You can start a file
+monitor from the prompt and watch it log:
 
 ```
-aro> :service stop http-a1b2
-HTTP server stopped
+aro> Start the <file-monitor> with "./data".
+[FileMonitor] Watching: ./data
+=> OK
 ```
+
+…and a moment later, when something changes:
+
+```
+[FileMonitor] Created: ./data/notes.txt
+```
+
+But a `File Event Handler` you define here will not run. For handler-driven
+file work, write a directory and `aro run` it.
+
+## Git
+
+`<git>` is available without setup. `Retrieve` reads state; `Stage`, `Commit`
+and `Push` change it:
+
+```
+aro> Retrieve the <status> from the <git>.
+=> OK
+
+aro> Extract the <branch> from the <status: branch>.
+=> OK
+
+aro> Log "On branch: ${<branch>}" to the <console>.
+[_repl_session_] On branch: main
+=> OK
+```
+
+Each git action emits an event (`git.commit`, `git.push`, …), and a
+`git.commit Handler` defined in the same session will receive it.
 
 ## Installing Plugins from Git
 
@@ -68,6 +96,9 @@ Plugin 'plugin-rust-csv' v1.0.0 installed and loaded (commit: 7b2e4f1)
   [+] Rust plugin built
 Actions: ParseCSV, FormatCSV
 ```
+
+If the plugin ships qualifiers as well as actions, a `Qualifiers:` line follows,
+listing them under the handle you will use to call them.
 
 Install a specific version:
 
@@ -82,83 +113,52 @@ Now use them:
 
 ```
 aro> Greet the <message> with "World".
-=> "Hello, World!"
+=> OK
 ```
 
 New verbs. New capabilities. Same syntax.
 
-The plugin is cloned, built, and loaded in one step. REPL plugins are stored in `~/.aro/repl-plugins/` and persist across sessions.
+The plugin is cloned, built, and loaded in one step. REPL plugins are stored in
+`~/.aro/repl-plugins/` and persist across sessions — set `ARO_REPL_PLUGINS_DIR`
+to put them somewhere else.
 
 ## Listing Plugins
 
 ```
 aro> /plugin list
 Name               | Version | Handle | Status
--------------------|---------|--------|-------
+------------------ | ------- | ------ | -------
 plugin-rust-csv    | 1.0.0   | CSV    | loaded
 plugin-swift-hello | 2.0.0   | Hello  | loaded
 ```
 
-## Removing Plugins
+## Updating and Removing Plugins
 
-Unload a plugin from the session:
+```
+aro> /plugin update plugin-rust-csv
+Plugin 'plugin-rust-csv' updated: v1.0.0 -> v1.1.0 (commit: 7b2e4f1 -> 9c1d0a4)
+  [+] Rust plugin built
+```
+
+`--ref <ref>` pins the update to a tag or commit instead of taking the latest.
+If there is nothing new, it says so and does not rebuild.
 
 ```
 aro> /plugin remove plugin-swift-hello
-Plugin 'plugin-swift-hello' unloaded
+Plugin 'plugin-swift-hello' removed
 ```
 
-The actions disappear. The session continues.
+The actions disappear, and the plugin is deleted from disk as well as unloaded,
+so a later `/plugin add` of the same URL starts clean. The session continues.
 
-## File Watching
+## A Note on Reusable Logic
 
-Monitor directories:
-
-```
-aro> :service start file-watcher --path ./data
-File watcher started on ./data
-
-aro> (File Handler: File Event Handler) {
-(File Handler)> Extract the <path> from the <event: path>.
-(File Handler)> Log "Changed: ${<path>}" to the <console>.
-(File Handler)> }
-Feature set registered for file events
-```
-
-Touch a file in `./data`. See the log appear.
-
-## Reusable Inline Actions
-
-Repeated logic does not have to become a plugin. A feature set whose business activity is `Action` is callable as `Application.<Name>` from anywhere in the session:
-
-```
-aro> (Doubled: Action takes <number>) {
-(Doubled)> Extract the <n> from the <input: number>.
-(Doubled)> Compute the <out> from <n> * 2.
-(Doubled)> Return an <OK: status> with { value: <out> }.
-(Doubled)> }
-User-defined action registered: Application.Doubled
-
-aro> Application.Doubled the <r> from 21.
-aro> Extract the <answer> from the <r: value>.
-aro> Log <answer> to the <console>.
-42
-```
-
-The same call shape works for built-ins, plugin actions, and user-defined actions — `Application.<Name>` is just one more namespace.
-
-## Repository Operations
-
-`<git>` is available without setup. Run `<Retrieve>` against it to read state, or use `<Stage>`/`<Commit>`/`<Push>` to mutate:
-
-```
-aro> Retrieve the <status> from the <git>.
-aro> Extract the <branch> from the <status: branch>.
-aro> Log "On branch: ${<branch>}" to the <console>.
-On branch: main
-```
-
-Each git action emits an event (`git.commit`, `git.push`, …) so handlers in the same session can react.
+A feature set whose business activity is `Action` is callable as
+`Application.<Name>` in a compiled application (ARO-0081). At the prompt it is
+not: the definition registers, `:fs` lists it, and the call site answers
+`Unknown user-defined action 'Application.Doubled'` (GitLab issue #576). Use
+`:invoke` for now, keeping chapter 4's caveats about its input in mind, and
+move the action into a file when it earns its keep.
 
 ## The Coding Assistant
 

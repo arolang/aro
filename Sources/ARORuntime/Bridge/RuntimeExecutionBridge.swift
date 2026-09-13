@@ -640,7 +640,12 @@ private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any 
     return array.map { element -> any Sendable in
         if let dict = element as? [String: Any] {
             // Check if it's an expression object
-            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil || dict["$unary"] != nil {
+            // Any `$`-prefixed key marks an expression node. Naming them
+            // one by one is how `[<a>.x]` fell through to the plain-object
+            // branch and evaluated to a dictionary (GitLab #519), and how
+            // each newly serialised node ($unary, $member, $subscript) had
+            // to be remembered here separately.
+            if dict.keys.contains(where: { $0.hasPrefix("$") }) {
                 return evaluateExpressionJSON(dict, context: context)
             }
             // Otherwise it's a plain object - evaluate its values recursively
@@ -659,7 +664,12 @@ private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -
     for (key, value) in obj {
         if let dict = value as? [String: Any] {
             // Check if it's an expression object
-            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil || dict["$unary"] != nil {
+            // Any `$`-prefixed key marks an expression node. Naming them
+            // one by one is how `[<a>.x]` fell through to the plain-object
+            // branch and evaluated to a dictionary (GitLab #519), and how
+            // each newly serialised node ($unary, $member, $subscript) had
+            // to be remembered here separately.
+            if dict.keys.contains(where: { $0.hasPrefix("$") }) {
                 result[key] = evaluateExpressionJSON(dict, context: context)
             } else {
                 // Plain nested object
@@ -672,6 +682,36 @@ private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -
         }
     }
     return result
+}
+
+/// Read `name` off a compiled-mode value, mirroring the interpreter's
+/// `ExpressionEvaluator.evaluateMemberAccess`: dictionaries answer their entry,
+/// anything else has no members.
+private func memberValue(_ name: String, of base: any Sendable) -> any Sendable {
+    if let dict = base as? [String: any Sendable] {
+        if let value = dict[name] { return value }
+    }
+    if let dict = base as? [String: AnySendable] {
+        if let value = dict[name] { return value }
+    }
+    FileHandle.standardError.write(Data("[RuntimeBridge] Warning: no member '\(name)' on \(type(of: base))\n".utf8))
+    return ""
+}
+
+/// Index a compiled-mode value, mirroring the interpreter's
+/// `ExpressionEvaluator.evaluateSubscript` — including that an array index
+/// counts back from the most recent element (ARO-0038).
+private func subscriptValue(_ index: any Sendable, of base: any Sendable) -> any Sendable {
+    if let array = base as? [any Sendable], let i = index as? Int {
+        if i >= 0 && i < array.count { return array[array.count - 1 - i] }
+        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: index \(i) out of bounds for \(array.count) elements\n".utf8))
+        return ""
+    }
+    if let dict = base as? [String: any Sendable], let key = index as? String {
+        if let value = dict[key] { return value }
+    }
+    FileHandle.standardError.write(Data("[RuntimeBridge] Warning: cannot subscript \(type(of: base)) with \(type(of: index))\n".utf8))
+    return ""
 }
 
 /// Recursively evaluate a JSON-encoded expression
@@ -689,6 +729,16 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         // Environment variable access: <env: VAR_NAME>
         if varName == "env", let envKey = specs.first {
             return ProcessInfo.processInfo.environment[envKey] ?? "" as any Sendable
+        }
+
+        // ARO-0047: command-line parameters in an expression (GitLab #547).
+        // Mirrors ExpressionEvaluator; a parameter that was not passed reads as
+        // "" here, and the `default` path below sees it as absent instead.
+        if varName == "parameter" {
+            guard let name = specs.first else {
+                return ParameterStorage.shared.getAll()
+            }
+            return ParameterStorage.shared.get(name) ?? "" as any Sendable
         }
 
         // Special handling for repository count access: <repository-name: count>
@@ -769,6 +819,18 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
        let leftExpr = binary["left"] as? [String: Any],
        let rightExpr = binary["right"] as? [String: Any] {
 
+        // `<params: count> default 3` (GitLab #547): value-returning, and the
+        // left operand's *absence* is the normal case, so it cannot use the
+        // eager path below — an unresolved variable there yields "" and a
+        // missing field yields the record itself, both of which would look
+        // present. Mirrors `ExpressionEvaluator.evaluatePresentValue`.
+        if op == BinaryOperator.defaulting.rawValue {
+            if let present = evaluatePresentExpressionJSON(leftExpr, context: context) {
+                return present
+            }
+            return evaluateExpressionJSON(rightExpr, context: context)
+        }
+
         let left = evaluateExpressionJSON(leftExpr, context: context)
         let right = evaluateExpressionJSON(rightExpr, context: context)
 
@@ -778,6 +840,28 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
     // Interpolated string: {"$interpolated":"Hello ${name}!"}
     if let template = expr["$interpolated"] as? String {
         return interpolateString(template, context: context)
+    }
+
+    // Member access: {"$member":{"base":expr,"member":"name"}}
+    //
+    // Compiled mode has always serialized this node and never evaluated it,
+    // so `<order>.lines` read as the empty string. It became reachable from a
+    // for-each header with GitLab #519 — where an empty string iterates
+    // nothing, silently — so it is evaluated here.
+    if let member = expr["$member"] as? [String: Any],
+       let baseExpr = member["base"] as? [String: Any],
+       let name = member["member"] as? String {
+        let base = evaluateExpressionJSON(baseExpr, context: context)
+        return memberValue(name, of: base)
+    }
+
+    // Subscript: {"$subscript":{"base":expr,"index":expr}}
+    if let subscriptExpr = expr["$subscript"] as? [String: Any],
+       let baseExpr = subscriptExpr["base"] as? [String: Any],
+       let indexExpr = subscriptExpr["index"] as? [String: Any] {
+        let base = evaluateExpressionJSON(baseExpr, context: context)
+        let index = evaluateExpressionJSON(indexExpr, context: context)
+        return subscriptValue(index, of: base)
     }
 
     // Object literal: {"key1": expr1, "key2": expr2, ...}
@@ -797,7 +881,73 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         return result
     }
 
+    // An expression node the compiler serializes but this evaluator does not
+    // know. Returning "" silently is how `<a>.b` read as empty in compiled
+    // binaries for as long as it did — say so instead.
+    if let marker = expr.keys.first(where: { $0.hasPrefix("$") }) {
+        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: unsupported expression node '\(marker)' evaluated as empty\n".utf8))
+    }
     return ""
+}
+
+/// Evaluates the left operand of `default`, returning nil when the value is
+/// **absent** (GitLab #547).
+///
+/// Absent means an unbound variable, a missing field, or a `nil`/`null`
+/// literal — nothing else. `false`, `0`, `""` and `[]` are values and are
+/// returned, so the default does not fire on falsiness. This is the compiled
+/// counterpart of `ExpressionEvaluator.evaluatePresentValue`; the two must
+/// agree, because `aro run` and `aro build` run the same source.
+private func evaluatePresentExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> (any Sendable)? {
+    // A literal `nil` / `null` on the left is absent by definition. It has to
+    // be caught here: the JSON converter renders NSNull as the string "null".
+    if let lit = expr["$lit"], lit is NSNull {
+        return nil
+    }
+
+    if let varName = expr["$var"] as? String {
+        let specs = expr["$specs"] as? [String] ?? []
+
+        // A command-line parameter is present exactly when it was passed
+        // (ARO-0047) — the case `default` exists for.
+        if varName == "parameter" {
+            guard let name = specs.first else { return ParameterStorage.shared.getAll() }
+            return ParameterStorage.shared.get(name)
+        }
+
+        // Other magic sources are always present — let the general path answer.
+        if varName == "env" || (specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName)) {
+            return evaluateExpressionJSON(expr, context: context)
+        }
+
+        guard var value = context.resolveAny(varName) else { return nil }
+
+        // Namespaced qualifier form first, exactly as the general path does.
+        // try? is acceptable: a specifier that is not a registered qualifier is
+        // the common case and falls through to per-specifier resolution.
+        if specs.count > 1, let transformed = try? QualifierRegistry.shared.resolve(specs.joined(separator: "."), value: value) {
+            return transformed
+        }
+
+        for spec in specs {
+            // try? is acceptable: most specifiers are field names rather than
+            // registered qualifiers, and a failure falls through to the field
+            // access below — the same probe the general path performs.
+            if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
+                value = transformed
+            } else if let dict = value as? [String: any Sendable] {
+                // The one place the general path silently keeps the base value;
+                // here a missing key is precisely what `default` is asking about.
+                guard let propVal = dict[spec] else { return nil }
+                value = propVal
+            } else {
+                return nil
+            }
+        }
+        return value
+    }
+
+    return evaluateExpressionJSON(expr, context: context)
 }
 
 /// Interpolate a string template with ${varname} or ${<base: specifier>} placeholders

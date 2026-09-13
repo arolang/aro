@@ -2,7 +2,7 @@
 
 ARO's streaming execution engine enables processing of arbitrarily large datasets with constant memory usage. Inspired by Apache Spark's lazy evaluation model, ARO automatically optimizes data pipelines to process data incrementally rather than loading entire files into memory.
 
-Combined with **automatic pipeline detection** (ARO-0067), ARO transparently recognizes data flow chains and applies streaming optimizations without requiring explicit pipeline operators or syntax changes. The same natural-language code that works for small datasets automatically streams for large datasets.
+Combined with **automatic pipeline detection** (ARO-0086), ARO transparently recognizes data flow chains and applies streaming optimizations without requiring explicit pipeline operators or syntax changes. The same natural-language code that works for small datasets automatically streams for large datasets.
 
 ## The Problem with Eager Loading
 
@@ -118,22 +118,21 @@ The runtime automatically:
 
 ---
 
-## Explicit Mode Control
+## Choosing the Mode
 
-For cases where you need explicit control, use qualifiers:
+There is no qualifier for this. `streaming` and `eager` do not exist as
+qualifiers, and a verb inside angle brackets (`<Read: eager> the <data> …`) is
+not ARO syntax at all — it does not parse.
 
-```aro
-(* Force streaming (default behavior) *)
-<Read: streaming> the <data> from the <file: "huge.csv">.
+What you choose between is *verbs*:
 
-(* Force eager loading (loads entire file into memory) *)
-<Read: eager> the <data> from the <file: "small.csv">.
-```
-
-| Qualifier | Memory | Use Case |
+| Statement | Memory | Use Case |
 |-----------|--------|----------|
-| `streaming` (default) | O(1) constant | Large files, pipelines |
-| `eager` | O(n) full file | Small files, random access |
+| `Read the <data> from the <file: …>.` | grows with the file | Structured formats, small and medium files |
+| `Stream the <lines> from "…".` | O(1) — one line at a time | Large plain-text files |
+
+`Read` also picks the mode for you by size, using the heuristics below; the
+`Stream` action, described later in this chapter, is the explicit form.
 
 ---
 
@@ -261,7 +260,7 @@ Stream the <result> from <file-path>.
 |---|---|---|
 | Peak memory | O(file size) × 3 | O(1) |
 | Format detection | ✅ JSON / CSV / YAML / JSONL | ❌ Raw lines only |
-| Count lines before iterating | ✅ `Compute the <n: count>` | ❌ Materialises stream |
+| Count lines before iterating | ✅ `Compute the <n: count>` | ⚠️ Works, but reads and consumes the stream |
 | Best for | Structured formats, small/medium files | Large plain-text files, log files, data files |
 
 The three-times multiplier for `Read` + `Split` occurs because three copies of the data live in memory simultaneously:
@@ -314,27 +313,31 @@ The three-times multiplier for `Read` + `Split` occurs because three copies of t
 }
 ```
 
-### Why `count` Does Not Work on Streams
+### Counting a Stream Costs the Stream
 
-Counting a stream requires reading every element — that defeats the purpose of streaming:
+Counting requires reading every element, so it materialises what `Stream`
+opened lazily:
 
 ```aro
 Stream the <lines> from "./bigfile.dat".
-
-(* ✗ Runtime error: "Cannot count a stream — streams must be consumed
-      with 'for each'. Remove this count statement, or replace 'Stream'
-      with 'Read' if you need the total count." *)
-Compute the <n: count> from <lines>.
+Compute the <n: count> from <lines>.    (* reads the whole file to answer *)
 ```
 
-If you need the line count before iterating, use `Read` instead (which loads the file eagerly):
+That is not an error, and on a small file it is fine — but on the 1 GB file
+`Stream` exists for, it undoes the reason you reached for `Stream`. Worse, it
+consumes the stream: a `for each` afterwards has nothing left to iterate.
+
+If you need both a count and the lines, either read eagerly:
 
 ```aro
 Read the <raw> from "./bigfile.dat".
 Split the <lines> from <raw> by /\n/.
-Compute the <n: count> from <lines>.    (* ✓ works — full file is in memory *)
+Compute the <n: count> from <lines>.    (* full file is in memory *)
 for each <line> in <lines> { ... }
 ```
+
+or count as you go, with the accumulator pattern of Chapter 36 — which keeps
+memory at O(1) and gives you the count at the end.
 
 ### SSE and WebSocket Streaming
 
@@ -514,7 +517,7 @@ ARO automatically decides whether to stream based on data size:
 
 When an in-memory collection exceeds the element threshold, `Filter` and `Map` return lazy streams instead of materialised arrays. Downstream operations (`Filter`, `Map`, `Reduce`, `for each`) chain onto the stream without allocating intermediate arrays, giving O(1) memory per pipeline stage. Terminal actions (`Log`, `Return`) materialise the stream on demand. `Reduce` naturally produces a scalar with O(1) accumulators regardless of collection size.
 
-You can override this with explicit qualifiers when needed.
+`Stream` is the explicit override: it never materialises, whatever the size.
 
 ---
 
@@ -525,7 +528,7 @@ This example demonstrates a multi-stage streaming pipeline for analyzing server 
 ### logs.csv
 
 ```csv
-timestamp,level,service,message,response_time
+timestamp,level,service,message,response-time
 2024-01-15T10:00:00Z,INFO,api,Request received,45
 2024-01-15T10:00:01Z,ERROR,api,Database timeout,5000
 2024-01-15T10:00:02Z,WARN,auth,Rate limit exceeded,120
@@ -558,7 +561,7 @@ timestamp,level,service,message,response_time
     Reduce the <critical-count> from <slow-errors>
         with count().
 
-    (* Stage 6: Average response time of errors *)
+    (* Stage 6: Average response time of the API errors *)
     Reduce the <avg-response> from <api-errors>
         with avg(<response-time>).
 
@@ -581,8 +584,13 @@ Analysis complete:
   Critical issues:
 1
   Avg error response time:
-2507.5
+5000
 ```
+
+(One `ERROR` row belongs to `api` and one to `auth`, so the API average is that
+single 5000 ms request. Note also that the CSV header is `response-time`, with
+a hyphen, because that is the name the `where` clauses use — a field is
+matched by the header text.)
 
 Even with a 10GB log file, this pipeline uses constant memory because:
 - Logs are read in chunks
@@ -619,7 +627,7 @@ For datasets that truly need random access or multiple iterations, use the `eage
 
 ## Pipeline Detection
 
-The streaming engine works seamlessly with ARO's automatic pipeline detection (ARO-0067). When you write chained operations using immutable variables, ARO automatically:
+The streaming engine works seamlessly with ARO's automatic pipeline detection (ARO-0086). When you write chained operations using immutable variables, ARO automatically:
 
 1. **Detects the data flow graph** through variable dependencies
 2. **Builds a lazy pipeline** that defers execution until a drain operation
@@ -645,7 +653,7 @@ See **Chapter 34: Data Pipelines** for more details on automatic pipeline detect
 
 - **ARO-0051**: Streaming Execution Engine (this chapter)
 - **ARO-0090**: Streaming I/O — where a stream may become a value, and what bounds it (see Chapter 50)
-- **ARO-0067**: Automatic Pipeline Detection
+- **ARO-0086**: Automatic Pipeline Detection
 - **ARO-0018**: Data Pipeline Operations
 
 ---

@@ -102,12 +102,18 @@ A critical design decision: **handlers are registered before the entry point exe
 
 ```text
 execute(program):
-  1. Register all event handlers (domain, repository, file, socket, state)
-  2. Execute Application-Start
-  3. Await pending handlers
+  1. Find the entry point; build the user-action registry (ARO-0081)
+  2. Publish ApplicationStarted; create the root context; register services
+  3. Register handlers — ten passes, in order: socket, WebSocket, domain,
+     plugin, notification, file, repository observer, eviction, watch,
+     state observer, key press
+  4. Execute Application-Start
+  5. Drain: await pending handlers until quiescent, with stall detection
 ```
 
-Step 1 before Step 2 is critical. If Application-Start emits an event, the handler must already be subscribed. Get the order wrong and you have a race condition baked in from the start.
+Step 3 before step 4 is critical. If Application-Start emits an event, the handler must already be subscribed. Get the order wrong and you have a race condition baked in from the start.
+
+Step 5 is not a plain wait. The engine loops on `awaitPendingEvents` and watches the pending count: if it stops *decreasing* rather than reaching zero, it prints a stall warning instead of hanging silently. A cascade that will never finish is a bug you want named, not a program that never exits.
 
 <svg viewBox="0 0 600 280" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -165,9 +171,30 @@ Step 1 before Step 2 is critical. If Application-Start emits an event, the handl
 
 ---
 
-## Seven Handler Types
+## Handler Types
 
-ARO supports seven categories of event handlers, distinguished by business activity patterns.
+Handlers are distinguished entirely by their business activity string. There are no annotations, no registration calls — a feature set becomes a handler by being named one.
+
+The classification is a single pass in `AnalyzedProgram.init`, and it is worth reading in full before the prose below, because the *order* of its tests is the specification:
+
+| Test on the business activity | Bucket |
+|-------------------------------|--------|
+| contains `" Watch:"` | watch handlers |
+| contains `StateObserver` or `StateTransition Handler` | state observers |
+| contains `KeyPress Handler` | key-press handlers |
+| contains `Socket Event Handler` | socket handlers |
+| contains `WebSocket Event Handler` | WebSocket handlers |
+| contains `File Event Handler` | file handlers |
+| contains `NotificationSent Handler` | notification handlers |
+| contains `" Observer"` **and** `-repository` | repository observers |
+| ends with `" Evicted Handler"` **and** `-repository` | eviction handlers |
+| contains `" Handler"`, none of the above, not `Application-End` | domain handlers |
+
+Ten buckets, matched top to bottom, which is why `Socket Event Handler` has to be tested before the generic `" Handler"` rule: the generic rule's exclusion list is what keeps it from claiming everything. Two buckets deliberately overlap with the generic rule — notification and eviction handlers are *also* domain handlers, because they carry a domain event as well as their specialised one.
+
+Two things are *not* on this list and are commonly assumed to be. HTTP routes are not matched by name at all — a feature set is an HTTP handler because an `operationId` in `openapi.yaml` says so. And `Action` (ARO-0081) is not an event pattern; user-defined actions are called directly as `Application.<Name>`, never dispatched through the bus.
+
+The sections below cover the seven a program most often writes.
 
 ### 1. Domain Event Handlers
 
@@ -376,10 +403,10 @@ publishAndTrack(event):
     run handler in task group
     on completion:
       decrement inFlightHandlers
-      if 0: signal waiters
+      if 0 and no fire-and-forget publishes pending: resume flush waiters
 ```
 
-After `Application-Start` completes, the engine waits for all handlers to finish before returning. If they don't finish within the timeout, a warning is logged.
+`awaitPendingEvents(timeout:)` is where a naive implementation would poll, and does not. It is a `withTaskGroup` race between two tasks: one registers a `withCheckedContinuation` in a `flushContinuations` table — resumed the moment the in-flight count reaches zero — and the other sleeps for the timeout and removes that specific continuation. Whichever finishes first wins; the return value says which. No spin, no wasted wakeups, and no lost waiter, because a continuation is identified and removed individually rather than by clearing the table.
 
 ---
 
@@ -428,7 +455,7 @@ The event architecture enables loosely coupled, reactive programming:
 
 1. **EventBus** provides centralized publish-subscribe with type-based routing
 2. **Handler Registration** happens before entry point execution
-3. **Seven Handler Types** cover domain events, repositories, files, sockets, state transitions, key presses, and WebSocket events
+3. **Handler types by naming convention** — ten buckets matched in a fixed order, covering domain events, repositories (change and eviction), files, sockets, WebSockets, state transitions, key presses and watches. HTTP routes are the exception: they come from `operationId`, not from a name pattern
 4. **State Guards** enable declarative filtering without code
 5. **In-Flight Tracking** ensures cascaded events complete before shutdown
 6. **Race Prevention** uses actor isolation for correctness
@@ -437,10 +464,11 @@ The event architecture enables loosely coupled, reactive programming:
 The event system is the glue between services. When an HTTP request arrives, the server publishes an event. When a file changes, the monitor publishes an event. Feature sets subscribe to these events and react — without knowing or caring about the source.
 
 Implementation references:
-- `Sources/ARORuntime/Events/EventBus.swift` (287 lines)
-- `Sources/ARORuntime/Events/EventTypes.swift` (321 lines)
+- `Sources/ARORuntime/Events/EventBus.swift` (~805 lines)
+- `Sources/ARORuntime/Events/EventTypes.swift` (~400 lines)
 - `Sources/ARORuntime/Events/StateGuard.swift` (129 lines)
-- `Sources/ARORuntime/Core/ExecutionEngine.swift` (851 lines)
+- `Sources/ARORuntime/Core/ExecutionEngine.swift` (~1,640 lines) — the handler-registration passes
+- `Sources/AROParser/SemanticAnalyzer.swift` — `AnalyzedProgram.init`, the canonical pattern classifier
 
 ---
 

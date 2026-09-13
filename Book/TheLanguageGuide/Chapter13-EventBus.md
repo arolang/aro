@@ -377,6 +377,8 @@ These verbs run synchronously at their statement position. Any upstream futures 
 
 The non-effectful actions—`Extract`, `Compute`, `Retrieve`, `Transform`, `Filter`, and so on—all flow lazy handles through bindings. There is no observable difference at the language level. You write the same code; the runtime decides when to run the work.
 
+Deferral is an allowlist, not the complement of the table above, so a verb can be neither. `Store`, `Send`, `Write`, `Update`, `Delete`, `Commit`, `Push`, `Notify`, `Render`, the service verbs (`Start`, `Stop`, `Connect`, `Close`, `Keepalive`) and `Sleep` all run at their own statement without appearing in the effect table: they change state another statement can observe, so moving them would move the change. `Sleep` is the clearest case — the delay *is* the effect, and deferring it would silently delete the pacing it exists to provide.
+
 If a force takes unusually long (default: more than five seconds) the runtime emits a single line to stderr identifying the binding name and source location. This is purely diagnostic—the wait then continues indefinitely—but it lets you spot pathological waits before they become hangs. Set `ARO_FORCE_WARN_SECONDS=0` to disable the warning, or any positive number to override the budget.
 
 ---

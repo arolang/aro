@@ -363,14 +363,14 @@ File storage handler.
 
 ## A.6 Summary Statistics
 
-| File | Lines | Handlers | Purpose |
-|------|-------|----------|---------|
-| openapi.yaml | 127 | — | Event schemas |
-| main.aro | 31 | 2 | Application lifecycle |
-| crawler.aro | 31 | 1 | Core crawling logic |
-| links.aro | 103 | 5 | Link processing pipeline |
-| storage.aro | 29 | 1 | File storage |
-| **Total** | **194 + 127** | **9** | **Complete web crawler** |
+| File | Lines | Feature Sets | Purpose |
+|------|-------|--------------|---------|
+| openapi.yaml | 126 | — | Event schemas |
+| main.aro | 30 | 2 | Application lifecycle |
+| crawler.aro | 30 | 1 | Core crawling logic |
+| links.aro | 99 | 5 (4 handlers + 1 observer) | Link processing pipeline |
+| storage.aro | 27 | 1 | File storage |
+| **Total** | **186 + 126** | **9** | **Complete web crawler** |
 
 ---
 

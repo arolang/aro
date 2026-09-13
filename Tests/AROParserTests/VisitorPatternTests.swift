@@ -47,6 +47,12 @@ struct NodeCounterVisitor: ASTVisitor {
         1
     }
 
+    func visit(_ node: WhenStatement) throws -> Int {
+        var count = 1
+        for stmt in node.body { count += try stmt.accept(self) }
+        return count
+    }
+
     func visit(_ node: MatchStatement) throws -> Int {
         var count = 1
         for caseClause in node.cases {
@@ -199,6 +205,12 @@ struct VariableCollectorVisitor: ASTVisitor {
         [node.variableName]
     }
 
+    func visit(_ node: WhenStatement) throws -> Set<String> {
+        var vars: Set<String> = []
+        for stmt in node.body { vars.formUnion(try stmt.accept(self)) }
+        return vars
+    }
+
     func visit(_ node: MatchStatement) throws -> Set<String> {
         var vars: Set<String> = [node.subject.base]
         for caseClause in node.cases {
@@ -215,7 +227,7 @@ struct VariableCollectorVisitor: ASTVisitor {
     }
 
     func visit(_ node: ForEachLoop) throws -> Set<String> {
-        var vars: Set<String> = [node.itemVariable, node.collection.base]
+        var vars: Set<String> = [node.itemVariable, node.collection?.base ?? node.collectionLabel]
         if let index = node.indexVariable {
             vars.insert(index)
         }

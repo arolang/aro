@@ -60,32 +60,43 @@ For the debugger this means: pauses on effect statements are observationally ide
 
 ## 4.4 Step into / step over / step out
 
-Phase 1 of the debugger treats `step` and `step over` (alias `next`) identically because Phase 1 hasn't grown a call stack model yet. The distinction lands in Phase 3:
+`s`, `n` and `f` are all accepted at the prompt, and they map to distinct step modes on the controller — `.stepIn`, `.stepOver`, `.stepOut`. But the checkpoint does not yet act on the distinction: any of the three pauses at the next statement boundary the runtime reaches, wherever it is. In practice `s`, `n` and `f` are three spellings of "advance one statement."
+
+The intended distinction, when the controller grows a frame model:
 
 - **step (`s`)** — into the next emit / sub-graph call if the current statement triggers one.
-- **next (`n`)** — over the next emit / sub-graph call.
-- **finish (`f`)** — run to the end of the current feature set and pause when the parent caller resumes.
+- **next (`n`)** — over it.
+- **finish (`f`)** — run to the end of the current feature set and pause when the parent resumes.
 
-For a `createUser` feature set that emits `UserCreated`:
-
-```aro
-Emit a <UserCreated: event> with <user>.   ← paused here, about to fan out
-```
-
-`s` follows the emit into the first statement of the `UserCreated Handler` feature set. `n` lets the handler run to completion and pauses on the next statement in `createUser`. `f` runs the rest of `createUser` and pauses where its caller resumes (typically the HTTP framework's per-request driver).
+Today all three follow the emit. Pause on an `Emit` and press `n` expecting to stay in the emitting feature set and you land in a handler instead — which is a surprise worth knowing before it happens to you mid-session.
 
 ## 4.5 Events as call edges
 
-When a statement publishes an event, every matching handler becomes a new frame on the *causal call stack*. The chain at any pause is:
+Stepping does cross the event boundary. Pause on an `Emit` and step, and the next pause is inside a handler:
 
 ```
-HTTP POST /users  →  createUser  →  Emit UserCreated  →  SendWelcomeEmail
-                                                       →  AuditLog
+⏸  paused (breakpoint (verb Emit)) at main.aro:7 — Application-Start
+   <Emit> the <NumberTriggered: event> with the <_expression_> = "Event triggered!".
+(aro-dbg) s
+
+⏸  paused (step) at main.aro:4 — Handler One
+   <Log> "Handler #1 executed" to the <console>.
 ```
 
-`bt` shows the chain. `step` from a paused `Emit` follows the first handler. `step out` returns past the emit.
+That is the useful half. Two things about it are not what a stack-frame debugger would give you, and the chapter would be lying if it left them out.
 
-This is what makes the debugger useful for event-driven systems. A conventional stack-frame debugger has no way to represent "X was caused by Y emitted from Z"; the ARO debugger treats it as the obvious thing it is.
+**Handlers run concurrently, so the pauses interleave.** The event bus gives each subscriber its own Task. The controller is an actor, so only one checkpoint is *served* at a time, but they queue in whatever order the scheduler produced — five handlers on one event pause in a different order on different runs, and the prompt for one can be printed while another's banner is still arriving. Read the feature-set name on each banner rather than assuming you are still where you were.
+
+**There is no causal backtrace.** `bt` prints the current pause and nothing else — feature set, business activity, file, line, statement:
+
+```
+(aro-dbg) bt
+  Handler One · NumberTriggered Handler
+  at main.aro:4
+  <Log> "Handler #1 executed" to the <console>.
+```
+
+It does not print the chain that led there. The `PauseInfo` the controller hands the frontend carries one location, not a stack; DAP's `stackTrace` request answers with an empty frame list for the same reason (appendix A.6). Reconstructing "X was caused by Y emitted from Z" is the natural shape for an event-driven debugger and is what the causal call stack in the glossary describes — it is a design the runtime is built toward, not a thing you can read off the prompt today. Until it lands, the `--record` JSONL from chapter 9 is the honest way to see the whole cascade: every pause in order, with its feature set, in one file.
 
 ## 4.6 What "before this statement" means
 
@@ -117,4 +128,4 @@ These omissions are deliberate. Each one removes a class of "what did the debugg
 
 ---
 
-**Next:** Chapter 5 walks the five flavors of breakpoint, from the location bp you already met to event and error-any.
+**Next:** Chapter 5 walks the six flavors of breakpoint, from the location bp you already met to logpoints, event and error-any.

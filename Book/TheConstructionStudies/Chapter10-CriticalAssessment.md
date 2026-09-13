@@ -30,7 +30,7 @@ Store the <user> into the <user-repository>.   (* 3 *)
 Return an <OK: status> for the <creation>.     (* 4 *)
 ```
 
-When something fails, you know exactly which statement failed and why.
+When something fails, you know exactly which statement failed and why — and that stayed true after ARO-0088 made statements finish out of order, because effects never defer and a deferred failure is attributed to the statement that caused it rather than to wherever it was noticed. That was the harder half of the design: overlapping work is easy, keeping the blame accurate is not.
 
 ### Event-Driven Architecture
 
@@ -47,7 +47,7 @@ No explicit wiring code; the EventBus handles all routing.
 The verbose syntax reads like prose:
 
 ```aro
-Extract the <email> from the <user: profile: contact: email>.
+Extract the <email> from the <user: profile.contact.email>.
 Send the <welcome-message> to the <email>.
 ```
 
@@ -57,17 +57,17 @@ Even non-programmers can follow the logic.
 
 ## What Doesn't Work
 
-### HTTP Disabled in Binary Mode
+### Two HTTP Servers to Maintain
 
-**Problem**: Compiled binaries crash when using SwiftNIO.
+**Problem**: SwiftNIO cannot be used in compiled binaries, so there are two server implementations to keep in step.
 
 **Technical Cause**: SwiftNIO relies on Swift type metadata that isn't properly initialized when the Swift runtime starts from LLVM-compiled code. The crash occurs in `_swift_allocObject_` with a null metadata pointer when NIO tries to create socket channels.
 
-**Impact**: HTTP servers only work in interpreter mode, negating the startup-time benefits of native compilation.
+**Impact**: Not what this section used to claim. Compiled binaries *do* serve HTTP — `NativeHTTPServer` routes from the embedded OpenAPI contract, speaks WebSocket, streams request bodies with backpressure and enforces per-route body limits, and the `FileUpload` example tests all of it against a built binary. The cost is duplication, and the duplication has a measurable edge: `Transfer-Encoding: chunked` request bodies are implemented in the NIO server and not in the native one, which frames by `Content-Length` alone.
 
-**Workaround**: A native BSD socket HTTP server is used for compiled binaries, but it's less robust than NIO.
+**Workaround**: None needed for the common case; use the interpreter if you need chunked request bodies.
 
-**Potential Fix**: Investigate Swift runtime initialization sequence; may require changes to how we link against the Swift stdlib.
+**Potential Fix**: Investigate Swift runtime initialization sequence; may require changes to how we link against the Swift stdlib. Closing that would let one server serve both modes, which is the real prize — not the feature, the deletion.
 
 ---
 
@@ -87,7 +87,7 @@ Even non-programmers can follow the logic.
 
 **Resolution**: `aro_action_*` now returns immediately with an `AROFuture` handle whose underlying Task runs on a custom `TaskExecutor` over GCD's elastic global queue, not the cooperative pool. Force points (typed value-accessors and effectful verbs) block the C-bridge pthread on the future's `DispatchGroup`, but action work cannot starve itself: GCD spawns additional threads under load. Cascading-emit chains that previously risked deadlock now finish in milliseconds.
 
-The effect-ordering rule preserves the language-level guarantee that observable side effects happen in source order: `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Compare`, `Validate`, and `Accept` are tagged force-at-site, so each forces its inputs before running and binds its result eagerly. Non-effectful verbs flow lazy handles through bindings; the next consumer forces transparently. See ARO-0009 §4 for the full lazy-execution model and §13.13 of the Language Guide for the user-facing contract.
+The effect-ordering rule preserves the language-level guarantee that observable side effects happen in source order: `Log`, `Return`, `Throw`, `Publish`, `Emit`, `Compare`, `Validate`, and `Accept` are tagged force-at-site, so each forces its inputs before running and binds its result eagerly. Non-effectful verbs flow lazy handles through bindings; the next consumer forces transparently. See ARO-0088 for the full concurrency and deferral model, and Chapter 39 of the Language Guide for the user-facing contract.
 
 ---
 
@@ -180,9 +180,9 @@ Business activity scope is neither.
 
 | Limitation | Technical Cause | Impact | Difficulty to Fix |
 |------------|-----------------|--------|-------------------|
-| HTTP in binary | SwiftNIO metadata | Uses native BSD HTTP server instead of NIO | Hard |
+| Two HTTP servers | SwiftNIO metadata | A native BSD server serves compiled binaries; no chunked request bodies there | Hard |
 | ~~No IR type checking~~ | ~~Textual LLVM IR~~ | **Resolved in ARO 0.7** (Swifty-LLVM) | Resolved |
-| Sync action execution | @_cdecl constraint | Potential deadlocks | Hard |
+| ~~Sync action execution~~ | ~~@_cdecl constraint~~ | **Resolved** (futures on an elastic executor, issue #55) | Resolved |
 | Function pointer fragility | Sendable constraints | Undefined behavior risk | Medium |
 | Single lookahead | Parser simplicity | Disambiguation heuristics | Medium |
 | Platform type handling | Darwin vs Linux differences | Boolean representation bugs | Easy |
@@ -253,7 +253,7 @@ For students: ARO is an example of what a constrained DSL looks like in practice
 
 If we were to continue development:
 
-1. **Fix NIO in binary**: Investigate Swift runtime initialization deeply; NIO's compiled-mode limitation remains open
+1. **Fix NIO in binary**: Investigate Swift runtime initialization deeply; closing it would delete the second HTTP server rather than add a feature
 2. **Add optional types**: `<user: User>` syntax for explicit typing
 3. **Improve error messages**: Source-mapped errors from LLVM failures
 4. **Reduce prepositions**: Simplify to 3-4 with clear semantics

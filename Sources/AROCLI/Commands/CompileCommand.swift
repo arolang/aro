@@ -58,13 +58,19 @@ struct CompileCommand: ParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [CompilationResult] = []
 
+        // Cross-file `Application.<Name>` resolution (#587). Only a directory
+        // is an application; a single named file must not be spoken for.
+        let declaredActions: UserActionRegistry? = sourceFiles.count > 1
+            ? UserActionRegistry.declared(inFiles: sourceFiles)
+            : nil
+
         for sourceFile in sourceFiles {
             if verbose {
                 print("Compiling: \(sourceFile.lastPathComponent)")
             }
 
             let source = try String(contentsOf: sourceFile, encoding: .utf8)
-            let result = compiler.compile(source)
+            let result = compiler.compile(source, declaredUserActions: declaredActions)
 
             allDiagnostics.append(contentsOf: result.diagnostics)
             compiledPrograms.append(result)

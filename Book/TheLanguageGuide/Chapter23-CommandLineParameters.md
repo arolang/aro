@@ -136,7 +136,7 @@ Extract the <verbose> from the <parameter: verbose>.    (* true *)
 Extract the <dry-run> from the <parameter: dry-run>.    (* true *)
 ```
 
-Flags that were not provided produce an error when extracted directly. Use the all-parameters form with a default to handle optional flags safely (see section 19B.6).
+Flags that were not provided produce an error when extracted directly. Use the all-parameters form with a `default` to handle optional flags safely (see section 23.6).
 
 ### Short Flags
 
@@ -212,7 +212,28 @@ Extract the <host> from the <params: host>.
 Extract the <verbose> from the <params: verbose>.
 ```
 
-Reading a field off the all-parameters dictionary is safe when the key is missing — the binding is simply absent. Apply a default where you use the value (for example with a `when` guard or a `match` `otherwise` branch).
+Reading a field off the all-parameters dictionary is safe when the key is missing — the binding is simply absent. To turn an absent value into a usable one, supply the fallback with `default`:
+
+```aro
+Extract the <params> from the <parameter>.
+
+Create the <port> with <params: port> default 8080.
+Create the <host> with <params: host> default "0.0.0.0".
+
+Log "Starting server on ${<host>}:${<port>}" to the <console>.
+```
+
+`--port 3000` binds `3000`; leaving it off binds `8080`.
+
+Two things about `default` are worth holding on to. First, it is **not** `or`. `or` is a boolean operator: it evaluates both sides for truthiness and yields `true` or `false`, so `<params: port> or 8080` binds `true` rather than a port. Earlier editions of this chapter taught the `or` spelling; programs written from it bound a boolean and broke later, wherever the value was used (GitLab #547).
+
+Second, `default` fires on **absence**, not on falsiness. `--prefix ""` and `--retries 0` were passed, so those values win over the fallback; only a parameter that is missing entirely falls through. That is the behaviour you want when an empty string or a zero is a legitimate setting.
+
+Defaults can chain, first present value winning:
+
+```aro
+Create the <region> with <params: region> default <config: region> default "eu".
+```
 
 Contrast with extracting a parameter directly off `<parameter: name>`, which requires the argument to be present:
 
@@ -314,7 +335,7 @@ A CLI tool that reads a file, counts its words, and optionally shows verbose out
     Log <path> to the <console> when <verbose> is true.
 
     Read the <content> from the <file: path>.
-    Split the <words> from <content> with " ".
+    Split the <words> from <content> by " ".
     Compute the <word-count: count> from <words>.
 
     (* "text" is the default: the otherwise branch handles a missing --format *)
@@ -360,7 +381,7 @@ The `parameter` system object provides clean access to command-line arguments:
 
 1. **Named parameters** — `Extract the <name> from the <parameter: name>.` reads `--name value` directly.
 2. **All parameters** — `Extract the <params> from the <parameter>.` returns a dictionary for optional access.
-3. **Defaults** — `Create the <port> with <params: port> or 8080.` handles optional parameters with fallbacks.
+3. **Defaults** — `Create the <port> with <params: port> default 8080.` handles optional parameters with fallbacks; `default` returns a value where `or` would only return a boolean.
 4. **Type coercion** — integers, doubles, and booleans are automatically converted; no parsing needed.
 5. **Short flags** — `-v` and combined `-vf` become boolean entries in the parameter dictionary.
 6. **Both modes** — works identically in `aro run` and compiled binaries.

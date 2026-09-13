@@ -94,6 +94,8 @@ This is a deliberate constraint. Guards run before the handler body, at event di
 
 Two event payload fields can be compared directly in the guard (`<event: count> >= <event: threshold>`), because both are in scope as event data. The handler body is entered only when the condition holds.
 
+The observer above uses `where` rather than `when` in the same position. Both keywords are accepted for a declaration guard and behave identically; `when` is the spelling used everywhere else in this chapter, and `where` reads better on an observer, which is filtering deliveries rather than gating a decision.
+
 ### Comparison Operators
 
 The `when` guard supports the full set of comparison operators:

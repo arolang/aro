@@ -277,8 +277,17 @@ public struct BodyMaterializationAnalyzer {
                 // Iterating a stream is the element-wise shape: the loop pulls
                 // one element at a time and never holds the collection. A
                 // specifier on the collection is a field access, which does.
-                if tainted.contains(loop.collection.base), !loop.collection.specifiers.isEmpty {
-                    return Finding(statement: "For each <\(loop.itemVariable)> in <\(loop.collection.base): \(loop.collection.specifiers.joined(separator: "."))>", line: loop.span.start.line, span: loop.span)
+                if let noun = loop.collection {
+                    if tainted.contains(noun.base), !noun.specifiers.isEmpty {
+                        return Finding(statement: "For each <\(loop.itemVariable)> in <\(noun.base): \(noun.specifiers.joined(separator: "."))>", line: loop.span.start.line, span: loop.span)
+                    }
+                } else if let expression = loop.collectionExpression {
+                    // An expression collection (GitLab #519) is not the
+                    // element-wise shape: building the list needs the value.
+                    let read = DataFlowAnalyzer.variables(in: expression)
+                    if !read.isDisjoint(with: tainted) {
+                        return Finding(statement: "For each <\(loop.itemVariable)> in \(loop.collectionLabel)", line: loop.span.start.line, span: loop.span)
+                    }
                 }
                 if let finding = walk(loop.body, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
                     return finding
