@@ -29,16 +29,35 @@ struct ExecTimeoutTests {
             .path
     }
 
+    /// The ceiling a "the timeout bounded it" assertion may use.
+    ///
+    /// Enforcement costs `timeout`, plus — in the worst case — the SIGTERM
+    /// grace before SIGKILL (`terminationGrace`, 2s) and then the wait for a
+    /// pipe a surviving grandchild still holds (`orphanedPipeGrace`, 2s). So
+    /// ~4.2s is legitimate for a 200ms timeout, and a tighter bound asserts
+    /// the host's signal-delivery latency rather than the contract. It did:
+    /// `< 1.5` passed on Darwin, where Foundation puts the child in a process
+    /// group of its own and the group kill lands at once, and failed on the
+    /// Linux CI runner at 2.2s — exactly `timeout` plus one full grace —
+    /// because there the child shares our group, so `childProcessGroup` returns
+    /// nil by design and only the direct SIGTERM is sent.
+    ///
+    /// The commands under test sleep far longer than this, so a pass still
+    /// proves the caller was released by the timeout and not by the command.
+    private static let enforcementCeiling: Double = 6.0
+
     @Test("A command that outruns its timeout returns exit code -1, quickly")
     func testTimeoutReturnsMinusOne() {
-        let (result, seconds) = timed(ExecConfig(command: "sleep 2", timeout: 200))
+        let (result, seconds) = timed(ExecConfig(command: "sleep 30", timeout: 200))
 
         #expect(result.exitCode == -1)
         #expect(result.error)
         #expect(result.message.contains("timed out"))
         // The whole point: the caller is released at its timeout, not at the
-        // command's own pace. `sleep` dies on SIGTERM, so no grace period is spent.
-        #expect(seconds < 1.5, "took \(seconds)s — the timeout did not bound the child")
+        // command's own pace. 30s of `sleep` returning in seconds can only be
+        // the timeout.
+        #expect(seconds < Self.enforcementCeiling,
+                "took \(seconds)s — the timeout did not bound the child")
     }
 
     @Test("A command that finishes inside its timeout is unaffected")
@@ -126,11 +145,12 @@ struct ExecTimeoutTests {
     @Test("The shell-free argv form is bounded too")
     func testArgvFormIsBounded() {
         let (result, seconds) = timed(
-            ExecConfig.direct(argv: ["sleep", "3"], timeout: 200)
+            ExecConfig.direct(argv: ["sleep", "30"], timeout: 200)
         )
 
         #expect(result.exitCode == -1)
-        #expect(seconds < 1.5, "took \(seconds)s — argv execution ignored the timeout")
+        #expect(seconds < Self.enforcementCeiling,
+                "took \(seconds)s — argv execution ignored the timeout")
     }
 
     @Test("A configuration object's timeout is read whatever number spelling it uses")
