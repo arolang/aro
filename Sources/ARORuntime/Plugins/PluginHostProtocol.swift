@@ -107,6 +107,33 @@ public enum PluginInfoParser {
     /// - Structured: `"actions": [{ "name": "Greet", "verbs": ["greet", "hello"], "role": "own", "prepositions": ["from"], "description": "...", "since": "1.0.0" }]`
     ///
     /// - Returns: Tuple of (action names, verbs map from name → verbs)
+    /// Parse `system_objects` out of an `aro_plugin_info()` payload.
+    ///
+    /// `identifier` is the canonical key — it is what `SystemObjectDescriptor`
+    /// calls the field — but no SDK emits it. The C SDK's info builder writes
+    /// `{"name":…,"capabilities":…}` (`aro_plugin_sdk.h`) and the Python SDK's
+    /// `@system_object` decorator records `"name"` as well. The runtime read
+    /// only `identifier`, so every entry was dropped, `systemObjects` stayed
+    /// empty, and `providesSystemObject(_:)` was false for everything the
+    /// plugin declared — as far as we can tell no plugin's system objects had
+    /// ever registered through `aro_plugin_info` (GitLab #556).
+    ///
+    /// Both keys are accepted rather than the canonical one simply being
+    /// swapped, so plugins already shipping either spelling keep working.
+    /// `identifier` wins when both are present, being the documented one.
+    public static func parseSystemObjects(from dict: [String: Any]) -> [SystemObjectDescriptor] {
+        guard let entries = dict["system_objects"] as? [[String: Any]] else { return [] }
+        return entries.compactMap { entry in
+            let identifier = (entry["identifier"] as? String) ?? (entry["name"] as? String)
+            guard let identifier, !identifier.isEmpty else { return nil }
+            return SystemObjectDescriptor(
+                identifier: identifier,
+                capabilities: Set(entry["capabilities"] as? [String] ?? []),
+                description: entry["description"] as? String
+            )
+        }
+    }
+
     public static func parseActionList(from dict: [String: Any]) -> (names: [String], verbsMap: [String: [String]]) {
         let parsed = parseActionListWithMetadata(from: dict)
         return (names: parsed.names, verbsMap: parsed.verbsMap)
