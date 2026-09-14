@@ -164,8 +164,7 @@ For simple variable output, ARO provides a shorthand syntax. When an execution b
 The shorthand takes a variable or an expression, never a bare literal:
 `{{ "some text" }}` does not parse. Static text belongs outside the braces.
 
-The two forms are *not* interchangeable in one respect — see
-Section 44.13 on escaping.
+The two forms are interchangeable, escaping included — see Section 44.13.
 
 The shorthand also works with expressions:
 
@@ -641,20 +640,33 @@ The opt-out, for content you have already sanitised, qualifies the *target*:
 {{ Print <trusted-html> to the <template: raw>. }}
 ```
 
-### The shorthand does not escape
+### The shorthand escapes too
 
-In an `.html` template the two forms Section 44.3 called equivalent are not:
+In an `.html` template the two forms Section 44.3 calls equivalent really are,
+and each has its own opt-out:
 
 ```text
-S1: {{ <user: name> }}                              → Alice <b>
-S2: {{ Print <user: name> to the <template>. }}     → Alice &lt;b&gt;
+S1: {{ <user: name> }}                               → Alice &lt;b&gt;
+S2: {{ Print <user: name> to the <template>. }}      → Alice &lt;b&gt;
 S3: {{ Print <user: name> to the <template: raw>. }} → Alice <b>
+S4: {{ <user: name> | raw }}                         → Alice <b>
 ```
 
-The shorthand behaves like the deliberate opt-out. Until that is fixed
-([GitLab #560](https://git.ausdertechnik.de/arolang/aro/-/issues/560)), write
-untrusted values through `Print` in HTML templates, and keep the shorthand for
-values you produced yourself.
+The shorthand's opt-out is the `raw` **filter**, because the shorthand has no
+target to qualify; `Print`'s is the `raw` qualifier on `<template>`. Both mean
+the same thing: *I wrote this markup on purpose.*
+
+The shorthand used to behave like S3 — the deliberate opt-out — so the form
+every example reaches for first was the unsafe one
+([GitLab #560](https://git.ausdertechnik.de/arolang/aro/-/issues/560)). Nothing
+you have to remember any more: reach for `raw` only when you mean it.
+
+Escaping runs *after* the filters, so a filter that emits markup on purpose —
+`markdown` — needs `raw` in an HTML template:
+
+```text
+{{ <article-body> | markdown | raw }}
+```
 
 Where escaping is not automatic — a `.tpl` file that happens to emit markup —
 escape in the feature set instead, with the `html-escape` qualifier of

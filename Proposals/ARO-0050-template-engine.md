@@ -241,6 +241,25 @@ resolved as qualifiers or property access before `Print` runs, so
 `<trusted-html: raw>` fails as an undefined member. Qualifying the target also
 matches `<console: error>` for stream selection.
 
+The **shorthand** (§7) escapes on exactly the same rule, and opts out with a
+`raw` **filter** — it has no target to qualify:
+
+```
+{{ <trusted-html> | raw }}
+```
+
+Escaping is applied after the filter pipeline, as `Print` escapes its finished
+message, so a filter that emits markup deliberately needs `raw` alongside it:
+
+```
+{{ <article-body> | markdown | raw }}
+```
+
+Both forms must make the same decision. Escaping was originally installed on
+the template context and applied by the `Print` path alone, so the shorthand —
+which §7 defines as equivalent — wrote its value through unescaped, making the
+shorter and more common form the unsafe one (GitLab #560).
+
 Only use `raw` for markup your own code produced. For anything derived from
 input, escape explicitly with the standard-library primitives instead
 (ARO-0019 §3.1):

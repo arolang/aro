@@ -522,9 +522,12 @@ The Compute action transforms data using built-in operations:
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
 collection/text qualifiers in §3.2. A template whose path ends `.html` or `.htm`
 escapes what it prints; `.tpl`, `.txt` and `.md` do not, so a `.tpl` emitting HTML
-still needs `html-escape` (GitLab #476, `TemplateEscaping.forTemplate`). Opt one
-value out with `Print <x> to the <template: raw>.` — and do not hand-escape into
-an escaping template, or the reader sees `&amp;lt;`.
+still needs `html-escape` (GitLab #476, `TemplateEscaping.forTemplate`). Both output
+forms escape on the same rule — `Print <x> to the <template>.` and the `{{ <x> }}`
+shorthand (GitLab #560) — and each opts out its own way: `<template: raw>` for
+Print, the `| raw` filter for the shorthand. Escaping runs after the filters, so
+`{{ <body> | markdown | raw }}` is how markup-emitting filters stay markup. Do not
+hand-escape into an escaping template, or the reader sees `&amp;lt;`.
 
 **The qualifier namespace is closed** (§3.3, GitLab #486). A Compute qualifier must
 resolve to a built-in, a plugin qualifier (`handle.qualifier`), a chain (`a|b`), or a
