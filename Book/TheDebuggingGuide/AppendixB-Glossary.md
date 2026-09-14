@@ -20,7 +20,7 @@ Terms unique to (or used in a specific way by) the ARO debugger.
 
 **Entry pause.** The unconditional first pause of every debug session, before any user statement runs. Provides a starting prompt where you can set breakpoints before execution begins.
 
-**Event breakpoint.** A breakpoint that matches a published event by name. Its hook lives in `EventBus.publish`; an `Emit` statement publishes through `publishAndTrack`, which has no hook, so the case does not fire today (chapter 5.5, GitLab #557). Use a verb breakpoint on `Emit`.
+**Event breakpoint.** A breakpoint that matches a published event by name. The hook runs on every one of the bus's publish paths, and matches the event's own name — for an `Emit`, the name the statement wrote rather than the `"domain"` routing prefix. On the `Emit` path the pause strictly precedes the handler fan-out (chapter 5.5).
 
 **Force.** Reading a lazy `AROFuture` to obtain its value. The line that triggers the force is not always the line that *defined* the action that produced the future.
 

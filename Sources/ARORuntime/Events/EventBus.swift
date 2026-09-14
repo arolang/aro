@@ -248,6 +248,32 @@ public actor EventBus {
 
     // MARK: - Publishing
 
+    /// Issue #229 Phase 3 — the event-breakpoint hook, for every publish path.
+    ///
+    /// This used to live inline in `publish(_:)` and nowhere else. An ARO
+    /// `Emit` statement does not go through `publish` — `EmitAction` calls
+    /// `publishAndTrack` — so `be <EventName>` registered a breakpoint the
+    /// runtime could never match, for the only kind of event a user writes
+    /// (GitLab #557). `publishAndWait` and `publishInternalBackpressured` had
+    /// no hook either.
+    ///
+    /// Fast path when no debugger is attached: a TaskLocal pointer load and a
+    /// nil check.
+    static func eventBreakpointCheckpoint(for event: any RuntimeEvent) async {
+        guard let controller = Debug.controller else { return }
+        // `eventName`, not `type(of: event).eventType`: every ARO `Emit`
+        // produces a `DomainEvent` whose static type is the routing prefix
+        // "domain", so matching on the static name compared every user event
+        // against one constant (GitLab #557).
+        let name = event.eventName
+        await controller.eventCheckpoint(
+            name: name,
+            featureSetName: "",
+            businessActivity: "",
+            payloadPreview: "(\(name))"
+        )
+    }
+
     /// Publish an event to all subscribers (fire-and-forget)
     /// This is nonisolated for compatibility with existing synchronous code
     /// - Parameter event: The event to publish
@@ -256,32 +282,22 @@ public actor EventBus {
         // cannot exit between publish() returning and publishInternal running.
         pendingFireAndForgetPublishes.increment()
         Task {
-            // Issue #229 Phase 3 — event breakpoint hook. Fast-path when
-            // no debugger is attached: nil check + return.
+            // **Ordering caveat, on this path only (#230 follow-up):** the
+            // checkpoint and `publishInternal` both run inside this detached
+            // Task, so a pause here is ordered before the fan-out in
+            // practice, but it is not a guarantee the type system carries —
+            // `publish` is fire-and-forget and returns before either runs.
             //
-            // **Ordering caveat (#230 follow-up):** the checkpoint runs in a
-            // detached Task alongside `publishInternal`. The runtime
-            // *intends* to pause "before handlers fire," and on a pure
-            // statement-bound debugger that's effectively what users see,
-            // because Swift's actor scheduler typically runs the checkpoint
-            // first. But it is **not strictly guaranteed** — subscribers may
-            // begin executing concurrently with a slow pause. If you need
-            // strict happens-before semantics for an event breakpoint,
-            // prefer a verb breakpoint on `Emit` at the call site (which
-            // pauses on the statement boundary, before any subscriber
-            // Task is even scheduled). The strict-gating path is tracked
-            // in #230 as a follow-up; it requires reshaping `publish` to
-            // await synchronously, which most callers don't want.
-            if let controller = Debug.controller {
-                let typeName = type(of: event).eventType
-                let preview = "(\(typeName))"
-                await controller.eventCheckpoint(
-                    name: typeName,
-                    featureSetName: "",
-                    businessActivity: "",
-                    payloadPreview: preview
-                )
-            }
+            // `publishAndTrack` and `publishAndWait` do not share this
+            // caveat: both are async and both await their handlers, so the
+            // checkpoint at the top of each strictly precedes any subscriber
+            // (GitLab #557). An ARO `Emit` takes `publishAndTrack`, which is
+            // why the guarantee holds for the events users actually write,
+            // and why the debugging guide no longer sends them to a verb
+            // breakpoint on `Emit` for strict ordering. #230 remains open
+            // only for this path, and closing it means reshaping `publish`
+            // to await synchronously, which most callers don't want.
+            await Self.eventBreakpointCheckpoint(for: event)
             await self.publishInternal(event)
             let drained = self.pendingFireAndForgetPublishes.decrement()
             if drained {
@@ -371,6 +387,8 @@ public actor EventBus {
     /// counting it in `inFlightHandlers` exactly like the Task-per-subscription
     /// path so `awaitPendingEvents` waits for the full cascade to drain.
     private func publishInternalBackpressured(_ event: any RuntimeEvent) async {
+        await Self.eventBreakpointCheckpoint(for: event)
+
         let eventType = type(of: event).eventType
         let matchingSubscriptions = store.matching(for: eventType)
 
@@ -469,6 +487,9 @@ public actor EventBus {
     /// Publish an event and wait for all handlers to complete
     /// - Parameter event: The event to publish
     public func publishAndWait(_ event: any RuntimeEvent) async {
+        // Same happens-before guarantee as publishAndTrack (GitLab #557).
+        await Self.eventBreakpointCheckpoint(for: event)
+
         let eventType = type(of: event).eventType
         let matchingSubscriptions = store.matching(for: eventType)
 
@@ -484,6 +505,12 @@ public actor EventBus {
     /// Publish an event, wait for handlers to complete, and track in-flight status
     /// This is used by EmitAction to ensure proper event sequencing
     public func publishAndTrack(_ event: any RuntimeEvent) async {
+        // Strictly happens-before the fan-out: this path is already async and
+        // already awaits its handlers, so the ordering caveat documented on
+        // `publish(_:)` does not apply here. A pause genuinely stops the
+        // program before any subscriber runs (GitLab #557).
+        await Self.eventBreakpointCheckpoint(for: event)
+
         let eventType = type(of: event).eventType
         let matchingSubscriptions = store.matching(for: eventType)
 

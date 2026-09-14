@@ -37,6 +37,15 @@ public actor DebugController {
     private var sampleStride: Int = 1
     private var sampleCounter: Int = 0
 
+    /// Feature set / activity / file of the most recent statement checkpoint.
+    ///
+    /// An event pause used to be reported with `featureSetName: ""` and
+    /// `businessActivity: ""`, so the banner had no context — it said which
+    /// event, never where the `Emit` was. Every publish path in the runtime is
+    /// reached from a statement, and that statement checkpointed immediately
+    /// before, so the last one we saw *is* the emitting statement (GitLab #557).
+    private var lastStatementContext: (featureSet: String, activity: String, file: String, line: Int) = ("", "", "", 0)
+
     // MARK: - Init
 
     public init(frontend: any DebugFrontend) {
@@ -130,6 +139,7 @@ public actor DebugController {
         let basename = sourceFile.isEmpty
             ? ""
             : URL(fileURLWithPath: sourceFile).lastPathComponent
+        lastStatementContext = (featureSetName, businessActivity, basename, line)
 
         // Match breakpoints first — they override the step mode.
         // Conditional predicates evaluate against the live context when
@@ -233,12 +243,16 @@ public actor DebugController {
     public func eventCheckpoint(name: String, featureSetName: String, businessActivity: String, payloadPreview: String) async {
         let matched = breakpoints.first { if case .event(let n) = $0 { return n == name } else { return false } }
         guard let bp = matched else { return }
+        // Callers pass "" for the context they do not have; fall back to the
+        // statement that got us here, so the pause names the emitting feature
+        // set and line instead of nothing at all (GitLab #557).
+        let ctx = lastStatementContext
         let info = PauseInfo(
             reason: .event(name),
-            featureSetName: featureSetName,
-            businessActivity: businessActivity,
-            file: "",
-            line: 0,
+            featureSetName: featureSetName.isEmpty ? ctx.featureSet : featureSetName,
+            businessActivity: businessActivity.isEmpty ? ctx.activity : businessActivity,
+            file: ctx.file,
+            line: ctx.line,
             column: 0,
             statementSummary: "Emit \(name) \(payloadPreview)",
             verb: "Emit",

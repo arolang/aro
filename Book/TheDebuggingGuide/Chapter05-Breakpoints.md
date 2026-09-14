@@ -130,9 +130,19 @@ breakpoint set on event UserCreated
 
 The intent is that when any statement publishes a `UserCreated` event, the runtime pauses just before the event bus fans out to subscribers.
 
-**It does not fire yet, and you should use a verb breakpoint instead.** The event hook lives in `EventBus.publish`, but an ARO `Emit` statement does not go through `publish` — it calls `publishAndTrack`, which has no hook. So `be UserCreated` registers cleanly, lists cleanly, and never stops, for the only kind of event you actually write (GitLab issue #557).
+That is what happens, and the pause is a strict happens-before: on the `Emit` path the event bus already awaits its handlers, so the program stops before any subscriber runs (GitLab #557).
 
-What works today, and works better, is a **verb breakpoint on `Emit`**:
+```
+(aro-dbg) be NumberTriggered
+breakpoint set on event NumberTriggered
+(aro-dbg) c
+
+⏸  paused (event NumberTriggered) at main.aro:7 — Application-Start
+```
+
+The pause names the feature set and line that emitted, not just the event.
+
+A **verb breakpoint on `Emit`** remains useful, and it is the better tool when you want the statement's own bindings rather than the event:
 
 ```
 (aro-dbg) b Emit
