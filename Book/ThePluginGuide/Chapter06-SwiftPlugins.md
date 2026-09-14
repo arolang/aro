@@ -113,13 +113,14 @@ Every language has a native, idiomatic way to register plugins:
 | **Swift** | `@AROExport` macro on an `AROPlugin` value | `aro_plugin_register` + all C ABI |
 | **C / C++** | `ARO_PLUGIN()` + `ARO_HANDLE()` + `ARO_ACTION()` / `ARO_QUALIFIER()` | Automatic via the single-header SDK |
 | **Python** | `@plugin` + `@action` / `@qualifier` decorators + `export_abi(globals())` | Module-level `aro_plugin_info` / `aro_action_*` / `aro_plugin_qualifier` |
-| **Rust** | `#[no_mangle] extern "C"` functions, written by hand | None — the Rust SDK's proc macros are still pass-through stubs (GitLab #549) |
+| **Rust** | `#[action]` / `#[qualifier_attr]` attributes + `aro_export! { … }` | `aro_plugin_info` / `execute` / `qualifier` / `free` / `init` / `shutdown` |
 
-The Rust row is the odd one out and deliberately so: `aro new plugin --lang
-rust` currently scaffolds `#[action]` / `#[qualifier_attr]` attributes and an
-`aro_export!` block that the published Rust SDK does not implement, so the
-generated crate does not compile. Chapter 7 therefore teaches the hand-written
-FFI, which does work.
+Every row generates the C ABI from decorated handlers, and `aro new plugin`
+scaffolds against each one. Chapter 7 nonetheless writes Rust's exports by hand:
+that is what `aro_export!` expands to, it needs no git dependency, and it makes
+the ABI contract concrete. The Rust SDK's macros were pass-through stubs for a
+while, so scaffolded crates did not compile (GitLab #549); that is fixed
+upstream.
 
 ## 6.4 Your First Swift Plugin: Custom Actions
 

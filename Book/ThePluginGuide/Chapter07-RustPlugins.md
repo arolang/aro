@@ -88,14 +88,37 @@ provides:
 Rust plugins communicate with ARO through a C-compatible FFI (Foreign Function
 Interface). Three attributes make this work.
 
-> **A word about the Rust SDK.** Swift, C, C++ and Python each have an SDK that
-> generates the C ABI for you from decorated handlers, and `aro new plugin`
-> scaffolds against it. Rust is the exception. `aro new plugin --lang rust`
-> emits `#[action]` / `#[qualifier_attr]` attributes and an `aro_export!` block,
-> but the published `aro-plugin-sdk-rust` implements none of them — its proc
-> macros are pass-through stubs and `aro_export!` does not exist, so the
-> scaffolded crate does not compile (GitLab #549). Until that lands, write the
-> exports by hand. That is what this chapter teaches, and it works today.
+> **The SDK or by hand.** Like Swift, C, C++ and Python, Rust has an SDK that
+> generates the C ABI from decorated handlers, and `aro new plugin --lang rust`
+> scaffolds against it:
+>
+> ```rust
+> use aro_plugin_sdk::prelude::*;
+>
+> #[action(name = "example", verbs = ["example"], role = "own",
+>          prepositions = ["with", "from"], description = "An example action.")]
+> fn example(input: &Input) -> PluginResult<Output> {
+>     Ok(Output::new().set("result", json!("ok")))
+> }
+>
+> aro_export! {
+>     name: "my-rust", version: "1.0.0", handle: "MyRust",
+>     actions: [example], qualifiers: [],
+> }
+> ```
+>
+> `aro_export!` generates `aro_plugin_info`, `aro_plugin_execute`,
+> `aro_plugin_qualifier`, `aro_plugin_free`, `aro_plugin_init` and
+> `aro_plugin_shutdown`. Note the attribute is `#[qualifier_attr]`, not
+> `#[qualifier]` — the SDK has a `qualifier` module, so the prelude re-exports
+> the attribute under the longer name. The SDK's proc macros were
+> pass-through stubs for a while and `aro_export!` did not exist at all, which
+> made every scaffolded crate fail to compile (GitLab #549); that is fixed
+> upstream.
+>
+> This chapter writes the exports **by hand** instead. That is still worth
+> reading: it is what the macros expand to, it is the only option if you want
+> to avoid the git dependency, and it makes the ABI contract in §7.3 concrete.
 >
 > One note if you reach for the SDK's helpers: `Output::value(v)` produces
 > `{"value": v}` rather than the documented `{"result": v}`. The runtime's

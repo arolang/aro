@@ -140,6 +140,48 @@ struct PluginScaffoldTests {
         #expect(source.contains("actions: []"))
     }
 
+    @Test("The Rust scaffold names only macros the SDK prelude exports (GitLab #549)")
+    func rustUsesOnlyExportedMacroNames() throws {
+        let source = try generateAndRead(language: .rust, file: "src/lib.rs")
+
+        // `aro_plugin_sdk::prelude` re-exports exactly these three macros:
+        //   pub use aro_plugin_sdk_macros::{action, aro_export, qualifier as qualifier_attr};
+        // Every macro name the scaffold writes has to be one of them, or the
+        // generated crate does not compile — which is how #549 arose, when the
+        // scaffold named macros the SDK did not have at all.
+        let exportedByPrelude: Set<String> = ["action", "aro_export", "qualifier_attr"]
+
+        // Attribute macros the file applies, as `#[name(`.
+        var used: Set<String> = []
+        var rest = Substring(source)
+        while let open = rest.range(of: "#[") {
+            rest = rest[open.upperBound...]
+            let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+            if !name.isEmpty { used.insert(String(name)) }
+        }
+        // Plus the one function-like macro.
+        if source.contains("aro_export!") { used.insert("aro_export") }
+
+        #expect(!used.isEmpty, "no macros found — the scan is broken, not the scaffold")
+        #expect(used.isSubset(of: exportedByPrelude),
+                "scaffold uses macros the prelude does not export: \(used.subtracting(exportedByPrelude).sorted())")
+        // Specifically: `#[qualifier]` does not resolve — the SDK has a
+        // `qualifier` module, so the attribute is re-exported renamed.
+        #expect(!used.contains("qualifier"))
+    }
+
+    @Test("The Rust next-steps text names the attribute the scaffold actually writes")
+    func rustNextStepsMatchTheTemplate() throws {
+        let scaffold = RustPluginScaffold()
+        let steps = scaffold.nextSteps(options: options(language: .rust)).joined(separator: "\n")
+        let source = try generateAndRead(language: .rust, file: "src/lib.rs")
+
+        // The advice used to say `#[qualifier]`, a name that does not resolve,
+        // while the generated file correctly used `#[qualifier_attr]`.
+        #expect(steps.contains("#[qualifier_attr]"))
+        #expect(source.contains("#[qualifier_attr("))
+    }
+
     // MARK: - C / C++
 
     // The C templates are asserted via `pluginSource` directly because
