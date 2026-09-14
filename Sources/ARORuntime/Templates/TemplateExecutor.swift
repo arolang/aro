@@ -147,8 +147,7 @@ public final class TemplateExecutor: @unchecked Sendable {
                 let startRow = currentRow
                 let startCol = currentCol
 
-                let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
-                let rendered = await applyFilters(formatValue(value), filters: filters, context: templateContext)
+                let rendered = try await renderShorthand(expression, context: templateContext)
 
                 // Compute visible width (strip ANSI codes)
                 let stripped = stripANSI(rendered)
@@ -270,8 +269,7 @@ public final class TemplateExecutor: @unchecked Sendable {
                 index += 1
 
             case .expressionShorthand(let expression):
-                let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
-                parts.append(await applyFilters(formatValue(value), filters: filters, context: templateContext))
+                parts.append(try await renderShorthand(expression, context: templateContext))
                 index += 1
 
             case .statements(let statementsSource):
@@ -312,6 +310,36 @@ public final class TemplateExecutor: @unchecked Sendable {
     }
 
     // MARK: - Expression Evaluation
+
+    /// Render one `{{ … }}` shorthand: filters, then the template's escaping.
+    ///
+    /// GitLab #476 made `.html`/`.htm` templates escape by default so that
+    /// `Print … to the <template>` is safe "without the author having to
+    /// remember". The escaping was installed on the template context and
+    /// applied by the Print path only — so `{{ <x> }}`, which ARO-0050 §3 and
+    /// Chapter 44 §44.3 both describe as *equivalent* to the Print form, wrote
+    /// its value through unescaped (GitLab #560). The shorthand is the form
+    /// every example reaches for first, so the short path was the unsafe one:
+    /// the exact inversion #476 set out to fix.
+    ///
+    /// `{{ <x> | raw }}` is the opt-out, mirroring `<template: raw>` on the
+    /// Print form. It is a filter rather than a target qualifier because the
+    /// shorthand has no target, and filters are already its own syntax.
+    ///
+    /// Escaping runs *after* the filters, as Print escapes its finished
+    /// message: a filter that deliberately emits markup (`markdown`) is
+    /// therefore escaped unless `raw` is asked for, which is the safe default
+    /// and the same rule Print follows.
+    private func renderShorthand(
+        _ expression: String,
+        context templateContext: ExecutionContext
+    ) async throws -> String {
+        let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
+        let isRaw = filters.contains { TemplateEscaping.isRawQualifier($0.name) }
+        let effective = filters.filter { !TemplateEscaping.isRawQualifier($0.name) }
+        let rendered = await applyFilters(formatValue(value), filters: effective, context: templateContext)
+        return isRaw ? rendered : templateContext.templateEscaping.apply(to: rendered)
+    }
 
     /// Evaluate an expression with optional filters: <expr | filter: "arg">
     private func evaluateExpressionWithFilters(
