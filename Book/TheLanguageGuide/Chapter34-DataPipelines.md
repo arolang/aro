@@ -161,31 +161,62 @@ per-element binding, so `with <user> * 0.9` has nothing to range over and
 `with 3` has nothing to mean; both are check-time errors. To compute something
 per element, use `for each` (Chapter 33) and accumulate.
 
-### Map does not project onto a schema
+### Map projects onto a schema
 
-`Map` looks as though it should turn a `List<User>` into a `List<UserSummary>`
-by copying the fields the target schema declares, and ARO-0018 describes it
-that way. **It does not.** A schema name in the qualifier slot is read as a
-field name, so it finds nothing:
+Naming a schema from `components/schemas` turns a `List<User>` into a
+`List<UserSummary>`, copying **only** the fields the target declares:
+
+```yaml
+# openapi.yaml
+components:
+  schemas:
+    UserSummary:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+```
 
 ```aro
 Map the <summaries: List<UserSummary>> from the <users>.
-(* [] — "UserSummary" was looked up as a field *)
+(* [{ id: "1", name: "a", email: "a@x" }] — password-hash is gone *)
 ```
 
-And the `as` spelling is worse, because it looks like it worked — the rows pass
-through untouched, `password-hash` and all:
+Both spellings do the same thing, so use whichever reads better:
 
 ```aro
+Map the <summaries: List<UserSummary>> from the <users>.
 Map the <summaries> as List<UserSummary> from the <users>.
-(* the full User records, nothing removed *)
 ```
 
-Do not reach for `Map` to keep sensitive fields out of a response. This is
-tracked as [GitLab #559](https://git.ausdertechnik.de/arolang/aro/-/issues/559).
-Until it is fixed, build the shape you want explicitly — inside a `for each`,
-`Create` the summary record from the fields you intend to expose, and `Store`
-it where the response reads it.
+`List<X>`, `Array<X>`, `Set<X>` and a bare `X` all name the schema `X`.
+
+**Nested records are projected too.** A declared property that is itself an
+object is projected onto its own schema, so a field one level down is dropped
+as surely as one at the top:
+
+```aro
+(* Deep declares id and address; Address declares city *)
+Map the <safe: List<Deep>> from the <records>.
+(* address.zip and the top-level secret are both gone *)
+```
+
+**An annotation that names no schema is an error**, not an empty list:
+
+```aro
+Map the <summaries: List<NoSuchSchema>> from the <users>.
+(* Runtime Error: Cannot map the summaries: List<NoSuchSchema> from the users. *)
+```
+
+That matters, because both spellings used to fail quietly
+([GitLab #559](https://git.ausdertechnik.de/arolang/aro/-/issues/559)): the
+qualifier form read `UserSummary` as a *field name* and returned `[]`, and the
+`as` form passed every row through untouched — `password-hash` and all —
+which looked like it had worked.
+
+Without an annotation, `Map` still passes rows through unchanged. Projection is
+something you ask for.
 
 ---
 

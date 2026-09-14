@@ -287,7 +287,7 @@ public struct SchemaBinding {
     }
 
     /// Resolve a $ref to a schema
-    private static func resolveRef(_ ref: String, components: Components?) -> Schema? {
+    static func resolveRef(_ ref: String, components: Components?) -> Schema? {
         let parts = ref.split(separator: "/")
         guard parts.count == 4,
               parts[0] == "#",
