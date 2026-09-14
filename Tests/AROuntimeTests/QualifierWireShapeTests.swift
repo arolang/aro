@@ -3,10 +3,12 @@
 // ARORuntimeTests - what a qualifier must put on the wire (GitLab #551)
 // ============================================================
 //
-// The wire shape for a qualifier result is exactly `{"result": <the value>}`.
-// `decodeQualifierResult` returns `result.value` verbatim, and neither
-// `QualifierRegistry` nor `ComputeAction` unwraps anything further — so a
-// handler that returns a dict gets that dict bound as the value.
+// The wire shape for a qualifier result is `{"result": <the value>}`, with
+// `{"value": <the value>}` accepted as well since GitLab #554 — that is what
+// the Rust and C SDKs' `Output::value` helper produces, and `result` wins if
+// both are present. `decodeQualifierResult` returns that value verbatim, and
+// neither `QualifierRegistry` nor `ComputeAction` unwraps anything further —
+// so a handler that returns a dict gets that dict bound as the value.
 //
 // The Python SDK's `export_abi` wraps a handler's return in `{"result": ...}`
 // on its own, so a handler returning `{"result": x}` shipped
@@ -79,10 +81,25 @@ struct QualifierWireShapeTests {
                 == "sort requires a list")
     }
 
+    @Test("`value` is accepted as the outer key, as the SDK helpers produce it")
+    func valueKeyDecodes() throws {
+        // #551 pinned `result` as the only outer key and this case as a
+        // failure. #554 then decided the other way: the Rust and C SDKs'
+        // `Output::value(v)` helper produces `{"value": v}`, that is the
+        // pattern their READMEs teach, and rejecting it made the shipped
+        // helper unusable for qualifiers. `result` stays the documented key
+        // and wins when a plugin sends both.
+        #expect(try decode(#"{"value": "HI"}"#) as? String == "HI")
+        #expect(try decode(#"{"result": "HI", "value": "LO"}"#) as? String == "HI")
+    }
+
     @Test("Neither key is a failure with a message that says so")
     func neitherKeyThrows() {
         #expect(throws: QualifierError.self) {
-            _ = try decode(#"{"value": "HI"}"#)
+            _ = try decode(#"{"outcome": "HI"}"#)
+        }
+        #expect(throws: QualifierError.self) {
+            _ = try decode("{}")
         }
     }
 }
