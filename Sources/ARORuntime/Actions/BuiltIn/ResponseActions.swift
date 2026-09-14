@@ -1338,6 +1338,11 @@ public struct DomainEvent: RuntimeEvent {
     /// Static event type for routing - uses "domain.*" prefix
     public static var eventType: String { "domain" }
 
+    /// The name the `Emit` statement wrote, which is what handler routing
+    /// matches on and therefore what an event breakpoint must match too
+    /// (GitLab #557).
+    public var eventName: String { domainEventType }
+
     /// Timestamp when the event occurred
     public let timestamp: Date
 

@@ -98,6 +98,25 @@ public protocol RuntimeEvent: Sendable {
 
     /// Timestamp when the event occurred
     var timestamp: Date { get }
+
+    /// The event's name as a user would write it.
+    ///
+    /// For most events this is the static `eventType`. It is *not* for the one
+    /// kind an ARO program emits: every `Emit` produces a `DomainEvent`, whose
+    /// static `eventType` is the routing prefix `"domain"` and whose real name
+    /// lives in the instance's `domainEventType`. Handler routing has always
+    /// compared against that instance value (`event.domainEventType ==
+    /// eventType`, in `FeatureSetExecutor` and `ExecutionEngine`), but the
+    /// debugger's event breakpoint matched `type(of: event).eventType` — so
+    /// `be NumberTriggered` was compared against `"domain"` and could never
+    /// match any event a user writes (GitLab #557).
+    ///
+    /// The default keeps every existing conformer as it was.
+    var eventName: String { get }
+}
+
+extension RuntimeEvent {
+    public var eventName: String { Self.eventType }
 }
 
 // MARK: - Repository Protocol
