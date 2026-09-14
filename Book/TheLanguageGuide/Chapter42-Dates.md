@@ -202,18 +202,34 @@ rebinding, and bindings are immutable (Chapter 11).
 ## 42.8 Date Comparisons
 
 ARO-0010 §3 specifies `before` and `after` as guard operators, and a range
-membership test `when <order-date> in <sale-period>`. **None of the three is
-implemented** — each is a parse error, not a wrong answer:
+membership test `when <order-date> in <sale-period>`. All three work:
 
+```aro
+Log "Booking accepted" to the <console> when <booking-date> before <deadline>.
+Log "Too late" to the <console> when <booking-date> after <deadline>.
+
+Compute the <discount> from <price> * 0.2 when <order-date> in <sale-period>.
 ```
-3:52: error: Expected '.', but got identifier(before)
-  hint: Statements must end with a period (.)
+
+`before` and `after` order two instants the same way `<` and `>` order numbers,
+and read the way the domain says it. `in` tests membership of a `date-range`,
+inclusive of both endpoints — it is the inverse of `contains`, so
+`<sale-period> contains <order-date>` says the same thing.
+
+`in` also tests collection membership (ARO-0042), which is the same operator:
+
+```aro
+Log "Priority handling" to the <console> when <tier> in ["gold", "platinum"].
 ```
 
-This is tracked as [GitLab #558](https://git.ausdertechnik.de/arolang/aro/-/issues/558).
+All three work identically under `aro run` and `aro build`. That is worth
+stating, because until GitLab #558 they did not: the compiled expression
+evaluator did not recognise the operators, and an unrecognised one evaluated
+to false, so a compiled binary silently skipped the guarded statement that the
+interpreter ran.
 
-Until it lands, compare the timestamps, which are plain integers and work with
-every operator you already have:
+You can still compare timestamps by hand if you want the integers themselves —
+`timestamp` is Unix epoch seconds, so `<` reads as "before":
 
 ```aro
 Extract the <booking-ts> from the <booking-date: timestamp>.
@@ -222,22 +238,7 @@ Extract the <deadline-ts> from the <deadline: timestamp>.
 Log "Booking accepted" to the <console> when <booking-ts> < <deadline-ts>.
 ```
 
-Because `timestamp` is Unix epoch seconds, `<` reads as "before" and `>` reads
-as "after", and a range test is the two comparisons written out:
-
-```aro
-Extract the <order-ts> from the <order-date: timestamp>.
-Extract the <sale-start> from the <sale-period: start>.
-Extract the <sale-end> from the <sale-period: end>.
-Extract the <start-ts> from the <sale-start: timestamp>.
-Extract the <end-ts> from the <sale-end: timestamp>.
-
-Compute the <discount> from <price> * 0.2
-    when <order-ts> >= <start-ts> and <order-ts> <= <end-ts>.
-```
-
-Verbose, but it runs — and the arithmetic is the same comparison the operators
-would have performed.
+but there is no longer a reason to prefer it.
 
 ---
 
@@ -338,7 +339,7 @@ Time handling in ARO provides:
 - **Formatting**: Convert dates to strings with custom patterns
 - **Offsets**: Calculate relative dates with `+/-` notation
 - **Ranges**: Represent periods with start and end dates, with `days`/`hours` spans
-- **Comparisons**: through `timestamp` — the `before`/`after` operators are unimplemented ([#558](https://git.ausdertechnik.de/arolang/aro/-/issues/558))
+- **Comparisons**: `before` / `after` between two dates, and `in` for `date-range` membership (§42.8); `timestamp` still gives you the raw epoch seconds
 - **Distance**: Calculate intervals between dates
 - **Recurrence**: Define repeating patterns, with `next` and `previous`
 - **Sleep**: Pause for a spelled interval — `for 500ms`, `for 30 seconds`

@@ -1453,6 +1453,15 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     /// same way `<` and `>` order numbers (GitLab #516).
     case before = "before"
     case after = "after"
+    /// Membership: `when <order-date> in <sale-period>`.
+    ///
+    /// ARO-0041 §7 specifies this for a `date-range`, and ARO-0042 for a
+    /// collection. `where <field> in <list>` had it as a `WhereOperator`, and
+    /// `contains` had it as this operator with the operands the other way
+    /// round — but the guard spelling the proposals write did not parse at all
+    /// (GitLab #558). It is the inverse of `contains`, and evaluates through
+    /// the same code.
+    case `in` = "in"
 
     // Logical
     case and = "and"

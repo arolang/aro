@@ -391,6 +391,11 @@ public struct ExpressionEvaluator: Sendable {
         // Collection operators
         case .contains:
             return containsValue(left, right)
+        // `a in b` is `b contains a`. `containsValue` already knew about
+        // date ranges and collections; only the guard spelling was missing
+        // (GitLab #558).
+        case .in:
+            return containsValue(right, left)
         case .matches:
             return matchesPattern(left, right)
 

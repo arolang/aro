@@ -93,6 +93,30 @@ Filter the <overdue> from the <invoices> where <due> before <now>.
 They read as the domain says them and order as the comparisons they
 are; comparing something that is neither a date nor a number raises,
 rather than quietly answering false.
+
+### Membership
+
+`in` tests whether a value belongs to a container, and sits at the same
+precedence as the other comparisons:
+
+```aro
+when <order-date> in <sale-period> {
+    Compute the <discount> from <price> * 0.2.
+}
+
+Log "Priority" to the <console> when <tier> in ["gold", "platinum"].
+```
+
+It is the inverse of `contains` — `<xs> contains <x>` and `<x> in <xs>`
+are the same test — and dispatches on the **right** operand the way
+`contains` dispatches on the left: a `date-range` tests interval
+membership inclusive of both endpoints (ARO-0041 §7), a
+list/collection tests element membership, a string tests substring
+containment, and a map/object tests key membership.
+
+`in` is also a delimiter in `for each <x> in <xs>` and an operator in a
+`where` clause. Neither is ambiguous with this one: both consume the
+keyword before any expression is parsed.
 ```
 
 ### 1.3 Semantics
@@ -149,6 +173,7 @@ type_check       = expression , "is" , [ "a" | "an" ] , type_name ;
 | `>=` | Greater than or equal | `<score> >= 80` |
 | `equals` | Deep equality | `<obj-a> equals <obj-b>` |
 | `contains` | Membership / substring (dispatches on left operand) | `<roles> contains "admin"`, `<text> contains "error"` |
+| `in` | Membership, the inverse of `contains` (dispatches on right operand) | `<order-date> in <sale-period>`, `"admin" in <roles>` |
 | `matches` | Regex match | `<email> matches /.*@.*\.com/` |
 
 The `contains` operator picks its comparison from the **runtime type of the
