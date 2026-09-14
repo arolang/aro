@@ -32,6 +32,103 @@ public struct MapAction: ActionImplementation {
         "Object", "Dictionary", "Map"
     ]
 
+
+    // MARK: - Schema projection (GitLab #559)
+
+    /// The schema name a result annotation asks to project onto, if any.
+    ///
+    /// `Map` is documented (ARO-0018, Chapter 34) as mapping a collection onto
+    /// a target type from `components/schemas`, copying only the fields the
+    /// target declares. It did not: `execute` took the first specifier that is
+    /// not a known *scalar* type name and treated it as a **field name**, and a
+    /// schema name is not in that set — so `<summaries: List<UserSummary>>`
+    /// became a field lookup for "List<UserSummary>" and missed, yielding `[]`.
+    ///
+    /// The `as` spelling was worse, because it looked like it worked: `as
+    /// List<UserSummary>` sets `asType` rather than a specifier, so there was
+    /// no field specifier at all and the rows passed through **untouched** —
+    /// `password-hash` included. Chapter 34 offers exactly that as the way to
+    /// keep sensitive fields out of a response.
+    ///
+    /// Accepts `UserSummary`, `List<UserSummary>`, `Array<…>` and `Set<…>`,
+    /// from either the qualifier slot or `as`.
+    static func schemaAnnotation(_ result: ResultDescriptor) -> String? {
+        for candidate in [result.specifiers.first, result.asType].compactMap({ $0 }) {
+            if let name = schemaName(fromAnnotation: candidate) { return name }
+        }
+        return nil
+    }
+
+    /// Unwrap one collection wrapper and keep what looks like a schema name.
+    static func schemaName(fromAnnotation annotation: String) -> String? {
+        var inner = annotation.trimmingCharacters(in: .whitespaces)
+
+        // `List<X>` / `Array<X>` / `Set<X>` → X
+        for wrapper in ["List", "Array", "Set"] where inner.hasPrefix(wrapper + "<") && inner.hasSuffix(">") {
+            inner = String(inner.dropFirst(wrapper.count + 1).dropLast())
+            break
+        }
+        inner = inner.trimmingCharacters(in: .whitespaces)
+
+        // A bare scalar or collection type names no schema.
+        guard !typeSpecifiers.contains(inner) else { return nil }
+        // Schema names are PascalCase; a field name is not. This is the same
+        // rule `ExtractAction.detectSchemaQualifier` applies (ARO-0046).
+        guard let first = inner.first, first.isUppercase else { return nil }
+        return inner
+    }
+
+    /// Copy `value` onto `schema`, keeping only what the schema declares.
+    ///
+    /// Recurses through object properties and array items, so a nested record
+    /// is projected too — projecting only the top level would leave a
+    /// sensitive field one nesting away from the response.
+    ///
+    /// Deliberately not `SchemaBinding.validateAgainstSchema`: that keeps
+    /// undeclared keys when `additionalProperties` is unset, which is right for
+    /// binding a request body and exactly wrong for projection.
+    static func project(
+        _ value: any Sendable,
+        onto schema: Schema,
+        components: Components?,
+        schemaName: String
+    ) -> any Sendable {
+        if let ref = schema.ref,
+           let resolved = SchemaBinding.resolveRef(ref, components: components) {
+            return project(value, onto: resolved, components: components, schemaName: schemaName)
+        }
+
+        if let items = schema.items, let array = value as? [any Sendable] {
+            return array.map {
+                project($0, onto: items.value, components: components, schemaName: schemaName)
+            }
+        }
+
+        guard let properties = schema.properties else { return value }
+
+        if let array = value as? [any Sendable] {
+            // A collection mapped onto a bare object schema projects per row,
+            // which is what `List<UserSummary>` means.
+            return array.map {
+                project($0, onto: schema, components: components, schemaName: schemaName)
+            }
+        }
+
+        guard let dict = value as? [String: any Sendable] else { return value }
+
+        var projected: [String: any Sendable] = [:]
+        for (name, propertyRef) in properties {
+            guard let propertyValue = dict[name] else { continue }
+            projected[name] = project(
+                propertyValue,
+                onto: propertyRef.value,
+                components: components,
+                schemaName: schemaName
+            )
+        }
+        return projected
+    }
+
     public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
@@ -42,6 +139,32 @@ public struct MapAction: ActionImplementation {
         // Get source collection
         guard let source = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
+        }
+
+        // ARO-0018 / Chapter 34: a schema annotation projects onto the target
+        // type, keeping only the fields it declares (GitLab #559).
+        if let schemaName = Self.schemaAnnotation(result) {
+            guard let registry = context.schemaRegistry else {
+                throw SchemaValidationError.schemaNotFound(
+                    schemaName: schemaName,
+                    availableSchemas: ["(schema registry not available - ensure openapi.yaml is present)"]
+                )
+            }
+            guard let schema = registry.schema(named: schemaName) else {
+                // A PascalCase annotation that names no schema used to become a
+                // field lookup and silently return [] (or, via `as`, pass every
+                // row through). Saying so is the whole point.
+                throw SchemaValidationError.schemaNotFound(
+                    schemaName: schemaName,
+                    availableSchemas: registry.schemaNames
+                )
+            }
+            return Self.project(
+                source,
+                onto: schema,
+                components: registry.components,
+                schemaName: schemaName
+            )
         }
 
         // Find field specifier (skip known type specifiers)

@@ -78,10 +78,30 @@ Map the <names: name> from the <users>.
 Map the <names> from the <users> with name.
 ```
 
+The `as` spelling is equivalent, and `List<X>`, `Array<X>`, `Set<X>` and a
+bare `X` all name the schema `X`:
+
+```aro
+Map the <summaries> as List<UserSummary> from the <users>.
+```
+
 **Requirements:**
 - Target type must be defined in `openapi.yaml` components/schemas
-- Runtime maps fields with matching names from source to target
+- Runtime copies **only** the properties the target declares; anything else in
+  the source row is dropped. That is what makes `Map` usable for keeping a
+  field out of a response, which is how ARO-0018 and the Language Guide both
+  present it.
+- Projection recurses: a declared property that is itself an object is
+  projected onto its own schema, so an undeclared field one level down is
+  dropped too. Projecting only the top level would leave a sensitive field one
+  nesting away from the response.
 - Missing fields in target are omitted (if optional) or error (if required)
+- An annotation that names no schema is an **error**, listing the schemas that
+  do exist — not a silent empty result
+
+Neither spelling projected at all until GitLab #559: the qualifier form read
+the schema name as a *field* name and returned an empty list, and the `as`
+form passed every row through untouched, which looked like success.
 
 **Map takes a field name, not a value.** There is no per-element binding, so an
 expression after `with` has nothing to range over. `Map the <d> from the <x>
