@@ -245,10 +245,20 @@ if __name__ == "__main__":
 ```
 
 Note what the qualifier handler returns: the **bare transformed value**. The
-SDK's `export_abi` adds the `{"result": …}` wrapper for you. Return a dict —
-as the SDK's own README and its `ok()` helper both do — and you get the
-double-wrapped shape the runtime mis-binds (GitLab #551). Until that is
-resolved, return bare values from `@qualifier` handlers.
+SDK's `export_abi` adds the `{"result": …}` wrapper for you, so returning
+`{"result": x}` ships `{"result": {"result": x}}` and your `Compute` binds the
+dict instead of the value. `aro new plugin --lang python` and
+`Examples/QualifierPluginPython` both return bare values (GitLab #551).
+
+Two traps remain in the SDK itself: its README's qualifier example returns
+`{"value": …}`, and its `ok()` helper builds the same shape. Both double-wrap.
+Do not use `ok()` in a `@qualifier` handler — it is built for actions, whose
+responses are free-form objects the caller picks fields off.
+
+Errors go through `raise`, not a returned `{"error": …}`. `export_abi` turns an
+exception into `{"error": …}`, which the runtime reports as a failure; a
+*returned* error dict is wrapped as a value like any other, so the failure gets
+bound silently instead of raised.
 
 The `run()` call at the bottom starts the SDK's persistent JSON-line loop. ARO
 does not use it — it imports your module and calls one function, as shown
