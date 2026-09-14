@@ -100,7 +100,10 @@ matters and a typo costs you the feature silently rather than raising an error.
 Three are easy to get wrong:
 
 - `services[].methods` is a **plural array**, not a singular `method` string.
-- `system_objects[].identifier` — not `name`. An entry keyed on `name` is dropped.
+- `system_objects[]` is keyed on `identifier`, and `name` is accepted as an
+  alias — which matters, because every SDK emits `name` and none emits
+  `identifier` (GitLab #556). Prefer `identifier` in hand-written info JSON:
+  it matches the field's name in the runtime, and it wins if both are present.
 - `qualifiers[].inputTypes` is **camelCase** while `accepts_parameters` beside
   it is snake_case. That is inconsistent, and it is what the runtime reads;
   spelling it `input_types` makes the qualifier accept every type instead.

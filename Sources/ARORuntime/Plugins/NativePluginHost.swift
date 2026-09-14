@@ -974,22 +974,9 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             }
         }
 
-        // Parse system objects
-        var sysObjDescriptors: [SystemObjectDescriptor] = []
-        if let sysObjects = dict["system_objects"] as? [[String: Any]] {
-            for sysObj in sysObjects {
-                if let identifier = sysObj["identifier"] as? String {
-                    let capabilities = sysObj["capabilities"] as? [String] ?? []
-                    let description = sysObj["description"] as? String
-                    sysObjDescriptors.append(SystemObjectDescriptor(
-                        identifier: identifier,
-                        capabilities: Set(capabilities),
-                        description: description
-                    ))
-                }
-            }
-        }
-        systemObjects = sysObjDescriptors
+        // Parse system objects (GitLab #556 — see parseSystemObjects for why
+        // both `identifier` and `name` are accepted).
+        systemObjects = PluginInfoParser.parseSystemObjects(from: dict)
 
         // Parse deprecations
         var deprecationList: [DeprecationDescriptor] = []

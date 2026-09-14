@@ -266,7 +266,7 @@ Top-level fields:
 - **actions**: Action descriptors routed through `aro_plugin_execute("Hash", ...)`. The flat shorthand `"actions": ["hash"]` still parses, but the structured form carries the `verbs`, `role`, `prepositions` and `description` that the editor and `aro actions` display.
 - **qualifiers**: Qualifier names routed through `aro_plugin_qualifier(name, ...)`. `inputTypes` is camelCase — spell it `input_types` and the runtime silently accepts the qualifier for every type. Each entry may declare `accepts_parameters: true` if the qualifier accepts inline arguments.
 - **services**: Named services with their methods, also routed through `aro_plugin_execute("service:<method>", ...)`
-- **system_objects**: Objects this plugin manages via `aro_object_read/write/list`. The key is `identifier`, not `name` — an entry keyed on `name` is skipped.
+- **system_objects**: Objects this plugin manages via `aro_object_read/write/list`. The key is `identifier`, with `name` accepted as an alias — the SDKs all emit `name` (GitLab #556). Prefer `identifier` when writing the JSON by hand; it wins if both appear.
 - **events.subscribes**: Event types the plugin wants to receive via `aro_plugin_on_event`
 - **events.emits**: Event types this plugin may emit (informational, for tooling)
 - **deprecations**: Identifiers scheduled for removal (`feature`, `message`, `since`, `remove_in`)
