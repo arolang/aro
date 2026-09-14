@@ -753,13 +753,39 @@ public struct RetrieveAction: ActionImplementation {
             // Check for where clause (bound by FeatureSetExecutor)
             let whereField: String? = context.resolve("_where_field_")
             let whereValue = context.resolveAny("_where_value_")
+            let whereOp: String? = context.resolve("_where_op_")
             // Compound and/or condition (GitLab #498): storage only knows
             // field-equals, so retrieve everything and filter here with the
             // same matcher Filter uses.
-            let compoundCondition: ResolvedWhereCondition? =
+            var condition: ResolvedWhereCondition? =
                 context.resolveAny("_where_tree_") is String
                     ? ResolvedWhereCondition.resolve(from: context)
                     : nil
+
+            // A *single* predicate went straight to `storage.retrieve(where:
+            // equals:)` and dropped `_where_op_` on the floor, so
+            // `where <qty> > 2` silently matched on equality instead — a
+            // clean `aro check`, an `[OK]` exit, and the wrong rows
+            // (GitLab #565). The compound branch never had the bug because it
+            // goes through `matchesElement`, which honours the operator;
+            // hence the asymmetry where adding a second predicate fixed the
+            // first one's answer.
+            //
+            // `is` is the only operator the storage layer can answer, so it
+            // keeps the indexed fast path. Everything else — `<`, `<=`, `>`,
+            // `>=`, `is not`, `in`, `contains`, `matches`, `before`, `after`
+            // (ARO-0018 §2.1) — becomes a one-predicate condition evaluated
+            // by the same matcher the `and`/`or` trees use, so a lone
+            // predicate and a chained one can no longer disagree.
+            let equalityFastPath = whereOp == nil
+                || whereOp?.lowercased() == WhereOperator.equal.rawValue
+            if condition == nil, !equalityFastPath,
+               let field = whereField, let matchValue = whereValue, let op = whereOp {
+                condition = .predicate(field: field, op: op, value: matchValue)
+            }
+            // Below, a non-equality single predicate must retrieve everything
+            // and filter, exactly as a compound condition does.
+            let compoundCondition = condition
 
             // Retrieve from repository storage service
             var values: [any Sendable]
