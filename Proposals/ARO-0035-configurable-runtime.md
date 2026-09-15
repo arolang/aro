@@ -22,7 +22,8 @@ The Configure action provides a declarative way to set configuration values that
 ### 1.1 Syntax
 
 ```aro
-Configure the <setting: qualifier> with <value>.
+Configure the <setting: qualifier> with <value>.          (* one setting  *)
+Configure the <setting> with { qualifier: value, … }.     (* several      *)
 ```
 
 Where:
@@ -30,15 +31,30 @@ Where:
 - `qualifier` is the specific setting name
 - `value` is the configuration value
 
+`Configure`'s result names the category being configured, and bindings are
+immutable (ARO-0001), so **two qualified `Configure` statements on the same
+category in one feature set are a rebinding and are rejected**. Use the object
+form to set several at once — that is what it is for (GitLab #564):
+
+```aro
+(* Rejected: Cannot rebind variable 'http-client' *)
+Configure the <http-client: timeout> with 5000.
+Configure the <http-client: retries> with 3.
+
+(* Write this instead *)
+Configure the <http-client> with { timeout: 5000, retries: 3 }.
+```
+
+Different categories in one feature set are independent and fine.
+
 ### 1.2 Examples
 
 ```aro
 (* Set a timeout value *)
 Configure the <validation: timeout> with 10.
 
-(* Set HTTP client configuration *)
-Configure the <http-client: timeout> with 5000.
-Configure the <http-client: retries> with 3.
+(* Set HTTP client configuration — several settings, one statement *)
+Configure the <http-client> with { timeout: 5000, retries: 3 }.
 
 (* Set custom application settings *)
 Configure the <batch: size> with 100.
@@ -137,8 +153,7 @@ Configure HTTP client for slow external APIs:
 
 ```aro
 (Application-Start: External Service) {
-    Configure the <http-client: timeout> with 30000.
-    Configure the <http-client: retries> with 5.
+    Configure the <http-client> with { timeout: 30000, retries: 5 }.
     Return an <OK: status> for the <startup>.
 }
 ```
@@ -149,8 +164,8 @@ Configure batch sizes for data processing:
 
 ```aro
 (Application-Start: Data Processor) {
-    Configure the <batch: size> with 1000.
-    Configure the <batch: concurrency> with 4.
+    (* `concurrency` is a keyword, so quote it as an object key *)
+    Configure the <batch> with { size: 1000, "concurrency": 4 }.
     Return an <OK: status> for the <startup>.
 }
 ```

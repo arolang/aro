@@ -524,13 +524,48 @@ public struct DataFlowAnalyzer {
             diagnostics.error(
                 "Cannot rebind variable '\(name)' - variables are immutable",
                 at: span.start,
-                hints: [
-                    "Variable '\(name)' was already defined earlier in this feature set",
-                    "Create a new variable with a different name instead",
-                    "Example: <\(verb)> the <\(name)-updated> \(preposition.rawValue) the <\(objectName)>"
-                ]
+                hints: hintsForRebinding(
+                    name: name, verb: verb, objectName: objectName, preposition: preposition)
             )
         }
+    }
+
+
+    /// Hints for an immutability violation.
+    ///
+    /// The generic advice — bind a differently-named variable — is right for a
+    /// value and wrong for `Configure`, whose result names a *thing being
+    /// configured* rather than a value being produced. Two settings on one
+    /// repository is the natural spelling and reads as a rebinding:
+    ///
+    ///     Configure the <cache-repository: ttl> with 60.
+    ///     Configure the <cache-repository: maxSize> with 500.
+    ///
+    /// Advising `<cache-repository-updated>` there is nonsense: that names a
+    /// different repository, so the program would compile and configure the
+    /// wrong thing. The object form sets both at once and is what to write
+    /// (GitLab #564).
+    private func hintsForRebinding(
+        name: String,
+        verb: String,
+        objectName: String,
+        preposition: Preposition
+    ) -> [String] {
+        let alreadyDefined = "Variable '\(name)' was already defined earlier in this feature set"
+
+        if verb.lowercased() == "configure" {
+            return [
+                alreadyDefined,
+                "Configure takes every setting at once, in one object",
+                "Example: <Configure> the <\(name)> with { setting: value, other: value }",
+            ]
+        }
+
+        return [
+            alreadyDefined,
+            "Create a new variable with a different name instead",
+            "Example: <\(verb)> the <\(name)-updated> \(preposition.rawValue) the <\(objectName)>",
+        ]
     }
 
     // MARK: - Publish Statement
