@@ -43,7 +43,7 @@ after them.
 | `b <Verb>` | — | Verb breakpoint. |
 | `b <line> if <pred>` | — | Conditional location breakpoint; `b <file>:<line> if <pred>` scopes it to a file. |
 | `be <Event>` | `breakevent` | Event breakpoint; pauses before the handlers fan out. |
-| `berror` | — | Error-any breakpoint; pair with `ARO_NO_DEFER=1` (GitLab #561). |
+| `berror` | — | Error-any breakpoint; catches deferred failures too. |
 | `bl` | `list` | List active breakpoints. |
 | `d <n>` | `delete` | Delete breakpoint by index. |
 | `w <expr>` | `watch` | Add a watch expression. |
@@ -74,7 +74,7 @@ after them.
 | `.conditionalLocation(file, line, predicate)` | File + line + predicate truthy |
 | `.logpoint(file, line, message)` | File + line — prints and continues, never pauses |
 | `.event(name)` | The event's own name — for an `Emit`, the name the statement wrote |
-| `.errorAny` | Any *thrown* runtime error, before the message is formatted; deferred-action failures do not throw here (GitLab #561) |
+| `.errorAny` | Any runtime error — thrown at its statement, or carried by a deferred action and surfaced when the feature set drains |
 
 ## A.5 Pause reasons
 
@@ -86,7 +86,7 @@ As printed by the CLI frontend, in `⏸  paused (<reason>) at …`:
 | `step` | Step / next / finish chose to pause |
 | `breakpoint (<bp>)` | A registered breakpoint matched; `<bp>` is its description — `main.aro:5`, `:5` for a launch-set one, `verb Emit`, `main.aro:5 if <x> == 1`, `any error` |
 | `event <name>` | An event-name breakpoint matched a publish, on any of the bus's publish paths |
-| `error: <msg>` | An error-any breakpoint matched a thrown error (misses deferred failures — GitLab #561) |
+| `error: <msg>` | An error-any breakpoint matched; for a deferred failure the line is the statement that created it |
 
 ## A.6 DAP requests handled
 
