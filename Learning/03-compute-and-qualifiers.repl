@@ -22,7 +22,7 @@
       "outputs" : [
 
       ],
-      "source" : "## What just happened\n\n- **`Compute`** read two existing bindings, multiplied them, and bound\n  `6.8` to `<latte-subtotal>`. Read → transform → bind: that rhythm is\n  the heartbeat of ARO data processing.\n- The object slot holds an **expression**. Arithmetic (`+ - * \/ %`),\n  parentheses, and comparisons all work there; string concatenation\n  uses `++` (never `+` — the operator tells you whether you are doing\n  math or building text).\n- One caution that will save you a puzzled minute: expression operands\n  must be **plain variables**. `<item: price> * 2` does not parse —\n  `Extract` the field into its own name first, then compute."
+      "source" : "## What just happened\n\n- **`Compute`** read two existing bindings, multiplied them, and bound\n  `6.8` to `<latte-subtotal>`. Read → transform → bind: that rhythm is\n  the heartbeat of ARO data processing.\n- The object slot holds an **expression**. Arithmetic (`+ - * \/ %`),\n  parentheses, and comparisons all work there; string concatenation\n  uses `++` (never `+` — the operator tells you whether you are doing\n  math or building text).\n- Operands can reach into a record. `<item: price> * 2` reads the\n  `price` field and doubles it, and the same `<record: field>` form\n  works wherever a value is expected: on its own (`Compute the <price>\n  from <item: price>.`), under a qualifier (`Compute the <name:\n  uppercase> from <item: name>.`), or in `Create`. A field the record\n  does not have is an error, not a shrug."
     },
     {
       "id" : "nb03-c04",
