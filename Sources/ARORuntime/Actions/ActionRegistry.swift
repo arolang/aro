@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROParser
 
 /// Global registry that binds action verbs to their implementations
 ///
@@ -42,6 +43,24 @@ public final class ActionRegistry: @unchecked Sendable {
     /// Mapping from verb (lowercase) to action type
     private var actions: [String: any ActionImplementation.Type]
 
+    /// Every action type that claims a verb, in registration order.
+    ///
+    /// `actions` keeps one winner per verb, and that used to be the whole
+    /// story: registration is `actions[verb] = type`, so a second claimant
+    /// silently replaced the first. `DeleteAction` claims `clear` and documents
+    /// `Clear the <all> from the <message-repository>.`; `TerminalActions`'
+    /// `ClearAction` claims it too and is registered later, so every `Clear`
+    /// reached the terminal action and the repository form failed at run time
+    /// (GitLab #562).
+    ///
+    /// The two are not actually ambiguous — `ClearAction` accepts only `for`,
+    /// `DeleteAction` accepts `from`/`in`/`of` — so `execute` picks the
+    /// claimant whose declared `validPrepositions` fits the statement.
+    /// `validPrepositions` is already the contract each action states and
+    /// `validatePreposition` already enforces, so this reads the existing
+    /// declaration rather than adding a new concept.
+    private var overloads: [String: [any ActionImplementation.Type]] = [:]
+
     /// Dynamic action handlers for plugin-provided actions
     private var dynamicHandlers: [String: DynamicActionHandler] = [:]
 
@@ -66,7 +85,9 @@ public final class ActionRegistry: @unchecked Sendable {
 
     /// Private initializer - use shared instance
     private init() {
-        self.actions = Self.createBuiltInActions()
+        let builtIns = Self.createBuiltInActions()
+        self.actions = builtIns.actions
+        self.overloads = builtIns.overloads
     }
 
     // MARK: - Middleware Storage (GitLab #107)
@@ -108,40 +129,109 @@ public final class ActionRegistry: @unchecked Sendable {
 
     // MARK: - Registration
 
+    /// The built-in action modules, in registration order.
+    ///
+    /// Order matters: registration is last-writer-wins per verb, and
+    /// `resolveLocked` breaks a tie by preferring the latest claimant whose
+    /// declared prepositions fit. Exposed so a test can check the same list the
+    /// registry builds from, rather than a copy that can drift (GitLab #562).
+    public static let builtInModules: [[any ActionImplementation.Type]] = {
+        var modules: [[any ActionImplementation.Type]] = [
+            RequestActionsModule.actions,
+            OwnActionsModule.actions,
+            ResponseActionsModule.actions,
+            ServerActionsModule.actions,
+            SocketActionsModule.actions,
+            FileActionsModule.actions,
+            DataPipelineActionsModule.actions,
+            TestActionsModule.actions,
+            TerminalActionsModule.actions,
+            SystemActionsModule.actions,
+        ]
+        #if !os(Windows)
+        modules.append(GitActionsModule.actions)
+        #endif
+        return modules
+    }()
+
     /// Create the initial dictionary of built-in actions.
-    private static func createBuiltInActions() -> [String: any ActionImplementation.Type] {
+    private static func createBuiltInActions() -> (
+        actions: [String: any ActionImplementation.Type],
+        overloads: [String: [any ActionImplementation.Type]]
+    ) {
         var actions: [String: any ActionImplementation.Type] = [:]
+        var overloads: [String: [any ActionImplementation.Type]] = [:]
 
         func register(_ moduleActions: [any ActionImplementation.Type]) {
             for actionType in moduleActions {
                 for verb in actionType.verbs {
-                    actions[verb.lowercased()] = actionType
+                    let key = verb.lowercased()
+                    // The same type listed by two modules is a duplicate, not a
+                    // conflict — it resolves to identical behaviour either way.
+                    let alreadyClaimed = overloads[key]?.contains {
+                        String(describing: $0) == String(describing: actionType)
+                    } ?? false
+                    if !alreadyClaimed { overloads[key, default: []].append(actionType) }
+                    actions[key] = actionType
                 }
             }
         }
 
-        register(RequestActionsModule.actions)
-        register(OwnActionsModule.actions)
-        register(ResponseActionsModule.actions)
-        register(ServerActionsModule.actions)
-        register(SocketActionsModule.actions)
-        register(FileActionsModule.actions)
-        register(DataPipelineActionsModule.actions)
-        register(TestActionsModule.actions)
-        register(TerminalActionsModule.actions)
-        register(SystemActionsModule.actions)
-        #if !os(Windows)
-        register(GitActionsModule.actions)
-        #endif
+        for module in Self.builtInModules { register(module) }
 
-        return actions
+        reportShadowedClaimants(overloads)
+        return (actions, overloads)
+    }
+
+    /// Warn about an action that no statement can reach.
+    ///
+    /// Registration is last-writer-wins per verb, and `resolveLocked` breaks a
+    /// tie by preposition, preferring the *latest* claimant that fits. So a
+    /// claimant is unreachable exactly when every preposition it declares is
+    /// also declared by a later claimant of the same verb — that is the shape
+    /// that hid GitLab #562, where `DeleteAction`'s documented
+    /// `Clear the <all> from the <m-repository>.` was replaced wholesale by
+    /// `TerminalActions.ClearAction`.
+    ///
+    /// Overlapping-but-not-covering is fine and common: `DeleteAction`
+    /// (`from`, `for`) and `ClearAction` (`for`) share `for`, and both stay
+    /// reachable because `from` is Delete's alone.
+    private static func reportShadowedClaimants(
+        _ overloads: [String: [any ActionImplementation.Type]]
+    ) {
+        for (verb, claimants) in overloads.sorted(by: { $0.key < $1.key }) where claimants.count > 1 {
+            for (index, claimant) in claimants.enumerated() {
+                let later = claimants.dropFirst(index + 1)
+                guard !later.isEmpty else { continue }
+                let covered = later.reduce(into: Set<Preposition>()) {
+                    $0.formUnion($1.validPrepositions)
+                }
+                if claimant.validPrepositions.isSubset(of: covered) {
+                    let shadows = later
+                        .filter { !$0.validPrepositions.isDisjoint(with: claimant.validPrepositions) }
+                        .map { String(describing: $0) }
+                        .joined(separator: ", ")
+                    let preps = claimant.validPrepositions
+                        .map(\.rawValue).sorted().joined(separator: ", ")
+                    let message = "[ActionRegistry] Warning: '\(verb)' on \(claimant) is "
+                        + "unreachable — \(shadows) claims the same verb for every "
+                        + "preposition it accepts (\(preps)).\n"
+                    FileHandle.standardError.write(Data(message.utf8))
+                }
+            }
+        }
     }
 
     /// Register a custom action
     public func register<A: ActionImplementation>(_ action: A.Type) {
         lock.lock()
         for verb in A.verbs {
-            actions[verb.lowercased()] = action
+            let key = verb.lowercased()
+            let alreadyClaimed = overloads[key]?.contains {
+                String(describing: $0) == String(describing: action)
+            } ?? false
+            if !alreadyClaimed { overloads[key, default: []].append(action) }
+            actions[key] = action
         }
         lock.unlock()
         // Plugin- or app-registered actions need to flow into the
@@ -306,6 +396,33 @@ public final class ActionRegistry: @unchecked Sendable {
         return synchronousDynamicHandlers[normalizeActionNameLocked(verb)]
     }
 
+
+    /// The action type to run for `verb` with this statement's preposition.
+    ///
+    /// One claimant is the overwhelmingly common case and resolves exactly as
+    /// before. When a verb has several, the one whose `validPrepositions`
+    /// contains the statement's preposition wins — which is what lets
+    /// `Clear the <screen> for the <terminal>.` and
+    /// `Clear the <all> from the <m-repository>.` both work (GitLab #562).
+    /// With no match the last registration stands, so the error the caller
+    /// gets is the same `validatePreposition` error as before rather than a
+    /// confusing "unknown action".
+    ///
+    /// Must be called with `lock` held.
+    private func resolveLocked(
+        verb: String,
+        preposition: Preposition
+    ) -> (any ActionImplementation.Type)? {
+        let key = verb.lowercased()
+        guard let candidates = overloads[key], candidates.count > 1 else {
+            return actions[key]
+        }
+        if let fitting = candidates.last(where: { $0.validPrepositions.contains(preposition) }) {
+            return fitting
+        }
+        return actions[key]
+    }
+
     // MARK: - Lookup
 
     /// Get an action implementation for a verb
@@ -460,7 +577,7 @@ extension ActionRegistry {
             middleware: [RegisteredMiddleware]
         ) = {
             lock.lock(); defer { lock.unlock() }
-            let action = actions[verb.lowercased()].map { $0.init() }
+            let action = resolveLocked(verb: verb, preposition: object.preposition).map { $0.init() }
             let handler = dynamicHandlers[normalizeActionNameLocked(verb)]
             return (action, handler, middlewareSnapshotLocked(for: canonicalVerb))
         }()
