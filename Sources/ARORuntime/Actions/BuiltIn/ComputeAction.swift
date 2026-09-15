@@ -40,6 +40,28 @@ private func resolveOperationName(
     return fallback
 }
 
+/// The value an object clause denotes, with `<record: field>` read as the
+/// field it names (GitLab #594).
+///
+/// `Compute` and `Create` resolved `object.base` and dropped the specifiers, so
+/// `Compute the <doubled> from <item: price>.` bound the whole `item` record
+/// and `Compute the <upper: uppercase> from <item: name>.` uppercased every key
+/// and value in it. Nothing said so: it checked clean and exited `[OK]`.
+///
+/// The same statement with an operator — `<item: price> * 2` — always worked,
+/// because the parser makes that an expression and the expression evaluator
+/// resolves member access properly. So the two halves of one statement
+/// disagreed about what `<item: price>` meant.
+///
+/// A specifier that names nothing on the value is an error, as it is for
+/// `Extract`, rather than quietly yielding the container.
+private func resolveObjectValue(
+    _ object: ObjectDescriptor,
+    context: ExecutionContext
+) throws -> any Sendable {
+    try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
+}
+
 // MARK: - Compute Actions
 
 /// Computes a value from inputs
@@ -206,9 +228,7 @@ public struct ComputeAction: SynchronousAction {
     ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        guard let input = context.resolveAny(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
+        let input = try resolveObjectValue(object, context: context)
 
         // #326: name set comes from the registry. Markdown is a
         // built-in but explicitly *not* in `knownComputations` because
@@ -850,9 +870,7 @@ public struct ComputeAction: SynchronousAction {
         }
 
         try validatePreposition(object.preposition)
-        guard let input = context.resolveAny(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
+        let input = try resolveObjectValue(object, context: context)
         // Fold over an unread body without building it (GitLab #477).
         // The bytes go past once; the digest, the count or the lines come out
         // the other side, and the body's size never becomes the process's.
@@ -896,7 +914,12 @@ public struct ComputeAction: SynchronousAction {
         // ARO-0051: Streaming count — materialize and rebind
         if let anyStreaming = input as? AnyStreamingValue {
             let materialized = try await anyStreaming.materialize()
-            context.bind(object.base, value: materialized, allowRebind: true)
+            // Only when the object *is* the base. With specifiers the value is
+            // a field of it, and rebinding the base to its own field would
+            // replace the record with one of its members.
+            if object.specifiers.isEmpty {
+                context.bind(object.base, value: materialized, allowRebind: true)
+            }
             return materialized.count
         }
 
@@ -1535,7 +1558,9 @@ public struct CreateAction: ActionImplementation {
         } else if let literal = context.resolveAny("_literal_") {
             sourceValue = literal
         } else {
-            sourceValue = context.resolveAny(object.base)
+            // `<record: field>` means the field (GitLab #594), the same as it
+            // does on the expression side of the very same statement.
+            sourceValue = try resolveObjectValue(object, context: context)
         }
 
         if let value = sourceValue {

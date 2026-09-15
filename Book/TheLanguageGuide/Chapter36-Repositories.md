@@ -20,14 +20,14 @@ Repositories solve this by providing shared storage:
 ```aro
 (incrementCount: Counter API) {
     Retrieve the <counts> from the <counter-repository>.
-    Compute the <current> from <counts: length>.
+    Compute the <current: length> from <counts>.
     Store the <current> into the <counter-repository>.
     Return an <OK: status> with <current>.
 }
 
 (getCount: Counter API) {
     Retrieve the <counts> from the <counter-repository>.
-    Compute the <total> from <counts: length>.
+    Compute the <total: length> from <counts>.
     Return an <OK: status> with { count: <total> }.
 }
 ```
