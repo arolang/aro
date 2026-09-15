@@ -93,11 +93,17 @@ This enables responsive terminal designs that adapt to the user's terminal size 
 
 ARO provides template filters for applying ANSI styling to text. These filters integrate seamlessly with the template engine you learned in Chapter 44.
 
-**Filters apply to a variable reference, not to a literal.** `{{ <heading> | bold }}`
-styles the value bound to `heading`; `{{ "Heading" | bold }}` is a parse error
-(`Expected action verb …, but got string`). Bind the text in the feature set
-and style the binding — which is also where the text belongs, since Section
-44.12 asks you to prepare data outside the template:
+**Filters apply to a variable reference or to a string literal.**
+`{{ <heading> | bold }}` styles the value bound to `heading`, and
+`{{ "=== Task List ===" | bold }}` styles the text as written — which is how a
+styled heading is usually spelled, and the only reason to put a literal inside
+the braces at all. A *bare* literal (`{{ "Heading" }}`) is still not an
+expression; static text belongs outside the braces (Section 44.3).
+
+A filtered literal used to be a parse error — `Expected action verb …, but got
+string` — because classification required a `<` prefix
+([GitLab #568](https://git.ausdertechnik.de/arolang/aro/-/issues/568)). If you
+bound headings in the feature set to work around that, both spellings work now:
 
 ```aro
 Create the <heading> with "=== Task List ===".
@@ -149,11 +155,21 @@ Apply text styles using simple filters:
 {{ <removed> | strikethrough }}
 ```
 
-The seven filters above — `color`, `bg`, `bold`, `dim`, `italic`, `underline`,
-`strikethrough` — are the whole set. In particular there is no `length` filter:
-`{{ <tasks> | length }}` prints the collection, not its size. Count in the
-feature set (`Compute the <task-count: length> from <tasks>.`) and print the
-binding.
+The seven styling filters above — `color`, `bg`, `bold`, `dim`, `italic`,
+`underline`, `strikethrough` — are joined by the value filters `date`,
+`uppercase`, `lowercase`, `trim`, `markdown`, `rows`, and `length`:
+
+```aro
+Total: {{ <tasks> | length }} tasks     (* elements in a collection *)
+{{ <title> | length }}                  (* characters in a string   *)
+{{ <tasks> | count }}                    (* the same filter          *)
+```
+
+`length` used to be missing from the table, and an unknown filter was skipped
+in silence — so `{{ <tasks> | length }}` printed the whole collection with no
+diagnostic ([GitLab #568](https://git.ausdertechnik.de/arolang/aro/-/issues/568)).
+Counting in the feature set (`Compute the <task-count: length> from <tasks>.`)
+still works and is the better choice when the count is used more than once.
 
 ### 47.3.3 Chaining Filters
 

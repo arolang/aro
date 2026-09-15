@@ -123,6 +123,41 @@ Templates can apply ANSI styling using filters:
 {{ <message> | color: "green" | bold | underline }}
 ```
 
+**Value Filters**:
+```aro
+Total: {{ <tasks> | length }} tasks      (* elements in a collection  *)
+{{ <title> | length }}                   (* characters in a string    *)
+{{ <tasks> | count }}                     (* `count` is the same filter *)
+```
+
+**Filters apply to a string literal too**, which is how a styled heading is
+written — and the only reason to put a literal inside the braces, since static
+text belongs outside them:
+
+```aro
+{{ "=== Task Manager ===" | bold | color: "cyan" }}
+```
+
+A *bare* literal (`{{ "some text" }}`) is still not an expression.
+
+Both of these were specified here and neither worked: classification required a
+`<` prefix, so a literal was parsed as an ARO statement and failed with
+"Expected action verb, but got string(…)", and `length` was not in the filter
+table at all — an unknown filter was skipped in silence, so `{{ <tasks> |
+length }}` printed the whole collection (GitLab #568).
+
+**Loops and conditionals** use the template engine's own spellings, not a
+`{{for}}`/`{{end}}` pair:
+
+```aro
+{{ for each <task> in <tasks> { }}
+  [{{ <task: id> }}] {{ <task: title> }}
+{{ } }}
+```
+
+There is no `{{when}}`/`{{else}}` block. Put the condition on a statement
+inside a `{{ … }}` block, or compute the branch before rendering.
+
 ### 3.2 Supported Colors
 
 **Named Colors (16-color)**:
@@ -158,12 +193,17 @@ Templates have access to a `terminal` object with capability information:
 ```
 
 **Example: Responsive Design**:
+
+There is no conditional template block, so the branch happens in the feature
+set and each arm binds its own name — two guarded statements on one name would
+be a rebinding:
+
 ```aro
-{{when <terminal: columns> > 120}}
-  {{ "Wide layout" }}
-{{else}}
-  {{ "Narrow layout" }}
-{{end}}
+Extract the <cols> from the <terminal: columns>.
+Transform the <wide> from the <template: wide.screen> when <cols> > 120.
+Render the <wide> to the <console> when <cols> > 120.
+Transform the <narrow> from the <template: narrow.screen> when <cols> <= 120.
+Render the <narrow> to the <console> when <cols> <= 120.
 ```
 
 ## 4. Reactive Watch Pattern
@@ -562,12 +602,10 @@ public static func mainScreen() -> String {
 Terminal: {{ <terminal: columns> }} columns × {{ <terminal: rows> }} rows
 
 {{ "Tasks:" | bold }}
-
-{{for task in tasks}}
+{{ for each <task> in <tasks> { }}
   [{{ <task: id> }}] {{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
-{{end}}
-
-{{ "---" }}
+{{ } }}
+---
 Total: {{ <tasks> | length }} tasks
 ```
 
@@ -630,29 +668,34 @@ Total: {{ <tasks> | length }} tasks
 Check terminal dimensions for layout decisions:
 
 ```aro
-{{when <terminal: columns> > 120}}
-  (* Wide layout - show detailed view *)
-  Transform the <view> from the <template: wide-dashboard.screen>.
-{{when <terminal: columns> > 80}}
-  (* Medium layout - show summary *)
-  Transform the <view> from the <template: medium-dashboard.screen>.
-{{else}}
-  (* Narrow layout - show compact view *)
-  Transform the <view> from the <template: narrow-dashboard.screen>.
-{{end}}
+  (* Each arm binds its own name — one name guarded twice is a rebinding *)
+  Extract the <cols> from the <terminal: columns>.
+
+  Transform the <wide> from the <template: wide-dashboard.screen> when <cols> > 120.
+  Render the <wide> to the <console> when <cols> > 120.
+
+  Transform the <medium> from the <template: medium-dashboard.screen>
+      when <cols> > 80 and <cols> <= 120.
+  Render the <medium> to the <console> when <cols> > 80 and <cols> <= 120.
+
+  Transform the <narrow> from the <template: narrow-dashboard.screen> when <cols> <= 80.
+  Render the <narrow> to the <console> when <cols> <= 80.
 ```
 
 ### 9.2 Graceful Degradation
 
 Check capabilities before using advanced features:
 
+The colour filters already degrade on their own: `ANSIRenderer` emits nothing
+when the terminal is not a TTY, so the styled form is safe everywhere and needs
+no conditional:
+
 ```aro
-{{when <terminal: supports_color>}}
-  {{ <error> | color: "red" | bold }}
-{{else}}
-  ERROR: {{ <error> }}
-{{end}}
+{{ <error> | color: "red" | bold }}
 ```
+
+Where you do need two different *layouts*, branch in the feature set as §3.1
+shows.
 
 ### 9.3 Efficient Re-Rendering
 

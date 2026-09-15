@@ -3,10 +3,8 @@
 Terminal: {{ <terminal: columns> }} columns × {{ <terminal: rows> }} rows
 
 {{ "Tasks:" | bold }}
-
-{{for task in tasks}}
+{{ for each <task> in <tasks> { }}
   [{{ <task: id> }}] {{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
-{{end}}
-
-{{ "---" }}
+{{ } }}
+---
 Total: {{ <tasks> | length }} tasks

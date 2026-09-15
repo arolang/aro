@@ -23,17 +23,16 @@
     Return an <OK: status> for the <startup>.
 }
 
-(* Watch handler - triggered automatically when task-repository changes *)
+(* Watch handler - triggered automatically when task-repository changes.
+   Renders templates/task-list.screen, so the template this example ships
+   is actually exercised (GitLab #568). *)
 (Dashboard Watch: task-repository Observer) {
-    (* Note: Clear action will clear the terminal screen *)
-    (* Clear the <screen> for the <terminal>. *)
-
     (* Retrieve all tasks *)
     Retrieve the <tasks> from the <task-repository>.
 
-    (* Display tasks *)
-    Log "=== Task Dashboard ===" to the <console>.
-    Log "Tasks updated reactively!" to the <console>.
+    (* Render the dashboard template and print it *)
+    Transform the <dashboard> from the <template: task-list.screen>.
+    Render the <dashboard> to the <console>.
 
     Return an <OK: status> for the <render>.
 }

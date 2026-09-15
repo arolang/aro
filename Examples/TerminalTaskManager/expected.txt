@@ -1,11 +1,15 @@
 # Example: TerminalTaskManager
 # Type: console
+# Note: occurrence-check. The observer renders templates/task-list.screen on
+# every repository change, so the dashboard appears once per Store — and the
+# template's own output is pinned, which is what makes it an exercised
+# template rather than a dead file (GitLab #568).
 ---
-=== Task Dashboard ===
-Tasks updated reactively!
-=== Task Dashboard ===
-Tasks updated reactively!
-=== Task Dashboard ===
-Tasks updated reactively!
+=== Task Manager ===
+Tasks:
+  [1] Write documentation - pending
+  [2] Fix bug #127 - in-progress
+  [3] Review PR - pending
+Total: 3 tasks
 Task Manager started. Tasks are tracked reactively.
 Press Ctrl+C to exit.
