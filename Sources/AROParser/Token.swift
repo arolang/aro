@@ -293,7 +293,14 @@ extension TokenKind {
         case .identifier:
             return true
         // Keywords that can appear in business activity names
-        case .error, .match, .case, .otherwise, .`if`, .`else`:
+        //
+        // `guard` is here because it is an ordinary domain noun — *Access
+        // Guard*, *Rate Guard*, *Schema Guard* — and the parser never consumes
+        // the token as a keyword anywhere: a guard clause is written `when` or
+        // `where`. So the reserved word existed only to *break* an identifier
+        // sequence, which made `(Application-Start: Guard)` report "Missing
+        // business activity" at the activity it had just read (GitLab #584).
+        case .error, .match, .case, .otherwise, .`if`, .`else`, .`guard`:
             return true
         default:
             return false
