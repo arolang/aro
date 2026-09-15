@@ -177,7 +177,17 @@ The reason it's useful in ARO specifically: error messages in ARO are generated 
    [error] Runtime Error: Cannot read the data from the _expression_. …
 ```
 
-**Run it with `ARO_NO_DEFER=1`.** The error checkpoint hangs off the throw in the statement executor, and a *deferred* action doesn't throw there — its failure rides in the future and gets reported when something forces it, as `[ARO] Deferred action for 'data' failed: …`. So with deferral on, which is the default, `berror` misses exactly the failures you set it for and the program runs to the end without stopping (GitLab issue #561). Turning deferral off is the fix today and is a good idea while error-hunting anyway, for the reason chapter 4.2 gives: it removes the gap between the line you read and the line that ran.
+It catches deferred failures too. A *deferred* action doesn't throw at its own statement — its failure rides in the future and surfaces when the feature set drains it — and the checkpoint fires there as well, attributed to the statement that **created** the future rather than the one that read the empty value (GitLab #561). So the pause points at the cause:
+
+```
+(aro-dbg) berror
+breakpoint set on any error
+(aro-dbg) c
+
+⏸  paused (error: Runtime Error: Cannot read the data …) at main.aro:3 — Application-Start
+```
+
+`ARO_NO_DEFER=1` is still worth reaching for while error-hunting, for the reason chapter 4.2 gives — it removes the gap between the line you read and the line that ran — but `berror` no longer needs it.
 
 ```bash
 ARO_NO_DEFER=1 aro debug ./MyApp

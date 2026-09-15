@@ -361,7 +361,8 @@ public actor RuntimeContext: ExecutionContext {
                         // Record the failure so feature-set exit reports it with
                         // both spans rather than letting a typed read swallow it
                         // as nil.
-                        current.recordDeferredFailure(error, binding: name)
+                        current.recordDeferredFailure(
+                            error, binding: name, sourceLocation: future.sourceLocation)
                         return nil
                     }
                 }
@@ -579,7 +580,8 @@ public actor RuntimeContext: ExecutionContext {
                 // empty string at the read site with nothing reported. Keep
                 // the read total, but remember the failure so feature-set
                 // exit can surface it (ARO-0088 §4).
-                ctx.recordDeferredFailure(error, binding: name)
+                ctx.recordDeferredFailure(
+                    error, binding: name, sourceLocation: future.sourceLocation)
                 return ""
             }
         }
@@ -628,7 +630,8 @@ public actor RuntimeContext: ExecutionContext {
             do {
                 return try await future.value()
             } catch {
-                ctx.recordDeferredFailure(error, binding: name)
+                ctx.recordDeferredFailure(
+                    error, binding: name, sourceLocation: future.sourceLocation)
                 return ""
             }
         }
@@ -654,7 +657,8 @@ public actor RuntimeContext: ExecutionContext {
             do {
                 return TypedValue.infer(try future.force())
             } catch {
-                ctx.recordDeferredFailure(error, binding: name)
+                ctx.recordDeferredFailure(
+                    error, binding: name, sourceLocation: future.sourceLocation)
                 return TypedValue.infer("")
             }
         }
@@ -1126,10 +1130,25 @@ public actor RuntimeContext: ExecutionContext {
     /// the one that noticed. See `takeDeferredFailure()`.
     nonisolated(unsafe) private var _deferredFailure: Error?
 
-    nonisolated func recordDeferredFailure(_ error: Error, binding: String) {
+    /// `AROFuture.sourceLocation` ("line:column") of the statement that created
+    /// the failing future.
+    ///
+    /// Kept so the debugger's error-any breakpoint can name the statement that
+    /// *caused* the failure rather than the one that noticed it. Under ARO-0088
+    /// deferral a value-producing action does not throw at its own statement —
+    /// the future carries the failure — so `errorCheckpoint` was never reached
+    /// for the majority of runtime failures and `berror` silently did nothing
+    /// (GitLab #561).
+    nonisolated(unsafe) private var _deferredFailureLocation: String?
+
+    nonisolated func recordDeferredFailure(
+        _ error: Error,
+        binding: String,
+        sourceLocation: String? = nil
+    ) {
         let owner = statementScopeOwner
         if owner !== self {
-            owner.recordDeferredFailure(error, binding: binding)
+            owner.recordDeferredFailure(error, binding: binding, sourceLocation: sourceLocation)
             return
         }
         // Reads are total, so the caller is about to receive an empty value.
@@ -1138,7 +1157,10 @@ public actor RuntimeContext: ExecutionContext {
         FileHandle.standardError.write(Data(
             "[ARO] Deferred action for '\(binding)' failed: \(error)\n".utf8))
         withExclusiveMutation {
-            if _deferredFailure == nil { _deferredFailure = error }
+            if _deferredFailure == nil {
+                _deferredFailure = error
+                _deferredFailureLocation = sourceLocation
+            }
         }
     }
 
@@ -1148,6 +1170,16 @@ public actor RuntimeContext: ExecutionContext {
             let error = _deferredFailure
             _deferredFailure = nil
             return error
+        }
+    }
+
+    /// The `line:column` of the statement that created the failing future, if
+    /// one was recorded. Read before `takeDeferredFailure()` consumes it.
+    public nonisolated var deferredFailureLine: Int? {
+        withExclusiveMutation {
+            guard let location = _deferredFailureLocation,
+                  let lineText = location.split(separator: ":").first else { return nil }
+            return Int(lineText)
         }
     }
 
@@ -1220,7 +1252,8 @@ public actor RuntimeContext: ExecutionContext {
                 // discards the return value, and it has already emptied the
                 // list — so without recording here, the failure would be gone
                 // by the time feature-set exit drains again.
-                recordDeferredFailure(error, binding: future.bindingName)
+                recordDeferredFailure(
+                    error, binding: future.bindingName, sourceLocation: future.sourceLocation)
                 if firstError == nil { firstError = error }
             }
         }

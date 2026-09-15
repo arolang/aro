@@ -195,7 +195,7 @@ public final class FeatureSetExecutor: Sendable {
             // Feature-set exit is a force point (ARO-0088 §3). Without it a
             // deferred action nobody read would be cancelled when its handle is
             // released, so a failing statement could leave no trace at all.
-            try drainDeferredResults(context: context)
+            try await drainDeferredResults(context: context)
 
             // Check for response (either from sequential or scheduled execution)
             if let response = context.getResponse() {
@@ -395,6 +395,29 @@ public final class FeatureSetExecutor: Sendable {
             }
             throw error
         }
+    }
+
+    /// Fire `.errorAny` for a failure, if a debugger is attached.
+    ///
+    /// Shared by the statement catch and the deferred-failure drain so both
+    /// kinds of failure reach the same breakpoint (GitLab #561). `BreakSignal`
+    /// is control flow for `break inner`, not an error, and never fires.
+    private func fireErrorCheckpoint(
+        error: Error,
+        context: ExecutionContext,
+        line: Int?
+    ) async {
+        guard !(error is BreakSignal), let controller = Debug.controller else { return }
+        let resolved = Debug.currentSourceFile
+        let basename = resolved.isEmpty
+            ? "" : URL(fileURLWithPath: resolved).lastPathComponent
+        await controller.errorCheckpoint(
+            message: "\(error)",
+            featureSetName: context.featureSetName,
+            businessActivity: context.businessActivity,
+            line: line ?? 0,
+            file: basename
+        )
     }
 
     /// Build a `SymbolSnapshot` array from the visible bindings on a
@@ -939,13 +962,29 @@ public final class FeatureSetExecutor: Sendable {
     /// Also surfaces a failure that a read already swallowed: `resolveAny` keeps
     /// reads total by handing back `""` when a deferred action failed, and this
     /// is where that gets reported instead of disappearing.
-    private func drainDeferredResults(context: ExecutionContext) throws {
+    private func drainDeferredResults(context: ExecutionContext) async throws {
         guard let runtime = context as? RuntimeContext else { return }
         let drainError = runtime.drainPendingFutures()
         if let observed = runtime.takeDeferredFailure() {
+            // Fire the error-any checkpoint here too. Under ARO-0088 deferral a
+            // value-producing action that fails does not throw at
+            // `executeStatement`'s catch — the `AROFuture` carries the failure
+            // and this is where it surfaces — so `.errorAny` never matched, and
+            // `berror`, which the debugging guide bills as the breakpoint to
+            // reach for when you do not yet know *where* the bug is, silently
+            // did nothing for the majority of runtime failures (GitLab #561).
+            //
+            // The line is the statement that *created* the future, not the one
+            // that noticed the empty value, so the pause points at the cause.
+            await fireErrorCheckpoint(
+                error: observed,
+                context: context,
+                line: runtime.deferredFailureLine
+            )
             throw observed
         }
         if let drainError {
+            await fireErrorCheckpoint(error: drainError, context: context, line: nil)
             throw drainError
         }
         // Backstop for a refused rebind no statement check observed — a
