@@ -386,11 +386,34 @@ Match expressions work in templates:
 
 ### 10.1 Syntax
 
-The `<Include>` action embeds another template:
+The `<Include>` action embeds another template. Like every other ARO
+statement it is Action-Result-Object: a result binding, then `from`
+naming the template.
 
 ```aro
-{{ Include the <template: header.tpl>. }}
+{{ Include the <header> from the <template: header.tpl>. }}
 ```
+
+The result binds the rendered string; the include also writes it into
+the enclosing template at that point, so the binding is usually
+incidental and named for readability.
+
+`from` is the **only** preposition `Include` accepts, and that is
+deliberate. Two earlier spellings were specified here and neither could
+work (GitLab #563):
+
+- `{{ Include the <template: header.tpl>. }}` has no preposition
+  clause, which the grammar requires of every statement, so it is a
+  parse error.
+- `{{ Include the <template: header.tpl> with { … }. }}` parses, but
+  with `with` as the primary preposition the object is an expression,
+  and the executor's fast path for a statement that needs no action
+  binds that expression's value and never dispatches `Include`. The
+  include silently did not happen, and the template rendered an empty
+  string in its place.
+
+Declaring `from` alone means `aro check` reports the second spelling
+with a hint naming this one, rather than a program rendering nothing.
 
 ### 10.2 Context Inheritance
 
@@ -410,13 +433,13 @@ Included templates:
   <title>{{ <page-title> }} | MyApp</title>
 </head>
 <body>
-  {{ Include the <template: partials/header.tpl>. }}
+  {{ Include the <header> from the <template: partials/header.tpl>. }}
 
   <main>
     {{ Print <content> to the <template>. }}
   </main>
 
-  {{ Include the <template: partials/footer.tpl>. }}
+  {{ Include the <footer> from the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
@@ -435,11 +458,16 @@ Included templates:
 
 ### 10.4 Include with Override Variables
 
-Use `with` to pass/override variables to included template:
+A **trailing** `with` clause passes or overrides variables in the
+included template. It follows the `from` clause; it does not replace it:
 
 ```
-{{ Include the <template: user-card.tpl> with { user: <current-user>, showDetails: true }. }}
+{{ Include the <card> from the <template: user-card.tpl>
+     with { user: <current-user>, showDetails: true }. }}
 ```
+
+That distinction is the whole of §10.1's second note: `with` as a
+trailing clause is fine, `with` as the statement's preposition is not.
 
 ## 11. Examples
 
@@ -517,14 +545,14 @@ The Team
 <html>
 <head>
   <title>{{ <title> }} | MyApp</title>
-  {{ Include the <template: partials/head.tpl>. }}
+  {{ Include the <head> from the <template: partials/head.tpl>. }}
 </head>
 <body>
-  {{ Include the <template: partials/nav.tpl>. }}
+  {{ Include the <nav> from the <template: partials/nav.tpl>. }}
   <main>
     {{ Print <body-content> to the <template>. }}
   </main>
-  {{ Include the <template: partials/footer.tpl>. }}
+  {{ Include the <footer> from the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
@@ -804,7 +832,7 @@ Error: Can not extract the <name> from the <user: name> in template welcome.tpl
 | **Variable Shorthand** | `{{ <variable> }}` |
 | **Output Action** | `Print expression to the <template>.` |
 | **For-Each** | `{{ for each <item> in <list> { }} ... {{ } }}` |
-| **Include** | `{{ Include the <template: partial.tpl>. }}` |
+| **Include** | `{{ Include the <part> from the <template: partial.tpl>. }}` |
 | **Isolation** | Context cloned, no bleed-back |
 | **Binary Mode** | Templates embedded in compiled binary |
 

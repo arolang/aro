@@ -24,9 +24,35 @@ import AROParser
 public struct IncludeAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["include", "embed", "insert"]
-    public static let validPrepositions: Set<Preposition> = [.with, .from]
+    /// `from` only — deliberately not `with`.
+    ///
+    /// `with` as the *primary* preposition cannot work: the object is then an
+    /// expression, and `FeatureSetExecutor`'s `!needsExecution` fast path binds
+    /// that expression's value to the result and never dispatches the action.
+    /// So `Include the <template: card.tpl> with { user: <u> }.` — the spelling
+    /// ARO-0050 §10 used to specify — parsed, bound a variable, and rendered
+    /// nothing at all, with no diagnostic (GitLab #563).
+    ///
+    /// Declaring only `from` makes `CodeQualityValidator.validatePrepositions`
+    /// report it at check time, with a hint naming the spelling that works.
+    /// A **trailing** `with` clause is unaffected and still passes overrides:
+    /// `Include the <c> from the <template: card.tpl> with { label: "Go" }.`
+    public static let validPrepositions: Set<Preposition> = [.from]
 
     public init() {}
+
+    /// Rebuild a template path from a qualified noun's specifiers.
+    ///
+    /// Specifiers are split on `:` and `.`, so `header.tpl` arrives as
+    /// `["header", "tpl"]` and has to be rejoined. A single specifier that
+    /// names a bound variable is resolved instead, so
+    /// `<template: chosen-partial>` works.
+    static func path(fromSpecifiers specifiers: [String], context: ExecutionContext) -> String {
+        if specifiers.count == 1, let resolved: String = context.resolve(specifiers[0]) {
+            return resolved
+        }
+        return specifiers.joined(separator: ".")
+    }
 
     public func execute(
         result: ResultDescriptor,
@@ -38,22 +64,33 @@ public struct IncludeAction: ActionImplementation {
         // Get template path from object base or specifiers
         let templatePath: String
 
-        // Check if object.base is "template" with path in specifiers
-        if object.base.lowercased() == "template" {
+        // ARO-0050 §10 used to write the `with` form with the template in the
+        // *result* slot:
+        //
+        //     {{ Include the <template: user-card.tpl> with { user: <u> }. }}
+        //
+        // That parses — `with` satisfies the preposition — but the template is
+        // then in the result slot, where ARO binds a variable. Two includes in
+        // one template would both bind `template`, which immutability forbids,
+        // so the spelling cannot work as written and the proposal has been
+        // amended to the `from` form. What it used to do was worse than
+        // failing: the path was read from the object, which is the `with`
+        // literal, so the include rendered to the empty string with no
+        // diagnostic at all (GitLab #563). Say what to write instead.
+        if result.base.lowercased() == "template", !result.specifiers.isEmpty {
+            let path = Self.path(fromSpecifiers: result.specifiers, context: context)
+            throw ActionError.invalidInput(
+                "Include needs a result binding, and the template goes after `from`: "
+                + "write `Include the <part> from the <template: \(path)>"
+                + (object.preposition == .with ? " with …" : "") + ".`",
+                received: "Include the <template: \(path)> \(object.preposition.rawValue) …"
+            )
+        } else if object.base.lowercased() == "template" {
             guard !object.specifiers.isEmpty else {
                 throw ActionError.missingRequiredField(field: "a template path", action: "Include")
             }
-
-            // Join specifiers with '.' to reconstruct path with extension
-            // (specifiers are split by ':' and '.', so "foo.tpl" becomes ["foo", "tpl"])
-            let rawPath = object.specifiers.joined(separator: ".")
-
-            // Check if this is a single-part variable reference that should be resolved
-            if object.specifiers.count == 1, let resolved: String = context.resolve(object.specifiers[0]) {
-                templatePath = resolved
-            } else {
-                templatePath = rawPath
-            }
+            templatePath = Self.path(
+                fromSpecifiers: object.specifiers, context: context)
         } else {
             // Legacy: path directly in object.base
             templatePath = object.base
