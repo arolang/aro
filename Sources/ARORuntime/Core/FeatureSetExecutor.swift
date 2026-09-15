@@ -639,7 +639,16 @@ public final class FeatureSetExecutor: Sendable {
 
                     // Still need to run the action for side effects (like Return, Log, etc.).
                     // Goes through the registry so middleware sees it too (#107).
-                    if statement.action.semanticRole == .response,
+                    //
+                    // Asks the predicate directly rather than
+                    // `semanticRole == .response`. The role is a taxonomy for
+                    // *data flow*; "must run for its effect" is a different
+                    // question, and using the role as a proxy is why correcting
+                    // `emit` to EXPORT — which is what the registry has always
+                    // said — would otherwise have stopped an Emit running here
+                    // (GitLab #585). Same verb set as before, named for what it
+                    // means.
+                    if ActionRoleCatalog.mustRunForEffect(verb),
                        actionRegistry.isRegistered(verb) {
                         _ = try await actionRegistry.execute(
                             verb: verb,
@@ -802,7 +811,10 @@ public final class FeatureSetExecutor: Sendable {
         // follow run while it is in flight; a read forces it.
         let canonicalVerb = ActionRunner.canonicalizeVerb(verb)
         if LazyActionPolicy.deferrable(canonicalVerb),
-           statement.action.semanticRole != .response,
+           // `deferrableVerbs` is already an allowlist, so this is
+           // belt-and-braces — but it is the effect question, not the role
+           // one, so it asks the predicate (GitLab #585).
+           !ActionRoleCatalog.mustRunForEffect(canonicalVerb),
            !testVerbs.contains(canonicalVerb),
            let owner = outerContext as? RuntimeContext,
            let scope = context as? RuntimeContext {
@@ -845,9 +857,13 @@ public final class FeatureSetExecutor: Sendable {
                 (outerContext as? RuntimeContext)?.markConfigured(resultDescriptor.base)
             }
 
-            // Bind result to context (unless it's a response action that already set the response)
-            // Also skip binding if the action already bound the result (to avoid double-binding)
-            if statement.action.semanticRole != .response {
+            // Bind result to context (unless the action is an effect that
+            // already set the response) and skip binding if the action already
+            // bound the result, to avoid double-binding.
+            //
+            // The predicate, not the role — see the note at the side-effect
+            // re-run above (GitLab #585).
+            if !ActionRoleCatalog.mustRunForEffect(verb) {
                 // Check if this is a rebinding action (accept, update, delete, merge, etc.)
                 // Also include REQUEST actions (retrieve, fetch, etc.) since they always get fresh data
                 // and should override parent context values (fixes event handler variable shadowing)

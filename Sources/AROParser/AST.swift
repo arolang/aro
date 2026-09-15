@@ -1121,19 +1121,15 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
     case server     // Server/service operations (Start, Stop, Connect, Close)
 
     /// Classifies a verb into its semantic role
+    /// The semantic role of `verb`.
+    ///
+    /// One definition, in `ActionRoleCatalog`, mirroring
+    /// `ActionImplementation.role`. This used to be four hardcoded lists that
+    /// disagreed with the registry on 25 of 136 verbs — so the LSP hover panel
+    /// and `aro actions` gave different answers for the same verb, and a
+    /// reader had no way to tell which was authoritative (GitLab #585).
     public static func classify(verb: String) -> ActionSemanticRole {
-        let lower = verb.lowercased()
-
-        let requestVerbs = ["extract", "parse", "retrieve", "fetch", "read", "receive", "get", "load"]
-        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast", "render", "repaint", "patch"]
-        let exportVerbs = ["publish", "export", "expose", "share"]
-        let serverVerbs = ["start", "stop", "listen", "await", "connect", "close", "disconnect", "terminate", "wait", "keepalive", "block", "make", "touch", "mkdir", "createdirectory", "copy", "move", "rename"]
-
-        if requestVerbs.contains(lower) { return .request }
-        if responseVerbs.contains(lower) { return .response }
-        if exportVerbs.contains(lower) { return .export }
-        if serverVerbs.contains(lower) { return .server }
-        return .own
+        ActionRoleCatalog.role(forVerb: verb)
     }
 }
 
