@@ -190,6 +190,23 @@ public struct TemplateParser {
             return .statements(trimmed)
         }
 
+        // A string literal carrying filters is an expression, not a statement.
+        //
+        // ARO-0083 §6 writes a styled heading as a literal —
+        // `{{ "=== Task Manager ===" | bold | color: "cyan" }}` — and every
+        // terminal example does. Classification required a `<` prefix, so it
+        // fell through to statement parsing and died on "Expected action verb,
+        // but got string(...)" (GitLab #568).
+        //
+        // The filter is what makes it meaningful: a *bare* literal
+        // (`{{ "some text" }}`) still parses as a statement and is still
+        // rejected, because static text belongs outside the braces — the rule
+        // Chapter 44 §44.3 states. Styling is the reason to put a literal
+        // inside them.
+        if trimmed.hasPrefix("\""), Self.findFilterPipe(trimmed) != nil {
+            return .expressionShorthand(trimmed)
+        }
+
         // Check if it's a simple expression (no period at the end, starts with <)
         // e.g., {{ <user: name> }} or {{ <count> }}
         if trimmed.hasPrefix("<") && !trimmed.contains(".") {
@@ -220,6 +237,29 @@ public struct TemplateParser {
 
         // Otherwise, treat as ARO statements
         return .statements(trimmed)
+    }
+
+
+    /// The index of the first `|` that separates an expression from a filter.
+    ///
+    /// Skips pipes inside `<…>` and inside a string literal, so
+    /// `{{ "a|b" | bold }}` splits at the second pipe rather than the first.
+    static func findFilterPipe(_ str: String) -> String.Index? {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (index, char) in zip(str.indices, str) {
+            if escaped { escaped = false; continue }
+            switch char {
+            case "\\" where inString: escaped = true
+            case "\"": inString.toggle()
+            case "<" where !inString: depth += 1
+            case ">" where !inString: depth -= 1
+            case "|" where !inString && depth == 0: return index
+            default: break
+            }
+        }
+        return nil
     }
 
     /// Parse a for-each block opening

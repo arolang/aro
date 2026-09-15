@@ -337,7 +337,9 @@ public final class TemplateExecutor: @unchecked Sendable {
         let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
         let isRaw = filters.contains { TemplateEscaping.isRawQualifier($0.name) }
         let effective = filters.filter { !TemplateEscaping.isRawQualifier($0.name) }
-        let rendered = await applyFilters(formatValue(value), filters: effective, context: templateContext)
+        let rendered = await applyFilters(
+            formatValue(value), filters: effective,
+            context: templateContext, original: value)
         return isRaw ? rendered : templateContext.templateEscaping.apply(to: rendered)
     }
 
@@ -364,15 +366,15 @@ public final class TemplateExecutor: @unchecked Sendable {
         return (value, [])
     }
 
-    /// Find pipe character outside of angle brackets
+    /// Find the pipe that separates an expression from its filters.
+    ///
+    /// Delegates to `TemplateParser.findFilterPipe`, which also skips pipes
+    /// inside a string literal — needed now that a literal may carry filters
+    /// (`{{ "a|b" | bold }}`, GitLab #568). Sharing it keeps the parser's
+    /// classification and the executor's split from disagreeing about where
+    /// the filters start.
     private func findPipeOutsideBrackets(_ str: String) -> String.Index? {
-        var depth = 0
-        for (index, char) in zip(str.indices, str) {
-            if char == "<" { depth += 1 }
-            else if char == ">" { depth -= 1 }
-            else if char == "|" && depth == 0 { return index }
-        }
-        return nil
+        TemplateParser.findFilterPipe(str)
     }
 
     /// Parse filter chain: filter1: "arg1" | filter2
@@ -427,8 +429,29 @@ public final class TemplateExecutor: @unchecked Sendable {
     }
 
     /// Apply filters to a formatted value
-    private func applyFilters(_ value: String, filters: [(name: String, arg: String?)], context: ExecutionContext) async -> String {
+    /// Count the elements a `length` filter should report.
+    ///
+    /// A collection counts its elements and a string its characters, matching
+    /// the `length` Compute qualifier. The rendered string is the fallback for
+    /// a value the filter is handed after another filter has already
+    /// stringified it.
+    static func elementCount(of value: Any?, rendered: String) -> Int {
+        switch value {
+        case let array as [Any]: return array.count
+        case let dict as [String: Any]: return dict.count
+        case let string as String: return string.count
+        default: return rendered.count
+        }
+    }
+
+    private func applyFilters(
+        _ value: String,
+        filters: [(name: String, arg: String?)],
+        context: ExecutionContext,
+        original: Any? = nil
+    ) async -> String {
         var result = value
+        let value = original
 
         for filter in filters {
             switch filter.name {
@@ -440,6 +463,14 @@ public final class TemplateExecutor: @unchecked Sendable {
                 result = result.lowercased()
             case "trim":
                 result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // `{{ <tasks> | length }}` printed the whole collection: the filter
+            // table had only the styling filters, and an unknown filter was
+            // skipped in silence, so the output was simply wrong (GitLab #568).
+            // `count` is the same filter under the other name the Compute
+            // qualifiers use (ARO-0019 §3.2).
+            case "length", "count":
+                result = String(Self.elementCount(of: value, rendered: result))
 
             // Markdown -> HTML via the shared MinimalMarkdown helper. The
             // same subset is also exposed as the `markdown` Compute
@@ -579,6 +610,14 @@ public final class TemplateExecutor: @unchecked Sendable {
     private func evaluateExpression(_ expression: String, context: ExecutionContext) async throws -> Any {
         // Parse the expression: <variable> or <variable: property> or <a> ++ <b>
         let trimmed = expression.trimmingCharacters(in: .whitespaces)
+
+        // A string literal is its own value. The concatenation path below has
+        // always recognised one; the top level did not, so a styled literal
+        // reached `resolveVariableExpression` and failed with
+        // `Variable '"=== Task Manager ==="' is not defined` (GitLab #568).
+        if trimmed.count >= 2, trimmed.hasPrefix("\""), trimmed.hasSuffix("\"") {
+            return String(trimmed.dropFirst().dropLast())
+        }
 
         // Check for operators (concatenation, arithmetic)
         if trimmed.contains(" ++ ") {
