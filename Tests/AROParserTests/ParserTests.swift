@@ -127,7 +127,10 @@ struct ActionSemanticRoleTests {
 
     @Test("Response verbs are classified correctly")
     func testResponseVerbs() {
-        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write"]
+        // `emit` moved to EXPORT, which is what `EmitAction.role` and
+        // `aro actions` have always said — the classifier was the odd one out
+        // (GitLab #585).
+        let responseVerbs = ["return", "throw", "send", "respond", "output", "write"]
         for verb in responseVerbs {
             #expect(ActionSemanticRole.classify(verb: verb) == .response)
         }
@@ -135,7 +138,10 @@ struct ActionSemanticRoleTests {
 
     @Test("Export verbs are classified correctly")
     func testExportVerbs() {
-        let exportVerbs = ["publish", "export", "expose", "share"]
+        let exportVerbs = ["publish", "export", "expose", "share",
+                           // Joined by the verbs the registry always had here
+                           // and the classifier did not (GitLab #585).
+                           "emit", "commit", "push", "tag", "schedule"]
         for verb in exportVerbs {
             #expect(ActionSemanticRole.classify(verb: verb) == .export)
         }

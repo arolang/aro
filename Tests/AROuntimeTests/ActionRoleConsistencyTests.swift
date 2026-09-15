@@ -14,11 +14,17 @@ import Testing
 ///      verb name rather than by type.
 ///   3. ARO-0004's tables — now generated from (1), so it can no longer drift.
 ///
-/// (1) and (2) disagree for 25 verbs. That is a design question, not a typo:
-/// roles drive data-flow analysis, where EXPORT makes symbols globally
-/// accessible, so changing either side is a behavioural change. These tests pin
-/// the disagreement so it is visible and cannot grow silently while the decision
-/// is pending.
+/// (1) and (2) used to disagree for 25 verbs, pinned here so the divergence
+/// could not grow silently "while the decision is pending". GitLab #585 is that
+/// decision: there is now one table, `ActionRoleCatalog`, mirroring the
+/// registry, and these tests assert agreement instead of cataloguing the
+/// disagreement.
+///
+/// The two runtime decisions that keyed on `semanticRole == .response` — the
+/// side-effect re-run after the expression fast path, and the result binding —
+/// now ask `ActionRoleCatalog.mustRunForEffect` instead. Those were never role
+/// questions; using the role as a proxy is what made correcting `emit`
+/// behaviour-changing rather than cosmetic.
 @Suite("Action Role Consistency")
 struct ActionRoleConsistencyTests {
 
@@ -38,29 +44,33 @@ struct ActionRoleConsistencyTests {
         return result
     }
 
-    @Test("The role divergence has not grown")
-    func testDivergenceIsBounded() {
-        // Pinned, not asserted-empty: reconciling these needs a decision per verb.
-        // If this fails with MORE verbs, a new action was added with a role the
-        // classifier does not agree with. If it fails with FEWER, some were
-        // reconciled — lower the number.
+    @Test("The declared role and the classifier agree for every registered verb")
+    func testNoDivergence() {
+        // Was `<= 25`, pinned while the decision was pending. It is now zero:
+        // add an action whose role the catalog does not mirror and this fails.
         let divergent = divergentVerbs()
 
-        #expect(
-            divergent.count <= 25,
-            "role divergence grew to \(divergent.count): \(divergent.keys.sorted())"
-        )
+        let detail = divergent
+            .map { "\($0.key) (declared \($0.value.declared), classified \($0.value.classified))" }
+            .sorted().joined(separator: ", ")
+        #expect(divergent.isEmpty, "roles disagree for \(divergent.count) verb(s): \(detail)")
     }
 
-    @Test("Known divergences are the expected ones")
-    func testKnownDivergences() {
-        let divergent = divergentVerbs()
+    @Test("The verbs that used to diverge now agree")
+    func testFormerDivergencesAgree() {
+        // Spot-checks from each direction, so a silent reclassification is
+        // still caught — now by agreement rather than by disagreement.
+        #expect(ActionSemanticRole.classify(verb: "emit") == .export)
+        #expect(ActionSemanticRole.classify(verb: "request") == .request)
+        #expect(ActionSemanticRole.classify(verb: "commit") == .export)
+        #expect(ActionSemanticRole.classify(verb: "probe") == .request)
+        #expect(ActionSemanticRole.classify(verb: "append") == .response)
+    }
 
-        // Spot-checks from each direction, so a silent reclassification is caught.
-        #expect(divergent["emit"]?.declared == .export)
-        #expect(divergent["emit"]?.classified == .response)
-        #expect(divergent["request"]?.declared == .request)
-        #expect(divergent["request"]?.classified == .own)
+    @Test("The enumeration is not vacuous")
+    func testEnumerationIsNotVacuous() {
+        // A parity test over an empty set passes for the wrong reason.
+        #expect(ActionRegistry.shared.registeredVerbs.count > 100)
     }
 
     @Test("Store's role is what the code declares, whatever ARO-0004 §2.4 says")
