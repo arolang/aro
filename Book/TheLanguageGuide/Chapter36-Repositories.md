@@ -961,18 +961,42 @@ returns an empty list instead. No error is raised, which is consistent with ARO'
 }
 ```
 
-To set both, use the object form. Two `Configure` statements on the same
-repository in one feature set are rejected as a rebinding — the immutability
-check keys on the result base and ignores the qualifier
-([GitLab #564](https://git.ausdertechnik.de/arolang/aro/-/issues/564)):
+### Setting Several at Once
+
+**One `Configure` per repository, with every setting in an object:**
 
 ```aro
-(* Works *)
 Configure the <cache-repository> with { ttl: 60, maxSize: 500 }.
+```
 
-(* Does not — "Cannot rebind variable 'cache-repository'" *)
+The qualifier form sets exactly one setting, so two of them on the same
+repository is a rebinding of `<cache-repository>` and is rejected — bindings
+are immutable (Chapter 11), and `Configure`'s result names the repository
+itself:
+
+```aro
+(* Rejected: Cannot rebind variable 'cache-repository' *)
 Configure the <cache-repository: ttl> with 60.
 Configure the <cache-repository: maxSize> with 500.
+```
+
+`aro check` says so, and points at the object form:
+
+```
+error: Cannot rebind variable 'cache-repository' - variables are immutable
+  hint: Configure takes every setting at once, in one object
+  hint: Example: <Configure> the <cache-repository> with { setting: value, other: value }
+```
+
+It used to suggest `<cache-repository-updated>` instead, which names a
+*different* repository — advice that compiles and configures the wrong thing
+([GitLab #564](https://git.ausdertechnik.de/arolang/aro/-/issues/564)).
+
+Two settings on two *different* repositories are fine, of course:
+
+```aro
+Configure the <cache-repository: ttl> with 60.
+Configure the <session-repository: ttl> with 300.
 ```
 
 ### What Happens When maxSize Is Full
