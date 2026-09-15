@@ -123,8 +123,36 @@ public final class ActionRunner: @unchecked Sendable {
             // Action has async paths that need Task dispatch — fall through
             return nil
         } catch {
-            return .failure(String(describing: error))
+            return .failure(Self.failureMessage(for: error))
         }
+    }
+
+    /// The message an action failure should carry across the C bridge.
+    ///
+    /// `String(describing:)` on an error *struct* prints its memberwise
+    /// initialiser, so a compiled binary answered a rejected state transition
+    /// with
+    ///
+    ///     AcceptStateError(expectedFrom: "draft", expectedTo: "cancelled",
+    ///                      actualState: "placed", objectName: "order",
+    ///                      fieldName: "status")
+    ///
+    /// — Swift internals, over HTTP, to whoever called the API. The
+    /// interpreter never did that, so the two modes disagreed about what an
+    /// error even looks like, and the compiled one contradicted ARO's own
+    /// error philosophy (ARO-0006).
+    ///
+    /// `localizedDescription` alone is not the fix: for an error that is not
+    /// `LocalizedError`, Foundation invents "The operation couldn't be
+    /// completed. (Module.Error error 0.)", which says less than the struct
+    /// dump it replaced. So the message is used only when the error actually
+    /// provides one, and `String(describing:)` remains the fallback.
+    static func failureMessage(for error: any Error) -> String {
+        if let localized = error as? any LocalizedError,
+           let description = localized.errorDescription, !description.isEmpty {
+            return description
+        }
+        return String(describing: error)
     }
 
     // MARK: - Verb Canonicalization
@@ -410,7 +438,7 @@ extension ActionRunner {
             do {
                 return .success(try syncHandler(result, object, context))
             } catch {
-                return .failure(String(describing: error))
+                return .failure(Self.failureMessage(for: error))
             }
         }
 
@@ -425,7 +453,7 @@ extension ActionRunner {
             let value = try future.force()
             return .success(value)
         } catch {
-            return .failure(String(describing: error))
+            return .failure(Self.failureMessage(for: error))
         }
     }
 
