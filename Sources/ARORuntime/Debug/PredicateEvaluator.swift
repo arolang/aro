@@ -25,19 +25,37 @@ enum PredicateEvaluator {
     /// `context`. Returns `false` on parse error or evaluation failure
     /// — debugger predicates should never crash the program.
     static func evaluate(_ source: String, context: ExecutionContext) async -> Bool {
+        guard let value = await self.value(source, context: context) else { return false }
+        return asBool(value)
+    }
+
+    /// Parse `source` as an ARO expression and evaluate it against `context`,
+    /// returning the **value**.
+    ///
+    /// `evaluate` answers a conditional breakpoint, which only needs
+    /// truthiness. A *watch* needs the value itself, and resolving one by
+    /// exact-matching `<name>` against the pause snapshot could never handle a
+    /// qualifier: a snapshot entry's `name` is the bare binding, so
+    /// `<user: id>` and `<users-repository: count>` printed `(unresolved)`
+    /// forever, with no diagnostic (GitLab #567). Sharing this pipeline means
+    /// a watch accepts exactly what a conditional breakpoint already does.
+    ///
+    /// `nil` on parse or evaluation failure — a debugger expression must never
+    /// crash the program it is observing.
+    static func value(_ source: String, context: ExecutionContext) async -> (any Sendable)? {
         // Parse once per call. A future optimization caches the AST on
         // the `.conditionalLocation` enum case, but caching across actor
         // calls needs a stable identity for the breakpoint and is a
         // separate optimization.
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty else { return nil }
 
         let tokens: [Token]
         do {
             let lexer = Lexer(source: trimmed)
             tokens = try lexer.tokenize()
         } catch {
-            return false
+            return nil
         }
 
         let expression: any AROParser.Expression
@@ -45,17 +63,14 @@ enum PredicateEvaluator {
             let parser = Parser(tokens: tokens)
             expression = try parser.parseExpression()
         } catch {
-            return false
+            return nil
         }
 
-        let value: any Sendable
         do {
-            value = try await ExpressionEvaluator().evaluate(expression, context: context)
+            return try await ExpressionEvaluator().evaluate(expression, context: context)
         } catch {
-            return false
+            return nil
         }
-
-        return asBool(value)
     }
 
     /// Match the truthy semantics used elsewhere in the runtime

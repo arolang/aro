@@ -46,7 +46,7 @@ after them.
 | `berror` | — | Error-any breakpoint; catches deferred failures too. |
 | `bl` | `list` | List active breakpoints. |
 | `d <n>` | `delete` | Delete breakpoint by index. |
-| `w <expr>` | `watch` | Add a watch expression. |
+| `w <expr>` | `watch` | Add a watch — any ARO expression, evaluated at every pause (`<user: id>`, `<a> == <b>`). |
 | `w` | — | List watches. |
 | `dw <n>` | — | Delete watch by index. |
 | `p` | `print` | Print all current bindings. |

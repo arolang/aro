@@ -68,19 +68,38 @@ Three workflows show up over and over.
 
 The watch list is part of the session state — it goes away when you quit. The recording / replay flow in Chapter 9 lets you reproduce a session against an existing trace; the watches you set during replay are independent of the watches you set during the original run.
 
-## 6.3 The current evaluator
+## 6.3 What a watch may be
 
-The watch evaluator is a string match, and knowing that saves you a confusing session. At every pause the frontend looks for a snapshot entry whose name, wrapped in angle brackets, is exactly what you typed, and prints that entry's *string preview*. Nothing is parsed.
+A watch is an **ARO expression**, evaluated against the live context at every
+pause — the same `Lexer → Parser → ExpressionEvaluator` pipeline a conditional
+breakpoint uses (chapter 5.4). So a watch accepts whatever `b 5 if …` accepts:
 
-So:
+```
+(aro-dbg) w <user>
+(aro-dbg) w <user: id>
+(aro-dbg) w <users-repository: count>
+(aro-dbg) w <limit> > 50
+...
+   watch <user> = ["id": 530, "name": "Ada"]
+   watch <user: id> = 530
+   watch <users-repository: count> = 1
+   watch <limit> > 50 = true
+```
 
-- **`<name>` works.** This is the whole supported surface.
-- **`<name: qualifier>` does not.** A snapshot entry is named for the bare binding, so `<user: id>` matches nothing and prints `(unresolved)` at every pause — accepted at `w` time without complaint, then silently useless (GitLab issue #567). The same goes for repository navigation like `<users-repository: count>`.
-- **Arithmetic and comparisons** (`<a> == <b>`, `<count> + 1`) do not work either, for the same reason.
+- **`<name>`** — the binding.
+- **`<name: qualifier>`** — a field, a date part, a repository's `count`.
+- **Arithmetic and comparisons** — `<a> == <b>`, `<count> + 1`.
 
-If you want a field, watch the binding that holds it and read the field off the preview — the preview of a record shows its keys. If you want a computed value, bind it in the source with a `Compute` and watch that; a name in the program is a name the watch list can find.
+An expression that cannot be evaluated at this pause prints `(unresolved)`
+rather than stopping the program: a name not yet bound reads as unresolved
+early in a feature set and resolves once the binding exists, which is often
+exactly what you want to watch for.
 
-Conditional breakpoints *do* evaluate the full expression grammar (chapter 5.4), against the live context rather than a snapshot. Routing watches through the same evaluator is the obvious fix and is part of the #230 follow-up; when it lands this chapter gains the examples above.
+Until GitLab #567 the evaluator was a string match against the pause snapshot —
+it compared the bare binding name, so `<user: id>` matched nothing and printed
+`(unresolved)` forever, accepted at `w` time without complaint. Only `<name>`
+worked. If you remember working around that by binding a `Compute` just to
+watch it, you no longer need to.
 
 ## 6.4 What watches do not do
 

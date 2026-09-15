@@ -22,12 +22,12 @@ import ARORuntime
 final class CLIDebugFrontend: DebugFrontend, @unchecked Sendable {
     func didPause(_ pause: PauseInfo, controller: DebugController) async -> StepMode {
         printPause(pause)
-        let watches = await controller.listWatches()
-        if !watches.isEmpty {
-            for w in watches {
-                let resolved = pause.symbols.first { "<\($0.name)>" == w }?.valuePreview ?? "(unresolved)"
-                print("   watch \(w) = \(resolved)")
-            }
+        // Resolved by the controller, which has the live context and the same
+        // expression evaluator conditional breakpoints use — so a qualified
+        // watch (`<user: id>`) resolves instead of printing "(unresolved)"
+        // forever (GitLab #567).
+        for watch in await controller.resolvedWatches(pause: pause) {
+            print("   watch \(watch.expression) = \(watch.value)")
         }
         while true {
             print("(aro-dbg) ", terminator: "")
