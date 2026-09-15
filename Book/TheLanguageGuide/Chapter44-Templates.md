@@ -360,11 +360,14 @@ output at that point, and `<name>` also holds it.
 </html>
 ```
 
-> ARO-0050 §10 spells this without the binding — `{{ Include the <template:
-> header.tpl>. }}` — and that form does not parse
-> ([GitLab #563](https://git.ausdertechnik.de/arolang/aro/-/issues/563)). The
-> `with`-only form parses but renders nothing at all, which is worse. Use the
-> `from` form above.
+> ARO-0050 §10 used to spell this without the binding — `{{ Include the
+> <template: header.tpl>. }}` — which cannot parse, since every ARO statement
+> carries a preposition clause. It also offered `{{ Include the <template:
+> header.tpl> with { … }. }}`, which parsed and rendered *nothing*: with `with`
+> as the preposition the object is an expression, and the executor binds its
+> value without ever dispatching `Include`. The proposal now specifies the
+> `from` form above, and `aro check` reports the `with` spelling with a hint
+> naming it ([GitLab #563](https://git.ausdertechnik.de/arolang/aro/-/issues/563)).
 
 ### Passing Variables to Included Templates
 

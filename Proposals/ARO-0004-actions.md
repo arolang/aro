@@ -703,7 +703,7 @@ prepositions each one declares.
 | 21 | GitCommit | export | commit | to, with |
 | 22 | Given | own | given | with |
 | 23 | Group | own | group | from |
-| 24 | Include | own | embed, include, insert | from, with |
+| 24 | Include | own | embed, include, insert | from |
 | 25 | Join | own | join | from |
 | 26 | List | request | list | from |
 | 27 | Listen | server | await, listen | for, on, to |

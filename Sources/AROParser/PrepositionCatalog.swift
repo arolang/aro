@@ -85,7 +85,7 @@ public enum PrepositionCatalog {
         "destroy": [.`for`, .from],
         "disconnect": [.from, .with],
         "dispatch": [.to, .via, .with],
-        "embed": [.from, .with],
+        "embed": [.from],   // not .with — see IncludeAction (GitLab #563)
         "emit": [.to, .with],
         "exec": [.`for`, .on, .with],
         "execute": [.`for`, .on, .with],
@@ -101,8 +101,8 @@ public enum PrepositionCatalog {
         "given": [.with],
         "group": [.from],
         "http": [.from, .to, .via, .with],
-        "include": [.from, .with],
-        "insert": [.from, .with],
+        "include": [.from],   // not .with — see IncludeAction (GitLab #563)
+        "insert": [.from],   // not .with — see IncludeAction (GitLab #563)
         "invoke": [.from, .to, .via, .with],
         "join": [.from],
         "keepalive": [.`for`],

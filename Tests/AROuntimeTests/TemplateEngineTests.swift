@@ -305,10 +305,15 @@ struct IncludeActionTests {
         #expect(IncludeAction.verbs.contains("insert"))
     }
 
-    @Test("Include action valid prepositions")
+    @Test("Include takes `from`, and deliberately not `with` (GitLab #563)")
     func testIncludeActionPrepositions() {
-        #expect(IncludeAction.validPrepositions.contains(.with))
         #expect(IncludeAction.validPrepositions.contains(.from))
+        // `with` as the *primary* preposition makes the object an expression,
+        // and the executor's `!needsExecution` fast path binds that value and
+        // never dispatches the action — so the include rendered nothing at all,
+        // silently. Declaring only `from` gets it reported at check time.
+        // A trailing `with` clause after `from` still passes overrides.
+        #expect(!IncludeAction.validPrepositions.contains(.with))
     }
 }
 
