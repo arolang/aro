@@ -37,6 +37,17 @@ public actor DebugController {
     private var sampleStride: Int = 1
     private var sampleCounter: Int = 0
 
+    /// The live context of the most recent checkpoint, for evaluating watches.
+    ///
+    /// A watch used to be resolved by exact-matching `<name>` against the pause
+    /// snapshot, so anything with a qualifier — `<user: id>`,
+    /// `<users-repository: count>` — could never match and printed
+    /// `(unresolved)` at every pause (GitLab #567). Conditional breakpoints
+    /// already evaluate arbitrary ARO expressions against this same context;
+    /// holding on to it lets watches use the one evaluator instead of a second,
+    /// weaker one.
+    private var lastContext: ExecutionContext?
+
     /// Feature set / activity / file of the most recent statement checkpoint.
     ///
     /// An event pause used to be reported with `featureSetName: ""` and
@@ -98,6 +109,39 @@ public actor DebugController {
         watchExpressions.removeAll { $0 == expression }
     }
 
+    /// Each watch expression with its rendered value at this pause.
+    ///
+    /// Evaluated through `PredicateEvaluator`, the same
+    /// `Lexer → Parser → ExpressionEvaluator` pipeline a conditional
+    /// breakpoint uses, so a watch accepts whatever `b 5 if …` accepts:
+    /// `<user>`, `<user: id>`, `<a> == <b>`, `<users-repository: count>`.
+    ///
+    /// Falls back to the pause snapshot when there is no live context — the
+    /// harness path `checkpoint` supports without one — which is exactly the
+    /// old behaviour, bare names only.
+    public func resolvedWatches(pause: PauseInfo) async -> [(expression: String, value: String)] {
+        var out: [(expression: String, value: String)] = []
+        for expression in watchExpressions {
+            if let context = lastContext,
+               let value = await PredicateEvaluator.value(expression, context: context) {
+                out.append((expression, Self.renderWatchValue(value)))
+                continue
+            }
+            // Snapshot fallback: bare `<name>` only.
+            let snapshot = pause.symbols.first { "<\($0.name)>" == expression }?.valuePreview
+            out.append((expression, snapshot ?? "(unresolved)"))
+        }
+        return out
+    }
+
+    /// Render a watch value for one console line.
+    static func renderWatchValue(_ value: any Sendable) -> String {
+        let rendered = String(describing: value)
+        let limit = 120
+        guard rendered.count > limit else { return rendered }
+        return rendered.prefix(limit) + "…"
+    }
+
     public func listWatches() -> [String] {
         watchExpressions
     }
@@ -135,6 +179,7 @@ public actor DebugController {
             throw DebuggerQuit()
         }
 
+        lastContext = context
         let (line, column, summary, verb) = describe(statement)
         let basename = sourceFile.isEmpty
             ? ""
