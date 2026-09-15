@@ -462,10 +462,17 @@ Omit the `where` clause and the repository is emptied:
 Delete the <all> from the <message-repository>.
 ```
 
-Use `Delete`, not `Clear`, for this. `Clear` is claimed by the terminal action
-(Chapter 47) and never reaches the repository — it fails at run time with
-`Cannot clear the all from the message-repository`
-([GitLab #562](https://git.ausdertechnik.de/arolang/aro/-/issues/562)).
+`Clear` is a synonym here, so either reads fine:
+
+```aro
+Clear the <all> from the <message-repository>.
+```
+
+`Clear` is also the terminal action (Chapter 47), and the two are told apart by
+the preposition: `from` a repository, `for` the terminal. `Clear … from` used
+to reach the terminal action and fail with
+`Cannot clear the all from the message-repository`, because the verb was
+registered last-writer-wins ([GitLab #562](https://git.ausdertechnik.de/arolang/aro/-/issues/562)).
 
 ## Repository Observers
 
