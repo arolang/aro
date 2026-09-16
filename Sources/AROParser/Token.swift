@@ -251,6 +251,31 @@ public struct Token: Sendable, Equatable, Locatable, CustomStringConvertible {
         self.lexeme = lexeme
     }
     
+    /// Whether this token is a *word* — spelled out of letters, whatever role
+    /// the lexer gave it.
+    ///
+    /// Used for the segments of a hyphenated name, where a reserved word is
+    /// just a word: `created-at`, `content-type`, `valid-from`,
+    /// `Content-Type` (GitLab #579, #583). Distinct from
+    /// `TokenKind.isIdentifierLike`, which answers "may this stand alone as a
+    /// name" — a much stronger claim, and one that must stay narrow.
+    ///
+    /// Decided on the lexeme rather than the kind, because ARO models each
+    /// keyword as its own `TokenKind` case; listing them would go stale the
+    /// next time one is added. Literals and punctuation are excluded
+    /// explicitly: a hyphen followed by `42`, `"x"` or `(` is not a longer
+    /// name.
+    public var isWordShaped: Bool {
+        switch kind {
+        case .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral, .stringSegment:
+            return false
+        default:
+            break
+        }
+        guard let first = lexeme.first, first.isLetter || first == "_" else { return false }
+        return lexeme.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+    }
+
     public var description: String {
         "\(kind) at \(span)"
     }

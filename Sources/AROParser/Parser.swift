@@ -1425,9 +1425,10 @@ public final class Parser {
             while check(.hyphen) {
                 advance() // consume hyphen
                 key += "-"
-                if case .identifier(let nextPart) = peek().kind {
-                    advance()
-                    key += nextPart
+                // Any word after a hyphen: `{ created-at: … }` is one key
+                // (GitLab #579, #583).
+                if peek().isWordShaped {
+                    key += advance().lexeme
                 } else {
                     throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
                 }
@@ -2092,15 +2093,49 @@ public final class Parser {
 
     /// Parses: identifier { "-" identifier }
     private func parseCompoundIdentifier() throws -> String {
-        var result = try expectIdentifier(message: "identifier").lexeme
-        
+        // A reserved word is a word again inside a hyphenated name.
+        //
+        // The segments were each required to be a plain identifier, so any
+        // segment that lexed as a keyword or preposition was a parse error
+        // wherever the name appeared: `<content-type>`, `<with-tax>`,
+        // `<tax-with>`, `<from-date>`, `<by-age>`, `{ created-at: … }`,
+        // `<request: headers.Content-Type>` (GitLab #579, #583). Meanwhile
+        // `taxed-price` and `user-email-address` were fine, so the rule was
+        // not discoverable by trying a few names.
+        //
+        // Nothing is ambiguous here. **After a hyphen** no clause can begin —
+        // only the rest of the name — so any word is taken verbatim. That is
+        // what makes `created-at`, `valid-from` and `Content-Type` reachable,
+        // and the header case has no workaround by renaming: the name is
+        // chosen by whoever produced the data.
+        var result = try parseNameSegment(isFirst: true, message: "identifier").lexeme
+
         while check(.hyphen) {
             advance()
             result += "-"
-            result += try expectIdentifier(message: "identifier after '-'").lexeme
+            result += try parseNameSegment(isFirst: false, message: "identifier after '-'").lexeme
         }
-        
+
         return result
+    }
+
+    /// One segment of a possibly-hyphenated name.
+    ///
+    /// After a hyphen, every word-shaped token is accepted — a keyword there
+    /// is part of the name, not the start of a clause.
+    ///
+    /// For the **first** segment a reserved word is accepted only when a
+    /// hyphen follows it, which is the one token of lookahead that tells
+    /// `<with-tax>` (a name) from `with` (a preposition opening a clause). So
+    /// `with` alone still lexes and parses exactly as it did.
+    private func parseNameSegment(isFirst: Bool, message: String) throws -> Token {
+        if !isFirst, peek().isWordShaped {
+            return advance()
+        }
+        if isFirst, peek().isWordShaped, peekAt(1)?.kind == .hyphen {
+            return advance()
+        }
+        return try expectIdentifier(message: message)
     }
     
     /// Parses space-separated compound identifiers as a single string
@@ -2781,9 +2816,10 @@ extension Parser {
             while check(.hyphen) {
                 advance() // consume hyphen
                 key += "-"
-                if case .identifier(let nextPart) = peek().kind {
-                    advance()
-                    key += nextPart
+                // Any word after a hyphen: `{ created-at: … }` is one key
+                // (GitLab #579, #583).
+                if peek().isWordShaped {
+                    key += advance().lexeme
                 } else {
                     throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
                 }

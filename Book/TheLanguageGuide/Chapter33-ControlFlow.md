@@ -821,7 +821,19 @@ This merges what would otherwise be two separate loops (one for file entries, on
 
 ### Reserved Words in Variable Names
 
-The following words are reserved and **cannot** appear in variable names: `on`, `in`, `is`, `with`, `at`, `for`, `from`, `to`. A variable like `<is-active>` or `<from-date>` will fail to parse. Use alternatives like `<active>`, `<start-date>`.
+The following words are reserved and cannot stand **alone** as a variable name:
+`on`, `in`, `is`, `with`, `at`, `for`, `from`, `to`. `<with>` is a preposition,
+not a name.
+
+Inside a **hyphenated** name they are ordinary words, because nothing but the
+rest of the name can follow a hyphen: `<is-active>`, `<from-date>`,
+`<created-at>`, `<content-type>` and `<valid-from>` all parse, as do
+object-literal keys and qualifier path segments spelled that way —
+`{ created-at: … }`, `<request: headers.Content-Type>`.
+
+They used to fail everywhere, which forced fields to be renamed `createdAt`
+even when the payload called them `created-at`, and left a real header name
+like `Content-Type` unreachable (GitLab #579, #583).
 
 ---
 
