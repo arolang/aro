@@ -369,6 +369,48 @@ public struct DataFlowAnalyzer {
             }
         }
 
+        // A verb whose *result slot* names content to read, when that name is
+        // already bound.
+        //
+        // `Append the <log-line> to the <file: "./app.log">.` is
+        // `AppendAction`'s own documented primary form, and the action does
+        // read the content from the result slot:
+        //
+        //     } else if let value: String = context.resolve(result.base) {
+        //         content = value
+        //
+        // But the analyzer treated the slot as a *binding*, so the variable
+        // holding the content was being rebound and the immutability check
+        // rejected the statement before the action could run — with a hint
+        // suggesting `<log-line-updated>`, which is unbound and would append
+        // the empty string (GitLab #580).
+        //
+        // `store`, `write`, `emit`, `save`, `persist` and `send` already had
+        // this rule inside the `.response` branch; `append` belongs with them.
+        // It is applied here rather than there so it holds regardless of which
+        // role branch the verb takes — `append` classifies as `.own` today and
+        // `.response` once the role taxonomy is unified (GitLab #585).
+        //
+        // Scoped twice. The name must be *already defined* — the same guard
+        // the `.response` branch uses — and the statement must carry no `with`
+        // clause: `Append the <entry> to the <file: …> with "…"` takes its
+        // content from the literal, exactly as `AppendAction` prefers
+        // `_literal_` over the result slot, so there the slot really is an
+        // output and binds an `AppendResult`.
+        if Self.resultIsContentVerbs.contains(statement.action.verb.lowercased()),
+           definedSymbols.contains(resultName),
+           statement.rangeModifiers.withClause == nil {
+            inputs.insert(resultName)
+            if definedSymbols.contains(objectName) || isKnownExternal(objectName) {
+                inputs.insert(objectName)
+            }
+            sideEffects.append("\(statement.action.verb):\(resultName)")
+            return (
+                DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+                dependencies
+            )
+        }
+
         // Determine data flow based on action semantic role
         switch statement.action.semanticRole {
         case .request:
@@ -427,8 +469,7 @@ public struct DataFlowAnalyzer {
             if definedSymbols.contains(objectName) || isKnownExternal(objectName) {
                 inputs.insert(objectName)
             }
-            let exportDataVerbs = ["store", "write", "emit", "save", "persist", "send"]
-            if exportDataVerbs.contains(statement.action.verb.lowercased()) {
+            if Self.resultIsContentVerbs.contains(statement.action.verb.lowercased()) {
                 if definedSymbols.contains(resultName) {
                     inputs.insert(resultName)
                 }
@@ -446,7 +487,14 @@ public struct DataFlowAnalyzer {
             // variable that already exists, and the bare spelling stores one, so
             // neither defines a name.
             // StoreAction.verbs, mirrored here because AROParser cannot see it.
-            let storeVerbs = ["store", "save", "persist"]
+            // `append` joins them: the block above hands the `with` form to
+            // this branch precisely because the slot is an output there, and
+            // an output that names an existing variable is a rebind. Before
+            // the role taxonomy was unified `append` classified as `.own`, so
+            // that branch ran the check and this one never had to — the two
+            // changes are individually correct and silently drop the check
+            // when combined (GitLab #580, #585).
+            let storeVerbs = ["store", "save", "persist", "append"]
             if storeVerbs.contains(statement.action.verb.lowercased()),
                statement.rangeModifiers.withClause != nil,
                statement.result.typeAnnotation == nil,
@@ -507,6 +555,17 @@ public struct DataFlowAnalyzer {
             dependencies
         )
     }
+
+    /// Verbs that read the value in their **result slot** rather than binding
+    /// one there.
+    ///
+    /// `Store the <a> into the <repo>.`, `Write the <text> to the <file>.`,
+    /// `Append the <line> to the <file>.` — the slot names what to write. The
+    /// first five have always been handled; `append` was missing, which made
+    /// its own documented primary form a rebinding error (GitLab #580).
+    static let resultIsContentVerbs: Set<String> = [
+        "store", "write", "emit", "save", "persist", "send", "append",
+    ]
 
     // MARK: - Immutability Check
 
