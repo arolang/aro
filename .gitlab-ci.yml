@@ -607,11 +607,42 @@ integration:linux:
     # metadata relocations when linking the plugin .so (PREL32/PC32
     # "recompile with -fPIC" errors).
     - |
+      # Pre-warm the Swift plugin packages before the harness runs.
+      #
+      # Each plugin depends on aro-plugin-sdk-swift, whose `@AROExport` macro
+      # pulls in swift-syntax — and swift-syntax is 421s of each 443s build.
+      # Five plugins meant ~35 minutes of compiling the identical macro graph
+      # five times, which was most of this job (GitLab #593).
+      #
+      # Two things avoid that work rather than merely overlapping it:
+      #
+      #   --enable-experimental-prebuilts  use the prebuilt swift-syntax
+      #     instead of compiling it. Default-on from Swift 6.4; probed here
+      #     because this job pins 6.3.2, and an unrecognised flag would fail
+      #     every plugin build.
+      #
+      #   --cache-path  one dependency cache for all five packages, so the
+      #     checkouts are fetched once. Measured as worth ~8s per build —
+      #     small, but it also means four fewer chances to hit github.com.
+      #
+      # A shared --scratch-path was measured and deliberately NOT used: a
+      # scratch directory does not accumulate compiled products across root
+      # packages, so alternating between plugins thrashes it. Re-building an
+      # unchanged package into a shared scratch still cost full build time.
+      PREBUILTS=""
+      if PATH="/usr/share/swift/usr/bin:$PATH" swift build --help 2>&1 | grep -q 'enable-experimental-prebuilts'; then
+        PREBUILTS="--enable-experimental-prebuilts"
+        echo "=== swift-syntax prebuilts: supported, enabled"
+      else
+        echo "=== swift-syntax prebuilts: not supported by this toolchain, building from source"
+      fi
+      PLUGIN_CACHE="$CI_PROJECT_DIR/.plugin-dep-cache"
+      mkdir -p "$PLUGIN_CACHE"
       for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
         [ -f "$pkg" ] || continue
         dir="$(dirname "$pkg")"
         echo "=== Pre-warming plugin build: $dir"
-        (cd "$dir" && PATH="/usr/share/swift/usr/bin:$PATH" swift build -c release) || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
+        (cd "$dir" && PATH="/usr/share/swift/usr/bin:$PATH" swift build -c release $PREBUILTS --cache-path "$PLUGIN_CACHE") || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
       done
 
     - chmod +x Tests/IntegrationTestsRunner/run-tests.pl
