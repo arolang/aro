@@ -88,7 +88,9 @@ public struct CodeQualityValidator {
                     at: featureSet.span.end,
                     hints: [
                         "Feature sets should end with a Return statement",
-                        "Add: <Return> an <OK: status> for the <result>."
+                        // Bare verb — the bracketed spelling no longer parses
+                        // (GitLab #514, #574).
+                        "Add: Return an <OK: status> for the <result>."
                     ],
                     // Consequential (GitLab #509): a statement that failed
                     // analysis often takes the terminator down with it, so

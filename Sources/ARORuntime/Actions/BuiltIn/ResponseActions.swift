@@ -664,8 +664,11 @@ public struct StoreAction: ActionImplementation {
             // keeps only the shape ("Cannot store the ticket into the
             // ticket-repository"), and here the shape is exactly what reads
             // fine — what went wrong is which of two things names the value.
+            // Bare verb: the bracketed spelling was removed (GitLab #514), so
+            // echoing it here would print a statement the reader cannot type
+            // back (GitLab #574).
             let statementText =
-                "<Store> the <\(result.fullName)> \(object.preposition.rawValue) the <\(repoName)> with { … }."
+                "Store the <\(result.fullName)> \(object.preposition.rawValue) the <\(repoName)> with { … }."
 
             if !result.specifiers.isEmpty {
                 // `Store the <stored: ticket> into the <repo> with { … }` names
