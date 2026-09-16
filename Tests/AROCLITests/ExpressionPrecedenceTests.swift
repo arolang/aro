@@ -143,15 +143,19 @@ struct ExpressionPrecedenceTests {
 
     @Test("`or` over a non-boolean operand is untouched")
     func orOverNonBooleanOperand() async throws {
-        // `Create the <count> with <params: count> or 3.` (ARO-0047 §Examples)
-        // puts a non-boolean on both sides of `or`. The left operand is a
-        // variable reference, not a comparison, so the removed rewrite never
-        // applied to it — this pins that it still parses and evaluates.
-        // (What `or` *returns* for non-boolean operands — the value or a
-        // boolean — is a separate question, unchanged here.)
+        // A non-boolean on both sides of `or`. The left operand is a variable
+        // reference, not a comparison, so the removed rewrite never applied
+        // to it — this pins that it still parses and evaluates. (What `or`
+        // *returns* for non-boolean operands — the value or a boolean — is a
+        // separate question, unchanged here.)
+        //
+        // Both sides are variables: the literal spelling this used to carry,
+        // `<settings: retries> or 3`, is rejected since GitLab #575 because
+        // a literal's truthiness is fixed at parse time. That is a separate
+        // check, and pinning it here would confuse the two.
         let (_, results) = try await run(
-            "Create the <settings> with { retries: 5 }.",
-            "Create the <retries> with <settings: retries> or 3."
+            "Create the <settings> with { retries: 5, backoff: 3 }.",
+            "Create the <retries> with <settings: retries> or <settings: backoff>."
         )
         #expect(results.allSatisfy { $0.isSuccess })
     }

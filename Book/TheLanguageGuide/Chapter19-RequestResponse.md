@@ -21,7 +21,21 @@ This cycle is the same regardless of what your API does. A simple health check e
 Extraction is the first step in handling any request. You need to get data out of the request and into local bindings where you can work with it.
 Simple extraction pulls a single value from a known location. Extracting a user identifier from path parameters, a search query from query parameters, or an authentication token from headers are all simple extractions. Each uses the Extract action with the appropriate context identifier and qualifier.
 Nested extraction navigates into structured data. The request body is often a JSON object with nested properties. You can extract the entire body and then extract individual fields from it, or you can use chained qualifiers to navigate directly to nested values.
-Optional data needs care, because a missing value is an error rather than an empty one. Query parameters are typically optional—clients may or may not include them—and extracting one the client omitted fails the statement, ending the feature set. There is no fallback operator: `Create the <limit> with <maybe-missing> or 10.` parses but still fails on the missing binding, because the `or` never gets to run. Bind the default first and let a `when` guard overwrite the decision instead, or declare the parameter's `default` in the OpenAPI contract so the runtime supplies it before your handler sees the request.
+Optional data needs care, because a missing value is an error rather than an empty one. Query parameters are typically optional—clients may or may not include them—and extracting one the client omitted fails the statement, ending the feature set. The fallback is the `default` operator, but it has to be reached: `default` rescues a *missing field*, not a *failed statement*, so extract the whole record first and then default the field off it.
+
+```aro
+(search: Search API) {
+    Extract the <query-params> from the <queryParameters>.
+    Create the <limit> with <query-params: limit> default 10.
+    Retrieve the <results> from the <search-repository> where <limit> is <limit>.
+    Return an <OK: status> with <results>.
+}
+```
+
+This is the same shape Chapter 23 uses for command-line parameters, and for the same reason: extracting the record always succeeds, and the field that is not there is *absent* rather than an error. The default fires on absence and never on falsiness, so `?limit=0` binds `"0"` rather than falling back to ten, and `?limit=` binds the empty string the client actually sent.
+
+Earlier editions of this chapter said there was no fallback operator and taught you to bind a default and overwrite it with a `when` guard. That advice predates `default`, which arrived in GitLab #547; Chapter 23 covers the operator in full. Two things it is worth being precise about. First, `or` is not the operator you want—it is boolean, so `<maybe-missing> or 10` asks whether either side is truthy and yields `true`. `aro check` rejects that shape and names `default` in the hint (GitLab #575). Second, declaring `default:` for the parameter in your OpenAPI contract does *not* currently make the runtime supply it—an omitted parameter still fails the extraction—so reach for the record-and-default form above rather than the contract.
+
 Multiple extractions gather all the data you need. A complex handler might extract several path parameters, multiple query parameters, the request body, and one or more headers. Each extraction creates a binding that subsequent statements can use.
 The pattern is to perform all extractions early in the feature set, before any processing logic. This makes it clear what data the handler needs and ensures that missing required data causes immediate failure rather than partial processing.
 ---
