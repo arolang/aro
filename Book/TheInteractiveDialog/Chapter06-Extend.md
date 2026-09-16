@@ -157,8 +157,8 @@ A feature set whose business activity is `Action` is callable as
 `Application.<Name>` in a compiled application (ARO-0081). At the prompt it is
 not: the definition registers, `:fs` lists it, and the call site answers
 `Unknown user-defined action 'Application.Doubled'` (GitLab issue #576). Use
-`:invoke` for now, keeping chapter 4's caveats about its input in mind, and
-move the action into a file when it earns its keep.
+`:invoke` for now — it passes the same `input` record a file's action reads
+(chapter 4) — and move the action into a file when it earns its keep.
 
 ## The Coding Assistant
 

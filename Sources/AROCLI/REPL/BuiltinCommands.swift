@@ -328,16 +328,38 @@ public struct InvokeCommand: MetaCommand {
         var input: [String: any Sendable]? = nil
         if jsonStart >= 0 {
             let jsonStr = args[jsonStart...].joined(separator: " ")
-            if let data = jsonStr.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                input = json.mapValues { convertToSendable($0) }
-            } else {
-                return .error("Invalid JSON input")
+            guard let json = Self.parseInputObject(jsonStr) else {
+                return .error("Invalid JSON input: \(jsonStr)")
             }
+            input = json.mapValues { convertToSendable($0) }
         }
 
         let result = try await session.invokeFeatureSet(named: name, input: input)
         return convertResult(result)
+    }
+
+    /// Parse `:invoke`'s JSON argument, accepting both spellings.
+    ///
+    /// Plain JSON is what a user types and what now reaches here, since the
+    /// meta-command tokenizer passes a `{`-led argument through verbatim
+    /// (GitLab #578).
+    ///
+    /// The backslash-escaped form is accepted too. Before that fix the
+    /// tokenizer ate the quotes, so `{\"width\": 3}` was *the only spelling
+    /// that worked* — the issue says as much — and anyone who learned that
+    /// workaround has it in their notes. Unescaping on the retry keeps it
+    /// working rather than trading one broken spelling for another.
+    static func parseInputObject(_ text: String) -> [String: Any]? {
+        func object(_ candidate: String) -> [String: Any]? {
+            guard let data = candidate.data(using: .utf8) else { return nil }
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        }
+
+        if let parsed = object(text) { return parsed }
+        // Retry with the escaped quotes unescaped.
+        let unescaped = text.replacingOccurrences(of: "\\\"", with: "\"")
+        guard unescaped != text else { return nil }
+        return object(unescaped)
     }
 
     private func convertResult(_ result: REPLResult) -> MetaCommandResult {

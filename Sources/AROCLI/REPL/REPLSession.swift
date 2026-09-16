@@ -517,8 +517,16 @@ public final class REPLSession: @unchecked Sendable {
             businessActivity: featureSet.featureSet.businessActivity
         )
 
-        // Bind input values if provided
-        if let input = input {
+        // Bind input values if provided.
+        //
+        // Both shapes. ARO-0081 says a user-defined action reads its arguments
+        // off `input` — `Extract the <w> from the <input: width>.` — which is
+        // how a feature set written for a file is spelled, so `:invoke` has to
+        // offer it or the prompt cannot run the code you just wrote. Binding
+        // the keys at top level as well keeps every existing `:invoke` working
+        // (GitLab #578).
+        if let input {
+            childContext.bind("input", value: input)
             for (key, value) in input {
                 childContext.bind(key, value: value)
             }
