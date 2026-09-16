@@ -128,6 +128,90 @@ default:
 # Proposals/ is the project's top-priority source of truth, so a duplicated or
 # dangling ARO-NNNN identifier is a real defect. Cheap and dependency-free, so it
 # runs before the Swift build rather than after it.
+# =============================================================================
+# GitHub authentication (.pre — before every other job)
+# =============================================================================
+# Every Swift build resolves its package graph from github.com, and the plugin
+# SDKs are pip-installed from `git+https://`. Unauthenticated, those fetches
+# are rate-limited per runner IP; when the limit is hit git cannot read the
+# reply as a ref listing, so it asks for a password and reports the one thing
+# that was never wrong:
+#
+#   fatal: could not read Username for 'https://github.com'
+#   fatal: expected flush after ref listing
+#
+# The `http.version` pin in `variables:` removed one cause of that message
+# (HTTP/2 multiplexing being cut short). This removes the other. A GitHub App
+# installation token is minted once per pipeline and handed to the jobs that
+# talk to github.com through a dotenv artifact.
+#
+# Short-lived by construction: the JWT is valid for nine minutes and the
+# installation token GitHub returns expires in an hour, which is why the
+# artifact does too.
+github-token:
+  stage: .pre
+  # Only where the App is configured. Without this the job would fail on a
+  # fork, on a contributor's own namespace, and on this project in the window
+  # between merging the change and setting the variables — and because six
+  # jobs `needs:` it, that failure would redden the whole pipeline rather than
+  # falling back to the anonymous fetches that worked before.
+  #
+  # When it *does* run it still fails loudly on a missing or bad key: a silent
+  # fallback to anonymous is the rate-limited state this exists to escape, and
+  # it would look fixed while still failing intermittently.
+  rules:
+    - if: $GITHUB_APP_CLIENT_ID
+  image:
+    name: ausdertechnik/buildbot-margarete@sha256:9127b6b2a5cd54400727be4c54f41c9fcee312488315fe7327e8aa725589bdb4
+    entrypoint: [""]
+  script:
+    - |
+      set -e
+      for variable in GITHUB_APP_CLIENT_ID GITHUB_APP_INSTALLATION_ID GITHUB_APP_PRIVATE_KEY; do
+        if [ -z "$(eval "printf '%s' \"\${$variable:-}\"")" ]; then
+          echo "$variable is required to generate a GitHub token" >&2
+          exit 1
+        fi
+      done
+
+      command -v openssl >/dev/null || { echo "openssl is required to generate a GitHub App JWT" >&2; exit 1; }
+      command -v curl >/dev/null || { echo "curl is required to request a GitHub App installation token" >&2; exit 1; }
+
+      b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+      key_file="${GITHUB_APP_PRIVATE_KEY}"
+      if [ ! -f "$key_file" ]; then
+        key_file="$(mktemp)"
+        printf '%s\n' "$GITHUB_APP_PRIVATE_KEY" > "$key_file"
+        trap 'rm -f "$key_file"' EXIT
+      fi
+
+      now="$(date +%s)"
+      header="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)"
+      payload="$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' \
+        "$((now - 60))" "$((now + 540))" "$GITHUB_APP_CLIENT_ID" | b64url)"
+      signature="$(printf '%s.%s' "$header" "$payload" \
+        | openssl dgst -sha256 -sign "$key_file" -binary | b64url)"
+      jwt="$header.$payload.$signature"
+
+      response="$(curl -fsS -X POST \
+        -H "Authorization: Bearer $jwt" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/app/installations/$GITHUB_APP_INSTALLATION_ID/access_tokens")"
+      GITHUB_TOKEN="$(printf '%s' "$response" | tr -d '\n' \
+        | sed -n 's/.*"token" *: *"\([^"]*\)".*/\1/p')"
+      if [ -z "$GITHUB_TOKEN" ]; then
+        echo "Failed to obtain GitHub App installation token" >&2
+        exit 1
+      fi
+      printf 'GITHUB_TOKEN=%s\n' "$GITHUB_TOKEN" > github-token.env
+      echo "GitHub token generated"
+  artifacts:
+    reports:
+      dotenv: github-token.env
+    expire_in: 1 hour
+
 proposals:
   stage: test
   image: python:3.12-slim
@@ -157,6 +241,10 @@ test:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: github-token
+      artifacts: true
+      optional: true
   cache:
     key:
       files:
@@ -171,6 +259,11 @@ test:
     - apt-get install -y -qq wget gnupg software-properties-common libgit2-dev libzmq3-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+    # Authenticate to github.com so package resolution is not rate-limited
+    # (see the `github-token` job). Placed after the packages are installed:
+    # these images ship without git, so an earlier `git config` exits 127 and
+    # takes the job with it. A no-op when the token is unset.
+    - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
     - apt-get install -y -qq llvm-20-dev libzstd-dev
@@ -227,6 +320,9 @@ build:linux:
   needs:
     - job: test
       optional: true
+    - job: github-token
+      artifacts: true
+      optional: true
   cache:
     key:
       files:
@@ -241,6 +337,11 @@ build:linux:
     - apt-get install -y -qq git wget gnupg software-properties-common libgit2-dev libzmq3-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+    # Authenticate to github.com so package resolution is not rate-limited
+    # (see the `github-token` job). Placed after the packages are installed:
+    # these images ship without git, so an earlier `git config` exits 127 and
+    # takes the job with it. A no-op when the token is unset.
+    - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
     - apt-get install -y -qq llvm-20-dev libzstd-dev
@@ -390,13 +491,15 @@ integration:linux:
   needs:
     - job: build:linux
       artifacts: true
+    - job: github-token
+      artifacts: true
+      optional: true
   cache:
     key: swift-integration
     paths:
       - /usr/share/swift/
     policy: pull
   before_script:
-    # Install dependencies
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
     - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev libzmq3-dev gnupg software-properties-common python3 python3-dev python3-venv build-essential
@@ -419,6 +522,11 @@ integration:linux:
     # honest signal — a green example that exercised no plugin was worth less
     # than a red one that says why.
     - apt-get install -y -qq python3-pip
+    # Authenticate to github.com so package resolution is not rate-limited
+    # (see the `github-token` job). Placed after the packages are installed:
+    # these images ship without git, so an earlier `git config` exits 127 and
+    # takes the job with it. A no-op when the token is unset.
+    - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
     - pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
     - python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
 
@@ -961,6 +1069,15 @@ docker:buildsystem:
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
+  needs:
+    - job: github-token
+      artifacts: true
+      optional: true
+    # `needs` replaces the implicit "wait for the previous stage", so the
+    # test-stage gate this job already had is named here rather than lost.
+    - job: test
+    - job: proposals
+    - job: action-reference
   variables:
     IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-buildsystem
   before_script:
@@ -982,6 +1099,7 @@ docker:buildsystem:
       --context=docker/buildsystem/
       --dockerfile=docker/buildsystem/Dockerfile
       --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME}
+      --build-arg=GITHUB_TOKEN=${GITHUB_TOKEN}
       --build-arg=SKIP_TESTS=true
       --cache=true
       --cache-repo=${CI_REGISTRY_IMAGE}/cache

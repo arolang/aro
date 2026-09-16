@@ -98,10 +98,30 @@ ENV GIT_CONFIG_COUNT=1 \
     GIT_CONFIG_KEY_0=http.version \
     GIT_CONFIG_VALUE_0=HTTP/1.1
 
+# Authenticate to github.com when a token is supplied.
+#
+# The clone below and the package resolution inside `swift build` both go to
+# github.com, where unauthenticated fetches are rate-limited per source IP.
+# CI passes a short-lived GitHub App installation token as a build argument
+# (see the `github-token` job in .gitlab-ci.yml).
+#
+# Defaulted to empty so the image still builds outside CI, where nobody has a
+# token: the config is only written when one is actually supplied, and an
+# anonymous clone of a public repository keeps working.
+#
+# Written with `git config` rather than an env var so it cannot outlive the
+# layer as an inherited environment setting — though note the token is still
+# recorded in this layer's history, which is why it is minted per pipeline
+# and expires in an hour.
+ARG GITHUB_TOKEN=""
+
 # Build ARO from source
 WORKDIR /aro-build
 ARG ARO_VERSION=main
-RUN git clone --depth 1 --branch ${ARO_VERSION} https://github.com/arolang/aro.git . \
+RUN if [ -n "${GITHUB_TOKEN}" ]; then \
+      git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    fi \
+    && git clone --depth 1 --branch ${ARO_VERSION} https://github.com/arolang/aro.git . \
     && swift build -c release --static-swift-stdlib \
     && swift build -c release --product ARORuntime \
     && cp .build/release/aro /usr/local/bin/aro \
