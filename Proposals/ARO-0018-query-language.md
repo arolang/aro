@@ -55,6 +55,22 @@ Filter the <premium-users: List<User>> from the <users>
     where <tier> is "premium".
 ```
 
+A **scalar** element — a string, a number — is matched against the predicate
+**as itself**, because there is no field to read. The field name is then
+decorative, and reads as whatever suits the call site:
+
+```aro
+Compute the <lines: lines> from the <content>.
+Filter the <errors> from the <lines> where <line> contains "ERROR".
+```
+
+A record is matched on the named field, and a record that does not carry that
+field does not match — unchanged.
+
+Filtering a scalar list used to match nothing and return an empty list, with no
+error, no warning and no `aro check` diagnostic: "read a file, keep the lines
+containing X, count them" reported zero every time (GitLab #569).
+
 **Syntax:**
 ```ebnf
 filter_statement = "<Filter>" , "the" , typed_result , "from" , "the" , source ,

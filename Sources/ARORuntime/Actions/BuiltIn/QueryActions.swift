@@ -413,7 +413,18 @@ public struct FilterAction: ActionImplementation {
 
         // ARO-0051 / Issue #165: Return lazy stream for large collections so
         // downstream collection operations chain without O(n) intermediate arrays.
-        if arraySource.count >= StreamingHeuristics.elementCountThreshold,
+        //
+        // Records only. The stream carries `[String: any Sendable]`, so the
+        // `compactMap` below *discards* any element that is not a record — and
+        // a large list of scalars would therefore filter to nothing whatever
+        // the predicate said. That is the same silent-empty failure as
+        // GitLab #569, reachable at 10 000 elements, which is exactly the size
+        // a filtered log file reaches. A scalar list takes the eager path
+        // instead: it is a filter over strings, so the intermediate array the
+        // streaming path exists to avoid costs little here.
+        let allRecords = arraySource.allSatisfy { $0 is [String: any Sendable] }
+        if allRecords,
+           arraySource.count >= StreamingHeuristics.elementCountThreshold,
            let runtimeContext = context as? RuntimeContext {
             let rows: [[String: any Sendable]] = arraySource.compactMap { $0 as? [String: any Sendable] }
             let stream = AROStream<[String: any Sendable]>.from(rows)

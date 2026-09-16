@@ -216,7 +216,7 @@ No double-checking is needed. A single `<Store>` in the queue handler is suffici
 
 **Limited Set Operations.** We have intersect, union, and difference. Operations like subset checking or symmetric difference would be useful.
 
-**Filter Does Not Reach Scalars.** `Filter … where` matches fields on records. Over a list of plain strings it matches nothing and returns an empty list, with no error (GitLab #569). Set operations are the tool for scalar collections; `<Filter>` is the tool for records.
+**Filter Reaches Scalars Too.** `Filter … where` matches a record on the named field and a scalar against the predicate as itself, so it works over a list of plain strings — it used to match nothing and return an empty list with no error (GitLab #569). Set operations are still the better tool when the question is about membership between two collections; `<Filter>` is for keeping the elements that satisfy a predicate.
 
 ---
 

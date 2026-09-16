@@ -63,11 +63,41 @@ public indirect enum ResolvedWhereCondition: Sendable {
         }
     }
 
-    /// Convenience for heterogeneous collections: non-dictionary
-    /// items never match a field predicate.
+    /// Tests one element of any collection.
+    ///
+    /// A record is matched on the named field. Anything else — a string, a
+    /// number — is matched **as itself**, because there is no field to read:
+    ///
+    ///     Create the <ls> with ["INFO ok", "ERROR bad"].
+    ///     Filter the <errs> from the <ls> where <line> contains "ERROR".
+    ///
+    /// This used to `return false` for every non-record, so filtering a list
+    /// of scalars matched nothing and returned `[]` — no error, no warning, no
+    /// `aro check` diagnostic, the program running on with the wrong answer
+    /// (GitLab #569). "Read a file, keep the lines containing X, count them"
+    /// is the first shape most people reach for after
+    /// `Compute the <lines: lines>`, and it silently produced 0.
+    ///
+    /// The field name is ignored for a scalar, which is why every binding name
+    /// behaved identically in the bug report. That is the accepted cost of the
+    /// smaller surprise: `<line>`, `<item>` and `<value>` all read naturally
+    /// at the call site, and none of them could name anything else.
     public func matchesElement(_ element: any Sendable) -> Bool {
-        guard let dict = element as? [String: any Sendable] else { return false }
-        return matches(dict)
+        if let dict = element as? [String: any Sendable] { return matches(dict) }
+        return matchesScalar(element)
+    }
+
+    /// Applies the condition to a value that carries no fields, comparing the
+    /// value itself at every leaf.
+    private func matchesScalar(_ element: any Sendable) -> Bool {
+        switch self {
+        case .predicate(_, let op, let value):
+            return WherePredicateMatcher.matches(actual: element, op: op, expected: value)
+        case .and(let l, let r):
+            return l.matchesScalar(element) && r.matchesScalar(element)
+        case .or(let l, let r):
+            return l.matchesScalar(element) || r.matchesScalar(element)
+        }
     }
 
     // MARK: - Skeleton parsing
