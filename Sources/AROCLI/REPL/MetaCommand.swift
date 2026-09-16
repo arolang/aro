@@ -114,14 +114,39 @@ public final class MetaCommandRegistry: Sendable {
         return names.sorted()
     }
 
-    /// Parse command line respecting quotes
+    /// Parse a meta-command line into a command name and arguments.
+    ///
+    /// Shell-style quoting, with one exception: a token that *starts* an
+    /// object or array — `{` or `[` — takes the rest of the line **verbatim**.
+    ///
+    /// Without that, `:invoke Calculate Area {"width": 3}` could not work.
+    /// The `"` characters were consumed as quoting and the surviving tokens
+    /// rejoined with spaces, so `InvokeCommand` handed `{width: 3}` to
+    /// `JSONSerialization` and reported "Invalid JSON input". The only
+    /// spelling that parsed was one with the quotes escaped —
+    /// `{\"width\": 3}` — which nobody would write at a prompt (GitLab #578).
+    ///
+    /// A JSON object or array is the last argument of every command that takes
+    /// one, so there is nothing after it to tokenise.
     private func parseCommandLine(_ input: String) -> [String] {
         var parts: [String] = []
         var current = ""
         var inQuotes = false
         var escaped = false
 
-        for char in input {
+        var index = input.startIndex
+        while index < input.endIndex {
+            let char = input[index]
+            defer { index = input.index(after: index) }
+
+            // At a token boundary, an opening brace or bracket means the rest
+            // of the line is one structured literal — hand it over untouched.
+            if !escaped, !inQuotes, current.isEmpty, char == "{" || char == "[" {
+                let tail = String(input[index...]).trimmingCharacters(in: .whitespaces)
+                if !tail.isEmpty { parts.append(tail) }
+                return parts
+            }
+
             if escaped {
                 current.append(char)
                 escaped = false
