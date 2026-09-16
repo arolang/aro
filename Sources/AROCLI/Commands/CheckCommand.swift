@@ -122,6 +122,14 @@ struct SourceCheckSubcommand: ParsableCommand {
             totalErrors += reportUndeclaredTransitions(directory: resolvedPath, sourceFiles: sourceFiles)
         }
 
+        // Exactly one Application-Start (GitLab #581).
+        // Directory-scoped: a single named file may be one of many in an
+        // application this invocation was never pointed at, so it must not
+        // speak for the application — the same reasoning as `declaredActions`.
+        if isDirectory.boolValue {
+            totalErrors += reportEntryPoint(directory: resolvedPath, sourceFiles: sourceFiles)
+        }
+
         // Where each route's request body goes (GitLab #477).
         if isDirectory.boolValue {
             totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles)
@@ -196,6 +204,75 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// ones are not bounded at all because they never build the body, and
     /// where the contract and the code disagree about which is which.
     /// - Returns: the number of warnings emitted.
+    // MARK: - Entry Point (GitLab #581)
+
+    /// Report an application with no `Application-Start`, or more than one.
+    ///
+    /// The rule itself is `EntryPointCheck` in AROParser, so it is testable
+    /// without driving the CLI; this formats its verdict.
+    private func reportEntryPoint(directory: URL, sourceFiles: [URL]) -> Int {
+        var declarations: [EntryPointCheck.Declaration] = []
+        for file in sourceFiles {
+            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
+            // The group is the first path component under the directory being
+            // checked, so several entry points in one subdirectory still read
+            // as one application.
+            let fileDirectory = file.deletingLastPathComponent()
+            let group: String
+            if fileDirectory.standardized == directory.standardized {
+                group = "."
+            } else {
+                let relative = fileDirectory.path
+                    .replacingOccurrences(of: directory.path + "/", with: "")
+                group = String(relative.split(separator: "/").first ?? ".")
+            }
+            for featureSet in Compiler().compile(source).program.featureSets {
+                declarations.append(EntryPointCheck.Declaration(
+                    name: featureSet.name,
+                    activity: featureSet.businessActivity,
+                    group: group
+                ))
+            }
+        }
+
+        switch EntryPointCheck.classify(declarations) {
+        case .ok:
+            return 0
+
+        case .missing(let swapped):
+            print("\nerror: No \(EntryPointCheck.entryPointName) feature set"
+                  + " — the application has no entry point")
+            if let swapped {
+                print("  hint: (\(swapped.name): \(EntryPointCheck.entryPointName))"
+                      + " has the name and the business activity the other way round")
+                print("  hint: Write: (\(EntryPointCheck.entryPointName): \(swapped.name))")
+            } else {
+                print("  hint: Add: (\(EntryPointCheck.entryPointName): My App) { … }")
+            }
+            return 1
+
+        case .separateApplications(let groups):
+            // Not a broken application but a directory of them. `aro run`
+            // already says this; saying anything else here would report an
+            // error the author cannot act on.
+            print("\nnote: \(directory.lastPathComponent) contains \(groups.count)"
+                  + " separate applications (\(groups.joined(separator: ", "))), not one")
+            if let first = groups.first {
+                print("  hint: Check one of them: aro check \(directory.path)/\(first)")
+            }
+            return 0
+
+        case .multiple(let starts):
+            print("\nerror: \(starts.count) \(EntryPointCheck.entryPointName) feature sets"
+                  + " — an application must have exactly one")
+            for start in starts {
+                print("  (\(EntryPointCheck.entryPointName): \(start.activity))")
+            }
+            return 1
+        }
+    }
+
+
     private func reportBodyPolicies(directory: URL, sourceFiles: [URL]) -> Int {
         let contract = ["openapi.yaml", "openapi.yml", "openapi.json"]
             .map { directory.appendingPathComponent($0) }
