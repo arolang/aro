@@ -46,7 +46,7 @@ Everything in the previous section is a syntax error, which means `aro check` fi
 
 Four you will meet:
 
-**`Filter … where` over a list of strings returns nothing.** `Filter` compares fields on records. A list of plain strings has no fields, so nothing matches and the result is `[]` — no error, no warning (GitLab #569). Counting lines that contain "ERROR" this way reports zero every time. Use `for each` with a `when` guard.
+**`Filter … where` reaches scalars.** A record is matched on the named field; a string or a number is matched as itself, because it has no field to name — so `Filter … where <line> contains "ERROR"` over a list of lines keeps the lines that contain it. Until GitLab #569 it matched nothing and returned `[]` with no error or warning, so counting lines this way reported zero every time. `for each` with a `when` guard works too, and is what to reach for when the body does more than keep or drop.
 
 **`when not <a> contains <b>` is always false.** `not` binds to the left operand, so the guard becomes `(not <a>) contains <b>`, which is false whatever the values are. Parenthesise: `when not (<a> contains <b>)` (GitLab #572).
 

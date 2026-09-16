@@ -59,7 +59,9 @@ Two details in there are the exact places the model — and you — will get it 
 
 `<List>` hands back a *record* per directory entry, not a path string. `Read the <content> from the <file>` where `<file>` is the loop variable does not read the file; it looks for a system object called `file`, fails, and (because the failure is in a deferred action nobody reads) leaves the loop to carry on. Pull `path` off the record first.
 
-The inner `for each` with a guard is doing what a `Filter` should be doing. It is not there for style. `Filter … where <line> contains "ERROR"` over a list of strings matches nothing and returns an empty list, silently, because `Filter` only compares *fields of records* — and a string has no fields (GitLab #569). The version with `Filter` in it passes `aro check`, runs to completion, exits `[OK]`, and writes `Total errors: 0` into your report. That is the failure mode this whole book is about: not code that breaks, code that quietly agrees with you.
+The inner `for each` with a guard is one way to write this; `Filter … where <line> contains "ERROR"` is the other, and it now works over a list of strings — a scalar element is matched against the predicate as itself, since it has no fields to name (GitLab #569).
+
+It did not, for a long time, and the way it failed is the failure mode this whole book is about. `Filter` compared *fields of records* and a string has none, so it matched nothing and returned an empty list — silently. The version with `Filter` in it passed `aro check`, ran to completion, exited `[OK]`, and wrote `Total errors: 0` into your report. Not code that breaks: code that quietly agrees with you.
 
 ## 5.3 CI-style Invocations
 
