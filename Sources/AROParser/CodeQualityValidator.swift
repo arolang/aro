@@ -30,6 +30,10 @@ public struct CodeQualityValidator {
         // mysterious hang. Warn on unitless literals over a minute.
         validateSleepDurations(in: statements)
 
+        // GitLab #575: `<params: port> or 8080` is the fallback shape people
+        // reach for, and `or` is boolean, so it binds `true`.
+        validateLogicalLiterals(in: statements)
+
         // Check for empty feature set
         if statements.isEmpty {
             diagnostics.warning(
@@ -234,6 +238,144 @@ public struct CodeQualityValidator {
 
     /// Flattens the statement tree, descending into match cases and loop bodies.
     /// Mirrors `DataFlowAnalyzer.collectAROStatements`.
+    // MARK: - Logical operators over non-boolean literals (GitLab #575)
+
+    /// `<params: port> or 8080` reads as "the port, or 8080 if it wasn't
+    /// passed", and that is what several editions of the docs taught. But `or`
+    /// evaluates truthiness and yields a boolean (ARO-0001 §Logical
+    /// Operators), so the statement binds `true` — and 8080 is constantly
+    /// truthy, so it binds `true` whether the parameter was passed or not.
+    /// `aro check` passed it, the program exited `[OK]`, and the wrong value
+    /// only surfaced wherever it was finally used.
+    ///
+    /// A non-boolean literal under `and`/`or` is always dead weight: its
+    /// truthiness is fixed at parse time, so it can only pin the result or
+    /// contribute nothing. There is no program for which flagging it loses
+    /// something, which is what makes this an error rather than a warning.
+    /// Boolean literals are left alone — `<x> or false` is redundant but it
+    /// is not a mistaken default, and generated source writes it.
+    private func validateLogicalLiterals(in statements: [Statement]) {
+        for aro in collectAROStatements(statements) {
+            for expression in expressionSlots(of: aro) {
+                for binary in logicalExpressions(in: expression) {
+                    checkLogicalOperand(binary, side: "right", operand: binary.right)
+                    checkLogicalOperand(binary, side: "left", operand: binary.left)
+                }
+            }
+        }
+    }
+
+    private func checkLogicalOperand(
+        _ binary: BinaryExpression,
+        side: String,
+        operand: any Expression
+    ) {
+        guard let literal = Self.literalOperand(operand),
+              let shown = Self.nonBooleanLiteralDescription(literal) else { return }
+
+        let op = binary.op.rawValue
+        let truthy = Self.isTruthyLiteral(literal)
+
+        // A literal under `and`/`or` either pins the result — `or` with a
+        // truthy operand is always true, `and` with a falsy one always false —
+        // or contributes nothing, leaving the other operand's truthiness.
+        // Both are dead weight; they differ only in how to say so.
+        let effect: String
+        if (binary.op == .or) == truthy {
+            effect = "makes the expression constantly \(truthy)"
+        } else {
+            let other = side == "right" ? binary.left.description : binary.right.description
+            effect = "does nothing — the expression is just the truthiness of \(other)"
+        }
+
+        var hints = [
+            "`\(op)` evaluates truthiness and yields a boolean (ARO-0001 §Logical Operators)",
+            "\(shown) is always \(truthy ? "truthy" : "falsy"), so `\(op)` has nothing to decide",
+        ]
+        // The fallback misreading only has one shape: the value on the left,
+        // the intended default on the right of an `or`.
+        if binary.op == .or && side == "right" {
+            hints.insert(
+                "To supply a fallback value, use `default`: "
+                    + "\(binary.left.description) default \(shown)",
+                at: 0
+            )
+        }
+
+        diagnostics.error(
+            "`\(op)` is a boolean operator, so the \(side) operand \(shown) \(effect)",
+            at: binary.span.start,
+            hints: hints
+        )
+    }
+
+    /// How to name a non-boolean literal in a diagnostic, or nil when the
+    /// literal is a boolean and therefore not judged.
+    private static func nonBooleanLiteralDescription(_ literal: LiteralValue) -> String? {
+        switch literal {
+        case .boolean: return nil
+        case .integer(let i): return String(i)
+        case .float(let f): return String(f)
+        case .string(let s): return "\"\(s)\""
+        default: return nil
+        }
+    }
+
+    private static func isTruthyLiteral(_ literal: LiteralValue) -> Bool {
+        switch literal {
+        case .integer(let i): return i != 0
+        case .float(let f): return f != 0
+        case .string(let s): return !s.isEmpty
+        default: return true
+        }
+    }
+
+    /// Every expression an `AROStatement` carries: its value, and its guard.
+    private func expressionSlots(of statement: AROStatement) -> [any Expression] {
+        var slots: [any Expression] = []
+        switch statement.valueSource {
+        case .expression(let e), .sinkExpression(let e): slots.append(e)
+        case .literal, .none: break
+        }
+        if let condition = statement.statementGuard.condition { slots.append(condition) }
+        return slots
+    }
+
+    /// Every `and`/`or` node in an expression tree.
+    ///
+    /// Descends through the wrappers an operand can hide behind — the
+    /// parenthesised group most of all, since `(<a> or 5)` is precisely how
+    /// someone writes the mistake once the precedence table surprises them.
+    private func logicalExpressions(in expression: any Expression) -> [BinaryExpression] {
+        switch expression {
+        case let binary as BinaryExpression:
+            var found = logicalExpressions(in: binary.left)
+                + logicalExpressions(in: binary.right)
+            if binary.op == .and || binary.op == .or { found.append(binary) }
+            return found
+        case let grouped as GroupedExpression:
+            return logicalExpressions(in: grouped.expression)
+        case let unary as UnaryExpression:
+            return logicalExpressions(in: unary.operand)
+        case let array as ArrayLiteralExpression:
+            return array.elements.flatMap { logicalExpressions(in: $0) }
+        case let map as MapLiteralExpression:
+            return map.entries.flatMap { logicalExpressions(in: $0.value) }
+        default:
+            return []
+        }
+    }
+
+    /// A literal operand, seen through any parentheses around it: `(8080)`
+    /// is the same mistake as `8080`.
+    private static func literalOperand(_ expression: any Expression) -> LiteralValue? {
+        switch expression {
+        case let literal as LiteralExpression: return literal.value
+        case let grouped as GroupedExpression: return literalOperand(grouped.expression)
+        default: return nil
+        }
+    }
+
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
         var result: [AROStatement] = []
         for statement in statements {

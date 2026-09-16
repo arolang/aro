@@ -578,6 +578,15 @@ The logical operators evaluate truthiness and yield a **boolean**. `or` is
 therefore not a way to supply a fallback value: `<params: port> or 8080` is
 `true`, not the port. Use `default` for that.
 
+Because that misreading is common enough to have been taught by earlier
+editions of the documentation, a **non-boolean literal under `and`/`or` is an
+error** (GitLab #575). Such an operand has a truthiness fixed at parse time, so
+it can only pin the result (`or 8080` is always true, `and 0` always false) or
+contribute nothing — never anything a program wants. The diagnostic names
+`default` and shows the rewrite. Boolean literals are left alone: `<x> or
+false` is redundant but it is not a mistaken fallback, and generated source
+writes it.
+
 ### The `default` Operator
 
 ```ebnf

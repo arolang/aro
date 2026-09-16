@@ -129,12 +129,38 @@ struct DefaultOperatorRuntimeTests {
 
     @Test("`or` stays boolean — it is a condition, not a fallback")
     func orRemainsBoolean() async throws {
+        // Both operands non-boolean, so this pins what `or` *returns*: the
+        // truthiness of the two, never either value. Written with variables
+        // on both sides because a literal operand is now rejected outright
+        // (GitLab #575) — see `orOverALiteralIsRejected` below.
         let (session, results) = try await run(
-            "Create the <settings> with { retries: 5 }.",
-            "Create the <truthy> with <settings: retries> or 3."
+            "Create the <settings> with { retries: 5, backoff: 3 }.",
+            "Create the <truthy> with <settings: retries> or <settings: backoff>."
         )
         #expect(results.allSatisfy { $0.isSuccess })
         #expect(session.getVariable("truthy") as? Bool == true)
+    }
+
+    @Test("`or` over a literal is rejected rather than silently binding true")
+    func orOverALiteralIsRejected() async throws {
+        // The completion of this issue's story (GitLab #575). #547 gave the
+        // language `default` and documented that `or` is not it, in three
+        // places — but `<settings: retries> or 3` still compiled, passed
+        // `aro check`, exited `[OK]` and bound `true`. A non-boolean literal
+        // under `or` has a truthiness fixed at parse time, so it can only pin
+        // the result; there is no program that wants it.
+        let (_, results) = try await run(
+            "Create the <settings> with { retries: 5 }.",
+            "Create the <truthy> with <settings: retries> or 3."
+        )
+        guard case .error(let message) = try #require(results.last) else {
+            Issue.record("expected the statement to be rejected, got \(results.last!)")
+            return
+        }
+        #expect(message.contains("`or` is a boolean operator"))
+        #expect(message.contains("constantly true"))
+        // The `default` suggestion rides on the diagnostic's hints, which the
+        // REPL does not print; `LogicalLiteralTests` covers those.
     }
 
     // MARK: - Empty literals (#548)

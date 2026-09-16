@@ -68,7 +68,7 @@ HTTP handlers have access to various parts of the incoming request through speci
 
 Path parameters are values embedded in the URL path based on the template defined in your OpenAPI specification. A template like /users/{id}/orders/{orderId} defines two path parameters: "id" and "orderId". You extract these using the pathParameters identifier with the parameter name as a qualifier.
 
-Query parameters are the key-value pairs in the URL's query string. A request to /search?q=widgets&page=2 has query parameters "q" and "page". You extract these using the queryParameters identifier. Query parameters are typically optional; extracting one that was not provided yields an empty value rather than an error.
+Query parameters are the key-value pairs in the URL's query string. A request to /search?q=widgets&page=2 has query parameters "q" and "page". You extract these using the queryParameters identifier. Query parameters are typically optional, but extracting one the client did not send is an error rather than an empty value—the statement fails and the feature set ends. To make one genuinely optional, extract the whole `queryParameters` record and default the field off it; Chapter 19 shows the pattern. A parameter sent with nothing after the `=`, as in `?q=`, *was* provided, and yields the empty string.
 
 The request body contains data sent with POST, PUT, and PATCH requests. For JSON content, the runtime parses the body into a structured object. You extract it using the request identifier with "body" as the qualifier. You can then extract individual fields from the body using additional qualifiers.
 
