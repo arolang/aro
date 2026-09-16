@@ -285,11 +285,7 @@ public struct FormatSerializer: Sendable {
 
         switch value {
         case let str as String:
-            if str.contains("\n") || str.contains(":") || str.contains("#") {
-                return "|\n" + str.split(separator: "\n", omittingEmptySubsequences: false)
-                    .map { indentStr + "  " + $0 }.joined(separator: "\n")
-            }
-            return str
+            return yamlScalar(str)
         case let int as Int:
             return String(int)
         case let double as Double:
@@ -325,6 +321,67 @@ public struct FormatSerializer: Sendable {
         default:
             return String(describing: value)
         }
+    }
+
+    /// A YAML scalar that reads back as exactly this string.
+    ///
+    /// A string containing `:` or `#` used to be emitted as a literal block
+    /// scalar (`|`). That is valid YAML, but the block form *implies* a
+    /// trailing newline — clip chomping — so every such value came back one
+    /// `\n` longer than it went out. A writable `.store` file therefore grew
+    /// a newline on every string on every restart: `url: http://a` became
+    /// `url: |\n    http://a`, which reloads as `"http://a\n"`, gets written
+    /// as a block again, and so on (GitLab #582).
+    ///
+    /// Double-quoted style has no chomping semantics and round-trips exactly,
+    /// and `FormatDeserializer.unescapeDoubleQuotedYAML` already reads the
+    /// escapes. A newline stays a newline because it is written `\n`, not as
+    /// an actual line break.
+    ///
+    /// Plain style is kept where it is unambiguous, so a hand-seeded store
+    /// stays as readable as the author wrote it.
+    static func yamlScalar(_ str: String) -> String {
+        guard needsQuoting(str) else { return str }
+
+        var out = "\""
+        for ch in str.unicodeScalars {
+            switch ch {
+            case "\\": out += "\\\\"
+            case "\"":  out += "\\\""
+            case "\n":  out += "\\n"
+            case "\t":  out += "\\t"
+            case "\r":  out += "\\r"
+            default:
+                if ch.value < 0x20 {
+                    out += String(format: "\\x%02x", ch.value)
+                } else {
+                    out.unicodeScalars.append(ch)
+                }
+            }
+        }
+        return out + "\""
+    }
+
+    /// Whether a plain (unquoted) YAML scalar would read back as something
+    /// other than this string.
+    private static func needsQuoting(_ str: String) -> Bool {
+        if str.isEmpty { return true }
+
+        // Leading/trailing space is stripped by every plain-scalar reader.
+        if str != str.trimmingCharacters(in: .whitespaces) { return true }
+
+        // Anything a reader would take for structure, a comment, or a
+        // different type.
+        if str.rangeOfCharacter(from: CharacterSet(charactersIn: ":#\n\r\t")) != nil { return true }
+        if let first = str.first,
+           "-?:,[]{}#&*!|>'\"%@`".contains(first) { return true }
+
+        // A string that would come back as a number, a bool or null.
+        if Int(str) != nil || Double(str) != nil { return true }
+        let lower = str.lowercased()
+        if ["true", "false", "null", "~", "yes", "no", "on", "off"].contains(lower) { return true }
+
+        return false
     }
 
     // MARK: - XML Serialization
