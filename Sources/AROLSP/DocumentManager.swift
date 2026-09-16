@@ -112,6 +112,29 @@ public final class DocumentManager: @unchecked Sendable {
         self.onCompile = onCompile
     }
 
+    /// The application's `Application.<Name>` declarations, if the server has
+    /// a workspace to scan.
+    ///
+    /// `Application.<Name>` resolves across every `.aro` file of an
+    /// application (GitLab #587), and the CLI drivers — `check`, `run`,
+    /// `build`, `test`, `debug` — all pass the declarations into the analyser.
+    /// The language server did not: it analysed one document at a time with no
+    /// workspace context, so an editor marked a valid cross-file call as an
+    /// error on code that compiles and runs (GitLab #589). A red squiggle on
+    /// correct code teaches people to ignore squiggles.
+    ///
+    /// A closure rather than a stored registry, so the server owns the cache
+    /// and its invalidation; the manager just asks at compile time.
+    nonisolated(unsafe) public var declaredActionsProvider: (@Sendable () -> UserActionRegistry?)?
+
+    /// Compile `content` with whatever application context the server has.
+    private func compile(_ content: String) -> CompilationResult {
+        if let declared = declaredActionsProvider?() {
+            return Compiler().compile(content, declaredUserActions: declared)
+        }
+        return Compiler.compile(content)
+    }
+
     // MARK: - Document Operations
 
     // All public mutation / query methods now go through `lock`
@@ -124,7 +147,7 @@ public final class DocumentManager: @unchecked Sendable {
     /// Open a document. Compiles **synchronously** — first diagnostics
     /// should not wait for a keystroke.
     public func open(uri: DocumentUri, content: String, version: Int) -> DocumentState {
-        let result = Compiler.compile(content)
+        let result = compile(content)
         let state = DocumentState(
             uri: uri,
             content: content,
@@ -143,7 +166,7 @@ public final class DocumentManager: @unchecked Sendable {
     /// synchronously (used by the full-sync path / tests). Supersedes
     /// any pending debounced compile.
     public func update(uri: DocumentUri, content: String, version: Int) -> DocumentState? {
-        let result = Compiler.compile(content)
+        let result = compile(content)
         let state = DocumentState(
             uri: uri,
             content: content,
@@ -251,7 +274,7 @@ public final class DocumentManager: @unchecked Sendable {
         generation: Int
     ) {
         // Compile outside the lock — it's the expensive part.
-        let result = Compiler.compile(content)
+        let result = compile(content)
         let newState = DocumentState(
             uri: uri,
             content: content,

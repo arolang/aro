@@ -44,18 +44,82 @@ public final class AROLanguageServer: Sendable {
 
     /// Thread-safe workspace tracking. The LSP class is `final class Sendable`,
     /// so mutation goes through this serialised box.
-    private final class WorkspaceState: @unchecked Sendable {
+    /// Internal rather than private so the tests can drive the real scan and
+    /// invalidation instead of only the `declaredActionsProvider` seam.
+    final class WorkspaceState: @unchecked Sendable {
         private let lock = NSLock()
         private var roots: [URL] = []
+
+        /// `Application.<Name>` declarations across the whole workspace, or
+        /// `nil` when they need rescanning.
+        ///
+        /// Cached because it is consulted on every compile — which is every
+        /// keystroke after the debounce — while the answer only changes when a
+        /// file is added, removed, or has its `Action` header edited.
+        /// `UserActionRegistry.declared(inFiles:)` is a parse-only scan, so a
+        /// rebuild is cheap, but doing it per keystroke would not be.
+        private var declaredActions: UserActionRegistry?
 
         func setRoots(_ urls: [URL]) {
             lock.lock(); defer { lock.unlock() }
             roots = urls
+            declaredActions = nil
         }
 
         var allRoots: [URL] {
             lock.lock(); defer { lock.unlock() }
             return roots
+        }
+
+        /// Drop the cache; the next compile rescans.
+        func invalidateDeclaredActions() {
+            lock.lock(); defer { lock.unlock() }
+            declaredActions = nil
+        }
+
+        /// The workspace's declared actions, scanning on first use.
+        ///
+        /// `nil` with no roots — an editor opened on a single loose file has
+        /// no application to speak for, and the analyser's own diagnostic
+        /// already says only this file was analysed.
+        func currentDeclaredActions() -> UserActionRegistry? {
+            lock.lock()
+            let cached = declaredActions
+            let currentRoots = roots
+            lock.unlock()
+
+            if let cached { return cached }
+            guard !currentRoots.isEmpty else { return nil }
+
+            let files = currentRoots.flatMap { Self.aroFiles(under: $0) }
+            guard !files.isEmpty else { return nil }
+            let scanned = UserActionRegistry.declared(inFiles: files)
+
+            lock.lock()
+            declaredActions = scanned
+            lock.unlock()
+            return scanned
+        }
+
+        /// Every `.aro` file under `root`, skipping the directories an
+        /// application's sources never live in.
+        private static func aroFiles(under root: URL) -> [URL] {
+            let skipped: Set<String> = [".build", ".git", "node_modules", ".swiftpm"]
+            guard let walker = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+
+            var found: [URL] = []
+            for case let url as URL in walker {
+                if url.hasDirectoryPath {
+                    if skipped.contains(url.lastPathComponent) { walker.skipDescendants() }
+                    continue
+                }
+                if url.pathExtension == "aro" { found.append(url) }
+            }
+            return found
         }
     }
 
@@ -77,6 +141,12 @@ public final class AROLanguageServer: Sendable {
                 diagnosticsHandler: diagnostics
             )
         }
+        // The manager asks for the application's declared actions on every
+        // compile, so a cross-file `Application.<Name>` call resolves in the
+        // editor exactly as it does under `aro check` (GitLab #589).
+        let workspace = workspaceState
+        self.documentManager.declaredActionsProvider = { workspace.currentDeclaredActions() }
+
         self.hoverHandler = HoverHandler()
         self.definitionHandler = DefinitionHandler()
         self.completionHandler = CompletionHandler()
@@ -316,7 +386,18 @@ public final class AROLanguageServer: Sendable {
             "textDocument/didOpen": { [self] in handleDidOpenSync(params: $0) },
             "textDocument/didChange": { [self] in handleDidChangeSync(params: $0) },
             "textDocument/didClose": { [self] in handleDidCloseSync(params: $0) },
-            "textDocument/didSave": { _ in },
+            // Not a full no-op any more: a save may have changed an `Action`
+            // header on disk, so the workspace action cache is dropped
+            // (GitLab #589). Diagnostics on this path are still published by
+            // the next compile.
+            "textDocument/didSave": { [self] _ in workspaceState.invalidateDeclaredActions() },
+            // A file created or deleted outside the editor changes which
+            // actions the workspace declares, and no `didOpen`/`didSave`
+            // announces it (GitLab #589). Clients only send this when they
+            // watch files, so it is a bonus signal, not the primary one.
+            "workspace/didChangeWatchedFiles": { [self] _ in
+                workspaceState.invalidateDeclaredActions()
+            },
             "$/cancelRequest": { _ in }
         ]
     }
@@ -957,7 +1038,10 @@ public final class AROLanguageServer: Sendable {
             "textDocument/didOpen": { [self] in await handleDidOpen(params: $0) },
             "textDocument/didChange": { [self] in await handleDidChange(params: $0) },
             "textDocument/didClose": { [self] in await handleDidClose(params: $0) },
-            "textDocument/didSave": { [self] in await handleDidSave(params: $0) }
+            "textDocument/didSave": { [self] in await handleDidSave(params: $0) },
+            "workspace/didChangeWatchedFiles": { [self] _ in
+                workspaceState.invalidateDeclaredActions()
+            }
         ]
     }
 
@@ -1057,8 +1141,26 @@ public final class AROLanguageServer: Sendable {
         }
 
         log("Document saved: \(uri)")
-        if let state = documentManager.get(uri: uri) {
-            publishDiagnostics(for: uri, state: state)
+
+        // A save is when an `Action` header reaches disk, so the workspace's
+        // declarations may have changed (GitLab #589).
+        workspaceState.invalidateDeclaredActions()
+
+        // Recompile *every* open document, not just this one. The squiggle
+        // that needs clearing is on the file that *calls*
+        // `Application.<Name>`, and that file was compiled against the old
+        // registry — so publishing only this document's diagnostics would
+        // leave the caller marked red until someone thought to edit it.
+        // Open documents are few; the registry rescan behind this is
+        // parse-only and cached.
+        for (openUri, state) in documentManager.all() {
+            if let recompiled = documentManager.update(
+                uri: openUri, content: state.content, version: state.version
+            ) {
+                publishDiagnostics(for: openUri, state: recompiled)
+            } else {
+                publishDiagnostics(for: openUri, state: state)
+            }
         }
     }
 
