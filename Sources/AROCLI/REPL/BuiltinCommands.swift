@@ -57,15 +57,15 @@ public struct HelpCommand: MetaCommand {
 
         Direct Mode:
           Type ARO statements directly, ending with .
-          Example: <Set> the <x> to 42.
+          Example: Set the <x> to 42.
 
         Feature Set Definition:
           Start with (Name: Activity) {
           End with }
           Example:
             (Calculate Sum: Math) {
-                <Compute> the <sum> from <a> + <b>.
-                <Return> an <OK: status> with <sum>.
+                Compute the <sum> from <a> + <b>.
+                Return an <OK: status> with <sum>.
             }
 
         Keyboard Shortcuts:
