@@ -557,11 +557,11 @@ components:
         created-at: { type: string, format: date-time }
       required: [id, customer-id, amount, status]
 
-    # Note: `created-at` can be sorted by (the Sort key is a string) but not
-    # read with `<order: created-at>` — a hyphenated name ending in a
-    # preposition does not lex as an identifier (GitLab #579). Name fields you
-    # need to extract `createdAt`, or extract them before the hyphen problem
-    # arises.
+    # `created-at` can be both sorted by and read with `<order: created-at>`.
+    # It used to be unreadable — a hyphenated name whose tail is a preposition
+    # did not lex as an identifier (GitLab #579, #583) — so fields like this
+    # had to be renamed `createdAt` even when the payload called them
+    # `created-at`.
 
     OrderSummary:
       type: object
