@@ -121,8 +121,16 @@ struct ReplNotebookView: View {
                         .padding(.top, SolaroSpace.s)
                         .padding(.bottom, 120)
                 }
-                .frame(maxWidth: 880)
+                // Fill the editor pane rather than sitting in a fixed
+                // 880pt column. A notebook's content is mostly code, tables
+                // and output — the things that suffer most from being
+                // wrapped early — and on a wide window the old cap left
+                // roughly a third of the pane empty on either side while
+                // the code inside scrolled or wrapped. The column now
+                // tracks the pane, so resizing the window or collapsing a
+                // sidebar gives the cells the space back.
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, SolaroSpace.l)
                 .padding(.top, SolaroSpace.l)
             }
             // Scroll only when the notebook moved the selection for
