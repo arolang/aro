@@ -154,11 +154,37 @@ so a later `/plugin add` of the same URL starts clean. The session continues.
 ## A Note on Reusable Logic
 
 A feature set whose business activity is `Action` is callable as
-`Application.<Name>` in a compiled application (ARO-0081). At the prompt it is
-not: the definition registers, `:fs` lists it, and the call site answers
-`Unknown user-defined action 'Application.Doubled'` (GitLab issue #576). Use
-`:invoke` for now — it passes the same `input` record a file's action reads
-(chapter 4) — and move the action into a file when it earns its keep.
+`Application.<Name>` (ARO-0081), and that holds at the prompt as much as in a
+compiled application:
+
+```
+aro> (Doubled: Action takes <number>) {
+(Doubled)>     Extract the <n> from the <input: number>.
+(Doubled)>     Compute the <out> from <n> * 2.
+(Doubled)>     Return an <OK: status> with { value: <out> }.
+(Doubled)> }
+Feature set 'Doubled' defined
+aro> Application.Doubled the <r> from 21.
+=> OK
+aro> Extract the <v> from the <r: value>.
+=> OK
+aro> Log "doubled: ${<v>}" to the <console>.
+[_repl_session_] doubled: 42
+=> OK
+```
+
+Every definition in the session is compiled alongside the statement that calls
+it, which is what makes this work — a statement on its own is a program of
+one, and `Application.<Name>` resolves against the program it is given. So an
+action can call a sibling action defined earlier, and redefining one is what
+the next call reaches. Earlier editions of this chapter said the call site
+answered `Unknown user-defined action` and told you to reach for `:invoke`
+instead; that was true until GitLab #576.
+
+`:invoke` still has its place for running a definition once without writing a
+call, and its JSON object now arrives as `input` — so `:invoke Doubled
+{"number": 21}` runs an action written for a file unchanged, rather than
+needing its `Extract`s rewritten.
 
 ## The Coding Assistant
 
