@@ -134,7 +134,13 @@ sub requires_serial_run {
     my $type = $hints->{type} // '';
     return 1 if $type eq 'socket'
              || $type eq 'socket-client'
-             || $type eq 'multiservice';
+             || $type eq 'multiservice'
+             # multi-context binds the port from its own openapi.yaml (8080)
+             # rather than one the harness hands it, so running it beside an
+             # HTTP example is a race: whoever loses falls back to 8081 and
+             # its output no longer matches. Serialised, the port is the
+             # contract's, every time.
+             || $type eq 'multi-context';
     return 0;
 }
 
