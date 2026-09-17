@@ -235,7 +235,7 @@ action-reference:
 # =============================================================================
 test:
   stage: test
-  image: swift:6.3-jammy
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -255,18 +255,12 @@ test:
       - .swiftpm/
     policy: pull-push
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq wget gnupg software-properties-common libgit2-dev libzmq3-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     # Authenticate to github.com so package resolution is not rate-limited
     # (see the `github-token` job). Placed after the packages are installed:
     # these images ship without git, so an earlier `git config` exits 127 and
     # takes the job with it. A no-op when the token is unset.
     - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq
-    - apt-get install -y -qq llvm-20-dev libzstd-dev
     # Create pkg-config file for LLVM
     - |
       cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
@@ -311,7 +305,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: swift:6.3-jammy
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -333,18 +327,12 @@ build:linux:
       - .swiftpm/
     policy: pull-push
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq git wget gnupg software-properties-common libgit2-dev libzmq3-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     # Authenticate to github.com so package resolution is not rate-limited
     # (see the `github-token` job). Placed after the packages are installed:
     # these images ship without git, so an earlier `git config` exits 127 and
     # takes the job with it. A no-op when the token is unset.
     - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq
-    - apt-get install -y -qq llvm-20-dev libzstd-dev
     # Create pkg-config file for LLVM
     - |
       cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
@@ -722,7 +710,7 @@ integration:repl:
 # version (pyproject asks for >=3.9; jammy has 3.10).
 integration:jupyter:
   stage: integration
-  image: ubuntu:22.04
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -732,13 +720,6 @@ integration:jupyter:
     - job: build:linux
       artifacts: true
   before_script:
-    - apt-get update -qq
-    - export DEBIAN_FRONTEND=noninteractive
-    - apt-get install -y -qq wget gnupg ca-certificates libgit2-dev libzmq3-dev libcurl4 python3 python3-pip
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq
-    - apt-get install -y -qq libllvm20
     - chmod +x ./aro-dist/aro
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - ./aro-dist/aro --version
@@ -816,7 +797,7 @@ integration:jupyter:
 # genuinely does not work on Linux yet.
 repl:smoke:
   stage: integration
-  image: swift:6.3-jammy
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
   allow_failure: true
   rules:
     - if: $CI_COMMIT_TAG
@@ -826,11 +807,6 @@ repl:smoke:
     - job: build:linux
       artifacts: true
   before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq wget gnupg ca-certificates libgit2-dev libzmq3-dev >/dev/null
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq && apt-get install -y -qq libllvm20 gdb >/dev/null
     - chmod +x ./aro-dist/aro
   script:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
