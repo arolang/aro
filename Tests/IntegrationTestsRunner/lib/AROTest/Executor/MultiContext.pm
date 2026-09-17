@@ -44,9 +44,14 @@ sub test_multi_context_example {
         @modes_to_test = ('interpreter');  # Default
     }
 
-    # Build binary if compiled mode is being tested
+    # Build binary if compiled mode is being tested.
+    #
+    # The build gets its own budget, not $timeout: that is the per-run
+    # budget for each of the three contexts, far too short to bound a
+    # compile (GitLab #592).
     if (grep { $_ eq 'compiled' } @modes_to_test) {
-        my $build_result = build_example($example_name, $timeout, $hints->{workdir});
+        my $build_result =
+            build_example($example_name, $options{build_timeout}, $hints->{workdir});
 
         if (!$build_result->{success}) {
             # Build failed - skip compiled mode tests

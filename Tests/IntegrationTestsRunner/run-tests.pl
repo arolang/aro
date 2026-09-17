@@ -29,12 +29,15 @@ GetOptions(
     'generate'   => \$options{generate},
     'verbose|v'  => \$options{verbose},
     'timeout=i'  => \$options{timeout},
+    'build-timeout=i' => \$options{build_timeout},
     'filter=s'   => \$options{filter},
     'jobs|j=i'   => \$options{jobs},
     'help|h'     => \$options{help},
 ) or die "Invalid options. Use --help for usage.\n";
 
 die "--jobs must be >= 1 (got $options{jobs})\n" if $options{jobs} < 1;
+die "--build-timeout must be >= 1 (got $options{build_timeout})\n"
+    if $options{build_timeout} < 1;
 
 if ($options{help}) {
     print_usage();
@@ -69,6 +72,11 @@ Options:
     --generate          Generate expected.txt files for all examples
     -v, --verbose       Show detailed output
     --timeout=N         Timeout in seconds for long-running examples (default: 60)
+    --build-timeout=N   Timeout in seconds for `aro build` in compiled mode
+                        (default: 300). Separate from --timeout because
+                        compiling an example and running one are different
+                        kinds of work; a loaded runner should not make a
+                        slow build look like a failing change (GitLab #592).
     --filter=PATTERN    Test only examples matching pattern
     -j, --jobs=N        Run up to N tests in parallel (default: 1).
                         Tests with hardcoded ports (socket / socket-client /
