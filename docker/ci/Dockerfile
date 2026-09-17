@@ -58,10 +58,20 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
         llvm-20-dev libllvm20 llvm-20 clang-20 \
     && rm -rf /var/lib/apt/lists/*
 
-# `aro build` shells out to `llc` and `clang` by name, and the integration
-# job symlinks them itself today.
+# `llc` and `llvm-objcopy` are given unversioned names because `aro build`
+# shells out to them by name and nothing else in the image provides them.
+#
+# `clang` is deliberately NOT symlinked. The Swift toolchain ships its own
+# clang, and `swift build` passes `-index-store-path` to it — a Swift/Apple
+# flag that upstream LLVM's clang does not recognise:
+#
+#   clang: error: unknown argument: '-index-store-path'
+#
+# Pointing /usr/bin/clang at clang-20 made every C target in the package fail
+# to compile. A job that genuinely wants LLVM 20's clang asks for `clang-20`
+# by name, or puts /usr/lib/llvm-20/bin on PATH for the command that needs it,
+# which is what `integration:linux` already does for itself.
 RUN ln -sf /usr/bin/llc-20 /usr/bin/llc \
-    && ln -sf /usr/bin/clang-20 /usr/bin/clang \
     && ln -sf /usr/bin/llvm-objcopy-20 /usr/bin/llvm-objcopy
 
 # The pkg-config file `test` writes by hand before building.
@@ -78,9 +88,20 @@ RUN mkdir -p /usr/lib/pkgconfig && printf '%s\n' \
     'Libs: -L${libdir} -lLLVM-20' \
     > /usr/lib/pkgconfig/llvm.pc
 
-ENV PATH="/usr/lib/llvm-20/bin:${PATH}" \
-    LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:${LD_LIBRARY_PATH}"
+# LLVM 20's libraries are needed at run time, but its *binaries* must not come
+# first on PATH: that would shadow the Swift toolchain's clang just as the
+# symlink above did, with the same `-index-store-path` failure. Jobs that need
+# those binaries prepend the directory themselves.
+ENV LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:${LD_LIBRARY_PATH}"
 
-# Fail the image build rather than a job three stages later.
-RUN swift --version && llc --version | head -1 && clang --version | head -1 \
+# Verify here rather than in a job three stages later. The clang probe is the
+# regression this image shipped the first time: `swift build` passes
+# -index-store-path, so if anything ever shadows the Swift toolchain's clang
+# again, the image build fails instead of every C target in the package.
+RUN swift --version \
+    && llc --version | head -1 \
+    && clang-20 --version | head -1 \
+    && printf 'int main(void){return 0;}\n' > /tmp/probe.c \
+    && clang -index-store-path /tmp/probe-index -c /tmp/probe.c -o /tmp/probe.o \
+    && rm -rf /tmp/probe.c /tmp/probe.o /tmp/probe-index \
     && perl -e 'print "perl ok\n"' && python3 --version
