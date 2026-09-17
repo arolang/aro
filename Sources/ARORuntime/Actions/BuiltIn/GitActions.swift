@@ -98,7 +98,14 @@ public struct GitCommitAction: ActionImplementation {
         context.bind(result.base, value: commitResult.asDictionary)
 
         // Emit event
-        context.emit(GitCommitEvent(hash: commitResult.hash, message: message, author: commitResult.author))
+        let gitEvent = GitCommitEvent(hash: commitResult.hash, message: message, author: commitResult.author)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
 
         return commitResult.asDictionary
     }
@@ -144,7 +151,14 @@ public struct PullAction: ActionImplementation {
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let value: [String: any Sendable] = ["branch": branch ?? "unknown", "output": output]
         context.bind(result.base, value: value)
-        context.emit(GitPullEvent(branch: branch))
+        let gitEvent = GitPullEvent(branch: branch)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
         return value
     }
 }
@@ -196,7 +210,14 @@ public struct PushAction: ActionImplementation {
         let branchName = branch ?? (try? git.currentBranch(in: repoURL)) ?? "unknown"
         let value: [String: any Sendable] = ["remote": remote, "branch": branchName]
         context.bind(result.base, value: value)
-        context.emit(GitPushEvent(branch: branchName))
+        let gitEvent = GitPushEvent(branch: branchName)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
         return value
     }
 }
@@ -249,7 +270,14 @@ public struct CloneAction: ActionImplementation {
 
         let value = cloneResult.asDictionary
         context.bind(result.base, value: value)
-        context.emit(GitCloneEvent(url: url, path: destination.path))
+        let gitEvent = GitCloneEvent(url: url, path: destination.path)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
         return value
     }
 }
@@ -284,7 +312,14 @@ public struct GitCheckoutAction: ActionImplementation {
         try git.checkout(ref: ref, in: repoURL)
         let value: [String: any Sendable] = ["ref": ref]
         context.bind(result.base, value: value)
-        context.emit(GitCheckoutEvent(ref: ref))
+        let gitEvent = GitCheckoutEvent(ref: ref)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
         return value
     }
 }
@@ -334,7 +369,14 @@ public struct TagAction: ActionImplementation {
         try git.tag(name: name, message: message, in: repoURL)
         let value: [String: any Sendable] = ["name": name]
         context.bind(result.base, value: value)
-        context.emit(GitTagEvent(name: name))
+        let gitEvent = GitTagEvent(name: name)
+        context.emit(gitEvent)
+        // Also as a DomainEvent, so an ARO handler can observe it:
+        // handler registration subscribes on the Swift type `DomainEvent`,
+        // which a typed Git event is not (GitLab #588).
+        if let observable = GitEventBridge.domainEvent(for: gitEvent) {
+            context.emit(observable)
+        }
         return value
     }
 }

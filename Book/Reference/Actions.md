@@ -7,7 +7,9 @@ are the verbs you write. A handful are registered under a longer internal name â
 `aro actions` prints; the verb is what the parser accepts. Run `aro actions` for
 the live table and `aro actions --qualifiers` for the qualifier set.
 
-> Git actions (`Stage`, `Commit`, `Push`, `Pull`, `Clone`, `Checkout`, `Tag`) operate on the `<git>` system object and emit `git.commit`, `git.push`, `git.pull`, `git.checkout`, `git.tag`, `git.clone` events. See [ARO-0080](../../Proposals/ARO-0080-git-actions.md) and Chapter 48 of TheLanguageGuide.
+> Git actions (`Stage`, `Commit`, `Push`, `Pull`, `Clone`, `Checkout`, `Tag`) operate on the `<git>` system object and emit events a feature set can subscribe to: `GitCommit`, `GitPush`, `GitPull`, `GitCheckout`, `GitTag`, `GitClone`.
+>
+> Those are the names to write in a handler â€” `(Notify Release: GitTag Handler)`. The dotted forms below (`git.tag`) are the runtime's internal event types, and a dot cannot appear in a business activity, so they are not spellable as handler names. See [ARO-0080](../../Proposals/ARO-0080-git-actions.md) and Chapter 48 of TheLanguageGuide.
 
 > Plugin actions are namespaced via the plugin's `handle:` (PascalCase). For example, a plugin with `handle: Markdown` exposing a `ToHTML` action is called as `Markdown.ToHTML the <html> from <source>.`. See ThePluginGuide.
 
@@ -22,11 +24,11 @@ the live table and `aro actions --qualifiers` for the qualifier set.
 | **Assert**    | Verification      | OWN               | Checks that a condition holds true.<br>`Assert the <value> equals <expected>.` |
 | **Broadcast** | Communication     | RESPONSE          | Sends to multiple WebSocket recipients.<br>`Broadcast the <message> to the <websocket>.` |
 | **Call**      | Control           | OWN               | Invokes a function or service.<br>`Call the <result> via <API: POST /users> with <data>.` |
-| **Checkout**  | Git               | OWN               | Switches Git branches via `<git>`. Emits `git.checkout`.<br>`Checkout the <branch> from the <git> with "feature/x".` |
+| **Checkout**  | Git               | OWN               | Switches Git branches via `<git>`. Emits `git.checkout`, observable as `GitCheckout Handler`.<br>`Checkout the <branch> from the <git> with "feature/x".` |
 | **Clear**     | Terminal          | OWN               | Clears the terminal screen.<br>`Clear the <screen> for the <terminal>.` |
-| **Clone**     | Git               | REQUEST           | Clones a remote repository via `<git>`. Optional `branch:` checks out that ref at clone time. Emits `git.clone`.<br>`Clone the <repo> from the <git> with { url: "...", path: "./out", branch: "main" }.` |
+| **Clone**     | Git               | REQUEST           | Clones a remote repository via `<git>`. Optional `branch:` checks out that ref at clone time. Emits `git.clone`, observable as `GitClone Handler`.<br>`Clone the <repo> from the <git> with { url: "...", path: "./out", branch: "main" }.` |
 | **Close**     | Server            | SERVER            | Terminates a connection or handle.<br>`Close the <database-connections> for the <application>.` |
-| **Commit**    | Git               | EXPORT            | Creates a Git commit on `<git>`. Emits `git.commit`.<br>`Commit the <result> to the <git> with "feat: add feature".` |
+| **Commit**    | Git               | EXPORT            | Creates a Git commit on `<git>`. Emits `git.commit`, observable as `GitCommit Handler`.<br>`Commit the <result> to the <git> with "feat: add feature".` |
 | **Compare**   | Evaluation        | OWN               | Compares two values and binds a fresh result: `<r: matches>` is the boolean, `<r: result>` is `equal`/`less`/`greater`.<br>`Compare the <same> from the <hash> against the <stored-hash>.` |
 | **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`Compute the <total> from <price> * <quantity>.` |
 | **Connect**   | Server            | SERVER            | Establishes a link between endpoints.<br>`Connect the <socket> to the <host: "localhost">.` |
@@ -56,8 +58,8 @@ the live table and `aro actions --qualifiers` for the qualifier set.
 | **Probe**     | Communication     | REQUEST           | Issues a lightweight liveness/metadata request without fetching a body.<br>`Probe the <health> from the <url>.` |
 | **Prompt**    | Terminal          | REQUEST           | Prompts the user for terminal input.<br>`Prompt the <answer> for the <question>.` |
 | **Publish**   | Communication     | EXPORT            | Makes a variable globally accessible across feature sets.<br>`Publish as <app-config> <config>.` |
-| **Pull**      | Git               | REQUEST           | Pulls remote changes into `<git>`. Emits `git.pull`.<br>`Pull the <updates> from the <git>.` |
-| **Push**      | Git               | EXPORT            | Pushes local commits via `<git>`. Emits `git.push`.<br>`Push the <result> to the <git>.` |
+| **Pull**      | Git               | REQUEST           | Pulls remote changes into `<git>`. Emits `git.pull`, observable as `GitPull Handler`.<br>`Pull the <updates> from the <git>.` |
+| **Push**      | Git               | EXPORT            | Pushes local commits via `<git>`. Emits `git.push`, observable as `GitPush Handler`.<br>`Push the <result> to the <git>.` |
 | **Read**      | I/O               | REQUEST           | Reads data from a file.<br>`Read the <config> from the <file: "./config.json">.` |
 | **Receive**   | Communication     | REQUEST           | Accepts incoming data from external source.<br>`Receive the <message> from the <event>.` |
 | **Reduce**    | Processing        | OWN               | Aggregates elements into a summary.<br>`Reduce the <total> from the <amounts> with sum.` |
@@ -80,7 +82,7 @@ the live table and `aro actions --qualifiers` for the qualifier set.
 | **Stop**      | Server            | SERVER            | Ends a server or service.<br>`Stop the <http-server> with <application>.` |
 | **Store**     | Persistence       | RESPONSE          | Saves data to a repository.<br>`Store the <user> into the <user-repository>.` |
 | **Stream**    | I/O               | REQUEST           | Reads a file line-by-line as a lazy stream, or subscribes to SSE/WebSocket.<br>`Stream the <lines> from "./bigfile.dat".` |
-| **Tag**       | Git               | EXPORT            | Creates a Git tag on `<git>`. Emits `git.tag`.<br>`Tag the <release> for the <git> with "v1.0.0".` |
+| **Tag**       | Git               | EXPORT            | Creates a Git tag on `<git>`. Emits `git.tag`, observable as `GitTag Handler`.<br>`Tag the <release> for the <git> with "v1.0.0".` |
 | **Then**      | Testing           | OWN               | Denotes expected result in test scenarios.<br>`Then the <result> with <expected>.` |
 | **Throw**     | Error Handling    | RESPONSE          | Signals an exception or fault.<br>`Throw a <NotFound: error> for the <user>.` |
 | **Transform** | Processing        | OWN               | Renders a template with data context.<br>`Transform the <output> from the <template: "welcome.tpl">.` |
