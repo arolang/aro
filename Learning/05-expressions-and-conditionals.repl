@@ -86,7 +86,7 @@
       "outputs" : [
 
       ],
-      "source" : "Two of the guarded lines were skipped: `<free-delivery>` and\n`<under-minimum>` are both `false`.\n\nGuards work on *any* statement, including ones that bind. Caution: a\nskipped `Compute … when …` binds **nothing** — reading the name later\nfails. Keep guarded bindings close to the guarded statements that use\nthem, and prefer `match` when every path must produce a value."
+      "source" : "Three of those four lines carry a guard, and only one of them ran.\n`Loyalty discount available.` printed because `<discount-eligible>` is\n`true`; `Free delivery unlocked!` and `Below the delivery minimum.`\nstayed silent because `<free-delivery>` and `<under-minimum>` are both\n`false`. `Rules checked.` has no guard, so it always prints.\n\nWorth noticing what the session *shows*: a statement whose guard is\nfalse still reports `=> OK`. It did not fail — there was simply\nnothing to do. The console output is the only evidence of which branch\nwas taken.\n\nGuards work on *any* statement, including ones that bind. Caution: a\nskipped `Compute … when …` binds **nothing** — reading the name later\nfails with `Undefined variable`. Keep guarded bindings close to the\nguarded statements that use them, and prefer `match` when every path\nmust produce a value."
     },
     {
       "id" : "nb05-c12",
