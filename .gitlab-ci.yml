@@ -494,11 +494,28 @@ integration:linux:
     - job: github-token
       artifacts: true
       optional: true
+  # Cache what this job recompiles every run: the five plugin packages'
+  # build directories. Together they are ~2177s of a ~3533s job, and they are
+  # a pure function of their resolved dependency graph (GitLab #595).
+  #
+  # The previous declaration cached `/usr/share/swift/` with `policy: pull`
+  # and did nothing at all. Two reasons, both visible in the job log:
+  # the path is outside $CI_PROJECT_DIR, which the runner cannot archive, and
+  # `pull` means nothing ever writes it — so every run reported
+  # "WARNING: Cache file does not exist / Failed to extract cache".
+  #
+  # Keyed on the plugins' own Package.resolved files, so a dependency bump
+  # invalidates it. That is the correct trigger: what is being avoided is
+  # dependency compilation, and swift-syntax is the bulk of it.
   cache:
-    key: swift-integration
-    paths:
-      - /usr/share/swift/
-    policy: pull
+    - key:
+        files:
+          - Examples/GreetingPlugin/Plugins/plugin-swift-hello/Package.resolved
+          - Examples/SQLiteExample/plugins/SQLitePlugin/Package.resolved
+        prefix: plugin-build
+      paths:
+        - Examples/*/[Pp]lugins/*/.build
+      policy: pull-push
   before_script:
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
