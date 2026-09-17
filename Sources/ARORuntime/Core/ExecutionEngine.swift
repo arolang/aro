@@ -779,21 +779,39 @@ public actor ExecutionEngine {
         let fileHandlers = program.fileHandlers
 
         for analyzedFS in fileHandlers {
-            let featureSetName = analyzedFS.featureSet.name
-            let lowercaseName = featureSetName.lowercased()
+            let lowercaseName = analyzedFS.featureSet.name.lowercased()
 
-            // Determine which file event type this handler should respond to
-            if lowercaseName.contains("created") {
+            // Which of the three the name asks for. A name that asks for none
+            // gets all three.
+            //
+            // There used to be no `else`: a handler whose name contained
+            // neither "created", "modified" nor "deleted" matched no branch and
+            // subscribed to *nothing*. It compiled, `aro check` reported no
+            // problem, and it simply never ran — with no output at any log
+            // level to say so (GitLab #570, #571). The issue's own repro,
+            // `(File Changed: File Event Handler)`, is the natural thing to
+            // write and was dead code.
+            //
+            // Subscribing to all three is what such a name asks for, and it
+            // cannot break a working program: the alternative was firing never.
+            let wantsCreated = lowercaseName.contains("created")
+            let wantsModified = lowercaseName.contains("modified")
+            let wantsDeleted = lowercaseName.contains("deleted")
+            let named = wantsCreated || wantsModified || wantsDeleted
+
+            if wantsCreated || !named {
                 eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeFileEventHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
-                        eventData: ["path": event.path]
+                        eventData: ["path": event.path, "kind": "created"]
                     )
                 }
-            } else if lowercaseName.contains("modified") {
+            }
+
+            if wantsModified || !named {
                 eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     // Skip temp files (hidden files starting with .)
@@ -805,17 +823,19 @@ public actor ExecutionEngine {
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
-                        eventData: ["path": event.path]
+                        eventData: ["path": event.path, "kind": "modified"]
                     )
                 }
-            } else if lowercaseName.contains("deleted") {
+            }
+
+            if wantsDeleted || !named {
                 eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeFileEventHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
-                        eventData: ["path": event.path]
+                        eventData: ["path": event.path, "kind": "deleted"]
                     )
                 }
             }

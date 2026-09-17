@@ -1007,15 +1007,39 @@ Watch the <file-monitor> for the <directory> with ".".
 | `FileModifiedEvent` | File content changed | `path` - file path |
 | `FileDeletedEvent` | File removed | `path` - file path |
 
+Every file event's payload also carries `kind` — `"created"`, `"modified"` or
+`"deleted"` — so one handler can serve all three.
+
 ### 5.3 Event Handlers
 
 Feature sets with business activity `File Event Handler` receive file events:
+
+The **feature set name** selects the event: the runtime looks for `created`,
+`modified` or `deleted` in it.
 
 | Feature Set Name | Handles Event |
 |------------------|---------------|
 | `Handle File Created` | `FileCreatedEvent` |
 | `Handle File Modified` | `FileModifiedEvent` |
 | `Handle File Deleted` | `FileDeletedEvent` |
+| `File Changed` — naming none of the three | **all three** |
+
+A name that asks for none of them receives all three, and `<event: kind>` says
+which one arrived:
+
+```aro
+(File Changed: File Event Handler) {
+    Extract the <path> from the <event: path>.
+    Extract the <kind> from the <event: kind>.
+    Log "${<kind>}: ${<path>}" to the <console>.
+    Return an <OK: status> for the <event>.
+}
+```
+
+Such a handler used to subscribe to **nothing** — it compiled, `aro check`
+reported no problem, and it never ran, with no output to say so
+(GitLab #570, #571). The payload was also only `{ path }`, so a single handler
+could not have told the three apart even if it had fired.
 
 ```aro
 (Handle File Created: File Event Handler) {
