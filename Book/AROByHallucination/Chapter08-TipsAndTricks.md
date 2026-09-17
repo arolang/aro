@@ -52,7 +52,7 @@ Four you will meet:
 
 **`Compute … from <a> and <b>` is a boolean.** It reads like "combine these two", and it computes logical AND. If you wanted a record, that is `Create the <x> with { a: <a>, b: <b> }.`
 
-**A `File Event Handler` subscribes by its own name.** The runtime matches `created`, `modified` or `deleted` inside the feature-set name. `(File Changed: File Event Handler)` matches none of them and never runs (GitLab #570).
+**A `File Event Handler` subscribes by its own name.** The runtime matches `created`, `modified` or `deleted` inside the feature-set name; a name matching none of them receives all three, with `<event: kind>` saying which arrived. `(File Changed: File Event Handler)` used to match nothing and never run (GitLab #570).
 
 What these have in common is that the English sentence is right and the ARO is wrong. That is the specific hazard of a language designed to read like prose, being written by a model trained on prose. The model is a fluent speaker of ARO's surface and an unreliable one of its semantics — and so, at first, are you.
 

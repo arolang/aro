@@ -238,7 +238,7 @@ Nothing. Not an error — nothing at all. This is the best example in the book o
 
 Two things are wrong, and neither is visible.
 
-**A `File Event Handler` subscribes by its own name.** The runtime looks for the words `created`, `modified` or `deleted` *in the feature-set name* and wires it to that event. A handler called `File Changed` matches none of the three, subscribes to nothing, and is dead code. `aro check` does not warn (GitLab #570).
+**A `File Event Handler` subscribes by its own name.** The runtime looks for the words `created`, `modified` or `deleted` *in the feature-set name* and wires it to that event. A handler called `File Changed` names none of the three and therefore receives all three; read `<event: kind>` to tell them apart. It used to subscribe to nothing and be dead code, with no warning from `aro check` (GitLab #570).
 
 **There is no `kind` field.** The event payload is `{ path }` and nothing else, so one handler could not distinguish the three events even if it did fire. `[created]` was never going to be printable.
 
