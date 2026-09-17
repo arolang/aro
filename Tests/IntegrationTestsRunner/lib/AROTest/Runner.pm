@@ -537,10 +537,15 @@ sub run_test {
         $result->{compiled_duration} = 0;
         $result->{build_duration} = 0;
     } elsif ($mode eq 'compiled' || $mode eq 'both') {
-        # Build the example first (use workdir if specified)
-        # Use global timeout for build (not hints timeout) - hints timeout may be very short
-        # for keep-alive examples (e.g. 3s) which would cause builds to time out on slow CI machines
-        my $build_result = build_example($example_name, $options{timeout}, $hints->{workdir});
+        # Build the example first (use workdir if specified).
+        #
+        # Not the hints timeout: that is the *run* budget, and for a
+        # keep-alive example it is deliberately short (3s), which would time
+        # out any build. Not the global run timeout either — bounding a
+        # compile with the 60s meant for a run made a loaded runner
+        # indistinguishable from a broken change (GitLab #592).
+        my $build_result =
+            build_example($example_name, $options{build_timeout}, $hints->{workdir});
         $result->{build_duration} = $build_result->{duration};
 
         if (!$build_result->{success}) {

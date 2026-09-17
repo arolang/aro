@@ -22,6 +22,19 @@ our %options = (
     generate => 0,
     verbose  => 0,
     timeout  => 60,
+    # `aro build` gets its own budget, separate from the run timeout.
+    #
+    # Compiling an example is not the same kind of work as running one, and
+    # bounding both with 60s made a loaded runner look like a broken change:
+    # three unrelated merge requests failed `integration:linux` on the same
+    # day with `RecursiveActions … ERROR`, which is the build-failed branch
+    # (GitLab #592). That example builds in 0.8s locally.
+    #
+    # 300s is chosen to be far above any honest build and still catch a
+    # genuinely hung one. A build that takes five minutes is worth failing;
+    # one that takes ninety seconds on a busy runner is not a defect in
+    # whichever merge request happened to be queued at the time.
+    build_timeout => 300,
     filter   => '',
     jobs     => 1,
     help     => 0,
