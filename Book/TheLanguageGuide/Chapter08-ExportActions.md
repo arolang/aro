@@ -91,7 +91,7 @@ Data stored in a repository can be retrieved by any feature set:
     Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve with a filter *)
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
     Return an <OK: status> with <user>.
 }
 ```
@@ -531,7 +531,7 @@ the same configuration back out of the repository.
     Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve stored user *)
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
 
     Return an <OK: status> with <user>.
 }

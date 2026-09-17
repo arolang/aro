@@ -285,7 +285,7 @@ The one case that is *not* an error is a repository query that matches nothing.
 It binds `[]`, and an empty list is a perfectly good value:
 
 ```aro
-Retrieve the <user> from the <user-repository> where <id> = <id>.
+Retrieve the <user> from the <user-repository> where id = <id>.
 Compute the <n: length> from <user>.
 (* n = 0 — no error was raised *)
 ```
@@ -296,12 +296,12 @@ clause (Chapter 36):
 
 ```aro
 (* Works *)
-Retrieve the <found> from the <user-repository> where <id> = <id>.
+Retrieve the <found> from the <user-repository> where id = <id>.
 Compute the <count: length> from <found>.
 Return a <NotFound: status> for the <missing: user> when <count> == 0.
 
 (* Or supply a fallback and skip the check entirely *)
-Retrieve the <user> from the <user-repository> where <id> = <id>
+Retrieve the <user> from the <user-repository> where id = <id>
     default { id: <id>, name: "unknown" }.
 ```
 
@@ -320,7 +320,7 @@ console.log(user.name);
 ARO code:
 
 ```aro
-Retrieve the <user> from the <user-repository> where <id> = <id>
+Retrieve the <user> from the <user-repository> where id = <id>
     default { id: <id>, name: "unknown" }.
 Log <user: name> to the <console>.
 ```

@@ -117,6 +117,30 @@ struct BareWhereFieldSessionTests {
         #expect(user?["name"] as? String == "Grace")
     }
 
+    @Test("A bare field resolves even when a binding shares its name (GitLab #573)")
+    func bareFieldBeatsASameNamedBinding() async {
+        // The idiomatic repository query, and the reason #573 argued for the
+        // bare form: with brackets, `where <id> = <id>` reads as a tautology
+        // rather than a filter. Bare, it reads as what it is — the *field*
+        // `id` against the *binding* `<id>` — and the two must not be confused
+        // for each other when they share a name.
+        let session = REPLSession(suppressLogPrefix: true)
+        let engine = REPLCellEngine(session: session)
+
+        _ = await engine.executeCell(#"Compute the <u1> from { id: 1, name: "Ada" }."#)
+        _ = await engine.executeCell("Store the <u1> into the <collide573-repository>.")
+        _ = await engine.executeCell(#"Compute the <u2> from { id: 2, name: "Grace" }."#)
+        _ = await engine.executeCell("Store the <u2> into the <collide573-repository>.")
+        _ = await engine.executeCell("Compute the <id> from 2.")
+
+        let outcome = await engine.executeCell(
+            "Retrieve the <user> from the <collide573-repository> where id is <id>.")
+        #expect(outcome.error == nil)
+        // Grace, not Ada: the predicate compared the field to the binding's
+        // value, not the field to itself.
+        #expect((session.getVariable("user") as? [String: Any])?["name"] as? String == "Grace")
+    }
+
     @Test("Delete's single-predicate guard takes a bare field")
     func bareDelete() async {
         let session = REPLSession(suppressLogPrefix: true)

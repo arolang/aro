@@ -18,13 +18,18 @@ That was the hallucination. A useful one. The next hour of conversation was spen
 Retrieve the <user> from the <user-repository> where id = <id>.
 ```
 
-It has barely changed since — though "barely" is doing a little work. That exact line no longer parses: the field in a `where` clause wears angle brackets like everything else, and the comparison is spelled `is` or `==`. What you would type today is
+It has barely changed since — and for a while "barely" was doing more work than
+that. For most of the language's life that exact line did *not* parse: the field
+in a `where` clause had to wear angle brackets like everything else, so you
+typed `where <id> is <id>` — which reads as a tautology rather than a filter.
+It parses again now, verbatim, because the brackets became optional there
+(GitLab #545, #573) and `=` is accepted alongside `is`.
 
-```aro
-Retrieve the <user> from the <user-repository> where <id> is <id>.
-```
-
-Same shape, same reading, one pair of brackets more. It is a small thing, and it is the first entry in this book's running theme: a sentence that reads perfectly and does not compile. The model that produced the original guessed the grammar of the language before the grammar existed, and got it almost exactly right. Almost is where the whole book lives.
+That is the first entry in this book's running theme, and it resolved in the
+happier direction: a sentence that read perfectly and did not compile, until the
+language came back to it. The model that produced the original guessed the
+grammar before the grammar existed, and got it exactly right — it just took the
+implementation a few years to agree.
 
 ## 1.2 Letting the Machine Write
 

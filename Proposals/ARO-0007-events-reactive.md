@@ -624,7 +624,7 @@ Retrieve the <newest> from the <user-repository: 0>.
 (* GET /messages/{id} - Retrieve single message *)
 (getMessage: Chat API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <message> from the <message-repository> where <id> is <id>.
+    Retrieve the <message> from the <message-repository> where id is <id>.
     Return an <OK: status> with <message>.
 }
 ```
