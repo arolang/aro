@@ -70,7 +70,7 @@
       "outputs" : [
 
       ],
-      "source" : "## The qualifier namespace is closed\n\nA Compute qualifier must resolve to one of exactly four things: a\nbuilt-in, a plugin qualifier (`Handle.qualifier`), a chain (`a|b`), or\na date offset (`-7d`). **Anything else is an error.**\n\nIt was not always so. An unrecognized qualifier used to return its\ninput unchanged — so a typo compiled, passed `aro check`, exited\n`[OK]`, and printed the wrong value (GitLab #486 tells the story).\nCounting the café's feedback lines with an invented `linecount`\nqualifier once returned *the whole file*. Try it — the next cell is\nsupposed to fail."
+      "source" : "## The qualifier namespace is closed\n\nA Compute qualifier must resolve to one of exactly four things: a\nbuilt-in, a plugin qualifier (`Handle.qualifier`), a chain (`a|b`), or\na date offset (`-7d`). **Anything else is an error.**\n\nThat matters most for the qualifier you *meant* to spell correctly. An\ninvented `linecount` does not quietly hand back its input for the rest\nof the program to treat as a line count — it stops, and names what it\ndid not recognise. Try it: the next cell is supposed to fail."
     },
     {
       "id" : "nb03-c10",
@@ -94,7 +94,7 @@
       "outputs" : [
 
       ],
-      "source" : "The diagnostic names the problem — `Unknown Compute qualifier\n'linecount'` — and in a full program `aro check` reports it before\nanything runs, so a green check now means every qualifier exists. The\ncorrect spelling for counting lines is two small steps: `lines`, then\n`length`. (`lines` already drops the trailing newline's phantom\nelement, so a three-line file counts as 3, not 4.)"
+      "source" : "The diagnostic names the problem — `Unknown Compute qualifier\n'linecount'` — and in a full program `aro check` reports it before\nanything runs, so a green check means every qualifier exists. The\ncorrect spelling for counting lines is two small steps: `lines`, then\n`length`. (`lines` already drops the trailing newline's phantom\nelement, so a three-line file counts as 3, not 4.)"
     },
     {
       "id" : "nb03-c13",
