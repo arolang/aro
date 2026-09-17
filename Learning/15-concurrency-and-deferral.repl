@@ -54,7 +54,7 @@
       "outputs" : [
 
       ],
-      "source" : "### Variant: bounding the fan-out\n\nThe default bound is a multiple of the core count, not one task per\nitem — an unbounded fan-out over 500 elements used to exhaust the\nthread pool. When the iteration cost is dominated by an external\nservice (a payment API, a rate-limited supplier), set the bound to\nwhat *that service* tolerates, not what your machine does:"
+      "source" : "### Variant: bounding the fan-out\n\nThe default bound is a multiple of the core count, not one task per\nitem, so a fan-out over 500 elements runs in waves rather than\nclaiming 500 threads at once. When the iteration cost is dominated by an external\nservice (a payment API, a rate-limited supplier), set the bound to\nwhat *that service* tolerates, not what your machine does:"
     },
     {
       "id" : "nb15-c08",

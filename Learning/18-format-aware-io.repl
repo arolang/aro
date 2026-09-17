@@ -118,7 +118,7 @@
       "outputs" : [
 
       ],
-      "source" : "### Variant: opting out with `raw`\n\nThe opt-out matters for more than inspection. A `.txt` file is\nparsed as `key=value` pairs by default — so a *free-form* text file\n(a note, a log fragment, a list of numbers) silently yields an empty\ndictionary, which is the kind of bug that ships. `raw` bypasses the\nformatter entirely, in both directions: the string goes to disk\nverbatim and comes back verbatim (GitLab #197 is the war story):"
+      "source" : "### Variant: opting out with `raw`\n\nThe opt-out matters for more than inspection. A `.txt` file is\nparsed as `key=value` pairs by default — so a *free-form* text file\n(a note, a log fragment, a list of numbers) silently yields an empty\ndictionary, which is the kind of bug that ships. `raw` bypasses the\nformatter entirely, in both directions: the string goes to disk\nverbatim and comes back verbatim:"
     },
     {
       "id" : "nb18-c16",

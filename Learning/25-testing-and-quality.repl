@@ -22,7 +22,7 @@
       "outputs" : [
 
       ],
-      "source" : "## What just happened\n\n- **`Compare`** is an *OWN* action taking **both operands as inputs**\n  — `from` the actual, `against` the expected — and binding a **fresh\n  result**. (An older spelling tried to rebind its own first operand;\n  immutability killed it — GitLab #469.)\n- The result record has two fields:\n  - **`matches`** — a boolean, `true` on equality. The assertion bit.\n  - **`result`** — the ordering: `equal`, `less`, or `greater`.\n- Nothing stops on a mismatch — Compare *reports*, you decide. That is\n  what makes it composable into checks: guard on `matches`, log a\n  verdict, or feed it onward.\n\nThis is the assertion shape available *inside a session*. The\ndedicated test actions (`Then`, `Assert`) belong to the `aro test`\nrunner and appear later in fenced form."
+      "source" : "## What just happened\n\n- **`Compare`** is an *OWN* action taking **both operands as inputs**\n  — `from` the actual, `against` the expected — and binding a **fresh\n  result**. It never touches either operand, which is what lets it\n  live under immutability.\n- The result record has two fields:\n  - **`matches`** — a boolean, `true` on equality. The assertion bit.\n  - **`result`** — the ordering: `equal`, `less`, or `greater`.\n- Nothing stops on a mismatch — Compare *reports*, you decide. That is\n  what makes it composable into checks: guard on `matches`, log a\n  verdict, or feed it onward.\n\nThis is the assertion shape available *inside a session*. The\ndedicated test actions (`Then`, `Assert`) belong to the `aro test`\nrunner and appear later in fenced form."
     },
     {
       "id" : "nb25-c04",
@@ -86,7 +86,7 @@
       "outputs" : [
 
       ],
-      "source" : "## Design for quality: the closed qualifier namespace\n\nA quality story that is about the *language*, not your code. Compute\nqualifiers used to be an open namespace: an invented qualifier\ncompiled, passed `aro check`, ran, exited `[OK]` — and silently\nreturned its input unchanged. The wrong number, wearing a green\ncheckmark. That bug class was closed by fiat (GitLab #486): a\nqualifier now **must** resolve to a built-in, a plugin qualifier, or a\ndate offset — anything else is an error, at run time *and* at\n`aro check` time (GitLab #465), where the check names the closest\nreal qualifier.\n\nThe next cell fails on purpose. In a session the refusal arrives as a\nbundle of analyzer diagnostics — find\n`Unknown Compute qualifier 'sparkle'` among them — then imagine the\nalternative: `sparkle` quietly handing back `\"abc\"` with a green\ncheckmark."
+      "source" : "## Design for quality: the closed qualifier namespace\n\nA quality story that is about the *language*, not your code. A Compute\nqualifier **must** resolve to a built-in, a plugin qualifier, or a\ndate offset — anything else is an error, at run time *and* at\n`aro check` time, where the check names the closest real qualifier.\n\nThe payoff is that a green check is worth something: every qualifier\nin the program exists. An invented one cannot slip through by handing\nback its input and letting a plausible-looking wrong number reach\nproduction wearing a checkmark.\n\nThe next cell fails on purpose. In a session the refusal arrives as a\nbundle of analyzer diagnostics — find\n`Unknown Compute qualifier 'sparkle'` among them."
     },
     {
       "id" : "nb25-c12",
