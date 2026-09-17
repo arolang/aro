@@ -439,7 +439,7 @@ build:linux:
 # =============================================================================
 integration:linux:
   stage: integration
-  image: ubuntu:22.04
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -505,72 +505,38 @@ integration:linux:
         - Examples/*/[Pp]lugins/*/.build
       policy: pull-push
   before_script:
-    - apt-get update -qq
-    - export DEBIAN_FRONTEND=noninteractive
-    - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev libzmq3-dev gnupg software-properties-common python3 python3-dev python3-venv build-essential
-
-    # Python plugin SDK (GitLab #486 fallout, job 122170).
-    #
-    # Examples/QualifierPluginPython declares `stats.*` qualifiers from a
-    # python-plugin. The container had python3 but never the SDK the plugin
-    # imports, so the plugin registered nothing and every `stats.*` qualifier
-    # went unresolved. That used to be invisible: an unresolved qualifier
-    # returned its input unchanged, so the example printed empty values and
-    # still matched its occurrence-check expectations. #486 closed the
-    # qualifier namespace, the unresolved name became a hard error, and the
-    # example started failing — surfacing a plugin that had never actually
-    # run here.
-    #
-    # Installed rather than tolerated, per this job's own policy note below:
-    # fix it or quarantine it, never reinstate blanket tolerance. If the
-    # runner cannot reach the SDK the install fails loudly here, which is the
-    # honest signal — a green example that exercised no plugin was worth less
-    # than a red one that says why.
-    - apt-get install -y -qq python3-pip
-    # Authenticate to github.com so package resolution is not rate-limited
-    # (see the `github-token` job). Placed after the packages are installed:
-    # these images ship without git, so an earlier `git config` exits 127 and
-    # takes the job with it. A no-op when the token is unset.
+    # The image carries the packages, LLVM 20, perl modules and Rust that this
+    # job used to install for itself (GitLab #596). What remains is either
+    # job-specific or a fallback for running against an image that predates
+    # the addition — each check is a no-op once the image has the thing.
     - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
     - pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
     - python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
-
-    # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
-    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
-    - apt-get update -qq
-    - apt-get install -y -qq libllvm20 llvm-20 clang-20
-
-    # Setup LLVM 20 for both aro binary and llc/clang (V2 code generator produces LLVM 20 IR)
-    - ln -sf /usr/bin/llc-20 /usr/bin/llc
-    - ln -sf /usr/bin/clang-20 /usr/bin/clang
-    - ln -sf /usr/bin/llvm-objcopy-20 /usr/bin/llvm-objcopy
-    - export PATH="/usr/lib/llvm-20/bin:$PATH"
+    # NOT symlinked: /usr/bin/clang. On ubuntu:22.04 this job pointed it at
+    # clang-20 safely, because the Swift tarball it downloaded brought its own
+    # clang earlier on PATH. On this image /usr/bin/clang IS the Swift
+    # toolchain's clang, and the plugin pre-warm builds below run `swift
+    # build` — which passes -index-store-path and fails against upstream
+    # clang. `Linker.findCompiler` checks /usr/bin/clang first and a Swift
+    # clang links perfectly well, so `aro build` is unaffected; `llc` still
+    # resolves to llc-20 through the image's own symlink.
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
-
-    # Install Rust for plugin compilation
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    - export PATH="$HOME/.cargo/bin:$PATH"
+    # Fallbacks, in case the image has not yet been rebuilt with these.
+    - command -v rustc >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; export PATH="$HOME/.cargo/bin:$PATH"; }
     - rustc --version
-
-    # Install Swift for native compilation tests
-    - wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-    - tar xzf swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-    - mv swift-6.3.2-RELEASE-ubuntu22.04 /usr/share/swift
-    - export PATH="/usr/share/swift/usr/bin:$PATH"
-
-    # Install Perl modules
-    - cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
-
-    # Prepare ARO binary
+    - perl -MNet::EmptyPort -e1 2>/dev/null || cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+    - |
+      if ! command -v swift >/dev/null; then
+        wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
+        tar xzf swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
+        mv swift-6.3.2-RELEASE-ubuntu22.04 /usr/share/swift
+        export PATH="/usr/share/swift/usr/bin:$PATH"
+      fi
+    - swift --version
     - chmod +x ./aro-dist/aro
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
-
-    # Copy runtime library to system location
     - mkdir -p /usr/local/lib
     - cp ./aro-dist/libARORuntime.a /usr/local/lib/libARORuntime.a
-
-    # Verify installation
     - ./aro-dist/aro --version
   script:
     - export PATH="$HOME/.cargo/bin:/usr/share/swift/usr/bin:/usr/lib/llvm-20/bin:$PATH"
@@ -634,8 +600,18 @@ integration:linux:
       # scratch directory does not accumulate compiled products across root
       # packages, so alternating between plugins thrashes it. Re-building an
       # unchanged package into a shared scratch still cost full build time.
+      # Put the Swift toolchain's own bin directory first for these builds.
+      #
+      # The exports above add /usr/lib/llvm-20/bin to PATH so `aro build` finds
+      # llc-20 and clang-20. But a plugin build is `swift build`, which
+      # compiles C targets and passes -index-store-path — a flag upstream
+      # LLVM's clang rejects. Deriving the directory from `command -v swift`
+      # keeps the toolchain ahead of LLVM 20 whether swift came from the CI
+      # image or from the tarball fallback, instead of relying on a hardcoded
+      # path that is empty on one of them (GitLab #596).
+      SWIFT_BIN="$(dirname "$(command -v swift)")"
       PREBUILTS=""
-      if PATH="/usr/share/swift/usr/bin:$PATH" swift build --help 2>&1 | grep -q 'enable-experimental-prebuilts'; then
+      if PATH="$SWIFT_BIN:$PATH" swift build --help 2>&1 | grep -q 'enable-experimental-prebuilts'; then
         PREBUILTS="--enable-experimental-prebuilts"
         echo "=== swift-syntax prebuilts: supported, enabled"
       else
@@ -647,7 +623,7 @@ integration:linux:
         [ -f "$pkg" ] || continue
         dir="$(dirname "$pkg")"
         echo "=== Pre-warming plugin build: $dir"
-        (cd "$dir" && PATH="/usr/share/swift/usr/bin:$PATH" swift build -c release $PREBUILTS --cache-path "$PLUGIN_CACHE") || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
+        (cd "$dir" && PATH="$SWIFT_BIN:$PATH" swift build -c release $PREBUILTS --cache-path "$PLUGIN_CACHE") || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
       done
 
     - chmod +x Tests/IntegrationTestsRunner/run-tests.pl
