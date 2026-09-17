@@ -16,9 +16,18 @@ public enum StdinScriptResult: Sendable {
 
 /// Evaluates an ARO source string by delegating to a single REPL session.
 ///
-/// The full source is wrapped in one feature set by `REPLSession.executeStatement`,
-/// so multi-line input shares a single evaluation context — identical to pasting
-/// the same lines into an interactive `aro repl`.
+/// Piped input arrives whole and may mix kinds — a feature-set definition,
+/// then statements that use it — so it is split into units the way a notebook
+/// cell is and each is run in source order. Consecutive statements stay
+/// together as one unit, which is what lets them overlap their I/O
+/// (ARO-0088); splitting them would serialise work the language is allowed to
+/// run concurrently.
+///
+/// Before GitLab #576 the whole source was handed to
+/// `REPLSession.executeStatement`, which wraps its input in a single feature
+/// set — so a definition in piped source was a feature set nested inside one,
+/// and failed to parse. The doc comment here claimed parity with the
+/// interactive prompt, which is what that promise actually requires.
 public enum StdinScriptRunner {
     public static func run(source: String) async -> StdinScriptResult {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -26,15 +35,31 @@ public enum StdinScriptRunner {
             return .empty
         }
 
+        let units = REPLCellSplitter.split(source)
+        guard !units.isEmpty else { return .empty }
+
         let session = REPLSession(suppressLogPrefix: true)
         do {
-            let result = try await session.executeStatement(source)
-            switch result {
-            case .error(let msg):
-                return .failure(message: msg)
-            default:
-                return .success
+            for unit in units {
+                let result: REPLResult
+                switch unit {
+                case .featureSet(let name, let activity, let unitSource, _):
+                    result = try await session.defineFeatureSet(
+                        name: name, activity: activity, source: unitSource
+                    )
+                case .statements(let unitSource, _):
+                    result = try await session.executeStatement(unitSource)
+                case .meta:
+                    // Meta-commands (`:vars`, `:fs`) are a prompt affordance;
+                    // piped source is a program, so they are skipped rather
+                    // than failing the run.
+                    continue
+                }
+                if case .error(let msg) = result {
+                    return .failure(message: msg)
+                }
             }
+            return .success
         } catch {
             return .failure(message: String(describing: error))
         }

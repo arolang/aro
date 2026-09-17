@@ -83,6 +83,11 @@ public final class REPLSession: @unchecked Sendable {
     /// Raw feature set sources for export
     private var _featureSetSources: [String: String] = [:]
 
+    /// The order feature sets were defined in, so companion sources compile
+    /// in a stable order. A dictionary's order is not, and diagnostics that
+    /// move between runs of the same session are worse than useless.
+    private var _definitionOrder: [String] = []
+
     /// EventBus subscription per handler feature-set name, so a
     /// redefinition replaces its subscription instead of stacking a
     /// second one — the same rule user-defined actions follow.
@@ -172,7 +177,19 @@ public final class REPLSession: @unchecked Sendable {
         _history
     }
 
+    /// The sources of every feature set defined in this session, in
+    /// definition order.
+    ///
+    /// A statement is compiled as a program of one, and semantic analysis
+    /// resolves `Application.<Name>` against the program it is given — so
+    /// without these, an action defined at the prompt is unknown at the very
+    /// next line (GitLab #576).
+    public var companionSources: [String] {
+        _definitionOrder.compactMap { _featureSetSources[$0] }
+    }
+
     public func addFeatureSet(name: String, featureSet: AnalyzedFeatureSet, source: String? = nil) {
+        if _featureSets[name] == nil { _definitionOrder.append(name) }
         _featureSets[name] = featureSet
         if let source = source {
             _featureSetSources[name] = source
@@ -277,8 +294,15 @@ public final class REPLSession: @unchecked Sendable {
     // MARK: - Statement Execution
 
     /// Execute a single ARO statement
+    /// Execute a statement against everything the session has defined.
+    ///
+    /// Defaults to the session's own `companionSources` rather than to
+    /// nothing: the interactive prompt and piped stdin both come through
+    /// here, and an empty list meant a user-defined action defined one line
+    /// earlier was reported unknown (GitLab #576). Callers that keep their
+    /// own definition state — the cell engine does — pass it explicitly.
     public func executeStatement(_ source: String) async throws -> REPLResult {
-        try await executeStatement(source, companions: [])
+        try await executeStatement(source, companions: companionSources)
     }
 
     /// Execute a statement (or block of statements) with `companions`
@@ -467,15 +491,31 @@ public final class REPLSession: @unchecked Sendable {
         \(statementsSource)
         }
         """
+        return try await defineFeatureSet(name: name, activity: activity, source: source)
+    }
 
+    /// Define a feature set from its complete `(Name: Activity) { … }`
+    /// source, rather than from body statements.
+    ///
+    /// This is the form a splitter produces, so the piped-stdin front end can
+    /// define a feature set and then call it — which its own documentation
+    /// promised was identical to the interactive prompt, and was not
+    /// (GitLab #576).
+    public func defineFeatureSet(
+        name: String,
+        activity: String,
+        source: String
+    ) async throws -> REPLResult {
         // Compile with the session's other definitions as companions
         // (GitLab #503): an action must be able to call the sibling
         // actions defined before it, in the terminal REPL exactly as in
         // a notebook cell. The definition's own previous source is
         // excluded so a redefinition never resolves against its old body.
-        let companions = _featureSetSources
-            .filter { $0.key != name }
-            .map(\.value)
+        // Ordered by definition so the compiled unit — and therefore any
+        // diagnostic about it — is the same on every run.
+        let companions = _definitionOrder
+            .filter { $0 != name }
+            .compactMap { _featureSetSources[$0] }
         var compiledSource = source
         if !companions.isEmpty {
             compiledSource += "\n\n" + companions.joined(separator: "\n\n")
@@ -551,6 +591,7 @@ public final class REPLSession: @unchecked Sendable {
     public func clear() {
         _featureSets.removeAll()
         _featureSetSources.removeAll()
+        _definitionOrder.removeAll()
         _history.removeAll()
 
         // Cleared handlers must stop answering events — the definition

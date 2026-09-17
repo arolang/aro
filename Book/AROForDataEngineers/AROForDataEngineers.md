@@ -757,11 +757,13 @@ imports to write — every `.aro` file under the application directory is
 discovered and its actions join one flat `Application.` namespace, so a
 name may be declared only once across the whole application.
 
-One place still sees a single file at a time: analysing one file on its
-own — the LSP, the REPL, `aro check bronze.aro` naming the file rather
-than the directory. There a call into a sibling file is reported unknown,
-and the diagnostic says so. Point the tool at the directory and it
-resolves.
+One place still sees a single file at a time: `aro check bronze.aro`
+naming the file rather than the directory. There a call into a sibling
+file is reported unknown, and the diagnostic says so. Point it at the
+directory and it resolves. The REPL is not such a place — every
+definition in the session is compiled alongside the statement that calls
+it, so an action defined at the prompt is callable from the next line
+(GitLab #576).
 
 ### 8.2 Passing arguments
 
