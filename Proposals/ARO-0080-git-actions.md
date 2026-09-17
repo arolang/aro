@@ -129,14 +129,34 @@ Tag the <release> for the <git> with "v1.0.0".
 
 ## Events
 
-| Event           | Triggered By | Payload             |
-|-----------------|-------------|---------------------|
-| `git.commit`    | Commit      | hash, message, author |
-| `git.push`      | Push        | branch              |
-| `git.pull`      | Pull        | branch              |
-| `git.checkout`  | Checkout    | ref                 |
-| `git.tag`       | Tag         | name                |
-| `git.clone`     | Clone       | url, path           |
+Each mutating action emits an event. Write a handler feature set against the
+**handler name**; the routing name is the internal one and is not spellable as
+a business activity, because a dot there is a parse error.
+
+| Handler name  | Routing name   | Triggered By | Payload               |
+|---------------|----------------|--------------|-----------------------|
+| `GitCommit`   | `git.commit`   | Commit       | hash, message, author |
+| `GitPush`     | `git.push`     | Push         | branch                |
+| `GitPull`     | `git.pull`     | Pull         | branch                |
+| `GitCheckout` | `git.checkout` | Checkout     | ref                   |
+| `GitTag`      | `git.tag`      | Tag          | name                  |
+| `GitClone`    | `git.clone`    | Clone        | url, path             |
+
+```aro
+(Notify Commit: GitCommit Handler) {
+    Extract the <message> from the <event: message>.
+    Extract the <hash> from the <event: hash>.
+    Log "committed ${<hash>}: ${<message>}" to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+Until GitLab #588 none of the six was observable: handler registration
+subscribes on the Swift type `DomainEvent`, which is what `Emit` produces, and
+the typed Git events are not `DomainEvent`s — so this table described six
+events with payloads that nothing could consume. Each action now emits a
+`DomainEvent` alongside its typed event, so the handler names above work and
+the typed events remain for Swift-side subscribers.
 
 ## Implementation
 

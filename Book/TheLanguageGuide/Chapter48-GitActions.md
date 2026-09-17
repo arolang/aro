@@ -158,7 +158,7 @@ Tag the <release> for the <git> with {
 
 ## Git Events
 
-Every mutating Git action emits a runtime event. You can write feature sets that listen for them like any other handler:
+Every mutating Git action emits an event, and a feature set subscribes to it the way it subscribes to any other — by naming it as its business activity. The read-only actions (`Retrieve` for status, log and branch) emit nothing; there is no state change to announce.
 
 | Event           | Trigger     | Payload                       |
 |-----------------|-------------|-------------------------------|
@@ -177,6 +177,20 @@ Every mutating Git action emits a runtime event. You can write feature sets that
     Return an <OK: status> for the <notification>.
 }
 ```
+
+**The name in the left column is the only spelling.** `aro actions` and the
+action reference also show an internal event type for each of these —
+`git.tag`, `git.commit` and so on — but a dot cannot appear in a business
+activity, so those are not handler names. Neither is the Swift type:
+`GitTagEvent`, `Tag` and `gittag` all name nothing. A handler whose activity
+matches no event is not an error; it simply never runs, so the symptom is
+silence rather than a message.
+
+**The payload is the fields in the table and nothing else.** A `GitCommit`
+handler can read `<event: hash>`, `<event: message>` and `<event: author>`;
+there is no commit object hiding behind the event. If a handler needs more
+than the event carries — a diff, a file list — it reads the repository itself
+with `Retrieve`.
 
 ## Worked Example
 
