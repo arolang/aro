@@ -81,6 +81,16 @@ sub normalize_output {
     # Normalize ls -la total blocks count
     $output =~ s/listing\.output: total \d+/listing.output: total __TOTAL__/g;
 
+    # Normalize the port the HTTP server reports binding.
+    #
+    # An example whose contract names 8080 gets 8080 only if 8080 is free; the
+    # runtime falls back to the next port otherwise. That makes the number a
+    # property of the machine, not of the example -- ContextAware's expected
+    # files were generated where something already held 8080 and recorded
+    # 8081, so they failed on any host where the port was free. Both sides are
+    # normalized, so either number matches.
+    $output =~ s/HTTP Server started on port \d+/HTTP Server started on port __PORT__/g;
+
     # Normalize API response times (generationtime_ms from weather API)
     $output =~ s/generationtime_ms: \d+\.\d+/generationtime_ms: __TIME__/g;
 

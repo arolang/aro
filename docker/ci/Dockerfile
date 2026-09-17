@@ -37,8 +37,20 @@ ENV GIT_CONFIG_COUNT=1 \
     GIT_CONFIG_VALUE_0=HTTP/1.1
 
 # Base packages: the union of what the jobs install for themselves.
+#
+# `build-essential` is not one of those, but two later steps need a C
+# toolchain and neither says so by name: `cpanm` shells out to `make` to
+# configure a distribution, and `cargo` links with whatever `cc` resolves to.
+# Without it the image build fails on Test::TCP ("You probably need to have
+# 'make'") and Rust warns "no default linker (`cc`) was found in your PATH"
+# before failing to link the Rust plugin example.
+#
+# gcc does not disturb the Swift toolchain's clang: it installs under its own
+# names (`gcc`, `cc`), so nothing shadows the clang `swift build` invokes --
+# see the -index-store-path note below.
 RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
+        build-essential \
         git ca-certificates wget curl gnupg software-properties-common \
         libgit2-dev libzmq3-dev libcurl4 libzstd-dev \
         zlib1g-dev libsqlite3-dev libxml2 \
@@ -57,6 +69,19 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
     && apt-get install -y -qq --no-install-recommends \
         llvm-20-dev libllvm20 llvm-20 clang-20 \
     && rm -rf /var/lib/apt/lists/*
+
+# Rust, for the Rust plugin example that `integration:linux` builds. Installed
+# via rustup rather than apt so the version matches what a contributor gets.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \
+    && /root/.cargo/bin/rustc --version
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# The two CPAN modules the example harness uses. `libipc-run-perl` and friends
+# come from apt above; these two are not packaged, and `cpan -T` in the job
+# reached the network on every run.
+RUN cpanm --notest --quiet Net::EmptyPort Term::ANSIColor \
+    && perl -MNet::EmptyPort -e 'print "Net::EmptyPort ok\n"' \
+    && perl -MTerm::ANSIColor -e 'print "Term::ANSIColor ok\n"'
 
 # `llc` and `llvm-objcopy` are given unversioned names because `aro build`
 # shells out to them by name and nothing else in the image provides them.
@@ -104,4 +129,6 @@ RUN swift --version \
     && printf 'int main(void){return 0;}\n' > /tmp/probe.c \
     && clang -index-store-path /tmp/probe-index -c /tmp/probe.c -o /tmp/probe.o \
     && rm -rf /tmp/probe.c /tmp/probe.o /tmp/probe-index \
-    && perl -e 'print "perl ok\n"' && python3 --version
+    && perl -e 'print "perl ok\n"' && python3 --version \
+    && make --version | head -1 && cc --version | head -1 \
+    && cargo --version && rustc --version
