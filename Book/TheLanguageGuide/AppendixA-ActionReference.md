@@ -11,7 +11,7 @@ and State are functional *domains*, not roles — see the detailed sections.)
 | Action | Role | Description | Example |
 |--------|------|-------------|---------|
 | **Extract** | REQUEST | Pull data from structured source | `Extract the <id> from the <request: params>.` |
-| **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where <id> is <id>.` |
+| **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id is <id>.` |
 | **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
 | **Read** | REQUEST | Read from file or URL | `Read the <config> from the <file: "./config.json">.` |
 | **Probe** | REQUEST | Check reachability of a target | `Probe the <reachability> from <target>.` |
@@ -46,7 +46,7 @@ and State are functional *domains*, not roles — see the detailed sections.)
 | **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
 | **Join** | OWN | Join collection to string | `Join the <csv> from <parts> with ",".` |
 | **Merge** | OWN | Combine data | `Merge the <existing-user> with <update-data>.` |
-| **Delete** | OWN | Remove data | `Delete the <user> from the <users> where <id> is <id>.` |
+| **Delete** | OWN | Remove data | `Delete the <user> from the <users> where id is <id>.` |
 | **Return** | RESPONSE | Return result | `Return an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
 | **Log** | RESPONSE | Write to logs | `Log "Done" to the <console>.` |
@@ -591,7 +591,7 @@ Merge the <target> from <source>.
 **Examples:**
 ```aro
 (* Merge update data into existing entity *)
-Retrieve the <existing-user> from the <user-repository> where <id> is <id>.
+Retrieve the <existing-user> from the <user-repository> where id is <id>.
 Extract the <update-data> from the <request: body>.
 Merge the <existing-user> with <update-data>.
 Store the <existing-user> into the <user-repository>.

@@ -25,7 +25,7 @@
 (updateUser: User API) {
     Extract the <id> from the <pathParameters: id>.
     Extract the <update-data> from the <request: body>.
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
     Update the <user> with <update-data>.
     Store the <user> into the <user-repository>.
     Return an <OK: status> with <user>.

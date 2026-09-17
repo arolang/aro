@@ -164,7 +164,7 @@ ecommerce-api/
 
 (getProduct: Product API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <product> from the <product-repository> where <id> = <id>.
+    Retrieve the <product> from the <product-repository> where id = <id>.
     Return an <OK: status> with <product>.
 }
 ```

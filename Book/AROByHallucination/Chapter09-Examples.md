@@ -122,14 +122,14 @@ The model calls `read_file` on `openapi.yaml` to refresh its memory of the opera
 
 (getUser: User Service) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
     Return an <OK: status> with <user>.
 }
 
 (deleteUser: User Service) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
-    Delete the <removed> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
+    Delete the <removed> from the <user-repository> where id is <id>.
     Emit a <UserDeleted: event> with <user>.
     Return a <NoContent: status> for the <deletion>.
 }
@@ -173,7 +173,7 @@ Look closely at that session, because three things in it will surprise you and n
 
 **Ids are UUIDs, and the create response does not have one.** The repository assigns the id when the value is stored. `<user>` was bound by `Create` before that happened, so the `Created` response carries only the fields you sent. If you want the id back, retrieve the stored record and return that instead.
 
-**`where <id> is <id>` compares against the real id.** Which means `GET /users/1` returns `{"data":[]}` — not a 404, an empty result — and `DELETE /users/1` returns `204` having deleted nothing. Both are the happy path doing exactly what it was asked. If you sketch this API from memory and test it with `/users/1`, you will conclude that delete is broken. It is not; your id is.
+**`where id is <id>` compares against the real id.** Which means `GET /users/1` returns `{"data":[]}` — not a 404, an empty result — and `DELETE /users/1` returns `204` having deleted nothing. Both are the happy path doing exactly what it was asked. If you sketch this API from memory and test it with `/users/1`, you will conclude that delete is broken. It is not; your id is.
 
 ---
 

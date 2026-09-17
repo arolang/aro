@@ -80,7 +80,7 @@ Here is ARO code followed by the runtime error messages it produces when operati
 ```aro
 (getUser: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Retrieve the <user> from the <user-repository> where id is <id>.
     Return an <OK: status> with <user>.
 }
 ```

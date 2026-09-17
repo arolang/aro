@@ -219,7 +219,7 @@ Use `where` to filter results:
 ```aro
 (getUserById: User API) {
     Extract the <id> from the <pathParameters: id>.
-    Retrieve the <user> from the <user-repository> where <id> = <id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
     Return an <OK: status> with <user>.
 }
 ```
