@@ -48,7 +48,7 @@ Four you will meet:
 
 **`Filter … where` reaches scalars.** A record is matched on the named field; a string or a number is matched as itself, because it has no field to name — so `Filter … where <line> contains "ERROR"` over a list of lines keeps the lines that contain it. Until GitLab #569 it matched nothing and returned `[]` with no error or warning, so counting lines this way reported zero every time. `for each` with a `when` guard works too, and is what to reach for when the body does more than keep or drop.
 
-**`when not <a> contains <b>` is always false.** `not` binds to the left operand, so the guard becomes `(not <a>) contains <b>`, which is false whatever the values are. Parenthesise: `when not (<a> contains <b>)` (GitLab #572).
+**`when not <a> contains <b>` negates the comparison.** `not` binds looser than the comparisons, so it reads as `not (<a> contains <b>)`. It used to bind to the left operand, making the guard `(not <a>) contains <b>` — false whatever the values were, with no diagnostic (GitLab #572).
 
 **`Compute … from <a> and <b>` is a boolean.** It reads like "combine these two", and it computes logical AND. If you wanted a record, that is `Create the <x> with { a: <a>, b: <b> }.`
 

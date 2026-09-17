@@ -61,11 +61,18 @@ Action ... when <status> != "archived".
 (* Regex *)
 Action ... when <url> matches /\.pdf$/.
 
-(* Negation - note the parentheses *)
-Action ... when not (<url> contains <base-domain>).
+(* Negation *)
+Action ... when not <url> contains <base-domain>.
 ```
 
-Those parentheses are not decoration. `not` binds tighter than the comparison, so `when not <url> contains <base>` is read as `(not <url>) contains <base>`, which is always false and never warns. Always parenthesise the comparison you mean to negate (GitLab #572).
+`not` binds looser than the comparison, so that reads as
+`not (<url> contains <base-domain>)` — what the sentence says. The
+parenthesised form means the same thing and is worth keeping when a guard gets
+long enough that the grouping stops being obvious.
+
+It did not always: `not` used to bind to the left operand, so the guard became
+`(not <url>) contains <base>` and was always false, in both directions, with no
+warning (GitLab #572).
 
 ---
 
@@ -317,7 +324,7 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 
 ## 8.11 What Could Be Better
 
-**Negation Is A Trap.** `when not (<url> contains <base-domain>)` works and is the right way to write a skip rule. Drop the parentheses and the guard silently becomes dead — no error, no warning, no diagnostic (GitLab #572). Of all the ways ARO can be quietly wrong, this is the one you will hit.
+**Negation Used To Be A Trap.** `when not <url> contains <base-domain>` now negates the comparison, with or without parentheses. Dropping them used to make the guard silently dead — no error, no warning, no diagnostic (GitLab #572) — and it was the most likely way to be quietly wrong in this whole chapter.
 
 **The Guard And `where` Vocabularies Differ.** A `where` clause on `<Filter>`, `<Retrieve>`, or `<Delete>` understands `starts-with`, `ends-with`, `matches`, `in`, and `not in` in addition to `contains`. A `when` guard understands `contains`, `matches`, the comparison operators, and `not (…)` — but not `starts-with` or `ends-with`; those are a parse error in a guard. For a domain filter, `contains` is what we want anyway, but the asymmetry catches people.
 

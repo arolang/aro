@@ -253,7 +253,7 @@ Emit a <CrawlPage: event> with { url: <url> } when <new-entry> > 0.
 
 Two traps:
 
-- **Parenthesise what you negate.** `when not <url> contains <domain>` parses as `(not <url>) contains <domain>` and is silently always false (GitLab #572).
+- **`not` negates the whole comparison.** `when not <url> contains <domain>` reads as `not (<url> contains <domain>)`; it used to parse as `(not <url>) contains <domain>` and be silently always false (GitLab #572).
 - **Guards and `where` clauses differ.** `starts-with` and `ends-with` work in a `where` clause on `<Filter>`, `<Retrieve>` or `<Delete>`; in a `when` guard they are a parse error.
 
 ---
