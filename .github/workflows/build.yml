@@ -1142,6 +1142,7 @@ jobs:
             libsqlite3-dev \
             zlib1g-dev \
             git \
+            libzmq5 \
             libipc-run-perl \
             libyaml-libyaml-perl \
             libhttp-tiny-perl \
@@ -1263,7 +1264,7 @@ jobs:
         run: |
           apt-get update -qq
           export DEBIAN_FRONTEND=noninteractive
-          apt-get install -y -qq wget gnupg software-properties-common perl libgit2-dev libcurl4
+          apt-get install -y -qq wget gnupg software-properties-common perl libgit2-dev libcurl4 libzmq5
           # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
@@ -1309,7 +1310,7 @@ jobs:
 
       - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20 libgit2
+          brew install llvm@20 libgit2 zeromq
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
           else
@@ -1388,7 +1389,7 @@ jobs:
 
       - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20 libgit2
+          brew install llvm@20 libgit2 zeromq
           # Detect LLVM path (ARM64 vs Intel)
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"

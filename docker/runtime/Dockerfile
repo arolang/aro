@@ -48,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstdc++6 \
     libatomic1 \
     libxml2 \
+    libzmq5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Restore the real ldconfig after apt-get (was replaced for QEMU arm64 compatibility)
