@@ -836,6 +836,7 @@ Proposals/              # Language specifications
 ├── ARO-0086-automatic-pipeline-detection.md
 ├── ARO-0087-plugin-sdk.md
 ├── ARO-0088-concurrency-model.md
+├── ARO-0089-ranges.md
 ├── ARO-0090-streaming-io-and-materialization.md
 └── ARO-0091-jupyter-kernel.md
 ```
@@ -891,6 +892,7 @@ The `Proposals/` directory contains language specifications:
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
 | **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
+| **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
 
