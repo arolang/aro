@@ -1027,7 +1027,7 @@ public final class Parser {
                         guard !defaultOperatorSuppressed else { return false }
                         let base = qualifiedRefBase().lowercased()
                         return !SystemObjectCatalog.isSystemObject(base)
-                            || base == "parameter" || base == "env"
+                            || SystemObjectCatalog.isValueBearing(base)
                     default:
                         return false
                     }
