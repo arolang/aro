@@ -446,10 +446,13 @@ specifiers, and only a name reaches the lazy-stream iteration path
 memory. An expression that *evaluates* to a stream streams as well; a list
 literal is a value and is iterated as one.
 
-There is no range literal. `for each <n> in [1..10]` is not ARO — count with the
-range loop, `for <n> from 1 to 10 { … }`, whose upper bound is exclusive (it
-binds 1…9). A `..` / `..<` range syntax is deliberately not part of this
-proposal; GitLab #546 sketches one for its own proposal.
+There is no range literal *yet*. `for each <n> in [1..10]` is not ARO — count
+with the range loop, `for <n> from 1 to 10 { … }`, whose upper bound is
+exclusive (it binds 1…9). A `..` / `..<` range syntax is not part of this
+proposal; it is specified separately in
+[ARO-0089](ARO-0089-ranges.md), which also explains why `[1..10]` stays an
+error once ranges exist and how the two counting forms differ at their upper
+bound.
 
 #### Basic Iteration
 
