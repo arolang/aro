@@ -18,6 +18,7 @@ use Exporter 'import';
 use AROTest::Utils qw($has_yaml $has_http_tiny $has_net_emptyport is_executable get_binary_path);
 use AROTest::Config qw(%options $examples_dir @cleanup_handlers);
 use AROTest::Binary qw(find_aro_binary);
+use AROTest::Ports qw(http_port socket_port);
 
 our @EXPORT_OK = qw(get_operation_order generate_test_payload run_http_example run_http_example_internal);
 
@@ -133,27 +134,10 @@ sub run_http_example_internal {
     }
     # Use a free port so parallel runs and occupied ports don't conflict.
     # ARO_HTTP_PORT env var overrides the openapi.yaml port inside the server.
-    #
-    # Under -j > 1 the runner now assigns each forked worker an
-    # ARO_TEST_WORKER_ID 0..jobs-1 (see Pool.pm). We allocate
-    # ports out of a worker-local non-overlapping range so two
-    # concurrent workers can never collide on the same port
-    # (#297). Within a range Net::EmptyPort still probes for a
-    # free slot — only same-worker races could remain, but a
-    # single worker runs one example at a time, so they can't.
-    # Serial runs keep $spec_port for stable observable output.
-    my $port;
-    if ($has_net_emptyport) {
-        if ($options{jobs} > 1) {
-            my $slot = $ENV{ARO_TEST_WORKER_ID} // 0;
-            my $base = 30000 + ($slot * 1000);
-            $port = Net::EmptyPort::empty_port($base);
-        } else {
-            $port = Net::EmptyPort::empty_port($spec_port);
-        }
-    } else {
-        $port = $spec_port;
-    }
+    # The worker-lane layout lives in AROTest::Ports, which the console
+    # executors now share (GitLab #597); serial runs keep $spec_port so
+    # observable output stays stable.
+    my $port = http_port($spec_port);
 
     # Determine command based on mode
     my @cmd;
@@ -177,16 +161,8 @@ sub run_http_example_internal {
     # process, or a concurrent worker. Mirrors what the MultiService and
     # Console executors already do.
     if ($has_net_emptyport) {
-        my $socket_port;
-        if ($options{jobs} > 1) {
-            # Allocate from +500 within this worker's 1000-wide lane so it
-            # stays clear of the HTTP port taken from the lane's base above.
-            my $slot = $ENV{ARO_TEST_WORKER_ID} // 0;
-            $socket_port = Net::EmptyPort::empty_port(30500 + ($slot * 1000));
-        } else {
-            $socket_port = Net::EmptyPort::empty_port(9000);
-        }
-        $extra_env{ARO_SOCKET_PORT} = $socket_port;
+        # +500 inside this worker's lane, clear of the HTTP port above.
+        $extra_env{ARO_SOCKET_PORT} = socket_port(9000);
     }
     if ($mode eq 'compiled') {
         # Execute compiled binary directly

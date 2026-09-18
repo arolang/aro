@@ -627,9 +627,18 @@ integration:linux:
       done
 
     - chmod +x Tests/IntegrationTestsRunner/run-tests.pl
-    # K8s runner pod is small (~1–2 vCPUs); -j 2 gets a real speedup
-    # without thrashing the cooperative pool.
-    - perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j 2
+    # `auto` asks the cgroup how many CPUs this pod may actually use and
+    # clamps the answer to 2-4. The pod was assumed to be ~1-2 vCPUs, which
+    # is why this was pinned at -j 2; nobody had measured it, and `nproc`
+    # would not have answered the question -- inside a container it reports
+    # the node's processors. The run now prints what it found, so the number
+    # can be chosen from data rather than from the assumption (GitLab #597).
+    #
+    # The floor of 2 means this can never be slower than the pinned value it
+    # replaces. Raising the ceiling is only safe because the console
+    # executors now take ports from a worker-local lane like the HTTP one,
+    # closing the probe race that made higher concurrency flaky.
+    - perl Tests/IntegrationTestsRunner/run-tests.pl --verbose -j auto
   artifacts:
     when: on_failure
     name: test-failures-linux

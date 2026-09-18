@@ -31,11 +31,24 @@ GetOptions(
     'timeout=i'  => \$options{timeout},
     'build-timeout=i' => \$options{build_timeout},
     'filter=s'   => \$options{filter},
-    'jobs|j=i'   => \$options{jobs},
+    'jobs|j=s'   => \my $jobs_requested,
     'help|h'     => \$options{help},
 ) or die "Invalid options. Use --help for usage.\n";
 
-die "--jobs must be >= 1 (got $options{jobs})\n" if $options{jobs} < 1;
+# --jobs accepts a number or "auto"; "auto" asks the cgroup what this
+# container may use (GitLab #597) and reports it, so a run says what capacity
+# it found rather than leaving the right number a matter of guesswork.
+if (defined $jobs_requested) {
+    my ($jobs, $err, $detected) = AROTest::Config::resolve_jobs($jobs_requested);
+    die "$err\n" if $err;
+    $options{jobs} = $jobs;
+    if (defined $detected) {
+        say "Detected $detected usable CPU(s); running with --jobs $jobs"
+          . " (auto, clamped to"
+          . " $AROTest::Config::JOBS_AUTO_FLOOR-$AROTest::Config::JOBS_AUTO_CEILING).";
+    }
+}
+
 die "--build-timeout must be >= 1 (got $options{build_timeout})\n"
     if $options{build_timeout} < 1;
 
@@ -78,7 +91,10 @@ Options:
                         kinds of work; a loaded runner should not make a
                         slow build look like a failing change (GitLab #592).
     --filter=PATTERN    Test only examples matching pattern
-    -j, --jobs=N        Run up to N tests in parallel (default: 1).
+    -j, --jobs=N|auto   Run up to N tests in parallel (default: 1). `auto`
+                        reads this container's CPU quota -- not `nproc`, which
+                        reports the node's processors and so overstates a pod's
+                        share -- and clamps the result to 2-4 (GitLab #597).
                         Tests with hardcoded ports (socket / socket-client /
                         multiservice) always run serially after the pool.
     -h, --help          Show this help
