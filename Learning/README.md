@@ -5,6 +5,14 @@ between live code cells, executed against a real ARO REPL session
 (ARO-0091). Open them in SOLARO (a `.repl` file opens as a notebook), or
 in JupyterLab / VS Code / DataSpell after `aro kernel install`.
 
+**Getting them.** Clone the repository and open this folder — or let
+SOLARO fetch it for you. SOLARO offers the course once on a first
+launch, and **Help → Learning Notebooks…** (or the welcome screen's
+**Learn ARO** tile) installs it at any time afterwards. It downloads
+`Learning/` at the release tag matching its own version into
+`~/Documents/ARO Learning` and opens notebook 01, so the course you work
+through is the one that release's runtime speaks.
+
 ## The story arc
 
 You have just joined **Brew & Bytes**, a small café going digital. Every

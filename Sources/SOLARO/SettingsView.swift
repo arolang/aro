@@ -275,6 +275,11 @@ enum SolaroPrefs: String {
     case runtimeBackend   = "solaro.runtimeBackend"
     case filesTabMode     = "solaro.filesTabMode"
     case metricsHistoryDepth = "solaro.metrics.historyDepth"
+    /// Set once the user has answered the first-run offer to
+    /// install the Learning notebooks, either way. Its absence is
+    /// what "first launch" means for that prompt — see
+    /// `LearningCourse.shouldPromptOnLaunch`.
+    case learningPromptAnswered = "solaro.learning.promptAnswered"
     // Release signing (#268). The Team ID is what notarytool and
     // the DMG packaging script need; the identity SHA-1 just lets
     // the picker re-select the same certificate after a rescan.

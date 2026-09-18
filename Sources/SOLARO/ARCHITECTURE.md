@@ -28,6 +28,7 @@ Sources/
 │   ├── Theme.swift               ← SolaroColor / SolaroFont / SolaroSpace / SolaroRadius
 │   ├── WorkspaceState.swift      ← welcome ↔ open routing
 │   ├── Welcome.swift             ← welcome (NSOpenPanel + recents tiles)
+│   ├── LearningNotebooks.swift   ← first-run offer + Learning/ downloader
 │   ├── Workspace.swift           ← shell (NavigationSplitView + toolbar + sheets)
 │   ├── Sidebar.swift             ← Files / Features / Plugins tabs
 │   ├── FileTree.swift            ← directory-grouped tree builder
@@ -185,6 +186,7 @@ project map.
 | `NodeEditing.swift` + `SelectedStatementSection.swift` | Per-action editor schemas (`LogEditing`, `CreateEditing`, `ComputeEditing`, `ReturnEditing`, `EmitEditing`, `WithClauseEditing`, `GenericEditing`) wrap a single `EditableField` enum with cases for stringLiteral / identifier / expression / picker / record / combo. `NodeEditorView` renders the field list, `SelectedStatementSection` renders the same form read-write inside the Inspector. Apply hits `controller.nodeEditApply` which CenterPane wires to the existing save-and-reparse pipeline. |
 | `QualifierCatalog.swift` | Snapshot of `ARORuntime.QualifierRegistry.allRegistrations()` keyed by `namespace.qualifier`. Used to populate the modifier dropdown in the editor; built-ins drop the `_builtin` namespace, plugin qualifiers keep theirs so `collections.reverse` and a future `stats.reverse` stay distinct. |
 | `CreateFeatureSetSheet.swift` | Canvas right-click → "Create new Feature Set…" dialog. `NewFeatureSetDraft` collects name, business activity, optional `when`, and (for `Action` activities) the `takes <name: Type>` parameter. `FeatureSetTemplate.render` emits a minimal valid block; CenterPane appends it through the same `saveAndReparse` pipeline that statement edits use. |
+| `LearningNotebooks.swift` | The `.repl` course under `Learning/` upstream, offered on a first launch. `LearningCourse` holds the pure pieces — version→tag (`0.11.2`, no `v`; `dev` falls back to `main`), Contents-API URLs, the `~/Documents/ARO Learning` destination, and `shouldPromptOnLaunch` (never asked + no recents + not installed). `LearningCourseStore.shared` does the staged download + two-rename swap, following `BookStore.refresh`. One `LearningCourseCard` renders on the welcome screen (with "Not now", which sets `SolaroPrefs.learningPromptAnswered`) and in the Help → Learning Notebooks… window. |
 | `AroBinaryVersion.swift` | Probes the resolved `aro --version` once per workspace open and shows a yellow banner when the version disagrees with `AROVersion.shortVersion`. Dismissal is scoped to the `(path, binary version, solaro version)` triple so a new drift still surfaces. |
 | `RunParameterDefaults` in `RunParameters.swift` | Per-project parameter persistence at `~/Library/Application Support/SOLARO/parameters/<hash>.json` keyed by a deterministic hash of the project root path. |
 | `WorkspaceController.testResults: [String: TestNodeResult]` | The single source of truth for test PASS/FAIL state across every surface. Populated from `ConsoleProcess.testResults` via the `executionTick` onChange in `WorkspaceView`. |
