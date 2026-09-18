@@ -77,6 +77,10 @@ struct SOLAROApp: App {
                     Label("Books", systemImage: "books.vertical")
                 }
                 .keyboardShortcut("?", modifiers: [.command])
+                // The notebook course. Reachable for the whole life
+                // of the install, not only from the first-run offer
+                // on the welcome screen.
+                LearningNotebooksCommand()
                 Divider()
                 Button {
                     CrashReporter.openReportBugPage()

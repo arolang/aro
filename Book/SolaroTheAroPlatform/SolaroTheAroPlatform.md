@@ -221,6 +221,27 @@ work, it reloads; if both moved, you are asked rather than silently
 overwritten — which is what stops a `git checkout` from being
 autosaved over by the next keystroke.
 
+**The course.** The notebooks that teach ARO itself ship in the
+repository under `Learning/`: a guided sequence that builds one café
+ordering system while walking the language, prose cell by runnable
+cell. It is the best way to learn the ARO essentials, so on a
+genuinely first launch — nothing opened before, no copy on disk — the
+welcome screen offers to install it. Say yes and SOLARO mirrors
+`Learning/` out of GitHub **at the release tag matching the running
+version**, not at `main`, so the course and the runtime under it agree;
+it lands in `~/Documents/ARO Learning` and opens as a project with the
+first notebook focused.
+
+Decline and the offer never returns on its own. It stays on the welcome
+screen's **Learn ARO** tile and under **Help → Learning Notebooks…**,
+which is also where you re-download the course after upgrading SOLARO.
+A copy already on disk is offered for opening rather than overwritten,
+and an update that fails partway — no network, a tag that never shipped
+the course, a file that never arrived — leaves the copy you have been
+working in exactly as it was. A build carrying no release tag (a local
+`swift build` reports `dev`) has nothing to pin to; it says so and
+falls back to `main`.
+
 Use the notebook where the notebook fits: prototyping a stage against
 real data, teaching, a runnable explanation of a feature set. When the
 shape is right, the statements move into a `.aro` file unchanged, and
@@ -282,6 +303,11 @@ launch and shows a banner if the CLI version disagrees with the app.
   this: they drive `aro repl --json` directly.
 - **The book viewer** (Help → Books) downloads PDFs of every book in
   this project, including this one, on demand from the latest release.
+- **The Learning notebooks** (Help → Learning Notebooks…, or the
+  welcome screen's **Learn ARO** tile) download the `.repl` course into
+  `~/Documents/ARO Learning`, pinned to the release tag matching this
+  build. SOLARO offers this once, unasked, on a first launch; §1.6 has
+  the details.
 
 ---
 

@@ -26,6 +26,20 @@ struct WelcomeView: View {
     /// below shows the newest one the user hasn't acknowledged.
     @State private var crashes = CrashReportStore()
     @State private var crashBannerDismissed = false
+    /// The Learning notebook course. Shared with the Help-menu
+    /// window so both surfaces show one download in flight.
+    @State private var learning = LearningCourseStore.shared
+    /// Remembers that the first-run offer was answered — declining
+    /// has to stick, or the offer is nagging rather than onboarding.
+    @AppStorage(SolaroPrefs.learningPromptAnswered.rawValue)
+    private var learningPromptAnswered: Bool = false
+    /// Whether the course card is on screen right now. Latched at
+    /// `onAppear` from the first-run test, and set by the Learn
+    /// tile afterwards. A latch rather than a live predicate,
+    /// because installing the course flips the predicate false and
+    /// the card must not vanish out from under the click that
+    /// started the download.
+    @State private var showLearningCard = false
 
     var body: some View {
         ZStack {
@@ -52,6 +66,9 @@ struct WelcomeView: View {
                 if let crash = unseenCrash {
                     crashBanner(crash)
                 }
+                if showLearningCard {
+                    learningCard
+                }
                 actionTiles
                 if !recents.isEmpty {
                     recentsSection
@@ -71,11 +88,40 @@ struct WelcomeView: View {
                 }
                 .padding(.bottom, SolaroSpace.l)
             }
-            .frame(maxWidth: 760)
+            // 860, not the original 760: three action tiles are
+            // 262pt each once their padding is counted, and at 760
+            // the third one (Learn ARO) got squeezed out of the row.
+            .frame(maxWidth: 860)
             .padding(.horizontal, SolaroSpace.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { crashes.reload() }
+        .onAppear {
+            crashes.reload()
+            learning.refreshInstalled()
+            // First launch, nothing opened before, no course on
+            // disk — that is the one moment we raise the offer
+            // without being asked.
+            showLearningCard = LearningCourse.shouldPromptOnLaunch(
+                answered: learningPromptAnswered,
+                hasRecentProjects: !recents.isEmpty,
+                isInstalled: learning.isInstalled)
+        }
+    }
+
+    // MARK: - Learning notebooks
+
+    private var learningCard: some View {
+        LearningCourseCard(
+            store: learning,
+            onOpen: { directory in
+                openLearningCourse(at: directory) { project in
+                    recents = RecentProjects.load()
+                    onOpen(project)
+                }
+            },
+            onAnswered: { learningPromptAnswered = true },
+            onDecline: { showLearningCard = false }
+        )
     }
 
     // MARK: - Recent crash (#275)
@@ -232,6 +278,20 @@ struct WelcomeView: View {
                 subtitle: "Scaffold a new ARO project"
             ) {
                 createProject()
+            }
+            // The course stays one click away for the whole life of
+            // the install, so declining the first-run offer costs
+            // nothing but the prompt.
+            WelcomeActionTile(
+                icon: "graduationcap",
+                title: learning.isInstalled
+                    ? "Learning notebooks"
+                    : "Learn ARO…",
+                subtitle: learning.isInstalled
+                    ? "Open the notebook course"
+                    : "Download the notebook course"
+            ) {
+                showLearningCard = true
             }
         }
     }
