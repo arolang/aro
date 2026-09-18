@@ -70,6 +70,46 @@ public enum SystemObjectCatalog {
         "_expression_"
     ]
 
+    /// System objects that are a **record of values**, not an address.
+    ///
+    /// The distinction matters for the `default` operator. `<file: "notes.md">`
+    /// is an address an action resolves — there is no variable called `file`
+    /// for an expression to read, so routing it through the expression grammar
+    /// would find nothing and hand back the fallback every time. But
+    /// `<queryParameters: limit>` *is* a value the expression evaluator can
+    /// read, so a missing `limit` is genuinely absent and `default` should
+    /// answer it.
+    ///
+    /// Without this, `Create the <limit> with <queryParameters: limit> default 10.`
+    /// failed the statement when the client omitted `?limit=` — the one case
+    /// the fallback exists for (GitLab #590).
+    ///
+    /// Two exclusions are deliberate. `<request: body>` carries the streaming
+    /// semantics of ARO-0090 and is consumed once, so promoting it would
+    /// materialise a body just to answer a presence check. And `headers` does
+    /// not resolve as a record at all — even `Extract the <h> from the
+    /// <headers>.` fails — so `<headers: x> default "y"` would have answered
+    /// `"y"` for a header that *was* sent. Both were checked rather than
+    /// assumed; the header case was caught exactly this way.
+    ///
+    /// Everything in this set must be resolvable by *both* evaluators. A base
+    /// that only the action path can resolve would silently take the default
+    /// on every read, which is the failure #547 was reported for.
+    public static let valueBearingNames: Set<String> = [
+        "parameter",        // CLI arguments — a missing --port is absent
+        "env",              // process environment
+        "queryparameters",  // HTTP query string (GitLab #590)
+        "pathparameters",   // HTTP path template values
+        "input",            // user-defined action arguments (ARO-0081)
+        "event",            // event payload fields in a handler
+    ]
+
+    /// Whether `<name: field>` may be read as an expression operand, so that
+    /// `default` can answer a missing field rather than failing the statement.
+    public static func isValueBearing(_ name: String) -> Bool {
+        valueBearingNames.contains(name.lowercased())
+    }
+
     /// Whether `name` refers to a framework-provided object.
     ///
     /// Case-insensitive, and treats any `*-repository` name as provided, since
