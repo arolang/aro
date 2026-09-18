@@ -93,6 +93,30 @@ sub print_summary {
     print "  Failed:  " . colored($failed, $failed > 0 ? 'red' : 'green') . "\n";
     print "  Skipped: " . colored($skipped, 'yellow') . "\n";
     printf "  Duration: %.2fs\n", $duration;
+
+    # How much of that was `aro build`. Every compiled-mode example links its
+    # own binary against libARORuntime.a, and the harness already timed each
+    # one without ever saying so -- which left "is the per-example build worth
+    # sharing?" an open question with no number attached (GitLab #597). Now a
+    # run answers it.
+    my $build_total = 0;
+    my $built = 0;
+    for my $result (@$results) {
+        next unless $result->{build_duration};
+        $build_total += $result->{build_duration};
+        $built++;
+    }
+    if ($built) {
+        # Summed over workers, so at -j > 1 this can exceed wall clock --
+        # that ratio is the point: it says how much of the run is spent
+        # linking binaries rather than exercising them.
+        printf "  Builds:   %.2fs summed across %d example(s)%s\n",
+            $build_total, $built,
+            $duration > 0
+                ? sprintf(" (%.2fx wall clock at -j %d)",
+                          $build_total / $duration, $options{jobs})
+                : '';
+    }
     print "=" x 120 . "\n";
 }
 

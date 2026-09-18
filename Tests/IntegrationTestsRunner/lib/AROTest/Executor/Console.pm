@@ -14,9 +14,10 @@ use Time::HiRes qw(sleep);
 use IPC::Run qw(start finish timeout kill_kill pump);
 use Exporter 'import';
 
-use AROTest::Utils qw($has_net_emptyport is_executable get_binary_path);
+use AROTest::Utils qw(is_executable get_binary_path);
 use AROTest::Config qw(%options $examples_dir);
 use AROTest::Binary qw(find_aro_binary);
+use AROTest::Ports qw(http_port socket_port);
 
 our @EXPORT_OK = qw(run_console_example run_console_example_internal run_debug_example);
 
@@ -61,12 +62,11 @@ sub run_console_example_internal {
 
     # Inject free-port env vars so examples that self-host HTTP/socket servers
     # don't conflict with sibling processes (e.g. kubectl port-forward on 8080).
-    # In parallel mode each test gets a random port; in serial we prefer the
-    # canonical ports so manual probes still work.
-    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}
-        // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(8080)) : 8080);
-    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT}
-        // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(9000)) : 9000);
+    # Under -j > 1 the port comes from this worker's own lane, so two workers
+    # cannot be handed the same one; in serial we prefer the canonical ports
+    # so manual probes still work. See AROTest::Ports.
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // http_port(8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // socket_port(9000);
 
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval { start(\@cmd, \$in, \$out, \$err, timeout($timeout)); };
@@ -131,10 +131,8 @@ sub run_debug_example {
         push @cmd, '--keep-alive' if $keep_alive;
     }
 
-    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}
-        // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(8080)) : 8080);
-    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT}
-        // ($has_net_emptyport ? ($options{jobs} > 1 ? Net::EmptyPort::empty_port() : Net::EmptyPort::empty_port(9000)) : 9000);
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // http_port(8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // socket_port(9000);
 
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval { start(\@cmd, \$in, \$out, \$err, timeout($timeout)); };
