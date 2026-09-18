@@ -24,6 +24,21 @@ struct SOLAROApp: App {
     /// the version shown in the About panel comes from `AROVersion`.
     let runtimeVersion: String = AROVersion.shortVersion
 
+    /// 1400×900 is the size the workspace wants, but it is a ceiling
+    /// rather than a promise: on a 1440×900 display the menu bar
+    /// alone makes a 900pt window taller than the screen, and the
+    /// welcome column then hangs off both edges. Clamp to what the
+    /// screen actually shows, leaving a small margin so the window
+    /// reads as a window rather than as full screen.
+    @MainActor
+    static var defaultWindowSize: CGSize {
+        guard let visible = NSScreen.main?.visibleFrame else {
+            return CGSize(width: 1400, height: 900)
+        }
+        return CGSize(width: min(1400, visible.width - 40),
+                      height: min(900, visible.height - 40))
+    }
+
     init() {
         // Per ADR-007 / ADR-010: install a local crash logger so
         // we can write a report to disk on fatal signals. No
@@ -48,7 +63,8 @@ struct SOLAROApp: App {
         WindowGroup("Solaro", id: SolaroWindowID.workspace) {
             RootView(runtimeVersion: runtimeVersion)
         }
-        .defaultSize(width: 1400, height: 900)
+        .defaultSize(width: Self.defaultWindowSize.width,
+                     height: Self.defaultWindowSize.height)
         .commands {
             // Custom Undo / Redo (see comment on SolaroUndoCommand
             // — routes between the focused NSTextView's UndoManager
