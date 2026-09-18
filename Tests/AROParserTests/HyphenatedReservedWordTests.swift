@@ -1,7 +1,7 @@
 // ============================================================
 // HyphenatedReservedWordTests.swift
 // ARO Parser Tests - reserved words inside hyphenated names
-// (GitLab #579, #583)
+// (GitLab #579, #583, #566, #497)
 // ============================================================
 //
 // Each segment of a hyphenated identifier had to be a plain identifier, so a
@@ -26,7 +26,7 @@
 import Testing
 @testable import AROParser
 
-@Suite("Reserved words in hyphenated names (GitLab #579, #583)")
+@Suite("Reserved words in hyphenated names (GitLab #579, #583, #566, #497)")
 struct HyphenatedReservedWordTests {
 
     private func errors(_ body: String) -> [Diagnostic] {
@@ -36,6 +36,73 @@ struct HyphenatedReservedWordTests {
             Return an <OK: status> for the <probe>.
         }
         """).diagnostics.filter { $0.severity == .error }
+    }
+
+    // MARK: - #497's list
+
+    // The third report of the same defect, from a different angle again:
+    // keyword -- not only preposition -- segments, in any position. Its
+    // names came out of authoring !470, where "every author tripped on this
+    // independently", which is the useful part of the report: these are the
+    // words domain vocabulary actually uses.
+    @Test("Every name #497 reported parses")
+    func keywordSegmentNamesParse() {
+        let names = [
+            "price-with-tip",
+            "opens-at",
+            "empty-list",
+            "as-json",
+            "is-open",
+            "by-price",
+            "qty-each",
+        ]
+        for name in names {
+            let body = "Create the <\(name)> with 1."
+            let found = errors(body)
+            #expect(found.isEmpty, "\(body) → \(found)")
+        }
+    }
+
+    // MARK: - #566's list
+
+    // #566 reported the same defect from the other direction -- interior
+    // *preposition* segments -- and was filed against a table of names the
+    // language invites you to write: a date range is <from-date>/<to-date>,
+    // a derived total is <price-with-tax>, and the result of
+    // `Sort the <…> from the <users> by "name".` is <sorted-by-name>.
+    //
+    // The fix for #579/#583 covered these too, but only <from-date> was
+    // pinned by a test. The rest are here so the reported spellings cannot
+    // regress silently.
+    @Test("Every name #566 reported parses, leading and interior")
+    func prepositionSegmentNamesParse() {
+        let names = [
+            "from-date",
+            "to-date",
+            "sorted-by-name",
+            "start-to-end",
+            "price-with-tax",
+            "group-on-key",
+            "check-at-noon",
+        ]
+        for name in names {
+            let body = "Create the <\(name)> with 1."
+            let found = errors(body)
+            #expect(found.isEmpty, "\(body) → \(found)")
+        }
+    }
+
+    // The interesting case the issue did not cover: the same word as both an
+    // identifier segment and the statement's real preposition. Inside <…>
+    // there is no clause to begin, so `from` is a word; between the result
+    // and the object it is the preposition.
+    @Test("A preposition segment coexists with the same word as a preposition")
+    func segmentAndPrepositionInOneStatement() {
+        let found = errors("""
+        Create the <src> with { from-date: "d" }.
+            Extract the <from-date> from the <src: from-date>.
+        """)
+        #expect(found.isEmpty, "\(found)")
     }
 
     // MARK: - #583's list
