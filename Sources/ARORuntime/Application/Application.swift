@@ -631,6 +631,28 @@ public final class Application: @unchecked Sendable {
             }
         }
 
+        // A declared query parameter the client omitted takes the `default:`
+        // from the contract (GitLab #591). `required: false` plus `default:`
+        // is how OpenAPI says "optional, and here is the value to use", and
+        // ARO is contract-first — the contract should not have to be restated
+        // in every handler.
+        //
+        // The default is bound as a *string*, which is how the same parameter
+        // arrives when the client does send it: `?limit=25` binds "25", so
+        // an omitted `limit` binds "10" rather than the integer 10. One
+        // parameter changing type depending on whether the client supplied it
+        // would be a worse surprise than the YAML scalar's type being lost.
+        //
+        // Applied after both branches above so it covers the two ways a
+        // parameter can be absent: no query string at all, and a query string
+        // that omits this one.
+        for param in effectiveParameters where param.in == "query" {
+            guard let paramName = param.name,
+                  deserializedQueryParams[paramName] == nil,
+                  let defaultValue = param.schema?.value.defaultValue else { continue }
+            deserializedQueryParams[paramName] = "\(defaultValue.anyValue)"
+        }
+
         // Bind request data to context
         context.bind("request", value: [
             "method": request.method,

@@ -35,6 +35,26 @@ Absent gives `10`; `?limit=25` gives `"25"`; `?limit=0` gives `"0"`, because the
 
 One distinction is worth knowing, because it is not arbitrary. `default` reads its left side as an *expression*, and only the framework objects that are genuinely **records of values** can be read that way. `<file: "notes.md">` is an *address* an action resolves — there is no value called `file` for an expression to read — so `Read the <c> from the <file: "x"> default "y".` keeps its object reading rather than answering `"y"` every time. `<request: body>` stays an address too: a body is consumed once (ARO-0090), and a presence check would materialise it.
 
+Often you do not need the operator at all. Declaring the parameter in your
+OpenAPI contract with a `default:` makes the runtime supply it before your
+handler runs (GitLab #591):
+
+```yaml
+parameters:
+  - name: limit
+    in: query
+    required: false
+    schema:
+      type: integer
+      default: 10
+```
+
+With that in the contract, `Extract the <limit> from the <queryParameters: limit>.`
+binds `"10"` when the client omits `?limit=`, and the handler needs no fallback
+of its own. Being contract-first, this is usually the better place for it: the
+route's shape stays declared in one file. The value arrives as a **string**, the
+same as a value the client did send, so `?limit=25` and an omitted `limit` bind
+the same type.
 
 Multiple extractions gather all the data you need. A complex handler might extract several path parameters, multiple query parameters, the request body, and one or more headers. Each extraction creates a binding that subsequent statements can use.
 The pattern is to perform all extractions early in the feature set, before any processing logic. This makes it clear what data the handler needs and ensures that missing required data causes immediate failure rather than partial processing.
