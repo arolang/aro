@@ -55,7 +55,7 @@ The Watch pattern is a **feature set pattern** (not an action) that combines wit
     Clear the <screen> for the <terminal>.
     Transform the <output> from the <template: dashboard.screen>.
     Log <output> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <output>.
 }
 ```
 
@@ -66,7 +66,7 @@ The Watch pattern is a **feature set pattern** (not an action) that combines wit
     Retrieve the <data> from the <repository-name>.
     Transform the <output> from the <template: view.screen>.
     Log <output> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <output>.
 }
 ```
 

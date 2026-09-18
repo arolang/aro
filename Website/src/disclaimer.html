@@ -388,8 +388,9 @@
                 Bugs &#x221D; (API Surface) × (Complexity) × (Mutability)
             </p>
             <p>
-                ARO attacks all three factors: <strong>Smaller API surface</strong>—55 actions vs. infinite
-                function possibilities. <strong>Reduced complexity</strong>—no control flow means fewer execution
+                ARO attacks all three factors: <strong>Smaller API surface</strong>—71 built-in actions vs.
+                infinite function possibilities. <strong>Reduced complexity</strong>—control flow is a guard on
+                a statement or a <code>match</code>, never a nest of branches, so there are fewer execution
                 paths. <strong>Limited mutability</strong>—actions transform and return; they don't mutate shared state.
             </p>
             <p>

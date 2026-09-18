@@ -1,4 +1,4 @@
-(* Webhook Receiver Example - Incoming OpenAPI 3.1 webhooks (ARO-0187) *)
+(* Webhook Receiver Example - Incoming OpenAPI 3.1 webhooks (GitLab #187) *)
 
 (Application-Start: Webhook Receiver) {
     Log "Starting Webhook Receiver..." to the <console>.

@@ -1,6 +1,6 @@
 # SystemMonitor Example
 
-A comprehensive HTTP API demonstrating the `<Exec>` action (ARO-0033) with context-aware response formatting (ARO-0031).
+A comprehensive HTTP API demonstrating the `<Exec>` action (ARO-0010) with context-aware response formatting (ARO-0031).
 
 ## Features
 

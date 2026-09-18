@@ -1,6 +1,6 @@
 # DirectoryLister Example
 
-Demonstrates the `<Exec>` action from ARO-0033 for executing system commands.
+Demonstrates the `<Exec>` action from ARO-0010 for executing system commands.
 
 ## Features
 

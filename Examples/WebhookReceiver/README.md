@@ -1,7 +1,7 @@
 # Webhook Receiver
 
 Demonstrates **incoming webhooks** declared via OpenAPI 3.1's top-level
-`webhooks` object (ARO-0187).
+`webhooks` object (GitLab #187).
 
 ## How it works
 

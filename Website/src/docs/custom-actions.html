@@ -77,14 +77,14 @@
         <h2 id="user-defined-actions">User-Defined Actions (ARO-0081)</h2>
         <p>The simplest extension lives entirely in ARO. Declare a feature set with the business activity <code>Action</code> and it becomes callable application-wide as <code>Application.&lt;Name&gt;</code>:</p>
 
-        <pre><code><span class="code-keyword">(DoubleValue: Action takes</span> &lt;number&gt;<span class="code-keyword">) {</span>
-    <span class="code-keyword">Extract</span> the &lt;n&gt; <span class="code-keyword">from</span> the &lt;input: number&gt;.
-    <span class="code-keyword">Compute</span> the &lt;doubled&gt; <span class="code-keyword">from</span> &lt;n&gt; * 2.
-    <span class="code-keyword">Return</span> an &lt;OK: status&gt; <span class="code-keyword">with</span> { doubled: &lt;doubled&gt; }.
-<span class="code-keyword">}</span>
+        <pre><code><span class="code-feature">(DoubleValue: Action takes &lt;number&gt;)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;n&gt;</span> from the &lt;input: number&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;doubled&gt;</span> from &lt;n&gt; * 2.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { doubled: &lt;doubled&gt; }.
+}
 
 <span class="code-comment">(* Call from any other feature set: *)</span>
-<span class="code-keyword">Application.DoubleValue</span> the &lt;r&gt; <span class="code-keyword">from</span> 21.</code></pre>
+<span class="code-keyword">Application.DoubleValue</span> the <span class="code-result">&lt;r&gt;</span> from 21.</code></pre>
 
         <p>The <code>takes &lt;name&gt;</code> sugar declares a single positional argument extracted as <code>input.&lt;name&gt;</code>. Without it, callers pass an object literal via <code>with</code>. The call shape is identical to built-in and plugin actions — same parser, same dispatch, no new syntax. See <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0081-user-defined-actions.md">ARO-0081</a> for the full specification.</p>
 
@@ -101,25 +101,25 @@
         </ol>
 
         <h2>The ActionImplementation Protocol</h2>
-        <pre><code><span class="code-keyword">public protocol</span> <span class="code-type">ActionImplementation</span>: <span class="code-type">Sendable</span> {
-    <span class="code-comment">/// The semantic role of this action</span>
-    <span class="code-keyword">static var</span> role: <span class="code-type">ActionRole</span> { <span class="code-keyword">get</span> }
+        <pre><code>public protocol ActionImplementation: Sendable {
+    /// The semantic role of this action
+    static var role: ActionRole { get }
 
-    <span class="code-comment">/// The verbs that trigger this action</span>
-    <span class="code-keyword">static var</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; { <span class="code-keyword">get</span> }
+    /// The verbs that trigger this action
+    static var verbs: Set&lt;String&gt; { get }
 
-    <span class="code-comment">/// Valid prepositions for object clauses</span>
-    <span class="code-keyword">static var</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; { <span class="code-keyword">get</span> }
+    /// Valid prepositions for object clauses
+    static var validPrepositions: Set&lt;Preposition&gt; { get }
 
-    <span class="code-comment">/// Required initializer</span>
-    <span class="code-keyword">init</span>()
+    /// Required initializer
+    init()
 
-    <span class="code-comment">/// Execute the action</span>
-    <span class="code-keyword">func</span> execute(
-        result: <span class="code-type">ResultDescriptor</span>,
-        object: <span class="code-type">ObjectDescriptor</span>,
-        context: <span class="code-type">ExecutionContext</span>
-    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span>
+    /// Execute the action
+    func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -&gt; any Sendable
 }</code></pre>
 
         <h3>Key Points</h3>
@@ -148,128 +148,128 @@
         <h2>Step-by-Step: Creating a Custom Action</h2>
 
         <h3>Step 1: Define Your Action</h3>
-        <pre><code><span class="code-keyword">import</span> ARORuntime
+        <pre><code>import ARORuntime
 
-<span class="code-keyword">public struct</span> <span class="code-type">EmailAction</span>: <span class="code-type">ActionImplementation</span> {
-    <span class="code-comment">// 1. Define the semantic role</span>
-    <span class="code-keyword">public static let</span> role: <span class="code-type">ActionRole</span> = .export
+public struct EmailAction: ActionImplementation {
+    // 1. Define the semantic role
+    public static let role: ActionRole = .export
 
-    <span class="code-comment">// 2. Define verbs that trigger this action</span>
-    <span class="code-keyword">public static let</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; = [<span class="code-string">"Email"</span>, <span class="code-string">"Mail"</span>]
+    // 2. Define verbs that trigger this action
+    public static let verbs: Set&lt;String&gt; = [<span class="code-string">"Email"</span>, <span class="code-string">"Mail"</span>]
 
-    <span class="code-comment">// 3. Define valid prepositions</span>
-    <span class="code-keyword">public static let</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; = [.to, .with]
+    // 3. Define valid prepositions
+    public static let validPrepositions: Set&lt;Preposition&gt; = [.to, .with]
 
-    <span class="code-comment">// 4. Required initializer</span>
-    <span class="code-keyword">public init</span>() {}
+    // 4. Required initializer
+    public init() {}
 
-    <span class="code-comment">// 5. Implement execute</span>
-    <span class="code-keyword">public func</span> execute(
-        result: <span class="code-type">ResultDescriptor</span>,
-        object: <span class="code-type">ObjectDescriptor</span>,
-        context: <span class="code-type">ExecutionContext</span>
-    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
-        <span class="code-comment">// Implementation here</span>
+    // 5. Implement execute
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -&gt; any Sendable {
+        // Implementation here
     }
 }</code></pre>
 
         <h3>Step 2: Implement the Execute Method</h3>
-        <pre><code><span class="code-keyword">public func</span> execute(
-    result: <span class="code-type">ResultDescriptor</span>,
-    object: <span class="code-type">ObjectDescriptor</span>,
-    context: <span class="code-type">ExecutionContext</span>
-) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
-    <span class="code-comment">// Get required service</span>
-    <span class="code-keyword">guard let</span> emailService = context.service(<span class="code-type">EmailService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
-        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"EmailService"</span>)
+        <pre><code>public func execute(
+    result: ResultDescriptor,
+    object: ObjectDescriptor,
+    context: ExecutionContext
+) async throws -&gt; any Sendable {
+    // Get required service
+    guard let emailService = context.service(EmailService.self) else {
+        throw ActionError.serviceNotFound(<span class="code-string">"EmailService"</span>)
     }
 
-    <span class="code-comment">// Get the email content</span>
-    <span class="code-keyword">let</span> content: <span class="code-type">EmailContent</span> = <span class="code-keyword">try</span> context.require(result.identifier)
+    // Get the email content
+    let content: EmailContent = try context.require(result.identifier)
 
-    <span class="code-comment">// Get the recipient from the object</span>
-    <span class="code-keyword">let</span> recipient: <span class="code-type">String</span>
-    <span class="code-keyword">switch</span> object.sourceType {
+    // Get the recipient from the object
+    let recipient: String
+    switch object.sourceType {
     <span class="code-keyword">case</span> .variable:
-        recipient = <span class="code-keyword">try</span> context.require(object.identifier)
+        recipient = try context.require(object.identifier)
     <span class="code-keyword">case</span> .literal:
         recipient = object.identifier
-    <span class="code-keyword">default</span>:
-        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.invalidObjectSource(object.sourceType)
+    default:
+        throw ActionError.invalidObjectSource(object.sourceType)
     }
 
-    <span class="code-comment">// Perform the action</span>
-    <span class="code-keyword">let</span> sendResult = <span class="code-keyword">try await</span> emailService.send(
+    // Perform the action
+    let sendResult = try await emailService.send(
         content: content,
         to: recipient
     )
 
-    <span class="code-comment">// Emit event for observability</span>
-    context.emit(<span class="code-type">EmailSentEvent</span>(
+    // Emit event for observability
+    context.emit(EmailSentEvent(
         recipient: recipient,
         messageId: sendResult.messageId
     ))
 
-    <span class="code-keyword">return</span> sendResult
+    return sendResult
 }</code></pre>
 
         <h3>Step 3: Register Your Action</h3>
-        <pre><code><span class="code-comment">// In your application setup</span>
-<span class="code-type">ActionRegistry</span>.shared.register(<span class="code-type">EmailAction</span>.<span class="code-keyword">self</span>)</code></pre>
+        <pre><code>// In your application setup
+ActionRegistry.shared.register(EmailAction.self)</code></pre>
 
         <h3>Step 4: Use in ARO</h3>
-        <pre><code>(Send Welcome Email: User Onboarding) {
-    Create the &lt;email-content&gt; with {
+        <pre><code><span class="code-feature">(Send Welcome Email: User Onboarding)</span> {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;email-content&gt;</span> with {
         subject: <span class="code-string">"Welcome to our platform!"</span>,
         body: <span class="code-string">"Thanks for signing up..."</span>
     }.
-    Extract the &lt;user-email&gt; from the &lt;user: email&gt;.
-    Email the &lt;email-content&gt; to the &lt;user-email&gt;.
-    Return an &lt;OK: status&gt; for the &lt;email&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-email&gt;</span> from the &lt;user: email&gt;.
+    <span class="code-keyword">Send</span> the <span class="code-result">&lt;email-content&gt;</span> to the &lt;user-email&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;email-content&gt;.
 }</code></pre>
 
         <h2>Execution Context</h2>
         <p>The <code>ExecutionContext</code> provides access to runtime services:</p>
 
-        <pre><code><span class="code-keyword">public protocol</span> <span class="code-type">ExecutionContext</span>: <span class="code-type">AnyObject</span>, <span class="code-type">Sendable</span> {
-    <span class="code-comment">// Variable Management</span>
-    <span class="code-keyword">func</span> resolve&lt;T: <span class="code-type">Sendable</span>&gt;(_ name: <span class="code-type">String</span>) -> T?
-    <span class="code-keyword">func</span> require&lt;T: <span class="code-type">Sendable</span>&gt;(_ name: <span class="code-type">String</span>) <span class="code-keyword">throws</span> -> T
-    <span class="code-keyword">func</span> bind(_ name: <span class="code-type">String</span>, value: <span class="code-keyword">any</span> <span class="code-type">Sendable</span>)
-    <span class="code-keyword">func</span> exists(_ name: <span class="code-type">String</span>) -> <span class="code-type">Bool</span>
+        <pre><code>public protocol ExecutionContext: AnyObject, Sendable {
+    // Variable Management
+    func resolve&lt;T: Sendable&gt;(_ name: String) -&gt; T?
+    func require&lt;T: Sendable&gt;(_ name: String) throws -&gt; T
+    func bind(_ name: String, value: any Sendable)
+    func exists(_ name: String) -&gt; Bool
 
-    <span class="code-comment">// Service Access</span>
-    <span class="code-keyword">func</span> service&lt;S&gt;(_ type: S.<span class="code-type">Type</span>) -> S?
+    // Service Access
+    func service&lt;S&gt;(_ type: S.Type) -&gt; S?
 
-    <span class="code-comment">// Event Emission</span>
-    <span class="code-keyword">func</span> emit(_ event: <span class="code-keyword">any</span> <span class="code-type">RuntimeEvent</span>)
+    // Event Emission
+    func emit(_ event: any RuntimeEvent)
 
-    <span class="code-comment">// Metadata</span>
-    <span class="code-keyword">var</span> featureSetName: <span class="code-type">String</span> { <span class="code-keyword">get</span> }
-    <span class="code-keyword">var</span> executionId: <span class="code-type">String</span> { <span class="code-keyword">get</span> }
+    // Metadata
+    var featureSetName: String { get }
+    var executionId: String { get }
 }</code></pre>
 
         <h2>Best Practices</h2>
 
         <h3>Single Responsibility</h3>
         <p>Each action should do one thing well:</p>
-        <pre><code><span class="code-comment">// Good: Focused action</span>
-<span class="code-keyword">public struct</span> <span class="code-type">HashPasswordAction</span>: <span class="code-type">ActionImplementation</span> { ... }
+        <pre><code>// Good: Focused action
+public struct HashPasswordAction: ActionImplementation { ... }
 
-<span class="code-comment">// Bad: Action doing too much</span>
-<span class="code-keyword">public struct</span> <span class="code-type">UserManagementAction</span>: <span class="code-type">ActionImplementation</span> { ... }</code></pre>
+// Bad: Action doing too much
+public struct UserManagementAction: ActionImplementation { ... }</code></pre>
 
         <h3>Fail Fast with Descriptive Errors</h3>
-        <pre><code><span class="code-keyword">public func</span> execute(...) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
-    <span class="code-comment">// Validate required services</span>
-    <span class="code-keyword">guard let</span> service = context.service(<span class="code-type">MyService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
-        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"MyService"</span>)
+        <pre><code>public func execute(...) async throws -&gt; any Sendable {
+    // Validate required services
+    guard let service = context.service(MyService.self) else {
+        throw ActionError.serviceNotFound(<span class="code-string">"MyService"</span>)
     }
 
-    <span class="code-comment">// Validate required variables</span>
-    <span class="code-keyword">let</span> input: <span class="code-type">InputType</span> = <span class="code-keyword">try</span> context.require(result.identifier)
+    // Validate required variables
+    let input: InputType = try context.require(result.identifier)
 
-    <span class="code-comment">// ... proceed with execution</span>
+    // ... proceed with execution
 }</code></pre>
 
         <h3>Emit Events for Observability</h3>
@@ -281,28 +281,28 @@ context.emit(<span class="code-type">PaymentProcessedEvent</span>(
 ))</code></pre>
 
         <h2>Example: External API Action</h2>
-        <pre><code><span class="code-keyword">public struct</span> <span class="code-type">WeatherAction</span>: <span class="code-type">ActionImplementation</span> {
-    <span class="code-keyword">public static let</span> role: <span class="code-type">ActionRole</span> = .request
-    <span class="code-keyword">public static let</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; = [<span class="code-string">"Weather"</span>, <span class="code-string">"Forecast"</span>]
-    <span class="code-keyword">public static let</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; = [.forPrep]
+        <pre><code>public struct WeatherAction: ActionImplementation {
+    public static let role: ActionRole = .request
+    public static let verbs: Set&lt;String&gt; = [<span class="code-string">"Weather"</span>, <span class="code-string">"Forecast"</span>]
+    public static let validPrepositions: Set&lt;Preposition&gt; = [.forPrep]
 
-    <span class="code-keyword">public init</span>() {}
+    public init() {}
 
-    <span class="code-keyword">public func</span> execute(
-        result: <span class="code-type">ResultDescriptor</span>,
-        object: <span class="code-type">ObjectDescriptor</span>,
-        context: <span class="code-type">ExecutionContext</span>
-    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
-        <span class="code-keyword">guard let</span> httpClient = context.service(<span class="code-type">HTTPClientService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
-            <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"HTTPClientService"</span>)
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -&gt; any Sendable {
+        guard let httpClient = context.service(HTTPClientService.self) else {
+            throw ActionError.serviceNotFound(<span class="code-string">"HTTPClientService"</span>)
         }
 
-        <span class="code-keyword">let</span> city: <span class="code-type">String</span> = <span class="code-keyword">try</span> context.require(object.identifier)
-        <span class="code-keyword">let</span> url = <span class="code-string">"https://api.weather.com/v1/forecast?city=\(city)"</span>
-        <span class="code-keyword">let</span> response = <span class="code-keyword">try await</span> httpClient.get(url: url)
+        let city: String = try context.require(object.identifier)
+        let url = <span class="code-string">"https://api.weather.com/v1/forecast?city=\(city)"</span>
+        let response = try await httpClient.get(url: url)
 
         context.bind(result.identifier, value: response)
-        <span class="code-keyword">return</span> response
+        return response
     }
 }</code></pre>
 

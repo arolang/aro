@@ -90,7 +90,7 @@ Configuration values are scoped to the application lifetime:
     (* Configuration available in all feature sets *)
     Extract the <timeout> from the <validation: timeout>.
     Log <timeout> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <timeout>.
 }
 ```
 

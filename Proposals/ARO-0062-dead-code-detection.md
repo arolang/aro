@@ -99,7 +99,7 @@ Only terminal if ALL branches return (not implemented in this proposal):
 
 ```aro
 match <value> {
-    case "a": Return an <OK: status>.
+    case "a": Return an <OK: status> for the <OK>.
     case "b": Log "continue" to <console>.
 }
 Log "This IS reachable" to <console>.

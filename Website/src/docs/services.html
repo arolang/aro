@@ -156,18 +156,18 @@
         <h3>Writing a Plugin Service</h3>
         <p>Use the <code>AROPluginKit</code> SDK with the <code>.service()</code> builder:</p>
 
-        <pre><code><span class="code-comment">// plugins/GreetingService/Sources/GreetingService/GreetingService.swift</span>
+        <pre><code>// plugins/GreetingService/Sources/GreetingService/GreetingService.swift
 import AROPluginKit
 
-<span class="code-keyword">@AROExport</span>
+@AROExport
 private let plugin = AROPlugin(name: <span class="code-string">"greeting-service"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"Greeting"</span>)
     .service(<span class="code-string">"greeting"</span>, methods: [<span class="code-string">"hello"</span>, <span class="code-string">"goodbye"</span>]) { method, input in
         let name = input.with.string(<span class="code-string">"name"</span>) ?? <span class="code-string">"World"</span>
 
         switch method {
-        case <span class="code-string">"hello"</span>:
+        <span class="code-keyword">case</span> <span class="code-string">"hello"</span>:
             return .success([<span class="code-string">"result"</span>: <span class="code-string">"Hello, \(name)!"</span>])
-        case <span class="code-string">"goodbye"</span>:
+        <span class="code-keyword">case</span> <span class="code-string">"goodbye"</span>:
             return .success([<span class="code-string">"result"</span>: <span class="code-string">"Goodbye, \(name)!"</span>])
         default:
             return .failure(.notFound, <span class="code-string">"Unknown method: \(method)"</span>)
@@ -201,7 +201,7 @@ let package = Package(
         name: <span class="code-string">"ARO Developer"</span>
     }.
 
-    <span class="code-keyword">Log</span> &lt;greeting&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;greeting&gt;</span> to the &lt;console&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
@@ -243,7 +243,7 @@ try ExternalServiceRegistry.shared.register(PostgresService())</code></pre>
             <h4>Next Steps</h4>
             <p>
                 <a href="http-services.html">HTTP Services</a> - Built-in HTTP server<br>
-                <a href="action-developer-guide.html">Creating Custom Actions</a> - Extend ARO with new actions
+                <a href="custom-actions.html">Creating Custom Actions</a> - Extend ARO with new actions
             </p>
         </div>
     </main>

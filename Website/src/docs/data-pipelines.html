@@ -247,11 +247,11 @@
             Results are always typed:
         </p>
 
-        <pre><code><span class="code-comment">(* Retrieve with filtering and ordering *)</span>
-<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;active-users: List&lt;User&gt;&gt;</span> from the &lt;users&gt;
-    where &lt;status&gt; is <span class="code-string">"active"</span>
-    order by &lt;name&gt; asc
-    limit 100.</code></pre>
+        <pre><code>(* Retrieve, then order and page with actions and qualifiers.
+   `order by` / `limit` are SQL, not ARO. *)
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt; where status = <span class="code-string">"active"</span>.
+<span class="code-keyword">Sort</span> the <span class="code-result">&lt;by-name&gt;</span> from the &lt;users&gt; by &lt;name&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;page-one: take&gt;</span> from &lt;by-name&gt; with 100.</code></pre>
 
         <h2>Filter: Subset Existing Collections</h2>
         <p>
@@ -259,7 +259,7 @@
         </p>
 
         <pre><code><span class="code-comment">(* Filter for premium users *)</span>
-<span class="code-keyword">Filter</span> the <span class="code-result">&lt;premium-users: List&lt;User&gt;&gt;</span> from the &lt;users&gt;
+<span class="code-keyword">Filter</span> the &lt;premium-users: List&lt;User&gt;&gt; from the &lt;users&gt;
     where &lt;tier&gt; is <span class="code-string">"premium"</span>.</code></pre>
 
         <h2>Map: Transform to Different Types</h2>
@@ -269,7 +269,7 @@
         </p>
 
         <pre><code><span class="code-comment">(* Map List&lt;User&gt; to List&lt;UserSummary&gt; *)</span>
-<span class="code-keyword">Map</span> the <span class="code-result">&lt;summaries: List&lt;UserSummary&gt;&gt;</span> from the &lt;users&gt;.</code></pre>
+<span class="code-keyword">Map</span> the &lt;summaries: List&lt;UserSummary&gt;&gt; from the &lt;users&gt;.</code></pre>
 
         <h2>Reduce: Aggregate to Single Value</h2>
         <p>
@@ -277,17 +277,14 @@
         </p>
 
         <pre><code><span class="code-comment">(* Sum all order amounts *)</span>
-<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total: Float&gt;</span> from the &lt;orders&gt;
-    with sum(&lt;amount&gt;).
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total: Float&gt;</span> from the &lt;orders&gt; with sum(&lt;amount&gt;).
 
 <span class="code-comment">(* Count orders *)</span>
-<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;order-count: Integer&gt;</span> from the &lt;orders&gt;
-    with count().
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;order-count: Integer&gt;</span> from the &lt;orders&gt; with count().
 
-<span class="code-comment">(* Average price of electronics *)</span>
-<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-price: Float&gt;</span> from the &lt;products&gt;
-    where &lt;category&gt; is <span class="code-string">"electronics"</span>
-    with avg(&lt;price&gt;).</code></pre>
+<span class="code-comment">(* Average price of electronics — filter first, then reduce *)</span>
+<span class="code-keyword">Filter</span> the <span class="code-result">&lt;electronics&gt;</span> from the &lt;products&gt; where &lt;category&gt; is <span class="code-string">"electronics"</span>.
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-price: Float&gt;</span> from the &lt;electronics&gt; with avg(&lt;price&gt;).</code></pre>
 
         <h2>Group: Partition by Field</h2>
         <p>
@@ -418,37 +415,27 @@
         </p>
 
         <pre><code><span class="code-feature">(Sales Report: Analytics)</span> {
-    <span class="code-comment">(* Retrieve recent orders *)</span>
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;recent-orders: List&lt;Order&gt;&gt;</span> from the &lt;orders&gt;
-        where &lt;created-at&gt; > now().minus(30.days)
-        order by &lt;created-at&gt; desc.
+    <span class="code-comment">(* A relative date is a qualifier offset, not a method call *)</span>
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;cutoff: -30d&gt;</span> with now.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;all-orders&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;recent-orders&gt;</span> from the &lt;all-orders&gt; where &lt;created-at&gt; &gt; &lt;cutoff&gt;.
 
-    <span class="code-comment">(* Get total revenue *)</span>
-    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total-revenue: Float&gt;</span> from the &lt;recent-orders&gt;
-        with sum(&lt;amount&gt;).
+    <span class="code-comment">(* Total revenue *)</span>
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total-revenue: Float&gt;</span> from the &lt;recent-orders&gt; with sum(&lt;amount&gt;).
 
-    <span class="code-comment">(* Count pending orders *)</span>
-    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;pending-count: Integer&gt;</span> from the &lt;recent-orders&gt;
-        where &lt;status&gt; is <span class="code-string">"pending"</span>
-        with count().
+    <span class="code-comment">(* Pending orders — filter, then count *)</span>
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;pending&gt;</span> from the &lt;recent-orders&gt; where &lt;status&gt; is <span class="code-string">"pending"</span>.
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;pending-count: Integer&gt;</span> from the &lt;pending&gt; with count().
 
-    <span class="code-comment">(* Map to summaries *)</span>
-    <span class="code-keyword">Map</span> the <span class="code-result">&lt;summaries: List&lt;OrderSummary&gt;&gt;</span> from the &lt;recent-orders&gt;.
+    <span class="code-comment">(* Project one field per element *)</span>
+    <span class="code-keyword">Map</span> the <span class="code-result">&lt;summaries&gt;</span> from the &lt;recent-orders&gt; with id.
 
-    <span class="code-comment">(* Filter high-value orders *)</span>
-    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;high-value: List&lt;Order&gt;&gt;</span> from the &lt;recent-orders&gt;
-        where &lt;amount&gt; > 1000.
-
-    <span class="code-comment">(* Group orders by status *)</span>
-    <span class="code-keyword">Group</span> the <span class="code-result">&lt;by-status&gt;</span> from the &lt;recent-orders&gt; by <span class="code-string">"status"</span>.
-
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with {
-        orders: &lt;summaries&gt;,
-        total: &lt;total-revenue&gt;,
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;report&gt;</span> with {
+        revenue: &lt;total-revenue&gt;,
         pending: &lt;pending-count&gt;,
-        high-value-count: &lt;high-value&gt;.count(),
-        by-status: &lt;by-status&gt;
+        orders: &lt;summaries&gt;
     }.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;report&gt;.
 }</code></pre>
 
         <h2>Why This Approach?</h2>

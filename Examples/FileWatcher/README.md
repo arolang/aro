@@ -17,8 +17,8 @@ Watches the current directory for file changes and logs when files are created, 
 
 ## Related Proposals
 
-- [ARO-0023: File System Operations](../../Proposals/ARO-0023-file-system.md)
-- [ARO-0028: Long-Running Applications](../../Proposals/ARO-0028-keepalive.md)
+- [ARO-0036: Extended File Operations](../../Proposals/ARO-0036-file-operations.md)
+- [ARO-0005: Application Architecture](../../Proposals/ARO-0005-application-architecture.md)
 
 ## Usage
 

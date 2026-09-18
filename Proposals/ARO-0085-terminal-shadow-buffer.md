@@ -461,7 +461,7 @@ actor TerminalService {
            with <metrics>
            to the <terminal>.
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <output>.
 }
 ```
 
@@ -479,7 +479,7 @@ actor TerminalService {
            with { tasks: <tasks> }
            to the <terminal>.
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <view>.
 }
 ```
 
@@ -497,7 +497,7 @@ actor TerminalService {
            with { percent: <percent> }
            to the <terminal>.
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <bar>.
 }
 ```
 

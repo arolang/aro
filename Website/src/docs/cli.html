@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>CLI Reference - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .doc-screenshot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 24px 0 8px;
+            display: block;
+        }
+
+        .doc-screenshot-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1>CLI Reference</h1>
+            <p class="lead">Every <code>aro</code> subcommand, what it is for, and the flags worth knowing.</p>
+        </header>
+
+        <h2>Every command</h2>
+        <table>
+            <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+            <tbody>
+                <tr><td><code>aro run &lt;path&gt;</code></td><td>Run an application in the interpreter</td></tr>
+                <tr><td><code>aro debug &lt;path&gt;</code></td><td>Step-debug: pause at every statement, inspect, continue</td></tr>
+                <tr><td><code>aro build &lt;path&gt;</code></td><td>Compile to a native binary through LLVM</td></tr>
+                <tr><td><code>aro compile &lt;path&gt;</code></td><td>Compile and report diagnostics, without linking</td></tr>
+                <tr><td><code>aro check &lt;path&gt;</code></td><td>Check sources for errors and warnings</td></tr>
+                <tr><td><code>aro diff &lt;range&gt;</code></td><td>Compare feature-set graphs between two revisions</td></tr>
+                <tr><td><code>aro test &lt;path&gt;</code></td><td>Run the colocated tests</td></tr>
+                <tr><td><code>aro repl</code></td><td>Interactive read-eval-print loop</td></tr>
+                <tr><td><code>aro kernel</code></td><td>The native Jupyter kernel, and its installer</td></tr>
+                <tr><td><code>aro new plugin</code></td><td>Scaffold a plugin in Swift, Rust, C, C++, Python or ARO</td></tr>
+                <tr><td><code>aro add &lt;source&gt;</code></td><td>Install a plugin from a Git repository</td></tr>
+                <tr><td><code>aro remove &lt;name&gt;</code></td><td>Uninstall a plugin</td></tr>
+                <tr><td><code>aro plugins</code></td><td>List installed plugins</td></tr>
+                <tr><td><code>aro actions</code></td><td>List every registered action, and optionally every qualifier</td></tr>
+                <tr><td><code>aro lsp</code></td><td>Start the Language Server over stdio</td></tr>
+                <tr><td><code>aro mcp</code></td><td>Start ARO as an MCP server for LLM tooling</td></tr>
+                <tr><td><code>aro ask</code></td><td>Local-model coding assistant that can read, write and test ARO</td></tr>
+                <tr><td><code>aro ui</code></td><td>Open Solaro, the ARO desktop UI, at a project path</td></tr>
+            </tbody>
+        </table>
+        <p>
+            Piping works too — source on stdin is evaluated directly:
+        </p>
+<pre><code>echo 'Log "Hi" to the &lt;console&gt;.' | aro</code></pre>
+
+        <h2>Running and checking</h2>
+<pre><code>aro run ./MyApp                     # interpret
+aro run ./MyApp -- --port 8080      # arguments after -- reach the application
+aro check ./MyApp                   # errors, warnings, and per-route body analysis
+aro check ./MyApp --no-warnings     # errors only
+aro test ./MyApp --filter pricing   # run the tests whose name matches</code></pre>
+
+        <h2>Building a binary</h2>
+<pre><code>aro build ./MyApp                   # native binary, static Swift runtime
+aro build ./MyApp --release         # optimize + size + strip
+aro build ./MyApp --emit-llvm       # LLVM IR text instead of a binary
+aro build ./MyApp --dynamic         # ship libswift*.so beside the binary (rpath=$ORIGIN)
+aro build ./MyApp --sign '-' --hardened-runtime</code></pre>
+        <p>
+            <code>--static</code> is the default and produces one self-contained file. On
+            Linux, Foundation still links dynamically.
+        </p>
+
+        <h2>Comparing two revisions</h2>
+        <p>
+            <code>aro diff</code> compares the <em>feature graph</em> — nodes are feature
+            sets, wires are events, <code>Application.&lt;Name&gt;</code> calls and
+            repository observers — rather than lines of text. It is derived with the
+            runtime's own matching rules, so what it shows is what the event bus will
+            actually wire up:
+        </p>
+<pre><code>aro diff --graph main..my-branch
+aro diff --graph main..my-branch --html report.html</code></pre>
+
+        <h2>Plugins</h2>
+<pre><code>aro new plugin my-csv --lang rust --actions --qualifiers
+aro new plugin my-workflows --lang aro
+aro add github:org/repo
+aro plugins
+aro remove my-csv</code></pre>
+        <p><code>--lang</code> is required: <code>swift</code>, <code>rust</code>, <code>c</code>, <code>cpp</code>, <code>python</code> or <code>aro</code>.</p>
+
+        <h2>Interactive and notebook</h2>
+<pre><code>aro repl                 # terminal REPL
+aro repl --json          # line-delimited JSON on stdio, for front-ends
+aro kernel install       # register the native Jupyter kernel (ZMQ, no Python)</code></pre>
+
+        <h2>Editor and assistant integration</h2>
+<pre><code>aro lsp                  # Language Server over stdio
+aro mcp                  # MCP server for LLM tooling
+aro ask "add a rate limit to createOrder"
+aro ui ./MyApp           # open Solaro at this project</code></pre>
+        <p>
+            <code>aro lsp</code>, <code>aro mcp</code>, <code>aro ask</code> and
+            <code>aro kernel</code> are available on macOS and Linux; they are not built
+            for Windows.
+        </p>
+
+        <h2>Discovering the language from the CLI</h2>
+<pre><code>aro actions                    # all 71 built-in actions, with roles and prepositions
+aro actions --qualifiers       # and every registered Compute qualifier
+aro actions Retrieve           # one action in detail
+aro actions --format json      # machine-readable, for tooling</code></pre>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                Each command's own <code>--help</code> is authoritative and always current.
+                For the step debugger see
+                <a href="https://github.com/arolang/aro/blob/main/Book/TheDebuggingGuide">The
+                ARO Debugging Guide</a>; for notebooks see
+                <a href="jupyter-notebooks.html">Jupyter Notebooks</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

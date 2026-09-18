@@ -1,5 +1,5 @@
 # ============================================================
-# OpenAPI Contract for the Webhook Receiver Example (ARO-0187)
+# OpenAPI Contract for the Webhook Receiver Example (GitLab #187)
 # ============================================================
 # Demonstrates OpenAPI 3.1 top-level `webhooks`. Each webhook entry is
 # routed as POST /<webhookName>, and dispatched to the feature set named

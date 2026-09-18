@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Concurrency - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .doc-screenshot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 24px 0 8px;
+            display: block;
+        }
+
+        .doc-screenshot-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1>Concurrency</h1>
+            <p class="lead">What runs at the same time as what, what ordering you may rely on, and the one rule that explains both.</p>
+        </header>
+
+        <h2>The rule</h2>
+        <p>
+            A statement's action <strong>starts</strong> where it is written. The program
+            <strong>waits</strong> for it at the first read of the binding it produces.
+            Nothing else is promised, and nothing less is.
+        </p>
+        <p>
+            That single rule is what makes independent statements overlap. Two two-second
+            requests in one feature set cost about two seconds, not four — nobody reads the
+            first result until after the second request has already been started:
+        </p>
+<pre><code><span class="code-feature">(Dashboard: Reporting)</span> {
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;sales&gt;</span> from the &lt;sales-url&gt;.      <span class="code-comment">(* starts now *)</span>
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;traffic&gt;</span> from the &lt;traffic-url&gt;.  <span class="code-comment">(* starts now, alongside *)</span>
+
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;total: sum&gt;</span> from &lt;sales&gt;.         <span class="code-comment">(* waits here for &lt;sales&gt; *)</span>
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;traffic&gt;</span> to the &lt;console&gt;.                <span class="code-comment">(* &lt;traffic&gt; is already in *)</span>
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;total&gt;.
+}</code></pre>
+
+        <h2>Effects stay in order</h2>
+        <p>
+            Deferral is an allowlist of value-producing verbs. Anything observable —
+            <code>Log</code>, <code>Store</code>, <code>Emit</code>, <code>Send</code>,
+            <code>Publish</code>, <code>Return</code> — never defers: it runs at its own
+            statement and forces whatever it reads first. So output appears in source
+            order even though the work behind it did not happen in source order.
+        </p>
+        <p>
+            <code>Sleep</code> is deliberately excluded from the allowlist, because for
+            <code>Sleep</code> the delay <em>is</em> the effect.
+        </p>
+
+        <h2>The levels</h2>
+        <table>
+            <thead>
+                <tr><th>Level</th><th>What happens</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Feature sets</td><td>Concurrent. Independent triggers — HTTP requests, events, file changes, sockets — run their feature sets at the same time.</td></tr>
+                <tr><td>Statements</td><td>Concurrent where independent, by the rule above.</td></tr>
+                <tr><td>Effects</td><td>Ordered. They run at their own statement, in source order.</td></tr>
+                <tr><td>Iterations</td><td>Sequential with <code>for each</code>; up to N at a time with <code>parallel for each</code>.</td></tr>
+                <tr><td>Streams</td><td>Pipelined. The producer runs ahead of the consumer by a bounded prefetch window.</td></tr>
+            </tbody>
+        </table>
+
+        <h2><code>parallel for each</code></h2>
+        <p>The one place a program asks for concurrency explicitly.</p>
+<pre><code><span class="code-comment">(* Sequential: one iteration at a time, deterministic order *)</span>
+<span class="code-keyword">for each</span> &lt;url&gt; in &lt;urls&gt; {
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;page&gt;</span> from &lt;url&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;page&gt;</span> into the &lt;page-repository&gt;.
+}
+
+<span class="code-comment">(* Concurrent: up to N iterations at a time, non-deterministic order *)</span>
+<span class="code-keyword">parallel for each</span> &lt;url&gt; in &lt;urls&gt; {
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;page&gt;</span> from &lt;url&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;page&gt;</span> into the &lt;page-repository&gt;.
+}
+
+<span class="code-comment">(* Explicit bound — match it to what the far end tolerates *)</span>
+<span class="code-keyword">parallel for each</span> &lt;url&gt; in &lt;urls&gt; with &lt;concurrency: 8&gt; {
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;page&gt;</span> from &lt;url&gt;.
+}</code></pre>
+
+        <table>
+            <thead>
+                <tr><th>Property</th><th>Behaviour</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Completion order</td><td>Non-deterministic. Never write code that depends on it.</td></tr>
+                <tr><td>Statements inside one iteration</td><td>Sequential, by the rule above</td></tr>
+                <tr><td>Iteration scope</td><td>A fresh child scope per iteration; the loop variable and index are bound there</td></tr>
+                <tr><td>Writes to outer bindings</td><td>Not possible — bindings are immutable. Accumulate through a repository.</td></tr>
+                <tr><td>Default concurrency</td><td><code>min(item count, max(4, cores &times; 4))</code></td></tr>
+                <tr><td><code>with &lt;concurrency: N&gt;</code></td><td>Overrides the default; <code>N &le; 0</code> is rejected and clamped to 1</td></tr>
+            </tbody>
+        </table>
+
+        <p>
+            <strong>Safe inside a parallel iteration:</strong> computing, requesting,
+            storing to repositories, emitting events, logging.
+            <strong>Unsafe:</strong> anything that assumes an ordering between iterations,
+            or that one iteration observes another's effects. Repository writes from
+            concurrent iterations are serialised by the repository — the result is
+            consistent, the order in which entries land is not defined.
+        </p>
+
+        <h2>What is shared</h2>
+        <p>
+            Two concurrent executions of the same feature set cannot see each other's
+            variables: each execution gets its own binding scope, and bindings are
+            immutable anyway. The only shared, mutable surfaces are
+            <strong>repositories</strong> and <strong>published symbols</strong>.
+        </p>
+
+        <h2>Turning it off, and tuning it</h2>
+        <table>
+            <thead>
+                <tr><th>Variable</th><th>Default</th><th>Effect</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>ARO_NO_DEFER</code></td><td>unset</td><td>Set it to run every action at its own statement, as the runtime did before deferral. The fastest way to find out whether a suspected bug is order-related.</td></tr>
+                <tr><td><code>ARO_FORCE_WARN_SECONDS</code></td><td><code>5</code></td><td>How long a wait at a force point may take before the runtime warns. <code>0</code> disables the warning.</td></tr>
+                <tr><td><code>ARO_STREAM_PREFETCH</code></td><td><code>2</code></td><td>How many elements a stream's producer may run ahead of its consumer.</td></tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Compiled binaries are more conservative</h4>
+            <p>
+                <code>aro build</code> bounds a <code>parallel for each</code> more
+                tightly than the interpreter does, so statement overlap yields a smaller
+                — still real — win. Both produce the same results; only throughput differs.
+            </p>
+        </div>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                The full specification is
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0088-concurrency-model.md">ARO-0088:
+                Concurrency Model</a>. For what streams do with the same machinery, see
+                <a href="streaming.html">Streaming Execution</a>; for request bodies that
+                stream rather than materialise, see <a href="request-bodies.html">Request Bodies</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -272,14 +272,14 @@
         <h2>Directory Operations</h2>
 
         <h3>List Directory Contents</h3>
-        <pre><code><span class="code-comment">(* List all entries *)</span>
-<span class="code-keyword">List</span> the <span class="code-result">&lt;entries&gt;</span> in the &lt;directory: <span class="code-string">"./uploads"</span>&gt;.
+        <pre><code><span class="code-comment">(* List all entries — `from`, like every other REQUEST action *)</span>
+<span class="code-keyword">List</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: <span class="code-string">"./uploads"</span>&gt;.
 
-<span class="code-comment">(* Filter with glob pattern *)</span>
-<span class="code-keyword">List</span> the <span class="code-result">&lt;aro-files&gt;</span> in the &lt;directory: <span class="code-string">"./src"</span>&gt; matching <span class="code-string">"*.aro"</span>.
+<span class="code-comment">(* Filter with a glob pattern *)</span>
+<span class="code-keyword">List</span> the <span class="code-result">&lt;aro-files&gt;</span> from the &lt;directory: <span class="code-string">"./src"</span>&gt; matching <span class="code-string">"*.aro"</span>.
 
 <span class="code-comment">(* List recursively *)</span>
-<span class="code-keyword">List</span> the <span class="code-result">&lt;all-files&gt;</span> in the &lt;directory: <span class="code-string">"./project"</span>&gt; recursively.</code></pre>
+<span class="code-keyword">List</span> the <span class="code-result">&lt;all-files&gt;</span> from the &lt;directory: <span class="code-string">"./project"</span>&gt; recursively.</code></pre>
 
         <p>Each entry includes:</p>
         <ul>
@@ -294,7 +294,7 @@
         <pre><code><span class="code-comment">(* Check if file exists *)</span>
 <span class="code-keyword">Exists</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
-when &lt;found&gt; is false {
+<span class="code-keyword">when</span> &lt;found&gt; is false {
     <span class="code-keyword">Log</span> <span class="code-string">"Config not found!"</span> to the &lt;console&gt;.
 }
 
@@ -303,30 +303,30 @@ when &lt;found&gt; is false {
 
         <h3>Create Directories</h3>
         <pre><code><span class="code-comment">(* Create directory with all parent directories *)</span>
-<span class="code-keyword">CreateDirectory</span> the <span class="code-result">&lt;output-dir&gt;</span> to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
+CreateDirectory the &lt;output-dir&gt; to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
 
         <h3>Get File Metadata</h3>
         <pre><code><span class="code-comment">(* Get detailed file stats *)</span>
 <span class="code-keyword">Stat</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
 
-<span class="code-keyword">Log</span> &lt;info: size&gt; to the &lt;console&gt;.
-<span class="code-keyword">Log</span> &lt;info: modified&gt; to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> <span class="code-result">&lt;info: size&gt;</span> to the &lt;console&gt;.
+<span class="code-keyword">Log</span> <span class="code-result">&lt;info: modified&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <h2>Copy and Move</h2>
 
         <h3>Copy Files</h3>
         <pre><code><span class="code-comment">(* Copy a file *)</span>
-<span class="code-keyword">Copy</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
+<span class="code-keyword">Copy</span> the <span class="code-result">&lt;file: <span class="code-string">"./template.txt"</span>&gt;</span> to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
 
 <span class="code-comment">(* Copy a directory - recursive by default *)</span>
-<span class="code-keyword">Copy</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
+<span class="code-keyword">Copy</span> the <span class="code-result">&lt;directory: <span class="code-string">"./src"</span>&gt;</span> to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
 
         <h3>Move and Rename</h3>
         <pre><code><span class="code-comment">(* Rename a file *)</span>
-<span class="code-keyword">Move</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
+<span class="code-keyword">Move</span> the <span class="code-result">&lt;file: <span class="code-string">"./draft.txt"</span>&gt;</span> to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
 
 <span class="code-comment">(* Move to different directory *)</span>
-<span class="code-keyword">Move</span> the &lt;file: <span class="code-string">"./inbox/report.pdf"</span>&gt; to the &lt;destination: <span class="code-string">"./archive/report.pdf"</span>&gt;.</code></pre>
+<span class="code-keyword">Move</span> the <span class="code-result">&lt;file: <span class="code-string">"./inbox/report.pdf"</span>&gt;</span> to the &lt;destination: <span class="code-string">"./archive/report.pdf"</span>&gt;.</code></pre>
 
         <h2>Complete Example</h2>
         <p>
@@ -336,11 +336,11 @@ when &lt;found&gt; is false {
         <pre><code><span class="code-feature">(Application-Start: File Operations Demo)</span> {
     <span class="code-keyword">Log</span> <span class="code-string">"=== File Operations ==="</span> to the &lt;console&gt;.
 
-    <span class="code-comment">(* Check and create output directory *)</span>
+    <span class="code-comment">(* Check and create the output directory *)</span>
     <span class="code-keyword">Exists</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
 
-    when &lt;dir-exists&gt; is false {
-        <span class="code-keyword">CreateDirectory</span> the <span class="code-result">&lt;output&gt;</span> to the &lt;path: <span class="code-string">"./demo-output"</span>&gt;.
+    <span class="code-keyword">when</span> &lt;dir-exists&gt; is false {
+        <span class="code-keyword">Make</span> the <span class="code-result">&lt;output-dir&gt;</span> at the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
         <span class="code-keyword">Log</span> <span class="code-string">"Created directory"</span> to the &lt;console&gt;.
     }
 
@@ -350,21 +350,19 @@ when &lt;found&gt; is false {
 
     <span class="code-comment">(* Append to it *)</span>
     <span class="code-keyword">Append</span> the <span class="code-result">&lt;line&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
-        with <span class="code-string">"\nAppended line."</span>.
+        with <span class="code-string">"Appended line."</span>.
 
-    <span class="code-comment">(* Get stats *)</span>
+    <span class="code-comment">(* Get stats — interpolation takes a plain name, so extract first *)</span>
     <span class="code-keyword">Stat</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;.
-    <span class="code-keyword">Log</span> <span class="code-string">"Size: &lt;info: size&gt; bytes"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;size&gt;</span> from the &lt;info: size&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Size: ${size} bytes"</span> to the &lt;console&gt;.
 
-    <span class="code-comment">(* Copy the file *)</span>
-    <span class="code-keyword">Copy</span> the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
-        to the &lt;destination: <span class="code-string">"./demo-output/hello-copy.txt"</span>&gt;.
+    <span class="code-comment">(* Copy and list *)</span>
+    <span class="code-keyword">Copy</span> the <span class="code-result">&lt;backup&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.bak"</span>&gt;.
+    <span class="code-keyword">List</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;entries&gt;</span> to the &lt;console&gt;.
 
-    <span class="code-comment">(* List directory *)</span>
-    <span class="code-keyword">List</span> the <span class="code-result">&lt;files&gt;</span> in the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
-
-    <span class="code-keyword">Log</span> <span class="code-string">"=== Complete ==="</span> to the &lt;console&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h2>Actions Reference</h2>

@@ -16,8 +16,8 @@ Loads a custom greeting service from a Swift plugin and calls its methods (`hell
 
 ## Related Proposals
 
-- [ARO-0025: Plugin Architecture](../../Proposals/ARO-0025-plugin-architecture.md)
-- [ARO-0020: Action Framework](../../Proposals/ARO-0020-action-framework.md)
+- [ARO-0016: Interoperability](../../Proposals/ARO-0016-interoperability.md)
+- [ARO-0004: Actions](../../Proposals/ARO-0004-actions.md)
 
 ## Usage
 

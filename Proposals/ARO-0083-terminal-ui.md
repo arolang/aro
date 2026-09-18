@@ -332,7 +332,7 @@ private func registerWatchHandlers(for program: AnalyzedProgram, baseContext: Ru
     Retrieve the <tasks> from the <task-repository>.
     Transform the <view> from the <template: dashboard.screen>.
     Log <view> to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <view>.
 }
 ```
 
@@ -710,7 +710,7 @@ Only clear and re-render when necessary:
     Transform the <view> from the <template: dashboard.screen>.
     Log <view> to the <console>.
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <view>.
 }
 ```
 
@@ -725,7 +725,7 @@ For high-frequency updates, consider throttling:
     (* Only re-render if enough time has passed *)
     (* Implementation would check timestamp *)
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <result>.
 }
 ```
 
@@ -821,7 +821,7 @@ Support for mouse interactions:
 
     (* Process click at (x, y) *)
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <y>.
 }
 ```
 
@@ -835,13 +835,13 @@ Proper full-screen TUI applications:
     Enable the <alternate-screen> for the <terminal>.
 
     Keepalive the <application> for the <events>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <application>.
 }
 
 (Application-End: Success) {
     (* Restore main buffer *)
     Disable the <alternate-screen> for the <terminal>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <alternate-screen>.
 }
 ```
 

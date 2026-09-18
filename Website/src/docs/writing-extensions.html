@@ -185,19 +185,26 @@ build:
         <pre><code><span class="code-comment">(* features/csv-parser.aro *)</span>
 
 <span class="code-feature">(Parse CSV File: CSV Processing)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file&gt;.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./data.csv"</span>&gt;.
     <span class="code-keyword">Split</span> the <span class="code-result">&lt;lines&gt;</span> from the &lt;content&gt; by <span class="code-string">"\n"</span>.
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;header: first&gt;</span> from the &lt;lines&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;header&gt;</span> from the &lt;lines: first&gt;.
     <span class="code-keyword">Split</span> the <span class="code-result">&lt;columns&gt;</span> from the &lt;header&gt; by <span class="code-string">","</span>.
-    <span class="code-keyword">Transform</span> each <span class="code-result">&lt;row&gt;</span> in the &lt;lines: 1-&gt; with &lt;columns&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;rows&gt;.
+
+    <span class="code-comment">(* `for each` is how you work per element — there is no `Transform each` *)</span>
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;rows&gt;</span> with [].
+    <span class="code-keyword">for each</span> &lt;row&gt; in &lt;lines&gt; {
+        <span class="code-keyword">Split</span> the <span class="code-result">&lt;cells&gt;</span> from the &lt;row&gt; by <span class="code-string">","</span>.
+        <span class="code-keyword">Log</span> <span class="code-result">&lt;cells&gt;</span> to the &lt;console&gt;.
+    }
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;columns&gt;.
 }
 
 <span class="code-feature">(Validate CSV Schema: CSV Validation)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;input: data&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;schema&gt;</span> from the &lt;input: schema&gt;.
-    <span class="code-keyword">Validate</span> the &lt;data&gt; against the &lt;schema&gt;.
-    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Valid: status&gt;</span>.
+    <span class="code-keyword">Validate</span> the <span class="code-result">&lt;valid&gt;</span> for the &lt;data&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;valid&gt;.
 }</code></pre>
 
         <h2>Native Plugins</h2>
@@ -208,10 +215,10 @@ build:
 
         <h3>Swift Plugins</h3>
         <p>Use the <code>AROPluginKit</code> SDK with the <code>@AROExport</code> macro:</p>
-        <pre><code><span class="code-comment">// Sources/CSVParser.swift</span>
+        <pre><code>// Sources/CSVParser.swift
 import AROPluginKit
 
-<span class="code-keyword">@AROExport</span>
+@AROExport
 private let plugin = AROPlugin(name: <span class="code-string">"csv-parser"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"CSV"</span>)
     .action(<span class="code-string">"ParseCSV"</span>, verbs: [<span class="code-string">"parsecsv"</span>], role: <span class="code-string">"own"</span>,
             prepositions: [<span class="code-string">"from"</span>],
@@ -225,19 +232,19 @@ private let plugin = AROPlugin(name: <span class="code-string">"csv-parser"</spa
 
         <h3>Rust Plugins</h3>
         <p>Use <code>#[action]</code> and <code>aro_export!</code> macros from the SDK:</p>
-        <pre><code><span class="code-comment">// src/lib.rs</span>
+        <pre><code>// src/lib.rs
 use aro_plugin_sdk::prelude::*;
 
-<span class="code-keyword">#[action</span>(name = <span class="code-string">"ParseCSV"</span>, verbs = [<span class="code-string">"parsecsv"</span>], role = <span class="code-string">"own"</span>,
-         prepositions = [<span class="code-string">"from"</span>], description = <span class="code-string">"Parse CSV data"</span>)<span class="code-keyword">]</span>
-fn parse_csv(input: &amp;Input) -> PluginResult&lt;Output&gt; {
+#[action(name = <span class="code-string">"ParseCSV"</span>, verbs = [<span class="code-string">"parsecsv"</span>], role = <span class="code-string">"own"</span>,
+         prepositions = [<span class="code-string">"from"</span>], description = <span class="code-string">"Parse CSV data"</span>)]
+fn parse_csv(input: &amp;Input) -&gt; PluginResult&lt;Output&gt; {
     let data = input.string(<span class="code-string">"data"</span>)
         .ok_or_else(|| PluginError::missing(<span class="code-string">"data"</span>))?;
     let rows = parse(data);
     Ok(Output::new().set(<span class="code-string">"rows"</span>, json!(rows)))
 }
 
-<span class="code-keyword">aro_export!</span> {
+aro_export! {
     name: <span class="code-string">"csv-parser-rs"</span>,
     version: <span class="code-string">"1.0.0"</span>,
     handle: <span class="code-string">"CSV"</span>,
@@ -247,14 +254,14 @@ fn parse_csv(input: &amp;Input) -> PluginResult&lt;Output&gt; {
 
         <h3>Python Plugins</h3>
         <p>Use <code>@plugin</code> and <code>@action</code> decorators:</p>
-        <pre><code><span class="code-comment"># src/plugin.py</span>
+        <pre><code># src/plugin.py
 from aro_plugin_sdk import plugin, action, export_abi, run, AROInput
 
-<span class="code-keyword">@plugin</span>(name=<span class="code-string">"csv-tools-py"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"CSV"</span>)
+@plugin(name=<span class="code-string">"csv-tools-py"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"CSV"</span>)
 class CSVPlugin:
     pass
 
-<span class="code-keyword">@action</span>(name=<span class="code-string">"parse-csv"</span>, verbs=[<span class="code-string">"parsecsv"</span>], role=<span class="code-string">"own"</span>,
+@action(name=<span class="code-string">"parse-csv"</span>, verbs=[<span class="code-string">"parsecsv"</span>], role=<span class="code-string">"own"</span>,
         prepositions=[<span class="code-string">"from"</span>], description=<span class="code-string">"Parse CSV data"</span>)
 def handle_parse_csv(input: AROInput):
     content = input.string(<span class="code-string">"data"</span>)
@@ -268,25 +275,25 @@ if __name__ == <span class="code-string">"__main__"</span>:
 
         <h3>C Plugins</h3>
         <p>Use <code>ARO_PLUGIN()</code> and <code>ARO_ACTION()</code> macros from the single-header SDK:</p>
-        <pre><code><span class="code-comment">/* src/csv_plugin.c */</span>
+        <pre><code>/* src/csv_plugin.c */
 #define ARO_PLUGIN_SDK_IMPLEMENTATION
 #include <span class="code-string">"aro_plugin_sdk.h"</span>
 
-<span class="code-keyword">ARO_PLUGIN</span>(<span class="code-string">"csv-parser-c"</span>, <span class="code-string">"1.0.0"</span>)
-<span class="code-keyword">ARO_HANDLE</span>(<span class="code-string">"CSV"</span>)
+ARO_PLUGIN(<span class="code-string">"csv-parser-c"</span>, <span class="code-string">"1.0.0"</span>)
+ARO_HANDLE(<span class="code-string">"CSV"</span>)
 
-<span class="code-comment">/* Lifecycle hooks (called on load/unload) */</span>
-<span class="code-keyword">ARO_INIT</span>() {
-    <span class="code-comment">/* initialise resources */</span>
+/* Lifecycle hooks (called on load/unload) */
+ARO_INIT() {
+    /* initialise resources */
 }
 
-<span class="code-keyword">ARO_SHUTDOWN</span>() {
-    <span class="code-comment">/* clean up resources */</span>
+ARO_SHUTDOWN() {
+    /* clean up resources */
 }
 
-<span class="code-keyword">ARO_ACTION</span>(<span class="code-string">"ParseCSV"</span>, <span class="code-string">"own"</span>, <span class="code-string">"from,with"</span>) {
+ARO_ACTION(<span class="code-string">"ParseCSV"</span>, <span class="code-string">"own"</span>, <span class="code-string">"from,with"</span>) {
     const char* data = aro_input_string(ctx, <span class="code-string">"data"</span>);
-    <span class="code-comment">/* parse CSV and populate output */</span>
+    /* parse CSV and populate output */
     aro_output_string(ctx, <span class="code-string">"rows"</span>, result);
     aro_output_int(ctx, <span class="code-string">"count"</span>, row_count);
     return aro_ok(ctx);
@@ -319,10 +326,10 @@ if __name__ == <span class="code-string">"__main__"</span>:
         <pre><code><span class="code-comment">(* Using qualifiers from a plugin with handle: Collections *)</span>
 <span class="code-keyword">Compute</span> the <span class="code-result">&lt;random-item: Collections.pick-random&gt;</span> from the &lt;items&gt;.
 <span class="code-keyword">Compute</span> the <span class="code-result">&lt;shuffled: Collections.shuffle&gt;</span> from the &lt;items&gt;.
-<span class="code-keyword">Log</span> &lt;items: Collections.reverse&gt; to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> <span class="code-result">&lt;items: Collections.reverse&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <h3>Swift Qualifiers</h3>
-        <pre><code><span class="code-keyword">@AROExport</span>
+        <pre><code>@AROExport
 private let plugin = AROPlugin(name: <span class="code-string">"my-plugin"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"MyPlugin"</span>)
     .qualifier(<span class="code-string">"reverse"</span>, inputTypes: [<span class="code-string">"List"</span>, <span class="code-string">"String"</span>],
                description: <span class="code-string">"Reverse elements or characters"</span>) { params in
@@ -336,7 +343,7 @@ private let plugin = AROPlugin(name: <span class="code-string">"my-plugin"</span
     }</code></pre>
 
         <h3>C Qualifiers</h3>
-        <pre><code><span class="code-keyword">ARO_QUALIFIER</span>(<span class="code-string">"first"</span>, <span class="code-string">"List"</span>, <span class="code-string">"Returns the first element"</span>) {
+        <pre><code>ARO_QUALIFIER(<span class="code-string">"first"</span>, <span class="code-string">"List"</span>, <span class="code-string">"Returns the first element"</span>) {
     aro_array* arr = aro_qualifier_array(ctx);
     if (!arr || aro_array_length(arr) == 0)
         return aro_error(ctx, ARO_ERR_INVALID_INPUT,
@@ -346,12 +353,12 @@ private let plugin = AROPlugin(name: <span class="code-string">"my-plugin"</span
 }</code></pre>
 
         <h3>Rust Qualifiers</h3>
-        <pre><code><span class="code-keyword">#[qualifier</span>(name = <span class="code-string">"reverse"</span>, input_types = [<span class="code-string">"List"</span>, <span class="code-string">"String"</span>])<span class="code-keyword">]</span>
-fn reverse(input: &amp;QualifierInput) -> PluginResult&lt;QualifierOutput&gt; {
-    <span class="code-comment">// ...</span>
+        <pre><code>#[qualifier(name = <span class="code-string">"reverse"</span>, input_types = [<span class="code-string">"List"</span>, <span class="code-string">"String"</span>])]
+fn reverse(input: &amp;QualifierInput) -&gt; PluginResult&lt;QualifierOutput&gt; {
+    // ...
 }
 
-<span class="code-keyword">aro_export!</span> {
+aro_export! {
     name: <span class="code-string">"my-plugin"</span>,
     version: <span class="code-string">"1.0.0"</span>,
     handle: <span class="code-string">"MyPlugin"</span>,
@@ -362,11 +369,11 @@ fn reverse(input: &amp;QualifierInput) -> PluginResult&lt;QualifierOutput&gt; {
         <h3>Python Qualifiers</h3>
         <pre><code>from aro_plugin_sdk import plugin, qualifier, export_abi, run
 
-<span class="code-keyword">@plugin</span>(name=<span class="code-string">"my-plugin"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"MyPlugin"</span>)
+@plugin(name=<span class="code-string">"my-plugin"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"MyPlugin"</span>)
 class MyPlugin:
     pass
 
-<span class="code-keyword">@qualifier</span>(name=<span class="code-string">"sort"</span>, description=<span class="code-string">"Sort a list"</span>)
+@qualifier(name=<span class="code-string">"sort"</span>, description=<span class="code-string">"Sort a list"</span>)
 def handle_sort(value, params=None):
     if isinstance(value, list):
         return sorted(value)
@@ -402,11 +409,9 @@ export_abi(globals())</code></pre>
         <pre><code><span class="code-comment">(* tests/csv-parser.test.aro *)</span>
 
 <span class="code-feature">(Test Parse CSV: CSV Parser Tests)</span> {
-    <span class="code-keyword">Create</span> the <span class="code-result">&lt;test-data&gt;</span> with <span class="code-string">"name,age\nAlice,30\nBob,25"</span>.
-    <span class="code-keyword">ParseCSV</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;test-data&gt;.
-    <span class="code-keyword">Assert</span> that &lt;result: length&gt; equals 2.
-    <span class="code-keyword">Assert</span> that &lt;result: 0 name&gt; equals <span class="code-string">"Alice"</span>.
-    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Passed: status&gt;</span>.
+    <span class="code-keyword">Given</span> the <span class="code-result">&lt;test-data&gt;</span> with <span class="code-string">"name,age\nAlice,30\nBob,25"</span>.
+    <span class="code-keyword">When</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;ParseCSVFile&gt;.
+    <span class="code-keyword">Then</span> the <span class="code-result">&lt;result&gt;</span> with 2.
 }</code></pre>
 
         <p>Run tests with:</p>

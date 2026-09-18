@@ -344,19 +344,16 @@ Application running (no HTTP routes available)</code></pre>
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
     <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
 
-    if &lt;user&gt; is empty then {
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;request&gt;.
-    }
-
+    <span class="code-comment">(* ARO has no `if`. A guard rides on the statement it protects. *)</span>
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;id&gt; when &lt;user&gt; is empty.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }
 
 <span class="code-feature">(createUser: User API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
-    <span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
-    <span class="code-keyword">Emit</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
-    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;stored-user&gt;</span> into the &lt;user-repository&gt; with &lt;user&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;stored-user&gt;.
 }</code></pre>
 
         <div class="highlight-box">

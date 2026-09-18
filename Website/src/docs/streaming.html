@@ -266,7 +266,7 @@
         <pre><code><span class="code-comment">(* This is automatically streamed - no syntax change needed *)</span>
 <span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"huge.csv"</span>&gt;.
 <span class="code-keyword">Filter</span> the <span class="code-result">&lt;filtered&gt;</span> from &lt;data&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
-<span class="code-keyword">Log</span> &lt;filtered&gt; to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> <span class="code-result">&lt;filtered&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <p>
             Under the hood, ARO sees this as a pipeline of three stages. Each row flows from
@@ -331,8 +331,9 @@
         <pre><code><span class="code-comment">(* Default: streaming - constant memory *)</span>
 <span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"huge.csv"</span>&gt;.
 
-<span class="code-comment">(* Explicit: load everything into memory *)</span>
-<span class="code-keyword">&lt;Read: eager&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"small.csv"</span>&gt;.</code></pre>
+(* A qualifier goes on the RESULT, never on the action — and it
+   binds a new name, because ARO variables are immutable *)
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;small-data: eager&gt;</span> from the &lt;file: <span class="code-string">"small.csv"</span>&gt;.</code></pre>
 
         <h2>Stream Tee</h2>
         <p>
@@ -343,7 +344,7 @@
 
         <pre><code><span class="code-keyword">Filter</span> the <span class="code-result">&lt;active&gt;</span> from &lt;orders&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
 <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total&gt;</span> from &lt;active&gt; with sum(&lt;amount&gt;).  <span class="code-comment">(* consumer 1 *)</span>
-<span class="code-keyword">Log</span> &lt;active&gt; to the &lt;console&gt;.                       <span class="code-comment">(* consumer 2 *)</span></code></pre>
+<span class="code-keyword">Log</span> <span class="code-result">&lt;active&gt;</span> to the &lt;console&gt;.                       <span class="code-comment">(* consumer 2 *)</span></code></pre>
 
         <p>
             The Stream Tee uses a bounded ring buffer so both consumers see every element.
@@ -481,7 +482,7 @@
 
     <span class="code-comment">(* Multi-stage filter pipeline *)</span>
     <span class="code-keyword">Filter</span> the <span class="code-result">&lt;high-value&gt;</span> from &lt;transactions&gt;
-        where &lt;amount&gt; > 500.
+        where &lt;amount&gt; &gt; 500.
 
     <span class="code-keyword">Filter</span> the <span class="code-result">&lt;completed&gt;</span> from &lt;high-value&gt;
         where &lt;status&gt; = <span class="code-string">"completed"</span>.
@@ -495,10 +496,10 @@
     <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-amount&gt;</span> from &lt;electronics&gt; with avg(&lt;amount&gt;).
     <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;max-amount&gt;</span> from &lt;electronics&gt; with max(&lt;amount&gt;).
 
-    <span class="code-keyword">Log</span> &lt;total-amount&gt; to the &lt;console&gt;.
-    <span class="code-keyword">Log</span> &lt;count&gt; to the &lt;console&gt;.
-    <span class="code-keyword">Log</span> &lt;avg-amount&gt; to the &lt;console&gt;.
-    <span class="code-keyword">Log</span> &lt;max-amount&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;total-amount&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;count&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;avg-amount&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;max-amount&gt;</span> to the &lt;console&gt;.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;streaming-demo&gt;.
 }</code></pre>
@@ -526,8 +527,8 @@
     <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total-time&gt;</span> from &lt;api-events&gt; with sum(&lt;time&gt;).
     <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-time&gt;</span> from &lt;api-events&gt; with avg(&lt;time&gt;).
 
-    <span class="code-keyword">Log</span> &lt;error-count&gt; to the &lt;console&gt;.
-    <span class="code-keyword">Log</span> &lt;avg-time&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;error-count&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;avg-time&gt;</span> to the &lt;console&gt;.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
 }</code></pre>

@@ -20,9 +20,9 @@ Implements a full user management API (list, create, get, update, delete) with b
 
 ## Related Proposals
 
-- [ARO-0027: Contract-First APIs](../../Proposals/ARO-0027-contract-first-api.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 - [ARO-0019: Event System](../../Proposals/ARO-0019-event-system.md)
-- [ARO-0023: File System Operations](../../Proposals/ARO-0023-file-system.md)
+- [ARO-0036: Extended File Operations](../../Proposals/ARO-0036-file-operations.md)
 - [ARO-0022: HTTP Server](../../Proposals/ARO-0022-http-server.md)
 
 ## Usage

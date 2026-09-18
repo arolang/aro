@@ -1,6 +1,6 @@
 (* State Observers for Order Management *)
 (* Demonstrates reactive handling of state transitions *)
-(* See ARO-0013 v2.1: State Observers *)
+(* See ARO-0022 v2.1: State Observers *)
 
 (* =================================================================== *)
 (* Audit ALL order status changes - no filter                          *)

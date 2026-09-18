@@ -16,9 +16,9 @@ Starts an HTTP server with one endpoint (`GET /hello`) defined in OpenAPI. Demon
 
 ## Related Proposals
 
-- [ARO-0027: Contract-First APIs](../../Proposals/ARO-0027-contract-first-api.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 - [ARO-0022: HTTP Server](../../Proposals/ARO-0022-http-server.md)
-- [ARO-0028: Long-Running Applications](../../Proposals/ARO-0028-keepalive.md)
+- [ARO-0005: Application Architecture](../../Proposals/ARO-0005-application-architecture.md)
 
 ## Usage
 

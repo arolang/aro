@@ -186,10 +186,11 @@ Local Plugins (from plugins/):
 <span class="code-feature">(processReport: Report API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;file&gt;</span> from the &lt;request: body&gt;.
 
-    <span class="code-comment">(* Actions from the csv-tools package *)</span>
-    <span class="code-keyword">ParseCSV</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file&gt;.
-    <span class="code-keyword">ValidateCSV</span> the &lt;data&gt; against &lt;report-schema&gt;.
-    <span class="code-keyword">FormatCSV</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
+    (* Actions from the csv-tools package. Each binds a NEW name —
+       ARO variables are immutable. *)
+    ParseCSV the &lt;data&gt; from the &lt;file&gt;.
+    ValidateCSV the &lt;valid&gt; from the &lt;data&gt;.
+    FormatCSV the &lt;output&gt; from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
 }</code></pre>

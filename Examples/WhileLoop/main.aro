@@ -1,4 +1,4 @@
-(* ARO-0131: While Loop Demo *)
+(* GitLab #131: While Loop Demo *)
 (* Demonstrates while loops: counter, accumulation, and early exit *)
 
 (Application-Start: Loop Demo) {

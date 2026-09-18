@@ -345,7 +345,7 @@ Feature sets trigger other feature sets via events:
 (Send Welcome Email: UserCreated Handler) {
     Extract the <user> from the <event: user>.
     Send the <welcome-email> to the <user: email>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <welcome-email>.
 }
 ```
 

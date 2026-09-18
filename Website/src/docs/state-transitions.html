@@ -293,37 +293,27 @@ components:
 
         <pre><code><span class="code-feature">(placeOrder: Order Management)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt; where id = &lt;order-id&gt;.
 
-    <span class="code-comment">(* Accept state transition from draft to placed *)</span>
+    <span class="code-comment">(* Accept the state transition from draft to placed *)</span>
     <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: draft_to_placed&gt;</span> on &lt;order: status&gt;.
 
-    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Order Confirmation&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;placed-order&gt;</span> into the &lt;order-repository&gt; with &lt;order&gt;.
+
+    <span class="code-comment">(* Events are broadcast by name — a handler is never addressed. *)</span>
+    <span class="code-keyword">Emit</span> an <span class="code-result">&lt;OrderPlaced: event&gt;</span> with &lt;placed-order&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;placed-order&gt;.
 }
 
 <span class="code-feature">(payOrder: Order Management)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt; where id = &lt;order-id&gt;.
 
     <span class="code-comment">(* Must be placed to accept payment *)</span>
     <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: placed_to_paid&gt;</span> on &lt;order: status&gt;.
 
-    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
-}
-
-<span class="code-feature">(shipOrder: Order Management)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
-
-    <span class="code-comment">(* Must be paid to ship *)</span>
-    <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: paid_to_shipped&gt;</span> on &lt;order: status&gt;.
-
-    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Shipping Notification&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;paid-order&gt;</span> into the &lt;order-repository&gt; with &lt;order&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;paid-order&gt;.
 }</code></pre>
 
         <h2>Error Handling</h2>
@@ -382,15 +372,15 @@ components:
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;fromState&gt;</span> from the &lt;transition: fromState&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;toState&gt;</span> from the &lt;transition: toState&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
-    <span class="code-keyword">Log</span> the &lt;audit&gt; for the &lt;console&gt;
-        with <span class="code-string">"Order ${orderId}: ${fromState} -> ${toState}"</span>.
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;audit&gt;</span> for the &lt;console&gt;
+        with <span class="code-string">"Order ${orderId}: ${fromState} -&gt; ${toState}"</span>.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
 }
 
-<span class="code-comment">(* Observe ONLY draft->placed transition *)</span>
+<span class="code-comment">(* Observe ONLY draft-&gt;placed transition *)</span>
 <span class="code-feature">(Notify Placed: status StateObserver&lt;draft_to_placed&gt;)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
-    <span class="code-keyword">Log</span> the &lt;notification&gt; for the &lt;console&gt;
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;notification&gt;</span> for the &lt;console&gt;
         with <span class="code-string">"Order ${orderId} has been placed!"</span>.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
 }</code></pre>
@@ -430,7 +420,7 @@ components:
             <h4>Learn More</h4>
             <p>
                 See the full state objects specification in
-                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0013-state-machines.md">ARO-0013: State Objects</a>.
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0022-state-guards.md">ARO-0022: State Guards</a>.
             </p>
         </div>
     </main>

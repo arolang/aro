@@ -124,7 +124,13 @@ const docsSubPages = [
     'metrics.html',
     'streaming.html',
     'repl.html',
-    'jupyter-notebooks.html'
+    'jupyter-notebooks.html',
+    'git.html',
+    'user-defined-actions.html',
+    'concurrency.html',
+    'testing.html',
+    'request-bodies.html',
+    'cli.html'
 ];
 docsSubPages.forEach(file => {
     processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../');

@@ -241,14 +241,14 @@ Non-string field values are converted to strings for comparison:
 (Track Shipment: OrderUpdated Handler<status:shipped>) {
     Extract the <order> from the <event: order>.
     Notify the <customer> for the <order>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <customer>.
 }
 
 (* State Observer: Triggers ONLY when status transitions from paid TO shipped *)
 (Log Transition: status StateObserver<paid_to_shipped>) {
     Extract the <orderId> from the <transition: entityId>.
     Log "Order ${orderId} shipped" to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <orderId>.
 }
 ```
 
