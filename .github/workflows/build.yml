@@ -1842,6 +1842,19 @@ jobs:
           path: Book/SolaroTheAroPlatform/output/ARO-Solaro-Platform.pdf
           retention-days: 30
 
+      - name: Build ARO by Hallucination PDF
+        run: |
+          cd Book/AROByHallucination
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload ARO by Hallucination PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-by-hallucination
+          path: Book/AROByHallucination/output/ARO-by-Hallucination.pdf
+          retention-days: 30
+
   # ===========================================================================
   # Create Release (only on tags)
   # ===========================================================================
@@ -1924,6 +1937,7 @@ jobs:
             artifacts/aro-essential-primer/ARO-Essential-Primer.pdf \
             artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf \
             artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf \
+            artifacts/aro-by-hallucination/ARO-by-Hallucination.pdf \
             artifacts/aro-kernel/aro_kernel-py3-none-any.whl; do
             if [ -f "$f" ]; then
               FILES="${FILES}${f}\n"
@@ -1972,6 +1986,7 @@ jobs:
             artifacts/aro-essential-primer/ARO-Essential-Primer.pdf
             artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf
             artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf
+            artifacts/aro-by-hallucination/ARO-by-Hallucination.pdf
             artifacts/aro-kernel/aro_kernel-py3-none-any.whl
           fail_on_unmatched_files: false
           body: |
@@ -1993,6 +2008,7 @@ jobs:
             | ARO Essential Primer | [ARO-Essential-Primer.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Essential-Primer.pdf) |
             | SOLARO — The ARO Development Platform | [ARO-Solaro-Platform.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Solaro-Platform.pdf) |
             | ARO for Data Engineers | [ARO-For-Data-Engineers.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-For-Data-Engineers.pdf) |
+            | ARO by Hallucination | [ARO-by-Hallucination.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-by-Hallucination.pdf) |
 
             ### Jupyter kernel
 
