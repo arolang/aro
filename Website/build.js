@@ -1,9 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { marked } = require('marked');
 
 // Ensure dist directories exist
-const distDirs = ['dist', 'dist/docs', 'dist/docs/guide', 'dist/docs/reference'];
+const distDirs = ['dist', 'dist/docs'];
 distDirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -31,9 +30,8 @@ if (!fs.existsSync('dist/img')) {
     fs.mkdirSync('dist/img', { recursive: true });
 }
 if (fs.existsSync('src/img')) {
-    fs.readdirSync('src/img').forEach(file => {
-        fs.copyFileSync(`src/img/${file}`, `dist/img/${file}`);
-    });
+    // Recursive: screenshots are grouped in subdirectories (src/img/solaro/).
+    fs.cpSync('src/img', 'dist/img', { recursive: true });
 }
 
 // Process HTML file with partial injection
@@ -86,13 +84,12 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
 }
 
 // Process main HTML files (at root level)
-const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'showcase.html', 'download.html', 'imprint.html'];
+// 'showcase.html' is disabled — src/showcase.html and src/img/*-screen.* are kept
+// so it can be switched back on by un-commenting it here and the nav/footer links.
+const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', /* 'showcase.html', */ 'solaro.html', 'download.html', 'imprint.html'];
 mainHtmlFiles.forEach(file => {
     processHtmlFile(`src/${file}`, `dist/${file}`, '');
 });
-
-// Process doc-template.html (one level deep)
-processHtmlFile('src/doc-template.html', 'dist/doc-template.html', '../');
 
 // Process docs subdirectory pages (one level deep)
 const docsSubPages = [
@@ -102,6 +99,7 @@ const docsSubPages = [
     'native-compilation.html',
     'language-proposals.html',
     'the-basics.html',
+    'computations.html',
     'feature-sets.html',
     'actions.html',
     'application-lifecycle.html',
@@ -141,108 +139,13 @@ if (fs.existsSync('src/style.css')) {
     fs.copyFileSync('src/style.css', 'dist/style.css');
 }
 
-// Read template for markdown docs (1 level deep: /docs/)
-const docTemplate = fs.readFileSync('src/doc-template.html', 'utf8');
-const docHeadContent = headPartial
-    .replace('{{stylesheet}}', '../style.css')
-    .replace('{{animations-stylesheet}}', '../animations.css')
-    .replace('{{subpage-stylesheet}}', '../subpage.css');
-const docFooterContent = footerPartial.replace(/\{\{base\}\}/g, '../');
-const processedDocTemplate = docTemplate
-    .replace('{{head}}', docHeadContent)
-    .replace('{{footer}}', docFooterContent);
-
-// Template for nested pages (2 levels deep: /docs/guide/, /docs/reference/)
-const nestedDocTemplate = fs.readFileSync('src/doc-template-nested.html', 'utf8');
-const nestedHeadContent = headPartial
-    .replace('{{stylesheet}}', '../../style.css')
-    .replace('{{animations-stylesheet}}', '../../animations.css')
-    .replace('{{subpage-stylesheet}}', '../../subpage.css');
-const nestedFooterContent = footerPartial.replace(/\{\{base\}\}/g, '../../');
-const processedNestedTemplate = nestedDocTemplate
-    .replace('{{head}}', nestedHeadContent)
-    .replace('{{footer}}', nestedFooterContent);
-
-// Extract title from markdown content
-function extractTitle(markdown) {
-    const match = markdown.match(/^#\s+(.+)$/m);
-    return match ? match[1] : 'Documentation';
-}
-
-// Process a markdown file to HTML
-function processMarkdownFile(srcPath, destPath, template) {
-    if (!fs.existsSync(srcPath)) return null;
-
-    const md = fs.readFileSync(srcPath, 'utf8');
-    const title = extractTitle(md);
-    const html = marked.parse(md);
-    const page = template
-        .replace('{{content}}', html)
-        .replace('{{title}}', title);
-
-    fs.writeFileSync(destPath, page);
-    return { title, srcPath, destPath };
-}
-
-// Documentation directory
-const docsDir = '../Documentation';
-
-// Process top-level documentation files
-const topLevelDocs = [
-    { src: 'GettingStarted.md', dest: 'getting-started.html' },
-    { src: 'StartWithARO.md', dest: 'start-with-aro.html' },
-    { src: 'LanguageTour.md', dest: 'language-tour.html' },
-    { src: 'ActionDeveloperGuide.md', dest: 'action-developer-guide.html' },
-    { src: 'README.md', dest: 'index.html' }
-];
-
-console.log('Processing top-level documentation...');
-topLevelDocs.forEach(doc => {
-    const srcPath = `${docsDir}/${doc.src}`;
-    const destPath = `dist/docs/${doc.dest}`;
-    if (fs.existsSync(srcPath)) {
-        const result = processMarkdownFile(srcPath, destPath, processedDocTemplate);
-        if (result) {
-            console.log(`  - ${doc.src} -> ${doc.dest}`);
-        }
-    }
-});
-
-// Process LanguageGuide files
-const languageGuideDir = `${docsDir}/LanguageGuide`;
-if (fs.existsSync(languageGuideDir)) {
-    console.log('Processing LanguageGuide...');
-    const guideFiles = fs.readdirSync(languageGuideDir).filter(f => f.endsWith('.md'));
-
-    guideFiles.forEach(file => {
-        const srcPath = `${languageGuideDir}/${file}`;
-        const destFile = file.replace('.md', '.html').toLowerCase().replace(/\s+/g, '-');
-        const destPath = `dist/docs/guide/${destFile}`;
-
-        const result = processMarkdownFile(srcPath, destPath, processedNestedTemplate);
-        if (result) {
-            console.log(`  - LanguageGuide/${file} -> guide/${destFile}`);
-        }
-    });
-}
-
-// Process LanguageReference files
-const languageRefDir = `${docsDir}/LanguageReference`;
-if (fs.existsSync(languageRefDir)) {
-    console.log('Processing LanguageReference...');
-    const refFiles = fs.readdirSync(languageRefDir).filter(f => f.endsWith('.md'));
-
-    refFiles.forEach(file => {
-        const srcPath = `${languageRefDir}/${file}`;
-        const destFile = file.replace('.md', '.html').toLowerCase().replace(/\s+/g, '-');
-        const destPath = `dist/docs/reference/${destFile}`;
-
-        const result = processMarkdownFile(srcPath, destPath, processedNestedTemplate);
-        if (result) {
-            console.log(`  - LanguageReference/${file} -> reference/${destFile}`);
-        }
-    });
-}
+// NOTE: build.js used to render Markdown from a ../Documentation directory into
+// dist/docs/{,guide/,reference/}. That directory no longer exists in the repo —
+// the developer docs live in the GitHub wiki, and the pages under src/docs/ are
+// hand-written HTML. The pipeline had been a silent no-op (every path was guarded
+// by existsSync), so it is gone rather than kept as dead weight. The
+// {{TEMPLATE:doc-template.html}} mechanism in processHtmlFile() is unrelated and
+// still reads the templates itself.
 
 // -------------------------------------------------------------------------
 // Static search index (#449). Walk the generated HTML in dist/ and emit a

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Computations - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .set-visual {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            margin: 32px 0;
+            padding: 24px;
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+        }
+
+        .set-diagram {
+            text-align: center;
+        }
+
+        .set-diagram svg {
+            margin-bottom: 8px;
+        }
+
+        .set-diagram-label {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../solaro.html">Solaro IDE</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Computations</h1>
+            <p class="lead">
+                <code>Compute</code> derives a new value from an existing one. The qualifier picks
+                the operation; the result name is yours.
+            </p>
+        </header>
+
+        <p>
+            <code>Compute</code> belongs to the <strong>OWN</strong> semantic role: it transforms data
+            inside a feature set without reaching outside it. Reach for <code>Create</code> when you are
+            making a new literal, and <code>Compute</code> when you are deriving something from a value
+            you already have.
+        </p>
+
+        <pre><code>Compute the &lt;total&gt; from &lt;price&gt; * &lt;quantity&gt;.
+Compute the &lt;digest: sha256&gt; from the &lt;payload&gt;.
+Compute the &lt;safe: html-escape&gt; from the &lt;comment&gt;.</code></pre>
+
+        <h2>Qualifier-as-name</h2>
+        <p>
+            Write <code>Compute the &lt;length&gt; from the &lt;message&gt;.</code> and the result name
+            <em>is</em> the operation. That is fine until you need two of them in one feature set &mdash;
+            names are immutable, so the second would have nowhere to go. Split them with a qualifier: the
+            base becomes the variable name, the qualifier selects the operation.
+        </p>
+
+        <pre><code><span class="code-comment">(* Name and operation are the same word *)</span>
+Compute the &lt;length&gt; from the &lt;message&gt;.
+
+<span class="code-comment">(* Name and operation separated — now you can have both *)</span>
+Compute the &lt;first-length: length&gt; from the &lt;first-message&gt;.
+Compute the &lt;second-length: length&gt; from the &lt;second-message&gt;.</code></pre>
+
+        <h2>The qualifier namespace is closed</h2>
+        <p>
+            A Compute qualifier must resolve to a built-in from the tables below, a plugin qualifier
+            (<code>handle.qualifier</code>), a chain (<code>a|b</code>), or a date offset
+            (<code>-7d</code>). Anything else is an error that names the closest match:
+        </p>
+
+        <pre><code>error: Unknown Compute qualifier 'lenght'
+  hint: Did you mean 'length'?
+  hint: Run `aro actions --qualifiers` for the full set</code></pre>
+
+        <p>
+            <code>aro check</code> rejects unknown qualifiers too, so a green check means the qualifier
+            exists. Namespaced names and chains are accepted at check time and resolved at run time,
+            because <code>aro check</code> does not load plugins. Run
+            <code>aro actions --qualifiers</code> for the live set, plugins included.
+        </p>
+
+        <h2>Text</h2>
+        <table>
+            <thead><tr><th>Qualifier</th><th>Does</th><th>Input</th></tr></thead>
+            <tbody>
+                <tr><td><code>uppercase</code></td><td>Convert to UPPERCASE</td><td>String</td></tr>
+                <tr><td><code>lowercase</code></td><td>Convert to lowercase</td><td>String</td></tr>
+                <tr><td><code>trim</code></td><td>Strip leading and trailing whitespace</td><td>String</td></tr>
+                <tr><td><code>replace</code></td><td>Substring replacement; <code>with { find: …, replace: … }</code></td><td>String</td></tr>
+                <tr><td><code>clip</code></td><td>Truncate to a width; <code>with 40</code></td><td>String</td></tr>
+                <tr><td><code>lines</code></td><td>Split into a list of lines</td><td>String</td></tr>
+                <tr><td><code>markdown</code></td><td>Render markdown to HTML</td><td>String</td></tr>
+            </tbody>
+        </table>
+
+        <p>
+            <code>lines</code> drops the trailing newline's phantom element, so counting lines is
+            <code>lines</code> then <code>length</code> and nothing else.
+        </p>
+
+        <h2>Collections and numbers</h2>
+        <table>
+            <thead><tr><th>Qualifier</th><th>Does</th><th>Input</th></tr></thead>
+            <tbody>
+                <tr><td><code>length</code> / <code>count</code></td><td>Character or element count</td><td>String, List, Object</td></tr>
+                <tr><td><code>take</code></td><td>First N elements; <code>with 3</code></td><td>String, List</td></tr>
+                <tr><td><code>unique</code></td><td>Remove duplicates, first-seen order wins</td><td>String, List</td></tr>
+                <tr><td><code>join</code></td><td>Join into a string; <code>with { separator: ", " }</code></td><td>List</td></tr>
+                <tr><td><code>sum</code></td><td>Total of a numeric collection</td><td>List</td></tr>
+                <tr><td><code>avg</code> / <code>average</code></td><td>Arithmetic mean</td><td>List</td></tr>
+                <tr><td><code>random</code></td><td>A random element, or a random Int below a bound</td><td>String, List, Int, Float</td></tr>
+                <tr><td><code>fixed</code></td><td>Round to N decimal places, 2 by default; <code>with 3</code></td><td>Int, Float, String</td></tr>
+                <tr><td><code>identity</code></td><td>Return the input unchanged</td><td>Any</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Hashing, encoding and escaping</h2>
+        <table>
+            <thead><tr><th>Qualifier</th><th>Does</th><th>Input</th></tr></thead>
+            <tbody>
+                <tr><td><code>hash</code> / <code>sha256</code></td><td>SHA-256 digest, hex-encoded</td><td>Any</td></tr>
+                <tr><td><code>html-escape</code></td><td>Escape <code>&amp; &lt; &gt; " '</code> for HTML</td><td>String</td></tr>
+                <tr><td><code>json-escape</code></td><td>Escape for a JSON string literal</td><td>String</td></tr>
+                <tr><td><code>url-encode</code> / <code>url-decode</code></td><td>Percent-encode a query value</td><td>String</td></tr>
+                <tr><td><code>base64-encode</code> / <code>base64-decode</code></td><td>Standard Base64</td><td>String</td></tr>
+                <tr><td><code>base64url-encode</code> / <code>base64url-decode</code></td><td>URL-safe Base64, as JWTs use</td><td>String</td></tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Escaping and templates</h4>
+            <p>
+                A template whose path ends <code>.html</code> or <code>.htm</code> escapes what it prints.
+                <code>.tpl</code>, <code>.txt</code> and <code>.md</code> do not &mdash; so a
+                <code>.tpl</code> emitting HTML still needs <code>html-escape</code>. Never hand-escape
+                into an escaping template, or your reader sees <code>&amp;amp;lt;</code>.
+            </p>
+        </div>
+
+        <h2>Dates and sets</h2>
+        <table>
+            <thead><tr><th>Qualifier</th><th>Does</th><th>Input</th></tr></thead>
+            <tbody>
+                <tr><td><code>date</code></td><td>Parse an ISO 8601 string into a date</td><td>String</td></tr>
+                <tr><td><code>format</code></td><td>Render a date</td><td>Date</td></tr>
+                <tr><td><code>distance</code></td><td>Distance between two dates; <code>to &lt;other&gt;</code></td><td>Date</td></tr>
+                <tr><td><code>intersect</code></td><td>Elements in both; <code>with &lt;other&gt;</code></td><td>List, Object</td></tr>
+                <tr><td><code>difference</code></td><td>Elements in A not in B; <code>with &lt;other&gt;</code></td><td>List, Object</td></tr>
+                <tr><td><code>union</code></td><td>All unique elements; <code>with &lt;other&gt;</code></td><td>List, Object</td></tr>
+            </tbody>
+        </table>
+
+        <p>
+            See <a href="working-with-dates.html">Working with Dates</a> and
+            <a href="set-operations.html">Set Operations</a> for the longer treatment of each.
+        </p>
+
+        <h2>Arithmetic</h2>
+        <p>
+            <code>Compute</code> also takes an expression directly, with the usual
+            <code>+ - * / %</code> and the precedence you expect.
+        </p>
+
+        <pre><code>Compute the &lt;subtotal&gt; from &lt;price&gt; * &lt;quantity&gt;.
+Compute the &lt;taxed&gt; from &lt;subtotal&gt; * 1.19.
+Compute the &lt;total: fixed&gt; from &lt;taxed&gt;.</code></pre>
+
+        <p>
+            <code>fixed</code> is the one to reach for with money: it rounds to two decimal places
+            unless you say otherwise.
+        </p>
+
+        <h2>Chaining</h2>
+        <p>Qualifiers chain with <code>|</code>, each stage resolving like a lone qualifier:</p>
+
+        <pre><code>Compute the &lt;slug: lowercase|trim&gt; from the &lt;title&gt;.</code></pre>
+
+        <h2>Plugin qualifiers</h2>
+        <p>
+            Plugins contribute qualifiers under their own handle, so there is never a collision with a
+            built-in:
+        </p>
+
+        <pre><code>Compute the &lt;pick: collections.pick-random&gt; from the &lt;items&gt;.
+Compute the &lt;ranked: stats.sort&gt; from the &lt;numbers&gt;.</code></pre>
+
+        <p>
+            See <a href="writing-extensions.html">Writing Extensions</a> for how a plugin declares them.
+        </p>
+
+        <h2>Two things that are not qualifiers</h2>
+        <p>
+            Both of these are common enough that the check-time diagnostic names them:
+        </p>
+        <ul>
+            <li>
+                <strong>Sorting, reversing and element access are actions.</strong>
+                <code>Sort the &lt;ranked&gt; for the &lt;users&gt; by "score".</code>,
+                <code>Reverse the &lt;backwards&gt; for the &lt;items&gt;.</code>,
+                <code>Extract the &lt;first-item: first&gt; from the &lt;items&gt;.</code>
+            </li>
+            <li>
+                <strong>A result <em>type</em> uses <code>as</code></strong>, because the qualifier slot
+                is already spoken for by the operation:
+                <code>Compute the &lt;n&gt; as Float from &lt;s&gt;.</code>
+            </li>
+        </ul>
+
+        <div class="highlight-box">
+            <h4>Specification</h4>
+            <p>
+                Encoding qualifiers are specified in
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0019-standard-library.md" class="proposal-link">ARO-0019 Standard Library</a>
+                &sect;3.1, collection and text qualifiers in &sect;3.2, and the closed namespace in &sect;3.3.
+            </p>
+        </div>
+
+        <hr>
+
+        <p>
+            <a href="the-basics.html">&larr; The Basics</a> |
+            <a href="data-pipelines.html">Data Pipelines &rarr;</a>
+        </p>
+    </main>
+
+{{footer}}
+</body>
+</html>

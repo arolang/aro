@@ -258,7 +258,9 @@
                 <a href="fdd.html">The FDD Story</a>
                 <a href="getting-started.html">Get Started</a>
                 <a href="tutorial.html">Tutorial</a>
-                <a href="showcase.html">Showcase</a>
+        <a href="solaro.html">Solaro IDE</a>
+                <a href="solaro.html">Solaro IDE</a>
+                <!-- Showcase disabled: <a href="showcase.html">Showcase</a> -->
                 <a href="docs.html">Docs</a>
                 <a href="disclaimer.html">Motivation</a>
                 <a href="download.html" class="nav-active">Download</a>
@@ -282,7 +284,7 @@
         <a href="fdd.html">The FDD Story</a>
         <a href="getting-started.html">Get Started</a>
         <a href="tutorial.html">Tutorial</a>
-        <a href="showcase.html">Showcase</a>
+        <!-- Showcase disabled: <a href="showcase.html">Showcase</a> -->
         <a href="docs.html">Docs</a>
         <a href="disclaimer.html">Motivation</a>
         <a href="download.html">Download</a>
@@ -458,6 +460,8 @@ swift build -c release
                     <span class="version">ARO-Essential-Primer.pdf</span>
                 </div>
 
+                <!-- ARO by Hallucination: CI builds the PDF but the release does not
+                     carry it, so this link 404s. Re-enable once the asset is attached.
                 <div class="download-card">
                     <div class="platform-icon">&#x1F916;</div>
                     <h3>ARO by Hallucination</h3>
@@ -467,6 +471,53 @@ swift build -c release
                         Download PDF
                     </a>
                     <span class="version">ARO-by-Hallucination.pdf</span>
+                </div>
+                -->
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F4CA;</div>
+                    <h3>ARO for Data Engineers</h3>
+                    <p class="platform-desc">Medallion pipelines, format-aware I/O and aggregation, end to end</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-For-Data-Engineers.pdf" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download PDF
+                    </a>
+                    <span class="version">ARO-For-Data-Engineers.pdf</span>
+                </div>
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F5A5;</div>
+                    <h3>Solaro &mdash; The ARO Platform</h3>
+                    <p class="platform-desc">The full tour of the IDE: canvas, debugger, notebooks, metrics and Ask</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Solaro-Platform.pdf" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download PDF
+                    </a>
+                    <span class="version">ARO-Solaro-Platform.pdf</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Solaro IDE -->
+        <section class="download-section">
+            <h2><span class="icon">&#x1F5A5;</span> Solaro &mdash; the ARO IDE</h2>
+            <p>
+                Solaro draws your feature sets as a live canvas and lights each statement up as the
+                runtime fires it, with the value it bound printed underneath. It ships with the ARO
+                release for Apple Silicon Macs, signed and notarized.
+                <a href="solaro.html">Take the tour &rarr;</a>
+            </p>
+
+            <div class="download-grid">
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F34E;</div>
+                    <h3>Solaro for macOS</h3>
+                    <p class="platform-desc">Disk image for Apple Silicon. Needs the matching <code>aro</code> CLI on your path.</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/solaro-macos-arm64.dmg" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download DMG
+                    </a>
+                    <span class="version">solaro-macos-arm64.dmg</span>
                 </div>
             </div>
         </section>

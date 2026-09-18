@@ -1370,6 +1370,42 @@ section {
    CTA Section
    ============================================================ */
 
+/* ---- Solaro IDE section (landing page) ---- */
+.solaro-section-home .section-title,
+.solaro-section-home .section-subtitle {
+    text-align: center;
+}
+.solaro-section-home .section-subtitle {
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: var(--space-xl);
+}
+.solaro-home-split {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: var(--space-xl);
+    align-items: center;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+.solaro-home-copy h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin-bottom: var(--space-md);
+}
+.solaro-home-copy p {
+    color: var(--color-text-muted);
+    line-height: 1.75;
+    margin-bottom: var(--space-md);
+}
+.solaro-home-shot img {
+    width: 100%;
+    display: block;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+}
+
 .cta-section {
     text-align: center;
     background: var(--color-bg);
@@ -1567,6 +1603,11 @@ section {
     }
 
     .example-showcase {
+        grid-template-columns: 1fr;
+        gap: var(--space-lg);
+    }
+
+    .solaro-home-split {
         grid-template-columns: 1fr;
         gap: var(--space-lg);
     }

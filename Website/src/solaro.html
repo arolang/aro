@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Solaro IDE - ARO Programming Language</title>
+{{head}}
+    <style>
+        /* Solaro-specific styles (extends subpage.css) */
+        .solaro-content {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+
+        .solaro-section {
+            margin-bottom: 80px;
+        }
+
+        .solaro-section h2 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            letter-spacing: -0.01em;
+        }
+
+        .solaro-section p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.75;
+            margin-bottom: 20px;
+        }
+
+        .solaro-section p.kicker {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--color-primary);
+            margin-bottom: 10px;
+        }
+
+        .solaro-shot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 28px 0 10px;
+            display: block;
+        }
+
+        .solaro-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 0;
+        }
+
+        .solaro-lead-quote {
+            font-size: 1.35rem;
+            line-height: 1.6;
+            color: var(--color-text);
+            border-left: 3px solid var(--color-primary);
+            padding-left: 24px;
+            margin: 0 0 48px;
+        }
+
+        .solaro-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            margin: 32px 0 8px;
+        }
+
+        .solaro-card {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 28px;
+        }
+
+        .solaro-card h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .solaro-card p {
+            font-size: 1rem;
+            margin-bottom: 0;
+        }
+
+        .solaro-install {
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(124, 58, 237, 0.04) 100%);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 36px;
+            margin-top: 8px;
+        }
+
+        .solaro-install h2 {
+            margin-bottom: 12px;
+        }
+
+        .solaro-install pre {
+            background: var(--color-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 20px 24px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        .solaro-install pre code {
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            color: var(--color-text);
+        }
+
+        .solaro-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .solaro-note {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-top: 20px;
+        }
+
+        @media (max-width: 640px) {
+            .solaro-lead-quote { font-size: 1.15rem; padding-left: 16px; }
+            .solaro-install { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="fdd.html">The FDD Story</a>
+                <a href="getting-started.html">Get Started</a>
+                <a href="tutorial.html">Tutorial</a>
+                <!-- Showcase disabled: <a href="showcase.html">Showcase</a> -->
+                <a href="solaro.html" class="nav-active">Solaro IDE</a>
+                <a href="docs.html">Docs</a>
+                <a href="disclaimer.html">Motivation</a>
+                <a href="download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+            <button class="nav-toggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu">
+        <a href="fdd.html">The FDD Story</a>
+        <a href="getting-started.html">Get Started</a>
+        <a href="tutorial.html">Tutorial</a>
+        <!-- Showcase disabled: <a href="showcase.html">Showcase</a> -->
+        <a href="solaro.html">Solaro IDE</a>
+        <a href="docs.html">Docs</a>
+        <a href="disclaimer.html">Motivation</a>
+        <a href="download.html">Download</a>
+        <a href="https://github.com/arolang/aro">GitHub</a>
+    </div>
+
+    <header class="subpage-hero">
+        <div class="container">
+            <h1><span class="accent">Solaro</span> &mdash; the ARO IDE</h1>
+            <p class="lead">The editor that stops lying about your code.</p>
+        </div>
+    </header>
+
+    <main class="solaro-content">
+
+        <p class="solaro-lead-quote">
+            Most editors call themselves &ldquo;integrated&rdquo; because a debugger, a terminal
+            and a file tree share one window. Solaro takes the word literally: the canvas that
+            draws your feature sets is the canvas that lights up as the runtime fires them.
+            The page you are reading is the page that is running.
+        </p>
+
+        <!-- The canvas -->
+        <section class="solaro-section">
+            <p class="kicker">The canvas</p>
+            <h2>Your program, drawn</h2>
+            <p>
+                Every feature set is a container. Every statement inside it is a node. Every
+                <code>&lt;variable&gt;</code> produced by one statement and consumed by another is an
+                edge. The layout engine arranges the flow left to right, top to bottom &mdash; so the
+                shape of the program is something you look at, not something you reconstruct in your head.
+            </p>
+            <p>
+                Pan with two fingers, pinch to zoom, double-click a node to jump to its source line,
+                drag anything anywhere. Your positions persist in a <code>.layout.json</code> beside the
+                file, so the picture survives a <code>git pull</code>. Open an <code>openapi.yaml</code>
+                and the canvas shows the route and schema graph instead.
+            </p>
+            <img src="img/solaro/02-canvas.jpg" class="solaro-shot" loading="lazy"
+                 alt="Solaro showing a StandupDigest project on the canvas: an Application-Start container with Log, Create, Request and Extract statement nodes wired together by curved edges, the file tree on the left and the inspector on the right">
+            <p class="solaro-caption">Feature sets as containers, statements as nodes, data flow as edges.</p>
+        </section>
+
+        <!-- Live run -->
+        <section class="solaro-section">
+            <p class="kicker">Live execution</p>
+            <h2>The program is the trace</h2>
+            <p>
+                Hit <strong>Run</strong> and the canvas pulses. Each statement node lights up as the
+                runtime fires it, and the value it bound appears underneath &mdash; the runtime's own
+                binding, not a re-execution by the editor. No print-tracing, no
+                <code>console.log</code> archaeology.
+            </p>
+            <p>
+                This works because the runtime emits one JSON event per statement fired, and Solaro
+                watches that stream. It never pauses your program to ask it questions; it is
+                <em>watching</em>, not interrogating. The consequence at the human level: when
+                something goes wrong you see <em>where</em> before you see <em>what</em>. A node that
+                stays dark is a branch that never fired. A node holding the wrong value is a bug whose
+                location you already know.
+            </p>
+            <img src="img/solaro/04-run-finished.jpg" class="solaro-shot" loading="lazy"
+                 alt="The same canvas after a finished run: each node now shows the value it bound, such as commit-count equals 3, with the console pane at the bottom showing the assembled digest output and exit 0">
+            <p class="solaro-caption">After the run: every node carries the value it produced. <code>&lt;commit-count&gt; = 3</code>.</p>
+        </section>
+
+        <!-- Split mode -->
+        <section class="solaro-section">
+            <p class="kicker">Canvas and code</p>
+            <h2>Two views, one file</h2>
+            <p>
+                The pane picker swaps the centre between map, canvas, text and split. In split mode the
+                canvas and the editor sit side by side and stay in step: edits in the code panel reach
+                the canvas as soon as the source parses, and canvas-driven changes write straight back
+                into the file. There is no Save button in the loop.
+            </p>
+            <p>
+                Syntax highlighting comes from the same lexer the runtime uses, so a token coloured as a
+                verb in the editor is a verb to the parser. Breakpoints toggle with a click in the gutter.
+            </p>
+            <img src="img/solaro/05-split-mode.jpg" class="solaro-shot" loading="lazy"
+                 alt="Solaro in split mode with the canvas on one side and the ARO source editor on the other, showing the same feature set in both">
+            <p class="solaro-caption">Split mode. Drag the divider to give either side more room.</p>
+        </section>
+
+        <!-- Inspector -->
+        <section class="solaro-section">
+            <p class="kicker">The inspector</p>
+            <h2>Edit the statement you selected</h2>
+            <p>
+                Select a node and the inspector's <strong>Selected Statement</strong> card lets you edit
+                it inline &mdash; the runtime reparses on every keystroke and reflows the canvas. Select a
+                repository node and you get its rows as a live table instead. Pin values you care about
+                under <strong>Watches</strong>; read diagnostics under <strong>Problems</strong>.
+            </p>
+            <p>
+                Those diagnostics come from <code>aro lsp</code> &mdash; the same language server VS Code
+                and IntelliJ talk to. A problem the inspector shows is a problem your teammate's editor shows.
+            </p>
+            <img src="img/solaro/03-inspector.jpg" class="solaro-shot" loading="lazy"
+                 alt="The Solaro inspector pane showing the file header card with parse and LSP status, a selected statement card, watches, and the feature sets list">
+            <p class="solaro-caption">The inspector is a stack of cards that follows your selection.</p>
+        </section>
+
+        <!-- Actions -->
+        <section class="solaro-section">
+            <p class="kicker">Actions &amp; snippets</p>
+            <h2>Drag a verb onto the canvas</h2>
+            <p>
+                The <strong>Actions</strong> tab lists every action the runtime can dispatch, grouped by
+                semantic role &mdash; REQUEST, OWN, RESPONSE, EXPORT, SERVICE &mdash; with built-ins
+                separated from each loaded plugin's contributions. Every row is a drag source: drop one on
+                a feature-set container and Solaro inserts the statement for you.
+            </p>
+            <p>
+                <strong>Snippets</strong> sits next to it on purpose. Actions drags one statement; Snippets
+                drags the pattern around it &mdash; a feature-set skeleton, a <code>for each</code> with a
+                filter, an event handler and its emitter.
+            </p>
+            <img src="img/solaro/06-actions-panel.jpg" class="solaro-shot" loading="lazy"
+                 alt="The Actions panel in Solaro's right rail, listing available actions grouped by semantic role with a count of built-in and plugin-provided actions in the header">
+            <p class="solaro-caption">Built-ins and plugin actions, grouped by role, draggable onto the canvas.</p>
+        </section>
+
+        <!-- Metrics + Ask -->
+        <section class="solaro-section">
+            <p class="kicker">Metrics</p>
+            <h2>What ran, how often, how long</h2>
+            <p>
+                The <strong>Metrics</strong> tab is a live, Prometheus-style snapshot of the runtime's
+                counters while your project runs. Every feature set the runtime has dispatched gets a row:
+                how many times it was entered this session, and the mean wall-clock time spent inside it,
+                awaited futures included.
+            </p>
+            <img src="img/solaro/07-metrics-panel.jpg" class="solaro-shot" loading="lazy"
+                 alt="The Metrics panel showing a table of feature sets with call counts and average millisecond timings for the current session">
+            <p class="solaro-caption">Call counts and average duration, per feature set, as it runs.</p>
+        </section>
+
+        <section class="solaro-section">
+            <p class="kicker">Ask</p>
+            <h2>A co-pilot that runs on your machine</h2>
+            <p>
+                Switch the right rail to <strong>Ask</strong> for an assistant backed by
+                <code>aro ask</code>. It can explain a feature set, propose a diff you can apply with one
+                click, or offer to run a command and wait for your approval.
+            </p>
+            <p>
+                It is local-first by default: MLX on Apple Silicon, <code>llama-server</code> elsewhere, or
+                an OpenAI-compatible endpoint if you configure one. It can see your project's source, the
+                LSP diagnostics, and the current run's event stream. Nothing else. No telemetry, and no
+                cloud upload of your source.
+            </p>
+            <img src="img/solaro/08-ask-panel.jpg" class="solaro-shot" loading="lazy"
+                 alt="The Ask panel in Solaro's right rail showing a chat conversation with the local assistant about the open ARO project">
+            <p class="solaro-caption">Ask, backed by a model running locally unless you point it somewhere else.</p>
+        </section>
+
+        <!-- Tests -->
+        <section class="solaro-section">
+            <p class="kicker">Tests</p>
+            <h2>Results where the code is</h2>
+            <p>
+                <code>aro test</code> collects every feature set whose business activity ends in
+                <em>Test</em> or <em>Tests</em>, runs them in isolation, and Solaro shows the outcome in
+                three places at once: a pill on the feature set's header in the canvas, coloured markers in
+                the editor gutter, and the pass/fail list in the Tests tab. A failure pins the offending
+                statement, so the click from red to cause is a single one.
+            </p>
+            <img src="img/solaro/09-test-results.jpg" class="solaro-shot" loading="lazy"
+                 alt="Solaro showing test results: pass and fail pills on feature set headers in the canvas and the Tests tab listing each test outcome">
+            <p class="solaro-caption">Green T, red T, or a pulsing one while the runtime is inside it.</p>
+        </section>
+
+        <!-- Notebooks -->
+        <section class="solaro-section">
+            <p class="kicker">Notebooks</p>
+            <h2>A REPL that keeps its output</h2>
+            <p>
+                Open a <code>.repl</code> file and the centre pane becomes a notebook: markdown cells and
+                ARO code cells, each keeping the output it produced. The keyboard chords are Jupyter's
+                &mdash; <kbd>&#8679;&#9166;</kbd> to run and move on, <kbd>&#8997;&#9166;</kbd> to run and
+                insert, <kbd>Esc</kbd> for command mode.
+            </p>
+            <p>
+                Cells run against <code>aro repl --json</code>, the same protocol and session engine the
+                native Jupyter kernel speaks &mdash; so a cell behaves identically in Solaro and in
+                JupyterLab. The file on disk is JSON with ARO's display bundle as first-class fields, so a
+                notebook diffs like source rather than like a minified blob.
+            </p>
+            <img src="img/solaro-notebook-collections.jpg" class="solaro-shot" loading="lazy"
+                 alt="Solaro's notebook editor showing the Collections and Pipelines notebook with a rendered markdown cell, a highlighted ARO code cell, and a native table output">
+            <p class="solaro-caption">Prototype a stage against real data, then move the statements into a <code>.aro</code> file unchanged.</p>
+        </section>
+
+        <!-- What else -->
+        <section class="solaro-section">
+            <h2>And the rest of the window</h2>
+            <div class="solaro-grid">
+                <div class="solaro-card">
+                    <h3>Step through meaning</h3>
+                    <p>
+                        Breakpoints live in the file's sidecar, so they survive a restart and travel with the
+                        project. Each step is a complete Action-Result-Object &mdash; a unit of work, not an
+                        arbitrary lexical line.
+                    </p>
+                </div>
+                <div class="solaro-card">
+                    <h3>Time travel</h3>
+                    <p>
+                        Record a run and scrub through it frame by frame in the time-travel sheet, watching
+                        values arrive on the canvas in the order the runtime produced them.
+                    </p>
+                </div>
+                <div class="solaro-card">
+                    <h3>A real terminal</h3>
+                    <p>
+                        The bottom pane carries the console (the run's stdout and stderr), a shell rooted at
+                        your project, and the test results &mdash; behind three tabs.
+                    </p>
+                </div>
+                <div class="solaro-card">
+                    <h3>Repository &amp; event overlays</h3>
+                    <p>
+                        An <code>Observer</code> feature set shows its repository's row count and last-touched
+                        row inline on the canvas. <code>Emit</code> and its handlers do the same for events.
+                    </p>
+                </div>
+                <div class="solaro-card">
+                    <h3>Plugins in-window</h3>
+                    <p>
+                        Install plugins from a Git URL or the in-app list. Their actions and qualifiers show up
+                        in the Actions panel alongside the built-ins.
+                    </p>
+                </div>
+                <div class="solaro-card">
+                    <h3>The books, built in</h3>
+                    <p>
+                        Help &rarr; Books downloads the PDFs of every book in the project on demand &mdash;
+                        including the full Solaro platform book.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Install -->
+        <section class="solaro-section">
+            <div class="solaro-install">
+                <h2>Get Solaro</h2>
+                <p>
+                    Solaro ships with the ARO release for Apple Silicon Macs. Download the disk image, drag
+                    it into <code>/Applications</code>, and launch &mdash; it is signed and notarized.
+                </p>
+                <p>
+                    It drives the <code>aro</code> CLI for run, debug, test and build, so install the
+                    matching CLI too:
+                </p>
+                <pre><code>brew install arolang/tap/aro</code></pre>
+                <div class="solaro-buttons">
+                    <a href="https://github.com/arolang/aro/releases/latest/download/solaro-macos-arm64.dmg" class="btn btn-primary btn-large">
+                        Download Solaro (macOS, Apple Silicon)
+                    </a>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Solaro-Platform.pdf" class="btn btn-outline btn-large">
+                        Read the Solaro book (PDF)
+                    </a>
+                </div>
+                <p class="solaro-note">
+                    Prefer to build it yourself? <code>swift build -c release --product SolaroApp</code>
+                    from a checkout of the repository. Solaro probes for a version mismatch at launch and
+                    tells you if the CLI on your path disagrees with the app.
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+{{footer}}
+</body>
+</html>
