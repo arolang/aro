@@ -89,25 +89,11 @@ Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
 
 <p>UI updates automatically when repository data changes:</p>
 
-<pre><code><span class="feature-name">(Application-Start: Task Manager)</span> {
-    <span class="comment">(* Initialize tasks *)</span>
-    <span class="action">Create</span> the <span class="result">&lt;task1&gt;</span> with { id: 1, title: "Write docs", status: "pending" }.
-    <span class="action">Store</span> the <span class="result">&lt;task1&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
-
-    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
-}
-
-<span class="comment">(* Watch handler - triggers on repository changes *)</span>
-<span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
-    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
-
-    <span class="action">Retrieve</span> the <span class="result">&lt;tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
-
-    <span class="action">Transform</span> the <span class="result">&lt;output&gt;</span> from the <span class="result">&lt;template: templates/dashboard.screen&gt;</span>.
-    <span class="action">Log</span> <span class="result">&lt;output&gt;</span> to the <span class="result">&lt;console&gt;</span>.
-
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;render&gt;</span>.
+<pre><code><span class="code-feature">(Dashboard Watch: task-repository Observer)</span> {
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;tasks&gt;</span> from the &lt;task-repository&gt;.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;view&gt;</span> from the &lt;template: dashboard.screen&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;view&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;view&gt;.
 }</code></pre>
 
 <p><strong>Flow:</strong></p>
@@ -161,11 +147,11 @@ Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
 
     <div class="comparison-good">
         <h4>✅ ARO Watch Pattern</h4>
-        <pre><code><span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
-    <span class="action">Retrieve</span> the <span class="result">&lt;tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
-    <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: dashboard.screen&gt;</span>.
-    <span class="action">Log</span> <span class="result">&lt;view&gt;</span> to the <span class="result">&lt;console&gt;</span>.
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span>.
+        <pre><code><span class="code-feature">(Dashboard Watch: task-repository Observer)</span> {
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;tasks&gt;</span> from the &lt;task-repository&gt;.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;view&gt;</span> from the &lt;template: dashboard.screen&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;view&gt;</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;view&gt;.
 }</code></pre>
         <ul>
             <li>Zero CPU usage when idle</li>
@@ -200,13 +186,13 @@ Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
 
 <p>Display an interactive menu:</p>
 
-<pre><code><span class="action">Create</span> the <span class="result">&lt;options&gt;</span> with ["Red", "Green", "Blue", "Yellow"].
+<pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;options&gt;</span> with [<span class="code-string">"Red"</span>, <span class="code-string">"Green"</span>, <span class="code-string">"Blue"</span>, <span class="code-string">"Yellow"</span>].
 
-<span class="comment">(* Single selection *)</span>
-<span class="action">Select</span> the <span class="result">&lt;choice&gt;</span> from <span class="result">&lt;options&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.
+<span class="code-comment">(* Single selection *)</span>
+<span class="code-keyword">Select</span> the <span class="code-result">&lt;choice&gt;</span> from the &lt;options&gt;.
 
-<span class="comment">(* Multi-selection *)</span>
-<span class="action">Select</span> the <span class="result">&lt;choices: multi-select&gt;</span> from <span class="result">&lt;options&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.</code></pre>
+<span class="code-comment">(* Multi-selection — the qualifier rides on the result *)</span>
+<span class="code-keyword">Select</span> the <span class="code-result">&lt;choices: multi-select&gt;</span> from the &lt;options&gt;.</code></pre>
 
 <h2>Complete Example</h2>
 
@@ -214,52 +200,53 @@ Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
 
 <h3>main.aro</h3>
 
-<pre><code><span class="feature-name">(Application-Start: Task Dashboard)</span> {
-    <span class="comment">(* Initialize tasks *)</span>
-    <span class="action">Create</span> the <span class="result">&lt;task1&gt;</span> with {
+<pre><code><span class="code-feature">(Application-Start: Task Dashboard)</span> {
+    <span class="code-comment">(* Initialize tasks *)</span>
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;task1&gt;</span> with {
         id: 1,
-        title: "Implement feature",
-        status: "in-progress",
-        priority: "high"
+        title: <span class="code-string">"Implement feature"</span>,
+        status: <span class="code-string">"in-progress"</span>,
+        priority: <span class="code-string">"high"</span>
     }.
-    <span class="action">Create</span> the <span class="result">&lt;task2&gt;</span> with {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;task2&gt;</span> with {
         id: 2,
-        title: "Write tests",
-        status: "pending",
-        priority: "medium"
+        title: <span class="code-string">"Write tests"</span>,
+        status: <span class="code-string">"pending"</span>,
+        priority: <span class="code-string">"medium"</span>
     }.
 
-    <span class="action">Store</span> the <span class="result">&lt;task1&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
-    <span class="action">Store</span> the <span class="result">&lt;task2&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;stored-task1&gt;</span> into the &lt;task-repository&gt; with &lt;task1&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;stored-task2&gt;</span> into the &lt;task-repository&gt; with &lt;task2&gt;.
 
-    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+    <span class="code-keyword">Keepalive</span> the <span class="code-result">&lt;application&gt;</span> for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
-<span class="comment">(* Reactive dashboard *)</span>
-<span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
-    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+<span class="code-comment">(* Reactive dashboard *)</span>
+<span class="code-feature">(Dashboard Watch: task-repository Observer)</span> {
+    Clear the &lt;screen&gt; for the &lt;terminal&gt;.
 
-    <span class="action">Retrieve</span> the <span class="result">&lt;all-tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;all-tasks&gt;</span> from the &lt;task-repository&gt;.
 
-    <span class="comment">(* Filter by status *)</span>
-    <span class="action">Filter</span> the <span class="result">&lt;done&gt;</span> from <span class="result">&lt;all-tasks&gt;</span> where <span class="result">&lt;status&gt;</span> = "done".
-    <span class="action">Filter</span> the <span class="result">&lt;in-progress&gt;</span> from <span class="result">&lt;all-tasks&gt;</span> where <span class="result">&lt;status&gt;</span> = "in-progress".
+    <span class="code-comment">(* Filter by status *)</span>
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;done&gt;</span> from &lt;all-tasks&gt; where &lt;status&gt; = <span class="code-string">"done"</span>.
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;in-progress&gt;</span> from &lt;all-tasks&gt; where &lt;status&gt; = <span class="code-string">"in-progress"</span>.
 
-    <span class="action">Transform</span> the <span class="result">&lt;output&gt;</span> from the <span class="result">&lt;template: templates/dashboard.screen&gt;</span>.
-    <span class="action">Log</span> <span class="result">&lt;output&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;template: templates/dashboard.screen&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;output&gt;</span> to the &lt;console&gt;.
 
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;render&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;render&gt;.
 }
 
-<span class="comment">(* Update task - triggers Watch handler *)</span>
-<span class="feature-name">(Complete Task: TaskCompleted Handler)</span> {
-    <span class="action">Extract</span> the <span class="result">&lt;task-id&gt;</span> from the <span class="result">&lt;event: taskId&gt;</span>.
+<span class="code-comment">(* Update a task - triggers the Watch handler *)</span>
+<span class="code-feature">(Complete Task: TaskCompleted Handler)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;task-id&gt;</span> from the &lt;event: taskId&gt;.
 
-    <span class="action">Retrieve</span> the <span class="result">&lt;task&gt;</span> from the <span class="result">&lt;task-repository&gt;</span> where id = <span class="result">&lt;task-id&gt;</span>.
-    <span class="action">Update</span> the <span class="result">&lt;task: status&gt;</span> with "done" into the <span class="result">&lt;task-repository&gt;</span>.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;task&gt;</span> from the &lt;task-repository&gt; where id = &lt;task-id&gt;.
+    <span class="code-keyword">Update</span> the <span class="code-result">&lt;done-task&gt;</span> with { status: <span class="code-string">"done"</span> }.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;stored-task&gt;</span> into the &lt;task-repository&gt; with &lt;done-task&gt;.
 
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;completion&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;completion&gt;.
 }</code></pre>
 
 <h3>templates/dashboard.screen</h3>
@@ -342,15 +329,15 @@ Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
 
 <h3>Efficient Re-Rendering</h3>
 
-<pre><code><span class="feature-name">(Dashboard Watch: data-repository Observer)</span> {
-    <span class="comment">(* Clear before full re-render for clean display *)</span>
-    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+<pre><code><span class="code-feature">(Dashboard Watch: data-repository Observer)</span> {
+    <span class="code-comment">(* Clear before a full re-render for a clean display *)</span>
+    Clear the &lt;screen&gt; for the &lt;terminal&gt;.
 
-    <span class="action">Retrieve</span> the <span class="result">&lt;data&gt;</span> from the <span class="result">&lt;data-repository&gt;</span>.
-    <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: dashboard.screen&gt;</span>.
-    <span class="action">Log</span> <span class="result">&lt;view&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;data-repository&gt;.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;view&gt;</span> from the &lt;template: dashboard.screen&gt;.
+    <span class="code-keyword">Log</span> <span class="code-result">&lt;view&gt;</span> to the &lt;console&gt;.
 
-    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;view&gt;.
 }</code></pre>
 
 <h2>Quick Reference</h2>

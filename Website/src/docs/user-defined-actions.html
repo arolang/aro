@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>User-Defined Actions - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .doc-screenshot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 24px 0 8px;
+            display: block;
+        }
+
+        .doc-screenshot-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1>User-Defined Actions</h1>
+            <p class="lead">Reusable logic written in ARO itself — a feature set that any other feature set can call by name, and get a value back from.</p>
+        </header>
+
+        <h2>A feature set that anything can call</h2>
+        <p>
+            Give a feature set the business activity <code>Action</code> and it becomes
+            callable application-wide as <code>Application.&lt;Name&gt;</code>. That is
+            the whole mechanism. Use it instead of writing a plugin, or hopping through
+            the event bus, when what you want is reusable logic with a return value.
+        </p>
+<pre><code><span class="code-feature">(DoubleValue: Action takes &lt;number&gt;)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;n&gt;</span> from the &lt;input: number&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;doubled&gt;</span> from &lt;n&gt; * 2.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { doubled: &lt;doubled&gt; }.
+}</code></pre>
+        <p>Call it from anywhere, with the same shape a plugin action uses:</p>
+<pre><code><span class="code-comment">(* `takes &lt;number&gt;` is sugar for one positional argument *)</span>
+<span class="code-keyword">Application.DoubleValue</span> the <span class="code-result">&lt;d&gt;</span> from 5.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;doubled&gt;</span> from the &lt;d: doubled&gt;.   <span class="code-comment">(* 10 *)</span>
+
+<span class="code-comment">(* The object form always works *)</span>
+<span class="code-keyword">Application.DoubleValue</span> the <span class="code-result">&lt;second&gt;</span> with { number: 7 }.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;second-doubled&gt;</span> from the &lt;second: doubled&gt;.   <span class="code-comment">(* 14 *)</span></code></pre>
+
+        <h2>Arguments</h2>
+        <p>
+            <code>takes &lt;name&gt;</code> declares a single positional argument, which
+            arrives as <code>input.&lt;name&gt;</code>. Without it, callers pass an object
+            literal through <code>with</code> and the action pulls fields off
+            <code>&lt;input&gt;</code>:
+        </p>
+<pre><code><span class="code-feature">(SumAndDouble: Action)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;a&gt;</span> from the &lt;input: a&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;b&gt;</span> from the &lt;input: b&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;sum&gt;</span> from &lt;a&gt; + &lt;b&gt;.
+
+    <span class="code-comment">(* Actions compose — this one calls the one above *)</span>
+    <span class="code-keyword">Application.DoubleValue</span> the <span class="code-result">&lt;inner&gt;</span> from &lt;sum&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;answer&gt;</span> from the &lt;inner: doubled&gt;.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { value: &lt;answer&gt; }.
+}</code></pre>
+        <p>At the call site the composed action looks like any other:</p>
+        <pre><code><span class="code-keyword">Application.SumAndDouble</span> the <span class="code-result">&lt;res&gt;</span> with { a: 3, b: 4 }.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;value&gt;</span> from the &lt;res: value&gt;.   <span class="code-comment">(* 14 *)</span></code></pre>
+
+        <h2>What the callee can see</h2>
+        <p>
+            A callee sees its own bindings and application-level published symbols —
+            never the caller's locals. Lookup cost therefore does not grow with call
+            depth. Field values keep their shape across the boundary: return a list and
+            the caller gets a list it can measure and iterate, not a rendering of one.
+        </p>
+
+        <h2>Recursion</h2>
+        <p>
+            Recursion has no depth limit. What it costs depends on the shape you write.
+        </p>
+        <p>
+            A call in <strong>tail position</strong> — the final statement is an unguarded
+            <code>Return … with &lt;r&gt;.</code> forwarding the call's result untouched —
+            reuses the frame it is already in, so depth costs nothing at all:
+        </p>
+<pre><code><span class="code-feature">(SumTo: Action)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;n&gt;</span> from the &lt;input: n&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;acc&gt;</span> from the &lt;input: acc&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { total: &lt;acc&gt; } when &lt;n&gt; &lt;= 0.
+
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;next&gt;</span> from &lt;n&gt; - 1.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;running&gt;</span> from &lt;acc&gt; + &lt;n&gt;.
+
+    <span class="code-comment">(* Tail call: the result is handed straight back, so this frame is reused *)</span>
+    <span class="code-keyword">Application.SumTo</span> the <span class="code-result">&lt;r&gt;</span> with { n: &lt;next&gt;, acc: &lt;running&gt; }.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;r&gt;.
+}</code></pre>
+        <p>
+            Any other recursion keeps its frames on the heap, so its depth is bounded by
+            memory rather than by a stack. <code>Factorial</code> is the standard example
+            — the frame still has to multiply the callee's result, so each level stays
+            live until the one below it returns:
+        </p>
+<pre><code><span class="code-feature">(Factorial: Action takes &lt;n&gt;)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;v&gt;</span> from the &lt;input: n&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { value: 1 } when &lt;v&gt; &lt;= 1.
+
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;next&gt;</span> from &lt;v&gt; - 1.
+    <span class="code-keyword">Application.Factorial</span> the <span class="code-result">&lt;inner&gt;</span> from &lt;next&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;sub&gt;</span> from the &lt;inner: value&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;value&gt;</span> from &lt;v&gt; * &lt;sub&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { value: &lt;value&gt; }.
+}</code></pre>
+
+        <h2>Guard rails</h2>
+        <table>
+            <thead>
+                <tr><th>What</th><th>Behaviour</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>aro check</code></td><td>Warns when every path through an action reaches a call before a <code>Return</code> — direct or mutual cycles alike.</td></tr>
+                <tr><td><code>ARO_MAX_CALL_DEPTH</code></td><td>A runaway recursion stops at 50&nbsp;000 live frames with an error naming the call chain, instead of an OOM kill. <code>0</code> disables the check.</td></tr>
+                <tr><td>Unknown action</td><td>Calling an <code>Application.&lt;Name&gt;</code> that no feature set defines is a check-time error, not a runtime surprise.</td></tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                The full specification is
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0081-user-defined-actions.md">ARO-0081:
+                User-Defined Actions</a>. <code>Examples/UserDefinedActions</code> and
+                <code>Examples/RecursiveActions</code> are runnable. For actions written
+                in Swift, Rust, C or Python instead, see
+                <a href="writing-extensions.html">Writing Extensions</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

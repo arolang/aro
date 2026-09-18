@@ -23,8 +23,8 @@ Implements a complete order lifecycle (draft, placed, paid, shipped, delivered, 
 
 ## Related Proposals
 
-- [ARO-0013: State Objects](../../Proposals/ARO-0013-state-machines.md) - State machines and observers
-- [ARO-0027: Contract-First APIs](../../Proposals/ARO-0027-contract-first-api.md)
+- [ARO-0022: State Guards](../../Proposals/ARO-0022-state-guards.md) - State machines and observers
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 - [ARO-0022: HTTP Server](../../Proposals/ARO-0022-http-server.md)
 
 ## Usage

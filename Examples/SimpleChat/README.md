@@ -18,8 +18,8 @@ Runs both an HTTP server (port 8080) and a TCP socket server (port 9000). HTTP e
 ## Related Proposals
 
 - [ARO-0022: HTTP Server](../../Proposals/ARO-0022-http-server.md)
-- [ARO-0024: Socket Communication](../../Proposals/ARO-0024-socket-communication.md)
-- [ARO-0027: Contract-First APIs](../../Proposals/ARO-0027-contract-first-api.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 
 ## Usage
 

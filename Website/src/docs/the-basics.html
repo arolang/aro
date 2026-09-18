@@ -117,11 +117,17 @@
         <h3>Example</h3>
 
         <pre><code><span class="code-feature">(Validate User Credentials: Authentication)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;request: body username&gt;.
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;password&gt;</span> from the &lt;request: body password&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;body: username&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;password&gt;</span> from the &lt;body: password&gt;.
+
     <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where username = &lt;username&gt;.
-    <span class="code-keyword">Compare</span> the &lt;password&gt; against the &lt;user: passwordHash&gt;.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+
+    <span class="code-comment">(* Compare binds a fresh result; it never rebinds an operand *)</span>
+    <span class="code-keyword">Compare</span> the <span class="code-result">&lt;password-match&gt;</span> from the &lt;password&gt; against the &lt;user: passwordHash&gt;.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt; when &lt;password-match: matches&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;username&gt;.
 }</code></pre>
 
         <h2>Statements</h2>

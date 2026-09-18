@@ -281,7 +281,7 @@ Plugins/
     When the <validation: failed> Then {
         Throw a <ValidationError: error> for the <validation: errors>.
     }.
-    Return a <Valid: status>.
+    Return an <Valid: status> for the <ValidationError>.
 }
 ```
 

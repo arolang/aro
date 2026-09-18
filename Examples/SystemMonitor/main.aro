@@ -1,4 +1,4 @@
-(* SystemMonitor - HTTP API for system commands (ARO-0033 Example) *)
+(* SystemMonitor - HTTP API for system commands (ARO-0010 Example) *)
 (* Demonstrates context-aware response formatting: *)
 (*   - HTTP requests get JSON responses *)
 (*   - Console output is formatted plaintext *)

@@ -59,7 +59,7 @@
         <header class="doc-header">
             <h1 class="gradient-text">Language Specifications</h1>
             <p class="lead">
-                The ARO language is documented through 60+ comprehensive specifications
+                The ARO language is documented through 67 numbered specifications
                 that cover everything from core syntax to native compilation.
             </p>
         </header>
@@ -311,6 +311,11 @@
                     <td>What runs concurrently: deferral, forcing, parallel for each, ordered effects</td>
                 </tr>
                 <tr>
+                    <td>0089</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0089-ranges.md" class="proposal-link">Ranges</a></td>
+                    <td><code>1..10</code> / <code>1..&lt;10</code> as lazy values (draft &mdash; not yet implemented)</td>
+                </tr>
+                <tr>
                     <td>0090</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0090-streaming-io-and-materialization.md" class="proposal-link">Streaming I/O</a></td>
                     <td>Request bodies that stream vs. become values; per-route size limits</td>
@@ -323,14 +328,111 @@
             </tbody>
         </table>
 
-        <h2>Legacy Proposals</h2>
+        <h2>Runtime &amp; Compiler Internals</h2>
         <p>
-            The original evolution proposals are preserved in the
-            <a href="https://github.com/arolang/aro/tree/main/Proposals/legacy" class="proposal-link">legacy folder</a>
-            for historical reference. These have been superseded by the consolidated specifications above.
+            These proposals specify how the implementation works rather than what the
+            language does. They are here because an <code>ARO-NNNN</code> reference in the
+            source should always resolve to something you can read.
         </p>
+        <table>
+            <thead>
+                <tr><th>#</th><th>Proposal</th><th>Topics</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0052</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0052-unified-url-io.md" class="proposal-link">Unified URL I/O</a></td>
+                    <td>One I/O surface for files, HTTP URLs and streams</td>
+                </tr>
+                <tr>
+                    <td>0053</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0053-lexer-lookup-optimization.md" class="proposal-link">Lexer Lookup Optimization</a></td>
+                    <td>Keyword, article and preposition recognition</td>
+                </tr>
+                <tr>
+                    <td>0054</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0054-execution-engine-refactor.md" class="proposal-link">Execution Engine Refactor</a></td>
+                    <td>Restructuring the interpreter's core</td>
+                </tr>
+                <tr>
+                    <td>0055</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0055-lexer-reserved-words-optimization.md" class="proposal-link">Lexer Reserved Words</a></td>
+                    <td>Faster reserved-word recognition</td>
+                </tr>
+                <tr>
+                    <td>0056</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0056-numeric-literal-underscores.md" class="proposal-link">Numeric Literal Underscores</a></td>
+                    <td>Superseded by 0082</td>
+                </tr>
+                <tr>
+                    <td>0057</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0057-lexer-cache-peeknext.md" class="proposal-link">Lexer <code>peekNext</code> Cache</a></td>
+                    <td>Tokenization performance</td>
+                </tr>
+                <tr>
+                    <td>0059</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0059-structured-logging.md" class="proposal-link">Structured Logging</a></td>
+                    <td>JSON-shaped log records</td>
+                </tr>
+                <tr>
+                    <td>0060</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0060-raw-string-literals.md" class="proposal-link">Raw String Literals</a></td>
+                    <td>Verbatim string syntax</td>
+                </tr>
+                <tr>
+                    <td>0061</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0061-ast-visitor-pattern.md" class="proposal-link">AST Visitor Pattern</a></td>
+                    <td>Traversal abstraction over the AST</td>
+                </tr>
+                <tr>
+                    <td>0062</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0062-dead-code-detection.md" class="proposal-link">Dead Code Detection</a></td>
+                    <td>Unreachable feature-set warnings</td>
+                </tr>
+                <tr>
+                    <td>0063</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0063-value-type-ast-nodes.md" class="proposal-link">Value-Type AST Nodes</a></td>
+                    <td><code>Sendable</code> AST representation</td>
+                </tr>
+                <tr>
+                    <td>0064</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0064-optimize-event-subscriptions.md" class="proposal-link">Event Subscription Matching</a></td>
+                    <td>Cheaper subscription lookup</td>
+                </tr>
+                <tr>
+                    <td>0067</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0067-pipeline-operator.md" class="proposal-link">Pipeline Operator</a></td>
+                    <td>Explicit pipelines (see also 0086)</td>
+                </tr>
+                <tr>
+                    <td>0068</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0068-extract-within-case.md" class="proposal-link">Extract Within Case</a></td>
+                    <td>Pattern-style extraction inside <code>match</code></td>
+                </tr>
+                <tr>
+                    <td>0069</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0069-async-plugin-compilation.md" class="proposal-link">Async Plugin Compilation</a></td>
+                    <td>Parallel plugin builds</td>
+                </tr>
+                <tr>
+                    <td>0070</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0070-llvm-expression-optimization.md" class="proposal-link">LLVM Expression Optimization</a></td>
+                    <td>Native codegen improvements</td>
+                </tr>
+                <tr>
+                    <td>0071</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0071-type-narrowing.md" class="proposal-link">Type Narrowing</a></td>
+                    <td>Flow-sensitive type refinement in branches</td>
+                </tr>
+                <tr>
+                    <td>0072</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0072-binary-socket-file-events.md" class="proposal-link">Binary Socket &amp; File Events</a></td>
+                    <td>Binary payload event handlers in compiled mode</td>
+                </tr>
+            </tbody>
+        </table>
 
-        <div class="highlight-box">
+<div class="highlight-box">
             <h4>Contributing</h4>
             <p>
                 Want to propose a new feature? Open an issue on

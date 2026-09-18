@@ -15,7 +15,7 @@ Fetches weather data from the Open-Meteo API using a simple GET request. Shows t
 
 ## Related Proposals
 
-- [ARO-0021: HTTP Client](../../Proposals/ARO-0021-http-client.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 
 ## Usage
 

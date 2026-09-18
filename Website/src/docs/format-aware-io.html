@@ -521,8 +521,10 @@
 
         <pre><code><span class="code-comment">(* JSON API - auto-parsed based on Content-Type header *)</span>
 <span class="code-keyword">Read</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/users"</span>&gt;.
-<span class="code-comment">(* users is now a structured object *)</span>
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;name&gt;</span> from the &lt;users: 0.name&gt;.
+
+<span class="code-comment">(* users is now a structured list — index, then field *)</span>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;first-user&gt;</span> from the &lt;users: first&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;name&gt;</span> from the &lt;first-user: name&gt;.
 
 <span class="code-comment">(* Bypass parsing with as String *)</span>
 <span class="code-keyword">Read</span> the <span class="code-result">&lt;raw: String&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/users"</span>&gt;.</code></pre>
@@ -582,9 +584,9 @@
         <pre><code><span class="code-feature">(Application-Start: Multi-Format Export)</span> {
     <span class="code-comment">(* Create sample data *)</span>
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;users&gt;</span> with [
-        { "id": 1, "name": "Alice", "email": "alice@example.com" },
-        { "id": 2, "name": "Bob", "email": "bob@example.com" },
-        { "id": 3, "name": "Charlie", "email": "charlie@example.com" }
+        { <span class="code-string">"id"</span>: 1, <span class="code-string">"name"</span>: <span class="code-string">"Alice"</span>, <span class="code-string">"email"</span>: <span class="code-string">"alice@example.com"</span> },
+        { <span class="code-string">"id"</span>: 2, <span class="code-string">"name"</span>: <span class="code-string">"Bob"</span>, <span class="code-string">"email"</span>: <span class="code-string">"bob@example.com"</span> },
+        { <span class="code-string">"id"</span>: 3, <span class="code-string">"name"</span>: <span class="code-string">"Charlie"</span>, <span class="code-string">"email"</span>: <span class="code-string">"charlie@example.com"</span> }
     ].
 
     <span class="code-comment">(* Export to multiple formats - same data, different files *)</span>

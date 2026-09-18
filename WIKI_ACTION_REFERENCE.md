@@ -274,7 +274,7 @@ Compares two values and binds a Boolean result.
     Retrieve the <user> from the <user-repository> where email = <data: email>.
     Extract the <stored-hash> from the <user: passwordHash>.
     Compute the <input-hash: hash> from the <password>.
-    Compare the <match> against the <stored-hash> with the <input-hash>.
+    Compare the <match> from the <stored-hash> against the <input-hash>.
     Throw a <Unauthorized: error> for the <login> when not <match>.
     Return an <OK: status> with <user>.
 }
@@ -334,7 +334,7 @@ Produces a new object with specified fields changed. The original binding is imm
 (activateUser: User API) {
     Extract the <id> from the <pathParameters: id>.
     Retrieve the <user> from the <user-repository> where id = <id>.
-    Update the <active-user> with { status: "active" } from the <user>.
+    Update the <active-user> from the <user> with { status: "active" }.
     Store the <active-user> into the <user-repository>.
     Return an <OK: status> with <active-user>.
 }
@@ -370,7 +370,7 @@ Merges two collections (concatenates) or two dicts (later keys override).
 (getFullCatalog: Catalog API) {
     Retrieve the <active-items> from the <item-repository> where status = "active".
     Retrieve the <featured-items> from the <featured-repository>.
-    Merge the <catalog> with <featured-items> from <active-items>.
+    Merge the <catalog: active-items> with <featured-items>.
     Return an <OK: status> with <catalog>.
 }
 ```
@@ -528,13 +528,16 @@ Validates and applies a state transition on a repository entity. Emits a `StateT
 **Verbs:** `join`
 **Prepositions:** `from`
 
-Joins the elements of a list into a single string. The qualifier specifies the separator.
+Joins the elements of a list into a single string. The separator is a plain
+string in the `with` clause; it defaults to the empty string. (The `join`
+*Compute qualifier* is the other spelling, and takes
+`with { separator: ", " }`.)
 
 ```aro
 (buildReport: Report API) {
     Retrieve the <log-entries> from the <log-repository>.
     Map the <lines> from the <log-entries: message>.
-    Join the <report: \n> from the <lines>.
+    Join the <report> from the <lines> with "\n".
     Write the <report> to "report.txt".
     Return an <OK: status> for the <report>.
 }
@@ -840,8 +843,8 @@ Creates a new empty file or directory. Use qualifier `directory` or `file` to sp
 
 ```aro
 (Application-Start: File Service) {
-    Make the <uploads: directory> at "uploads/".
-    Make the <temp: directory> at "tmp/".
+    Make the <uploads> at the <directory: "uploads/">.
+    Make the <temp> at the <directory: "tmp/">.
     Log "Directories created" to the <console>.
     Return an <OK: status> for the <startup>.
 }

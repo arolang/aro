@@ -24,8 +24,8 @@ Transform the <upper: uppercase> from the <message>.
 Create the <user> with <registration-data>.
 Update the <profile> with <changes>.
 Sort the <sorted-users> for the <users>.
-Merge the <combined> with <list-a> from <list-b>.
-Delete the <updated-cart> from the <item> in <cart>.
+Merge the <combined: list-a> with <list-b>.
+Delete the <item-sku> from the <cart>.
 Map the <names> from the <users>.
 Reduce the <total-price: sum> from the <line-items>.
 Filter the <adults> from the <applicants>.

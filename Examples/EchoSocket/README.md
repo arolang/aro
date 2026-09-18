@@ -17,8 +17,8 @@ Starts a TCP server on port 9000 that echoes back any data received from connect
 
 ## Related Proposals
 
-- [ARO-0024: Socket Communication](../../Proposals/ARO-0024-socket-communication.md)
-- [ARO-0028: Long-Running Applications](../../Proposals/ARO-0028-keepalive.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
+- [ARO-0005: Application Architecture](../../Proposals/ARO-0005-application-architecture.md)
 
 ## Usage
 

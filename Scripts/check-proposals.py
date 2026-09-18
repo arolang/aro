@@ -34,7 +34,22 @@ import re
 import sys
 
 PROPOSAL_GLOB = "Proposals/ARO-*.md"
-REFERENCE_GLOBS = ("Sources/**/*.swift", "Proposals/**/*.md", "CLAUDE.md")
+REFERENCE_GLOBS = (
+    "Sources/**/*.swift",
+    "Proposals/**/*.md",
+    "CLAUDE.md",
+    "OVERVIEW.md",
+    "MISSING.md",
+    # The documentation layers. A dangling ARO-NNNN in a book or on the
+    # website is exactly as broken as one in the source, and used to be
+    # invisible here: ARO-0029 and ARO-0033 were both cited for years by
+    # OVERVIEW.md and the website without ever existing.
+    "Book/**/*.md",
+    "Website/src/**/*.html",
+    "Examples/**/*.md",
+    "Examples/**/*.aro",
+    "Examples/**/*.yaml",
+)
 
 # References that are known not to resolve and are accepted for now. Keep this
 # empty if you can: an entry here is documentation debt, not a fix. Listing them

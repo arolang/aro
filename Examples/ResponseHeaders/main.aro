@@ -1,5 +1,5 @@
 (* Demonstrates accessing HTTP response headers, status code, and body.
-   ARO-0130: Request returns a structured { body, status, headers } result.
+   GitLab #130: Request returns a structured { body, status, headers } result.
    Uses a local server for deterministic, network-independent testing. *)
 
 (Application-Start: Response Headers Demo) {

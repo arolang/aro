@@ -71,8 +71,9 @@
         <p>Start an HTTP server in Application-Start:</p>
 
         <pre><code><span class="code-feature">(Application-Start: Web API)</span> {
-    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
-    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-comment">(* Routes and port come from openapi.yaml — no contract, no server. *)</span>
+    <span class="code-keyword">Start</span> the <span class="code-result">&lt;http-server&gt;</span> with { }.
+    <span class="code-keyword">Keepalive</span> the <span class="code-result">&lt;application&gt;</span> for the &lt;events&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
@@ -87,7 +88,7 @@
 <span class="code-feature">(createUser: User API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
-    <span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;user&gt;</span> into the &lt;user-repository&gt;.
     <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }
 
@@ -96,13 +97,13 @@
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;updates&gt;</span> from the &lt;request: body&gt;.
     <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
     <span class="code-keyword">Transform</span> the <span class="code-result">&lt;updated-user&gt;</span> from the &lt;user&gt; with &lt;updates&gt;.
-    <span class="code-keyword">Store</span> the &lt;updated-user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;updated-user&gt;</span> into the &lt;user-repository&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;updated-user&gt;.
 }
 
 <span class="code-feature">(deleteUser: User API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">Delete</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">Delete</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
     <span class="code-keyword">Return</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
 }</code></pre>
 
@@ -120,11 +121,13 @@
     <span class="code-comment">(* Request body *)</span>
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
 
-    <span class="code-comment">(* Headers *)</span>
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;auth-token&gt;</span> from the &lt;request: headers Authorization&gt;.
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;content-type&gt;</span> from the &lt;request: headers Content-Type&gt;.
+    (* Headers: pull the header set, then the header off it — a
+       qualifier is a single name, so it cannot hold <span class="code-string">"headers X"</span>. *)
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;headers&gt;</span> from the &lt;request: headers&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;auth-token&gt;</span> from the &lt;headers: Authorization&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;content-type&gt;</span> from the &lt;headers: Content-Type&gt;.
 
-    ...
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;data&gt;.
 }</code></pre>
 
         <h3>Response Status Codes</h3>
@@ -150,22 +153,21 @@
         <h3>Collection Resource</h3>
         <pre><code><span class="code-comment">(* List all *)</span>
 <span class="code-feature">(listProducts: Product API)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;page&gt;</span> from the &lt;queryParameters: page&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;limit&gt;</span> from the &lt;queryParameters: limit&gt;.
 
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;products&gt;</span> from the &lt;product-repository&gt;
-        with pagination &lt;page&gt; &lt;limit&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;products&gt;</span> from the &lt;product-repository&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;page-of-products: take&gt;</span> from &lt;products&gt; with &lt;limit&gt;.
 
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;products&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;page-of-products&gt;.
 }
 
 <span class="code-comment">(* Create new *)</span>
 <span class="code-feature">(createProduct: Product API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;product-data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">Validate</span> the &lt;product-data&gt; for the &lt;product-schema&gt;.
+    <span class="code-keyword">Validate</span> the <span class="code-result">&lt;valid&gt;</span> for the &lt;product-data&gt;.
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;product&gt;</span> with &lt;product-data&gt;.
-    <span class="code-keyword">Store</span> the &lt;product&gt; into the &lt;product-repository&gt;.
-    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;product&gt;.
+    <span class="code-keyword">Store</span> the <span class="code-result">&lt;stored-product&gt;</span> into the &lt;product-repository&gt; with &lt;product&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;stored-product&gt;.
 }</code></pre>
 
         <h3>Single Resource</h3>
@@ -174,24 +176,16 @@
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;product-id&gt;</span> from the &lt;pathParameters: id&gt;.
     <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;product&gt;</span> from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
 
-    if &lt;product&gt; is empty then {
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: product&gt;.
-    }
-
+    <span class="code-comment">(* ARO has no `if`. A guard rides on the statement it protects. *)</span>
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;product-id&gt; when &lt;product&gt; is empty.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;product&gt;.
 }
 
 <span class="code-comment">(* Delete one *)</span>
 <span class="code-feature">(deleteProduct: Product API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;product-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;product&gt;</span> from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
-
-    if &lt;product&gt; is empty then {
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: product&gt;.
-    }
-
-    <span class="code-keyword">Delete</span> the &lt;product&gt; from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
-    <span class="code-keyword">Return</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+    <span class="code-keyword">Delete</span> the <span class="code-result">&lt;removed&gt;</span> from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;removed&gt;.
 }</code></pre>
 
         <h3>Nested Resources</h3>
@@ -202,17 +196,14 @@
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;orders&gt;.
 }
 
-<span class="code-comment">(* Specific order for user *)</span>
+<span class="code-comment">(* Specific order for user — `and` joins where clauses *)</span>
 <span class="code-feature">(getUserOrder: Order API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: userId&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: orderId&gt;.
     <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;
         where id = &lt;order-id&gt; and userId = &lt;user-id&gt;.
 
-    if &lt;order&gt; is empty then {
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: order&gt;.
-    }
-
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;order-id&gt; when &lt;order&gt; is empty.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
 
@@ -230,16 +221,14 @@
 
         <h3>Request Methods</h3>
         <pre><code><span class="code-comment">(* GET *)</span>
-<span class="code-keyword">Request</span> the <span class="code-result">&lt;data&gt;</span> from &lt;UserAPI: GET /users&gt;.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;users-url&gt;.
 
-<span class="code-comment">(* POST *)</span>
-<span class="code-keyword">Call</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
+<span class="code-comment">(* POST — the `to` preposition is what makes it a POST *)</span>
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;created&gt;</span> to the &lt;users-url&gt; with &lt;user-data&gt;.
 
-<span class="code-comment">(* PUT *)</span>
-<span class="code-keyword">Call</span> the <span class="code-result">&lt;updated&gt;</span> via &lt;UserAPI: PUT /users/{id}&gt; with &lt;updates&gt;.
-
-<span class="code-comment">(* DELETE *)</span>
-<span class="code-keyword">Call</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: DELETE /users/{id}&gt;.</code></pre>
+<span class="code-comment">(* PUT / DELETE — `via &lt;METHOD&gt;` names the verb explicitly *)</span>
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;updated&gt;</span> via PUT the &lt;user-url&gt; with &lt;updates&gt;.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;removed&gt;</span> via DELETE the &lt;user-url&gt;.</code></pre>
 
         <h3>Response Handling</h3>
         <pre><code><span class="code-feature">(Fetch External Data: External Service)</span> {
@@ -248,10 +237,8 @@
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;status-code&gt;</span> from the &lt;response: statusCode&gt;.
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;response: body&gt;.
 
-    if &lt;status-code&gt; is not 200 then {
-        <span class="code-keyword">Log</span> <span class="code-string">"API error: ${status-code}"</span> to the &lt;console&gt;.
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> for the &lt;api: error&gt;.
-    }
+    <span class="code-keyword">Log</span> <span class="code-string">"API error: ${status-code}"</span> to the &lt;console&gt; when &lt;status-code&gt; != 200.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> for the &lt;status-code&gt; when &lt;status-code&gt; != 200.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;body&gt;.
 }</code></pre>
@@ -281,7 +268,7 @@
 }.
 
 <span class="code-comment">(* POST to API *)</span>
-<span class="code-keyword">Write</span> the &lt;payload&gt; to the &lt;url: <span class="code-string">"https://api.example.com/posts"</span>&gt;.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;payload&gt;</span> to the &lt;url: <span class="code-string">"https://api.example.com/posts"</span>&gt;.</code></pre>
 
         <h3>Custom Headers and Options</h3>
         <p>Use the <code>with</code> clause for headers, timeout, and other options:</p>
@@ -289,13 +276,13 @@
 <span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/protected"</span>&gt; with {
     headers: {
         Authorization: <span class="code-string">"Bearer ${token}"</span>,
-        Accept: <span class="code-string">"application/json"</span>
+        <span class="code-keyword">Accept</span>: <span class="code-string">"application/json"</span>
     },
     timeout: 30
 }.
 
 <span class="code-comment">(* POST with custom headers *)</span>
-<span class="code-keyword">Write</span> the &lt;payload&gt; to the &lt;url: <span class="code-string">"https://api.example.com/data"</span>&gt; with {
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;payload&gt;</span> to the &lt;url: <span class="code-string">"https://api.example.com/data"</span>&gt; with {
     headers: {
         Authorization: <span class="code-string">"Bearer ${token}"</span>,
         X-Request-ID: <span class="code-string">"${request-id}"</span>
@@ -309,13 +296,13 @@
     <span class="code-keyword">Read</span> the <span class="code-result">&lt;remotedata&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/export"</span>&gt;.
 
     <span class="code-comment">(* Cache locally *)</span>
-    <span class="code-keyword">Write</span> the &lt;remotedata&gt; to the &lt;file: <span class="code-string">"./data/snapshot.json"</span>&gt;.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;remotedata&gt;</span> to the &lt;file: <span class="code-string">"./data/snapshot.json"</span>&gt;.
 
     <span class="code-comment">(* Read local report *)</span>
     <span class="code-keyword">Read</span> the <span class="code-result">&lt;report&gt;</span> from the &lt;file: <span class="code-string">"./reports/daily.json"</span>&gt;.
 
     <span class="code-comment">(* Upload to remote *)</span>
-    <span class="code-keyword">Write</span> the &lt;report&gt; to the &lt;url: <span class="code-string">"https://api.example.com/upload"</span>&gt;.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;report&gt;</span> to the &lt;url: <span class="code-string">"https://api.example.com/upload"</span>&gt;.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;sync&gt;.
 }</code></pre>
@@ -324,38 +311,37 @@
 
         <h3>API Key</h3>
         <pre><code><span class="code-feature">(getSecureData: Secure API)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;api-key&gt;</span> from the &lt;request: headers X-API-Key&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;headers&gt;</span> from the &lt;request: headers&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;api-key&gt;</span> from the &lt;headers: X-API-Key&gt;.
 
-    when &lt;api-key&gt; is empty {
-        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;missing: api-key&gt;.
+    <span class="code-keyword">when</span> &lt;api-key&gt; is empty {
+        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;api-key&gt;.
     }
 
-    <span class="code-keyword">Validate</span> the &lt;api-key&gt; for the &lt;api-key-registry&gt;.
+    <span class="code-keyword">Validate</span> the <span class="code-result">&lt;key-valid&gt;</span> for the &lt;api-key&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;api-key&gt; when not &lt;key-valid&gt;.
 
-    if &lt;validation&gt; is failed then {
-        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;invalid: api-key&gt;.
-    }
-
-    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;repository&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;secrets-repository&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
 }</code></pre>
 
         <h3>Bearer Token</h3>
         <pre><code><span class="code-feature">(getProtectedResource: Protected API)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;auth-header&gt;</span> from the &lt;request: headers Authorization&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;headers&gt;</span> from the &lt;request: headers&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;auth-header&gt;</span> from the &lt;headers: Authorization&gt;.
 
-    when &lt;auth-header&gt; is empty {
-        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;missing: token&gt;.
+    <span class="code-keyword">when</span> &lt;auth-header&gt; is empty {
+        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;auth-header&gt;.
     }
 
-    <span class="code-keyword">Parse</span> the <span class="code-result">&lt;token&gt;</span> from the &lt;auth-header&gt; as <span class="code-string">"Bearer"</span>.
-    <span class="code-keyword">Validate</span> the &lt;token&gt; for the &lt;jwt-validator&gt;.
+    <span class="code-comment">(* "Bearer &lt;token&gt;" — split on the space, take the last field *)</span>
+    <span class="code-keyword">Split</span> the <span class="code-result">&lt;parts&gt;</span> from the &lt;auth-header&gt; by <span class="code-string">" "</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;token&gt;</span> from the &lt;parts: last&gt;.
 
-    if &lt;token&gt; is invalid then {
-        <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;invalid: token&gt;.
-    }
+    <span class="code-keyword">Validate</span> the <span class="code-result">&lt;token-valid&gt;</span> for the &lt;token&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;token&gt; when not &lt;token-valid&gt;.
 
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;token: claims userId&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;protected-repository&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
 }</code></pre>
 
@@ -365,12 +351,9 @@
         <pre><code><span class="code-feature">(createUser: User API)</span> {
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
 
-    <span class="code-comment">(* Always validate input *)</span>
-    <span class="code-keyword">Validate</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
-
-    if &lt;validation&gt; is failed then {
-        <span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;validation: errors&gt;.
-    }
+    <span class="code-comment">(* Always validate input. Validate binds a fresh boolean result. *)</span>
+    <span class="code-keyword">Validate</span> the <span class="code-result">&lt;valid&gt;</span> for the &lt;user-data&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;user-data&gt; when not &lt;valid&gt;.
 
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
     <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.

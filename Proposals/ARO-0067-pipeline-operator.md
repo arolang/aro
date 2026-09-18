@@ -103,7 +103,7 @@ public struct PipelineStatement: Statement {
       |> Sort by <created-date>
       |> Store in <user-repository>.
 
-    Return an <OK: status>.
+    Return an <OK: status> for the <result>.
 }
 ```
 

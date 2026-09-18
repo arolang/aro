@@ -16,7 +16,7 @@ Creates a greeting string, logs it to the console, and exits. This is the starti
 ## Related Proposals
 
 - [ARO-0001: Core Syntax](../../Proposals/ARO-0001-core-syntax.md)
-- [ARO-0020: Action Framework](../../Proposals/ARO-0020-action-framework.md)
+- [ARO-0004: Actions](../../Proposals/ARO-0004-actions.md)
 
 ## Usage
 

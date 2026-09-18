@@ -127,16 +127,18 @@ ARO-Lang/
 
 ## Language Specification
 
-The language is specified in numbered Evolution Proposals under `Proposals/`. The
-numbering is sparse — proposals are added or rejected over time, so gaps are
-expected. Below is the current set, grouped by theme.
+The language is specified in numbered Evolution Proposals under `Proposals/` — 67 of
+them. The numbering is sparse — proposals are added or rejected over time, so gaps are
+expected. `Proposals/README.md` is the complete, grouped index; the headline set is
+below. Every `ARO-NNNN` reference in the repository must resolve to a file there, which
+`Scripts/check-proposals.py` enforces in CI.
 
 ### Core Language
 
 | # | Proposal | Description |
 |---|----------|-------------|
 | 0001 | Language Fundamentals | Core syntax, literals, expressions, scoping |
-| 0002 | Control Flow | `When` guards, `match`, iteration |
+| 0002 | Control Flow | `when` guards, `match`, iteration, `while` |
 | 0003 | Type System | Types, OpenAPI integration, schemas |
 | 0004 | Actions | Action roles, built-in actions, extensions |
 | 0005 | Application Architecture | App structure, lifecycle (concurrency: see 0088) |
@@ -144,75 +146,79 @@ expected. Below is the current set, grouped by theme.
 | 0007 | Events & Reactive | Events, state, repositories |
 | 0008 | I/O Services | HTTP, files, sockets, system objects |
 | 0009 | Native Compilation | LLVM, `aro build`, plugins in binaries |
-| 0010 | Advanced Features | Regex, dates, exec |
+| 0010 | Advanced Features | Regex, dates, `Execute` |
 | 0011 | HTML/XML Parsing | `Parse` action for documents |
 | 0014 | Domain Modeling | DDD patterns, entities, aggregates |
 | 0015 | Testing Framework | Colocated tests, Given / When / Then |
 | 0016 | Interoperability | External services, `Call`, plugins |
-| 0018 | Query Language | SQL-like queries (data pipelines) |
-| 0019 | Standard Library | Primitive types, utilities |
-| 0022 | State Guards | Event handler filtering with `field:value` |
+| 0018 | Data Pipelines | Filter, transform, aggregate, group |
+| 0019 | Standard Library | Primitive types, the closed Compute-qualifier set |
+| 0022 | State Guards | Handler filtering with `field:value` |
+| 0081 | User-Defined Actions | `Application.<Name>` callable feature sets, recursion |
+| 0088 | Concurrency Model | Statement overlap, ordered effects, `parallel for each` |
+| 0089 | Ranges | `1..10` as a lazy value — **draft, not implemented** |
 
 ### Tooling & Developer Experience
 
 | # | Proposal | Description |
 |---|----------|-------------|
 | 0030 | IDE Integration | Syntax highlighting, snippets |
-| 0031 | Context-Aware Formatting | Adaptive output for machine / human / developer |
-| 0034 | Language Server Protocol | LSP server, diagnostics, navigation |
-| 0035 | Configurable Runtime | `Configure` action for timeouts, settings |
+| 0034 | Language Server Protocol | `aro lsp`, diagnostics, navigation |
 | 0044 | Runtime Metrics | Execution counts, timing, Prometheus format |
 | 0045 | Package Manager | `aro add` / `aro remove`, `plugin.yaml` |
 | 0049 | REPL | Interactive read-eval-print loop |
 | 0059 | Structured Logging | JSON-shaped log records |
 | 0062 | Dead Code Detection | Unreachable feature-set warnings |
+| 0084 | Local LLM Integration | `aro lm` — superseded by `aro ask` |
+| 0087 | Plugin SDK | SDK and DX across Swift, Rust, C and Python |
+| 0091 | Jupyter Kernel | `aro repl --json`, native ZMQ kernel, notebook semantics |
 
 ### Language Features
 
 | # | Proposal | Description |
 |---|----------|-------------|
-| 0036 | Extended File Operations | `Exists`, `Stat`, `Make`, `Copy`, `Move` |
+| 0031 | Context-Aware Formatting | Adaptive output for machine / human / developer |
+| 0035 | Configurable Runtime | `Configure` for timeouts and settings |
+| 0036 | Extended File Operations | `Exists`, `Stat`, `Make`, `Copy`, `Move`, `Delete` |
 | 0037 | Regex Split | `Split` with regex delimiters |
-| 0038 | List Element Access | `first`, `last`, `index`, range qualifiers |
+| 0038 | List Element Access | `first`, `last`, index, range specifiers |
 | 0040 | Format-Aware I/O | Auto format detection for JSON, YAML, CSV |
 | 0041 | Date/Time Ranges | Date arithmetic, ranges, recurrence |
 | 0042 | Set Operations | `intersect`, `difference`, `union` |
 | 0043 | Sink Syntax | Expressions in result position |
 | 0046 | Typed Event Extraction | Schema-validated event data |
-| 0047 | Command-Line Parameters | `Parameters` action, CLI argument parsing |
+| 0047 | Command-Line Parameters | `Parameters`, CLI argument parsing |
 | 0048 | WebSocket | Server, real-time messaging |
-| 0050 | Template Engine | Mustache-style `Render` |
-| 0051 | Streaming Execution | Lazy evaluation, Stream Tee, aggregation fusion |
-| 0052 | Numeric Separators / Terminal UI / Unified URL I/O | (multiple proposals reusing 0052) |
-| 0056 | Numeric Literal Underscores | Readable numeric literals |
+| 0050 | Template Engine | Mustache-style `Render`, escaping rules |
+| 0051 | Streaming Execution | Lazy evaluation, stream tee, aggregation fusion |
+| 0052 | Unified URL I/O | One I/O surface for files, URLs and streams |
+| 0056 | Numeric Literal Underscores | Superseded by 0082 |
 | 0060 | Raw String Literals | Verbatim string syntax |
-| 0067 | Pipeline Operator / Auto Pipeline Detection | Implicit and explicit pipelines |
-| 0068 | Extract within Case | Pattern-style extraction in `match` |
+| 0067 | Pipeline Operator | Explicit pipelines (see also 0086) |
+| 0068 | Extract Within Case | Pattern-style extraction inside `match` |
 | 0071 | Type Narrowing | Flow-sensitive type refinement |
-| 0072 | Binary Socket / File Events | Binary payload event handlers |
+| 0072 | Binary Socket / File Events | Binary payload handlers in compiled mode |
+| 0073 | Store Files | File-backed repositories, YAML seeds, writability by permission |
+| 0080 | Git Actions | Native Git via libgit2, plus an event per change |
+| 0082 | Numeric Separators | Underscores in decimal literals (supersedes 0056) |
+| 0083 | Terminal UI | Terminal UI system |
+| 0086 | Automatic Pipeline Detection | Implicit pipeline detection across statements |
+| 0090 | Streaming I/O and Materialization | Bodies that stream vs. become values, `x-aro-max-body` |
 
 ### Runtime & Compiler Internals
 
 | # | Proposal | Description |
 |---|----------|-------------|
-| 0053 | Lexer Lookup Optimization / Terminal Shadow Buffer | (multiple proposals reusing 0053) |
+| 0053 | Lexer Lookup Optimization | Keyword / article / preposition recognition |
 | 0054 | Execution Engine Refactor | Engine restructuring |
 | 0055 | Lexer Reserved Words Optimization | Faster keyword recognition |
 | 0057 | Lexer Cache `peekNext` | Tokenization performance |
 | 0061 | AST Visitor Pattern | Traversal abstraction |
-| 0063 | Value-Type AST Nodes | Sendable AST representation |
-| 0064 | Optimize Event Subscriptions | Subscription cost reduction |
+| 0063 | Value-Type AST Nodes | `Sendable` AST representation |
+| 0064 | Optimize Event Subscriptions | Cheaper subscription lookup |
 | 0069 | Async Plugin Compilation | Parallel plugin builds |
 | 0070 | LLVM Expression Optimization | Native codegen improvements |
-
-### Subsystems
-
-| # | Proposal | Description |
-|---|----------|-------------|
-| 0073 | Plugin SDK / Store Files | (two proposals reuse 0073: SDK and store-backed repositories) |
-| 0080 | Git Actions | Native Git via libgit2 — status, log, stage, commit, push, pull, clone, checkout, tag |
-| 0081 | User-Defined Actions | Define custom actions in ARO itself (proposed) |
-| 0088 | Concurrency Model | Statement overlap, force points, `parallel for each`, event dispatch, stream prefetch |
+| 0085 | Terminal Shadow Buffer | Shadow-buffer optimization (draft) |
 
 See `Proposals/README.md` for the full index.
 
@@ -225,7 +231,8 @@ swift test                                 # Run unit tests
 aro run ./Examples/HelloWorld              # Run an example
 ```
 
-For full installation and per-platform build instructions, see [README.md](./README.md).
+For installation and per-platform build instructions, see the
+[Wiki](https://github.com/arolang/aro/wiki) and `Book/TheEssentialPrimer`.
 
 ## Usage
 
@@ -233,13 +240,29 @@ For full installation and per-platform build instructions, see [README.md](./REA
 
 ```bash
 aro run ./MyApp           # Run an ARO application (interpreter)
+aro debug ./MyApp         # Step-debug: pause at every statement
 aro build ./MyApp         # Compile to native binary (LLVM IR + link)
 aro compile ./MyApp       # Compile and report diagnostics
-aro check ./MyApp         # Quick syntax check
+aro check ./MyApp         # Errors, warnings, per-route request-body analysis
+aro diff --graph a..b     # Compare feature-set graphs between two revisions
 aro test ./MyApp          # Run colocated test feature sets
-aro add <package>         # Install a plugin package
-aro remove <package>      # Uninstall a plugin package
+aro repl                  # Interactive REPL (--json for a machine-readable one)
+aro kernel install        # Register the native Jupyter kernel (ZMQ, no Python)
+aro new plugin <name> --lang swift   # Scaffold a plugin
+aro add <package>         # Install a plugin from a Git repository
+aro remove <package>      # Uninstall a plugin
+aro plugins               # List installed plugins
+aro actions               # List built-in and plugin actions (--qualifiers too)
+aro lsp                   # Language Server over stdio
+aro mcp                   # MCP server for LLM tooling
+aro ask "fix this"        # Local-model coding assistant
+aro ui ./MyApp            # Open Solaro, the ARO desktop UI
+
+echo 'Log "Hi" to the <console>.' | aro    # evaluate source on stdin
 ```
+
+`aro lsp`, `aro mcp`, `aro ask` and `aro kernel` are built on macOS and Linux only.
+Each command's own `--help` is authoritative.
 
 ### Contract-First HTTP APIs
 
@@ -452,11 +475,11 @@ direction:
 
 - Lexer, recursive-descent parser, AST, symbol tables, semantic analysis
 - Lazy `AROFuture` runtime with auto-forcing value accessors
-- Action registry and 50+ built-in actions
+- Action registry and 71 built-in actions (`aro actions` prints the live table)
 - EventBus with state guards (ARO-0022) and typed event extraction (ARO-0046)
 - HTTP server (SwiftNIO) and client (AsyncHTTPClient), plus SSE
 - WebSocket server (ARO-0048)
-- File system operations and FileMonitor (ARO-0029, ARO-0036, ARO-0040)
+- File system operations and FileMonitor (ARO-0036, ARO-0040)
 - TCP socket server / client, including binary socket events (ARO-0072)
 - Native Git via libgit2 (ARO-0080)
 - Store files / file-backed repositories (ARO-0073)
@@ -467,11 +490,16 @@ direction:
 - Testing framework (`Given` / `When` / `Then`)
 - Native compilation (`aro build`) with bundled plugins
 - LSP server (ARO-0034)
-- CLI: `run`, `build`, `compile`, `check`, `test`, `add`, `remove`
+- User-defined actions callable as `Application.<Name>`, tail calls included (ARO-0081)
+- Concurrency model: statement overlap, ordered effects, `parallel for each` (ARO-0088)
+- Streaming request bodies with per-route materialization limits (ARO-0090)
+- Jupyter: `aro repl --json` and the native ZMQ kernel (ARO-0091)
+- CLI: `run`, `debug`, `build`, `compile`, `check`, `diff`, `test`, `repl`, `kernel`,
+  `new`, `add`, `remove`, `plugins`, `actions`, `lsp`, `mcp`, `ask`, `ui`
 
 ### In Progress / Proposed
 
-- ARO-0081: User-defined actions (define new actions in ARO itself)
+- ARO-0089: Ranges — `1..10` as a lazy value (specified, not implemented)
 - Type narrowing (ARO-0071)
 - Continued LLVM expression optimization (ARO-0070)
 

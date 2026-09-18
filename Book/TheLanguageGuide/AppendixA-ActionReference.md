@@ -186,7 +186,7 @@ Makes HTTP requests to external URLs or APIs.
 ```aro
 Request the <result> from <url>.              (* GET request *)
 Request the <result> to <url> with <data>.    (* POST request *)
-Request the <result> via METHOD <url>.        (* Explicit method *)
+Request the <result> via PUT the <url> with <data>.  (* Explicit method *)
 ```
 
 **Examples:**
@@ -1320,14 +1320,17 @@ Closes connections.
 
 **Syntax:**
 ```aro
-Close the <connection>.
+Close the <result> with <target>.
 ```
+
+`Close` takes `from` or `with` — the object names what is being closed,
+and the result names the outcome.
 
 **Examples:**
 ```aro
-Close the <database-connections>.
-Close the <socket-server>.
-Close the <connection>.
+Close the <session> with <connection>.
+Close the <server> with <application>.
+Close the <pool> from the <database-connections>.
 ```
 
 **Valid Prepositions:** None

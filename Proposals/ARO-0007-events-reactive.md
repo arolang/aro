@@ -928,7 +928,7 @@ ARO provides two complementary mechanisms for reacting to state:
 (Notify Shipped: OrderUpdated Handler<status:shipped>) {
     Extract the <order> from the <event: order>.
     Send the <notification> to the <order: email>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -939,7 +939,7 @@ ARO provides two complementary mechanisms for reacting to state:
 (Track Shipment: status StateObserver<paid_to_shipped>) {
     Extract the <orderId> from the <transition: entityId>.
     Log "Order shipped: ${orderId}" to the <console>.
-    Return an <OK: status>.
+    Return an <OK: status> for the <orderId>.
 }
 ```
 

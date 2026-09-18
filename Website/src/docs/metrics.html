@@ -220,24 +220,24 @@
         </p>
 
         <pre><code><span class="code-comment">(* Table format - ASCII table for terminal display *)</span>
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the &lt;console&gt;.
 
 <span class="code-comment">(* Short format - single-line summary *)</span>
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the &lt;console&gt;.
 
 <span class="code-comment">(* Plain format - detailed human-readable output *)</span>
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the &lt;console&gt;.
 
 <span class="code-comment">(* Prometheus format - for monitoring systems *)</span>
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.</code></pre>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <p>
             Without a qualifier, <code>&lt;metrics&gt;</code> defaults to the <code>plain</code> format:
         </p>
 
         <pre><code><span class="code-comment">(* These are equivalent *)</span>
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
-<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.</code></pre>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics&gt;</span> to the &lt;console&gt;.
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <h2>Output Formats</h2>
 
@@ -335,7 +335,7 @@ aro_application_uptime_seconds 5.2</code></pre>
         </p>
 
         <pre><code><span class="code-feature">(getMetrics: Monitoring API)</span> {
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with <span class="code-result">&lt;metrics: prometheus&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;metrics: prometheus&gt;.
 }</code></pre>
 
         <h2>Example Usage</h2>
@@ -344,38 +344,38 @@ aro_application_uptime_seconds 5.2</code></pre>
         </p>
 
         <pre><code><span class="code-feature">(Application-Start: Metrics Demo)</span> {
-    <span class="code-keyword">Log</span> <span class="code-string">"=== Metrics Demo ==="</span> to the <span class="code-result">&lt;console&gt;</span>.
-    <span class="code-keyword">Log</span> <span class="code-string">"Emitting events in parallel..."</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> <span class="code-string">"=== Metrics Demo ==="</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Emitting events in parallel..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Emit events in parallel for each item *)</span>
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;items&gt;</span> with [1, 2, 3].
-    parallel for each &lt;item&gt; in &lt;items&gt; {
-        <span class="code-keyword">Emit</span> a <span class="code-result">&lt;ProcessItem: event&gt;</span> with <span class="code-result">&lt;item&gt;</span>.
+    <span class="code-keyword">parallel for each</span> &lt;item&gt; in &lt;items&gt; {
+        <span class="code-keyword">Emit</span> a <span class="code-result">&lt;ProcessItem: event&gt;</span> with &lt;item&gt;.
     }
 
-    <span class="code-keyword">Log</span> <span class="code-string">"Events emitted. Metrics will be shown at shutdown."</span> to the <span class="code-result">&lt;console&gt;</span>.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;demo&gt;</span>.
+    <span class="code-keyword">Log</span> <span class="code-string">"Events emitted. Metrics will be shown at shutdown."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
 }
 
 <span class="code-feature">(Process Item: ProcessItem Handler)</span> {
-    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;value&gt;</span> from the <span class="code-result">&lt;event: item&gt;</span>.
-    <span class="code-keyword">Log</span> <span class="code-string">"Processing item: ${value}"</span> to the <span class="code-result">&lt;console&gt;</span>.
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;processing&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;value&gt;</span> from the &lt;event: item&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Processing item: ${value}"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
 }
 
 <span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">Log</span> <span class="code-string">"=== Final Metrics ==="</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> <span class="code-string">"=== Final Metrics ==="</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Short summary *)</span>
-    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Detailed table *)</span>
-    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Prometheus format for monitoring *)</span>
-    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the &lt;console&gt;.
 
-    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;shutdown&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <h2>Available Metric Types</h2>

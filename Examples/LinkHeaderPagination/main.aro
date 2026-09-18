@@ -1,4 +1,4 @@
-(* Demonstrates RFC 8288 Link header parsing (ARO-0132).
+(* Demonstrates RFC 8288 Link header parsing (GitLab #132).
    The Parse action with the link-header specifier converts a standard HTTP
    Link header value into a rel-keyed dictionary for easy navigation. *)
 

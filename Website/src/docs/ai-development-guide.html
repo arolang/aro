@@ -200,34 +200,34 @@ Documentation/          <span class="code-comment"># Developer guides</span></co
         <h2>Creating Custom Actions</h2>
         <p>When extending ARO with new actions, follow this pattern:</p>
 
-        <pre><code><span class="code-keyword">public struct</span> MyAction: ActionImplementation {
-    <span class="code-keyword">public static let</span> role: ActionRole = .own
-    <span class="code-keyword">public static let</span> verbs: Set&lt;String&gt; = [<span class="code-string">"MyVerb"</span>]
-    <span class="code-keyword">public static let</span> validPrepositions: Set&lt;Preposition&gt; = [.with, .from]
+        <pre><code>public struct MyAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set&lt;String&gt; = [<span class="code-string">"MyVerb"</span>]
+    public static let validPrepositions: Set&lt;Preposition&gt; = [.with, .from]
 
-    <span class="code-keyword">public init</span>() {}
+    public init() {}
 
-    <span class="code-keyword">public func</span> execute(
+    public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> Sendable {
-        <span class="code-comment">// Get input from context</span>
-        <span class="code-keyword">let</span> input: String = <span class="code-keyword">try</span> context.require(object.identifier)
+    ) async throws -&gt; any Sendable {
+        // Get input from context
+        let input: String = try context.require(object.identifier)
 
-        <span class="code-comment">// Process and bind result</span>
-        <span class="code-keyword">let</span> output = process(input)
+        // Process and bind result
+        let output = process(input)
         context.bind(result.identifier, value: output)
 
-        <span class="code-comment">// Emit event</span>
+        // Emit event
         context.emit(MyEvent(value: output))
 
-        <span class="code-keyword">return</span> output
+        return output
     }
 }
 
-<span class="code-comment">// Register</span>
-ActionRegistry.shared.register(MyAction.<span class="code-keyword">self</span>)</code></pre>
+// Register
+ActionRegistry.shared.register(MyAction.self)</code></pre>
 
         <h2>Concurrency</h2>
         <p>

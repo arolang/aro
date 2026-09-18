@@ -71,7 +71,7 @@
         </p>
 
         <pre><code><span class="code-comment">(* Log the current time *)</span>
-<span class="code-keyword">Log</span> <span class="code-keyword">&lt;now&gt;</span> to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> <span class="code-result">&lt;now&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <p>Output: <code>2025-12-29T15:20:49Z</code></p>
 
@@ -88,10 +88,10 @@
             Extract individual parts of a date using qualifiers:
         </p>
 
-        <pre><code><span class="code-keyword">Extract</span> the <span class="code-result">&lt;year&gt;</span> from the <span class="code-keyword">&lt;now: year&gt;</span>.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;month&gt;</span> from the <span class="code-keyword">&lt;now: month&gt;</span>.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;day&gt;</span> from the <span class="code-keyword">&lt;now: day&gt;</span>.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;hour&gt;</span> from the <span class="code-keyword">&lt;now: hour&gt;</span>.</code></pre>
+        <pre><code><span class="code-keyword">Extract</span> the <span class="code-result">&lt;year&gt;</span> from the &lt;now: year&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;month&gt;</span> from the &lt;now: month&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;day&gt;</span> from the &lt;now: day&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;hour&gt;</span> from the &lt;now: hour&gt;.</code></pre>
 
         <h3>Available Properties</h3>
         <table>
@@ -113,7 +113,7 @@
         </p>
 
         <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;deadline: date&gt;</span> from <span class="code-string">"2025-12-31T23:59:59Z"</span>.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;deadline-year&gt;</span> from the <span class="code-keyword">&lt;deadline: year&gt;</span>.</code></pre>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;deadline-year&gt;</span> from the &lt;deadline: year&gt;.</code></pre>
 
         <h2>Formatting Dates</h2>
         <p>
@@ -163,18 +163,18 @@
         </p>
 
         <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;vacation: date-range&gt;</span> from &lt;start&gt; to &lt;end&gt;.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;duration&gt;</span> from the <span class="code-keyword">&lt;vacation: days&gt;</span>.</code></pre>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;duration&gt;</span> from the &lt;vacation: days&gt;.</code></pre>
 
         <h2>Date Comparisons</h2>
         <p>
             Compare dates in when clauses:
         </p>
 
-        <pre><code>when &lt;booking&gt; before &lt;deadline&gt; {
+        <pre><code><span class="code-keyword">when</span> &lt;booking&gt; before &lt;deadline&gt; {
     <span class="code-keyword">Log</span> <span class="code-string">"Booking accepted"</span> to the &lt;console&gt;.
 }
 
-when &lt;event&gt; after &lt;now&gt; {
+<span class="code-keyword">when</span> &lt;event&gt; after &lt;now&gt; {
     <span class="code-keyword">Log</span> <span class="code-string">"Upcoming event"</span> to the &lt;console&gt;.
 }</code></pre>
 
@@ -184,7 +184,7 @@ when &lt;event&gt; after &lt;now&gt; {
         </p>
 
         <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;weekly: recurrence&gt;</span> with <span class="code-string">"every monday"</span>.
-<span class="code-keyword">Extract</span> the <span class="code-result">&lt;next&gt;</span> from the <span class="code-keyword">&lt;weekly: next&gt;</span>.</code></pre>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;next&gt;</span> from the &lt;weekly: next&gt;.</code></pre>
 
         <h3>Pattern Examples</h3>
         <ul>

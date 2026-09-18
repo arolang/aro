@@ -1,6 +1,6 @@
 # Build a multiline string literals demo
 
-Create a single-file ARO application that demonstrates triple-quoted multiline string literals (ARO-0097).
+Create a single-file ARO application that demonstrates triple-quoted multiline string literals (GitLab #97).
 
 In the `Application-Start` feature set:
 
