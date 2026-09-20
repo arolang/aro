@@ -32,6 +32,8 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
+aro check -r ./Apps   # Check every application under a directory separately;
+                      # without -r a directory of applications is an error (#824)
 aro diff --graph main..my-branch          # Feature-graph diff: nodes, statements, wires
 aro diff --graph main..my-branch --html report.html   # Same comparison, two graphs side by side
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
@@ -109,6 +111,35 @@ MyApp/
 - At most ONE `Application-End: Success` and ONE `Application-End: Error` (both optional)
 - Feature sets are triggered by **events**, not direct calls
 - **Contract-First HTTP**: `openapi.yaml` is required for HTTP server (no contract = no server)
+
+**A directory of applications is not an application.** `aro run`, `aro build` and
+`aro check` all refuse a path holding several `Application-Start` feature sets in
+different subdirectories, and name one to point at instead. `aro check --recursive`
+checks each of them separately — without it, every `.aro` file under the path is
+pooled into one pseudo-application, so sibling applications appear to share feature
+sets and entry points (GitLab #824).
+
+### Importing another application (ARO-0005 §3)
+
+No imports are needed *within* an application. `import` is for pulling in a
+**separate** application's feature sets, and it is the one place a path appears in
+ARO source:
+
+```aro
+import ../ModuleA
+import ../ModuleB
+
+(Application-Start: Combined) { … }
+```
+
+The path is relative to the importing file's directory, and every feature set,
+type and published variable of the imported application becomes visible — so
+`Examples/ModulesExample/Combined` serves the routes whose handlers live in
+`ModuleA` and `ModuleB`. Remove the two lines and startup fails with "Missing
+ARO feature set handlers".
+
+It is resolved by `Application.resolveImports`; there are no visibility modifiers
+and no partial imports.
 
 ### Compilation Pipeline
 

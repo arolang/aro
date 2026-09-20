@@ -49,6 +49,17 @@ struct SourceCheckSubcommand: ParsableCommand {
     )
     var syntax: Bool = false
 
+    @Flag(
+        name: [.long, .customShort("r")],
+        help: """
+            Check every application under the path separately instead of \
+            treating them as one. Without it, a directory holding several \
+            applications is an error -- the same answer `aro run` and \
+            `aro build` give.
+            """
+    )
+    var recursive: Bool = false
+
     func run() throws {
         if syntax {
             try runSyntaxOnly()
@@ -63,9 +74,37 @@ struct SourceCheckSubcommand: ParsableCommand {
             throw ExitCode.failure
         }
 
+        if recursive {
+            guard isDirectory.boolValue else {
+                print("Error: --recursive needs a directory, not a file")
+                throw ExitCode.failure
+            }
+            try runRecursive(root: resolvedPath)
+            return
+        }
+
+        let (errors, warnings) = try checkApplication(
+            at: resolvedPath,
+            isDirectory: isDirectory.boolValue
+        )
+
+        if errors > 0 {
+            Foundation.exit(1)
+        }
+        _ = warnings
+    }
+
+    /// Check one path -- a single file, or a directory treated as one
+    /// application -- and print its report.
+    ///
+    /// Split out of `run()` so `--recursive` can call it once per application
+    /// without the summary and the exit code being decided here (GitLab #824).
+    /// - Returns: the error and warning counts for this path.
+    @discardableResult
+    private func checkApplication(at resolvedPath: URL, isDirectory: Bool) throws -> (Int, Int) {
         let sourceFiles: [URL]
 
-        if isDirectory.boolValue {
+        if isDirectory {
             sourceFiles = try findSourceFiles(in: resolvedPath)
         } else {
             sourceFiles = [resolvedPath]
@@ -101,7 +140,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         // `nil` for a single named file: that file may well be one of many in
         // an application this invocation was never pointed at, so the
         // diagnostic must not speak for the application.
-        let declaredActions: UserActionRegistry? = isDirectory.boolValue
+        let declaredActions: UserActionRegistry? = isDirectory
             ? UserActionRegistry.declared(inFiles: sourceFiles)
             : nil
 
@@ -118,7 +157,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         // Transitions the contract does not declare (GitLab #507).
         // Directory-scoped: the state enums live in `openapi.yaml`, which a
         // single-file check has no application root to find.
-        if isDirectory.boolValue {
+        if isDirectory {
             totalErrors += reportUndeclaredTransitions(directory: resolvedPath, sourceFiles: sourceFiles)
         }
 
@@ -126,12 +165,12 @@ struct SourceCheckSubcommand: ParsableCommand {
         // Directory-scoped: a single named file may be one of many in an
         // application this invocation was never pointed at, so it must not
         // speak for the application — the same reasoning as `declaredActions`.
-        if isDirectory.boolValue {
+        if isDirectory {
             totalErrors += reportEntryPoint(directory: resolvedPath, sourceFiles: sourceFiles)
         }
 
         // Where each route's request body goes (GitLab #477).
-        if isDirectory.boolValue {
+        if isDirectory {
             totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles)
         }
 
@@ -148,9 +187,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             }
         }
 
-        if totalErrors > 0 {
-            Foundation.exit(1)
-        }
+        return (totalErrors, totalWarnings)
     }
 
     /// Report `Accept` statements that name a state the contract does not
@@ -210,22 +247,42 @@ struct SourceCheckSubcommand: ParsableCommand {
     ///
     /// The rule itself is `EntryPointCheck` in AROParser, so it is testable
     /// without driving the CLI; this formats its verdict.
-    private func reportEntryPoint(directory: URL, sourceFiles: [URL]) -> Int {
+    /// The first path component of `fileDirectory` below `root`, or `"."` when
+    /// the file sits in `root` itself.
+    static func group(of fileDirectory: URL, under root: URL) -> String {
+        let rootComponents = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        let fileComponents = fileDirectory.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+
+        guard fileComponents.count > rootComponents.count,
+              Array(fileComponents.prefix(rootComponents.count)) == rootComponents
+        else { return "." }
+
+        return fileComponents[rootComponents.count]
+    }
+
+    /// Apply `EntryPointCheck` to a directory without printing anything.
+    ///
+    /// `--recursive` needs the same verdict to decide whether a subdirectory
+    /// is one application or a container of them, so the classification is
+    /// shared rather than duplicated (GitLab #824).
+    private func classifyEntryPoints(directory: URL, sourceFiles: [URL]) -> EntryPointCheck.Result {
         var declarations: [EntryPointCheck.Declaration] = []
         for file in sourceFiles {
             guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
             // The group is the first path component under the directory being
             // checked, so several entry points in one subdirectory still read
             // as one application.
+            //
+            // Compared component-wise on symlink-resolved paths, because
+            // trimming `directory.path + "/"` off the file's path as a string
+            // breaks whenever the two spell the same directory differently.
+            // On macOS `/var` is a symlink to `/private/var`, so a project
+            // under `/var/folders/...` had the checked path trimmed out of the
+            // *middle* of the resolved one and every group came back named
+            // `privateAlpha` — one bogus group per application, which then
+            // read as a directory of applications (GitLab #824).
             let fileDirectory = file.deletingLastPathComponent()
-            let group: String
-            if fileDirectory.standardized == directory.standardized {
-                group = "."
-            } else {
-                let relative = fileDirectory.path
-                    .replacingOccurrences(of: directory.path + "/", with: "")
-                group = String(relative.split(separator: "/").first ?? ".")
-            }
+            let group = Self.group(of: fileDirectory, under: directory)
             for featureSet in Compiler().compile(source).program.featureSets {
                 declarations.append(EntryPointCheck.Declaration(
                     name: featureSet.name,
@@ -234,8 +291,11 @@ struct SourceCheckSubcommand: ParsableCommand {
                 ))
             }
         }
+        return EntryPointCheck.classify(declarations)
+    }
 
-        switch EntryPointCheck.classify(declarations) {
+    private func reportEntryPoint(directory: URL, sourceFiles: [URL]) -> Int {
+        switch classifyEntryPoints(directory: directory, sourceFiles: sourceFiles) {
         case .ok:
             return 0
 
@@ -251,16 +311,29 @@ struct SourceCheckSubcommand: ParsableCommand {
             }
             return 1
 
-        case .separateApplications(let groups):
-            // Not a broken application but a directory of them. `aro run`
-            // already says this; saying anything else here would report an
-            // error the author cannot act on.
-            print("\nnote: \(directory.lastPathComponent) contains \(groups.count)"
-                  + " separate applications (\(groups.joined(separator: ", "))), not one")
+        case .separateApplications(let groups, let multipleWithin):
+            // A directory of applications, not one application. `aro run` and
+            // `aro build` both refuse this path and name a subdirectory to
+            // point at; this used to print a note and exit 0, so a CI job
+            // running `aro check $DIR` passed on a path that cannot run
+            // (GitLab #824).
+            print("\nerror: \(directory.lastPathComponent) contains \(groups.count)"
+                  + " separate applications, not one")
+            for group in groups.prefix(groupsToList) {
+                print("  \(group)")
+            }
+            if groups.count > groupsToList {
+                print("  … and \(groups.count - groupsToList) more")
+            }
             if let first = groups.first {
                 print("  hint: Check one of them: aro check \(directory.path)/\(first)")
             }
-            return 0
+            print("  hint: Or check them all: aro check --recursive \(directory.path)")
+            for group in multipleWithin {
+                print("  note: \(group) declares more than one"
+                      + " \(EntryPointCheck.entryPointName); checking it will say so")
+            }
+            return 1
 
         case .multiple(let starts):
             print("\nerror: \(starts.count) \(EntryPointCheck.entryPointName) feature sets"
@@ -272,6 +345,78 @@ struct SourceCheckSubcommand: ParsableCommand {
         }
     }
 
+
+    /// How many application names to print before summarising the rest.
+    /// `aro check ./Examples` finds 109; listing them all buries the hint.
+    private var groupsToList: Int { 10 }
+
+    /// Check every application under `root` separately.
+    ///
+    /// "Separately" is the point: without it the command pools every `.aro`
+    /// file under the path into one pseudo-application, so sibling
+    /// applications appear to share feature sets, published symbols and
+    /// entry points. Each directory here gets its own report and its own
+    /// verdict, and a directory that is itself a container is recursed into.
+    private func runRecursive(root: URL) throws {
+        let applications = applicationDirectories(under: root)
+
+        guard !applications.isEmpty else {
+            // No subdirectory holds sources, so the path is one application
+            // (or empty, which `checkApplication` reports).
+            let (errors, _) = try checkApplication(at: root, isDirectory: true)
+            if errors > 0 { Foundation.exit(1) }
+            return
+        }
+
+        var failed: [String] = []
+        for application in applications {
+            print("\n=== \(application.path)")
+            let (errors, _) = try checkApplication(at: application, isDirectory: true)
+            if errors > 0 { failed.append(application.lastPathComponent) }
+        }
+
+        print()
+        if failed.isEmpty {
+            print("✅ \(applications.count) application(s) checked, no errors")
+        } else {
+            print("❌ \(failed.count) of \(applications.count) application(s) have errors:"
+                  + " \(failed.joined(separator: ", "))")
+            Foundation.exit(1)
+        }
+    }
+
+    /// The application directories directly under `root`.
+    ///
+    /// A subdirectory counts when it holds `.aro` files anywhere beneath it.
+    /// One that is itself a directory of applications — `ModulesExample`,
+    /// whose three applications each live one level further down — expands to
+    /// those, so `--recursive` reaches the same units `aro run` accepts.
+    private func applicationDirectories(under root: URL) -> [URL] {
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        var found: [URL] = []
+        for entry in contents.sorted(by: { $0.path < $1.path }) {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: entry.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue,
+                  let sources = try? findSourceFiles(in: entry),
+                  !sources.isEmpty
+            else { continue }
+
+            // Does this subdirectory hold applications of its own? Reuse the
+            // rule rather than guessing from the layout.
+            if case .separateApplications = classifyEntryPoints(directory: entry, sourceFiles: sources) {
+                found.append(contentsOf: applicationDirectories(under: entry))
+            } else {
+                found.append(entry)
+            }
+        }
+        return found
+    }
 
     private func reportBodyPolicies(directory: URL, sourceFiles: [URL]) -> Int {
         let contract = ["openapi.yaml", "openapi.yml", "openapi.json"]
