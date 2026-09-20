@@ -222,7 +222,9 @@ public struct DataFlowAnalyzer {
         }
 
         func visit(_ node: RequireStatement) -> Result {
-            analyzer.analyzeRequireStatement(node, builder: builder)
+            analyzer.analyzeRequireStatement(
+                node, builder: builder, definedSymbols: &definedSymbols
+            )
         }
 
         func visit(_ node: WhenStatement) -> Result {
@@ -661,8 +663,15 @@ public struct DataFlowAnalyzer {
 
     private func analyzeRequireStatement(
         _ statement: RequireStatement,
-        builder: SymbolTableBuilder
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
     ) -> (DataFlowInfo, Set<String>) {
+        // A Require introduces the name, so later statements read a symbol that
+        // is defined rather than an unresolved one. Without this every use of a
+        // Required variable was reported as an unpublished external dependency,
+        // which is the opposite of what the statement declares (GitLab #828).
+        definedSymbols.insert(statement.variableName)
+
         builder.define(
             name: statement.variableName,
             definedAt: statement.span,
@@ -1021,7 +1030,8 @@ public struct DataFlowAnalyzer {
     public func verifyDependencies(_ analyzed: AnalyzedFeatureSet, globalRegistry: GlobalSymbolRegistry) {
         for dependency in analyzed.dependencies {
             if globalRegistry.lookup(dependency) == nil {
-                if !isKnownExternal(dependency) {
+                if !isKnownExternal(dependency)
+                    && !isDeclaredRuntimeProvided(dependency, in: analyzed.symbolTable) {
                     diagnostics.warning(
                         "External dependency '\(dependency)' is not published by any feature set",
                         hints: ["Consider adding a <Publish> statement or marking it as framework-provided"]
@@ -1251,6 +1261,24 @@ public struct DataFlowAnalyzer {
     /// definition" warnings on correct code (GitLab #478).
     func isKnownExternal(_ name: String) -> Bool {
         SystemObjectCatalog.isSystemObject(name)
+    }
+
+    /// True when the feature set declared this name with
+    /// `Require … from the <framework>` or `… from the <environment>`.
+    ///
+    /// Both sources are supplied by the runtime, so the Require statement is
+    /// itself the declaration `verifyDependencies` would otherwise ask for --
+    /// its hint literally reads "consider … marking it as framework-provided".
+    /// Warning anyway made the only statement that declares an external
+    /// dependency the one statement that could not satisfy the check
+    /// (GitLab #828).
+    ///
+    /// A Require naming a feature set is left alone: that one really does need
+    /// someone to `Publish`, and saying so is the point of the warning.
+    private func isDeclaredRuntimeProvided(_ name: String, in symbolTable: SymbolTable) -> Bool {
+        guard let symbol = symbolTable.lookup(name) else { return false }
+        guard case .extracted(let from) = symbol.source else { return false }
+        return from == "\(RequireSource.framework)" || from == "\(RequireSource.environment)"
     }
 
     private func isServiceObject(_ name: String) -> Bool {

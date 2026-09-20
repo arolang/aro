@@ -98,6 +98,47 @@ struct ListActions: AsyncParsableCommand {
 
     // MARK: - Single-Action Lookup
 
+    /// Grammar keywords that are parsed as their own statement kinds, so the
+    /// registry will never hold them.
+    ///
+    /// Only keywords the registry does *not* already claim belong here: looking
+    /// up `match` or `publish` finds the Compare and Publish actions first, and
+    /// that answer is the right one.
+    private static let statementKeywords: [String: (name: String, syntax: String, meaning: String)] = {
+        let controlFlow: [(String, String, String)] = [
+            ("each", "for each <item> [at <index>] in <collection> [where <condition>] { … }",
+             "Iterates a collection. The loop variable is bound fresh and immutably per iteration."),
+            ("for", "for each <item> in <collection> { … }   |   for <n> from <start> to <end> { … }",
+             "Iterates a collection, or counts from one bound to another (upper bound exclusive)."),
+            ("while", "while <condition> { … }",
+             "Repeats while the condition holds."),
+            ("parallel", "parallel for each <item> in <collection> [with <concurrency: N>] { … }",
+             "Runs iterations concurrently. Completion order is not defined; each iteration gets its own scope."),
+            ("case", "match <noun> { case <pattern> { … } }",
+             "One branch of a match. The first matching case wins."),
+            ("otherwise", "match <noun> { … otherwise { … } }",
+             "The fallback branch of a match."),
+        ]
+        var table: [String: (name: String, syntax: String, meaning: String)] = [
+            "require": (
+                "Require",
+                "Require the <name> from the <framework | environment | FeatureSetName>.",
+                "Declares an external dependency. `framework` is provided by the runtime, "
+                    + "`environment` binds the environment variable of that name, and any other "
+                    + "source names a feature set expected to Publish it."
+            ),
+            "break": (
+                "Break",
+                "Break.",
+                "Leaves the innermost loop."
+            ),
+        ]
+        for (key, syntax, meaning) in controlFlow {
+            table[key] = (key, syntax, meaning)
+        }
+        return table
+    }()
+
     /// Resolves `query` against canonical names *and* verb aliases.
     ///
     /// Alias resolution is the point: `CreateDirectory` and `Keepalive` appear in
@@ -132,6 +173,22 @@ struct ListActions: AsyncParsableCommand {
                 print("  Plugin: \(plugin.pluginName ?? "(anonymous)")")
                 print("")
             }
+            return
+        }
+
+        // A few keywords are statements, not actions, so the registry will never
+        // hold them and "No action named 'require'" reads as if the feature had
+        // been removed. Name them for what they are instead (GitLab #828).
+        if let statement = Self.statementKeywords[needle] {
+            print("")
+            print("\(statement.name) is a statement, not an action.")
+            print("")
+            print("  Syntax:  \(statement.syntax)")
+            print("  Meaning: \(statement.meaning)")
+            print("")
+            print("  Statements are built into the grammar, so they have no role,")
+            print("  no prepositions and no entry in 'aro actions'.")
+            print("")
             return
         }
 
