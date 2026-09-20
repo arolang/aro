@@ -6,7 +6,11 @@
 set -u
 
 ARO="${ARO_BIN:-./.build/debug/aro}"
-PORT=8080
+# The contract says 18786; the harness may hand us a lane-local port instead so
+# two examples in the parallel pool cannot bind the same one. Whatever we end up
+# with, export it so the servers we start below agree with the URLs we request.
+PORT="${ARO_HTTP_PORT:-18786}"
+export ARO_HTTP_PORT="$PORT"
 BASE="http://localhost:$PORT"
 WORK="$(mktemp -d)"
 SERVER_PID=""
