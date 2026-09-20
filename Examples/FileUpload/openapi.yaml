@@ -6,6 +6,11 @@ info:
     Two routes that differ only in what they do with the body, which is the
     whole point: `uploadDocument` moves it to a file and is not limited by
     memory, `createNote` reads a field out of it and is.
+# An explicit port keeps this off 8080, which another example or another
+# process on the machine may hold. test.sh reads ARO_HTTP_PORT first, so the
+# harness can still hand both the server and the client a lane-local port.
+servers:
+  - url: http://localhost:18786
 paths:
   /documents/{name}:
     post:
