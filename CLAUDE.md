@@ -461,12 +461,42 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
 
 ```aro
 (Feature Name: Business Activity) {
+    Require the <token> from the <environment>.
     Extract the <result: qualifier> from the <source: qualifier>.
     Compute the <output> for the <input>.
     Return an <OK: status> for a <valid: result>.
     Publish as <alias> <variable>.
 }
 ```
+
+### Statements that are not actions
+
+Four forms are part of the grammar rather than the action registry, so they have
+no role, no prepositions, and no entry in `aro actions` — which explains them
+instead of reporting "no action named" (GitLab #828):
+
+| Form | Meaning |
+|------|---------|
+| `Publish as <alias> <variable>.` | Makes a variable visible to other feature sets in the same business activity |
+| `Require the <name> from the <source>.` | Declares an external dependency (below) |
+| `match <noun> { case <pattern> { … } otherwise { … } }` | Branches on a value; the first matching case wins |
+| `Break.` | Leaves the innermost loop |
+
+**`Require`** names something the feature set expects to be there, and the source
+decides who provides it:
+
+```aro
+Require the <console> from the <framework>.      (* provided by the runtime *)
+Require the <API_TOKEN> from the <environment>.  (* binds that environment variable *)
+Require the <settings> from the <ConfigLoader>.  (* expects that feature set to Publish it *)
+```
+
+`framework` is a no-op that documents the dependency. `environment` binds the
+variable of that name, and reading it when the variable is unset fails the
+statement in the usual way. Any other source names a feature set, and `aro check`
+warns when nothing publishes that symbol — the one case where the warning is the
+point. The source name is a single identifier, so a multi-word feature set cannot
+be named here.
 
 Application lifecycle handlers:
 ```aro
