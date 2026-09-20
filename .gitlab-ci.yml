@@ -231,6 +231,19 @@ action-reference:
     - python3 Scripts/generate-action-reference.py --check
 
 # =============================================================================
+# The integration harness has logic of its own, and it is testable
+# =============================================================================
+# Unit tests for Tests/IntegrationTestsRunner/lib — pure Perl, no toolchain,
+# no examples, no build. They pin behaviour that used to be discovered only by
+# an example failing in the wrong executor (GitLab #837). Core Perl only, so
+# any perl image works and nothing needs installing.
+harness:unit:
+  stage: test
+  image: perl:5.38-slim
+  script:
+    - prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
