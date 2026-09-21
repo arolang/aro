@@ -269,6 +269,33 @@ harness:unit:
     - prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
 
 # =============================================================================
+# The training pipeline's own helpers are testable, and were untested in CI
+# =============================================================================
+# Train/script/tests/ has existed for a while and nothing ran it. The
+# evaluation statistics (GitLab #786), the fusion gate (#791) and the grounded
+# fact-checker (#801) are decision procedures — they decide whether a model is
+# promoted — so they need to stay correct without anyone remembering to run
+# them. Everything under Train/script/tests is stdlib-only by construction: no
+# mlx, no model, no aro binary (the tests that would need one skip), so a slim
+# python image and pytest are the whole environment.
+#
+# `git` is installed because config.build_artifact_metadata stamps every
+# generated corpus artifact with the ARO-Lang commit, and its test asserts that
+# the commit resolves. python:3.12-slim ships without a git binary, so
+# `_git_commit` returned None and the provenance test failed on a checkout that
+# is a perfectly good git repository. safe.directory is the usual companion:
+# the runner's build directory is not owned by the user the container runs as.
+train:unit:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  script:
+    - pip install --no-cache-dir --quiet pytest
+    - python3 -m pytest Train/script/tests -q
+
+# =============================================================================
 # Fenced ARO blocks in the documentation must parse (GitLab #834)
 # =============================================================================
 # The proposals and the examples are the reference *and* the corpus `aro ask`
@@ -303,6 +330,25 @@ doc-examples:
   script:
     - chmod +x aro-dist/aro
     - ARO_BIN=aro-dist/aro python3 Scripts/check-doc-examples.py
+
+# =============================================================================
+# The training pipeline's own unit tests (GitLab #783)
+# =============================================================================
+# Pure python: pair shapes, the corpus gates, the config helpers. The tests
+# that need an `aro` binary skip themselves here and run for real in
+# train:corpus, which has one.
+train:tests:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    # The git-history miner and the artefact-metadata helper both shell
+    # out to git, which python:3.12-slim does not ship. Without this the
+    # suite fails on the image rather than on the code.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  script:
+    - pip install --quiet pytest
+    - python3 -m pytest Train/script/tests -q
 
 # =============================================================================
 # Test Stage - Gate for all builds (main branch only)
@@ -893,6 +939,78 @@ repl:smoke:
       echo "=== summary: startup=$rc_startup compute=$rc_compute ==="
       test "$rc_startup" -eq 0
       test "$rc_compute" -eq 0
+
+# =============================================================================
+# The training catalogs are generated from the runtime, not hand-maintained
+# (GitLab #779)
+# =============================================================================
+# Train/script/aro_action_catalog.json and its two siblings are the ground
+# truth the corpus is graded against: the verb-authority gate, the syntax-QA
+# answers and the hallucination metric all read them. They were extracted by
+# scanning Swift sources and had drifted a month behind — `Reverse` was
+# missing, so valid code counted as hallucinated, and `Store … in` was listed
+# as valid although `aro check` rejects it. They come from
+# `aro actions --format json` now, and this job fails when the committed JSON
+# no longer matches the binary that built alongside it.
+train:catalogs:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN --version"
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/extract_action_catalog.py --check
+    - python3 Train/script/extract_action_verbs.py --check
+    - python3 Train/script/extract_qualifier_catalog.py --check
+
+# =============================================================================
+# The corpus is re-validated when the language changes (GitLab #783)
+# =============================================================================
+# Training data was validated against the binary of the day it was generated
+# and then never asked again, so rows survived teaching a `where` form, a
+# qualifier and a `Compare` shape the language had since changed. This runs
+# the re-validator over the training data that lives in the repository —
+# Train/Material/curated.jsonl, the highest-weighted source in the mixture —
+# against the binary from this very pipeline. The generated corpora under
+# Train/data/ are not in the repository; the same command validates them on
+# the training host.
+train:corpus:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN --version"
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/revalidate_corpus.py Train/Material/curated.jsonl --jobs 4 --fail-under 100 --report corpus-validation.json
+  artifacts:
+    when: always
+    paths:
+      - corpus-validation.json
+    expire_in: 1 week
 
 # =============================================================================
 # Documentation Stage

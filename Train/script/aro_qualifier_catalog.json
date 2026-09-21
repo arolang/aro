@@ -112,6 +112,18 @@
   "description": "Date distance between two dates",
   "source": "aro actions --qualifiers --format json"
  },
+ "fixed": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "Double",
+   "Int",
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Round to a fixed number of decimal places (2 by default); with { places: 3 }",
+  "source": "aro actions --qualifiers --format json"
+ },
  "format": {
   "namespace": "_builtin",
   "builtin": true,
