@@ -191,3 +191,29 @@ whether *stderr* is a TTY. That is a real bug, but fixing it changes what appear
 which stream — a behaviour change, and it deserves its own issue.
 
 After: AROCLITests 354/52, AROLSPTests 76/19, AROuntimeTests 1830/281 — unchanged.
+
+## #733 — NOT done, blocked by the coordination rules
+
+The issue names eleven discovery sites. Nine of them are in files this branch is
+forbidden to touch:
+ - `Sources/AROCompiler/Linker.swift`: `findLLC` (98), `findClang` (158),
+   `findCompiler` (809), `findLibgit2Dir` (945), `findSwiftLibPath` (959),
+   `findArchiver` (1775), `findLLVMObjcopy` (1808), `findPython3` (1983).
+   The brief says outright: "If it needs Linker.swift, do not do it."
+ - `Sources/AROCLI/CompilationStrategy.swift`: `findARORuntimeLibrary` (307) and
+   `findSwiftLibPath` (622) — the two 200-line `#if` thickets the fix is really about.
+The `llvm@20` vs `llvm` Homebrew spelling mismatch is also in Linker.swift.
+
+Of the two in-bounds sites, neither can be converted without changing behaviour:
+ - `PluginCompiler.resolveSwiftExecutable` and the cargo candidate list both go
+   env-var -> hardcoded candidates. `ToolResolver.findTool` inserts a `which`
+   lookup between those two steps, so converting them changes WHICH toolchain
+   binary is selected on a host with a different swift/cargo earlier on PATH.
+   Nothing in the suite covers it, so the change would be unverifiable here.
+ - `PluginInstaller.buildSwiftPackage` hard-codes `/usr/bin/swift`, but
+   AROPackageManager deliberately has no ARORuntime dependency (its own comment
+   says so, and it carries its own copy of the DYLD strip for that reason), so
+   using ToolResolver there means adding a package dependency — not a refactor.
+
+There is no in-bounds duplication left to remove: the two PluginCompiler lists are
+for different tools. #733 should be done in one go once Linker.swift is free.
