@@ -1157,6 +1157,15 @@ public final class FeatureSetExecutor: Sendable {
         _ statement: PublishStatement,
         context: ExecutionContext
     ) async throws {
+        // A false guard skips the publish entirely — the name stays
+        // unpublished rather than published with a sentinel, so a reader
+        // that looks it up fails the way an absent binding always fails
+        // (GitLab #830 item 14).
+        if let whenCondition = statement.statementGuard.condition {
+            let conditionResult = try await expressionEvaluator.evaluate(whenCondition, context: context)
+            guard asBool(conditionResult) else { return }
+        }
+
         // Get the internal value
         guard var value = context.resolveAny(statement.internalVariable) else {
             throw ActionError.undefinedVariable(statement.internalVariable)

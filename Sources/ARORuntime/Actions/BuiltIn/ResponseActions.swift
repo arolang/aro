@@ -1105,6 +1105,17 @@ public struct PublishAction: SynchronousAction {
             featureSet: context.featureSetName
         ))
 
+        // Bind the alias locally, the way `FeatureSetExecutor` does for the
+        // statement form. Compiled code reaches Publish only through this
+        // action, and without the bind a `Log <alias>` after a publish
+        // printed empty in a binary and the value in the interpreter — the
+        // same program, two answers (GitLab #830).
+        //
+        // `allowRebind` because republishing under a name already bound is
+        // the author's business, and refusing it here would turn a working
+        // interpreted program into a failing compiled one.
+        context.bind(result.base, value: value, allowRebind: true)
+
         // value is already `any Sendable` from resolveAny
         return value
     }
