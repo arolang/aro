@@ -241,6 +241,12 @@ action-reference:
 train-tests:
   stage: test
   image: python:3.12-slim
+  before_script:
+    # The artefact-metadata helper shells out to git, which
+    # python:3.12-slim does not ship, so the suite failed on the image
+    # rather than on the code.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   script:
     - pip install --quiet pytest PyYAML
     - python3 -m pytest Train/script/tests -q
