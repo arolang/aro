@@ -84,3 +84,27 @@ Five parts, all in `Sources/AROParser/`:
 
 After: AROParserTests 819/120, AROuntimeTests 1830/281, AROCompilerTests 6/2,
 AROCLITests 354/52, AROLSPTests 76/19 — all identical to baseline, no test edited.
+
+## #737 — partially done (two of three bullets)
+
+Done:
+1. `parseHyphenatedKey(startingWith:)` — one loop, called from both
+   `parseObjectField` (literal form) and `parseMapEntry` (expression form).
+2. `parseArrayLiteral` overload pair renamed: `parseArrayLiteralValue() -> LiteralValue`
+   and `parseArrayLiteralExpression() -> ArrayLiteralExpression`. Both call sites
+   verified to have resolved by return-type context before the rename and now name
+   the one they meant.
+
+NOT done — the flattened feature-set header (third bullet). Reasons, both hard:
+ - `Parser.splitUserActionHeader` is pinned by `Tests/AROParserTests/UserActionTests.swift`
+   ("Header Decomposition" suite), which feeds it the *flat* string
+   (`"Action takes<number:Integer>"`) and asserts the tuple. Removing the flat path
+   means deleting those tests, i.e. modifying tests to accommodate a refactor.
+ - The two "further consumers" the issue names re-parse `FeatureSet.businessActivity`,
+   a `String`. Making the header structural means changing that stored property's
+   contract, and its guard consumers are `StateGuardSet.parse` call sites in
+   `Sources/ARORuntime/Core/ExecutionEngine.swift` — the tree MR !593 is open against.
+A half-measure (structural parse for the well-formed shape, string fallback otherwise)
+was considered and rejected: it adds a branch without removing either re-parse.
+
+After: AROParserTests 819/120, AROuntimeTests 1830/281, AROCLITests 354/52 — unchanged.

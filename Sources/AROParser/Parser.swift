@@ -1343,7 +1343,7 @@ public final class Parser {
             advance()
             return .null
         case .leftBracket:
-            return try parseArrayLiteral()
+            return try parseArrayLiteralValue()
         case .leftBrace:
             return try parseObjectLiteral()
         default:
@@ -1351,8 +1351,8 @@ public final class Parser {
         }
     }
 
-    /// Parses: "[" [ literal { "," literal } ] "]"
-    private func parseArrayLiteral() throws -> LiteralValue {
+    /// Parses: "[" [ literal { "," literal } ] "]" — the literal form.
+    private func parseArrayLiteralValue() throws -> LiteralValue {
         try expect(.leftBracket, message: "'['")
         var elements: [LiteralValue] = []
 
@@ -1410,6 +1410,27 @@ public final class Parser {
         return .object(fields)
     }
 
+    /// Continues a key that began with `first`, absorbing `-word` runs.
+    ///
+    /// `{ created-at: … }` is one key, not a subtraction (GitLab #579, #583),
+    /// and any word-shaped token may follow the hyphen — keywords included,
+    /// since a field named `order` or `from` is perfectly ordinary JSON. Both
+    /// the literal form (`parseObjectField`) and the expression form
+    /// (`parseMapEntry`) carried their own copy of this loop.
+    private func parseHyphenatedKey(startingWith first: String) throws -> String {
+        var key = first
+        while check(.hyphen) {
+            advance() // consume hyphen
+            key += "-"
+            if peek().isWordShaped {
+                key += advance().lexeme
+            } else {
+                throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
+            }
+        }
+        return key
+    }
+
     /// Parses: key ":" value
     /// Key can be: identifier, identifier-identifier-..., or string literal
     private func parseObjectField() throws -> (String, LiteralValue) {
@@ -1420,19 +1441,7 @@ public final class Parser {
             key = s
         } else if case .identifier(let name) = peek().kind {
             advance()
-            key = name
-            // Handle hyphenated keys: customer-name, order-id, etc.
-            while check(.hyphen) {
-                advance() // consume hyphen
-                key += "-"
-                // Any word after a hyphen: `{ created-at: … }` is one key
-                // (GitLab #579, #583).
-                if peek().isWordShaped {
-                    key += advance().lexeme
-                } else {
-                    throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
-                }
-            }
+            key = try parseHyphenatedKey(startingWith: name)
         } else {
             throw ParserError.unexpectedToken(expected: "field name", got: peek())
         }
@@ -2442,7 +2451,7 @@ extension Parser {
 
         // Array literal: [...]
         case .leftBracket:
-            return try parseArrayLiteral()
+            return try parseArrayLiteralExpression()
 
         // Map literal: {...}
         case .leftBrace:
@@ -2765,8 +2774,8 @@ extension Parser {
         return VariableRefExpression(noun: noun, span: startToken.span.merged(with: endToken.span))
     }
 
-    /// Parses an array literal: [elem1, elem2, ...]
-    private func parseArrayLiteral() throws -> ArrayLiteralExpression {
+    /// Parses an array literal of expressions: [elem1, elem2, ...]
+    private func parseArrayLiteralExpression() throws -> ArrayLiteralExpression {
         let startToken = try expect(.leftBracket, message: "'['")
         var elements: [any Expression] = []
 
@@ -2811,19 +2820,7 @@ extension Parser {
         switch keyToken.kind {
         case .identifier(let s):
             advance()
-            key = s
-            // Handle hyphenated keys: customer-name, order-id, etc.
-            while check(.hyphen) {
-                advance() // consume hyphen
-                key += "-"
-                // Any word after a hyphen: `{ created-at: … }` is one key
-                // (GitLab #579, #583).
-                if peek().isWordShaped {
-                    key += advance().lexeme
-                } else {
-                    throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
-                }
-            }
+            key = try parseHyphenatedKey(startingWith: s)
         case .stringLiteral(let s):
             advance()
             key = s
