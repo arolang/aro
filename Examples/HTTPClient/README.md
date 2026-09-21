@@ -4,7 +4,7 @@ Demonstrates making HTTP requests using the `<Request>` action.
 
 ## What It Does
 
-Fetches weather data from the Open-Meteo API using a simple GET request. Shows the streamlined syntax for HTTP client operations.
+Fetches weather data over HTTP with a simple GET request, showing the streamlined `Request` syntax. The URL points at a **local stub on port 18765**, not at the live Open-Meteo API, so the example is deterministic and runs offline; the real URL is in a comment beside it.
 
 ## Features Tested
 
@@ -32,7 +32,7 @@ aro build ./Examples/HTTPClient
 
 ```
 HTTP Client Demo
-Fetching weather data from Open-Meteo API...
+Fetching weather data from the local stub...
 Weather data received:
 {
   "latitude": 52.52,

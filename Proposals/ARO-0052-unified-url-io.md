@@ -427,20 +427,27 @@ Call the <result> from the <payment-service: "charge"> with <payment>.
 
 ## 9. Future Extensions
 
+Nothing in this section is implemented (GitLab #833). Use `Request` for methods
+other than GET.
+
 ### 9.1 Other HTTP Methods
 
-Future proposals may extend the unified syntax:
+Sketch only — neither line below parses as a URL operation:
 
+<!-- aro-check: skip — sketched syntax that is not implemented -->
 ```aro
-(* Potential future syntax *)
 Update the <user> at the <url: "https://api.example.com/users/123">.  (* PUT *)
 Delete the <resource> at the <url: "https://api.example.com/items/456">.  (* DELETE *)
 ```
 
 ### 9.2 Streaming
 
-Large responses could support streaming:
+Sketch only. `Stream` **is** a registered action, but it subscribes to a
+Server-Sent Events stream and emits a domain event per message — it is not a
+way to read a large response body incrementally, which is what this sketch
+means. Streaming request *bodies* is ARO-0090.
 
+<!-- aro-check: skip — `Stream` exists but not with this meaning -->
 ```aro
 Stream the <data> from the <url: "https://api.example.com/large-export">.
 ```

@@ -2,8 +2,21 @@
 
 * Proposal: ARO-0049
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Implemented in part** — see the departures below
 * Requires: ARO-0001, ARO-0004, ARO-0005
+
+> **`aro repl` ships; several things in this document do not** (GitLab #833).
+> The shipped flags are exactly `--load <file>`, `--no-color` and `--json`
+> (`aro repl --help`):
+>
+> | This document | Reality |
+> |---|---|
+> | `--plugin`, `--http`, `--history` | do not exist |
+> | `<Set> the <x> to 42.` | the bracketed verb form was removed; `Set` itself is fine — it is one of `Update`'s verbs — so write `Set the <x> to 42.` |
+> | `~/.aro/repl.yaml` | no configuration file is read |
+>
+> `--json`, the line-delimited JSON protocol the Jupyter kernel speaks, is not
+> in this document at all; it is specified in ARO-0091.
 
 ## Abstract
 

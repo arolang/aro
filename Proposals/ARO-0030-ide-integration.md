@@ -43,7 +43,7 @@ ARO's unique syntax with angle brackets (`<Action>`, `<Result>`, `<Object>`) and
 | Code Folding | Yes | Yes |
 | Autocomplete (basic) | Yes | Yes |
 | Snippets | Yes | Yes |
-| LSP Support | Future | Future |
+| LSP Support | Yes | Yes |
 
 ---
 
@@ -158,9 +158,12 @@ code --install-extension arolang.aro-language
 
 ---
 
-## Language Server Protocol (Future)
+## Language Server Protocol
 
-A future ARO Language Server will provide:
+**Shipped.** `aro lsp` starts the server and ARO-0034 is the specification;
+this section is kept as the original sketch of what it would do. It said
+"Future" in both the table above and this heading long after ARO-0034 was
+implemented (GitLab #833). The server provides:
 
 1. **Real-time Diagnostics** - Syntax and semantic errors
 2. **Go to Definition** - Jump to feature set definitions
@@ -169,7 +172,9 @@ A future ARO Language Server will provide:
 5. **Code Actions** - Quick fixes for common issues
 6. **Workspace Symbols** - Search all feature sets
 
-The LSP server will be implemented in Swift and distributed as part of the `aro` CLI:
+The LSP server is implemented in Swift (`Sources/AROLSP`) and ships inside the
+`aro` CLI on macOS and Linux — not on Windows, where the JSONRPC dependency
+does not build (GitLab #701):
 
 ```bash
 aro lsp  # Start language server

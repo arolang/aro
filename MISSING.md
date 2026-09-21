@@ -1,478 +1,227 @@
-# What's Missing in ARO
+# What ARO Is Missing
 
-A comprehensive comparison of ARO with established programming languages (Java, TypeScript, Perl, Rust) to identify gaps and opportunities for improvement.
+A working list of gaps, compiled 2026-09-20 from a full read of the 67 proposals, the 45-page
+wiki, the twelve books, all 110 examples (checked and run), the Swift sources, the CI
+configuration and the training pipeline. Every entry is something a user can hit today.
 
-## Status Legend
+This file is not a language comparison. It is the inventory that the GitLab issues #598–#836
+were filed from; each section names the issues that track it.
 
-| Symbol | Meaning |
-|--------|---------|
-| :white_check_mark: | Implemented |
-| :construction: | Proposed (Draft) |
-| :x: | Missing |
-
----
-
-## 1. Type System
-
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Static typing | :construction: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Type inference | :construction: | Partial | :white_check_mark: | :x: | :white_check_mark: |
-| Generics | :construction: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Union types | :x: | :x: | :white_check_mark: | :x: | :white_check_mark: |
-| Intersection types | :x: | :x: | :white_check_mark: | :x: | :x: |
-| Literal types | :x: | :x: | :white_check_mark: | :x: | :x: |
-| Conditional types | :x: | :x: | :white_check_mark: | :x: | :x: |
-| Mapped types | :x: | :x: | :white_check_mark: | :x: | :x: |
-| Variance annotations | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: |
-| Higher-kinded types | :x: | :x: | :x: | :x: | Partial |
-| Dependent types | :x: | :x: | :x: | :x: | :x: |
-| Algebraic data types | :construction: | Limited | :white_check_mark: | :x: | :white_check_mark: |
-| Pattern matching | :construction: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
-| Type guards | :construction: | :x: | :white_check_mark: | :x: | :white_check_mark: |
-| Nullable/Optional types | :construction: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-
-### Missing Type Features
-
-**Critical:**
-- **Union types** - Essential for modeling "either A or B" without full enum overhead
-- **Literal types** - `type Direction = "north" | "south"` - powerful for validation
-- **Branded/Nominal types** - Distinguish `UserId` from `OrderId` even if both are strings
-
-**Important:**
-- **Template literal types** - TypeScript's `type Route = \`/api/${string}\``
-- **Mapped types** - Transform object types programmatically
-- **Conditional types** - `T extends U ? X : Y`
+Priority order for truth, when this file and something else disagree:
+`Proposals/` > `Sources/` > wiki and `OVERVIEW.md` > `Website/` > `Book/`.
 
 ---
 
-## 2. Standard Library
+## 1. Missing language features
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Collections (List, Map, Set) | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| String manipulation | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Regular expressions | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Date/Time | :construction: | :white_check_mark: | Limited | :white_check_mark: | External |
-| Math functions | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| JSON parsing | :construction: | External | :white_check_mark: | External | External |
-| XML parsing | :x: | :white_check_mark: | External | :white_check_mark: | External |
-| CSV parsing | :x: | External | External | External | External |
-| YAML parsing | :white_check_mark: | External | External | :white_check_mark: | External |
-| HTTP client | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | External |
-| HTTP server | :white_check_mark: | External | External | External | External |
-| File I/O | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Networking (sockets) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Cryptography | :construction: | :white_check_mark: | External | External | External |
-| Compression (gzip, zip) | :x: | :white_check_mark: | External | :white_check_mark: | External |
-| Database drivers | :construction: | JDBC | External | DBI | External |
-| Process spawning | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Environment variables | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Command-line args | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Serialization | :construction: | :white_check_mark: | Limited | :white_check_mark: | External |
+These are absences the documentation itself works around. #830 tracks the set.
 
-### Missing Standard Library Features
+| Gap | What people write instead |
+|---|---|
+| No default value on `Extract` | an unset `<env: NAME>` binds `""` silently, then `when <x> == ""` |
+| No positional CLI arguments | flags only; `./crawler https://example.com` cannot work |
+| Regex capture groups are unreadable | named groups compile, nothing exposes them; four `Split` statements replace one match |
+| No URL utilities | resolve, strip-fragment and normalise are rebuilt from `Split` and `++` |
+| `when` lacks `starts with`, `ends with`, `in`, `not in` | the `where` grammar has them; the two condition grammars have diverged |
+| `ParseHtml` cannot read attributes | `text` returns element text only, so `img[src]` is unreachable |
+| File metadata is read-only | no chmod, no touch, no path API |
+| No application-wide concurrency limit | `with <concurrency: N>` bounds one loop; handlers woken by emits escape it |
+| Repository persistence is all-or-nothing | a permission bit; no checkpoint, no transaction |
+| No subset or symmetric difference | only `intersect`, `difference`, `union` |
+| No imports or namespaces | two files cannot both define `Save Page`; a project can depend only on plugins |
+| Timezone conversion | specified in ARO-0041, not implemented; `<now>` is UTC and `<now: timezone>` answers GMT |
+| `Delete … where` takes one predicate | and its result has no readable fields |
+| `Copy` / `Move` bind a fixed result name | two in one feature set is an immutability error |
+| `Publish` takes no `when` guard | |
+| No 405, 422, 429 or 503 status names | an unrecognised name silently maps to 200, with no check-time warning |
+| Ranges (`1..10`) | specified in ARO-0089, not implemented (GitLab #546) |
+| Type narrowing and match exhaustiveness | specified in ARO-0071, still proposed |
+| Window functions | specified in ARO-0018 §6, not implemented |
+| `<today>`, `<yesterday>`, `<tomorrow>` | specified in ARO-0041 §5, not resolved by the runtime |
+| XML parsing | ARO-0011 is titled "HTML/XML" and specifies only HTML |
+| PUT/DELETE through `<url>` | ARO-0052 §9 lists them as future |
+| WebSocket binary frames, subprotocols, per-path handlers | ARO-0048 §9 |
+| Arrow-key `Select`, widgets, mouse events | ARO-0083 §11 |
+| NDJSON/CSV record streaming of request bodies | ARO-0090 §11 — `for each` over a body yields byte chunks |
+| Streaming a body into a plugin | passing one to a plugin action materialises it |
 
-**Critical:**
-- **XML/HTML parsing** - Essential for web scraping, config files
-- **CSV parsing** - Common data interchange format
-- **Compression** - gzip, zip, tar support
-- **Process spawning** - Execute external commands
-- **Command-line argument parsing** - Build CLI tools
-
-**Important:**
-- **TOML parsing** - Modern config file format
-- **Binary data manipulation** - Pack/unpack structs
-- **Image processing** - At least basic image info
-- **PDF generation** - Common business need
-- **Email (SMTP/IMAP)** - Communication
+**Also unspecified:** `aro ask` — a shipped subcommand with model downloads, `.context` session
+files and shell-execution approval — has no proposal. ARO-0084 covers the superseded `aro lm`.
+See #833.
 
 ---
 
-## 3. Error Handling
+## 2. Platform parity
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Exceptions | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Result types | :construction: | :x: | :x: | :x: | :white_check_mark: |
-| Checked exceptions | :x: | :white_check_mark: | :x: | :x: | :x: |
-| Error chaining | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Stack traces | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Error codes | :x: | :x: | :x: | :white_check_mark: | :x: |
-| panic/recover | :x: | :x: | :x: | :x: | :white_check_mark: |
-| `?` operator | :x: | :x: | :x: | :x: | :white_check_mark: |
-| try-with-resources | :x: | :white_check_mark: | :x: | :x: | RAII |
-| finally blocks | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+`aro run`, `aro check`, `aro compile`, `aro test` and the REPL work on all three platforms.
+Almost everything else is macOS and Linux. Tracked by #203 and #679–#701.
 
-### Missing Error Handling Features
+| Capability | macOS | Linux | Windows |
+|---|---|---|---|
+| `aro build` | yes | yes | **compiled out entirely** (#613) |
+| HTTP client, `Probe`, `Stream`, `Subscribe` | yes | yes | **six `unsupportedPlatform` throws** (#681) |
+| Socket client (`Connect`) | yes | yes | **missing** (#681) |
+| HTTP server | SwiftNIO | SwiftNIO | FlyingFox: no body streaming, no WebSocket |
+| Git actions (ARO-0080) | yes | yes | **whole module compiled out** (#683) |
+| `Exec` / `Shell` / `Run` | yes | yes | **hard-codes `/bin/sh` and `/usr/bin/env`** (#682) |
+| `aro lsp`, `aro mcp`, `aro ask`, `aro kernel` | yes | yes | **not registered as subcommands** (#701) |
+| File monitor | FSEvents | inotify | 1 s polling |
+| Terminal UI | full | full | Windows Terminal only; **hidden prompt echoes the password** (#699) |
+| `.store` writability | opt-in via `chmod o+w` | same | **inverted — every store is writable** (#684) |
+| Shutdown signals | POSIX | POSIX | **POSIX handlers installed unguarded; SIGTERM never arrives** (#685) |
+| Metrics | real | real | **all zeros, not absence** (#700) |
+| Solaro | yes | no | no |
+| CI | build only, no `swift test` (#687) | full | **`if: false`** (#686) |
 
-**Critical:**
-- **Stack traces** - Essential for debugging production issues
-- **Error chaining** - Wrap errors with context: `Error("failed to save").cause(originalError)`
-- **`?` propagation operator** - Rust's ergonomic error propagation
-
-**Important:**
-- **Error codes** - Machine-readable error categorization
-- **Structured error types** - Error hierarchies with data
-- **Recoverable vs fatal errors** - Distinguish panics from expected errors
-
----
-
-## 4. Concurrency & Async
-
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| async/await | :construction: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Threads | :x: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
-| Thread pools | :x: | :white_check_mark: | :x: | :x: | External |
-| Channels | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: |
-| Actors | :x: | External | :x: | :x: | External |
-| Mutex/RwLock | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: |
-| Atomics | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Futures/Promises | :construction: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Parallel iterators | :x: | :white_check_mark: | :x: | :x: | External |
-| Work stealing | :x: | :white_check_mark: | :x: | :x: | External |
-| Structured concurrency | :x: | :white_check_mark: | :x: | :x: | :x: |
-| Cancellation tokens | :x: | :white_check_mark: | External | :x: | :x: |
-| Deadlock detection | :x: | External | :x: | :x: | :x: |
-
-### Missing Concurrency Features
-
-**Critical:**
-- **Structured concurrency** - Ensure async tasks don't outlive their scope
-- **Cancellation** - Cancel long-running operations gracefully
-- **Timeouts** - Built-in timeout support for all async operations
-- **Rate limiting** - Control throughput
-
-**Important:**
-- **Channels** - Type-safe message passing between tasks
-- **Parallel iterators** - `list.parallelMap(fn)`
-- **Debouncing/Throttling** - Common async patterns
+The README's Platform Support table — which `CLAUDE.md` and ARO-0090 both name as the source of
+truth — was deleted on 2026-09-02 (#680). The version restored here is stricter than the one that
+was lost: the old table claimed a working HTTP client on Windows.
 
 ---
 
-## 5. Memory Management
+## 3. Execution-mode parity
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Garbage collection | Inherited | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Reference counting | :x: | :x: | :x: | :white_check_mark: | :white_check_mark: |
-| Ownership system | :x: | :x: | :x: | :x: | :white_check_mark: |
-| Borrowing | :x: | :x: | :x: | :x: | :white_check_mark: |
-| Lifetimes | :x: | :x: | :x: | :x: | :white_check_mark: |
-| Weak references | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Object pools | :x: | External | :x: | :x: | External |
-| Arena allocation | :x: | :x: | :x: | :x: | External |
-| Memory profiling | :x: | :white_check_mark: | :white_check_mark: | :x: | External |
+`aro run` and `aro build` are supposed to agree. These are the places they do not.
 
-### Missing Memory Features
-
-**Important:**
-- **Weak references** - Prevent memory leaks in caches
-- **Object pools** - Reuse expensive objects
-- **Memory limits** - Cap memory usage per operation
-
----
-
-## 6. Module System & Packages
-
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Module system | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Package manager | :construction: | Maven/Gradle | npm | CPAN | Cargo |
-| Version resolution | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Lockfiles | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Private packages | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Workspaces/Monorepos | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Dependency audit | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Tree shaking | :x: | ProGuard | :white_check_mark: | :x: | :white_check_mark: |
-| Conditional exports | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-
-### Missing Package Management Features
-
-**Critical:**
-- **Package registry** - Central repository for ARO packages
-- **Semantic versioning** - Version constraints (`^1.0`, `~1.0`)
-- **Lockfiles** - Reproducible builds
-- **Dependency audit** - Security vulnerability scanning
-
-**Important:**
-- **Workspaces** - Monorepo support
-- **Publishing workflow** - `aro publish`
-- **Scoped packages** - `@org/package`
+| Difference | Detail | Issue |
+|---|---|---|
+| `when { … }` blocks | pass `aro check`, abort `aro build` with "not supported in compiled mode" | #655 |
+| `Touch`, `Mkdir`, `Rename` | in the catalog, no bridge export — a raw linker error | #679 |
+| `is empty` / `is not empty` | serialised as `$unknown`; the guard never performs the test | #652 |
+| Interpolated expressions | `"${<a> + <b>}"` prints the literal `${...}` | #653 |
+| `Compare … against` | the right operand is never bound | #663 |
+| Errors in a range loop | swallowed; the loop continues with side effects | #654 |
+| `Return` in a streamed `for each` | does not end the feature set | #665 |
+| Arithmetic errors | `exit(1)` instead of a catchable ARO error (GitLab #472) | #692 |
+| Error message shape | the binary leaks Swift type names and drops the feature/statement frame | #692 |
+| File events | `MODIFIED` where the interpreter says `CREATED` / `DELETED` | #693 |
+| Socket connect/disconnect events | not published from the native bridge (ARO-0072) | #693 |
+| `Wait` verb | Keepalive interpreted, Listen compiled | #634 |
+| `Log` prefix | `[Feature Set]` interpreted, nothing compiled | #814 |
+| Chunked request bodies | the native server frames by Content-Length only | #692 |
+| Concurrency gating | a global 4 × CPU gate and 2 in-flight iterations per parallel loop | — |
+| Python plugins | a fresh interpreter per call interpreted, an embedded one compiled | #815 |
+| Tests | `aro test` never exercises the compiled path, so none of the above is caught | #694 |
 
 ---
 
-## 7. Tooling
+## 4. Notebook and REPL parity
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Compiler/Interpreter | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| REPL | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Formatter | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Linter | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Language Server (LSP) | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Debugger | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Profiler | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Coverage tool | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Documentation generator | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Benchmarking | :x: | :white_check_mark: | External | :white_check_mark: | :white_check_mark: |
-| Hot reload | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| Playground/Sandbox | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
+`aro repl`, `aro repl --json`, `aro kernel` and the Solaro notebook share one engine, so these
+apply to all four. Tracked by #688–#691.
 
-### Missing Tooling
-
-**Critical:**
-- **Language Server Protocol (LSP)** - Essential for IDE support
-  - Autocomplete, go-to-definition, find references, hover info
-  - Enables VS Code, IntelliJ, Vim/Neovim integration
-- **Formatter** - `aro fmt` for consistent code style
-- **Linter** - `aro lint` for catching common mistakes
-- **Debugger** - Step-through debugging with breakpoints
-
-**Important:**
-- **REPL** - Interactive exploration and prototyping
-- **Documentation generator** - Generate HTML docs from code
-- **Code coverage** - Track test coverage
-- **Profiler** - Find performance bottlenecks
-- **Online playground** - Try ARO in browser
+- Socket, WebSocket, File and KeyPress handlers are accepted and never dispatched, silently.
+- `Publish` cannot see a variable bound in an earlier cell, although every other statement can.
+- `Prompt`, `Select` and `Ask` throw "missing service" behind a pipe; the native kernel binds a
+  stdin channel and never uses it.
+- The session is not project-aware: no `openapi.yaml`, no `.store` seeds, no project `Plugins/`,
+  no `templates/`. A notebook opened inside a project cannot exercise that project.
+- Interrupting kills and replaces the kernel; all session state is lost.
+- `:export` produces code that will not run — no `Application-Start`, no `Return`.
 
 ---
 
-## 8. Testing
+## 5. Static and standalone binaries
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Unit testing framework | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Assertions | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Mocking | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | External |
-| Fixtures | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Parameterized tests | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | External |
-| Snapshot testing | :construction: | External | :white_check_mark: | :x: | External |
-| Property-based testing | :x: | :white_check_mark: | External | :x: | External |
-| Fuzzing | :x: | External | :x: | :x: | :white_check_mark: |
-| Mutation testing | :x: | :white_check_mark: | External | :x: | External |
-| Test parallelization | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Test filtering | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Watch mode | :x: | External | :white_check_mark: | :x: | External |
-| Contract testing | :x: | External | External | :x: | :x: |
-| E2E testing | :x: | External | External | :x: | :x: |
+The subject of MR !450 and issues #598–#627. Summarised per platform:
 
-### Missing Testing Features
+| | Application binary | The `aro` toolchain |
+|---|---|---|
+| **macOS** | libgit2 now static but unpackaged; three build-machine rpaths embedded; `--dynamic` undefined; Python plugins break the contract; the Swift runtime is not and cannot be static | libLLVM, libzmq and libgit2 dylibs plus a CI-runner rpath |
+| **Linux glibc** | Foundation can be linked statically today (the branch says otherwise); `--static` silently degrades; the `--dynamic` bundle list is stale; static libgit2 trades one dependency for OpenSSL | the same four dylibs; no arm64 build at all |
+| **Linux musl** | needs a musl-built runtime archive, musl plugins and a musl triple — none exist; route dispatch uses `dlsym`, which a static binary has no table for | not attempted |
+| **Windows** | `aro build` does not exist; the `/MT` choice would mix two CRTs with the `/MD` Swift DLLs | Swift DLLs plus the VC redistributable; no release asset |
 
-**Critical:**
-- **Property-based testing** - Generate random inputs to find edge cases
-- **Test parallelization** - Run tests concurrently
-- **Watch mode** - Re-run tests on file changes
-- **Test filtering** - Run specific tests by name/pattern
-
-**Important:**
-- **Fuzzing** - Security testing with random data
-- **Contract testing** - Test API contracts between services
-- **Visual regression** - Compare screenshots
+The gates do not test the claims: no macOS or Windows job runs the dependency checker, the Linux
+job runs the binary inside an image that has every Swift library installed, and nothing inspects
+`LC_RPATH`.
 
 ---
 
-## 9. Documentation
+## 6. Tooling
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Doc comments | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Doc generation | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Inline examples | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Example testing | :x: | :x: | :x: | :x: | :white_check_mark: |
-| API reference | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Tutorials | Partial | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Migration guides | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-
-### Missing Documentation Features
-
-**Critical:**
-- **Doc comments** - `(** This feature does X *)` syntax
-- **Doc generation** - `aro doc` to generate HTML documentation
-- **Example testing** - Test code examples in docs (like Rust's doctests)
-
----
-
-## 10. Build & Deployment
-
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Incremental compilation | :x: | :white_check_mark: | :white_check_mark: | N/A | :white_check_mark: |
-| Cross-compilation | :construction: | :white_check_mark: | N/A | N/A | :white_check_mark: |
-| Static linking | :construction: | GraalVM | N/A | N/A | :white_check_mark: |
-| Dynamic linking | :x: | :white_check_mark: | N/A | :white_check_mark: | :white_check_mark: |
-| WebAssembly target | :x: | :white_check_mark: | N/A | :x: | :white_check_mark: |
-| Docker support | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Lambda/Serverless | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Binary size optimization | :x: | :white_check_mark: | :white_check_mark: | N/A | :white_check_mark: |
-| Build caching | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-
-### Missing Build Features
-
-**Critical:**
-- **Incremental compilation** - Only recompile changed files
-- **WebAssembly target** - Run in browsers, edge functions
-- **Build caching** - Speed up CI builds
-
-**Important:**
-- **Lambda runtime** - Official AWS Lambda / Cloud Functions support
-- **Binary size optimization** - Strip debug symbols, dead code
+| Gap | Issue |
+|---|---|
+| `aro test` cannot test a compiled binary | #694 |
+| No formatter — the LSP's `formatStatement` is unreachable dead code | #677 |
+| No linter beyond `aro check`, whose warnings are ~90 % false on the examples | #823 |
+| No doc comments and no `aro doc` | — |
+| No coverage tool, no profiler, no benchmark harness | — |
+| No package registry; `aro add` takes a Git URL, there is no index | — |
+| No watch mode, no hot reload | — |
+| No online playground | — |
+| MCP exposes 8 of ~18 CLI capabilities — no `test`, no `diff --graph`, no plugin management | #696 |
+| Editor grammars are hand-maintained and miss 64 verbs including all of Git | #695 |
+| The debugger has no causal backtrace; `s`, `n` and `f` all do the same thing | — |
+| DAP has no `evaluate`, no conditional breakpoints, no detach-without-quit | — |
+| The recording format has no version field | — |
 
 ---
 
-## 11. Interoperability
+## 7. Solaro
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| C FFI | :construction: | JNI | N-API | XS | :white_check_mark: |
-| C++ FFI | :x: | JNI | N-API | :x: | External |
-| Call other languages | :construction: | GraalVM | :x: | Inline::* | :x: |
-| Be called from other languages | :x: | :white_check_mark: | N/A | :white_check_mark: | :white_check_mark: |
-| JavaScript interop | :x: | GraalJS | N/A | :x: | wasm-bindgen |
-| Python interop | :x: | Jython | :x: | :white_check_mark: | PyO3 |
-| gRPC | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| GraphQL | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| OpenAPI codegen | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+Tracked by #742–#778 and the existing #228, #234, #269, #288, #445, #446, #448, #531.
 
-### Missing Interoperability Features
+**Wrong, not just missing:** live pulses, error borders *and* breakpoints are keyed by bare line
+number with no file, so in any multi-file project the canvas lights the wrong file and the
+debugger stops where nothing was marked (#742, #743). Menu actions — including Delete File and
+Revert — are broadcast to every open window (#744).
 
-**Important:**
-- **JavaScript interop** - For WebAssembly targets
-- **Python interop** - Call ML libraries
-- **Be callable from C** - `libaro` shared library
+**Missing IDE basics:** no ⌘R for Run, no one-click `aro build`, no find-references (the one
+navigation an event-driven language most needs), no rename preview, no template picker.
 
----
+**Missing ARO-specific views:** the live feature-graph exists as a static drawing and as a run,
+but never as both at once — the data is already in `DebuggerState`. No store-file inspector, no
+request replay, no plugin scaffolding, no `.ipynb` export, and per-cell execution counts are
+persisted but never rendered.
 
-## 12. Security
-
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Sandboxing | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Capability-based security | :x: | Partial | :x: | :x: | :x: |
-| Taint tracking | :x: | :x: | :x: | :white_check_mark: | :x: |
-| SAST tools | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Secrets management | :x: | External | External | External | External |
-| Input validation | :construction: | External | External | External | External |
-| SQL injection prevention | :x: | :white_check_mark: | External | :white_check_mark: | :white_check_mark: |
-| XSS prevention | :x: | External | External | External | External |
-
-### Missing Security Features
-
-**Critical:**
-- **Taint tracking** - Perl's killer feature, track untrusted data through the system
-- **Input validation** - Built-in validation with clear error messages
-- **SQL parameterization** - Prevent injection by construction
-
-**Important:**
-- **SAST integration** - Security scanning in CI
-- **Secrets management** - Don't commit secrets
+**Not started:** accessibility (two labels in 51 900 lines; the canvas is invisible to VoiceOver),
+localisation, Linux and Windows builds.
 
 ---
 
-## 13. Observability
+## 8. The model and its pipeline
 
-| Feature | ARO | Java | TypeScript | Perl | Rust |
-|---------|-----|------|------------|------|------|
-| Structured logging | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Distributed tracing | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Metrics export | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Health checks | :x: | :white_check_mark: | :white_check_mark: | :x: | External |
-| OpenTelemetry | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Log levels | :construction: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Request correlation | :x: | :white_check_mark: | :white_check_mark: | :x: | External |
+Tracked by #779–#813. The product goal is turning natural language into valid ARO.
 
-### Missing Observability Features
-
-**Critical:**
-- **Distributed tracing** - Track requests across services
-- **Metrics** - Prometheus/StatsD export
-- **OpenTelemetry** - Standard observability
-
----
-
-## 14. Unique ARO Advantages
-
-While identifying gaps, it's worth noting ARO's unique strengths:
-
-| Feature | ARO | Others |
-|---------|-----|--------|
-| Natural language syntax | :white_check_mark: | :x: |
-| Feature-driven structure | :white_check_mark: | :x: |
-| AI-friendly design | :white_check_mark: | :x: |
-| Contract-first (OpenAPI) | :white_check_mark: | Limited |
-| Event-driven by default | :white_check_mark: | Frameworks |
-| Business domain focus | :white_check_mark: | :x: |
-| Parking lot visualization | :white_check_mark: | :x: |
+- **The benchmark is gone.** All 4 000 evaluation prompts were folded back into training, so the
+  75.5 % gate figure and the 67 % evaluation measure prompts the model has paraphrased answers
+  for (#785).
+- **The main task is absent.** Zero `full_application` rows; 14 multi-file rows; no `aro test`
+  pairs; the templated CRUD set is the only NL→application data (#797).
+- **`aro check` is the only oracle.** `aro run` is budgeted to single digits and `aro test` is
+  never used, so the corpus proves parseability rather than behaviour (#798).
+- **The corpus contradicts the language.** The action catalog is stale, ~150 statements use
+  invented verbs, and 36 % of the corpus is unvalidated commit-message pairs (#779, #780, #781).
+- **The loop makes it worse.** The iterative stage's best round is round 0, and it fuses each
+  round's adapter into the next round's base.
+- **The final model is fine-tuned on 17 conversations** for roughly 140 epochs (#790).
+- **User failures never come back.** `aro ask` writes repair logs into the user's project; the
+  training stage reads only the ARO repository root (#800).
 
 ---
 
-## Priority Recommendations
+## 9. Consistency debt
 
-### Must Have (P0)
+Not features, but they cost the same to hit.
 
-1. **Language Server Protocol (LSP)** - Without this, no IDE support
-2. **Formatter** - Code style consistency
-3. **Stack traces** - Debugging production issues
-4. **Incremental compilation** - Developer experience
-5. **Test parallelization** - CI speed
-
-### Should Have (P1)
-
-1. **REPL** - Interactive development
-2. **Debugger** - Step-through debugging
-3. **Documentation generator** - API docs
-4. **Package registry** - Share ARO packages
-5. **Property-based testing** - Better test coverage
-6. **Union types** - More expressive types
-7. **Error chaining** - Better error context
-
-### Nice to Have (P2)
-
-1. **Online playground** - Try ARO without install
-2. **WebAssembly target** - Browser/edge deployment
-3. **Watch mode** - Auto-run tests
-4. **Hot reload** - Faster development
-5. **Distributed tracing** - Production observability
-6. **Taint tracking** - Security
+- Twenty cross-proposal contradictions on roles, prepositions, `where` spelling, indexing
+  direction, `Emit` blocking, published visibility and more (#831).
+- Renumbered proposals citing the numbers they used to have, which CI cannot catch because it only
+  checks that the number resolves (#832).
+- Four proposals describing an API that never shipped (#833).
+- Specification examples that `aro check` rejects — invented verbs, `if … then`, method-call
+  syntax, undefined status names (#834).
+- Ten wiki contradictions and ten Solaro-book divergences (#835, #778).
+- Books describing as open five bugs that are fixed (#836).
+- Six verb-classification tables and ten catalog pairs kept in sync by hand, four of which have
+  already drifted into user-visible bugs (#722, #740).
 
 ---
 
-## Implementation Roadmap Suggestion
+## How to use this file
 
-### Phase 1: Developer Experience (3-6 months)
-- LSP server (autocomplete, diagnostics, hover)
-- Code formatter (`aro fmt`)
-- Basic linter (`aro lint`)
-- REPL for interactive exploration
-
-### Phase 2: Production Readiness (3-6 months)
-- Stack traces with source maps
-- Error chaining API
-- Structured logging with correlation
-- Health check endpoints
-- Incremental compilation
-
-### Phase 3: Ecosystem (6-12 months)
-- Package registry (aro-packages.dev)
-- Documentation generator
-- Property-based testing
-- Online playground
-- VS Code extension (based on LSP)
-
-### Phase 4: Advanced Features (12+ months)
-- WebAssembly compilation target
-- Distributed tracing (OpenTelemetry)
-- Union/intersection types
-- Debugger integration
-- Taint tracking
-
----
-
-## Conclusion
-
-ARO has a solid foundation with its unique natural-language syntax and feature-driven development model. The most critical gaps compared to established languages are in **tooling** (LSP, formatter, debugger) and **ecosystem** (package manager, documentation).
-
-The language design proposals (types, testing, interoperability) are comprehensive but remain unimplemented. Prioritizing developer experience tooling would accelerate adoption and community growth.
-
-ARO's strength is its AI-friendly, business-focused design. Leaning into this differentiation while closing the tooling gap would position it uniquely in the language landscape.
+Add a row when you find a gap; link the issue; delete the row when the issue closes. If a gap is
+big enough to need a design, it wants a proposal in `Proposals/` rather than a row here. Take the
+next free number by looking, not from this file — `Scripts/check-proposals.py` will tell you if you
+picked one that is taken.

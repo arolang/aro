@@ -63,7 +63,7 @@ The `aro build` command transforms ARO source files into a native executable thr
 +----------------------------------------------------------+
 |                    Linker (clang)                         |
 |                                                           |
-|              Links with libAROCRuntime.a                  |
+|              Links with libARORuntime.a                  |
 +---------------------------+------------------------------+
                             |
                             v
@@ -251,12 +251,18 @@ Prepositions are encoded as integers for efficient runtime dispatch:
 | `via` | 6 |
 | `against` | 7 |
 | `on` | 8 |
+| `by` | 9 |
+| `at` | 10 |
+
+All ten cases of `Preposition` are encoded (`LLVMTypeMapper.prepositionValue`).
+This table used to stop at 8, which read as though `at` and `by` had no native
+encoding (GitLab #831).
 
 ---
 
-## 4. AROCRuntime Bridge
+## 4. The Runtime Bridge
 
-The `AROCRuntime` is a Swift static library that provides C-callable functions for the compiled code.
+The runtime bridge is a Swift static library (`libARORuntime.a`) that provides C-callable functions for the compiled code.
 
 ### Architecture
 
@@ -270,7 +276,7 @@ The `AROCRuntime` is a Swift static library that provides C-callable functions f
                             | C function calls
                             v
 +----------------------------------------------------------+
-|                    libAROCRuntime.a                       |
+|                    libARORuntime.a                       |
 |                                                           |
 |  +----------------+  +----------------+  +-------------+  |
 |  | RuntimeBridge  |  | ActionBridge   |  | ServiceBridge| |
@@ -317,11 +323,18 @@ public func aro_action_log(
 ### Source Files
 
 ```
-Sources/AROCRuntime/
-+-- RuntimeBridge.swift    # Core runtime C interface
-+-- ActionBridge.swift     # All action @_cdecl functions
-+-- ServiceBridge.swift    # HTTP/File/Socket C interface
+Sources/ARORuntime/Bridge/
++-- RuntimeCoreBridge.swift       # Core runtime C interface
++-- ActionBridge.swift            # Action @_cdecl exports
++-- ServiceBridge.swift           # HTTP/File/Socket C interface
++-- FileSystemBridge.swift        # File and watcher C interface
++-- RuntimeExecutionBridge.swift  # Expression evaluation for compiled code
 ```
+
+There is no separate `AROCRuntime` module and there never shipped one. The
+bridge lives inside `ARORuntime`, and the archive the linker takes is
+`libARORuntime.a` — this section named three files in a module that does not
+exist (GitLab #833).
 
 ### Async-by-Default Action Execution
 
@@ -467,8 +480,6 @@ All built-in actions are exposed as C-callable functions:
 | `aro_action_start` | Start |
 | `aro_action_stop` | Stop |
 | `aro_action_listen` | Listen |
-| `aro_action_route` | Route |
-| `aro_action_watch` | Watch |
 | `aro_action_keepalive` | Keepalive |
 
 **External Actions:**
@@ -504,7 +515,7 @@ All built-in actions are exposed as C-callable functions:
 | macOS | x86_64 (Intel) | Supported |
 | Linux | x86_64 | Supported |
 | Linux | arm64 | Supported |
-| Windows | x86_64 | Future |
+| Windows | x86_64 | Not supported — `aro build` is compiled out (GitLab #613) |
 
 ### Requirements
 
@@ -512,7 +523,7 @@ All built-in actions are exposed as C-callable functions:
 |------------|---------|--------------|
 | LLVM | Compile IR to object code | `brew install llvm` (macOS) |
 | Clang | Link object files | Included with Xcode / LLVM |
-| Swift | Build AROCRuntime | Swift 6.3+ toolchain |
+| Swift | Build ARORuntime | Swift 6.3+ toolchain |
 
 ### Target Triple Examples
 
@@ -552,7 +563,7 @@ The final executable contains:
 |  +----------------------------------------------------+  |
 |                                                           |
 |  +----------------------------------------------------+  |
-|  |              libAROCRuntime.a                       |  |
+|  |              libARORuntime.a                       |  |
 |  |                                                     |  |
 |  |  - Runtime initialization/shutdown                 |  |
 |  |  - All action implementations                      |  |
@@ -583,7 +594,7 @@ The final executable contains:
 | Dependency | Bundled | Notes |
 |------------|---------|-------|
 | ARO Code | Yes | Compiled into binary |
-| AROCRuntime | Yes | Statically linked |
+| ARORuntime | Yes | Statically linked |
 | Swift Runtime | Dynamic | Required on target system |
 | System Libraries | Dynamic | Standard on all platforms |
 
@@ -592,8 +603,8 @@ The final executable contains:
 | Component | Approximate Size |
 |-----------|------------------|
 | Compiled ARO code | ~10-100 KB |
-| AROCRuntime | ~1-5 MB |
-| Swift runtime overhead | ~20-50 MB (dynamic linking) |
+| ARORuntime | ~1-5 MB |
+| Swift runtime | statically linked by default (`--static`); `--dynamic` bundles `libswift*` / `libFoundation*` beside the binary with `rpath=$ORIGIN` |
 
 ---
 
@@ -641,7 +652,7 @@ $ aro build ./HelloWorld --verbose
 [1/4] Parsing HelloWorld/main.aro...
 [2/4] Generating LLVM IR...
 [3/4] Compiling to object file...
-[4/4] Linking with AROCRuntime...
+[4/4] Linking with ARORuntime...
 
 Build complete: HelloWorld/HelloWorld
 ```
@@ -662,7 +673,7 @@ Native compilation works!
 |--------|-------------|
 | **Command** | `aro build ./MyApp` |
 | **Pipeline** | AST --> LLVM IR --> Object --> Executable |
-| **Runtime** | libAROCRuntime.a (Swift static library) |
+| **Runtime** | libARORuntime.a (Swift static library) |
 | **Bridge** | @_cdecl functions for C interoperability |
 | **Platforms** | macOS (arm64, x86_64), Linux (x86_64, arm64) |
 | **Output** | Single standalone executable |

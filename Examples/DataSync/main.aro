@@ -1,5 +1,5 @@
 (* ============================================================
-   DataSync - ARO-0052: Data Pipeline Example
+   DataSync - ARO-0052: Unified URL I/O — data pipeline example
    ============================================================
    Demonstrates syncing data between local files and remote URLs
    using the unified Read/Write syntax.

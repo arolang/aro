@@ -23,8 +23,29 @@ Store the <valid-data> into the <repository>.
 
 ## Solution
 
-Add `|>` pipeline operator for left-to-right data flow:
+Add a `|>` pipeline operator that marks a run of statements as one data flow:
 
+```aro
+Create the <raw> with "  hi  ".
+Compute the <clean: trim> from the <raw>
+  |> Compute the <shout: uppercase> from the <clean>
+  |> Log <shout> to the <console>.
+```
+
+> **What shipped is weaker than the sketch below.** Each stage is a complete
+> statement and names its own object: `|>` groups them, it does not thread a
+> value. `FeatureSetExecutor.executePipelineStatement` runs the stages in order
+> and passes nothing between them
+> (`Core/FeatureSetExecutor.swift:536`), so an abbreviated stage like
+> `|> Transform with "trim"` — with no result and no object — does not parse.
+>
+> The abbreviated form is what made this proposal look like it conflicted with
+> ARO-0086 (GitLab #831). It does not: ARO-0086's detection is what supplies the
+> optimisation either way, and `|>` only records the author's intent.
+
+The original sketch, kept for the record — **this does not parse**:
+
+<!-- aro-check: skip — the rejected abbreviated-stage form, shown as history -->
 ```aro
 Extract <data> from <request: body>
   |> Transform with "trim"

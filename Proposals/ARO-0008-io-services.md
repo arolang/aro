@@ -203,7 +203,7 @@ Write <data> to the <file: "./output.json">.
 
 ## 2. HTTP Server
 
-ARO uses **contract-first** HTTP API development. Routes are defined in an OpenAPI specification, and the HTTP server starts automatically when the contract exists.
+ARO uses **contract-first** HTTP API development. Routes are defined in an OpenAPI specification; without one no server is possible, and with one `Application-Start` still has to start it (§2.4).
 
 ### 2.1 Contract-First Architecture
 
@@ -339,21 +339,33 @@ Feature sets **must be named after the `operationId`** from the OpenAPI spec:
 }
 ```
 
-### 2.4 Automatic Server Startup
+### 2.4 Server Startup
 
-The HTTP server starts automatically when:
+The contract decides *whether* a server is possible and on *which* port; the
+`Start` statement decides whether it runs. Both are required:
 
-1. An `openapi.yaml` (or `.yml`/`.json`) file exists in the application directory
-2. At least one route is defined in the OpenAPI document
-3. Feature sets with matching `operationId` names exist
+1. An `openapi.yaml` (or `.yml`/`.json`) file exists in the application
+   directory, with at least one route, and feature sets named after the
+   `operationId`s — otherwise no server is possible at all, and no port is
+   opened;
+2. `Application-Start` contains `Start the <http-server> with <contract>.`
 
-**No explicit `<Start>` action is required for the HTTP server.**
+**An explicit `Start` is required.** `Application.registerDefaultServices`
+only *registers* the HTTP service (`Application.swift:133`); the only callers of
+`start(port:)` are `StartAction` (`ServerActions.swift:145`) and its C bridge
+(`HTTPServerBridge.swift:65`). The contract supplies the port as the fourth
+priority in `StartAction`'s resolution order, which is what "from openapi.yaml"
+means. This section claimed no `Start` was needed until GitLab #831, while
+ARO-0001, ARO-0005, ARO-0010 and every example in the repository start it
+explicitly.
 
 ```aro
 (Application-Start: User API) {
     Log "User API starting..." to the <console>.
 
-    (* HTTP server starts automatically from openapi.yaml *)
+    (* Routes and port come from openapi.yaml; the server still has to start *)
+    Start the <http-server> with <contract>.
+
     (* Keep running to handle requests *)
     Keepalive the <application> for the <events>.
 
@@ -785,13 +797,22 @@ File -> | Format Detector  | --> | Deserializer | --> |  Object  |
 | `.toml` | TOML | Tom's Obvious Minimal Language |
 | `.csv` | CSV | Comma-Separated Values |
 | `.tsv` | TSV | Tab-Separated Values |
-| `.md` | Markdown | Simple markdown tables |
-| `.html` | HTML | HTML table elements |
-| `.txt` | Plain Text | Key=value format |
-| `.sql` | SQL | INSERT statements |
-| `.log` | Log | Date-prefixed log entries |
-| `.env` | Environment | KEY=VALUE format |
+| `.md` | Markdown | Write: markdown tables. **Read: plain String** |
+| `.html` | HTML | Write: HTML table elements. **Read: plain String** |
+| `.txt` | Plain Text | **Plain String, both directions** |
+| `.sql` | SQL | Write: INSERT statements. **Read: plain String** |
+| `.log` | Log | Write: date-prefixed entries. **Read: plain String** |
+| `.env` | Environment | KEY=VALUE, both directions |
 | (unknown) | Binary | Default for unknown extensions |
+
+**Reading is not the inverse of writing for the text formats.**
+`FormatDeserializer` (`FileSystem/FormatDeserializer.swift:47`) returns the file
+contents unchanged for `.txt`, `.markdown`, `.html`, `.sql`, `.log` and
+`.binary`; there is no markdown-table parser and no SQL-INSERT parser anywhere in
+`Sources/`. `.env` is the only key=value reader. `.txt` was parsed as a
+properties file once and deliberately stopped being (GitLab #468): "`.env` is the
+format that means key=value; `.txt` means text." ARO-0040 §2.3 has always said
+this; this table implied round-tripping until GitLab #831.
 
 #### Format Examples
 
@@ -981,17 +1002,28 @@ ARO normalizes paths for cross-platform compatibility:
 
 ## 5. File Monitoring
 
-ARO provides real-time file system change detection through the `<Watch>` action.
+ARO provides real-time file system change detection through the file monitor,
+which is started like any other service.
 
-### 5.1 Watch Action
+### 5.1 Starting the File Monitor
 
 ```aro
 (* Watch a directory for changes *)
-Watch the <file-monitor> for the <directory> with "./watched".
+Start the <file-monitor> with "./watched".
 
-(* Watch current directory *)
-Watch the <file-monitor> for the <directory> with ".".
+(* Watch the current directory *)
+Start the <file-monitor> with ".".
 ```
+
+**There is no `Watch` action.** `watch` appears in the parser's verb catalog and
+in the C bridge, but no `ActionImplementation` declares it, so
+`ActionRegistry` throws `unknownAction("watch")` at run time — as it does for
+`monitor` and `observe`, which `ActionRunner` maps onto the same missing verb.
+`StartAction` handles `file-monitor`, `filemonitor` and `watcher`
+(`ServerActions.swift:43`) and takes only `with`. This section spelled every
+example `Watch the <file-monitor> for the <directory> with …` until GitLab #831,
+which is three errors in one line: the verb, the object clause and the
+preposition.
 
 **Behavior:**
 - Watches the specified directory recursively
@@ -1079,7 +1111,7 @@ could not have told the three apart even if it had fired.
     Log "Starting file watcher" to the <console>.
 
     (* Watch the current directory for changes *)
-    Watch the <file-monitor> for the <directory> with ".".
+    Start the <file-monitor> with ".".
 
     Log "Watching for file changes... Press Ctrl+C to stop." to the <console>.
 
@@ -1287,7 +1319,7 @@ Close the <connection>.
 ```aro
 (Application-Start: File Processor) {
     Log "Starting file processor" to the <console>.
-    Watch the <file-monitor> for the <directory> with "./inbox".
+    Start the <file-monitor> with "./inbox".
     Keepalive the <application> for the <events>.
     Return an <OK: status> for the <startup>.
 }

@@ -5,10 +5,24 @@
 
 **Proposal-ID:** ARO-0087
 **Author:** ARO Language Team
-**Status:** Draft
+**Status:** Implemented, with two documented departures (see below)
 **Created:** 2026-04-11
 **Updated:** 2026-04-11
-**Requires:** ARO-0045 (Package Manager), ARO-0016 (Interoperability)
+**Requires:** ARO-0045, ARO-0016
+
+---
+
+> **Two mechanisms in this document are not what shipped** (GitLab #833):
+>
+> | This document | What ships |
+> |---|---|
+> | an `@AROPlugin` macro on a type | `@AROExport` on a `let plugin = AROPlugin(…)` value; Python uses `@plugin` / `@action` / `@qualifier` plus `export_abi(globals())` |
+> | dylibs embedded as base64 and `dlopen`ed from a temp directory in compiled binaries | native plugins are **linked into** the binary, their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexist (`AROCompiler/Linker.swift`); Python plugins ship as source beside it |
+>
+> The temp-directory scheme was dropped because it made a compiled binary write
+> executable code to disk at start-up. The rest of the proposal — the SDKs, the
+> single `aro_plugin_info`/`execute`/`qualifier`/`free` contract, `aro new
+> plugin --lang`, qualifier namespacing — is what ships.
 
 ---
 
