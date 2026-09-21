@@ -228,3 +228,48 @@ smallest change this set can resolve at p=0.5: 24.6%
 prompts needed to call the 0.700 to 0.517 this run shipped on: 111
 ```
 
+### Commit 2 — #787 (the iterative loop)
+
+**The claim reproduces, and the mechanism is more specific than the issue says.**
+
+The loop's promotion block already picked `best_round` (round 0) and set
+`current_model_path` to it. Round 7 shipped anyway because of
+`22_distillation.ipynb`'s `find_best_teacher()`, whose helper
+`_highest_fused()` sorts `round_*/fused` by round number and returns
+`rounds[-1]` — the NEWEST round — under a function named "find best teacher".
+`best_round: 0` was sitting in `round_results.json` in the same tree and
+nothing asked. That is the concrete mechanism behind "it ships round 7 anyway".
+
+Also corrected: the issue's "fuses the adapter to become the next round's
+base — compounding LoRA fuses" is **stale**. NB21 cell 15 lines 51-61 anchors
+`TRAINING_BASE_MODEL = BASE_MODEL` and chains adapters; `fuse_model` runs each
+round only for the downstream notebooks. The degradation is not compounding
+fuses.
+
+Added `Train/script/loop_policy.py` (23 tests):
+- `select_promotion` — promote only when distinguishably better than the
+  baseline (round -1 where present) plus a 2-point absolute floor; reports
+  `wasted_rounds`, the rounds after the winner that did not beat it.
+- `promoted_model_dir` — the replacement for `_highest_fused` on the iterative
+  tree; returns None (not the newest round) when nothing earned promotion.
+- `recommend_max_rounds(eval_n)` — 60 prompts justifies 5 rounds at 5 points
+  each; the run did 8. `DEFAULT_MAX_ROUNDS = 2`.
+- `accept_sample` — execution (`aro run` via `eval_metrics.run_aro_program`,
+  gated by `is_safely_runnable`) plus novelty (`config.NearDuplicateIndex`);
+  a missing `aro` binary is a rejection, not a silent pass.
+
+Wired: NB21 `NUM_ROUNDS` 8 -> 2, acceptance filter in `run_generation_round`,
+promotion block decides rather than warns and records the refusal;
+NB22 `find_best_teacher` uses the promotion decision for the iterative tree.
+
+CLI against the real record:
+
+```
+recorded best_round:       0
+recorded promotion rate:   0.6666666666666666
+promote: True (round 0)
+reason:  round 0 beats the baseline by +70.0% with non-overlapping 95% intervals
+rounds after the winner that did not beat it: [1, 2, 5, 6, 7]
+rounds this eval size could distinguish at 5 points each: 5 (the run did 8)
+```
+

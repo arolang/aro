@@ -159,6 +159,30 @@ python3 Train/script/eval_stats.py Train/data/rounds/round_results.json --n 60
 (`--n` is only needed for records written before the loop started recording
 `eval_n` next to every rate.)
 
+#### What leaves the loop (GitLab #787)
+
+The loop does **not** hand its newest round to the next stage. A round is
+promoted only when it is distinguishably better than the model the loop started
+from — non-overlapping intervals plus a two-point absolute floor — and when no
+round clears that bar the starting model stands and `round_results.json`
+records the refusal. `script/loop_policy.py` holds that decision, and can
+re-decide a finished run:
+
+```bash
+python3 Train/script/loop_policy.py Train/data/rounds/round_results.json --n 60
+```
+
+`NUM_ROUNDS` defaults to 2 rather than 8. Eight rounds cost about twelve hours
+and produced a series whose intervals all overlap except the two rounds that
+were distinguishably *worse*; `recommend_max_rounds(eval_n)` says how many
+rounds a given eval size could actually tell apart.
+
+Generated samples join the next round's corpus only when they **run** (where
+they are safely runnable) and are novel against what the corpus already holds.
+`aro check` alone accepted programs that parse and do nothing, and restatements
+of material already present — neither moves the pass rate the loop watches, and
+both make the next round worse.
+
 ### Distillation & packaging
 
 | # | Notebook | Purpose |
