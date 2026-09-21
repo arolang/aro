@@ -261,3 +261,41 @@ not pass aro check
 ```
 9 new tests (they build throwaway git repos).
 
+## #789 — the thinking booster (VERIFIED; and the template is factually wrong)
+
+`data/26_thinking/mlx/train.jsonl`:
+```
+rows                                   2 348
+with a <think> block                   1 156
+without one                            1 192   (issue: 1192 ✓)
+templated ("a EXPORT/OWN/REQUEST action", "Let me work out the ARO.")
+                                       1 156 of 1 156  (issue said 1024)
+mean think length                      1 640 chars  (issue said 807)
+rows carrying a system prompt          0        (issue ✓)
+```
+
+**New finding:** the template asserts "`Log` — a EXPORT action". The registry
+says Log's role is **response**. So the booster taught the wrong role 798
+times, and the grammar is wrong too ("a EXPORT", "a OWN").
+
+**Fix:** `config.thinking_trace_is_templated()` / `validate_thinking_row()` —
+a gate that checks presence, the template fingerprint and the system prompt,
+which a 40-character threshold cannot — and
+`Train/script/34_thinking_pairs.py`, which builds traces by breaking a
+validated program in one known way, asking the oracle, and writing the think
+block from the real diagnostic. Invented verbs are graded against the catalog
+rather than `aro check` (which accepts them) and the trace says so.
+
+Before/after, scored by the same gate:
+```
+data/26_thinking/mlx/train.jsonl   2 348 rows,     0 usable (0.0%)
+                                   2 348 no system prompt
+                                   1 192 no <think>
+                                   1 156 templated
+34_thinking_pairs.py over Train/Material/curated.jsonl
+                                   1 007 rows, 1 007 usable (100%)
+                                   categories: invalid_verb 382,
+                                   missing_period 344, unknown_qualifier 162,
+                                   wrong_preposition 119
+```
+

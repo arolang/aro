@@ -2115,6 +2115,59 @@ def _fixtrain_gate_pair(pair, notebook_tag=''):
     return False
 
 
+# ── What counts as a thinking trace (GitLab #789) ────────────────────────────
+# The booster's stage scored a trace on "at least 40 characters inside
+# <think>" plus `aro check` on the answer. 1 154 of its 1 156 traces were the
+# same template — a per-statement enumeration of each verb's role and
+# preposition, 1 640 characters of it on average — and another 1 192 rows had
+# no think block at all, so the model learned to think or not at random.
+#
+# Three things a trace must be, none of which a character count can tell:
+# present (never mixed with rows that have none), not the template, and
+# reasoning about something that happened rather than reciting a table.
+
+THINK_RE = _re.compile(r'<think>(.*?)</think>', _re.DOTALL)
+THINK_MIN_CHARS = 120
+
+# The template's fingerprint. `a EXPORT action`, `a OWN action`: the wrong
+# article, and, for Log, the wrong role — the registry says RESPONSE.
+_TEMPLATED_THINK_RES = (
+    _re.compile(r'\ba (?:EXPORT|OWN|REQUEST|RESPONSE|SERVER) action\b'),
+    _re.compile(r'It takes the preposition `\w+`\.\s*\n\s*-'),
+    _re.compile(r'Let me work out the ARO\.'),
+)
+
+
+def thinking_trace(text):
+    """The contents of the <think> block, or None."""
+    match = THINK_RE.search(text or '')
+    return match.group(1).strip() if match else None
+
+
+def thinking_trace_is_templated(text) -> bool:
+    trace = thinking_trace(text) or text or ''
+    return any(pattern.search(trace) for pattern in _TEMPLATED_THINK_RES)
+
+
+def validate_thinking_row(row, require_system_prompt=True):
+    """Problems with one thinking-booster row; empty means it is usable."""
+    problems = []
+    messages = row.get('messages') or []
+    roles = [m.get('role') for m in messages if isinstance(m, dict)]
+    if require_system_prompt and 'system' not in roles:
+        problems.append('no system prompt (`aro ask` always sends one)')
+    answer = _pair_assistant_text(row)
+    trace = thinking_trace(answer)
+    if trace is None:
+        problems.append('no <think> block (think and no-think must not mix)')
+    else:
+        if len(trace) < THINK_MIN_CHARS:
+            problems.append(f'think block is {len(trace)} chars')
+        if thinking_trace_is_templated(answer):
+            problems.append('templated pseudo-reasoning')
+    return problems
+
+
 # ── Deduplication at the door (GitLab #784) ──────────────────────────────────
 # Deduplication happened once, at assembly, on the first 300 characters of the
 # instruction plus a Jaccard threshold — and never on outputs. So 284 repeated
