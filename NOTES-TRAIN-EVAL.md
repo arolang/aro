@@ -273,3 +273,29 @@ rounds after the winner that did not beat it: [1, 2, 5, 6, 7]
 rounds this eval size could distinguish at 5 points each: 5 (the run did 8)
 ```
 
+### Commit 3 — #791 (sequential fusion, no gate)
+
+Added `Train/script/fusion_gate.py` (18 tests):
+- `evaluate_fuse` / `require_fuse_gate` — a metric blocks the fuse only when it
+  loses more than 2 points AND the measurements are distinguishable at 95%.
+  Both halves matter: a 20-point swing on NB25's 5 held-out chats is one chat.
+- `resolve_base` — refuses to fall through to `config.BASE_MODEL_ID` (the 30B
+  MoE) when the student chain is missing; `ARO_TRAIN_ALLOW_BASE_FALLBACK=1`
+  opts in deliberately.
+- `check_learning_rate` — reports NB23's 1e-4 as 10x the chain; does not block,
+  since that may be intended and the gate catches the damage either way.
+
+Wiring:
+- NB23 had **no** before/after: its smoke test ran after the fuse, on a model
+  already the base for NB24. Added a pre-fuse held-out pass-rate measurement
+  over `valid_pairs` (the existing 10% split) with and without the adapter.
+- NB24 already computed `before`/`after` on a 120-item holdout, charted them
+  and discarded them; the gate now consumes those exact dicts.
+- NB25's only pre-fuse check was `_adapters_finite` (NaN/Inf); the gate is now
+  in front of the fuse.
+- NB23/24/25 base resolution goes through `resolve_base`.
+
+Deliberately NOT done: the issue's "one mixed SFT on the student instead of
+three fuses" is a restructure of the whole booster chain that cannot be
+validated without a training run. The gate is what makes the current chain
+safe; the restructure is a separate piece of work.

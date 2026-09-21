@@ -192,6 +192,24 @@ both make the next round worse.
 | 24 | `24_thinking_finetune` | **Booster 2** — reasoning fine-tune fused onto the material model → `models/thinking/fused`. |
 | 25 | `25_conversation_finetune` | **Booster 3** — multi-turn fine-tune fused onto the thinking model → `models/conversation/fused` (**the final model**). |
 | 27 | `27_package` | Quantize, write `model_manifest.json`, populate `release/aro-coder-6bit/`, and upload. The **last-numbered** notebook; runs **after** the boosters and selects the final booster model via `find_best_fused_model()`. |
+
+#### Each booster is gated before it fuses (GitLab #791)
+
+The three boosters fuse in sequence, so a stage that loses ground becomes the
+base for the next one and the damage is only visible at the 104-prompt sweep at
+the very end, three fuses later, attributable to none of them. Every stage now
+measures a held-out before/after and passes it to
+`script/fusion_gate.require_fuse_gate` **before** `mlx_lm fuse` runs. A metric
+blocks the fuse when it loses more than two points *and* the two measurements
+are distinguishable at 95 % — so a 20-point swing on the conversation stage's
+five held-out chats passes with a warning rather than a refusal, because five
+chats could not have seen it either way.
+
+NB24 and NB25 also stop falling through to `BASE_MODEL_ID`. A missing student
+directory used to mean training and fusing a 30 B mixture-of-experts LoRA into
+what the rest of the chain calls "the student", announced by one `print`, with
+the next booster then anchoring on that. `fusion_gate.resolve_base` refuses,
+naming what it looked for; `ARO_TRAIN_ALLOW_BASE_FALLBACK=1` says you meant it.
 | 26 | `26_post_release_validation` | Download the published model + smoke-test like a user. Runs **after** `27_package` (it tests the just-uploaded model). |
 
 **Release ordering:** `27_package` is the last-numbered notebook. Execution order (set by the `NOTEBOOKS` list in `00_META_PIPELINE`, not the filename numbers) is `… → distillation → material → thinking → conversation → 27_package(+upload) → 26_post_release_validation`, so the model that gets uploaded is the **final** one after the full booster chain. (Post-release validation keeps a lower number but runs after packaging because it tests the upload.)
