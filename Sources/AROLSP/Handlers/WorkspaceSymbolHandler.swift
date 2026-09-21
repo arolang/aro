@@ -24,6 +24,8 @@ public struct WorkspaceSymbolHandler: Sendable {
 
         for (uri, state) in documents {
             guard let result = state.compilationResult else { continue }
+            // One line table per document; every span below converts through it.
+            let lines = LineIndex(state.content)
 
             for analyzed in result.analyzedProgram.featureSets {
                 let fs = analyzed.featureSet
@@ -37,7 +39,8 @@ public struct WorkspaceSymbolHandler: Sendable {
                         kind: 12,  // Function
                         uri: uri,
                         span: fs.span,
-                        containerName: fs.businessActivity
+                        containerName: fs.businessActivity,
+                        lines: lines
                     ))
                 }
 
@@ -51,7 +54,8 @@ public struct WorkspaceSymbolHandler: Sendable {
                                 kind: 14,  // Constant (published/exported)
                                 uri: uri,
                                 span: publish.span,
-                                containerName: fsName
+                                containerName: fsName,
+                                lines: lines
                             ))
                         }
                     }
@@ -65,7 +69,8 @@ public struct WorkspaceSymbolHandler: Sendable {
                                 kind: 6,  // Method
                                 uri: uri,
                                 span: aro.action.span,
-                                containerName: fsName
+                                containerName: fsName,
+                                lines: lines
                             ))
                         }
 
@@ -76,7 +81,8 @@ public struct WorkspaceSymbolHandler: Sendable {
                                 kind: 13,  // Variable
                                 uri: uri,
                                 span: aro.result.span,
-                                containerName: fsName
+                                containerName: fsName,
+                                lines: lines
                             ))
                         }
                     }
@@ -90,7 +96,8 @@ public struct WorkspaceSymbolHandler: Sendable {
                             kind: symbolKind(for: symbol),
                             uri: uri,
                             span: symbol.definedAt,
-                            containerName: fsName
+                            containerName: fsName,
+                            lines: lines
                         ))
                     }
                 }
@@ -120,9 +127,10 @@ public struct WorkspaceSymbolHandler: Sendable {
         kind: Int,
         uri: String,
         span: SourceSpan,
-        containerName: String?
+        containerName: String?,
+        lines: LineIndex
     ) -> [String: Any] {
-        let lspRange = PositionConverter.toLSP(span)
+        let lspRange = PositionConverter.toLSP(span, using: lines)
 
         var info: [String: Any] = [
             "name": name,

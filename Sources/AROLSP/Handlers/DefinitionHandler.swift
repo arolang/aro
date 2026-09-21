@@ -22,11 +22,12 @@ public struct DefinitionHandler: Sendable {
     ) -> [String: Any]? {
         guard let result = compilationResult else { return nil }
 
-        let aroPosition = PositionConverter.fromLSP(position)
+        let lines = LineIndex(content)
+        let aroPosition = PositionConverter.fromLSP(position, using: lines)
 
         // Find the variable at the position
         for analyzed in result.analyzedProgram.featureSets {
-            if let location = findDefinitionInStatements(analyzed.featureSet.statements, position: aroPosition, symbolTable: analyzed.symbolTable, uri: uri) {
+            if let location = findDefinitionInStatements(analyzed.featureSet.statements, position: aroPosition, symbolTable: analyzed.symbolTable, uri: uri, lines: lines) {
                 return location
             }
         }
@@ -40,40 +41,41 @@ public struct DefinitionHandler: Sendable {
         _ statements: [Statement],
         position: SourceLocation,
         symbolTable: SymbolTable,
-        uri: String
+        uri: String,
+        lines: LineIndex
     ) -> [String: Any]? {
         for statement in statements {
             if let aro = statement as? AROStatement {
                 if isPositionInSpan(position, aro.result.span) {
                     if let symbol = symbolTable.lookup(aro.result.base) {
-                        return createLocationResponse(uri: uri, span: symbol.definedAt)
+                        return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                     }
                 }
                 if isPositionInSpan(position, aro.object.noun.span) {
                     if let symbol = symbolTable.lookup(aro.object.noun.base) {
-                        return createLocationResponse(uri: uri, span: symbol.definedAt)
+                        return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                     }
                 }
                 if let expr = aro.valueSource.asExpression {
-                    if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri) {
+                    if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                         return location
                     }
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
-                if let location = findDefinitionInStatements(forEachLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                if let location = findDefinitionInStatements(forEachLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                     return location
                 }
             } else if let rangeLoop = statement as? RangeLoop {
-                if let location = findDefinitionInStatements(rangeLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                if let location = findDefinitionInStatements(rangeLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                     return location
                 }
             } else if let whileLoop = statement as? WhileLoop {
-                if let location = findDefinitionInStatements(whileLoop.body, position: position, symbolTable: symbolTable, uri: uri) {
+                if let location = findDefinitionInStatements(whileLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                     return location
                 }
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
-                    if let location = findDefinitionInStatements(caseClause.body, position: position, symbolTable: symbolTable, uri: uri) {
+                    if let location = findDefinitionInStatements(caseClause.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                         return location
                     }
                 }
@@ -81,16 +83,16 @@ public struct DefinitionHandler: Sendable {
                 for stage in pipeline.stages {
                     if isPositionInSpan(position, stage.result.span) {
                         if let symbol = symbolTable.lookup(stage.result.base) {
-                            return createLocationResponse(uri: uri, span: symbol.definedAt)
+                            return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                         }
                     }
                     if isPositionInSpan(position, stage.object.noun.span) {
                         if let symbol = symbolTable.lookup(stage.object.noun.base) {
-                            return createLocationResponse(uri: uri, span: symbol.definedAt)
+                            return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                         }
                     }
                     if let expr = stage.valueSource.asExpression {
-                        if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri) {
+                        if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                             return location
                         }
                     }
@@ -106,35 +108,36 @@ public struct DefinitionHandler: Sendable {
         _ expression: any AROParser.Expression,
         position: SourceLocation,
         symbolTable: SymbolTable,
-        uri: String
+        uri: String,
+        lines: LineIndex
     ) -> [String: Any]? {
         if let varRef = expression as? VariableRefExpression {
             if isPositionInSpan(position, varRef.span) {
                 let name = varRef.noun.base
                 if let symbol = symbolTable.lookup(name) {
-                    return createLocationResponse(uri: uri, span: symbol.definedAt)
+                    return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                 }
             }
         } else if let binary = expression as? BinaryExpression {
-            if let result = findDefinitionInExpression(binary.left, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(binary.left, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
-            if let result = findDefinitionInExpression(binary.right, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(binary.right, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
         } else if let unary = expression as? UnaryExpression {
-            if let result = findDefinitionInExpression(unary.operand, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(unary.operand, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
         } else if let member = expression as? MemberAccessExpression {
-            if let result = findDefinitionInExpression(member.base, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(member.base, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
         } else if let subscript_ = expression as? SubscriptExpression {
-            if let result = findDefinitionInExpression(subscript_.base, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(subscript_.base, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
-            if let result = findDefinitionInExpression(subscript_.index, position: position, symbolTable: symbolTable, uri: uri) {
+            if let result = findDefinitionInExpression(subscript_.index, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                 return result
             }
         }
@@ -160,8 +163,8 @@ public struct DefinitionHandler: Sendable {
         return true
     }
 
-    private func createLocationResponse(uri: String, span: SourceSpan) -> [String: Any] {
-        let lspRange = PositionConverter.toLSP(span)
+    private func createLocationResponse(uri: String, span: SourceSpan, lines: LineIndex) -> [String: Any] {
+        let lspRange = PositionConverter.toLSP(span, using: lines)
 
         return [
             "uri": uri,

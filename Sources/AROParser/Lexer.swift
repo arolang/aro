@@ -388,7 +388,7 @@ public final class Lexer: @unchecked Sendable {
                 segments.append((value, location))
             }
             // Emit interpolation tokens
-            emitInterpolationTokens(segments: segments, start: start)
+            try emitInterpolationTokens(segments: segments, start: start)
         } else {
             addToken(.stringLiteral(value), start: start)
         }
@@ -540,7 +540,7 @@ public final class Lexer: @unchecked Sendable {
     }
 
     /// Emits tokens for an interpolated string
-    private func emitInterpolationTokens(segments: [(String, SourceLocation)], start: SourceLocation) {
+    private func emitInterpolationTokens(segments: [(String, SourceLocation)], start: SourceLocation) throws {
         var i = 0
         while i < segments.count {
             let (content, loc) = segments[i]
@@ -551,15 +551,11 @@ public final class Lexer: @unchecked Sendable {
                 i += 1
                 // Next segment is the expression content
                 if i < segments.count {
-                    let (exprContent, _) = segments[i]
+                    let (exprContent, exprStart) = segments[i]
                     if exprContent != "}" {
-                        // Re-lex the expression content to get real tokens
-                        if let exprTokens = try? Lexer.tokenize(exprContent) {
-                            // Add all tokens except EOF
-                            for token in exprTokens where token.kind != .eof {
-                                tokens.append(token)
-                            }
-                        }
+                        // Re-lex the expression content to get real tokens,
+                        // then move their spans onto this document.
+                        tokens.append(contentsOf: try lexInterpolation(exprContent, at: exprStart))
                         i += 1
                     }
                 }
@@ -580,6 +576,80 @@ public final class Lexer: @unchecked Sendable {
                 i += 1
             }
         }
+    }
+
+    // MARK: - Interpolation Sub-Lexing (GitLab #659)
+
+    /// Lexes the inside of a `${…}` interpolation and returns its tokens with
+    /// spans expressed in *this* document's coordinates.
+    ///
+    /// The content is lexed by a second `Lexer` over a substring, so every
+    /// location it produces starts again at 1:1. This used to be run as
+    /// `try? Lexer.tokenize(exprContent)`, which had two consequences: a typo
+    /// inside an interpolation produced an empty interpolation and no
+    /// diagnostic at all, and the tokens that *did* come back carried spans
+    /// into a fragment the editor has never seen — so hover, rename and
+    /// go-to-definition inside an interpolation landed on line 1 of the file.
+    ///
+    /// Both halves are fixed here: the sub-lexer gets the enclosing
+    /// collector's twin so its diagnostics can be re-based and merged, and a
+    /// thrown `LexerError` is re-thrown at the position it actually occupies
+    /// in this file rather than swallowed. The `try?` this replaces is exactly
+    /// the kind CLAUDE.md forbids — a silent fallback that loses data.
+    private func lexInterpolation(_ content: String, at base: SourceLocation) throws -> [Token] {
+        // Mirror the enclosing lexer's error mode: with a collector it
+        // recovers and reports, without one it throws. Its diagnostics land in
+        // a private collector first so they can be re-based before merging.
+        let inner: DiagnosticCollector? = diagnostics == nil ? nil : DiagnosticCollector()
+
+        func drainDiagnostics() {
+            guard let inner, let diagnostics else { return }
+            for diagnostic in inner.diagnostics {
+                diagnostics.add(Diagnostic(
+                    severity: diagnostic.severity,
+                    message: diagnostic.message,
+                    location: diagnostic.location.map { Self.rebase($0, onto: base) },
+                    hints: diagnostic.hints,
+                    category: diagnostic.category
+                ))
+            }
+        }
+
+        do {
+            let innerTokens = try Lexer.tokenize(content, diagnostics: inner)
+            drainDiagnostics()
+            return innerTokens
+                .filter { $0.kind != .eof }
+                .map {
+                    Token(
+                        kind: $0.kind,
+                        span: SourceSpan(
+                            start: Self.rebase($0.span.start, onto: base),
+                            end: Self.rebase($0.span.end, onto: base)
+                        ),
+                        lexeme: intern($0.lexeme)
+                    )
+                }
+        } catch let error as LexerError {
+            // Report whatever the sub-lexer managed to collect before it gave
+            // up, then re-throw at the right place in this file.
+            drainDiagnostics()
+            throw error.relocated(to: Self.rebase(error.location ?? SourceLocation(), onto: base))
+        }
+    }
+
+    /// Maps a location inside an interpolation's content onto the enclosing
+    /// document, given where that content starts.
+    ///
+    /// Column is relative only on the content's *first* line; after a line
+    /// break inside the interpolation the inner column is already absolute.
+    private static func rebase(_ inner: SourceLocation, onto base: SourceLocation) -> SourceLocation {
+        SourceLocation(
+            line: base.line + inner.line - 1,
+            column: inner.line == 1 ? base.column + inner.column - 1 : inner.column,
+            offset: base.offset + inner.offset,
+            byteOffset: base.byteOffset + inner.byteOffset
+        )
     }
 
     // MARK: - Number Scanning

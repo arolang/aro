@@ -3,17 +3,39 @@
   "name": "ARO",
   "scopeName": "source.aro",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#featureset" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#status-codes" },
-    { "include": "#actions" },
-    { "include": "#variables" },
-    { "include": "#prepositions" },
-    { "include": "#articles" },
-    { "include": "#keywords" },
-    { "include": "#operators" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#featureset"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#status-codes"
+    },
+    {
+      "include": "#actions"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#prepositions"
+    },
+    {
+      "include": "#articles"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    }
   ],
   "repository": {
     "comments": {
@@ -31,14 +53,29 @@
           "name": "meta.featureset.aro",
           "begin": "\\(([^:]+):\\s*([^)<]+?)(\\s+Handler|\\s+Observer)?(<[^>]+>)?\\s*\\)",
           "beginCaptures": {
-            "1": { "name": "entity.name.function.featureset.aro" },
-            "2": { "name": "entity.name.type.business-activity.aro" },
-            "3": { "name": "storage.type.handler.aro" },
-            "4": { "name": "meta.state-guard.aro", "patterns": [{ "include": "#state-guard" }] }
+            "1": {
+              "name": "entity.name.function.featureset.aro"
+            },
+            "2": {
+              "name": "entity.name.type.business-activity.aro"
+            },
+            "3": {
+              "name": "storage.type.handler.aro"
+            },
+            "4": {
+              "name": "meta.state-guard.aro",
+              "patterns": [
+                {
+                  "include": "#state-guard"
+                }
+              ]
+            }
           },
           "end": "(?=\\()|$",
           "patterns": [
-            { "include": "#featureset-body" }
+            {
+              "include": "#featureset-body"
+            }
           ]
         }
       ]
@@ -48,8 +85,12 @@
         {
           "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::([^,>]+))?>",
           "captures": {
-            "1": { "name": "variable.other.aro" },
-            "2": { "name": "constant.other.aro" }
+            "1": {
+              "name": "variable.other.aro"
+            },
+            "2": {
+              "name": "constant.other.aro"
+            }
           }
         }
       ]
@@ -60,16 +101,36 @@
           "begin": "\\{",
           "end": "\\}",
           "patterns": [
-            { "include": "#comments" },
-            { "include": "#strings" },
-            { "include": "#numbers" },
-            { "include": "#status-codes" },
-            { "include": "#actions" },
-            { "include": "#variables" },
-            { "include": "#prepositions" },
-            { "include": "#articles" },
-            { "include": "#keywords" },
-            { "include": "#operators" }
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#status-codes"
+            },
+            {
+              "include": "#actions"
+            },
+            {
+              "include": "#variables"
+            },
+            {
+              "include": "#prepositions"
+            },
+            {
+              "include": "#articles"
+            },
+            {
+              "include": "#keywords"
+            },
+            {
+              "include": "#operators"
+            }
           ]
         }
       ]
@@ -78,33 +139,28 @@
       "patterns": [
         {
           "name": "keyword.action.request.aro",
-          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Receive|Request|Accept|List|Stat|Exists|Parameters|Prompt|Select)\\b",
-          "comment": "REQUEST actions - data coming IN"
+          "match": "\\b(Ask|Choose|Clone|Exists|Extract|Fetch|Find|Get|Http|List|Load|Parse|Probe|Prompt|Pull|Read|Receive|Request|Retrieve|Select|Stat|Stream|Subscribe)\\b",
+          "comment": "REQUEST actions - data coming IN (23 verbs, generated)"
         },
         {
           "name": "keyword.action.own.aro",
-          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Group|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render|Schedule|Sleep|Repaint|Show)\\b",
-          "comment": "OWN actions - internal processing"
+          "match": "\\b(Accept|Aggregate|Arrange|Assert|Build|Calculate|Call|Change|Check|Checkout|Clear|Combine|Compare|Compute|Configure|Construct|Convert|Create|Delay|Delete|Derive|Destroy|Embed|Exec|Execute|Filter|Flip|Given|Group|Include|Insert|Invoke|Join|Map|Match|Merge|Modify|Order|ParseHtml|Parsehtml|Pause|Reduce|Remove|Reverse|Run|Set|Shell|Show|Sleep|Sort|Split|Stage|Then|Transform|Update|Validate|Verify|When)\\b",
+          "comment": "OWN actions - internal processing (58 verbs, generated)"
         },
         {
           "name": "keyword.action.response.aro",
-          "match": "\\b(Return|Throw)\\b",
-          "comment": "RESPONSE actions - data going OUT"
+          "match": "\\b(Alert|Append|Broadcast|Debug|Dispatch|Fail|Log|Notify|Output|Patch|Persist|Print|Raise|Render|Repaint|Respond|Return|Save|Send|Signal|Store|Throw|Write)\\b",
+          "comment": "RESPONSE actions - data going OUT (23 verbs, generated)"
         },
         {
           "name": "keyword.action.export.aro",
-          "match": "\\b(Publish|Store|Log|Send|Emit|Write|Notify|CreateDirectory)\\b",
-          "comment": "EXPORT actions - persistence/external"
+          "match": "\\b(Commit|Emit|Export|Expose|Publish|Push|Schedule|Share|Tag)\\b",
+          "comment": "EXPORT actions - persistence/external (9 verbs, generated)"
         },
         {
           "name": "keyword.action.lifecycle.aro",
-          "match": "\\b(Start|Stop|Keepalive|Listen|Connect|Close|Disconnect|Make|Watch|Configure|Broadcast)\\b",
-          "comment": "LIFECYCLE actions - system management"
-        },
-        {
-          "name": "keyword.action.test.aro",
-          "match": "\\b(Given|When|Then|Assert)\\b",
-          "comment": "TEST actions - BDD testing"
+          "match": "\\b(Await|Block|Close|Connect|Copy|CreateDirectory|Createdirectory|Disconnect|Keepalive|Listen|Make|Mkdir|Move|Rename|Start|Stop|Terminate|Touch|Wait)\\b",
+          "comment": "SERVER actions - lifecycle and services (19 verbs, generated)"
         }
       ]
     },
@@ -192,5 +248,6 @@
         }
       ]
     }
-  }
+  },
+  "comment": "The `actions` patterns are generated from the runtime action registry by Scripts/generate-editor-grammars.py — do not hand-edit them, run the script."
 }
