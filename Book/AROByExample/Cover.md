@@ -17,7 +17,7 @@ Building a Web Crawler from Scratch
 </div>
 
 <div style="font-size: 12pt; color: #888; margin-bottom: 4em; padding: 1em; border: 1px solid #ccc; display: inline-block;">
-Based on a beta version of ARO.<br>
+Written against ARO @ARO_VERSION@.<br>
 This book will be updated as the language evolves.
 </div>
 
@@ -29,11 +29,11 @@ This book will be updated as the language evolves.
 </div>
 
 <div style="font-size: 12pt; color: #888;">
-January 2026
+@ARO_DATE@
 </div>
 
 <div style="font-size: 11pt; color: #aaa; margin-top: 1em;">
-Version 1.0
+ARO @ARO_VERSION@
 </div>
 
 </div>

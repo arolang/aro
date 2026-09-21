@@ -9,6 +9,20 @@ HTML_OUT="$OUTPUT_DIR/ARO-Essential-Primer.html"
 PDF_OUT="$OUTPUT_DIR/ARO-Essential-Primer.pdf"
 
 mkdir -p "$OUTPUT_DIR"
+
+# Build from a stamped copy of the source. `@ARO_VERSION@` and `@ARO_DATE@`
+# become the release this build is for, and the shared install snippet in
+# Book/Install.md is spliced in wherever the text asks for it. The checked-in
+# markdown keeps its placeholders.
+source "$SCRIPT_DIR/../book-release.sh"
+SRC_DIR="$OUTPUT_DIR/staged"
+rm -rf "$SRC_DIR"
+mkdir -p "$SRC_DIR"
+cp "$SOURCE" "$SCRIPT_DIR/metadata.yaml" "$SRC_DIR/"
+aro_book_stamp "$SRC_DIR"
+SOURCE="$SRC_DIR/$(basename "$SOURCE")"
+METADATA_FILE="$SRC_DIR/metadata.yaml"
+echo "Release: ARO $ARO_VERSION ($ARO_DATE)"
 cp "$CSS" "$OUTPUT_DIR/"
 
 echo "Building HTML..."
@@ -17,7 +31,7 @@ pandoc \
     --toc \
     --toc-depth=2 \
     --css="unix-style.css" \
-    --metadata-file="$SCRIPT_DIR/metadata.yaml" \
+    --metadata-file="$METADATA_FILE" \
     -f markdown+raw_html \
     -o "$HTML_OUT" \
     "$SOURCE"
@@ -33,7 +47,7 @@ elif command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
     echo "Building PDF with LaTeX..."
     pandoc \
         --pdf-engine=xelatex \
-        --metadata-file="$SCRIPT_DIR/metadata.yaml" \
+        --metadata-file="$METADATA_FILE" \
         --toc \
         --toc-depth=2 \
         -V geometry:margin=1in \

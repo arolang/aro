@@ -6,11 +6,13 @@
 
 ## 3.1 Installation
 
-ARO is implemented in Swift and distributed as a command-line tool. The implementation requires Swift 6.3 or later, which means you will need macOS 14 or a recent Linux distribution with Swift installed. On macOS, Xcode 16 provides everything you need. On Linux, you can install Swift from swift.org.
+ARO is distributed as a command-line tool. Released builds carry their own runtime, so nothing else has to be installed to run or compile an ARO application.
 
-The simplest way to get ARO is to build it from source. Clone the repository and run Swift Package Manager's build command. For development work, a debug build is sufficient and compiles faster. For running applications you intend to deploy, a release build with optimizations produces a significantly smaller and faster binary.
+<!-- ARO:INCLUDE Install.md -->
+*See [the shared installation instructions](../Install.md).*
+<!-- /ARO:INCLUDE -->
 
-After building, you will find the `aro` executable in the `.build` directory. To use it conveniently from any directory, add this location to your shell's PATH environment variable. Once configured, running `aro --help` should display the available subcommands, confirming that the installation was successful.
+Building from source is the route to take if you intend to work on the language itself. It needs Swift 6.3 or later — macOS 14 with Xcode 16, or a recent Linux distribution with a toolchain from swift.org — plus LLVM 20 if you want `aro build` to produce native binaries. A debug build compiles faster and is fine for development; a release build is what you want for anything you intend to run for real. Either way the executable lands under `.build`, and putting that directory on your `PATH` makes `aro` available everywhere.
 
 Four subcommands carry most of the daily work. The `run` command compiles and executes an application in a single step, which is what you will use most during development. The `check` command validates source files without running them, useful for catching errors before execution. The `build` command compiles an application to a native binary for deployment. The `compile` command produces intermediate output for tooling integration.
 

@@ -2,8 +2,8 @@
 title: "ARO by Hallucination"
 subtitle: "A language built by a conversation, and how to continue the conversation yourself"
 author: "ARO Language Project"
-date: "April 2026"
-version: "0.2.0"
+date: "@ARO_DATE@"
+version: "@ARO_VERSION@"
 lang: en
 chapters:
   - Cover.md

@@ -17,31 +17,14 @@
 
 ARO applications are built and run using the `aro` command-line tool. Installation depends on your platform.
 
-**macOS (Homebrew):**
+<!-- ARO:INCLUDE Install.md -->
+*See [the shared installation instructions](../Install.md).*
+<!-- /ARO:INCLUDE -->
 
-```bash
-brew install arolang/tap/aro
-```
-
-**From Source:**
-
-```bash
-git clone https://github.com/arolang/aro.git
-cd aro
-swift build -c release
-# The binary is at .build/release/aro
-```
-
-**Docker:**
+There is a container image too, if you would rather not install anything:
 
 ```bash
 docker pull ghcr.io/arolang/aro-runtime
-```
-
-Verify your installation:
-
-```bash
-aro --version
 ```
 
 You should see a version number. If you see an error, check the [ARO installation guide](https://github.com/arolang/aro#installation).

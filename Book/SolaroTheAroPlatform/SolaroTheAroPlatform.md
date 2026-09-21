@@ -261,7 +261,7 @@ confirm the developer; SOLARO is signed and notarized.
 If you'd rather build from source:
 
 ```bash
-git clone https://git.ausdertechnik.de/arolang/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 swift build -c release --product SolaroApp
 .build/release/SolaroApp
@@ -275,11 +275,11 @@ incremental rebuilds are seconds.
 
 SOLARO is a single application bundle. It needs the `aro` CLI on
 your path for run / debug / test / build — install the matching CLI
-via Homebrew:
+the usual way:
 
-```bash
-brew install arolang/tap/aro
-```
+<!-- ARO:INCLUDE Install.md -->
+*See [the shared installation instructions](../Install.md).*
+<!-- /ARO:INCLUDE -->
 
 …or copy `.build/release/aro` next to `Solaro.app/Contents/MacOS/`
 during a development build. SOLARO probes for a mismatched binary at
@@ -497,9 +497,9 @@ The whole script is one feature set:
 ```aro
 (Application-Start: Repo Backup) {
     Create the <repos> with [
-        { name: "aro",    url: "https://git.ausdertechnik.de/arolang/aro.git" },
-        { name: "demo-1", url: "https://git.ausdertechnik.de/arolang/aro.git" },
-        { name: "demo-2", url: "https://git.ausdertechnik.de/arolang/aro.git" }
+        { name: "aro",    url: "https://github.com/arolang/aro.git" },
+        { name: "demo-1", url: "https://github.com/arolang/aro.git" },
+        { name: "demo-2", url: "https://github.com/arolang/aro.git" }
     ].
 
     Compute the <today> from <now>.
@@ -836,7 +836,7 @@ adding a canvas overlay, or (increasingly) an agent rebuilding the IDE in
 a loop. The macOS dev cycle has a handful of sharp edges that aren't the
 app's fault but bite everyone once. They're documented in full, with
 copy-paste fixes, in
-[`Sources/SOLARO/TROUBLESHOOTING.md`](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Sources/SOLARO/TROUBLESHOOTING.md);
+[`Sources/SOLARO/TROUBLESHOOTING.md`](https://github.com/arolang/aro/blob/main/Sources/SOLARO/TROUBLESHOOTING.md);
 this is the tour.
 
 ### A.1 The pieces

@@ -230,6 +230,17 @@ action-reference:
   script:
     - python3 Scripts/generate-action-reference.py --check
 
+# The Construction Studies' grammar appendix had the same problem in its
+# precedence, preposition and reserved-word tables — `not` was documented as
+# binding tighter than the comparisons, which is the opposite of what the
+# parser does. Those three tables are now derived from Parser.swift,
+# Token.swift and Lexer.swift, and this job fails when they stop matching.
+grammar-appendix:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
+
 # =============================================================================
 # The integration harness has logic of its own, and it is testable
 # =============================================================================

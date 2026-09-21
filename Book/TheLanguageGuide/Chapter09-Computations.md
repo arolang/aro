@@ -238,11 +238,18 @@ When expressions contain multiple operators, ARO evaluates them in this order (h
 | 2 | unary `-` | Right |
 | 3 | `*` `/` `%` | Left |
 | 4 | `+` `-` `++` | Left |
-| 5 | `<` `>` `<=` `>=` | Left |
-| 6 | `==` `!=` `is` `is not` `contains` `matches` | Left |
-| 7 | `not` | Right |
-| 8 | `and` | Left |
-| 9 (lowest) | `or` | Left |
+| 5 | `default` | Left |
+| 6 | `<` `>` `<=` `>=` | Left |
+| 7 | `==` `!=` `is` `is not` `contains` `matches` | Left |
+| 8 | `not` | Right |
+| 9 | `and` | Left |
+| 10 (lowest) | `or` | Left |
+
+`not` is a prefix operator and it binds *looser* than the comparisons, as in
+Python rather than C. `not <a> == <b>` is `not (<a> == <b>)`, and
+`not <stock> >= 10` asks whether stock is short, not whether `not <stock>` is at
+least ten. Unary `-` is the exception: it stays at level 2, so `-<a> * <b>` is
+`(-<a>) * <b>`.
 
 Comparisons bind tighter than `and`/`or`, so a rule that mixes one with a named
 boolean fact groups the way it reads aloud — no parentheses needed:

@@ -50,7 +50,7 @@ This is what lets you debug an event-driven system the same way you debug a sync
 
 ## 1.4 Two runtimes, one debugger
 
-ARO compiles two ways: an interpreter (`aro run`) and a native binary (`aro build`). The debugger drives the interpreter directly — every Phase 1–5 feature works there. Native binaries get function-level DWARF (so `lldb` can name your feature sets in a backtrace) but not per-line breakpoints yet. Chapter 8 covers what `lldb` can and cannot see and when each path is the right tool.
+ARO compiles two ways: an interpreter (`aro run`) and a native binary (`aro build`). The debugger drives the interpreter directly — every Phase 1–5 feature works there. Native binaries carry a real DWARF line table, so `lldb` names your feature sets in a backtrace *and* resolves `breakpoint set --file --line` onto a statement. What a compiled binary does not have is everything above the line table: your bindings, the debugger's own breakpoint kinds, record and replay. Chapter 8 covers what `lldb` can and cannot see and when each path is the right tool.
 
 The practical implication: **debug from source, ship the compile**. The same `.aro` files run both ways.
 

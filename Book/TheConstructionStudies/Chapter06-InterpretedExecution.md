@@ -128,7 +128,7 @@ execute:
 
 Once a `Return` or `Throw` runs, the response is set and the loop stops. Remaining statements are skipped.
 
-Before each statement runs, the executor opens a fresh statement scope and unbinds twenty-one framework variables — `_literal_`, `_expression_`, `_with_`, `_where_value_` and the rest. These are the channel through which a statement's modifiers reach its action, and they are statement-local by construction. Leaving one bound is how a `with { separator: "-" }` from one statement silently reappears in the next; the compiled path, which clears only fourteen of them and opens no scope, does exactly that (GitLab #552).
+Before each statement runs, the executor opens a fresh statement scope and unbinds twenty-one framework variables — `_literal_`, `_expression_`, `_with_`, `_where_value_` and the rest. These are the channel through which a statement's modifiers reach its action, and they are statement-local by construction. Leaving one bound is how a `with { separator: "-" }` from one statement silently reappears in the next. The names are not written out here: the executor iterates `FrameworkVariables.transientKeys`, the same array the code generator emits unbind calls from, so the compiled path clears exactly the same twenty-one. Chapter 11 explains why that array lives in `AROParser` rather than in either mode.
 
 That last line of the loop is not bookkeeping. It is the other half of the execution model.
 
