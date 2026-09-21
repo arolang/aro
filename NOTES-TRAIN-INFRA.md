@@ -150,3 +150,32 @@ Commands: `pytest Train/script/tests/test_stage_runner.py -q` → 14 passed;
 full suite → 203 passed; `py_compile` on all 9 scripts → OK; per-cell compile of the
 meta notebook → 0 syntax errors; `python3 Train/script/28_diagnostic_repairs.py
 --dry-run --limit 3` → capped at 3 pairs as intended.
+
+### #804 — done (commit 5)
+
+`Train/script/sandbox.py`: `sandbox_env()` (env allowlist + private HOME/TMPDIR +
+dead-proxy offline vars), `prepare_workdir()`, `sandboxed_run()`, `program_dir()`,
+`mirrored_dir()`, `run_program_dir()`. All generated-code call sites routed through
+it: `config.aro_check_snippet`, `eval_metrics.run_aro_program` / `aro_check_dir`,
+`28_diagnostic_repairs.aro_check`, `30_fim_pairs.aro_check_dir`,
+`32_notebook_pairs.run_notebook_session` (+ per-pass `mirrored_dir`),
+`tools/run_prompts.run_aro_check`, `tools/curate_material.aro_check` and its bulk check.
+`.gitignore`: the five stray names.
+
+**Reproduced the bug and the fix against real aro 0.12.0**:
+`Write "Hello, ARO!" to the <file: "test.txt">.` — old call shape → `test.txt` in the
+caller's cwd; `sandbox.run_program_dir` → `test.txt` in the throwaway dir, cwd clean.
+(`Log … to the <file: …>` is not valid syntax in 0.12.0; `Write` is the sink that
+produced the strays.) That proof is now `TestAgainstTheRealRuntime` in
+`tests/test_sandbox.py`, skipped when no `aro` is on PATH.
+
+**Stale in the issue**: 32_notebook_pairs already passed `cwd=`; its real problem was
+that the cwd was `Learning/<notebook dir>` inside the repo, which is also why cells
+dropped out as non-reproducible between the two passes.
+
+**Could not verify / brief was stale**: there is no `AROWorkingDirectory` anywhere in
+`Sources/` on main (d15b1250). Relative paths resolve against
+`FileManager.default.currentDirectoryPath`, so `cwd=` on the subprocess is the lever.
+
+Commands: `pytest Train/script/tests/test_sandbox.py -q` → 17 passed;
+full suite → 219 passed (before the new file) / see next run.

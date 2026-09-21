@@ -60,6 +60,7 @@ from config import (  # noqa: E402
     ARO_APPLICATION_ROOT,
 )
 import stage_runner  # noqa: E402
+import sandbox  # noqa: E402
 
 NOTEBOOK_TAG = 'NB30_fim'
 
@@ -69,12 +70,9 @@ RNG = random.Random(30_2026)
 
 
 def aro_check_dir(files: dict) -> bool:
-    with tempfile.TemporaryDirectory() as tmp:
-        for name, content in files.items():
-            (Path(tmp) / name).write_text(content)
-        r = subprocess.run(['aro', 'check', str(tmp)],
-                           capture_output=True, text=True, timeout=30)
-        return r.returncode == 0
+    """Sandboxed `aro check` over {filename: content} (GitLab #804)."""
+    r = sandbox.run_program_dir(['aro', 'check'], extra_files=files, timeout=30)
+    return r.returncode == 0
 
 
 def collect_aro_files() -> list[Path]:

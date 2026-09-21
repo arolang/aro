@@ -55,6 +55,7 @@ from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, TRAIN_ROOT,
 )
 import stage_runner  # noqa: E402
+import sandbox  # noqa: E402
 
 NOTEBOOK_TAG = 'NB28_repairs'
 SEED_DIR = TRAIN_ROOT / 'seeds' / '28_repairs'
@@ -78,13 +79,13 @@ ARO = resolve_aro()
 
 
 def aro_check(files: dict) -> tuple[int, str]:
-    """`aro check` over a dict of {filename: content} as one application."""
-    with tempfile.TemporaryDirectory() as tmp:
-        for name, content in files.items():
-            (Path(tmp) / name).write_text(content)
-        r = subprocess.run([ARO, 'check', tmp],
-                           capture_output=True, text=True, timeout=30)
-        return r.returncode, (r.stdout + r.stderr)
+    """`aro check` over a dict of {filename: content} as one application.
+
+    Sandboxed (GitLab #804): the content is model-adjacent seed data and runs
+    with its own working directory, HOME and TMPDIR, never the pipeline's.
+    """
+    r = sandbox.run_program_dir([ARO, 'check'], extra_files=files, timeout=30)
+    return r.returncode, (r.stdout + r.stderr)
 
 
 # ── load + validate ──────────────────────────────────────────────────────────

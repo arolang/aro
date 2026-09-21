@@ -266,6 +266,31 @@ so every notebook logs the resolved base.
 | `ARO_TRAIN_RELEASE` | Release label used for `Train/runs/<release>/`. Defaults to `PIPELINE_VERSION`. |
 | `ARO_TRAIN_SKIP_MLX_PREFLIGHT` | `1` starts a run even when `mlx_preflight.py` says this mlx build cannot train a MoE model. |
 
+### Running generated programs
+
+The pipeline executes model output. Anything it generated — a program under
+`aro run`, a snippet under `aro check`, a course cell under `aro repl --json` —
+goes through `script/sandbox.py`, never a bare `subprocess.run`.
+
+A generated program gets its own throwaway directory as the working directory,
+its own empty `$HOME` and `$TMPDIR` inside it, and an allowlisted environment.
+So it can read and write inside that directory and nothing else by a relative
+path; it cannot see the checkout, the operator's home, or any `ARO_*`, `HF_*` or
+credential variable; and every proxy variable points at a closed port so a
+library that honours them fails immediately.
+
+Two limits, stated rather than implied: an **absolute** path is not blocked
+(`/tmp/x` is still `/tmp/x`), and a program that opens a socket directly is not
+stopped by an environment variable. Programs that would start a server or make a
+request are kept from being run at all by `eval_metrics.is_safely_runnable`.
+
+Before this, the subprocess inherited the pipeline's working directory, and the
+runtime resolves a relative path against the process working directory — so
+`Write … to the <file: "test.txt">.` in a generated program wrote
+`Train/script/test.txt`. It did: `app.log`, `test.txt`, `encoded.txt`,
+`decoded.txt` and a fabricated `events.jsonl` were sitting untracked there
+(GitLab #804).
+
 ### Provenance
 
 Every pair saved through `save_notebook_pair(s)` is stamped with a

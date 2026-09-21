@@ -1691,21 +1691,21 @@ def extract_aro_blocks(text):
 
 
 def aro_check_snippet(code, timeout=10, extra_files=None):
-    """Run `aro check` on a code string in a temp dir.
+    """Run `aro check` on a code string in a sandboxed temp dir.
 
     Returns (passed: bool | None, error: str). None means the aro binary is
     not available (caller decides whether that is fatal).
+
+    Sandboxed via sandbox.run_program_dir (GitLab #804): `aro check` does not
+    execute the program, but it does parse a directory of model output, and the
+    same call shape is used for `aro run` — keeping both on one path means the
+    containment cannot be forgotten in the one that matters.
     """
-    import tempfile
+    import sandbox
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / 'main.aro').write_text(code)
-            if extra_files:
-                for name, content in extra_files.items():
-                    (Path(tmp) / name).write_text(content)
-            r = subprocess.run(['aro', 'check', tmp],
-                               capture_output=True, text=True, timeout=timeout)
-            return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
+        r = sandbox.run_program_dir(['aro', 'check'], code,
+                                    extra_files=extra_files, timeout=timeout)
+        return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
     except FileNotFoundError:
         return None, 'aro_not_found'
     except subprocess.TimeoutExpired:

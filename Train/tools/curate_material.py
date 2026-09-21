@@ -20,6 +20,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+# The sandbox that generated ARO is executed in lives with the pipeline
+# (GitLab #804).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'script'))
+import sandbox  # noqa: E402
+
 TOOLS_DIR = Path(__file__).resolve().parent
 MATERIAL_DIR = TOOLS_DIR.parent / 'Material'
 ARO_BIN = TOOLS_DIR.parent.parent / '.build/release/aro'
@@ -38,11 +43,10 @@ def aro_check(code: str) -> tuple[bool, str]:
     """Return (passed, error_message). Requires a full feature-set program."""
     if not ARO_BIN.exists():
         sys.exit(f'aro binary not found at {ARO_BIN}. Build first: swift build -c release')
-    with tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / 'main.aro').write_text(code)
-        r = subprocess.run([str(ARO_BIN), 'check', tmp],
-                           capture_output=True, text=True, timeout=10)
-        return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
+    # Sandboxed (GitLab #804): curated material is still code the toolchain
+    # is about to parse, and it runs with its own cwd, HOME and TMPDIR.
+    r = sandbox.run_program_dir([str(ARO_BIN), 'check'], code, timeout=10)
+    return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
 
 
 def aro_check_syntax(snippet: str) -> tuple[bool, str]:
@@ -1338,18 +1342,13 @@ def validate_multi_file(examples):
     kept, failed = [], []
     for ex in examples:
         files = ex['files']
-        with tempfile.TemporaryDirectory() as tmp:
-            for fname, content in files.items():
-                (Path(tmp) / fname).write_text(content)
-            try:
-                r = subprocess.run(
-                    [str(ARO_BIN), 'check', tmp],
-                    capture_output=True, text=True, timeout=15,
-                )
-                ok = r.returncode == 0
-                err = (r.stderr or r.stdout).strip()[:500]
-            except Exception as exc:
-                ok, err = False, str(exc)[:300]
+        try:
+            r = sandbox.run_program_dir([str(ARO_BIN), 'check'],
+                                        extra_files=files, timeout=15)
+            ok = r.returncode == 0
+            err = (r.stderr or r.stdout).strip()[:500]
+        except Exception as exc:
+            ok, err = False, str(exc)[:300]
         if ok:
             kept.append({
                 'instruction': ex['instruction'],
