@@ -248,7 +248,14 @@ train-tests:
     - python3 Train/script/run_archive.py --dry-run --release ci || true
     # Not applicable off Apple Silicon: exit 2 is the expected answer here, and
     # asserting it keeps the preflight honest about saying so.
-    - python3 Train/script/mlx_preflight.py --no-record; test $? -eq 2
+    #
+    # Captured with `|| rc=$?` rather than `; test $? -eq 2`: the runner's
+    # shell has `set -e`, so the bare `;` form aborted the line the moment
+    # the preflight exited 2 — the very outcome being asserted — and the
+    # job failed with that same exit code, which read as the preflight
+    # being broken rather than the assertion never running. `|| …` is a
+    # condition context, where `set -e` does not fire.
+    - rc=0; python3 Train/script/mlx_preflight.py --no-record || rc=$?; test "$rc" -eq 2
 
 # =============================================================================
 # Test Stage - Gate for all builds (main branch only)
