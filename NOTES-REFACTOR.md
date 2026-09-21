@@ -108,3 +108,55 @@ A half-measure (structural parse for the well-formed shape, string fallback othe
 was considered and rejected: it adds a branch without removing either re-parse.
 
 After: AROParserTests 819/120, AROuntimeTests 1830/281, AROCLITests 354/52 — unchanged.
+
+## #739 — partially done
+
+Done — the descriptor half, in `Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift`
+(CONTENDED FILE; edit confined to the `generatePublishStatement` /
+`generateRequireStatement` region, post-change lines 1369-1379 (new `plainNoun`
+helper), 1401-1410 (publish) and 1463-1471 (require); pre-change lines removed:
+1390-1438 and 1491-1538):
+ - both statements open-coded the result and object descriptor structs field by
+   field although `DescriptorBuilder` exists; they now call it with a synthetic
+   `QualifiedNoun` (`plainNoun`).
+Also, in `Sources/AROCLI/PluginCompiler.swift`: the `try? compileProcess.run()` that
+ignored launch failure and then called `waitUntilExit()`/`terminationStatus` on an
+unlaunched Process (which raises) now skips the file on a launch failure.
+
+EVIDENCE the emitted code is equivalent — `aro build --emit-llvm` on a purpose-built
+app exercising both statements, before vs after, diffed:
+```
+353c353 <   store i32 0, ptr %22   >   store i32 1, ptr %22
+473c473 <   store i32 0, ptr %54   >   store i32 1, ptr %54
+```
+787 lines of IR, two lines differ: the object descriptor's preposition tag.
+The old inline code stored 0 (its comment said "from (0)"); `DescriptorBuilder`
+stores `LLVMTypeMapper.prepositionValue(.from)` = 1. `ActionBridge.intToPreposition`
+maps 0 -> nil -> `?? .from` and 1 -> `.from`, so the decoded `ObjectDescriptor` is
+the same either way. Runtime output identical before and after.
+
+Examples built and run end to end (`swift build --product ARORuntime` then
+`swift build --product aro`, two invocations):
+ - `Examples/Conditionals` — compiled output matches `expected.txt`.
+ - `Examples/Iteration` — compiled output matches `expected.txt` (only the
+   `[OK] demo` vs `demo` prefix, which is how compiled and interpreted always differ).
+ - plus the scratch Publish/Require app, interpreted and compiled.
+Pre-existing and NOT caused by this change: `Require the <X> from the <environment>.`
+fails in a compiled binary ("Undefined variable: 'environment'"). Verified identical
+on the unmodified baseline.
+
+NOT done:
+ - "stream and array for-each duplicate ~150 lines" — `generateForEachLoop` (835-1070)
+   and `generateStreamForEachLoop` (1071-1190). Merging them is a large restructure of
+   the contended file, against the "keep the edit small" instruction.
+ - The `PluginCompiler` per-language split (`SwiftObjectLocator`, `RustStaticLib`,
+   `CObjectCompiler`). 370 lines of build orchestration whose Rust/C/Python paths I
+   cannot exercise end to end here.
+ - The hard-coded `/usr/bin/clang`: routing it through the shared tool resolver would
+   change WHICH compiler runs (Homebrew LLVM vs the Xcode shim). That is a behaviour
+   change, not a refactor.
+STALE in the issue: the line numbers `1193-1260` / `1290-1360` no longer point at
+descriptor construction; `generateAROStatement` already uses `DescriptorBuilder`
+(line 566). Only Publish and Require still open-coded it.
+
+After: AROuntimeTests 1830/281, AROCLITests 354/52, AROCompilerTests 6/2 — unchanged.
