@@ -1998,40 +1998,12 @@ public struct ValidationResult: Sendable, Equatable {
     }
 }
 
-/// Result of a comparison operation
-public struct ComparisonResult: Sendable, Equatable {
-    public let matches: Bool
-    public let result: ComparisonOutcome
-
-    public init(matches: Bool, result: ComparisonOutcome) {
-        self.matches = matches
-        self.result = result
-    }
-}
-
 /// Outcome of a comparison
 public enum ComparisonOutcome: String, Sendable {
     case equal
     case notEqual
     case less
     case greater
-}
-
-/// Entity created by CreateAction
-public struct CreatedEntity: Sendable {
-    public let type: String
-    public let data: [String: any Sendable]
-
-    public init(type: String, data: [String: any Sendable]) {
-        self.type = type
-        self.data = data
-    }
-}
-
-extension CreatedEntity: Equatable {
-    public static func == (lhs: CreatedEntity, rhs: CreatedEntity) -> Bool {
-        lhs.type == rhs.type
-    }
 }
 
 // MARK: - Additional OWN Actions (ARO-0001)

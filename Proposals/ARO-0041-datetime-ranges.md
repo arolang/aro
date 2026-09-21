@@ -46,6 +46,24 @@ Extract the <total-hours: hours> from the <range>.
 | `minutes` | Total minutes in range |
 | `seconds` | Total seconds in range |
 
+### 1.4 Range Membership
+
+`in` tests whether an instant falls inside a range, **inclusive of both
+endpoints**:
+
+```aro
+when <order-date> in <sale-period> {
+    Compute the <discount> from <price> * 0.2.
+}
+```
+
+`in` dispatches on its right operand — a date-range tests interval membership,
+a list tests element membership, a string tests substring containment, a map
+tests key membership — and is the inverse of `contains`, which dispatches on the
+left. ARO-0002 §2.2 has the full operator table and used to cite "ARO-0041 §7"
+for this, which is Timezone Support; the semantics were documented nowhere here
+(GitLab #832).
+
 ---
 
 ## 2. Date Arithmetic
@@ -155,22 +173,26 @@ Create the <report-schedule> with "every last friday".
 
 ### 5.1 Magic Variables
 
-| Variable | Description |
-|----------|-------------|
-| `<now>` | Current date/time |
-| `<today>` | Today at midnight |
-| `<yesterday>` | Yesterday at midnight |
-| `<tomorrow>` | Tomorrow at midnight |
+| Variable | Description | Status |
+|----------|-------------|--------|
+| `<now>` | Current date/time | **resolves** |
+| `<today>` | Today at midnight | not implemented |
+| `<yesterday>` | Yesterday at midnight | not implemented |
+| `<tomorrow>` | Tomorrow at midnight | not implemented |
+
+**Only `<now>` resolves.** The other three fail with `Undefined variable:
+today` (GitLab #833). Until they land, derive them from `<now>` with a date
+offset qualifier:
 
 ### 5.2 Examples
 
 ```aro
-(* Check if date is in the past *)
-Compare the <event-date> < <now>.
+(* Midnight today, and midnight yesterday *)
+Compute the <today: date> from <now>.
+Compute the <yesterday: -1d|date> from <now>.
 
 (* Get items from today *)
-Retrieve the <orders> from the <order-repository>
-    where created >= <today>.
+Retrieve the <orders> from the <order-repository> where created >= <today>.
 ```
 
 ---
@@ -230,7 +252,7 @@ Extract the <pacific-time: timezone> from <utc-event> with "America/Los_Angeles"
 (* Check if booking is within valid range *)
 Create the <range> from <check-in> to <check-out>.
 Extract the <nights: days> from the <range>.
-Compare the <nights> >= 1.
+Return an <OK: status> with <range> when <nights> >= 1.
 ```
 
 ### 8.2 Expiration Check
@@ -238,7 +260,7 @@ Compare the <nights> >= 1.
 ```aro
 (* Check if subscription expired *)
 Compute the <days-until: distance> from <now> to <expiry-date>.
-Compare the <days-until> <= 0 then <expired> = true.
+Log "Subscription expired" to the <console> when <days-until> <= 0.
 ```
 
 ### 8.3 Scheduling
@@ -251,9 +273,9 @@ Compute the <next-day> from <now> + 1d.
 
 ---
 
-## Implementation
+## 9. Implementation
 
-### 8.1 ARODate
+### 9.1 ARODate
 
 ```swift
 public struct ARODate: Sendable {
@@ -266,7 +288,7 @@ public struct ARODate: Sendable {
 }
 ```
 
-### 8.2 ARODateRange
+### 9.2 ARODateRange
 
 ```swift
 public struct ARODateRange: Sendable {
@@ -279,7 +301,7 @@ public struct ARODateRange: Sendable {
 }
 ```
 
-### 8.3 ARORecurrence
+### 9.3 ARORecurrence
 
 ```swift
 public struct ARORecurrence: Sendable {

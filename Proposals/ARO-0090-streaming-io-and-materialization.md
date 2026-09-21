@@ -260,6 +260,16 @@ closed (#486), so the runtime knows which ones:
 | `length`, `count`, `size` | byte count | the raw bytes |
 | `lines` | a lazy sequence of lines | the raw bytes, split across chunks |
 
+**`length` means bytes here and only here.** A fold runs when the input is still
+an `UnreadBody` (`ComputeAction.swift:882` → `Streaming/BodyFolds.swift:57`), and
+it counts bytes because bytes are all a stream has. The same qualifier on a value
+— a String, a List — is the ordinary one from ARO-0019: Unicode characters, or
+elements (`ComputeAction.swift:416`). So `length` on a body that has already been
+read, and `length` on the same body unread, differ for any non-ASCII content.
+That is not a contradiction between the two proposals (GitLab #831), but it is a
+sharp edge: if you need a character count, materialize deliberately rather than
+letting the fold decide for you.
+
 ```aro
 (digestBody: Files API) {
     Extract the <payload> from the <request: body>.

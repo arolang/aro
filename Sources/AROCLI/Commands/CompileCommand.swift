@@ -36,7 +36,7 @@ struct CompileCommand: ParsableCommand {
         let sourceFiles: [URL]
 
         if isDirectory.boolValue {
-            sourceFiles = try findSourceFiles(in: resolvedPath)
+            sourceFiles = try SourceFiles.find(in: resolvedPath)
         } else {
             sourceFiles = [resolvedPath]
         }
@@ -93,28 +93,6 @@ struct CompileCommand: ParsableCommand {
         if !errors.isEmpty {
             throw ExitCode.failure
         }
-    }
-
-    private func findSourceFiles(in directory: URL) throws -> [URL] {
-        let fileManager = FileManager.default
-
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
-        var sourceFiles: [URL] = []
-
-        for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension == "aro" {
-                sourceFiles.append(fileURL)
-            }
-        }
-
-        return sourceFiles.sorted { $0.path < $1.path }
     }
 
     private func outputReport(programs: [CompilationResult], diagnostics: [Diagnostic]) {

@@ -129,6 +129,37 @@ public struct PluginManifest: Codable, Sendable, Equatable {
         self.build = build
     }
 
+    // MARK: - Copying
+
+    /// A copy of this manifest with different source information.
+    ///
+    /// This is the *only* thing the installer changes about a plugin's
+    /// `plugin.yaml`: it stamps in where the plugin came from. Every call site
+    /// used to do that by rebuilding `PluginManifest(name:version:…)` by hand,
+    /// and `update` left `handle:` off the list — silently renaming every
+    /// qualifier and action the plugin ships, so `Collections.pick-random`
+    /// stopped resolving the moment the user ran `aro plugins update`
+    /// (GitLab #661).
+    ///
+    /// Enumerating the fields once, here, is what keeps that from happening
+    /// again the next time the manifest grows a field.
+    public func with(source newSource: SourceInfo?) -> PluginManifest {
+        PluginManifest(
+            name: name,
+            version: version,
+            handle: handle,
+            description: description,
+            author: author,
+            license: license,
+            aroVersion: aroVersion,
+            source: newSource,
+            provides: provides,
+            dependencies: dependencies,
+            system: system,
+            build: build
+        )
+    }
+
     // MARK: - Parsing
 
     /// Parse a plugin.yaml file

@@ -58,6 +58,7 @@ Throw a <NotFoundError> for the <user> when <user: record> is null.
 
 (* Log admin access *)
 Log "Admin access detected" to the <audit> when <user: role> == "admin".
+```
 
 ### Guarded blocks
 
@@ -110,14 +111,13 @@ Log "Priority" to the <console> when <tier> in ["gold", "platinum"].
 It is the inverse of `contains` — `<xs> contains <x>` and `<x> in <xs>`
 are the same test — and dispatches on the **right** operand the way
 `contains` dispatches on the left: a `date-range` tests interval
-membership inclusive of both endpoints (ARO-0041 §7), a
+membership inclusive of both endpoints (ARO-0041 §1.4), a
 list/collection tests element membership, a string tests substring
 containment, and a map/object tests key membership.
 
 `in` is also a delimiter in `for each <x> in <xs>` and an operator in a
 `where` clause. Neither is ambiguous with this one: both consume the
 keyword before any expression is parsed.
-```
 
 ### 1.3 Semantics
 
@@ -180,7 +180,7 @@ The `contains` operator picks its comparison from the **runtime type of the
 left operand**: a list/collection tests element membership, a string tests
 substring containment (right operand must also be a string), and a map/object
 tests key membership. All other left-operand types evaluate to `false`. See
-ARO-0001 (Pattern Matching) for the full dispatch table.
+ARO-0001 §Pattern Matching for the full dispatch table.
 
 ### 2.3 Existence Checks
 
@@ -296,18 +296,18 @@ Guards add conditions to case clauses using `where`:
 ```aro
 match <user: subscription> {
     case <premium> where <user: credits> > 0 {
-        Grant the <premium-features> for the <user>.
-        Deduct the <credit> from the <user: account>.
+        Update the <user> with { tier: "premium" }.
+        Compute the <balance> from <user: credit> - 1.
     }
     case <premium> {
         Log "Low credits for premium user" to the <console>.
-        Grant the <basic-features> for the <user>.
+        Update the <user> with { tier: "basic" }.
     }
     case <basic> {
-        Grant the <basic-features> for the <user>.
+        Update the <user> with { tier: "basic" }.
     }
     otherwise {
-        Redirect the <user> to the <subscription-page>.
+        Return an <Error: status> with { redirect: "/subscribe" }.
     }
 }
 ```
@@ -462,7 +462,7 @@ bound.
 
     for each <item> in <items> {
         Validate the <availability> for the <item>.
-        Reserve the <quantity> for the <item>.
+        Store the <reservation> into the <reservation-repository> with { item: <item> }.
     }
 
     Return an <OK: status> for the <order>.
@@ -517,7 +517,7 @@ Access the current index with `at`:
             <Add> the <score> to the <department: metrics>.
         }
 
-        Generate the <report> for the <department>.
+        Render the <report> to the <template: "department.tpl"> with <department>.
     }
 
     Return an <OK: status> for the <analytics>.
@@ -541,7 +541,7 @@ parallel_foreach = "parallel" , "for" , "each" , "<" , item_name , ">" ,
 **Format:**
 ```aro
 parallel for each <item> in <items> {
-    Process the <result> for the <item>.
+    Compute the <result: uppercase> from the <item>.
 }
 
 parallel for each <item> in <items> with <concurrency: 4> {
@@ -781,11 +781,22 @@ Extract the <selected: 0,2,4> from the <letters>.
 
 | Access Type | Returns |
 |-------------|---------|
-| Single element (first, last, numeric) | Single value or empty string if out of bounds |
-| Range (3-5) | Array of elements |
+| Single element (first, last, numeric) | Single value; see below when out of bounds |
+| Range (3-5) | Array of elements, clamped to the list |
 | Pick (3,5,7) | Array of elements |
 
-Out-of-bounds indices are silently ignored.
+**Out of bounds is currently an accident, not a rule.** A numeric specifier
+past the end falls through to the "unknown specifier" branch and binds the
+**whole collection** — `Extract the <item: 5> from the <short>.` on a two-element
+list binds `[1, 2]`, not an empty string and not a null. The subscript form
+`<items>[99]` behaves differently again, and differently between modes: the
+interpreter throws, the compiled binary returns `""`. ARO-0038 §6 says `nil` and
+this table used to say empty string; none of the three descriptions matched.
+Tracked as GitLab #843, which has to settle the behaviour before either document
+can state one.
+
+Empty-list access (`<empty: first>`) does bind an empty value, as ARO-0038 §6.2
+says.
 
 ---
 
@@ -980,7 +991,7 @@ keyword          += "when" | "match" | "case" | "otherwise" | "where"
             case true {
                 (* Reserve inventory for all items *)
                 for each <item> in <items> {
-                    Reserve the <quantity> from the <inventory> for the <item>.
+                    Store the <reservation> into the <reservation-repository> with <item>.
                 }
 
                 (* Update order status *)
@@ -1037,7 +1048,7 @@ keyword          += "when" | "match" | "case" | "otherwise" | "where"
                     Return an <OK: status> with the <session-token>.
                 }
                 otherwise {
-                    Increment the <failed-attempts> for the <user>.
+                    Compute the <failed-attempts> from <user: attempts> + 1.
                     <Lock> the <user: account> for the <security-policy>
                         when <failed-attempts> >= 5.
                     Return an <Unauthorized: error> for the <request>.

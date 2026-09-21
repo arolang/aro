@@ -118,6 +118,29 @@ public struct PluginsLock: Codable, Sendable {
     }
 }
 
+// MARK: - Lock File Errors
+
+/// Failures that concern the lock file itself rather than any one plugin
+public enum LockFileError: Error, CustomStringConvertible, Equatable {
+    /// `plugins.lock` exists but could not be parsed. The underlying parse
+    /// failure is carried as text so the error stays `Equatable` and can be
+    /// asserted on in tests.
+    case unreadable(path: String, underlying: String)
+
+    public var description: String {
+        switch self {
+        case .unreadable(let path, let underlying):
+            return """
+                Cannot read \(path): \(underlying)
+
+                The lock file records the exact commit of every installed plugin. \
+                It has been left untouched — fix the file by hand, restore it from \
+                version control, or delete it to start a fresh lock.
+                """
+        }
+    }
+}
+
 // MARK: - Lock File Manager
 
 /// Thread-safe manager for reading and writing `plugins.lock`
@@ -140,16 +163,33 @@ public final class LockFileManager: Sendable {
         FileManager.default.fileExists(atPath: lockFileURL.path)
     }
 
-    /// Load the current lock file, returning an empty one if it does not exist
-    public func load() -> PluginsLock {
-        (try? PluginsLock.load(from: lockFileURL)) ?? PluginsLock()
+    /// Load the current lock file.
+    ///
+    /// A *missing* lock file is an empty lock — that is how the first
+    /// `aro add` in a fresh application starts. A lock file that is
+    /// present but will not parse is an error, and deliberately not the
+    /// same thing: every caller of this method goes on to `save()` the
+    /// result, so answering "empty" for an unreadable file silently
+    /// rewrote the user's `plugins.lock` with a single entry and threw
+    /// away every other plugin's pinned commit. A YAML typo in a
+    /// committed lock file cost the whole file on the next install.
+    ///
+    /// Refusing leaves the damaged file exactly as it is, so the user can
+    /// fix the typo (or `git checkout` it) and keep their pins.
+    public func load() throws -> PluginsLock {
+        guard exists else { return PluginsLock() }
+        do {
+            return try PluginsLock.load(from: lockFileURL)
+        } catch {
+            throw LockFileError.unreadable(path: lockFileURL.path, underlying: "\(error)")
+        }
     }
 
     /// Upsert a plugin entry and persist the lock file
     public func upsert(_ plugin: LockedPlugin) throws {
         nsLock.lock()
         defer { nsLock.unlock() }
-        var lock = load()
+        var lock = try load()
         lock.upsert(plugin)
         try lock.save(to: lockFileURL)
     }
@@ -158,7 +198,7 @@ public final class LockFileManager: Sendable {
     public func remove(name: String) throws {
         nsLock.lock()
         defer { nsLock.unlock() }
-        var lock = load()
+        var lock = try load()
         lock.remove(name: name)
         // Remove the file if no plugins remain
         if lock.locked.isEmpty {
@@ -173,7 +213,7 @@ public final class LockFileManager: Sendable {
     /// - Returns: List of mismatched plugin names
     public func verify(pluginsDirectory: URL) throws -> [String] {
         guard exists else { return [] }
-        let lock = load()
+        let lock = try load()
         var mismatches: [String] = []
 
         for entry in lock.locked {

@@ -268,7 +268,6 @@ Output data externally:
 | `Return` | Send as response |
 | `Throw` | Raise an error |
 | `Send` | Transmit data |
-| `Emit` | Publish event |
 | `Write` | Write to storage |
 | `Store` | Persist data |
 | `Log` | Record for audit |
@@ -276,11 +275,28 @@ Output data externally:
 
 #### Export Actions
 
-Make available to other features:
+Make available beyond the current execution:
 
 | Verb | Description |
 |------|-------------|
-| `Publish` | Export variable |
+| `Publish` | Export a variable to the business activity |
+| `Emit` | Publish a domain event |
+| `Commit`, `Push`, `Tag` | Export to version control |
+| `Schedule` | Hand work to the scheduler |
+
+`Emit` was listed under Response here until GitLab #831; `EmitAction` declares
+`.export`. The reverse mismatch is also real and is *not* fixed here: `Store`,
+`Log`, `Send` and `Write` read as exports but declare `.response`, and roles
+drive data-flow analysis, so changing one is a behavioural change rather than a
+documentation fix. ARO-0004 §2.4 records that decision and GitLab #480 tracks
+it. §11 of ARO-0004 is generated from the code and is the authority on any
+individual action's role.
+
+#### Server Actions
+
+Manage services and the application lifecycle: `Start`, `Stop`, `Listen`,
+`Connect`, `Close`, `WaitForEvents` (`Keepalive`), `Copy`, `Move`, `Make`.
+There are **five** roles, not four.
 
 ---
 

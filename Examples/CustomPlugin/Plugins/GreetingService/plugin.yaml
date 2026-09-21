@@ -7,7 +7,6 @@ license: MIT
 provides:
 - type: swift-plugin
   path: Sources/
-  handler: greeting
 build:
   swift:
     minimum-version: '5.9'

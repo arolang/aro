@@ -21,7 +21,7 @@
         "http://127.0.0.1:18791/down"
     ].
 
-    For each <target> in <targets> {
+    for each <target> in <targets> {
         Request the <response> from <target>.
         Extract the <status> from the <response: status>.
 

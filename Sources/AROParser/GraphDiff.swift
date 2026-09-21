@@ -385,12 +385,13 @@ public struct AROGraphDiff: Sendable, Hashable {
     }
 
     /// Verb for pairing and for the node card. Non-ARO statements
-    /// (Publish, ForEach, …) report their type name instead.
+    /// (Publish, ForEach, …) report a name of their own instead.
+    ///
+    /// Each statement type declares that name as `displayVerb`. This used to
+    /// read the Swift type name back out of the runtime and strip the word
+    /// "Statement" from it, so renaming an AST type quietly changed what the
+    /// diff printed.
     public static func verb(of statement: any Statement) -> String {
-        if let aro = statement as? AROStatement {
-            return aro.action.verb
-        }
-        return String(describing: type(of: statement))
-            .replacingOccurrences(of: "Statement", with: "")
+        statement.displayVerb
     }
 }

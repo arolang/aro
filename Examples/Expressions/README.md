@@ -19,7 +19,7 @@ Calculates a shopping cart total with tax using arithmetic expressions, concaten
 
 ## Related Proposals
 
-- [ARO-0002: Expressions](../../Proposals/ARO-0002-expressions.md)
+- [ARO-0002: Control Flow](../../Proposals/ARO-0002-control-flow.md)
 
 ## Usage
 

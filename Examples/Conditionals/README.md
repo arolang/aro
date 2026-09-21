@@ -15,7 +15,7 @@ Shows how to route logic based on variable values using `when` clauses for inlin
 
 ## Related Proposals
 
-- [ARO-0004: Conditional Branching](../../Proposals/ARO-0004-conditional-branching.md)
+- [ARO-0002: Control Flow](../../Proposals/ARO-0002-control-flow.md)
 
 ## Usage
 

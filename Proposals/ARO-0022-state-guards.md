@@ -19,7 +19,7 @@ Event handlers often need to react only to specific states or conditions within 
     Extract the <status> from the <event: status>.
     Compare the <status> equals "paid".
     (* Only executes if comparison passes *)
-    Process the <payment> for the <event: order>.
+    Send the <payment-request> to the <payment-gateway> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```
@@ -29,7 +29,7 @@ State guards move this filtering to the handler declaration:
 ```aro
 (* With state guards - declarative filtering *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
-    Process the <payment> for the <event: order>.
+    Send the <payment-request> to the <payment-gateway> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```
@@ -52,7 +52,7 @@ Example:
 (* Only handles events where status is "paid" *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
     Extract the <order> from the <event: order>.
-    Process the <payment> for the <order>.
+    Send the <payment-request> to the <payment-gateway> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```

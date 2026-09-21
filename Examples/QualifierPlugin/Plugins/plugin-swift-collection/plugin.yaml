@@ -8,7 +8,6 @@ aro-version: '>=0.1.0'
 provides:
 - type: swift-plugin
   path: Sources/
-  handler: collections
 build:
   swift:
     minimum-version: '6.3'
