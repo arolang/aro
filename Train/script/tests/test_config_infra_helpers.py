@@ -90,7 +90,8 @@ class TestProvenance(ConfigHelperTest):
         self.assertEqual(prov['lineage'], {'variant_of': 'example:Foo'})
 
     def test_save_pair_stamps_and_records_run(self):
-        config.save_notebook_pair('NBTEST', {'instruction': 'do x', 'output': 'c', 'source': 's1'})
+        config.save_notebook_pair('NBTEST', {'instruction': 'do x', 'output': 'c', 'source': 's1',
+                                   'task_type': 'code_generation'})
         recs = self._read_records()
         # flagged metadata first line (issue #382)
         self.assertTrue(config.is_jsonl_metadata_record(recs[0]))
@@ -107,10 +108,10 @@ class TestProvenance(ConfigHelperTest):
 class TestBackupAndRollback(ConfigHelperTest):
     def _seed(self):
         config.save_notebook_pairs('NBA', [
-            {'instruction': 'a1', 'output': 'o1'},
-            {'instruction': 'a2', 'output': 'o2'},
+            {'instruction': 'a1', 'output': 'o1', 'task_type': 'code_generation'},
+            {'instruction': 'a2', 'output': 'o2', 'task_type': 'code_generation'},
         ])
-        config.save_notebook_pairs('NBB', [{'instruction': 'b1', 'output': 'o3'}])
+        config.save_notebook_pairs('NBB', [{'instruction': 'b1', 'output': 'o3', 'task_type': 'code_generation'}])
 
     def test_clean_backs_up_then_removes(self):
         self._seed()
