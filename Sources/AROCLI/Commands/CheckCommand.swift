@@ -852,9 +852,10 @@ struct PluginCheckSubcommand: ParsableCommand {
             if !plugins.isEmpty {
                 print("")
                 print("Plugin details:")
+                let lockedPlugins = try pm.lockFile.load()
                 for plugin in plugins {
                     let constraint = plugin.manifest.aroVersion ?? "(any)"
-                    let lock = pm.lockFile.load().entry(for: plugin.manifest.name)
+                    let lock = lockedPlugins.entry(for: plugin.manifest.name)
                     let commit = lock?.commit.map { String($0.prefix(7)) } ?? "not locked"
                     print("   \(plugin.manifest.name) v\(plugin.manifest.version)")
                     print("     aro-version: \(constraint)")

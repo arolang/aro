@@ -17,6 +17,7 @@ import ArgumentParser
 import Foundation
 import AROCompiler
 import ARORuntime
+import AROPackageManager
 
 /// Pre-compiles managed plugins (from a `Plugins/` directory) for inclusion in
 /// a native binary produced by `aro build`.
@@ -459,20 +460,14 @@ struct PluginCompiler: Sendable {
     /// Locate the `swift` executable across known install paths so
     /// `swift build --show-bin-path` works on hosts where /usr/bin/swift
     /// does not exist (notably the Linux CI image at /usr/share/swift).
+    ///
+    /// The candidate table this used to carry now lives in
+    /// `AROPackageManager.ToolchainLocator`, which the plugin installer shares:
+    /// the installer was hard-coding `/usr/bin/swift` for exactly the hosts this
+    /// helper existed to handle (GitLab #669). `$SWIFT` still wins, and `PATH` is
+    /// searched after the known locations.
     static func resolveSwiftExecutable() -> String? {
-        if let env = ProcessInfo.processInfo.environment["SWIFT"],
-           !env.isEmpty,
-           FileManager.default.isExecutableFile(atPath: env) {
-            return env
-        }
-        let candidates = [
-            "/usr/bin/swift",
-            "/usr/local/bin/swift",
-            "/usr/share/swift/usr/bin/swift",
-            "/opt/swift/usr/bin/swift",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift",
-        ]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        ToolchainLocator.find("swift")
     }
 
     // MARK: - Manifest language detection
