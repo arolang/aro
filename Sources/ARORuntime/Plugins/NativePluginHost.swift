@@ -1001,7 +1001,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             verbsMap: verbsMap,
             qualifiers: qualifierDescriptors,
             services: serviceDescriptors,
-            deprecations: deprecationList
+            deprecations: deprecationList,
+            // Both spellings, because the SDKs disagree: the Python
+            // decorator writes `handle`, the C macro writes `handler`.
+            declaredHandle: (dict["handle"] as? String)
+                ?? (dict["handler"] as? String)
         )
 
         // Create action descriptors. Stamp the namespace handle onto every entry
@@ -1423,6 +1427,14 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         pluginInfo?.services.map { $0.name } ?? []
     }
 
+    /// The namespace handle this plugin's own code declares, if any.
+    ///
+    /// For comparison against the manifest's, which is what actually
+    /// takes effect (#825).
+    public var declaredHandle: String? {
+        pluginInfo?.declaredHandle
+    }
+
     // MARK: - Helpers
 
     private func convertToSendable(_ value: Any) -> any Sendable {
@@ -1497,8 +1509,19 @@ struct NativePluginInfo: Sendable {
     let services: [NativeServiceDescriptor]
     /// Deprecated features
     let deprecations: [DeprecationDescriptor]
+    /// The namespace handle the plugin's own code declares (#825).
+    ///
+    /// The effective handle comes from `plugin.yaml`, not from here —
+    /// the manifest is what the loader reads and what `aro add` writes.
+    /// This is carried so the two can be *compared*: a plugin whose code
+    /// says `Collections` and whose manifest says `Stats` used to load
+    /// silently under the manifest's name, and every qualifier it ships
+    /// answered to a namespace its own source never mentions.
+    ///
+    /// Nil for a plugin that declares none, which is most of them.
+    let declaredHandle: String?
 
-    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [PluginQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = []) {
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [PluginQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = [], declaredHandle: String? = nil) {
         self.name = name
         self.version = version
         self.language = language
@@ -1507,6 +1530,7 @@ struct NativePluginInfo: Sendable {
         self.qualifiers = qualifiers
         self.services = services
         self.deprecations = deprecations
+        self.declaredHandle = declaredHandle
     }
 }
 

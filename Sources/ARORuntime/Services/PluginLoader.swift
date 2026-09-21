@@ -93,14 +93,28 @@ public final class PluginLoader: @unchecked Sendable {
 
     // MARK: - Public API
 
-    /// Load all plugins from the plugins directory
+    /// Load the plugin layouts a `plugin.yaml` does not describe.
+    ///
     /// - Parameters:
-    ///   - directory: Base directory containing the `plugins/` folder
-    ///   - excluding: Directory names to skip (already managed by UnifiedPluginLoader)
+    ///   - directory: the project root. The plugin directory is resolved
+    ///     from it by `PluginDirectory`, so this agrees with the managed
+    ///     loader about which directory that is, on every filesystem
+    ///     (#848).
+    ///   - excluding: names already loaded from a manifest.
     public func loadPlugins(from directory: URL, excluding: Set<String> = []) throws {
-        let pluginsDir = directory.appendingPathComponent("plugins")
+        guard let resolved = PluginDirectory.resolve(in: directory) else {
+            return  // No plugin directory, nothing to load.
+        }
+        try loadPlugins(fromPluginDirectory: resolved.url, excluding: excluding)
+    }
 
-        // Check if plugins directory exists
+    /// The same work, against a directory the caller has already resolved.
+    ///
+    /// `UnifiedPluginLoader` uses this so both passes are guaranteed to
+    /// walk one directory rather than each appending its own spelling —
+    /// which is what made a project behave differently on Linux (#848).
+    public func loadPlugins(fromPluginDirectory pluginsDir: URL,
+                            excluding: Set<String> = []) throws {
         guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
             return // No plugins directory, nothing to load
         }
@@ -166,16 +180,16 @@ public final class PluginLoader: @unchecked Sendable {
         }
     }
 
-    /// Load managed plugins from the Plugins/ directory
-    /// These are plugins installed via `aro add` command
-    /// - Parameter directory: Base directory containing the `Plugins/` folder
+    /// Load the plugins installed by `aro add`, each with a manifest.
+    ///
+    /// - Parameter directory: the project root. Resolved through
+    ///   `PluginDirectory` so it finds the same directory the rest of
+    ///   the loader does, whatever the filesystem's case rules (#848).
     public func loadManagedPlugins(from directory: URL) throws {
-        let pluginsDir = directory.appendingPathComponent("Plugins")
-
-        // Check if Plugins directory exists
-        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
-            return // No Plugins directory, nothing to load
+        guard let resolved = PluginDirectory.resolve(in: directory) else {
+            return // No plugin directory, nothing to load
         }
+        let pluginsDir = resolved.url
 
         #if os(Windows)
         let libraryExtension = "dll"
@@ -2016,6 +2030,19 @@ public final class PluginLoader: @unchecked Sendable {
             return found
         }
 
+        // SwiftPM's current build system writes `out/Products/Release/`
+        // instead (GitLab #815 found the same assumption in the compiler's
+        // harvest step). `out` has no hyphen in it, so the arch-directory
+        // scan below walks straight past it, and a plugin built by a recent
+        // toolchain was reported missing.
+        if let found = searchReleaseDir(
+            buildDir.appendingPathComponent("out")
+                .appendingPathComponent("Products")
+                .appendingPathComponent("Release")
+        ) {
+            return found
+        }
+
         // Next, search for arch-specific directories like:
         // .build/arm64-apple-macosx/release/
         // .build/x86_64-apple-macosx/release/
@@ -2745,7 +2772,12 @@ private struct CPluginServiceWrapper: AROService {
     }
 
     init() throws {
-        fatalError("CPluginServiceWrapper requires name and loader")
+        // Same as the other plugin service wrappers (#647): this is
+        // registered as an instance, and the protocol path that could
+        // reach here should fail one lookup rather than the process.
+        throw ServiceError.initializationFailed(
+            Self.name,
+            reason: "a C plugin service cannot be created without the plugin it wraps — register it as an instance")
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {

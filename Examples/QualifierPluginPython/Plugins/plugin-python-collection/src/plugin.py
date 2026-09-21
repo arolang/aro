@@ -27,7 +27,7 @@ from typing import Any, List
 from aro_plugin_sdk import AROInput, export_abi, plugin, qualifier, run
 
 
-@plugin(name="plugin-python-collection", version="1.0.0", handle="Collections")
+@plugin(name="plugin-python-collection", version="1.0.0", handle="Stats")
 class CollectionPlugin:
     pass
 

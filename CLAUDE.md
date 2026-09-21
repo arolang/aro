@@ -438,14 +438,21 @@ MyApp/
         └── src/             # Source files
 ```
 
-**`Plugins/` and `plugins/` are two different loaders, not two spellings**
-(GitLab #848). `loadManagedPlugins` reads `Plugins/` and requires one
-subdirectory per plugin with a `plugin.yaml` — the layout `aro add` installs
-and `aro new plugin` scaffolds. `loadPlugins` reads lowercase `plugins/` and
-takes loose `.swift` files, prebuilt dylibs and bare Swift packages with no
-manifest. On macOS both walk the same directory because the filesystem is
-case-insensitive; on Linux only the matching one does. Use `Plugins/` with a
-manifest for anything new.
+**`Plugins/` is the only plugin directory** (GitLab #848). A lowercase
+`plugins/` is still read, with a deprecation warning, and will stop being read.
+
+The two were never interchangeable, which is why this is worth a paragraph.
+They used to be handled by two different loaders: `loadManagedPlugins` read
+`Plugins/` and required one subdirectory per plugin with a `plugin.yaml` — the
+layout `aro add` installs and `aro new plugin` scaffolds — while `loadPlugins`
+read lowercase `plugins/` and took loose `.swift` files, prebuilt libraries and
+bare Swift packages with no manifest. On macOS and Windows those are the same
+directory, so both loaders walked it and one of them succeeded; on Linux they
+are two, and only the matching one ran. A project therefore loaded a different
+set of plugins depending on the developer's filesystem.
+
+One directory is resolved now, and every layout above is loaded from it. Use
+`Plugins/` with a manifest for anything new.
 
 ### Key Files
 
@@ -502,7 +509,14 @@ provides:
 The root-level `handle:` field (PascalCase) is the canonical way to declare the namespace.
 - Qualifiers are accessed as `handle.qualifier` (e.g., `Collections.pick-random`)
 - Actions are invoked as `Handle.Verb` (e.g., `Markdown.ToHTML`)
-- The legacy `handler:` inside `provides:` still works but emits a deprecation warning
+- The legacy `handler:` inside `provides:` still works but emits a deprecation
+  warning — including when a root-level `handle:` is also present, which it did
+  not before (GitLab #825). If the two name different namespaces, the root-level
+  one wins and the warning says so.
+- A plugin whose **code** declares a handle that disagrees with its manifest
+  warns too. The manifest wins, because it is what the loader reads and what
+  `aro add` writes; it used to win silently, so a plugin could ship every
+  qualifier under a namespace its own source never mentioned.
 
 Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
 The runtime automatically registers them as `handle.qualifier` in `QualifierRegistry`.
