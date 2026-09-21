@@ -88,3 +88,29 @@ and a shrunken benchmark. Fixed floors kept but demoted to a collapse net.
   post-#796 gate: REFUSED — syntax_pass_rate regressed 75.5% -> 44.7%; 29 prompts got
                   worse and 0 got better (exact McNemar p=0.0000 < 0.05)
 Exit 0 iff the demonstration holds (old accepts, new refuses).
+
+## #807 — work done
+
+New `Train/script/release_metadata.py` + `tests/test_release_metadata.py`.
+NB27 now computes the provenance once (cell 12, after SYSTEM_PROMPT exists) and writes it
+into the manifest (cell 20), the model card and version_history (cell 16), and ships a copy
+of the manifest inside QUANT_DIR so the HF cache carries it too.
+
+**How min_cli_version was established** — mechanically, not by picking a number.
+`derive_min_cli_version` takes the later of two repository facts:
+ 1. earliest semver tag containing the commit that introduced each `aro ask` tool
+    (`git log -S 'name: "<tool>"' -- Sources/AROAsk`, then `git tag --contains`):
+    all 18 tools land in d7695769 → first tag **0.10.0**;
+ 2. earliest tag containing the commit that made `ARO-Lang/aro-coder-6bit` the default
+    model id (4964867178, "rename(model): aro-coder-4bit → aro-coder-6bit") → **0.11.3**.
+Answer: **0.11.3**. Verified live: `python3 Train/script/release_metadata.py` prints
+  aro_version 0.12.1-15-g…, catalog_hash 3187f658c9e07e65, min_cli_version 0.11.3,
+  basis {tool_vocabulary: 0.10.0, tools_checked: 18, tools_located: 18,
+         default_model_id: 0.11.3}
+Installed CLI is 0.12.0; newest tag 0.12.1. There is no 1.x, so the shipped "1.0.0" named
+a release that does not exist.
+
+NOT DONE (needs Sources/, outside this MR's remit): having `aro ask` warn on a catalog-hash
+mismatch. `release_metadata.catalog_drift()` returns the exact sentence to print; the CLI
+side is a one-line comparison. Also note `min_cli_version` is read by nothing in Sources/
+today, so it is currently documentation rather than a check.

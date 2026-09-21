@@ -277,3 +277,41 @@ python3 -m pytest Train/script/tests/test_release_gate.py -q
 `--demo` exits non-zero unless it demonstrates its point: the old thresholds
 accept a 45 % model and the new gate refuses it.
 <!-- end: release gate (GitLab #796) -->
+
+<!-- begin: release provenance (GitLab #807) -->
+## What a released model records about ARO
+
+`script/release_metadata.py` builds `release/model_manifest.json`. The manifest
+used to describe the model and say nothing about the language: no ARO version,
+no commit, no catalogue — and `min_cli_version: "1.0.0"`, for a CLI whose newest
+tag is 0.12.1 and which has never had a 1.x release.
+
+| Field | What it is for |
+|---|---|
+| `aro_version`, `aro_commit` | The ARO-Lang tag and commit the model was built against. The corpus already stamped `aro_lang_commit`; it was never propagated to the release |
+| `catalog_hash` | Digest of the action and qualifier catalogues (verbs, roles, prepositions, qualifier names — not descriptions). The key a CLI compares against its own to tell a user the language moved since the model was built |
+| `corpus_hash` | Digest of the training corpus, so a release ties back to the data that produced it |
+| `system_prompt_hash` | The prompt ships inside the model directory and `aro ask` reads it back, so it is versioned with the same key |
+| `min_cli_version` + `min_cli_version_basis` | **Derived, not chosen** (below). Null, with a reason, when the derivation cannot run |
+
+### How `min_cli_version` is derived
+
+Two facts in the repository, and the answer is the later of them:
+
+1. the earliest release that registers **every tool the model was trained to
+   call** — a reply invoking a tool the CLI never registered does nothing;
+2. the earliest release whose `aro ask` **resolves this model id by default**,
+   without the user passing `--model`.
+
+For `ARO-Lang/aro-coder-6bit` that is **0.11.3**: the whole tool vocabulary
+landed together in 0.10.0, and 0.11.3 is where the default model became the
+6-bit build. Recompute it any time:
+
+```bash
+python3 Train/script/release_metadata.py
+```
+
+`catalog_drift(manifest, running_hash)` returns the sentence `aro ask` should
+print on a mismatch. Nothing in `Sources/` reads it yet — wiring the warning
+into the CLI is a change outside `Train/`.
+<!-- end: release provenance (GitLab #807) -->

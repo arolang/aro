@@ -287,7 +287,7 @@ train:release-gate:
   image: python:3.12-slim
   script:
     - pip install --no-cache-dir --quiet pytest
-    - python3 -m pytest Train/script/tests/test_release_gate.py -q
+    - python3 -m pytest Train/script/tests/test_release_gate.py Train/script/tests/test_release_metadata.py -q
     - python3 Train/script/release_gate.py --demo
 
 # =============================================================================
