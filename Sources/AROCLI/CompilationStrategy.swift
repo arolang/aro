@@ -66,8 +66,10 @@ struct CompilationStrategy: Sendable {
         var size: Bool
         var strip: Bool
         var release: Bool
-        var staticLink: Bool
-        var dynamicLink: Bool
+        /// How the Swift runtime is bound to the binary. Resolved once by
+        /// `BuildCommand` (GitLab #815) so the plugin pre-compile stage and
+        /// this pipeline cannot disagree about which build they are in.
+        var linkMode: CCompiler.LinkMode
         var verbose: Bool
         var keepIntermediate: Bool
         var emitLLVM: Bool
@@ -86,24 +88,32 @@ struct CompilationStrategy: Sendable {
         case emittedLLVMOnly
     }
 
-    /// Run the native compilation pipeline.
+    /// Resolve `--static` / `--dynamic` into the single link mode the whole
+    /// build runs under.
     ///
-    /// - Throws: `ExitCode.failure` on any hard failure (code generation, IR
-    ///   write, object emission, missing runtime, mutually-exclusive link flags,
-    ///   or linking) — matching the previous inline behaviour.
-    func execute(_ request: Request) throws -> Outcome {
-        // --static and --dynamic are mutually exclusive; --dynamic wins if both
-        // are set (caller asked for dynamic explicitly). Default is static.
-        //
-        // Resolved here, first, because code generation needs it: the answer to
-        // "may this binary load a plugin shared object?" is fixed when it is
-        // linked, so it has to be written into the binary (GitLab #618).
-        if request.staticLink && request.dynamicLink {
+    /// It lives here, and is called once from `BuildCommand` before anything
+    /// else happens, because the choice used to be read *inside* `execute()` —
+    /// long after managed plugins had already been baked for a static link. A
+    /// `--dynamic` build therefore reported a static-linking failure it could
+    /// never have hit (GitLab #815). One read, one value, passed to everything
+    /// that acts on it.
+    ///
+    /// `--dynamic` wins when both are given: it was asked for explicitly, while
+    /// `--static` is also the default.
+    static func resolveLinkMode(staticLink: Bool, dynamicLink: Bool) throws -> CCompiler.LinkMode {
+        if staticLink && dynamicLink {
             print("Error: --static and --dynamic are mutually exclusive.")
             throw ExitCode.failure
         }
-        let effectiveLinkMode: CCompiler.LinkMode = request.dynamicLink ? .dynamicLink : .staticLink
+        return dynamicLink ? .dynamicLink : .staticLink
+    }
 
+    /// Run the native compilation pipeline.
+    ///
+    /// - Throws: `ExitCode.failure` on any hard failure (code generation, IR
+    ///   write, object emission, missing runtime, or linking) — matching the
+    ///   previous inline behaviour.
+    func execute(_ request: Request) throws -> Outcome {
         let llvmResult: LLVMCodeGenerationResult
 
         do {
@@ -115,7 +125,7 @@ struct CompilationStrategy: Sendable {
                 embeddedPlugins: request.embeddedPlugins.isEmpty ? nil : request.embeddedPlugins,
                 staticPlugins: request.staticPluginIRInfos.isEmpty ? nil : request.staticPluginIRInfos,
                 pythonPlugins: request.pythonPluginIRInfos.isEmpty ? nil : request.pythonPluginIRInfos,
-                linkMode: effectiveLinkMode.recordedName,
+                linkMode: request.linkMode.recordedName,
                 sourceFilename: request.entryFilename,
                 sourceDirectory: request.sourceDirectory,
                 sourceFileMap: request.sourceFileMap
@@ -214,6 +224,8 @@ struct CompilationStrategy: Sendable {
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: request.verbose)
 
         AROLogger.debug("CCompiler created", subsystem: "build")
+
+        let effectiveLinkMode = request.linkMode
 
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,

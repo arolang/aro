@@ -480,13 +480,20 @@ The runtime automatically registers them as `handle.qualifier` in `QualifierRegi
 
 ### Binary Mode Support
 
-Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes:
-- During `aro build`, plugins in `Plugins/` are compiled and bundled
-- Swift/C plugins are compiled to dynamic libraries
-- Python plugins are copied with their source files
-- Native plugins are linked INTO the binary, their symbols renamed
-  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
-  Python plugins ship as source beside it
+Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes,
+but the two link modes bundle them differently — and the choice is resolved once, in
+`BuildCommand`, before plugins are compiled, so the plugin stage knows which build it
+is in (GitLab #815).
+
+**`--static` (the default) bakes native plugins in.** A Swift package plugin is built
+with `swift build -c release` if nothing built it already, C sources are compiled, and
+a Rust crate gets a `staticlib`; the resulting `.o` files are linked INTO the binary
+with their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexist
+(`Linker.swift`). No `dlopen` at run time.
+
+**`--dynamic` ships the plugin's shared library beside the binary** and loads it at
+startup the way the interpreter does. Nothing is baked in, and no object files are
+needed.
 
 Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
 the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
