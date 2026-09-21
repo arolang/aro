@@ -626,14 +626,14 @@ public final class AROLanguageServer: Sendable {
     ) -> String? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.action.span) {
+                if aro.action.span.contains(position) {
                     isActionVerb = true
                     return aro.action.verb
                 }
-                if isPositionInSpan(position, aro.result.span) {
+                if aro.result.span.contains(position) {
                     return aro.result.base
                 }
-                if isPositionInSpan(position, aro.object.noun.span) {
+                if aro.object.noun.span.contains(position) {
                     return aro.object.noun.base
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
@@ -656,14 +656,14 @@ public final class AROLanguageServer: Sendable {
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.action.span) {
+                    if stage.action.span.contains(position) {
                         isActionVerb = true
                         return stage.action.verb
                     }
-                    if isPositionInSpan(position, stage.result.span) {
+                    if stage.result.span.contains(position) {
                         return stage.result.base
                     }
-                    if isPositionInSpan(position, stage.object.noun.span) {
+                    if stage.object.noun.span.contains(position) {
                         return stage.object.noun.base
                     }
                 }
@@ -735,19 +735,6 @@ public final class AROLanguageServer: Sendable {
             ],
             "kind": kind  // 1=Text, 2=Write, 3=Read
         ]
-    }
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-        return true
     }
 
     private func handleCompletionSync(params: Any?) -> [String: Any]? {

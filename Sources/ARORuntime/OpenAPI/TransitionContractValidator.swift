@@ -298,29 +298,10 @@ public enum TransitionContractValidator {
         let needle = state.lowercased()
         var scored: [(name: String, distance: Int)] = []
         for candidate in states {
-            let distance = editDistance(candidate.lowercased(), needle)
+            let distance = EditDistance.levenshtein(candidate.lowercased(), needle)
             if distance <= 2 { scored.append((candidate, distance)) }
         }
         scored.sort { $0.distance == $1.distance ? $0.name < $1.name : $0.distance < $1.distance }
         return scored.prefix(limit).map(\.name)
-    }
-
-    private static func editDistance(_ a: String, _ b: String) -> Int {
-        let x = Array(a), y = Array(b)
-        if x.isEmpty { return y.count }
-        if y.isEmpty { return x.count }
-
-        var previous = Array(0...y.count)
-        var current = [Int](repeating: 0, count: y.count + 1)
-
-        for i in 1...x.count {
-            current[0] = i
-            for j in 1...y.count {
-                let substitution = previous[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1)
-                current[j] = Swift.min(previous[j] + 1, current[j - 1] + 1, substitution)
-            }
-            swap(&previous, &current)
-        }
-        return previous[y.count]
     }
 }

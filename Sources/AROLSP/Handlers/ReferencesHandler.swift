@@ -108,8 +108,8 @@ public struct ReferencesHandler: Sendable {
     private func findSymbolNameInStatements(_ statements: [Statement], position: SourceLocation) -> String? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.result.span) { return aro.result.base }
-                if isPositionInSpan(position, aro.object.noun.span) { return aro.object.noun.base }
+                if aro.result.span.contains(position) { return aro.result.base }
+                if aro.object.noun.span.contains(position) { return aro.object.noun.base }
                 if let expr = aro.valueSource.asExpression,
                    let name = findSymbolNameInExpression(expr, position: position) { return name }
             } else if let forEachLoop = statement as? ForEachLoop {
@@ -124,8 +124,8 @@ public struct ReferencesHandler: Sendable {
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.result.span) { return stage.result.base }
-                    if isPositionInSpan(position, stage.object.noun.span) { return stage.object.noun.base }
+                    if stage.result.span.contains(position) { return stage.result.base }
+                    if stage.object.noun.span.contains(position) { return stage.object.noun.base }
                     if let expr = stage.valueSource.asExpression,
                        let name = findSymbolNameInExpression(expr, position: position) { return name }
                 }
@@ -138,7 +138,7 @@ public struct ReferencesHandler: Sendable {
 
     private func findSymbolNameInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> String? {
         if let varRef = expression as? VariableRefExpression {
-            if isPositionInSpan(position, varRef.span) {
+            if varRef.span.contains(position) {
                 return varRef.noun.base
             }
         } else if let binary = expression as? BinaryExpression {
@@ -199,22 +199,6 @@ public struct ReferencesHandler: Sendable {
     }
 
     // MARK: - Helpers
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-
-        return true
-    }
 
     private func createLocationDict(lines: LineIndex, uri: String, span: SourceSpan) -> [String: Any] {
         let lspRange = PositionConverter.toLSP(span, using: lines)
