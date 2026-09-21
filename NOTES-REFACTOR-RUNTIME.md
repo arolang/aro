@@ -113,3 +113,46 @@ way on main. The GitHub wiki also documents CrawlPage dedup; it is outside this 
 Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**.
 Examples: DataPipeline (where/aggregation modifiers), Computations (literals, qualifiers),
 ApplicationEnd (Runtime lifecycle + shutdown).
+
+## #728 — Configure is its own action
+- New `Actions/BuiltIn/ConfigureAction.swift`: `ConfigurableSetting` + `ConfigurableSettings.all`
+  (http-server `max-body`/`max-request-body`/`maxBody`; repository `ttl`, `maxSize`) and
+  `ConfigureAction` (role own, verbs ["configure"], same prepositions as Update).
+- `UpdateAction` moved out of ComputeAction.swift (2646 → 2317 lines) into its own file, verbs now
+  ["update","modify","change","set"]. It still reaches the settings table, so
+  `Update the <cache-repository: ttl> with 60.` behaves exactly as before.
+- Shared `EntityUpdate.apply` holds the generic dictionary path both use.
+- The `NeedsAsyncExecution` round trip is gone from the common path: `execute` decides which path
+  applies before running the sync body (the sync body still exists and is what the compiled
+  runtime calls, and still throws `NeedsAsyncExecution` for the repository paths so
+  `ActionRunner.executeSynchronouslyIfSupported` falls through as it always did).
+- `FeatureSetExecutor` no longer compares a verb string: `if ConfigureAction.handles(verb)`.
+- Removed `"configure": "update"` from `ActionRunner.verbMappings`. **This was mandatory**: the
+  compiled runtime's synchronous action table is keyed by canonical verb, so leaving the mapping
+  would have sent Configure statements to UpdateAction in compiled binaries only. Neither verb is
+  in `deferrableVerbs` or `forceAtSiteVerbs`, so deferral is unaffected. One consequence worth
+  naming: an `ActionMiddleware` registered for "update" no longer also sees Configure statements.
+
+**`aro actions` diff (intended, exactly this and nothing else):**
+```
+> Configure  own  for, from, into, to, w  configure
+< Update  own  ... change, configure, modify, set, update
+> Update  own  ... change, modify, set, update
+< 71 built-in actions  →  > 72 built-in actions
+```
+`Scripts/generate-action-reference.py` regenerated ARO-0004 §11 (72 → 73 rows as the script counts);
+`--check` passes.
+
+**One test changed, and I want it flagged:** `ActionRoleConsistencyTests.testActionCount` asserts the
+built-in action count (71 → 72). It is a bookkeeping constant whose own comment says "If an action
+is added, both this number and the table need updating". No other test was touched, and 1840 tests
+pass.
+
+Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**; targeted
+`UpdateIntoRepositorySession` (7) and `ConfigureRebindHint` (7) suites pass. Ran
+Examples/ConfigurableTimeout, and a probe covering all four paths (repository ttl, http-server
+max-body, ad-hoc `<validation: timeout>`, unset setting reading null, `Update the <order: status>`,
+`Set`): interpreted output correct. Also `aro build` of that probe and ran the binary — the compiled
+binary reports "Property 'retries' not found" where the interpreter answers null, which is a
+PRE-EXISTING divergence: `markConfigured` is only ever called by the interpreter's executor
+(no call anywhere in Bridge/), so compiled mode never had ARO-0035 §3.2's optional-read behaviour.

@@ -751,9 +751,10 @@ public final class FeatureSetExecutor: Sendable {
             // A Configure statement marks its category, so a later read of
             // an UNSET setting answers nil instead of the happy-path error —
             // configuration is optional by definition (ARO-0035 §3.2,
-            // GitLab #506). Only the executor knows the verb, so the mark
-            // lives here rather than in the shared UpdateAction.
-            if verb.lowercased() == "configure" {
+            // GitLab #506). The mark lives here rather than in the action
+            // because it has to outlive the statement scope the action runs
+            // in; which verbs mean "configure" is the action's own business.
+            if ConfigureAction.handles(verb) {
                 (outerContext as? RuntimeContext)?.markConfigured(resultDescriptor.base)
             }
 
