@@ -38,12 +38,12 @@
 
     (* Echo the message back to the sender with prefix *)
     Create the <echo-prefix> with "Echo: ".
-    Compute the <echo> from <echo-prefix> + <message>.
+    Compute the <echo> from <echo-prefix> ++ <message>.
     Send the <echo> to the <websocket-connection: connectionId>.
 
     (* Also broadcast to all connected clients *)
     Create the <broadcast-prefix> with "Broadcast: ".
-    Compute the <broadcast-message> from <broadcast-prefix> + <message>.
+    Compute the <broadcast-message> from <broadcast-prefix> ++ <message>.
     Broadcast the <broadcast-message> to the <websocket>.
 
     Return an <OK: status> for the <message>.

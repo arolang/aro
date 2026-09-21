@@ -142,9 +142,16 @@ Split the <parts> from the <csv> by /,/.
 (* Parse CSV line *)
 Create the <line> with "John,Doe,30,Engineer".
 Split the <fields> from the <line> by /,/.
-Extract the <first-name: first> from the <fields>.
-Extract the <last-name: 1> from the <fields>.
+Extract the <first-name: first> from the <fields>.   (* John *)
+Extract the <role: 0> from the <fields>.             (* Engineer *)
+Extract the <age: 1> from the <fields>.              (* 30 *)
 ```
+
+> **A numeric index counts back from the end** (ARO-0038): `0` is the last
+> element, `1` the one before it. `first` and `last` mean what they say and are
+> unaffected. The examples in this section used to read `<last-name: 1>` as
+> though `1` were the second element from the front, which binds `30` (GitLab
+> #831).
 
 ### 4.2 Log Parsing
 
@@ -152,9 +159,13 @@ Extract the <last-name: 1> from the <fields>.
 (* Parse log entry: "2024-01-15 10:30:45 INFO Server started" *)
 Split the <parts> from the <log-line> by /\s+/.
 Extract the <date: first> from the <parts>.
-Extract the <time: 1> from the <parts>.
-Extract the <level: 2> from the <parts>.
+Extract the <message: 0> from the <parts>.       (* "started" — the last field *)
+Extract the <subject: 1> from the <parts>.       (* "Server" *)
 ```
+
+Fields counted from the front, in a record whose tail varies in length, are a
+job for `Group` or a `match`, not for numeric specifiers — which is the practical
+consequence of indexing from the end.
 
 ### 4.3 URL Query String
 
@@ -219,9 +230,9 @@ Split pairs naturally with list element access (ARO-0038):
 Split the <parts> from the <path> by /\//.
 Extract the <filename: last> from the <parts>.
 
-(* Split and get range *)
+(* Split and get a range — also counted from the end, and in that order *)
 Split the <words> from the <sentence> by /\s+/.
-Extract the <first-three: 0-2> from the <words>.
+Extract the <last-three: 0-2> from the <words>.
 ```
 
 ---

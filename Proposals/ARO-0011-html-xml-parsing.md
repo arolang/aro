@@ -1,4 +1,4 @@
-# ARO-0011: HTML/XML Parsing
+# ARO-0011: HTML Parsing
 
 * Proposal: ARO-0011
 * Author: ARO Language Team
@@ -7,7 +7,13 @@
 
 ## Abstract
 
-This proposal introduces the `<ParseHtml>` action for extracting structured data from HTML content. Using specifiers, developers can extract links, page content, or text elements from HTML strings retrieved via HTTP requests or read from files.
+**XML is not implemented.** The title said "HTML/XML" while §4.2 listed XML as
+something that "could" be added, so the document promised a parser that does not
+exist (GitLab #833). `Parse` handles HTML — via SwiftSoup — and JSON, and the
+Link header; there is no XPath and no `ParseXml`. Retitled accordingly; the
+filename is left alone so links keep resolving.
+
+This proposal introduces the `Parse` action for extracting structured data from HTML content. Using specifiers, developers can extract links, page content, or text elements from HTML strings retrieved via HTTP requests or read from files.
 
 ## Parse dispatch (GitLab #521)
 
@@ -303,7 +309,7 @@ ParseHtml the <headers: text> from the <html> using "h1, h2, h3".
 
 ### 4.2 XML Parsing Variant
 
-A `<ParseXml>` action could provide similar functionality for XML documents with XPath support:
+A `ParseXml` action **could** provide similar functionality — this is a sketch, not a specification for XML documents with XPath support:
 
 ```aro
 (* Hypothetical future syntax *)

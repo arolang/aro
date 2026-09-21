@@ -35,7 +35,7 @@
     (* 2. Retrieve commit log *)
     Log "--- Recent Commits ---" to the <console>.
     Retrieve the <log> from the <git>.
-    For each <entry> in <log> {
+    for each <entry> in <log> {
         Extract the <short> from the <entry: short>.
         Extract the <message> from the <entry: message>.
         Extract the <author> from the <entry: author>.

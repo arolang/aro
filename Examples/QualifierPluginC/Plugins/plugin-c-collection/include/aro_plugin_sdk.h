@@ -1,5 +1,5 @@
 /*
- * aro_plugin_sdk.h  -  ARO C/C++ Plugin SDK  (ARO-0073 / ARO-0045)
+ * aro_plugin_sdk.h  -  ARO C/C++ Plugin SDK  (ARO-0087 / ARO-0045)
  * ================================================================
  *
  * Single-header, stb-style SDK for writing ARO plugins in C or C++.
@@ -39,7 +39,7 @@
  * registration tables populated via __attribute__((constructor)).
  *
  * LICENSE: MIT
- * SPEC:    ARO-0073 (Native Plugin ABI), ARO-0045 (Package Manager)
+ * SPEC:    ARO-0087 (Plugin SDK), ARO-0045 (Package Manager)
  */
 
 #ifndef ARO_PLUGIN_SDK_H

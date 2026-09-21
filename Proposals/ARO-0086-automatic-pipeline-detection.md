@@ -54,9 +54,21 @@ transactions → current-year → high-value → completed → electronics
 
 ### Three Core Principles
 
-1. **Zero New Syntax**: No `|>`, no `then`, no special keywords
+1. **No new syntax needed**: detection reads ordinary statements
 2. **Natural Language**: Reads like instructions to a human
 3. **Automatic Optimization**: Compiler and runtime handle the rest
+
+> **`|>` does exist.** ARO-0067 shipped it — `Lexer.swift:201` produces a `.pipe`
+> token, `Parser.swift:388` builds a `PipelineStatement`, and both the
+> interpreter (`FeatureSetExecutor.swift:529`) and the code generator handle it.
+> This proposal listed it under "what we didn't do", which read as though the
+> operator had been rejected (GitLab #831).
+>
+> The two are not rivals, because `|>` threads nothing: the executor simply runs
+> each stage in order, and every stage still names the previous stage's result
+> variable itself (`FeatureSetExecutor.swift:536`). It is a way of writing that
+> a group of statements is one pipeline. The *analysis* described here needs no
+> operator, and applies whether or not one is written.
 
 ### Why Immutability Enables This
 
