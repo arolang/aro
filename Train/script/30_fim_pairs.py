@@ -59,6 +59,7 @@ from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, NearDuplicateIndex,
     ARO_APPLICATION_ROOT,
 )
+import stage_runner  # noqa: E402
 
 NOTEBOOK_TAG = 'NB30_fim'
 
@@ -153,15 +154,17 @@ def build_pairs(per_file: int) -> tuple[list[dict], dict]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     ap.add_argument('--per-file', type=int, default=2)
     args = ap.parse_args()
+    opts = stage_runner.StageOptions.from_args(args)
 
     probe = subprocess.run(['aro', '--version'], capture_output=True)
     if probe.returncode != 0:
         sys.exit('no working `aro` on PATH — refusing to emit unvalidated fim data')
 
     pairs, stats = build_pairs(args.per_file)
+    pairs = opts.apply(pairs)
     print(f"files: {stats['files']} (skipped: {stats['unchecked']} failed "
           f"check, {stats['no_mask']} nothing maskable) | "
           f"dups dropped: {stats['dup']}")

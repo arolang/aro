@@ -73,6 +73,7 @@ from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, aro_check_snippet, auto_wrap_aro,
     _FEATURESET_HEADER_RE,
 )
+import stage_runner  # noqa: E402
 
 NOTEBOOK_TAG = 'NB32_notebooks'
 
@@ -666,7 +667,7 @@ def aro_check_audit(pairs: list[dict]) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     ap.add_argument('--notebook', help='substring match — mine only these notebooks')
     ap.add_argument('--repeats', type=int, default=2,
                     help='executions per notebook; >1 enables the '
@@ -689,6 +690,11 @@ def main():
         notebooks = [n for n in notebooks if args.notebook in n.name]
     if not notebooks:
         sys.exit(f'no .repl notebooks found under {LEARNING_DIR}')
+    # --limit caps the notebooks EXECUTED, not the pairs kept: executing
+    # them is the expensive half, and a smoke test wants the data path
+    # exercised end to end on one notebook (GitLab #803).
+    opts = stage_runner.StageOptions.from_args(args)
+    notebooks = opts.apply(notebooks)
 
     funnel = FunnelCounter('notebook_pairs')
     coverage = {}

@@ -231,6 +231,26 @@ action-reference:
     - python3 Scripts/generate-action-reference.py --check
 
 # =============================================================================
+# The training pipeline's Python was never tested by CI (GitLab #803)
+# =============================================================================
+# Train/ is Apple-Silicon-only where it touches mlx, but everything that decides
+# what the pipeline PRODUCES — the shared helpers, the hyper-parameter table,
+# the stall watchdog, the sandbox, the run archive — is ordinary Python that a
+# Linux runner can prove. This job runs those tests, and the two checks that
+# keep a table from drifting away from the notebooks that read it.
+train-tests:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --quiet pytest PyYAML
+    - python3 -m pytest Train/script/tests -q
+    - python3 Train/script/check_hparams.py
+    - python3 Train/script/run_archive.py --dry-run --release ci || true
+    # Not applicable off Apple Silicon: exit 2 is the expected answer here, and
+    # asserting it keeps the preflight honest about saying so.
+    - python3 Train/script/mlx_preflight.py --no-record; test $? -eq 2
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:

@@ -200,9 +200,34 @@ Open `script/00_META_PIPELINE.ipynb` and run all cells. The meta notebook:
 - renders a live status table with elapsed time and the last error line on
   failure.
 
-Per-stage timeouts live in `TIMEOUT_OVERRIDES` inside the meta notebook
-(`0` means "no timeout"). Long-running stages (10, 17, 20, 21) default to
-no timeout.
+A stage is killed when it stops **writing**, not when it has been running for
+too long. Every timeout in the meta notebook used to be `0`, because a
+wall-clock cap kept killing fine-tunes that legitimately run for hours — and
+the cost was that a genuinely wedged stage blocked the pipeline until someone
+noticed. `stage_runner.run_notebook()` watches the stage's log instead: no
+growth for `ARO_TRAIN_STALL_TIMEOUT` seconds (default 1800) and the stage is
+killed and reported as `stalled`. A six-hour training run printing loss lines
+is never touched. Hard wall-clock caps remain available per stage in
+`MAX_RUNTIME_OVERRIDES`, and are empty by default.
+
+### Dry runs and smoke tests
+
+Every stage understands the same two switches. Scripts take them as flags;
+notebooks read them from `ARO_TRAIN_DRY_RUN` / `ARO_TRAIN_LIMIT`.
+
+| Switch | Meaning |
+|--------|---------|
+| `--dry-run` | run the whole data path, save nothing |
+| `--limit N` | stop after N items (0 = no limit) |
+
+```bash
+python3 Train/script/30_fim_pairs.py --dry-run --limit 5
+ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --limit 1
+```
+
+That combination is what proves the data path without a GPU, and is what CI
+runs. (`29_multimodel_doc_qa.py` keeps its own older `--limit`, which counts
+documents rather than pairs.)
 
 ### Single stage
 

@@ -129,3 +129,24 @@ Picks where notebooks disagreed (full reasoning in the commit message):
 Commands: `check_hparams.py` → 8 notebooks clean; `--list` prints the table;
 per-cell `compile()` over all 9 edited notebooks → 0 syntax errors;
 `pytest Train/script/tests -q` → 189 passed.
+
+### #803 — done (commit 4)
+
+`Train/script/stage_runner.py`: `StageOptions` (`--dry-run`/`--limit`, plus
+`from_env()` for notebooks via `ARO_TRAIN_DRY_RUN`/`ARO_TRAIN_LIMIT`), and
+`run_notebook()` with a **stall watchdog** — kills a stage that has written nothing
+for `ARO_TRAIN_STALL_TIMEOUT` (default 1800s) rather than capping wall clock, so a
+6h fine-tune that prints loss lines is never killed. `MAX_RUNTIME_OVERRIDES` kept
+for hard caps, empty by default.
+Meta notebook's executor cell now delegates to it; `TIMEOUT_OVERRIDES`/`DEFAULT_TIMEOUT`
+(all zeros) removed; run loop reports `stalled` distinctly.
+Stages 28/30/31/32 take the shared options; 32 limits notebooks executed (the
+expensive half). 29 keeps its own older `--limit` (documents) — noted in README.
+CI: new `train-tests` job in the `test` stage (python:3.12-slim) running pytest,
+`check_hparams.py`, a `run_archive --dry-run`, and asserting `mlx_preflight` exits 2
+off Apple Silicon.
+
+Commands: `pytest Train/script/tests/test_stage_runner.py -q` → 14 passed;
+full suite → 203 passed; `py_compile` on all 9 scripts → OK; per-cell compile of the
+meta notebook → 0 syntax errors; `python3 Train/script/28_diagnostic_repairs.py
+--dry-run --limit 3` → capped at 3 pairs as intended.

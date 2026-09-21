@@ -54,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, TRAIN_ROOT,
 )
+import stage_runner  # noqa: E402
 
 NOTEBOOK_TAG = 'NB28_repairs'
 SEED_DIR = TRAIN_ROOT / 'seeds' / '28_repairs'
@@ -136,13 +137,14 @@ def build_pairs() -> tuple[list[dict], list[str]]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true',
-                    help='validate and report; save nothing')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     args = ap.parse_args()
+    opts = stage_runner.StageOptions.from_args(args)
 
     print(f'aro binary: {ARO}')
     print(f'seed dir:   {SEED_DIR}')
     pairs, failures = build_pairs()
+    pairs = opts.apply(pairs)
 
     for f in failures:
         print(f'  DROPPED  {f}')
