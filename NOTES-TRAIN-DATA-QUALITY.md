@@ -190,3 +190,37 @@ was verified end to end on a copy. `--write` is the operator's one-off step.
 Six pre-existing tests in `test_config_infra_helpers.py` saved unlabelled
 pairs; they now set `task_type` (that is the point of the change).
 
+## #784 — duplicates (VERIFIED; numbers slightly higher, and one much higher)
+
+Measured on `knowledge_pairs.jsonl` (10 007 rows), normalised (whitespace +
+case):
+
+| | issue | measured |
+|---|---|---|
+| repeated instructions (extra copies) | 276 | **284** (over 131 distinct) |
+| byte-identical (instruction, output) | 190 | **199** (over 60 distinct) |
+| repeated **outputs** (extra copies) | not counted | **2 710** over 706 distinct |
+| most-repeated single answer | — | **379 prompts share one commit message** |
+
+`comment_pairs.jsonl`: 23 057 rows, 1 149 distinct outputs, 6 897 distinct
+instructions. So ~20 rows per distinct answer — and **15 701 of the rows are
+byte-identical pairs**, which is a bigger problem than the 9× paraphrase.
+
+**Fix:** three caps in `config`, applied at save (`_dedup_gate`, seeded from
+the corpus already on disk so a rerun cannot reintroduce anything):
+exact (instruction, output) once; `ARO_TRAIN_MAX_PER_INSTRUCTION` (3);
+`ARO_TRAIN_MAX_PER_OUTPUT` (3) — the output-side cap that did not exist.
+Plus `Train/script/dedup_corpus.py` for corpora that already exist.
+
+Before/after, `dedup_corpus.py` at caps 3/3:
+```
+knowledge_pairs.jsonl  10 007 -> 8 376 rows (-1 631: output_cap 1 512,
+                       exact_pair 114, instruction_cap 5)
+                       duplicate pair copies 199 -> 0
+                       most-repeated answer  379 -> 3
+comment_pairs.jsonl    23 057 -> 3 311 rows (-19 746: exact_pair 12 122,
+                       output_cap 7 463, instruction_cap 161)
+                       all 1 149 distinct outputs retained
+```
+Again a report, not a rewrite of the shared corpus (concurrent branches).
+

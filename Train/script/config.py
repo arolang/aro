@@ -1350,6 +1350,8 @@ def save_notebook_pair(notebook_tag: str, pair: dict,
         return False
     pair = stamp_provenance(pair, notebook_tag, generation_strategy, lineage)
     pair = ensure_task_type(pair, notebook_tag)
+    if not _dedup_gate(pair, notebook_tag):
+        return False
     if not _pair_gate(pair, notebook_tag):
         return False
     _ensure_run_recorded()
@@ -1376,6 +1378,7 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     written = 0
     gate_dropped = 0
     runtime_dropped = 0
+    duplicate_dropped = 0
     with open(PAIRS_FILE, 'a') as f:
         for pair in pairs:
             pair['notebook'] = notebook_tag
@@ -1385,6 +1388,9 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
                 continue
             pair = stamp_provenance(pair, notebook_tag, generation_strategy)
             pair = ensure_task_type(pair, notebook_tag)
+            if not _dedup_gate(pair, notebook_tag):
+                duplicate_dropped += 1
+                continue
             if not _pair_gate(pair, notebook_tag):
                 runtime_dropped += 1
                 continue
@@ -1396,6 +1402,9 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     if runtime_dropped:
         print(f'[{notebook_tag}] pair-gate dropped {runtime_dropped} pairs the '
               f'runtime rejects (run pair_gate_report() for the per-source table)')
+    if duplicate_dropped:
+        print(f'[{notebook_tag}] dedup dropped {duplicate_dropped} repeats '
+              f'(run dedup_report() for the breakdown)')
     return written
 
 
@@ -2104,6 +2113,123 @@ def _fixtrain_gate_pair(pair, notebook_tag=''):
         print(f'  {tag}fixtrain-gate drop: {v["rule"]} — {v["match"][:60]!r}',
               flush=True)
     return False
+
+
+# ── Deduplication at the door (GitLab #784) ──────────────────────────────────
+# Deduplication happened once, at assembly, on the first 300 characters of the
+# instruction plus a Jaccard threshold — and never on outputs. So 284 repeated
+# instructions and 199 byte-identical pairs survived, and, far worse, 2 710
+# repeated *answers*: one commit message is the answer to 379 different
+# prompts. The comment-extraction stage generates nine paraphrases in each
+# direction, which turns roughly 1 300 comments into 23 057 rows sharing
+# 1 149 distinct outputs — twenty copies of every answer.
+#
+# Memorisation is the predictable result, and the SFT notebook's own note
+# about validation loss rising after ~400 iterations is consistent with it.
+#
+# Three caps, applied where pairs are written rather than where they are
+# assembled:
+DEDUP_EXACT_PAIRS = True        # never write the same (instruction, output) twice
+MAX_REPEATS_PER_INSTRUCTION = int(
+    os.environ.get('ARO_TRAIN_MAX_PER_INSTRUCTION', '3'))
+MAX_REPEATS_PER_OUTPUT = int(
+    os.environ.get('ARO_TRAIN_MAX_PER_OUTPUT', '3'))
+
+DEDUP_STATS = _Counter()
+_seen_pairs = set()
+_seen_instructions = _Counter()
+_seen_outputs = _Counter()
+_dedup_loaded = {'from': None}
+
+_WHITESPACE_RE = _re.compile(r'\s+')
+
+
+def normalize_for_dedup(text) -> str:
+    """Whitespace-folded, case-folded text — the unit both caps count."""
+    return _WHITESPACE_RE.sub(' ', (text or '').strip().lower())
+
+
+def _pair_prompt_text(pair):
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in msgs:
+            if isinstance(msg, dict) and msg.get('role') == 'user':
+                return msg.get('content') or ''
+        return ''
+    return pair.get('instruction') or pair.get('prompt') or ''
+
+
+def pair_fingerprint(pair) -> tuple:
+    return (normalize_for_dedup(_pair_prompt_text(pair)),
+            normalize_for_dedup(_pair_assistant_text(pair)))
+
+
+def _load_dedup_index(path=None):
+    """Seed the caps from the corpus already on disk, so a rerun cannot
+    reintroduce what a previous run already wrote."""
+    path = Path(path) if path else PAIRS_FILE
+    if _dedup_loaded['from'] == str(path):
+        return
+    _seen_pairs.clear()
+    _seen_instructions.clear()
+    _seen_outputs.clear()
+    _dedup_loaded['from'] = str(path)
+    if not path.exists():
+        return
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if is_jsonl_metadata_record(record):
+                continue
+            instruction, output = pair_fingerprint(record)
+            _seen_pairs.add((instruction, output))
+            _seen_instructions[instruction] += 1
+            _seen_outputs[output] += 1
+
+
+def _dedup_gate(pair, notebook_tag=''):
+    """True when the pair is new enough to be worth writing."""
+    if not DEDUP_EXACT_PAIRS:
+        return True
+    _load_dedup_index()
+    instruction, output = pair_fingerprint(pair)
+    if not instruction and not output:
+        return True
+    if (instruction, output) in _seen_pairs:
+        DEDUP_STATS['exact_pair'] += 1
+        return False
+    if (MAX_REPEATS_PER_INSTRUCTION
+            and _seen_instructions[instruction] >= MAX_REPEATS_PER_INSTRUCTION):
+        DEDUP_STATS['instruction_cap'] += 1
+        return False
+    if (MAX_REPEATS_PER_OUTPUT
+            and _seen_outputs[output] >= MAX_REPEATS_PER_OUTPUT):
+        DEDUP_STATS['output_cap'] += 1
+        return False
+    _seen_pairs.add((instruction, output))
+    _seen_instructions[instruction] += 1
+    _seen_outputs[output] += 1
+    return True
+
+
+def dedup_report(reset=False):
+    """What the caps kept out this run."""
+    if not DEDUP_STATS:
+        print('dedup: nothing dropped this run')
+    else:
+        print('dedup drops:')
+        for reason, n in DEDUP_STATS.most_common():
+            print(f'  {n:6d}x  {reason}')
+    counts = dict(DEDUP_STATS)
+    if reset:
+        DEDUP_STATS.clear()
+    return counts
 
 
 # ── task_type is not optional (GitLab #782) ──────────────────────────────────
