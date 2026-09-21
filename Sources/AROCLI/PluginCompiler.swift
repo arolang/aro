@@ -41,12 +41,18 @@ struct PluginCompiler: Sendable {
     let staticBuildDir: URL
     /// Whether to print progress to stdout.
     let verbose: Bool
+    /// How the binary is being linked. Only Python plugins care: a
+    /// `--static` build promises one copyable file, and borrowing the
+    /// build machine's interpreter would break that promise (#856).
+    let linkMode: EmbeddedPythonPolicy.LinkMode
 
-    init(sourcePluginsDir: URL, outputPluginsDir: URL, staticBuildDir: URL, verbose: Bool) {
+    init(sourcePluginsDir: URL, outputPluginsDir: URL, staticBuildDir: URL,
+         verbose: Bool, linkMode: EmbeddedPythonPolicy.LinkMode = .staticLink) {
         self.sourcePluginsDir = sourcePluginsDir
         self.outputPluginsDir = outputPluginsDir
         self.staticBuildDir = staticBuildDir
         self.verbose = verbose
+        self.linkMode = linkMode
     }
 
     /// Everything the build flow needs from plugin pre-compilation, ready to feed
@@ -62,6 +68,11 @@ struct PluginCompiler: Sendable {
         var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
         /// Extra linker flags (e.g. `-lpython3.12`) required by embedded Python plugins.
         var pythonLinkerFlags: [String] = []
+        /// Set when an embeddable CPython was found: the standard library to
+        /// copy next to the finished binary, and the version that names the
+        /// directory. Staging happens after linking, because only the build
+        /// command knows where the binary landed (#856).
+        var pythonStdlibToStage: (stdlibPath: String, version: String)?
     }
 
     /// Run the full plugin pre-compilation pipeline.
@@ -400,11 +411,52 @@ struct PluginCompiler: Sendable {
         // If Python plugins were found, find libpython and prepare deps
         if hasPythonPlugins {
             let pythonFinder = PythonLibraryFinder(verbose: verbose)
-            if let pythonPaths = pythonFinder.findPython() {
-                result.pythonLinkerFlags = pythonPaths.linkerFlags
+            let buildMachinePython = pythonFinder.findPython()
+
+            // A Python plugin is the one plugin kind that cannot simply be
+            // folded into the binary: it needs an interpreter. Decide what
+            // this build is allowed to claim before it produces anything
+            // (#856); the policy is in AROCompiler so the rules are testable
+            // without running a build.
+            let environment = ProcessInfo.processInfo.environment
+            let located = StaticPythonDistribution.locate(environment: environment)
+            let decision = EmbeddedPythonPolicy.decide(
+                plugins: result.pythonPluginIRInfos.map { $0.name },
+                linkMode: linkMode,
+                distribution: located,
+                buildMachinePython: buildMachinePython.map {
+                    (executable: $0.executable, libraryPath: $0.libraryPath, stdlibPath: $0.stdlibPath)
+                },
+                overrideEnabled: environment[EmbeddedPythonPolicy.overrideEnvironmentVariable] == "1"
+            )
+
+            switch decision {
+            case .notApplicable:
+                break
+            case .refuse(let reason):
+                print("Error: \(reason)")
+                throw ExitCode.failure
+            case .buildWithWarning(let reason):
+                print("Warning: \(reason)")
+            case .embedStatically(let distribution):
+                result.pythonLinkerFlags = distribution.linkerFlags
+                result.pythonStdlibToStage = (stdlibPath: distribution.stdlibPath,
+                                              version: distribution.version)
+                print("Embedding CPython \(distribution.version) from \(distribution.root)")
+                if verbose {
+                    print("  Archive: \(distribution.archivePath)")
+                    print("  Stdlib:  \(distribution.stdlibPath)")
+                }
+            }
+
+            let embeddingStatically = result.pythonStdlibToStage != nil
+            if let pythonPaths = buildMachinePython {
+                if !embeddingStatically {
+                    result.pythonLinkerFlags = pythonPaths.linkerFlags
+                }
                 if verbose {
                     print("Python \(pythonPaths.version) found: \(pythonPaths.executable)")
-                    print("  Linker flags: \(pythonPaths.linkerFlags.joined(separator: " "))")
+                    print("  Linker flags: \(result.pythonLinkerFlags.joined(separator: " "))")
                 }
 
                 // Install requirements to a temporary venv if needed
@@ -434,6 +486,14 @@ struct PluginCompiler: Sendable {
                     }
 
                     if verbose { print("  Python dependencies installed") }
+                }
+            } else if embeddingStatically {
+                // The interpreter travels with the binary, so the build
+                // machine not having one of its own is irrelevant — except
+                // for `requirements.txt`, which needs a pip to run.
+                if !pythonRequirementsFiles.isEmpty {
+                    print("Warning: Python plugin requirements cannot be installed — no python3 on this machine")
+                    print("  The embedded interpreter carries the standard library only.")
                 }
             } else {
                 print("Warning: Python plugins found but python3 not available on build machine")

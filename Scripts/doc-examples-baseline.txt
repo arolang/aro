@@ -85,7 +85,7 @@ Proposals/ARO-0008-io-services.md:736
 Proposals/ARO-0008-io-services.md:887
 Proposals/ARO-0008-io-services.md:963
 Proposals/ARO-0008-io-services.md:977
-Proposals/ARO-0009-native-compilation.md:616
+Proposals/ARO-0009-native-compilation.md:655
 Proposals/ARO-0010-advanced-features.md:272
 Proposals/ARO-0010-advanced-features.md:289
 Proposals/ARO-0010-advanced-features.md:345
