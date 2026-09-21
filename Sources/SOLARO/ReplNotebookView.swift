@@ -195,6 +195,8 @@ struct ReplNotebookView: View {
 private struct ReplNotebookToolbar: View {
     @Bindable var notebook: ReplNotebookController
     @State private var showKernelPopover = false
+    /// Last Jupyter import/export failure, shown in the toolbar (#769).
+    @State private var ipynbError: String?
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -225,13 +227,83 @@ private struct ReplNotebookToolbar: View {
                 notebook.addCell(kind: .markdown, after: notebook.selectedCellID)
             }
 
+            toolbarDivider
+
+            // Jupyter interchange (#769). The book positions notebooks
+            // as the Jupyter-parity surface and ARO ships a real
+            // kernel; handing one to somebody in JupyterLab needed the
+            // format JupyterLab reads.
+            Menu {
+                Button("Export as Jupyter Notebook…") { exportIpynb() }
+                Button("Import a Jupyter Notebook…") { importIpynb() }
+            } label: {
+                Label("Jupyter", systemImage: "arrow.left.arrow.right")
+                    .font(SolaroFont.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
             Spacer(minLength: 0)
+
+            if let error = ipynbError {
+                Text(error)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.stateError)
+                    .lineLimit(1)
+            }
 
             kernelChip
         }
         .padding(.horizontal, SolaroSpace.m)
         .padding(.vertical, 6)
         .background(SolaroColor.surface)
+    }
+
+    /// Write this notebook out for JupyterLab (#769).
+    private func exportIpynb() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = notebook.url
+            .deletingPathExtension().lastPathComponent + ".ipynb"
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        do {
+            try notebook.exportIpynb(to: destination)
+            ipynbError = nil
+            // Show it where it landed: an export nobody can find has
+            // not really happened.
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+        } catch {
+            ipynbError = error.localizedDescription
+        }
+    }
+
+    /// Replace this notebook's cells with an imported `.ipynb` (#769).
+    ///
+    /// Deliberately not described as lossless: nbformat carries mime
+    /// bundles, attachments and per-cell metadata a `.repl` has nowhere
+    /// to put, and they are dropped rather than half-represented.
+    private func importIpynb() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        let alert = NSAlert()
+        alert.messageText = "Replace this notebook's cells?"
+        alert.informativeText =
+            "Importing \(source.lastPathComponent) replaces every cell in "
+            + "\(notebook.url.lastPathComponent). Outputs Jupyter stores as "
+            + "images or HTML are not imported."
+        alert.addButton(withTitle: "Import")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try notebook.importIpynb(from: source)
+            ipynbError = nil
+        } catch {
+            ipynbError = error.localizedDescription
+        }
     }
 
     private var toolbarDivider: some View {
@@ -426,7 +498,29 @@ private struct ReplCellRow: View {
             }
             .onHover { hovering = $0 }
             .contextMenu { contextMenu(for: cell) }
+            // Notebook cells carried no label at all (#770). The kind
+            // matters as much as the content: "markdown cell" and
+            // "code cell, not run" are different things to land on.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(cellAccessibilityLabel(for: cell))
         }
+    }
+
+    /// What one notebook cell is, for a screen reader (#770).
+    private func cellAccessibilityLabel(for cell: ReplNotebookCell) -> String {
+        var parts: [String] = []
+        parts.append(cell.kind == .markdown ? "Markdown cell" : "Code cell")
+        if cell.kind == .code {
+            if let count = cell.executionCount {
+                parts.append("run \(count)")
+            } else {
+                parts.append("not run")
+            }
+            if cell.outputs.contains(where: { $0.kind == .error }) {
+                parts.append("has an error")
+            }
+        }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: Insert bar (between cells)

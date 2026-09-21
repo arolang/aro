@@ -184,8 +184,19 @@ struct LayoutSidecar: Codable, Equatable {
         if store.files[key] == nil,
            let legacy = readLegacy(for: source) {
             store.files[key] = legacy
-            try? store.save()
-            try? FileManager.default.removeItem(at: legacySidecarURL(for: source))
+            do {
+                try store.save()
+                // Only remove the legacy file once its contents are
+                // safely in the consolidated store — the other order
+                // loses the user's layout on a failed write.
+                try? FileManager.default
+                    .removeItem(at: legacySidecarURL(for: source))
+            } catch {
+                // The migration did not stick. Say so, and leave the
+                // legacy file where it is so the next launch retries
+                // rather than starting from a default layout (#755).
+                SolaroDiagnostics.warn("the canvas layout", error: error)
+            }
         }
         return store.files[key] ?? LayoutSidecar()
     }
@@ -209,6 +220,10 @@ struct LayoutSidecar: Codable, Equatable {
     /// caller can fall through to a default-initialised value.
     private static func readLegacy(for source: URL) -> LayoutSidecar? {
         let url = legacySidecarURL(for: source)
+        // Both `try?`s mean the same thing: there is no usable legacy
+        // sidecar here. Missing is the normal case, and a malformed one
+        // is indistinguishable from missing for the caller, which
+        // falls through to a default-initialised value either way.
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder()
                   .decode(LayoutSidecar.self, from: data)
@@ -277,6 +292,8 @@ struct ProjectLayoutStore: Codable, Equatable {
             // so a project without openapi / aro.toml still resolves
             // cleanly (`<name>.aroproject` is the manifest's
             // Finder-associable spelling).
+            // An unreadable directory is not a project root as far as
+            // this search is concerned; keep walking upward.
             if let entries = try? fm.contentsOfDirectory(atPath: dir.path),
                entries.contains(where: {
                    $0.hasSuffix(".aro") || $0.hasSuffix(".aroproject")
@@ -301,6 +318,10 @@ struct ProjectLayoutStore: Codable, Equatable {
     /// behavior as the legacy per-file path.
     static func load(for source: URL) -> ProjectLayoutStore {
         let url = storeURL(for: source)
+        // No store, or an unreadable one, means "this project has no
+        // saved layout" — which is true of every project until someone
+        // drags a node. Documented in the doc comment above, and the
+        // fallback below is the whole error handling.
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(ProjectLayoutStore.self, from: data)
         else { return ProjectLayoutStore(root: projectRoot(for: source)) }
@@ -366,6 +387,8 @@ struct ProjectLayoutStore: Codable, Equatable {
     /// abort the whole migration.
     static func migrateLegacySidecars(at root: URL) {
         let fm = FileManager.default
+        // A root we cannot list has no legacy sidecars to migrate as
+        // far as anyone can tell; this runs again on the next open.
         guard let entries = try? fm.contentsOfDirectory(
             at: root, includingPropertiesForKeys: nil
         ) else { return }
@@ -385,6 +408,9 @@ struct ProjectLayoutStore: Codable, Equatable {
             let name = String(legacyURL.lastPathComponent
                 .dropLast(".layout.json".count))
             let sourceURL = root.appendingPathComponent(name)
+            // Unreadable or malformed: there is nothing to carry
+            // forward, and the `else` below deletes it so the scan does
+            // not keep finding it forever.
             guard let data = try? Data(contentsOf: legacyURL),
                   let decoded = try? JSONDecoder()
                       .decode(LayoutSidecar.self, from: data)
@@ -397,9 +423,18 @@ struct ProjectLayoutStore: Codable, Equatable {
             if store.files[key] == nil {
                 store.files[key] = decoded
             }
+            // Best-effort: the contents are in `store` now, and a file
+            // that refuses to be deleted is re-read harmlessly next time.
             try? fm.removeItem(at: legacyURL)
         }
-        try? store.save()
+        do {
+            try store.save()
+        } catch {
+            // Everything this migration read has already been deleted,
+            // so a failure here is the one place in the sidecar code
+            // that really does lose work (#755).
+            SolaroDiagnostics.warn("the migrated canvas layouts", error: error)
+        }
     }
 }
 

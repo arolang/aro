@@ -22,7 +22,7 @@ public enum StreamingFileWriter {
     /// Memory cost is one chunk regardless of total size.
     @discardableResult
     public static func write(_ stream: AROStream<Data>, to path: String) async throws -> Int {
-        let destination = URL(fileURLWithPath: path)
+        let destination = AROWorkingDirectory.url(path)
         let directory = destination.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

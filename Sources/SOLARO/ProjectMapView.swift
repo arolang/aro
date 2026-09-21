@@ -20,12 +20,13 @@ struct ProjectMapView: View {
     /// trailing edge so the project-level map mirrors the per-FS
     /// canvas containers' test badge.
     let testResults: [String: TestNodeResult]
+    /// Live execution state (#765). The map animates from this while a
+    /// program runs, and settles to whatever ran last when it stops.
+    let activity: ProjectMapActivity
     let onSelect: (ProjectMapNode) -> Void
 
-    @State private var pan: CGSize = .zero
-    @State private var zoom: Double = 1.0
-    @GestureState private var dragOffset: CGSize = .zero
-    @GestureState private var magnify: Double = 1.0
+    /// Pan and zoom, shared with every other graph view (#775).
+    @State private var viewport = GraphViewport()
 
     // Layout constants
     private let domainWidth: CGFloat = 240
@@ -43,64 +44,73 @@ struct ProjectMapView: View {
                 SolaroColor.backdrop
                 dotGrid(in: geo.size)
 
-                ZStack(alignment: .topLeading) {
-                    // Domain containers behind everything else.
-                    ForEach(layout.domains, id: \.domain) { d in
-                        DomainContainer(
-                            name: d.domain,
-                            color: SolaroColor.roleColor(forVerb: d.domain.lowercased())
-                                .opacity(0.6)
-                        )
-                        .frame(width: d.frame.width, height: d.frame.height)
-                        .offset(x: d.frame.minX, y: d.frame.minY)
-                    }
-                    // Wires next.
-                    MapWiresLayer(
-                        edges: map.edges,
-                        positions: layout.nodePositions,
-                        cardSize: CGSize(width: domainWidth - 2 * domainPadding,
-                                         height: nodeHeight)
-                    )
-                    // Then the node cards on top.
-                    ForEach(map.nodes) { node in
-                        if let pos = layout.nodePositions[node.id] {
-                            ProjectMapNodeCard(
-                                node: node,
-                                testResult: testResults[node.featureSetName]
+                // The clock only ticks while something is lit (#765).
+                // A map of a project nobody is running costs no frames.
+                GraphSurface(viewport: $viewport) {
+                  TimelineView(.animation(minimumInterval: 1.0 / 30.0,
+                                        paused: !activity.isRunning)) { timeline in
+                    let now = timeline.date
+                    ZStack(alignment: .topLeading) {
+                        // Domain containers behind everything else.
+                        ForEach(layout.domains, id: \.domain) { d in
+                            DomainContainer(
+                                name: d.domain,
+                                color: SolaroColor.roleColor(forVerb: d.domain.lowercased())
+                                    .opacity(0.6)
                             )
-                                .frame(width: domainWidth - 2 * domainPadding,
-                                       height: nodeHeight)
-                                .offset(x: pos.x, y: pos.y)
-                                .onTapGesture(count: 2) {
-                                    onSelect(node)
-                                }
+                            .frame(width: d.frame.width, height: d.frame.height)
+                            .offset(x: d.frame.minX, y: d.frame.minY)
+                            // The container is decoration around cards
+                            // that carry their own labels (#770);
+                            // reading its name twice is noise.
+                            .accessibilityHidden(true)
+                        }
+                        // Wires next.
+                        MapWiresLayer(
+                            edges: map.edges,
+                            positions: layout.nodePositions,
+                            cardSize: CGSize(width: domainWidth - 2 * domainPadding,
+                                             height: nodeHeight),
+                            activity: activity,
+                            now: now
+                        )
+                        .accessibilityElement()
+                        .accessibilityLabel(CanvasAccessibility.wiresLabel(
+                            count: map.edges.count))
+                        .accessibilityAddTraits(.isImage)
+                        // Then the node cards on top.
+                        ForEach(map.nodes) { node in
+                            if let pos = layout.nodePositions[node.id] {
+                                ProjectMapNodeCard(
+                                    node: node,
+                                    testResult: testResults[node.featureSetName],
+                                    glow: activity.glow(
+                                        forFeatureSet: node.featureSetName,
+                                        now: now)
+                                )
+                                    .frame(width: domainWidth - 2 * domainPadding,
+                                           height: nodeHeight)
+                                    .offset(x: pos.x, y: pos.y)
+                                    .onTapGesture(count: 2) {
+                                        onSelect(node)
+                                    }
+                                    // One element per feature set
+                                    // (#770).
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityLabel(
+                                        CanvasAccessibility.featureSetLabel(
+                                            name: node.featureSetName,
+                                            activity: node.businessActivity,
+                                            statementCount: node.statementCount))
+                                    .accessibilityHint(
+                                        "Double-tap to open this feature set")
+                                    .accessibilityAddTraits(.isButton)
+                            }
                         }
                     }
+                  }
                 }
-                .offset(x: pan.width + dragOffset.width,
-                        y: pan.height + dragOffset.height)
-                .scaleEffect(zoom * magnify, anchor: .topLeading)
             }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture()
-                    .updating($dragOffset) { value, state, _ in
-                        state = value.translation
-                    }
-                    .onEnded { value in
-                        pan.width += value.translation.width
-                        pan.height += value.translation.height
-                    }
-            )
-            .gesture(
-                MagnificationGesture()
-                    .updating($magnify) { value, state, _ in
-                        state = value
-                    }
-                    .onEnded { value in
-                        zoom = max(0.3, min(3.0, zoom * value))
-                    }
-            )
             .overlay(alignment: .topLeading) {
                 if map.nodes.isEmpty {
                     EmptyMapNotice()
@@ -217,6 +227,8 @@ private struct ProjectMapNodeCard: View {
     /// feature set is a test FS and the runner has produced an
     /// outcome for it. nil for production FSes.
     let testResult: TestNodeResult?
+    /// 1 just after this feature set ran, fading to 0 (#765).
+    let glow: Double
 
     var body: some View {
         HStack(spacing: SolaroSpace.s) {
@@ -246,8 +258,13 @@ private struct ProjectMapNodeCard: View {
         .clipShape(RoundedRectangle(cornerRadius: SolaroRadius.m))
         .overlay(
             RoundedRectangle(cornerRadius: SolaroRadius.m)
-                .stroke(borderTint, lineWidth: 1)
+                .stroke(glow > 0
+                        ? SolaroColor.stateOK.opacity(0.4 + 0.6 * glow)
+                        : borderTint,
+                        lineWidth: glow > 0 ? 1.5 : 1)
         )
+        .shadow(color: SolaroColor.stateOK.opacity(0.45 * glow),
+                radius: 10 * glow)
         .help("\(node.featureSetName) · \(node.statementCount) statements")
     }
 
@@ -349,6 +366,8 @@ private struct MapWiresLayer: View {
     let edges: [ProjectMapEdge]
     let positions: [String: CGPoint]
     let cardSize: CGSize
+    let activity: ProjectMapActivity
+    let now: Date
 
     var body: some View {
         Canvas { ctx, _ in
@@ -372,12 +391,47 @@ private struct MapWiresLayer: View {
                 path.addCurve(to: end, control1: c1, control2: c2)
 
                 let (color, style) = strokeStyle(for: edge.kind)
+                let progress = activity.pulseProgress(
+                    from: edge.from, to: edge.to, now: now)
+
                 ctx.stroke(path,
-                           with: .color(color.opacity(0.2)),
+                           with: .color(color.opacity(progress == nil ? 0.2 : 0.45)),
                            style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 ctx.stroke(path, with: .color(color), style: style)
+
+                // The event, moving (#765). A dot on the curve rather
+                // than a flashing line, because the direction is the
+                // information: this event left there and arrived here.
+                if let progress {
+                    let point = pointOnCurve(start: start, c1: c1, c2: c2,
+                                             end: end, t: progress)
+                    let radius: CGFloat = 4
+                    let dot = Path(ellipseIn: CGRect(
+                        x: point.x - radius, y: point.y - radius,
+                        width: radius * 2, height: radius * 2))
+                    ctx.fill(dot, with: .color(color.opacity(0.25)))
+                    let core = Path(ellipseIn: CGRect(
+                        x: point.x - radius / 2, y: point.y - radius / 2,
+                        width: radius, height: radius))
+                    ctx.fill(core, with: .color(color))
+                }
             }
         }
+    }
+
+    /// A point on the same cubic Bézier the wire is drawn with, so the
+    /// pulse rides the wire rather than approximating it.
+    private func pointOnCurve(start: CGPoint, c1: CGPoint, c2: CGPoint,
+                              end: CGPoint, t: Double) -> CGPoint {
+        let u = 1 - t
+        let a = u * u * u
+        let b = 3 * u * u * t
+        let c = 3 * u * t * t
+        let d = t * t * t
+        return CGPoint(
+            x: a * start.x + b * c1.x + c * c2.x + d * end.x,
+            y: a * start.y + b * c1.y + c * c2.y + d * end.y
+        )
     }
 
     private func strokeStyle(for kind: ProjectMapEdge.Kind) -> (Color, StrokeStyle) {

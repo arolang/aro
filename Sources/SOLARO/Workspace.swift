@@ -327,7 +327,7 @@ struct WorkspaceView: View {
     let project: Project
     let onClose: () -> Void
 
-    @State private var controller: WorkspaceController
+    @State var controller: WorkspaceController
 
     init(project: Project, onClose: @escaping () -> Void) {
         self.project = project
@@ -336,11 +336,15 @@ struct WorkspaceView: View {
     }
 
     @State private var showOpenAPIPalette = false
-    @State private var showTimeTravel = false
+    @State var showTimeTravel = false
     /// Console process driving Play. Open whenever it's running OR
     /// the user has explicitly opened it.
-    @State private var consoleProcess = ConsoleProcess()
-    @State private var showConsole = false
+    @State var consoleProcess = ConsoleProcess()
+
+    /// The window hosting this workspace, so a broadcast menu action can be
+    /// acted on by the key window alone (GitLab #744).
+    @State private var hostWindow: NSWindow?
+    @State var showConsole = false
     /// Per-workspace undo manager. SwiftUI doesn't supply a
     /// non-document UndoManager on its own; we create one, push it
     /// into the environment, and every canvas mutation (drag,
@@ -351,16 +355,18 @@ struct WorkspaceView: View {
     @State private var bottomTab: BottomTab = .console
     /// Palette sheets: command (⌘⇧P), quick open (⌘P),
     /// find-in-project (⌘⇧F).
-    @State private var showCommandPalette = false
-    @State private var showQuickOpen = false
+    @State var showCommandPalette = false
+    @State var showQuickOpen = false
     @State private var showCommitOverlay = false
     /// Feature-graph diff sheet — the working tree against a
     /// revision, node by node and wire by wire (#443).
-    @State private var showGraphDiff = false
+    @State var showGraphDiff = false
+    /// Native build options (#763).
+    @State var showBuildSheet = false
     /// Set when the user hits ⌘⌫ with a file selected. The alert
     /// reads from this — non-nil = visible. Cleared on cancel or
     /// after the file is moved to Trash.
-    @State private var pendingDeleteFile: URL? = nil
+    @State var pendingDeleteFile: URL? = nil
     /// Destination URL the next "New file…" sheet will use. nil
     /// while the sheet is dismissed; non-nil drives the sheet's
     /// presentation. Hosted on `WorkspaceView` (not the sidebar)
@@ -371,18 +377,24 @@ struct WorkspaceView: View {
     /// layout, which re-rendered the sheet…
     @State private var pendingNewFileRequest: PendingNewFileRequest? = nil
     @State private var commitModel = GitCommitModel()
-    @State private var showHoverSheet = false
-    @State private var hoverState = HoverSheetState()
-    @State private var showCompletionSheet = false
-    @State private var completionState = CompletionSheetState()
-    @State private var showRenameSheet = false
-    @State private var renameNewName: String = ""
-    @State private var renameError: String? = nil
+    @State var showHoverSheet = false
+    @State var hoverState = HoverSheetState()
+    @State var showCompletionSheet = false
+    @State var completionState = CompletionSheetState()
+    @State var showRenameSheet = false
+    @State var renameNewName: String = ""
+    @State var renameError: String? = nil
+    /// What the pending rename would touch (#764). `nil` until asked.
+    @State var renamePreview: RenamePreview? = nil
+    /// The edits behind that preview, so confirming applies exactly
+    /// what was shown rather than asking the server a second time and
+    /// hoping the answer is the same.
+    @State var renameEdits: [AROLSPClient.TextEdit] = []
     @State private var showBlameSheet = false
     @State private var blameContent: String = ""
-    @State private var showFindInProject = false
+    @State var showFindInProject = false
     @State private var findInProjectModel = FindInProjectModel()
-    @State private var showSymbolPalette = false
+    @State var showSymbolPalette = false
     @State private var referencesSymbol: String? = nil
     /// Pre-run parameter dialog state. Populated by the Play / Debug
     /// button when the project references `<parameter: NAME>`; the
@@ -535,8 +547,8 @@ struct WorkspaceView: View {
         // View-menu commands ("Show Console" / "Show Terminal" /
         // "Show Tests") post this notification. Open the bottom
         // panel and switch to the requested tab. Posted to every
-        // workspace window — each one's onReceive runs, but the
-        // user only sees the key window respond visually.
+        // workspace window, so the key window alone acts on it —
+        // otherwise a background window silently changes its own tab too.
         .onReceive(
             NotificationCenter.default.publisher(for: .solaroShowBottomPanel)
         ) { note in
@@ -544,15 +556,23 @@ struct WorkspaceView: View {
                 let raw = note.userInfo?["tab"] as? String,
                 let tab = BottomTab(rawValue: raw)
             else { return }
+            guard NSWindow.shouldHandleMenuAction(receiver: hostWindow) else { return }
             bottomTab = tab
             showConsole = true
         }
+        // Menu actions arrive as one broadcast, so every mounted workspace
+        // sees them. Only the key window may act: with two project windows
+        // open this used to run Run, Debug, Test, Stop, Commit, Format
+        // Document and Graph Diff in both — and Delete File and Git: Revert
+        // Local Changes with them (GitLab #744).
+        .background(WindowAccessor(window: $hostWindow))
         .onReceive(
             NotificationCenter.default.publisher(for: .solaroMenuAction)
         ) { note in
             guard let raw = note.userInfo?["id"] as? String,
                   let action = SolaroMenuAction(rawValue: raw)
             else { return }
+            guard NSWindow.shouldHandleMenuAction(receiver: hostWindow) else { return }
             handleMenuAction(action)
         }
         // Bounce back to the welcome screen the moment the last
@@ -738,8 +758,15 @@ struct WorkspaceView: View {
         .sheet(isPresented: $showGraphDiff) {
             GraphDiffSheet(
                 project: project,
+                gitMonitor: controller.gitMonitor,
                 onClose: { showGraphDiff = false }
             )
+        }
+        .sheet(isPresented: $showBuildSheet) {
+            BuildSheet(projectName: project.displayName) { options in
+                showConsole = true
+                consoleProcess.startBuild(project: project, options: options)
+            }
         }
         .sheet(isPresented: $showCommitOverlay) {
             GitCommitSheet(
@@ -763,7 +790,9 @@ struct WorkspaceView: View {
             RenameSheet(
                 newName: $renameNewName,
                 error: $renameError,
+                preview: renamePreview,
                 onCancel: { showRenameSheet = false },
+                onPreview: { previewRename() },
                 onConfirm: { applyRename() }
             )
         }
@@ -860,7 +889,7 @@ struct WorkspaceView: View {
     /// it to `CanvasExporter.exportPNG` (#267). The exporter runs
     /// its own NSSavePanel and writes the PNG; nothing on the
     /// view changes.
-    private func exportCanvasPNG() {
+    func exportCanvasPNG() {
         guard let url = controller.currentFile,
               let program = controller.programs[url] else { return }
         let sidecar = LayoutSidecar.load(for: url)
@@ -871,232 +900,24 @@ struct WorkspaceView: View {
         CanvasExporter.exportPNG(graph: placed, project: project)
     }
 
-    /// Everything a caret-based LSP request needs, resolved against
-    /// the LIVE editor buffer rather than the file on disk
-    /// (GitLab #535). The two diverge whenever a write failed or is
-    /// still in flight, and a position computed against disk then
-    /// resolves to the wrong column — or the wrong line entirely.
-    /// Also nudges the server's document mirror into step first, so
-    /// the position we send means what we think it means.
-    private struct CaretContext {
-        let url: URL
-        let text: String
-        /// 0-based line, as LSP wants it.
-        let line0: Int
-        let column: Int
-        let line: String
-    }
-
-    private func caretContext() -> CaretContext? {
-        guard
-            let url = controller.currentFile,
-            let lineNumber = controller.currentLine,
-            let text = controller.liveText(for: url)
-        else { return nil }
-        let lines = text.components(separatedBy: "\n")
-        guard lineNumber - 1 < lines.count else { return nil }
-        controller.syncLSPWithLiveText(url)
-        let line = lines[lineNumber - 1]
-        return CaretContext(url: url, text: text,
-                            line0: lineNumber - 1,
-                            column: resolvedColumn(for: line),
-                            line: line)
-    }
-
-    private func goToDefinition() {
-        guard let caret = caretContext() else { return }
-        controller.lsp.definition(
-            url: caret.url,
-            line0: caret.line0,
-            character0: caret.column
-        ) { location in
-            guard let location else { return }
-            controller.openFile(location.url)
-            controller.currentLine = location.line
-        }
-    }
-
-    /// Pop the Hover sheet for the current caret position. Same
-    /// column heuristic as goToDefinition: use the editor-reported
-    /// column when we have one, otherwise the first `<` or first
-    /// non-whitespace character on the line.
-    private func hoverAtCaret() {
-        guard let caret = caretContext() else { return }
-        hoverState.content = ""
-        hoverState.hasResult = false
-        hoverState.isLoading = true
-        hoverState.symbol = identifierAround(line: caret.line,
-                                             column: caret.column)
-        showHoverSheet = true
-        controller.lsp.hover(
-            url: caret.url,
-            line0: caret.line0,
-            character0: caret.column
-        ) { content in
-            hoverState.isLoading = false
-            hoverState.hasResult = true
-            hoverState.content = content ?? ""
-        }
-    }
-
-    /// Best-effort: pluck the identifier surrounding the column for
-    /// the sheet's title bar. Doesn't influence the actual LSP
-    /// request — that uses the column directly.
-    private func identifierAround(line: String, column: Int) -> String? {
-        guard column >= 0, column <= line.count else { return nil }
-        let chars = Array(line)
-        let i = min(column, chars.count - 1)
-        let isIdent: (Character) -> Bool = { c in
-            c.isLetter || c.isNumber || c == "-" || c == "_"
-        }
-        guard i >= 0, i < chars.count, isIdent(chars[i]) else { return nil }
-        var start = i
-        while start > 0, isIdent(chars[start - 1]) { start -= 1 }
-        var end = i
-        while end < chars.count - 1, isIdent(chars[end + 1]) { end += 1 }
-        return String(chars[start...end])
-    }
-
-    // MARK: - LSP autocompletion (#254)
-
-    private func triggerCompletion() {
-        guard let caret = caretContext() else { return }
-
-        completionState.items = []
-        completionState.isLoading = true
-        completionState.hasResult = false
-        completionState.selection = nil
-        showCompletionSheet = true
-
-        controller.lsp.completion(
-            url: caret.url, line0: caret.line0, character0: caret.column
-        ) { items in
-            completionState.items = items
-            completionState.isLoading = false
-            completionState.hasResult = true
-            completionState.selection = items.first?.id
-        }
-    }
-
-    private func acceptCompletion(_ item: AROLSPClient.CompletionItem) {
-        showCompletionSheet = false
-        guard let caret = caretContext() else { return }
-        // Insert the chosen text at the current caret position,
-        // computed against the live buffer (GitLab #535).
-        let ns = caret.text as NSString
-        var lineStarts: [Int] = [0]
-        for i in 0..<ns.length {
-            if ns.character(at: i) == 0x0A { lineStarts.append(i + 1) }
-        }
-        let insertOffset = lineStarts[caret.line0] + caret.column
-        guard insertOffset <= ns.length else { return }
-        let insertRange = NSRange(location: insertOffset, length: 0)
-        let insertLength = (item.insertText as NSString).length
-
-        // Edit the OPEN buffer through the undoable replace path.
-        // This used to splice a disk snapshot, write the file and call
-        // `openFile` — a whole-document swap that hits
-        // `updateNSView`'s external-swap branch, whose
-        // `removeAllActions()` erased the file's entire undo history
-        // every time the user accepted one suggestion.
-        if controller.replaceInOpenBuffer(
-            url: caret.url,
-            range: insertRange,
-            with: item.insertText,
-            actionName: "Accept Completion",
-            caretOffset: insertOffset + insertLength
-        ) {
-            // The editor propagates the new text back through the
-            // editable binding on the next runloop tick, which writes
-            // disk, syncs the LSP and reparses.
-            return
-        }
-
-        // No open editor for this file (canvas-only pane): fall back
-        // to the disk path.
-        let text = ns.replacingCharacters(in: insertRange,
-                                          with: item.insertText)
-        controller.writeToDisk(text, to: caret.url)
-        controller.liveEditorText[caret.url.standardizedFileURL] = text
-        controller.lsp.didChange(url: caret.url, text: text)
-        controller.openFile(caret.url)
-    }
-
-    // MARK: - LSP rename (#256)
-
-    private func beginRename() {
-        renameNewName = ""
-        renameError = nil
-        showRenameSheet = true
-    }
-
-    private func applyRename() {
-        guard let caret = caretContext() else { return }
-        let newName = renameNewName.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty else {
-            renameError = "Enter a new name."
-            return
-        }
-        controller.lsp.rename(
-            url: caret.url, line0: caret.line0, character0: caret.column,
-            newName: newName
-        ) { edits, error in
-            if let edits {
-                _ = LSPEditApplier.apply(edits: edits, through: controller)
-                showRenameSheet = false
-            } else {
-                renameError = error ?? "Rename failed."
-            }
-        }
-    }
-
-    // MARK: - LSP formatting (#257)
-
-    private func formatDocument() {
-        guard let url = controller.currentFile else { return }
-        // The returned edits carry positions into the server's copy
-        // of the document — make sure that's the live buffer before
-        // asking (GitLab #535).
-        controller.syncLSPWithLiveText(url)
-        controller.lsp.format(url: url) { edits in
-            guard !edits.isEmpty else { return }
-            _ = LSPEditApplier.apply(edits: edits, through: controller)
-        }
-    }
-
     // MARK: - Git blame (#260)
 
-    private func showBlame() {
+    /// Ask the git monitor, rather than spawning a Process here (#772).
+    ///
+    /// This used to build its own subprocess with its own pipe handling
+    /// while every other git call in the app already went through
+    /// `GitStatusMonitor`.
+    func showBlame() {
         guard let url = controller.currentFile else { return }
-        let projectURL = project.rootPath
         blameContent = "Loading…"
         showBlameSheet = true
-        Task.detached(priority: .utility) {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            task.arguments = ["git", "blame", "--date=short", url.path]
-            task.currentDirectoryURL = projectURL
-            let out = Pipe(), err = Pipe()
-            task.standardOutput = out
-            task.standardError = err
-            do {
-                try task.run()
-                task.waitUntilExit()
-                let data = out.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                let result = task.terminationStatus == 0
-                    ? text
-                    : "git blame failed (exit \(task.terminationStatus))"
-                await MainActor.run { blameContent = result }
-            } catch {
-                await MainActor.run {
-                    blameContent = "Could not run git blame: \(error.localizedDescription)"
-                }
-            }
+        Task {
+            blameContent = await controller.gitMonitor.blame(
+                path: url.path, in: project)
         }
     }
 
-    private func resolvedColumn(for line: String) -> Int {
+    func resolvedColumn(for line: String) -> Int {
         if let tracked = controller.currentColumn,
            tracked >= 0,
            tracked <= line.count
@@ -1130,7 +951,7 @@ struct WorkspaceView: View {
     /// state (last error, last message) so each invocation starts
     /// fresh — the AI suggestion task itself runs from inside the
     /// sheet's `.task` modifier.
-    private func openCommitOverlay() {
+    func openCommitOverlay() {
         commitModel.commitError = nil
         commitModel.message = ""
         commitModel.suggestion = ""
@@ -1421,7 +1242,7 @@ struct WorkspaceView: View {
     /// any `<parameter: NAME>`, opens the run-parameters sheet so the
     /// user can fill them in (pre-filled from the last successful
     /// run); otherwise starts the run immediately.
-    private func requestRun() {
+    func requestRun() {
         // With a notebook open, Run means "run this notebook" — the
         // cells ARE the program, and `aro run` on the project would
         // execute something the user is not looking at. Matches the
@@ -1443,7 +1264,7 @@ struct WorkspaceView: View {
     /// Debug-button click handler. Mirrors `requestRun()` — same
     /// `<parameter: NAME>` scan, same sheet, just dispatches to
     /// `startDebug` on Execute.
-    private func requestDebug() {
+    func requestDebug() {
         requestStart(intent: .debug)
     }
 
@@ -1648,7 +1469,7 @@ struct WorkspaceView: View {
     /// ⌘F handler — toggle the editor's find bar when the editor
     /// pane is visible, otherwise fall through so the standard
     /// Edit > Find menu item keeps working.
-    private func handleFindInFile() {
+    func handleFindInFile() {
         let editorVisible = controller.paneMode == .text
             || controller.paneMode == .split
         guard editorVisible, controller.currentFile != nil else { return }
@@ -1696,10 +1517,16 @@ struct WorkspaceView: View {
         controller.repositoryValues = consoleProcess.repositoryValues
         controller.repositoryHistory = consoleProcess.repositoryHistory
         controller.repositoryRecords = consoleProcess.repositoryRecords
+        // The Project Map's pulses travel between records, so it needs
+        // to know when to keep asking for animation frames (#765).
+        controller.runIsActive = consoleProcess.isRunning
         controller.executionTick &+= 1
     }
 
     private func handleConsoleStateChange(_ newState: ConsoleProcess.State) {
+        // Starting and stopping both matter to the map's animation
+        // clock (#765), so mirror the flag before the exit-only work.
+        controller.runIsActive = consoleProcess.isRunning
         guard case .exited = newState else { return }
         let live = LiveValueIndex.load(for: project)
         guard !live.isEmpty else { return }
@@ -1717,7 +1544,7 @@ struct WorkspaceView: View {
     /// in-place.
     private func applyTimeTravelFrame(_ record: TimeTravelRecord) {
         if let line = record.line, line > 0 {
-            controller.lastExecutedAt[line] = Date()
+            controller.lastExecutedAt[SourceRef(file: record.file, line: line)] = Date()
         }
         if let fs = record.featureSet, !fs.isEmpty {
             controller.lastExecutedAtPerFeatureSet[fs] = Date()
@@ -1731,121 +1558,6 @@ struct WorkspaceView: View {
             controller.pauseSymbols[sym.name] = v
         }
         controller.executionTick &+= 1
-    }
-
-    /// Route a menu-bar action to the right handler. Centralised
-    /// dispatch keeps the menu definitions in `SOLAROApp.swift`
-    /// data-driven (each item only knows the action ID) and stops
-    /// us from threading 30+ named notifications.
-    private func handleMenuAction(_ action: SolaroMenuAction) {
-        switch action {
-        // File
-        case .fileRevealInFinder:
-            if let url = controller.currentFile {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
-        case .fileCopyPath:
-            if let url = controller.currentFile {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(url.path, forType: .string)
-            }
-        case .fileRename:
-            // Inline rename via NSAlert — the sidebar uses a
-            // SwiftUI alert with a TextField, but we'd have to
-            // route a Binding through the menu observer to share
-            // it. NSAlert is shorter and equally functional from
-            // a menu-driven entry point.
-            if let url = controller.currentFile {
-                renameCurrentFile(at: url)
-            }
-        case .fileMoveToTrash:
-            // Prefer whatever's highlighted in the Files panel —
-            // if the user picked a folder there, that's what they
-            // mean to delete, not the file they happen to have
-            // open in the editor (#?).
-            if let url = controller.treeFocus
-                ?? controller.currentFile {
-                pendingDeleteFile = url
-            }
-        case .fileCloseTab:
-            if let url = controller.currentFile {
-                controller.closeTab(url)
-            }
-        case .fileReload:
-            // File → Reload from Disk (GitLab #536). The comment in
-            // `load()` promised this menu item for a year.
-            controller.reloadFromDisk()
-        // Edit
-        case .editFindInFile:
-            handleFindInFile()
-        case .editFindInProject:
-            showFindInProject = true
-        case .editFormatDocument:
-            formatDocument()
-        case .editRenameRefactor:
-            beginRename()
-        case .editTriggerCompletion:
-            triggerCompletion()
-        // View
-        case .viewToggleSidebar:
-            controller.sidebarShown.toggle()
-        case .viewToggleInspector:
-            controller.inspectorShown.toggle()
-        case .viewPaneMap:    controller.setPaneMode(.map)
-        case .viewPaneCanvas: controller.setPaneMode(.canvas)
-        case .viewPaneText:   controller.setPaneMode(.text)
-        case .viewPaneSplit:  controller.setPaneMode(.split)
-        case .viewCommandPalette:
-            showCommandPalette = true
-        case .viewZoomIn:
-            EditorTypography.zoom(.in)
-        case .viewZoomOut:
-            EditorTypography.zoom(.out)
-        case .viewZoomReset:
-            EditorTypography.zoom(.reset)
-        case .viewQuickOpen:
-            showQuickOpen = true
-        case .viewSymbolPalette:
-            showSymbolPalette = true
-        // Navigate
-        case .navGoToDefinition: goToDefinition()
-        case .navHover:          hoverAtCaret()
-        case .navNextTab:        controller.cycleTab(by: 1)
-        case .navPrevTab:        controller.cycleTab(by: -1)
-        // Run
-        case .runPlay:           requestRun()
-        case .runDebug:          requestDebug()
-        case .runTests:
-            showConsole = true
-            consoleProcess.startTests(project: project)
-        case .runStop:           consoleProcess.stop()
-        case .runAutoLayout:
-            NotificationCenter.default.post(
-                name: .solaroResetCanvasLayout, object: nil
-            )
-        case .runExportCanvas:   exportCanvasPNG()
-        case .runTimeTravel:     showTimeTravel = true
-        // Git
-        case .gitCommit:         openCommitOverlay()
-        case .gitGraphDiff:      showGraphDiff = true
-        case .gitBlame:          showBlame()
-        case .gitRevertFile:
-            guard let url = controller.currentFile,
-                  let status = controller.gitMonitor.status.files[url.path]
-            else { return }
-            Task {
-                _ = await controller.gitMonitor.revertLocalChanges(
-                    in: project, path: url.path, status: status
-                )
-            }
-        // AI
-        case .aiOpenPanel:
-            controller.rightPaneMode = .coPilot
-            controller.inspectorShown = true
-        case .aiReset:
-            controller.aiCoPilot.reset(in: project)
-        }
     }
 
     /// Create a new file in `dir` according to the picked
@@ -1925,7 +1637,7 @@ struct WorkspaceView: View {
     /// context-menu rename, but uses AppKit's NSAlert directly so
     /// we don't have to thread a SwiftUI alert binding through
     /// the menu observer.
-    private func renameCurrentFile(at url: URL) {
+    func renameCurrentFile(at url: URL) {
         let alert = NSAlert()
         alert.messageText = "Rename \(url.lastPathComponent)"
         alert.informativeText = "Enter a new filename. The file stays in its current directory."
@@ -2073,7 +1785,10 @@ struct WorkspaceView: View {
             // VoiceOver users get the same "idle / running / failed"
             // summary as a hover tooltip user (#278); the dot
             // colour alone wouldn't be perceivable.
-            .accessibilityLabel("Runtime status")
+            // "Runtime status" told a screen-reader user the name of
+            // the control and nothing about the program (#770).
+            .accessibilityLabel(
+                CanvasAccessibility.runStateLabel(statusPipHelp))
             .accessibilityValue(statusPipHelp)
     }
 

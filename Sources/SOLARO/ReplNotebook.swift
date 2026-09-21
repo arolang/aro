@@ -108,17 +108,37 @@ struct ReplNotebookCell: Codable, Equatable, Identifiable, Sendable {
         self.durationMs = durationMs
     }
 
-    /// Decode with per-field defaults so hand-written or truncated
-    /// files still open (a notebook that half-loads is worse than
-    /// one that loads with empty outputs).
+    /// Decode, defaulting what is *absent* and refusing what is wrong.
+    ///
+    /// The two cases look similar and are not. A hand-written notebook
+    /// that omits `outputs` has simply never been run, and defaulting it
+    /// to empty is right — the original intent of this initialiser, and
+    /// the reason `.repl` files are pleasant to edit by hand. A cell
+    /// whose `source` is a number, or whose `kind` is a word that is not
+    /// a kind, is damaged, and the old code turned it into an empty code
+    /// cell with a freshly minted identity (#760). The 800 ms autosave
+    /// then wrote that back, so the cell's contents and its identity
+    /// were gone permanently, without a word. The Learning course ships
+    /// as `.repl` files that users edit, so this is a real path.
+    ///
+    /// `decodeIfPresent` draws exactly that line: `nil` for a key that
+    /// is absent or null, and a thrown error for one that is present and
+    /// of the wrong shape. The error reaches `ReplNotebookDocument.load`,
+    /// which surfaces it as `loadError` — and `saveNow` refuses to write
+    /// while that is set, so nothing overwrites the damaged file.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        kind = (try? c.decode(Kind.self, forKey: .kind)) ?? .code
-        source = (try? c.decode(String.self, forKey: .source)) ?? ""
-        outputs = (try? c.decode([ReplCellOutput].self, forKey: .outputs)) ?? []
-        executionCount = try? c.decodeIfPresent(Int.self, forKey: .executionCount)
-        durationMs = try? c.decodeIfPresent(Double.self, forKey: .durationMs)
+        // A missing id costs nothing: there is no identity to lose, and
+        // one is needed for SwiftUI to track the row.
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+            ?? UUID().uuidString
+        kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .code
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
+        outputs = try c.decodeIfPresent([ReplCellOutput].self,
+                                        forKey: .outputs) ?? []
+        executionCount = try c.decodeIfPresent(Int.self,
+                                               forKey: .executionCount)
+        durationMs = try c.decodeIfPresent(Double.self, forKey: .durationMs)
     }
 }
 

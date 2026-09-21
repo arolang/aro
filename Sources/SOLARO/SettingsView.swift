@@ -20,6 +20,8 @@ struct SettingsView: View {
     private var inspectorVisible: Bool = true
     @AppStorage(SolaroPrefs.formatOnSave.rawValue)
     private var formatOnSave: Bool = false
+    @AppStorage(SolaroPrefs.notebookStripOutputs.rawValue)
+    private var notebookStripOutputs: Bool = false
     @AppStorage(SolaroPrefs.editorGhostText.rawValue)
     private var editorGhostText: Bool = false
     @AppStorage(SolaroPrefs.editorGhostDelay.rawValue)
@@ -37,8 +39,12 @@ struct SettingsView: View {
     /// `api.github.com/search/repositories` rises from 60 to
     /// 5000 requests/hour — useful when several developers
     /// share an IP.
-    @AppStorage(GitHubMarketplaceFetcher.patDefaultsKey)
-    private var githubPAT: String = ""
+    /// Backed by the Keychain rather than `@AppStorage`; the initialiser
+    /// migrates any token left in defaults by an earlier build (GitLab #745).
+    @State private var githubPAT = SecretField(
+        .githubPAT,
+        migratingFrom: GitHubMarketplaceFetcher.legacyPATDefaultsKey
+    )
     @AppStorage(SolaroPrefs.theme.rawValue)
     private var theme: String = SolaroTheme.dark.rawValue
     @AppStorage(SolaroPrefs.metricsHistoryDepth.rawValue)
@@ -115,6 +121,11 @@ struct SettingsView: View {
                 Toggle("Inspector visible by default", isOn: $inspectorVisible)
                 Toggle("Format on save — strip trailing whitespace + tidy final newline",
                        isOn: $formatOnSave)
+                // The standard fix for notebook diff noise (#769): a
+                // notebook that was only read should not show up as
+                // changed because its cells re-rendered.
+                Toggle("Clear notebook outputs on save — keeps .repl diffs small",
+                       isOn: $notebookStripOutputs)
                 Toggle("Inline suggestions — show LSP completions as you type (⇥ to enter)",
                        isOn: $editorGhostText)
                 HStack {
@@ -180,7 +191,7 @@ struct SettingsView: View {
                 Text("AI · `aro ask`")
             }
             Section {
-                SecureField("GitHub PAT", text: $githubPAT,
+                SecureField("GitHub PAT", text: $githubPAT.value,
                             prompt: Text("ghp_… (optional)"))
                     .textFieldStyle(.roundedBorder)
                 Text("Optional token used by the plugin marketplace to query `topic:aro topic:plugin` on api.github.com. Raises the rate limit from 60 to 5000 requests / hour. Stored in this user's defaults — leave empty for unauthenticated requests.")
@@ -257,7 +268,7 @@ struct SettingsView: View {
 /// Centralised UserDefaults keys so callers (CenterPane,
 /// AICoPilot, ConsoleProcess, …) stay in sync with the
 /// SettingsView's @AppStorage names.
-enum SolaroPrefs: String {
+enum SolaroPrefs: String, CaseIterable {
     case editorFontSize   = "solaro.editor.fontSize"
     case editorLineHeight = "solaro.editor.lineHeight"
     case defaultPaneMode  = "solaro.defaultPaneMode"
@@ -285,6 +296,20 @@ enum SolaroPrefs: String {
     // the picker re-select the same certificate after a rescan.
     case signingTeamID    = "solaro.signing.teamID"
     case signingIdentity  = "solaro.signing.identitySHA1"
+    // Native build options (#763). Remembered per user rather than per
+    // project: someone who builds optimised release binaries does so for
+    // every project, and the sheet shows the current choice anyway.
+    case buildOptimize    = "solaro.build.optimize"
+    case buildLinkage     = "solaro.build.linkage"
+    /// Clear a notebook's outputs on the way to disk (#769). The
+    /// standard fix for notebook diff noise, and the book sells `.repl`
+    /// on diffing well.
+    case notebookStripOutputs = "solaro.notebook.stripOutputs"
+    /// Recorded keyboard-shortcut overrides (#776). This was a literal
+    /// string inside `Keybindings.swift` — the clearest case of a key
+    /// that nothing could enumerate, although the book tells users to
+    /// inspect their settings with `defaults export`.
+    case keybindingOverrides = "solaro.keybindings.overrides"
 }
 
 /// Which runtime drives the green Play button. The embedded path

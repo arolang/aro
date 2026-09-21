@@ -87,7 +87,7 @@ public final class PluginLoader: @unchecked Sendable {
 
     private init() {
         // Use .aro-cache in current directory
-        let currentDir = FileManager.default.currentDirectoryPath
+        let currentDir = AROWorkingDirectory.base
         self.cacheDir = URL(fileURLWithPath: currentDir).appendingPathComponent(".aro-cache")
     }
 

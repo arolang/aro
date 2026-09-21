@@ -434,6 +434,26 @@ struct WelcomeView: View {
             entrypoint: main.aro
             """
             try yamlStub.write(to: aroYaml, atomically: true, encoding: .utf8)
+
+            // SOLARO writes into the project as you use it: `.solaro/` holds
+            // the run's event log, the OpenAPI try-it-out history and saved
+            // environments, and `.layout.json` holds this user's canvas
+            // coordinates. None of it belongs to the project — the first
+            // `git add -A` in a new project committed all of it (GitLab #777).
+            let gitignore = url.appendingPathComponent(".gitignore")
+            if !FileManager.default.fileExists(atPath: gitignore.path) {
+                let ignoreStub = """
+                # SOLARO working files — per-user, per-machine, not the project
+                .solaro/
+                .layout.json
+
+                # `aro build` output
+                \(url.lastPathComponent)
+                .build/
+                """
+                try ignoreStub.write(to: gitignore, atomically: true, encoding: .utf8)
+            }
+
             let project = Project(rootPath: url)
             RecentProjects.remember(project)
             onOpen(project)

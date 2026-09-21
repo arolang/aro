@@ -33,8 +33,9 @@ useful with it before lunch.
 ## 1. The shape of SOLARO
 
 SOLARO opens to a Welcome view. From there you can open an existing
-ARO project (any folder with a `main.aro` in it), create a new one
-from a template, or jump back into something you had open before.
+ARO project (any folder with a `main.aro` in it), create a new one —
+a folder with a hello-world `main.aro` in it, which you then edit —
+or jump back into something you had open before.
 
 ![Welcome](screenshots/01-welcome.png){ width=85% }
 
@@ -80,8 +81,8 @@ shows the route / schema graph instead.
 You can pan with two fingers, zoom with a pinch, double-click a node
 to jump to its source line, right-click a feature set container to
 rename or duplicate it, and drag any node anywhere — your positions
-persist in a `.layout.json` next to the file so the picture survives
-a `git pull`.
+persist in one `.layout.json` at the project root, keyed by file, so
+the picture survives a `git pull`.
 
 ### 1.2 The code editor
 
@@ -320,12 +321,17 @@ in different places.
 
 ### 3.1 Run
 
-`Run` spawns the `aro run` subprocess against the open project. (Run
-and Debug are toolbar buttons with no default keyboard shortcut —
-every shortcut SOLARO ships is in the keybinding registry, and those
-two are not in it, so bind them yourself in Settings → Keybindings if
-you want them. When the open file is a notebook the same button turns
-into **Run All** and runs its cells instead.) The canvas highlights the **Application-Start** feature
+`Run` executes the open project. By default it runs the program
+*inside SOLARO*, linking the same `ARORuntime` the `aro` CLI uses, so
+statement events reach the canvas directly instead of travelling
+through a file. Settings → Backends offers two alternatives: an
+isolated XPC child process, where a crash in your code or a plugin
+takes down the service and not the editor, and an external `aro`
+subprocess, which is what earlier releases always did. (`Run` is
+⌘R, `Debug` is ⌘Y, `Stop` is ⌘., `Build…` is ⌘B and `Check` is ⇧⌘K —
+all remappable in Settings → Keybindings, like every other shortcut.
+When the open file is a notebook, `Run` turns into **Run All** and
+runs its cells instead.) The canvas highlights the **Application-Start** feature
 set, then each statement node lights up briefly as the runtime fires
 it. Values produced by an action (the `<result>` slot) appear under
 the node and stay there until the next run.
@@ -339,8 +345,9 @@ archaeology — the program is the trace.
 ### 3.2 Debug
 
 `Debug` launches the runtime in debug mode. Breakpoints toggle by
-clicking the gutter — they live in the file's `.layout.json` sidecar,
-so they survive a restart and travel with the project. The
+clicking the gutter — they live in the project's `.layout.json`,
+alongside the canvas positions, so they survive a restart and travel
+with the project. The
 **Selected Statement** card in the inspector shows live variable
 values when paused, and **Continue**, **Step Over**, **Step Into**
 and **Step Out** appear in the toolbar while the runtime is stopped;
@@ -564,13 +571,16 @@ For each feature set the panel shows:
 - **Avg ms** — mean wall-clock time spent inside the FS, including
   any awaited futures it forced. Sub-millisecond paths display as
   `<1`; the metric is exact above 1 ms.
-- **p95 ms** — the 95th-percentile latency, computed over a sliding
-  window of the last 200 invocations. The window resets when you
-  hit Run again so a hot-fix iteration doesn't fight the previous
-  run's outliers.
 - **Last ms** — the most recent invocation's latency. Useful when
   you're poking at a single FS via curl and want to see the number
   change per request without averaging.
+
+There is no percentile column and no Reset button; both are on the
+list rather than in the app. One caveat worth knowing under the
+default embedded backend: min, max and average are derived from the
+wall-clock span between a feature set's first and last event, so they
+agree with each other rather than describing a distribution. Under the
+external backend the numbers come from the runtime's own metrics.
 
 The panel updates once a second from the runtime's `/metrics`
 socket, so the numbers tick live while your app runs.
@@ -620,8 +630,9 @@ What you can ask it for:
   <commit-count: length>` do?" — single-shot Q&A about ARO syntax
   or the project.
 - "Add a CheckPassed event handler that logs to /tmp/passed.log"
-  — the assistant emits a diff against the current file and the
-  panel offers an Apply button.
+  — the assistant edits the open buffer directly, as one undoable
+  step. There is no diff to review first; ⌘Z is the way back, and
+  the panel says as much above the input.
 - "Run aro test" — tool calls. The assistant proposes the command,
   asks for approval (per ADR-006 the gate is binary today; see
   GitLab issue #370 for the proposed severity tiers), and pipes
@@ -650,16 +661,12 @@ once.
   inside it gets a row-coloured marker matching the result —
   green where the test passed, red where the runner pinned the
   failure. Breakpoint dots take precedence.
-- **The inspector.** A `Test results` card lists every FS with
-  its outcome and last-run latency. Failures get the runner's
-  error message inline; passing FSes collapse to a single
-  green row so the list stays readable on a project with dozens
-  of tests.
+- **The inspector's feature-set list**, where each test FS carries
+  the same pass/fail chip. There is no separate results card, and
+  no per-feature-set last-run latency — nothing collects one.
 
-Hitting `Test` (⌃⌘U) re-runs the suite. Re-runs are
-incremental — only test FSes whose source file has changed since
-the last green run actually execute. To force a full sweep, use
-View → Tests → Re-run all.
+Hitting `Test` (⌃⌘U) re-runs the suite — all of it, every time.
+Incremental re-runs are not implemented.
 
 Test discovery is purely naming-based: any feature set whose
 business activity is `…Test` or `…Tests` is a test. The Given /
@@ -753,11 +760,18 @@ Team ID with no local certificate.
 
 ### 10.2 Backends
 
-- **Runtime backend** — embedded (in-process via XPC, fastest for
-  short scripts), subprocess (one `aro` per Run, the conservative
-  default), or external (point at a remote runtime over the
-  control socket). The blurb beneath the picker reminds you which
-  is selected and what it implies.
+- **Runtime backend** — three choices, all of them local.
+  *Embedded* is the default: the program runs inside SOLARO's own
+  process, so statement events reach the canvas directly and there
+  is no `.solaro/events.jsonl` round-trip. *Isolated* runs it in
+  the `AROXPCService` child process instead, which costs roughly
+  50 µs per checkpoint and buys you a crash boundary — user code or
+  a plugin can take the service down and SOLARO keeps every buffer
+  and offers to relaunch. *External* spawns the configured `aro`
+  binary, which is what every release before the embedded runtime
+  did; under it, statement pulses only appear during `aro debug`,
+  because plain `aro run` emits no live events. The blurb beneath
+  the picker repeats this for whichever is selected.
 - **`SOLARO_ARO` override** — empty means autoresolve (repo build
   → `/usr/local` → Homebrew → `$PATH`). Set to a path to pin a
   specific binary; useful when you're hacking on the runtime and
@@ -767,8 +781,8 @@ Team ID with no local certificate.
   OpenAI-compatible URL to use a hosted model instead.
 - **Plugin marketplace** — optional GitHub PAT. Raises the
   marketplace's `topic:aro topic:plugin` API rate limit from 60
-  to 5000 requests / hour. Stored in your local defaults; never
-  uploaded.
+  to 5000 requests / hour. Kept in your login Keychain, not in
+  your defaults, and never uploaded anywhere but GitHub.
 
 ### 10.3 Keybindings
 
@@ -777,8 +791,9 @@ category — navigation, editing, and the notebook's command-mode keys
 from §1.6, which are ordinary registry entries rather than a
 hardwired special case. The left column is the command name and its
 current shortcut; the right column lets you capture a new one. The
-Reset button clears a binding back to the default. The full mapping
-is saved to `~/.config/solaro/keybindings.json` so it's portable.
+Reset button clears a binding back to the default. Overrides live in
+your defaults under `solaro.keybindings.overrides`, which is also what
+the settings panel itself tells you.
 
 ### 10.4 Books
 
@@ -905,8 +920,9 @@ If a specific file's edits still aren't landing, delete its `.o`
 
 SOLARO is built with SwiftUI on AppKit, talks to a Swift NIO-backed
 runtime, embeds an STTextView code editor, drives an MLX or
-llama-server backend for the `Ask` assistant, and uses libgit2 for
-its Git surface. The canvas is a hand-rolled layout engine because
+llama-server backend for the `Ask` assistant, and shells out to the
+`git` command line for its Git surface — so SOLARO needs `git` on
+your `PATH`, even though ARO's own `<git>` actions do not. The canvas is a hand-rolled layout engine because
 none of the off-the-shelf node-graph libraries did the live-value
 overlay we wanted. The whole thing is open source under MIT.
 

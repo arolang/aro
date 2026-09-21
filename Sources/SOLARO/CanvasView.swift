@@ -114,10 +114,8 @@ struct CanvasView: View {
     /// can omit it.
     let onReorderStatement: ((CanvasNode, CanvasNode, ReorderDropHalf) -> Void)?
 
-    @State private var pan: CGSize = .zero
-    @State private var zoom: Double = 1.0
-    @GestureState private var dragOffset: CGSize = .zero
-    @GestureState private var magnify: Double = 1.0
+    /// Pan and zoom, shared with every other graph view (#775).
+    @State private var viewport = GraphViewport()
     /// Honour System Settings → Accessibility → Display → Reduce
     /// Motion (#278). When set, the canvas drops its smooth zoom
     /// + scroll-to-node animations and snaps to the target value
@@ -178,17 +176,8 @@ struct CanvasView: View {
                 canvasLayers(contentSize: contentSize)
                 .frame(width: contentSize.width, height: contentSize.height,
                        alignment: .topLeading)
-                .offset(x: pan.width + dragOffset.width,
-                        y: pan.height + dragOffset.height)
-                .scaleEffect(zoom * magnify, anchor: .topLeading)
-                .animation(reduceMotion ? nil
-                                        : .easeOut(duration: 0.15),
-                           value: zoom)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .graphViewport($viewport, animatesZoom: !reduceMotion)
             }
-            .contentShape(Rectangle())
-            .gesture(panGesture)
-            .gesture(magnifyGesture)
             .overlay(alignment: .bottomTrailing) {
                 zoomControls.padding(SolaroSpace.m)
             }
@@ -252,11 +241,11 @@ struct CanvasView: View {
         // Solve for pan that places the node center at the viewport
         // center.
         let newPan = CGSize(
-            width: viewportSize.width / 2 - nodeCenter.x * zoom,
-            height: viewportSize.height / 2 - nodeCenter.y * zoom
+            width: viewportSize.width / 2 - nodeCenter.x * viewport.zoom,
+            height: viewportSize.height / 2 - nodeCenter.y * viewport.zoom
         )
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
-            pan = newPan
+            viewport.pan = newPan
         }
     }
 
@@ -694,26 +683,6 @@ struct CanvasView: View {
 
     // MARK: - Gestures
 
-    private var panGesture: some Gesture {
-        DragGesture()
-            .updating($dragOffset) { value, state, _ in
-                state = value.translation
-            }
-            .onEnded { value in
-                pan.width += value.translation.width
-                pan.height += value.translation.height
-            }
-    }
-
-    private var magnifyGesture: some Gesture {
-        MagnificationGesture()
-            .updating($magnify) { value, state, _ in
-                state = value
-            }
-            .onEnded { value in
-                zoom = max(0.3, min(3.0, zoom * value))
-            }
-    }
 
     // MARK: - Backdrop dot grid
 
@@ -749,19 +718,18 @@ struct CanvasView: View {
 
     private var zoomControls: some View {
         HStack(spacing: SolaroSpace.s) {
-            Button { zoom = max(0.3, zoom - 0.1) } label: {
+            Button { viewport.magnify(by: 0.9) } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
-            Text("\(Int(zoom * 100))%")
+            Text("\(Int(viewport.zoom * 100))%")
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.textSecondary)
                 .frame(minWidth: 40)
-            Button { zoom = min(3.0, zoom + 0.1) } label: {
+            Button { viewport.magnify(by: 1.1) } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
             Button {
-                pan = .zero
-                zoom = 1.0
+                viewport.reset()
             } label: {
                 Image(systemName: "scope")
             }
@@ -814,6 +782,19 @@ struct WiresLayer: View {
     }
 
     var body: some View {
+        canvas
+            // Every wire is drawn into one Canvas, so they cannot each
+            // be an element (#770). A summary of how many connections
+            // there are is still better than the silence this layer
+            // had, and it stops VoiceOver treating the whole layer as
+            // an unlabelled image.
+            .accessibilityElement()
+            .accessibilityLabel(CanvasAccessibility.wiresLabel(
+                count: graph.edges.count))
+            .accessibilityAddTraits(.isImage)
+    }
+
+    private var canvas: some View {
         Canvas { ctx, _ in
             // Draw sequence (program-flow) edges first so the
             // data-flow Béziers sit on top of them.

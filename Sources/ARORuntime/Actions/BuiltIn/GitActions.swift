@@ -253,7 +253,7 @@ public struct CloneAction: ActionImplementation {
         if path.hasPrefix("/") {
             destination = URL(fileURLWithPath: path)
         } else {
-            destination = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            destination = URL(fileURLWithPath: AROWorkingDirectory.base)
                 .appendingPathComponent(path)
         }
 

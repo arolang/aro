@@ -54,6 +54,18 @@ struct SigningSettingsTab: View {
                         Label("Rescan keychain", systemImage: "arrow.clockwise")
                     }
                     .disabled(settings.isScanning)
+                    // Now that the scan is off the main actor (#753) this
+                    // state is observable for as long as it lasts, so say
+                    // what the app is waiting on. A locked keychain puts
+                    // up its own unlock prompt, and the wait is otherwise
+                    // unexplained.
+                    if settings.isScanning {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Reading the keychain…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Toggle("Enter Team ID manually", isOn: $manualEntry)
                         .toggleStyle(.checkbox)
