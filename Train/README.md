@@ -194,6 +194,59 @@ things the report had no way to say:
 ```bash
 python3 Train/script/fact_check.py --report Train/data/07_eval/report.json
 ```
+
+#### What "good" means (GitLab #813)
+
+It used to mean `aro check` passed. Of the 4 000 rows in the recorded
+`ask-eval` run, 3 495 were judged that way, 494 by keyword and 11 not at all,
+and the reason column holds nothing but the check error — while the run's own
+analysis names "valid but wrong" as the dominant failure. A program that
+parses, runs, and computes the wrong thing scored exactly like one that is
+right.
+
+It now means **the program ran and produced what was asked for**.
+`Train/eval/functional/tasks.json` holds the benchmark; each task is graded
+one of two ways:
+
+- `execution_output` — the program is written to a directory with its
+  fixtures, run with `aro run` under a ten-second timeout, and what it printed
+  is compared to the expected output the way
+  `Tests/IntegrationTestsRunner` compares an example against its
+  `expected.txt` (ANSI stripped, the interpreter's `[Feature Set]` prefixes
+  removed, timings collapsed, placeholders such as `__NUMBER__` and
+  `__TIMESTAMP__` for what cannot be fixed).
+- `aro_test` — the generated application must pass a checked-in Given/When/Then
+  file (ARO-0015). The stronger of the two: it asserts the program's *values*
+  rather than its printing, so a correct answer formatted differently still
+  passes and a plausible wrong number does not.
+
+`aro check` survives only as a third mode for scoring an existing prompt set
+on the same axis, and every grade is reported separately so a headline number
+can never be assembled out of it again.
+
+```bash
+# verify the benchmark itself — no model needed
+python3 Train/script/functional_eval.py --reference
+```
+
+That last command is the guard against the benchmark rotting: every task ships
+a reference solution, and a benchmark whose own answers stop passing is
+measuring itself rather than the model.
+
+#### The human-rated slice
+
+A hundred answers per release, read by a person against four yes/no axes —
+correct, idiomatic, complete, safe. The rubric is
+`Train/eval/human/RUBRIC.md`; `script/human_eval.py` draws a fixed stratified
+slice and scores a filled-in sheet, reporting each axis with an interval and
+refusing to call a small difference between two releases a change.
+
+```bash
+python3 Train/script/human_eval.py sample --prompts Train/eval_prompts.json \
+    --out Train/eval/human/<version>.csv
+python3 Train/script/human_eval.py score Train/eval/human/<version>.csv \
+    --against Train/eval/human/<previous>.csv
+```
 | 20 | `20_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
 
 #### Reading a pass rate (GitLab #786)

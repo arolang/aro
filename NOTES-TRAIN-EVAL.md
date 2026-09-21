@@ -388,3 +388,84 @@ Measured on the real corpus snapshot
 `one_liner 3007 (30%) -> feature_set 2774 (28%) -> application 484 (5%) ->
 repair 3743 (37%)`, and the **second row of the file as it stands is already a
 repair**.
+### Commit 6 — #813 ("good" means `aro check` passed)
+
+**Figures confirmed exactly** from the local (gitignored) `ask-eval.csv`
+at the repo root: 4000 rows; `judge_method` = `aro_check` 3495, `keyword` 494,
+`n/a` 11; `judge` = good 2679 / bad 1321 (67.0%); 1321 non-empty `reason`
+values, all failure text.
+
+**Found and fixed: a format declared and never implemented.**
+`Train/eval_prompts.json` has carried one entry with `"grade_by":
+"execution_output"`, `fixtures` and `expected_output` since GitLab #486, and a
+grep for `grade_by` anywhere else in the repository returned nothing. It is
+read now, and its reference answer passes.
+
+Added:
+- `Train/script/functional_eval.py` — implements `execution_output` (write the
+  program + fixtures to a temp dir, `aro run` under a 10s timeout, normalise
+  and compare) and `aro_test` (the generated application must pass a checked-in
+  Given/When/Then file). Normalisation and the placeholder vocabulary are a
+  port of `Tests/IntegrationTestsRunner/lib`. Default match mode is `sequence`
+  (expected lines in order, other lines allowed between) because a generated
+  program's contract is its answer, not its framing; `strict` and `occurrence`
+  are per-task. `aro check` survives only as a third mode and is reported
+  separately so a headline cannot be built from it.
+- `Train/eval/functional/tasks.json` — **18 tasks, every reference solution
+  verified against aro 0.12.0**: `18/18 reference solutions pass`.
+  16 `execution_output`, 2 `aro_test`. Nothing in the benchmark is graded by
+  parsing alone (pinned by a test).
+- `Train/eval/human/RUBRIC.md` + `Train/script/human_eval.py` — a 100-item
+  stratified, seeded slice per release; four yes/no/n-a axes; `n/a` excluded
+  from a denominator rather than counted as a pass; an "incorrect" verdict
+  without a note is a validation error; scores come back with intervals and a
+  release-to-release verdict that can say indistinguishable.
+- 40 tests. The load-bearing one: a program that **runs cleanly and computes
+  7 + 6 instead of 7 * 6** is rejected — `status: ok`, `passed: False`. That is
+  the "valid but wrong" case neither old judge could see.
+
+Wired into NB20: the benchmark runs against the fine-tuned model and the
+summary lands in `_meta.functional`.
+
+#### Two toolchain findings, NOT fixed (they are in Sources/, out of scope)
+
+1. `Compute the <x> from "literal" + <var>.` fails with
+   `Error: Type mismatch: Cannot convert String to number`. String
+   concatenation with a literal on the left does not work. Cost me a benchmark
+   task (a Greet action); dropped it rather than encode the bug.
+2. `aro_action_catalog.json` lists `in` among Store's prepositions
+   (`['into', 'to', 'in']`), but the parser rejects it:
+   `Expected preposition, but got the keyword 'in'` — `in` is taken by
+   `for each ... in ...`. The generated catalog and the parser disagree.
+
+## Delivered
+
+MR: https://git.ausdertechnik.de/arolang/aro/-/merge_requests/591
+(train/training-eval -> main, closes #786 #787 #791 #801 #806 #813 #839)
+
+| commit | subject |
+|---|---|
+| 96f6080a | train: report pass rates with the precision they actually have (#786) |
+| bde7d016 | train: stop carrying the newest round forward instead of the best one (#787) |
+| f9613d0f | train: gate each booster before it fuses (#791) |
+| e74e58c7 | train: ground the hallucination metric in the catalogs (#801) |
+| b19b99f5 | train: teach the language before teaching the repair (#806) |
+| 9c30ba1b | train: make "good" mean the program ran and did what was asked (#813) |
+
+339 tests pass (197 pre-existing + 142 new). Every notebook cell compiles.
+`Scripts/check-proposals.py` passes. Nothing outside `Train/`,
+`.gitlab-ci.yml` and this notes file is touched.
+
+## CI follow-up
+
+First pipeline on MR !591 (22590): every test-stage job green except
+`train:unit`, which failed on a **pre-existing** test, not on anything this
+branch added — `test_config_infra_helpers.py::TestArtifactMetadata::
+test_metadata_fields` asserts `build_artifact_metadata()['aro_lang_commit']`
+resolves, and `python:3.12-slim` ships without a `git` binary, so
+`config._git_commit()` returned None. All 142 new tests passed there
+(`1 failed, 330 passed, 8 skipped` — the 8 skips are the aro-toolchain tests).
+
+The job now installs `git` and sets `safe.directory`; the runner does a real
+checkout, so the commit resolves. Amended into the #786 commit, which is where
+the job was added.
