@@ -131,8 +131,18 @@ SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
 #       DEFAULT_TYPE_CAP) so the caps file stays the readable inventory of
 #       what the model is trained to do. All uncapped: the whole course is a
 #       few hundred pairs, and notebook skills have no other source.
+#   v5 (2026-09-21, issue #806): correction 4000 → 3000. eval_derived supplies
+#       6,084 correction pairs (5,440 from ask_eval_pairs.jsonl, 642 from
+#       antihallucination.jsonl, two more elsewhere), so error→fix was the
+#       single largest task type reaching training — more of it than of
+#       writing a program correctly in the first place. A model that has seen
+#       more broken ARO than working ARO learns the shape of the repair, not
+#       the shape of the language. Correction is now capped at, not above,
+#       code_generation. Note the cap is applied first-N-wins in insertion
+#       order by 17_dataset_assembly, so which rows survive is decided by
+#       append order rather than by quality — worth fixing separately.
 # Bump TYPE_CAPS_VERSION whenever the caps change.
-TYPE_CAPS_VERSION = 'v4-2026-09-07'
+TYPE_CAPS_VERSION = 'v5-2026-09-21'
 
 TYPE_CAPS = {
     'code_generation':     3000,   # raised — keep distinct eval-derived code
@@ -142,7 +152,7 @@ TYPE_CAPS = {
     'code_transformation': None,   # uncapped (minority)
     'tool_calling':        None,   # uncapped — critical for aro ask
     'debugging':           None,   # uncapped — always useful
-    'correction':          4000,   # bounded — dominant error→fix, not overwhelming
+    'correction':          3000,   # at, not above, code_generation (#806)
     'full_application':    None,   # uncapped — plan → complete multi-file app
     # ── Notebook skills (NB32, mined from Learning/*.repl) ──────────────────
     'notebook_output':     None,   # uncapped — predict a cell's real output
