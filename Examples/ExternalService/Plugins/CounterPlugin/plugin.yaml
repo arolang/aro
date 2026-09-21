@@ -1,0 +1,15 @@
+name: counter-plugin
+version: 1.0.0
+handle: Counter
+description: Stateful counter service demonstrating the AROPluginKit builder API
+author: ARO Team
+license: MIT
+provides:
+- type: swift-plugin
+  path: Sources/
+build:
+  swift:
+    minimum-version: '5.9'
+    targets:
+    - name: CounterPlugin
+      path: Sources/

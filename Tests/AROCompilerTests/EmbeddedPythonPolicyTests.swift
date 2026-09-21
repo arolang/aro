@@ -23,7 +23,7 @@ struct EmbeddedPythonPolicyTests {
 
     private func decide(
         plugins: [String] = ["markdown"],
-        linkMode: EmbeddedPythonPolicy.LinkMode = .staticLink,
+        linkMode: CCompiler.LinkMode = .staticLink,
         distribution: StaticPythonDistribution.Location = .absent,
         override: Bool = false
     ) -> EmbeddedPythonPolicy.Decision {

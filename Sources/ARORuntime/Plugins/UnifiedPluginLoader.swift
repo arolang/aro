@@ -91,13 +91,43 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
     // MARK: - Plugin Loading
 
-    /// Load all plugins from the Plugins/ directory
-    /// - Parameter directory: Base directory containing the `Plugins/` folder
+    /// Load every plugin a project has.
+    ///
+    /// One directory, resolved once (#848). It used to be two: this
+    /// method looked for `Plugins/` and the legacy loader looked for
+    /// `plugins/`, which are the same directory on macOS and Windows
+    /// and two different ones on Linux. A project therefore loaded a
+    /// different set of plugins depending on the developer's
+    /// filesystem, and three shipped examples relied on that.
+    ///
+    /// Both passes now walk the *same* resolved directory: the managed
+    /// pass takes every subdirectory with a `plugin.yaml`, and the
+    /// legacy pass takes what is left — loose `.swift` files, prebuilt
+    /// libraries, and Swift packages without a manifest.
+    ///
+    /// - Parameter directory: the project root.
     public func loadPlugins(from directory: URL) throws {
-        let pluginsDir = directory.appendingPathComponent("Plugins")
+        guard let resolved = PluginDirectory.resolve(in: directory) else {
+            return  // No plugin directory, nothing to load.
+        }
+        let pluginsDir = resolved.url
 
-        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
-        let hasPluginsDir = FileManager.default.fileExists(atPath: pluginsDir.path)
+        if resolved.spelling == .legacy {
+            AROLogger.warning(PluginDirectory.deprecationWarning(for: directory),
+                              subsystem: "plugins")
+        }
+        // Only reachable on a case-sensitive filesystem, where a project
+        // can hold both names. Say so rather than silently ignoring one.
+        if let shadowed = PluginDirectory.shadowedDirectory(in: directory) {
+            AROLogger.warning(
+                "[plugins] both '\(PluginDirectory.canonicalName)/' and "
+                + "'\(shadowed.lastPathComponent)/' exist; only the former is "
+                + "loaded. Merge them — on macOS they would be one directory "
+                + "(GitLab #848).",
+                subsystem: "plugins")
+        }
+
+        let hasPluginsDir = true
 
         // Collect names of managed plugins (those with plugin.yaml in Plugins/) so the
         // legacy loader can skip them — prevents double-loading and module-cache conflicts
@@ -138,10 +168,13 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             }
         }
 
-        // Load legacy plugins from plugins/ directory (lowercase — bare .swift files and
-        // SPM packages without plugin.yaml). Skip any names already managed above.
+        // The same directory again, for the layouts a manifest does not
+        // describe: loose `.swift` files, prebuilt libraries, and Swift
+        // packages without a `plugin.yaml`. Names already loaded above
+        // are skipped, so nothing loads twice (#848).
         do {
-            try legacyLoader.loadPlugins(from: directory, excluding: managedPluginNames)
+            try legacyLoader.loadPlugins(fromPluginDirectory: pluginsDir,
+                                         excluding: managedPluginNames)
         } catch {
             AROLogger.debug("Legacy loader error: \(error)", subsystem: "plugins")
         }
@@ -667,6 +700,12 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         nativePlugins[pluginName] = host
         lock.unlock()
 
+        // The manifest's namespace is the one in force; say so when the
+        // plugin's own code names a different one (#825).
+        warnOnHandleMismatch(declared: host.declaredHandle,
+                             effective: qualifierNamespace,
+                             pluginName: pluginName)
+
         // Register actions from native plugin
         host.registerActions()
 
@@ -705,6 +744,13 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pythonPlugins[pluginName] = host
         lock.unlock()
 
+        // Same check as the native path (#825): the manifest's namespace
+        // is the one in force, so a code-declared one that disagrees is
+        // worth saying out loud rather than quietly overriding.
+        warnOnHandleMismatch(declared: host.declaredHandle,
+                             effective: qualifierNamespace,
+                             pluginName: pluginName)
+
         // Register actions from Python plugin
         host.registerActions()
 
@@ -714,6 +760,11 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     }
 
     // MARK: - Manifest Parsing
+
+    /// `parseManifest`, reachable from tests.
+    func parseManifestForTesting(yaml: String) throws -> UnifiedPluginManifest {
+        try parseManifest(yaml: yaml)
+    }
 
     private func parseManifest(yaml: String) throws -> UnifiedPluginManifest {
         let decoder = YAMLDecoder()
@@ -874,14 +925,38 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     ///
     /// Returns nil only for plugins that have no native/Python actions (e.g., pure aro-files plugins).
     private func resolveEffectiveHandle(manifest: UnifiedPluginManifest) -> String? {
+        let legacyHandler = manifest.provides.compactMap { $0.handler }.first
+
         // 1. Root-level handle (preferred)
         if let handle = manifest.handle {
             validateHandleFormat(handle, pluginName: manifest.name)
+            // The deprecation warning used to live in the legacy branch
+            // below, which is unreachable whenever a root-level handle
+            // is also present — so the seven example plugins carrying
+            // both keys never produced the warning CLAUDE.md promises
+            // (#825). It belongs here, where both keys are in view.
+            if let handler = legacyHandler {
+                if handler.lowercased() == handle.lowercased() {
+                    AROLogger.warning(
+                        "plugin '\(manifest.name)' still carries the deprecated "
+                        + "'handler: \(handler)' inside 'provides:'. The root-level "
+                        + "'handle: \(handle)' is what takes effect; delete the "
+                        + "legacy key.", subsystem: "plugins")
+                } else {
+                    // Two keys, two different namespaces. Whichever the
+                    // author meant, half their documentation is wrong.
+                    AROLogger.warning(
+                        "plugin '\(manifest.name)' declares two different "
+                        + "namespaces: root-level 'handle: \(handle)' and "
+                        + "deprecated 'handler: \(handler)'. '\(handle)' wins — "
+                        + "qualifiers answer to '\(handle.lowercased()).<name>'. "
+                        + "Delete the legacy key (#825).", subsystem: "plugins")
+                }
+            }
             return handle
         }
 
         // 2. Legacy: handler inside provides entries
-        let legacyHandler = manifest.provides.compactMap { $0.handler }.first
         if let handler = legacyHandler {
             AROLogger.warning("plugin '\(manifest.name)' uses deprecated 'handler:' inside 'provides:'. " +
                   "Move it to a root-level 'handle:' field in plugin.yaml (e.g., handle: \(toPascalCase(handler))).", subsystem: "plugins")
@@ -889,6 +964,54 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         }
 
         return nil
+    }
+
+    /// Warn when a plugin's own code and its manifest name different
+    /// namespaces (#825).
+    ///
+    /// The manifest wins, because it is what the loader reads and what
+    /// `aro add` writes. That is a defensible rule and it was applied
+    /// silently, which is not: a plugin whose source says `Collections`
+    /// and whose manifest says `Stats` shipped every qualifier under a
+    /// namespace its own source never mentions, and its README
+    /// documented the one that does not work.
+    private func warnOnHandleMismatch(declared: String?,
+                                      effective: String?,
+                                      pluginName: String) {
+        guard let declared, !declared.isEmpty else { return }
+        guard let effective, !effective.isEmpty else {
+            AROLogger.warning(
+                "plugin '\(pluginName)' declares handle '\(declared)' in its code "
+                + "but its plugin.yaml names none, so its qualifiers are "
+                + "registered without a namespace. Add 'handle: \(declared)' to "
+                + "plugin.yaml (#825).", subsystem: "plugins")
+            return
+        }
+        guard Self.handlesDisagree(declared: declared, effective: effective)
+        else { return }
+        AROLogger.warning(
+            "plugin '\(pluginName)' declares handle '\(declared)' in its code but "
+            + "plugin.yaml says '\(effective)'. The manifest wins, so qualifiers "
+            + "answer to '\(effective.lowercased()).<name>' and not "
+            + "'\(declared.lowercased()).<name>'. Make the two agree (#825).",
+            subsystem: "plugins")
+    }
+
+    /// Whether a code-declared handle and the effective one disagree.
+    ///
+    /// Case-insensitively: the manifest spells a handle in PascalCase
+    /// by convention and qualifiers resolve lowercased, so `Stats` and
+    /// `stats` are the same namespace and must not warn.
+    static func handlesDisagree(declared: String?, effective: String?) -> Bool {
+        guard let declared, !declared.isEmpty,
+              let effective, !effective.isEmpty
+        else { return false }
+        return declared.lowercased() != effective.lowercased()
+    }
+
+    /// `resolveEffectiveHandle`, reachable from tests.
+    func effectiveHandleForTesting(_ manifest: UnifiedPluginManifest) -> String? {
+        resolveEffectiveHandle(manifest: manifest)
     }
 
     /// Validate that a handle follows PascalCase convention.
@@ -1153,8 +1276,19 @@ struct NativePluginServiceWrapper: AROService {
         self.host = host
     }
 
+    /// Unreachable in practice, and no longer fatal when it is (#647).
+    ///
+    /// This wrapper is always registered as an *instance*, because it
+    /// needs the native plugin host it wraps. But it conforms to
+    /// `AROService`, whose `init()` the registry can call through the
+    /// protocol — and that path used to `fatalError`, taking the whole
+    /// process down rather than failing one service lookup. The
+    /// initialiser already declared `throws`; it just was not using it.
     init() throws {
-        fatalError("NativePluginServiceWrapper requires name and host")
+        throw ServiceError.initializationFailed(
+            Self.name,
+            reason: "a native plugin service cannot be created without the "
+                + "plugin it wraps — register it as an instance")
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
@@ -1178,7 +1312,12 @@ struct LazyNativeServiceWrapper: AROService {
     }
 
     init() throws {
-        fatalError("LazyNativeServiceWrapper requires pluginName and loader")
+        // Same as the other plugin service wrappers (#647): this is
+        // registered as an instance, and the protocol path that could
+        // reach here should fail one lookup rather than the process.
+        throw ServiceError.initializationFailed(
+            Self.name,
+            reason: "a native plugin service cannot be created without the plugin it wraps — register it as an instance")
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
@@ -1201,7 +1340,12 @@ struct LazyPythonServiceWrapper: AROService {
     }
 
     init() throws {
-        fatalError("LazyPythonServiceWrapper requires pluginName and loader")
+        // Same as the other plugin service wrappers (#647): this is
+        // registered as an instance, and the protocol path that could
+        // reach here should fail one lookup rather than the process.
+        throw ServiceError.initializationFailed(
+            Self.name,
+            reason: "a Python plugin service cannot be created without the plugin it wraps — register it as an instance")
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
@@ -1295,8 +1439,19 @@ struct PythonPluginServiceWrapper: AROService {
         self.host = host
     }
 
+    /// Unreachable in practice, and no longer fatal when it is (#647).
+    ///
+    /// This wrapper is always registered as an *instance*, because it
+    /// needs the Python plugin host it wraps. But it conforms to
+    /// `AROService`, whose `init()` the registry can call through the
+    /// protocol — and that path used to `fatalError`, taking the whole
+    /// process down rather than failing one service lookup. The
+    /// initialiser already declared `throws`; it just was not using it.
     init() throws {
-        fatalError("PythonPluginServiceWrapper requires name and host")
+        throw ServiceError.initializationFailed(
+            Self.name,
+            reason: "a Python plugin service cannot be created without the "
+                + "plugin it wraps — register it as an instance")
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {

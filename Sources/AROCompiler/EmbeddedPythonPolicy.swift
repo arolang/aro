@@ -32,12 +32,6 @@ public enum EmbeddedPythonPolicy {
         case refuse(reason: String)
     }
 
-    /// How the binary is being linked, as far as this decision cares.
-    public enum LinkMode: Equatable, Sendable {
-        case staticLink
-        case dynamicLink
-    }
-
     /// Decide.
     ///
     /// - Parameters:
@@ -51,7 +45,9 @@ public enum EmbeddedPythonPolicy {
     ///     environment by the caller.
     public static func decide(
         plugins: [String],
-        linkMode: LinkMode,
+        // `CCompiler.LinkMode`, not a second enum of the same two cases:
+        // one concept, one type, so they cannot disagree (GitLab #815).
+        linkMode: CCompiler.LinkMode,
         distribution: StaticPythonDistribution.Location,
         buildMachinePython: (executable: String, libraryPath: String, stdlibPath: String)?,
         overrideEnabled: Bool

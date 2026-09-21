@@ -264,6 +264,16 @@ struct BuildCommand: AsyncParsableCommand {
         await FileOps.createDirectoryIfNeeded(at: buildDir)
         await FileOps.createDirectoryIfNeeded(at: binaryPath.deletingLastPathComponent())
 
+        // Resolve --static / --dynamic once, here, before anything acts on it.
+        // Plugin pre-compilation is the first thing that needs to know (a
+        // `--dynamic` build must not bake plugins as static archives), and it
+        // runs before CompilationStrategy — which is where the flags used to be
+        // read, hence the static-link error a `--dynamic` build could report
+        // (GitLab #815).
+        let effectiveLinkMode = try CompilationStrategy.resolveLinkMode(
+            staticLink: staticLink, dynamicLink: dynamicLink
+        )
+
         // Pre-compile managed plugins for inclusion in the binary.
         // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
         // Python plugins fall back to base64 embedding (they run via subprocess).
@@ -272,8 +282,8 @@ struct BuildCommand: AsyncParsableCommand {
             sourcePluginsDir: sourceManagedPluginsDirEarly,
             outputPluginsDir: outputManagedPluginsDirEarly,
             staticBuildDir: layout.staticPluginsDir,
-            verbose: verbose,
-            linkMode: dynamicLink ? .dynamicLink : .staticLink
+            linkMode: effectiveLinkMode,
+            verbose: verbose
         )
         let compiledPlugins = try await pluginCompiler.compile(buildDir: buildDir)
         let embeddedPlugins = compiledPlugins.embeddedPlugins
@@ -326,8 +336,7 @@ struct BuildCommand: AsyncParsableCommand {
             size: size,
             strip: strip,
             release: release,
-            staticLink: staticLink,
-            dynamicLink: dynamicLink,
+            linkMode: effectiveLinkMode,
             verbose: verbose,
             keepIntermediate: keepIntermediate,
             emitLLVM: emitLLVM

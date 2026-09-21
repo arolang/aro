@@ -287,6 +287,19 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     // MARK: - Library Loading
 
     private func loadLibrary(config: UnifiedProvideEntry) throws {
+        // GitLab #618 — ask whether this binary may load a plugin shared
+        // object, not whether the loader happens to answer right now. The
+        // answer was fixed when the binary was linked, and `DynamicLoading`
+        // holds what the build recorded. Checked before the compile fallback
+        // below, so we don't spend a `swift build` producing something that
+        // could never be loaded.
+        guard DynamicLoading.canLoadPlugin(ofType: config.type) else {
+            throw NativePluginError.dynamicLoadingUnavailable(
+                pluginName,
+                message: DynamicLoading.unavailableReason(plugin: pluginName, pluginType: config.type)
+            )
+        }
+
         // Determine library path
         var libraryPath: URL?
 
@@ -1001,7 +1014,11 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             verbsMap: verbsMap,
             qualifiers: qualifierDescriptors,
             services: serviceDescriptors,
-            deprecations: deprecationList
+            deprecations: deprecationList,
+            // Both spellings, because the SDKs disagree: the Python
+            // decorator writes `handle`, the C macro writes `handler`.
+            declaredHandle: (dict["handle"] as? String)
+                ?? (dict["handler"] as? String)
         )
 
         // Create action descriptors. Stamp the namespace handle onto every entry
@@ -1423,6 +1440,14 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         pluginInfo?.services.map { $0.name } ?? []
     }
 
+    /// The namespace handle this plugin's own code declares, if any.
+    ///
+    /// For comparison against the manifest's, which is what actually
+    /// takes effect (#825).
+    public var declaredHandle: String? {
+        pluginInfo?.declaredHandle
+    }
+
     // MARK: - Helpers
 
     private func convertToSendable(_ value: Any) -> any Sendable {
@@ -1497,8 +1522,19 @@ struct NativePluginInfo: Sendable {
     let services: [NativeServiceDescriptor]
     /// Deprecated features
     let deprecations: [DeprecationDescriptor]
+    /// The namespace handle the plugin's own code declares (#825).
+    ///
+    /// The effective handle comes from `plugin.yaml`, not from here —
+    /// the manifest is what the loader reads and what `aro add` writes.
+    /// This is carried so the two can be *compared*: a plugin whose code
+    /// says `Collections` and whose manifest says `Stats` used to load
+    /// silently under the manifest's name, and every qualifier it ships
+    /// answered to a namespace its own source never mentions.
+    ///
+    /// Nil for a plugin that declares none, which is most of them.
+    let declaredHandle: String?
 
-    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [PluginQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = []) {
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [PluginQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = [], declaredHandle: String? = nil) {
         self.name = name
         self.version = version
         self.language = language
@@ -1507,6 +1543,7 @@ struct NativePluginInfo: Sendable {
         self.qualifiers = qualifiers
         self.services = services
         self.deprecations = deprecations
+        self.declaredHandle = declaredHandle
     }
 }
 
@@ -1670,6 +1707,9 @@ public enum NativePluginError: Error, CustomStringConvertible {
     case missingFunction(String, function: String)
     case executionFailed(String, message: String)
     case compilationFailed(String, message: String)
+    /// This binary was not linked in a way that can load a plugin shared
+    /// object (GitLab #618). The message explains it for this platform.
+    case dynamicLoadingUnavailable(String, message: String)
 
     public var description: String {
         switch self {
@@ -1685,6 +1725,8 @@ public enum NativePluginError: Error, CustomStringConvertible {
             return "Native plugin '\(name)' execution failed: \(message)"
         case .compilationFailed(let name, let message):
             return "Failed to compile native plugin '\(name)': \(message)"
+        case .dynamicLoadingUnavailable(_, let message):
+            return message
         }
     }
 }

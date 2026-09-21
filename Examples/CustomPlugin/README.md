@@ -74,8 +74,12 @@ Code-sign both ARO and plugins with the same Apple Developer Team ID.
 CustomPlugin/
 ├── main.aro              # ARO code calling the plugin
 ├── aro.yaml              # Plugin configuration
-└── plugins/
-    └── GreetingService.swift  # Plugin source
+└── Plugins/
+    └── GreetingService/
+        ├── plugin.yaml            # Manifest: name, handle, provides
+        ├── Package.swift          # Swift package
+        └── Sources/
+            └── GreetingService.swift
 ```
 
 ## Example Output

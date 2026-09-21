@@ -310,6 +310,16 @@ public final class CCompiler {
     public enum LinkMode: String, Sendable {
         case staticLink
         case dynamicLink
+
+        /// The name this mode is recorded under inside the produced binary
+        /// (`aro_set_build_link_mode`, GitLab #618). Kept in step with
+        /// `ARORuntime.AROLinkMode`'s raw values, which is what reads it back.
+        public var recordedName: String {
+            switch self {
+            case .staticLink: return "static"
+            case .dynamicLink: return "dynamic"
+            }
+        }
     }
 
     public struct LinkOptions {
