@@ -75,7 +75,7 @@ The fix was `VerbSets.swift` — a shared module with eleven named sets of verbs
 
 Adding a new verb means touching one file. The parity bugs *of that kind* stopped.
 
-This is a tiny architectural change with outsized impact. Shared canonical vocabulary between two execution modes is not glamorous. It's also exactly right — and it only fixes the lists you actually share. The framework variables cleared between statements are a second per-statement list that never got the same treatment, and they have drifted into a wrong answer (GitLab #552). One shared list is a habit, not a policy, until something enforces it.
+This is a tiny architectural change with outsized impact. Shared canonical vocabulary between two execution modes is not glamorous. It's also exactly right — and it only fixes the lists you actually share. The framework variables cleared between statements were a second per-statement list, kept privately by each mode, and they drifted into a wrong answer before they were pulled into `FrameworkVariables.transientKeys` alongside a parity test. The shape of the lesson is the pattern, not the incident: one shared list is a habit, not a policy, until something enforces it. `VerbSets` is shared by convention; `transientKeys` is shared by a test that fails when it isn't.
 
 ---
 

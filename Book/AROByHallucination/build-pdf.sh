@@ -21,6 +21,21 @@ CSS_FILE="$BOOK_DIR/unix-style.css"
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
+# Build from a stamped copy of the sources. `@ARO_VERSION@` and `@ARO_DATE@`
+# become the release this build is for, and the shared install snippet in
+# Book/Install.md is spliced in wherever a chapter asks for it. The checked-in
+# markdown keeps its placeholders.
+source "$BOOK_DIR/book-release.sh"
+SRC_DIR="$OUTPUT_DIR/staged"
+rm -rf "$SRC_DIR"
+mkdir -p "$SRC_DIR"
+cp "$SCRIPT_DIR"/*.md "$SRC_DIR/"
+cp "$METADATA_FILE" "$SRC_DIR/metadata.yaml"
+[[ -f "$SCRIPT_DIR/header.tex" ]] && cp "$SCRIPT_DIR/header.tex" "$SRC_DIR/"
+aro_book_stamp "$SRC_DIR"
+METADATA_FILE="$SRC_DIR/metadata.yaml"
+echo "Release: ARO $ARO_VERSION ($ARO_DATE)"
+
 # Check for required files
 if [[ ! -f "$METADATA_FILE" ]]; then
     echo "Error: metadata.yaml not found at $METADATA_FILE"
@@ -47,13 +62,13 @@ echo "Discovering chapters..."
 CHAPTERS=()
 
 # Start with cover page if it exists
-if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
+if [[ -f "$SRC_DIR/Cover.md" ]]; then
     CHAPTERS+=("Cover.md")
 fi
 
 # Get all Chapter*.md files with proper sorting
 # Transform ChapterXXY to ChapterXX.1Y for sorting so 06 < 06A < 07
-cd "$SCRIPT_DIR"
+cd "$SRC_DIR"
 while IFS= read -r file; do
     CHAPTERS+=("$file")
 done < <(for f in Chapter*.md; do
@@ -75,8 +90,8 @@ echo ""
 # Build the file list
 FILE_LIST=""
 for chapter in "${CHAPTERS[@]}"; do
-    if [[ -f "$SCRIPT_DIR/$chapter" ]]; then
-        FILE_LIST="$FILE_LIST $SCRIPT_DIR/$chapter"
+    if [[ -f "$SRC_DIR/$chapter" ]]; then
+        FILE_LIST="$FILE_LIST $SRC_DIR/$chapter"
         echo "  + $chapter"
     else
         echo "  ! Missing: $chapter"
@@ -114,8 +129,8 @@ else
     # Build content files (without cover) for TOC generation
     CONTENT_FILES=""
     for chapter in "${CHAPTERS[@]}"; do
-        if [[ "$chapter" != "Cover.md" && -f "$SCRIPT_DIR/$chapter" ]]; then
-            CONTENT_FILES="$CONTENT_FILES $SCRIPT_DIR/$chapter"
+        if [[ "$chapter" != "Cover.md" && -f "$SRC_DIR/$chapter" ]]; then
+            CONTENT_FILES="$CONTENT_FILES $SRC_DIR/$chapter"
         fi
     done
 
@@ -135,8 +150,8 @@ else
 
     # Generate cover HTML to temp file
     COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
-    if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-        pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+    if [[ -f "$SRC_DIR/Cover.md" ]]; then
+        pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SRC_DIR/Cover.md" > "$COVER_TEMP"
     else
         echo "" > "$COVER_TEMP"
     fi
@@ -183,8 +198,8 @@ cp "$CSS_FILE" "$OUTPUT_DIR/"
 # Build content files (without cover) for TOC generation
 CONTENT_FILES=""
 for chapter in "${CHAPTERS[@]}"; do
-    if [[ "$chapter" != "Cover.md" && -f "$SCRIPT_DIR/$chapter" ]]; then
-        CONTENT_FILES="$CONTENT_FILES $SCRIPT_DIR/$chapter"
+    if [[ "$chapter" != "Cover.md" && -f "$SRC_DIR/$chapter" ]]; then
+        CONTENT_FILES="$CONTENT_FILES $SRC_DIR/$chapter"
     fi
 done
 
@@ -214,8 +229,8 @@ pandoc \
 
 # Generate cover HTML to temp file
 COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
-if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-    pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+if [[ -f "$SRC_DIR/Cover.md" ]]; then
+    pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SRC_DIR/Cover.md" > "$COVER_TEMP"
 else
     echo "" > "$COVER_TEMP"
 fi

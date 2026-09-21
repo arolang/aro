@@ -32,7 +32,7 @@ Terms unique to (or used in a specific way by) the ARO debugger.
 
 **Logpoint.** A breakpoint that prints an interpolated message and continues instead of pausing. Launch-only (`--logpoint "LINE=MESSAGE"`); `{name}` tokens resolve against the bindings visible at that statement.
 
-**OSO stab.** A Mach-O symbol entry that the macOS linker emits to record "this object file contained DWARF for this address range." `dsymutil` reads OSO entries to build `.dSYM` bundles. Currently missing for ARO-compiled `.o` files (chapter 8.4).
+**OSO stab.** A Mach-O symbol entry that the macOS linker emits to record "this object file contained DWARF for this address range." `dsymutil` reads OSO entries to build `.dSYM` bundles. `aro build` earns one for its object by stamping an absolute `DW_AT_comp_dir` on the compile unit and producing the object with `clang -c -g` rather than `llc`; chapter 8.4 has the details, and CI asserts the whole chain.
 
 **PauseInfo.** The Sendable value passed from the controller to the frontend when execution pauses. Contains reason, file, line, statement summary, verb, symbol snapshot.
 

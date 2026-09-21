@@ -63,7 +63,7 @@ What `lldb` still cannot show you is the ARO *bindings*. It sees the compiled pr
 
 On macOS, Mach-O leaves DWARF in the `.o` files by design and points to them via OSO stab entries in the linked binary. `lldb` follows those entries straight to the object (the "debug map"), and `dsymutil` reads the same entries to build a self-contained `.dSYM`.
 
-Two things in `aro build` make that chain work, and both were once broken. The compiler stamps a real absolute `DW_AT_comp_dir` on the compile unit, which is what persuades `ld64` to record an `N_OSO` stab for our object at all; and the object comes from `clang -c -g` on the IR rather than from `llc`, because `llc`'s output lacks the Apple-flavored stab structure `ld` expects. The link line carries `-g` for the same reason.
+Two things in `aro build` make that chain work, and each is easy to undo by accident. The compiler stamps a real absolute `DW_AT_comp_dir` on the compile unit, which is what persuades `ld64` to record an `N_OSO` stab for our object at all; and the object comes from `clang -c -g` on the IR rather than from `llc`, because `llc`'s output lacks the Apple-flavored stab structure `ld` expects. The link line carries `-g` for the same reason.
 
 One wrinkle survives, and it is a housekeeping one: the debug map points at the intermediate `.o`, and `aro build` deletes that when the build finishes. A binary built without `--keep-intermediate` answers `Breakpoint 1: no locations (pending)` — which reads like missing debug info and is really a missing file. So for a debugging session, keep the object — or fold it into a `.dSYM`, which stands on its own afterwards (verified: `dsymutil` the binary, delete the `.o`, and the breakpoint still resolves):
 
@@ -98,7 +98,11 @@ So the loop stays:
 2. Set the breakpoint there, where the bindings are legible.
 3. Fix and re-ship.
 
-That works because the interpreter and the native binary share both the same `.aro` source *and* the same `ARORuntime` — the compiled program reaches it through the C ABI in `Sources/ARORuntime/Bridge/` rather than through a second implementation. There is no "this only happens in compiled mode" bug class that the lazy/eager divergence from chapter 4 doesn't already cover, and the two runtimes share the lazy-future semantics, so a force-order quirk you'd hit in production also hits in the interpreter.
+That works for most bugs because the interpreter and the native binary share both the same `.aro` source *and* the same `ARORuntime` — the compiled program reaches it through the C ABI in `Sources/ARORuntime/Bridge/` rather than through a second implementation. The actions, the repositories, the HTTP server and the lazy-future semantics are all the same code, so a force-order quirk you hit in production hits in the interpreter too.
+
+Two subsystems are the exception, and they are where a genuinely compiled-only bug lives. Expression evaluation has two implementations: the interpreter's `ExpressionEvaluator` and, for a serialized `when` or `while` condition, `evaluateExpressionJSON` in the bridge. Event dispatch likewise splits — typed Swift events through `EventBus` on one side, a `DomainEvent` string-plus-payload through the registration bridge on the other. Both are hand-maintained halves of one semantics, and *The Construction Studies* chapter 11 catalogues what has drifted across them before.
+
+The practical consequence: when a program behaves differently under `aro run` and under its own binary, suspect a guard condition or an event payload first. If the source reproduces it, debug it from source. If only the binary reproduces it, you are probably standing on one of those two seams, and the line table plus `lldb` is what you have.
 
 ## 8.6 What is still missing
 

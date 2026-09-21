@@ -210,7 +210,7 @@ Map the <summaries: List<NoSuchSchema>> from the <users>.
 ```
 
 That matters, because both spellings used to fail quietly
-([GitLab #559](https://git.ausdertechnik.de/arolang/aro/-/issues/559)): the
+(GitLab #559): the
 qualifier form read `UserSummary` as a *field name* and returned `[]`, and the
 `as` form passed every row through untouched — `password-hash` and all —
 which looked like it had worked.
