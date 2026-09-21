@@ -160,3 +160,34 @@ descriptor construction; `generateAROStatement` already uses `DescriptorBuilder`
 (line 566). Only Publish and Require still open-coded it.
 
 After: AROuntimeTests 1830/281, AROCLITests 354/52, AROCompilerTests 6/2 — unchanged.
+
+## #732 — partially done (three of five bullets)
+
+Done:
+2. `findSourceFiles(in:)` was byte-identical in CheckCommand and CompileCommand.
+   Now `Sources/AROCLI/Helpers/SourceFiles.find(in:)`; three call sites.
+3. Contract discovery: `CheckCommand.reportBodyPolicies` hand-rolled the
+   `["openapi.yaml","openapi.yml","openapi.json"]` list — replaced with
+   `OpenAPILoader.findContract(in:)` (provably the same: same names, same order,
+   first-existing). `AROLSP/RouteBodyLimits` keeps its own per-name loop, because
+   it deliberately falls through to a sibling spelling when one fails to PARSE;
+   it now reads the names from the new `OpenAPILoader.contractFilenames`.
+5. All seven `Foundation.exit(1)` in CheckCommand are `throw ExitCode.failure`.
+   All seven sit in `throws` functions and nothing catches between them and
+   ArgumentParser, so the exit status is the same 1 — but `defer` now runs.
+   Smoke-tested: ok app 0, missing path 1, --syntax ok 0, --syntax bad 1,
+   --recursive 0.
+
+NOT done:
+1. `ApplicationCompiler.compile(appConfig)` across six commands — the largest
+   item, spanning Run/Build/Test/Debug/Compile/Check. Each of the six prints a
+   differently worded report and exits differently; folding them needs a decision
+   about which wording survives, which is a behaviour change by definition.
+4. `extractRunCommandFlags` / DebugCommand's hand-rolled flag re-parsing. Making
+   these table-driven changes argument handling with no test covering the current
+   acceptance, so a regression would be invisible here.
+Also left: `RunCommand` printing errors to stdout while deciding ANSI colour from
+whether *stderr* is a TTY. That is a real bug, but fixing it changes what appears on
+which stream — a behaviour change, and it deserves its own issue.
+
+After: AROCLITests 354/52, AROLSPTests 76/19, AROuntimeTests 1830/281 — unchanged.
