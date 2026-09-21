@@ -22,7 +22,17 @@ A standard library provides:
 
 ## 1. Primitive Types
 
-ARO supports five primitive types. Types are inferred from literal values.
+ARO has **four** primitive types — Integer, Float, String, Boolean — and types
+are inferred from literal values. `DataType` (`AROParser/SymbolTable.swift:77`)
+declares exactly those four, plus `List`, `Map` and `schema(String)` for types
+that come from the OpenAPI contract. ARO-0003 has always said four.
+
+§1.5 below describes DateTime, and it is worth reading, but it is **not a fifth
+primitive**: a timestamp is a String that the date qualifiers and the `<now>`
+system object understand. There is no `DateTime` you can annotate, no `DateTime`
+in the type checker, and a value that looks like a date is a String everywhere
+except inside the operations in §5. This section said "five primitive types"
+until GitLab #831.
 
 ### 1.1 Integer
 

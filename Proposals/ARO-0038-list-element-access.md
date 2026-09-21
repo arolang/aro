@@ -177,13 +177,22 @@ Extract the <top-three: 0-2> from the <stack>.
 
 ### 6.1 Out of Bounds
 
-Accessing an index beyond the list length returns `nil`:
+**Specified here as `nil`; not what the runtime does.** Today an index past the
+end falls through `ExtractAction`'s specifier chain into its "unknown specifier"
+branch and binds the **whole list**:
 
 ```aro
 Create the <short> with [1, 2].
 Extract the <item: 5> from the <short>.
-(* item = nil *)
+(* specified: item = nil                       *)
+(* actual:    item = [1, 2] — the whole list   *)
 ```
+
+and the subscript form `<short>[5]` throws in the interpreter while the compiled
+binary returns `""`. The three descriptions in this proposal, in ARO-0002 §5.7
+and in the code were all different, which is why GitLab #843 exists: it has to
+choose one behaviour — error or null — and make both execution modes do it.
+Until then, do not rely on any of them; guard the length instead.
 
 ### 6.2 Empty Lists
 
@@ -202,8 +211,12 @@ Ranges are clamped to list bounds:
 ```aro
 Create the <short> with [1, 2, 3].
 Extract the <range: 0-10> from the <short>.
-(* range = [1, 2, 3] - clamped to available elements *)
+(* range = [3, 2, 1] - clamped, and in index order, which counts back *)
 ```
+
+A range uses the same indexing as a single element, so it comes back in that
+order: `0-2` on `[John, Doe, 30, Engineer]` binds `[Engineer, 30, Doe]`, not
+`[John, Doe, 30]`. Use `Reverse` if you want source order.
 
 ---
 

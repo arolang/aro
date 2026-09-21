@@ -9,7 +9,7 @@
  *)
 
 (Application-Start: Terminal UI Collection) {
-    Log "ARO Terminal UI System (ARO-0052 + ARO-0053)" to the <console>.
+    Log "ARO Terminal UI System (ARO-0083 + ARO-0085)" to the <console>.
     Log "================================================" to the <console>.
     Log "" to the <console>.
     Log "Available Examples:" to the <console>.

@@ -1,5 +1,10 @@
 # ARO-0047: Command-Line Parameters
 
+* Proposal: ARO-0047
+* Author: ARO Language Team
+* Status: **Implemented**
+* Requires: ARO-0001, ARO-0008
+
 ## Summary
 
 Add support for command-line parameters that ARO applications can extract using a dedicated `parameter` system object, enabling applications to receive configuration values at runtime without relying on environment variables.

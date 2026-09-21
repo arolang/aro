@@ -6,7 +6,7 @@
 **Status**: Draft
 **Author**: ARO Team
 **Created**: 2026-02-23
-**Related**: ARO-0052 (Terminal UI System)
+**Related**: ARO-0083 (Terminal UI)
 
 ## Abstract
 
@@ -14,7 +14,7 @@ This proposal introduces a **shadow buffer** (double buffering) optimization for
 
 ## Motivation
 
-ARO's reactive Watch pattern (ARO-0052) enables live-updating terminal UIs that re-render on events or repository changes. However, naive full-screen redraws have several problems:
+ARO's reactive terminal pattern (ARO-0083) enables live-updating terminal UIs that re-render on events or repository changes. However, naive full-screen redraws have several problems:
 
 1. **Performance**: Full-screen updates send thousands of ANSI escape codes
 2. **Flicker**: Clearing and redrawing causes visible flashing
@@ -575,23 +575,23 @@ Benchmark: Update 10 metrics
 - ✅ Update TaskManager example
 - ✅ Add performance comparison examples
 - ✅ Document optimization in Chapter 41
-- ✅ Update ARO-0052 proposal
+- ✅ Update the ARO-0083 proposal
 
 ## Future Enhancements
 
-### ARO-0054: Advanced Terminal Widgets
+### Future: Advanced Terminal Widgets
 - Widget system built on shadow buffer
 - Tables with scrolling (only render visible rows)
 - Split panes with independent dirty regions
 - Modal dialogs with shadow buffer stacking
 
-### ARO-0055: Terminal Animation
+### Future: Terminal Animation
 - Smooth animations at 60 FPS
 - Easing functions for transitions
 - Sprite-based character animations
 - Double-buffered animation frames
 
-### ARO-0056: Remote Terminal Optimization
+### Future: Remote Terminal Optimization
 - Compress dirty regions for SSH
 - Delta encoding for cell changes
 - Bandwidth usage tracking
@@ -631,7 +631,7 @@ Benchmark: Update 10 metrics
 
 ## Related Proposals
 
-- **ARO-0052**: Terminal UI System (base system)
+- **ARO-0083**: Terminal UI (base system)
 - **ARO-0007**: Event-Driven Architecture (Watch pattern)
 - **ARO-0050**: Template Engine (rendering integration)
 
