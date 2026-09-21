@@ -495,6 +495,15 @@ with their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexis
 startup the way the interpreter does. Nothing is baked in, and no object files are
 needed.
 
+**Python plugins cannot be made standalone** (GitLab #608). They need a CPython
+interpreter and its standard library at run time, and the build resolves both from the
+*build* machine — an absolute path to a framework or `libpython`, plus that machine's
+`sys.prefix`. So `aro build --static` refuses one, naming the plugin and the exact
+Python installation it would have depended on; `--dynamic` builds it with a warning
+saying the same, because that mode never promised a single file.
+`ARO_ALLOW_EMBEDDED_PYTHON=1` builds anyway, for people who build on the machine that
+will run it.
+
 Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
 the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
 from that rather than probing the loader, which answers a different question

@@ -1,3 +1,8 @@
 # Test hints for MarkdownRenderer
 # Requires managed plugin: https://github.com/arolang/plugin-python-markdown
+#
+# Interpreter only. A Python plugin needs a CPython interpreter and its standard
+# library at run time, so it cannot be baked into a standalone binary: `aro build`
+# refuses it and says which plugin and which Python installation (GitLab #608).
+mode: interpreter
 occurrence-check: true
