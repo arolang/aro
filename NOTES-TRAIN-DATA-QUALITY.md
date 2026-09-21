@@ -299,3 +299,33 @@ data/26_thinking/mlx/train.jsonl   2 348 rows,     0 usable (0.0%)
                                    wrong_preposition 119
 ```
 
+## #799 — preference data (VERIFIED, with the bias quantified)
+
+```
+data/dpo/dpo_pairs_raw.jsonl   717 rows; fields exactly {prompt, chosen,
+                               rejected} — no reason, no origin  ✓
+                               chosen is the LONGER side in 68.6% of rows
+                               (median +3 chars, mean 848 vs 781)
+data/dpo/failure_pairs.jsonl     5 rows out of 2 685 recorded failures  ✓
+                               (it does log `origin` and `error`, so the
+                               issue's "no origin" applies to the raw file)
+```
+
+**Fix:** `Train/script/35_preference_pairs.py`. Both sides are the same
+program; the rejected one has exactly one thing wrong and carries the oracle's
+own complaint. Reuses 34's mutation table, so the two stages agree on what
+"one thing wrong" means. `--audit FILE` reports any preference file's length
+bias; `LENGTH_RATIO_LIMIT` drops a pair whose sides differ by more than 25%.
+
+Before/after:
+```
+dpo_pairs_raw.jsonl   717 pairs  chosen longer 68.6%  median +3 chars
+                                 mean 848 / 781   reason: no   origin: no
+35_preference_pairs  1 007 pairs chosen longer 49.4%  median  0 chars
+                                 mean 265 / 265   reason: yes  origin: yes
+                                 invalid_verb 382, missing_period 344,
+                                 unknown_qualifier 162, wrong_preposition 119
+```
+Not done: swapping the custom hinge loss for ORPO/DPO in mlx-lm — that is the
+training stage, which belongs to `train/training-eval`, not to data quality.
+
