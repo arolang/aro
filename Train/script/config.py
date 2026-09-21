@@ -1349,6 +1349,7 @@ def save_notebook_pair(notebook_tag: str, pair: dict,
     if not _fixtrain_gate_pair(pair, notebook_tag):
         return False
     pair = stamp_provenance(pair, notebook_tag, generation_strategy, lineage)
+    pair = ensure_task_type(pair, notebook_tag)
     if not _pair_gate(pair, notebook_tag):
         return False
     _ensure_run_recorded()
@@ -1383,6 +1384,7 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
                 gate_dropped += 1
                 continue
             pair = stamp_provenance(pair, notebook_tag, generation_strategy)
+            pair = ensure_task_type(pair, notebook_tag)
             if not _pair_gate(pair, notebook_tag):
                 runtime_dropped += 1
                 continue
@@ -2102,6 +2104,139 @@ def _fixtrain_gate_pair(pair, notebook_tag=''):
         print(f'  {tag}fixtrain-gate drop: {v["rule"]} — {v["match"][:60]!r}',
               flush=True)
     return False
+
+
+# ── task_type is not optional (GitLab #782) ──────────────────────────────────
+# 4 822 of the 10 007 rows carried `task_type: None` — the book-QA, knowledge
+# extraction and LLM-extraction stages simply never set one. 17_dataset_assembly
+# then guessed from the source prefix and 20_evaluation stratified the holdout
+# on that guess, which is how a 200-row holdout ended up with exactly one
+# translation, one correction and one multi_file_application sample in it.
+#
+# The guess lives here now, where it can be tested, and it is a guess of last
+# resort: a stage that knows what it is producing should say so.
+
+TASK_TYPE_SOURCE_PREFIXES = (
+    ('book_qa:', 'syntax_qa'),
+    ('wiki:', 'syntax_qa'),
+    ('actions_explain', 'syntax_qa'),
+    ('actions_which', 'syntax_qa'),
+    ('actions_alias', 'syntax_qa'),
+    ('proposal:', 'syntax_qa'),
+    ('repair', 'correction'),
+    ('fix_', 'correction'),
+    ('diagnostic', 'correction'),
+    ('git_', 'debugging'),
+    ('mutation', 'code_generation'),
+    ('recombination', 'code_generation'),
+    ('spec_to_code', 'code_generation'),
+    ('readme_to_code', 'code_generation'),
+    ('example:', 'code_generation'),
+    ('book:', 'code_generation'),
+    ('curated/', 'code_generation'),
+    ('aro_by_example', 'code_generation'),
+    ('actions_usage', 'code_generation'),
+    ('actions_context', 'code_generation'),
+    ('multi_turn', 'tool_calling'),
+    ('notebook', 'notebook_qa'),
+)
+
+# `## openapi.yaml` + `## main.aro`, or any two `## <file>` headings: the
+# answer is a whole application, not a snippet. These were being filed as
+# `code_generation` and the one task type the caps care most about was
+# invisible.
+_MULTI_FILE_HEADING_RE = _re.compile(r'^\s*#{2,3}\s+[\w./-]+\.(aro|yaml|yml|store|json)\s*$',
+                                     _re.MULTILINE)
+
+
+def looks_like_multi_file_application(text) -> bool:
+    headings = _MULTI_FILE_HEADING_RE.findall(text or '')
+    return len(headings) >= 2
+
+
+def infer_task_type(pair, default=None):
+    """Best guess at a pair's task_type, or `default` when there is none.
+
+    Order matters: the shape of the answer beats the source tag, because a
+    source that usually produces snippets sometimes produces an application.
+    """
+    explicit = pair.get('task_type')
+    if explicit:
+        return explicit
+    answer = _pair_assistant_text(pair)
+    prompt = ''
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in msgs:
+            if isinstance(msg, dict) and msg.get('role') == 'user':
+                prompt = msg.get('content') or ''
+                break
+        if any(isinstance(m, dict) and m.get('role') == 'tool' for m in msgs) \
+                or '<tool_call>' in answer:
+            return 'tool_calling'
+    else:
+        prompt = pair.get('instruction') or pair.get('prompt') or ''
+    if looks_like_multi_file_application(answer):
+        return 'multi_file_application'
+    prov = pair.get('provenance') or {}
+    source = str(prov.get('source') or pair.get('source')
+                 or prov.get('generation_strategy') or '').lower()
+    for prefix, task_type in TASK_TYPE_SOURCE_PREFIXES:
+        if source.startswith(prefix):
+            return task_type
+    lowered = prompt.lower()
+    if lowered.startswith('fix this') or 'what is wrong' in lowered:
+        return 'correction'
+    if '```aro' in answer:
+        return 'code_generation'
+    if '?' in prompt:
+        return 'syntax_qa'
+    return default
+
+
+class MissingTaskType(ValueError):
+    """Raised when a pair reaches the corpus without a task_type and none can
+    be inferred. Caps and the stratified holdout are computed from this field;
+    a row without one is a row nobody can account for."""
+
+
+REQUIRE_TASK_TYPE = os.environ.get(
+    'ARO_TRAIN_REQUIRE_TASK_TYPE', '1').strip().lower() not in ('0', 'false', 'no')
+
+
+def ensure_task_type(pair, notebook_tag=''):
+    """Fill in `task_type`, or raise. Returns the pair."""
+    task_type = infer_task_type(pair)
+    if task_type:
+        pair['task_type'] = task_type
+        return pair
+    if REQUIRE_TASK_TYPE:
+        raise MissingTaskType(
+            f'[{notebook_tag or "?"}] pair has no task_type and none could be '
+            f'inferred; set it explicitly when you save the pair. '
+            f'Instruction: {(pair.get("instruction") or "")[:100]!r}')
+    return pair
+
+
+def task_type_census(path=None):
+    """{task_type: count} over a corpus file, `None` included as a key."""
+    path = Path(path) if path else PAIRS_FILE
+    counts = _Counter()
+    if not path.exists():
+        return {}
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if is_jsonl_metadata_record(record):
+                continue
+            counts[record.get('task_type') or '(none)'] += 1
+    return dict(counts.most_common())
 
 
 # ── The save-time runtime gate (GitLab #780) ─────────────────────────────────

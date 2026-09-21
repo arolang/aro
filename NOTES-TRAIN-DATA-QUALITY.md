@@ -157,3 +157,36 @@ scores made a skipped server and a missing binary indistinguishable.
 `ARO_NO_DEFER=1` so two runs of a program agree (ARO-0088 statement overlap).
 Servers are detected by shape (Keepalive / Listen / Start the <http-server> …).
 
+## #782 — task_type missing on 48% (VERIFIED exactly)
+
+`4822 / 10007 = 48.2%` — the issue's figure to the decimal.
+
+Fix: `config.infer_task_type()` (the guess moved out of the assembly notebook
+into testable code), `config.ensure_task_type()` called by both save paths and
+raising `MissingTaskType` (`ARO_TRAIN_REQUIRE_TASK_TYPE=0` to relax),
+`config.task_type_census()`, and `Train/script/backfill_task_types.py`.
+
+Backfill result (run on a COPY at /tmp/claude-501/tt/kp.jsonl — see note
+below):
+```
+missing before : 4822 (48.2%)
+filled         : 4822   syntax_qa 3679, code_generation 903, correction 119,
+                        multi_file_application 102, tool_calling 19
+still missing  : 0
+re-run         : 0 filled (idempotent)
+```
+Per type, before → after: syntax_qa 0 → 3679, correction 0 → 119,
+tool_calling 0 → 19, **multi_file_application 14 → 116**, code_generation
+1005 → 1908. The holdout contained one multi-file application because only 14
+of the 116 were labelled — the key mis-labelling was that an answer shaped
+`## openapi.yaml` + `## main.aro` was filed as `code_generation`; inference
+now reads the answer's shape before the source tag.
+
+**Not written to the shared corpus.** `Train/data/` lives only in the main
+checkout and sibling training branches are running against it; rewriting a
+10 007-line file while another process appends would lose rows. The backfill
+was verified end to end on a copy. `--write` is the operator's one-off step.
+
+Six pre-existing tests in `test_config_infra_helpers.py` saved unlabelled
+pairs; they now set `task_type` (that is the point of the change).
+
