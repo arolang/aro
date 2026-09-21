@@ -128,7 +128,8 @@ Multiple handlers can subscribe to the same event type:
     Extract the <order> from the <event: order>.
     Extract the <items> from the <order: items>.
     for each <item> in <items> {
-        <Decrement> the <stock> for the <item: productId> with <item: quantity>.
+        Compute the <remaining> from <item: stock> - <item: quantity>.
+        Update the <item> with { stock: <remaining> }.
     }
     Return an <OK: status> for the <inventory>.
 }
@@ -136,7 +137,9 @@ Multiple handlers can subscribe to the same event type:
 (Track Revenue: OrderCreated Handler) {
     Extract the <order> from the <event: order>.
     Extract the <amount> from the <order: total>.
-    Increment the <daily-revenue> by <amount>.
+    Retrieve the <revenue-so-far> from the <revenue-repository: last>.
+    Compute the <daily-revenue> from <revenue-so-far> + <amount>.
+    Store the <daily-revenue> into the <revenue-repository>.
     Return an <OK: status> for the <analytics>.
 }
 ```
@@ -189,7 +192,7 @@ Event handlers can filter events based on payload field values. Guards are speci
 (* Only handle OrderUpdated when status is "paid" *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
     Extract the <order> from the <event: order>.
-    Process the <payment> for the <order>.
+    Send the <payment-request> to the <payment-gateway> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```
@@ -612,8 +615,17 @@ Filtering:
 Retrieve the <user> from the <user-repository> where <id> is <user-id>.
 ```
 
-The `where` field MUST be written in angle brackets (`where <id> is <user-id>`);
-the unbracketed form `where id = <user-id>` is a parse error. Repository
+The `where` field may be written either way: `where <id> is <user-id>` and
+`where id = <user-id>` parse to the same `WhereClause`
+(`AROParser/Parser.swift:1303`), and hyphenated bare names work too
+(`where customer-id = <id>`). This document said the bare form was a parse error
+until GitLab #831; ARO-0018 §2.0 has the newer and correct account, including
+that the relaxation applies **only** to the query `where` clause — the `where`
+guarding a `for each` header, a `match` case or a feature-set header is an
+ordinary boolean expression and still requires angle brackets around every
+variable.
+
+Repository
 filtering is **equality-only**: the storage matches rows through an equality
 index on the named field, so `where <id> is <user-id>` (or the `=` spelling)
 selects rows whose `id` equals `<user-id>`. Range or substring operators

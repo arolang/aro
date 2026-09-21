@@ -205,25 +205,6 @@ public struct ReturnAction: SynchronousAction {
         }
     }
 
-    /// Format an array item as a string
-    private func formatArrayItem(_ value: any Sendable, context: ExecutionContext) -> String {
-        switch value {
-        case let str as String:
-            if let resolved = context.resolveAny(str) {
-                return formatArrayItem(resolved, context: context)
-            }
-            return str
-        case let int as Int:
-            return String(int)
-        case let double as Double:
-            return String(double)
-        case let bool as Bool:
-            return bool ? "true" : "false"
-        default:
-            return String(describing: value)
-        }
-    }
-
     /// Convert a Sendable value to a JSON-compatible type
     private func convertSendableToJSON(_ value: any Sendable) -> Any {
         SendableConverter.toJSON(value)

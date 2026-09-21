@@ -89,7 +89,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         )
 
         if errors > 0 {
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
         _ = warnings
     }
@@ -105,7 +105,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         let sourceFiles: [URL]
 
         if isDirectory {
-            sourceFiles = try findSourceFiles(in: resolvedPath)
+            sourceFiles = try SourceFiles.find(in: resolvedPath)
         } else {
             sourceFiles = [resolvedPath]
         }
@@ -364,7 +364,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             // No subdirectory holds sources, so the path is one application
             // (or empty, which `checkApplication` reports).
             let (errors, _) = try checkApplication(at: root, isDirectory: true)
-            if errors > 0 { Foundation.exit(1) }
+            if errors > 0 { throw ExitCode.failure }
             return
         }
 
@@ -381,7 +381,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         } else {
             print("❌ \(failed.count) of \(applications.count) application(s) have errors:"
                   + " \(failed.joined(separator: ", "))")
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
     }
 
@@ -403,7 +403,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: entry.path, isDirectory: &isDirectory),
                   isDirectory.boolValue,
-                  let sources = try? findSourceFiles(in: entry),
+                  let sources = try? SourceFiles.find(in: entry),
                   !sources.isEmpty
             else { continue }
 
@@ -419,10 +419,7 @@ struct SourceCheckSubcommand: ParsableCommand {
     }
 
     private func reportBodyPolicies(directory: URL, sourceFiles: [URL]) -> Int {
-        let contract = ["openapi.yaml", "openapi.yml", "openapi.json"]
-            .map { directory.appendingPathComponent($0) }
-            .first { FileManager.default.fileExists(atPath: $0.path) }
-        guard let contract else { return 0 }
+        guard let contract = OpenAPILoader.findContract(in: directory) else { return 0 }
 
         guard let spec = try? OpenAPILoader.load(from: contract) else { return 0 }
 
@@ -520,7 +517,7 @@ struct SourceCheckSubcommand: ParsableCommand {
                 source = try String(contentsOfFile: path, encoding: .utf8)
             } catch {
                 FileHandle.standardError.write(Data("\(label): cannot read file: \(error)\n".utf8))
-                Foundation.exit(1)
+                throw ExitCode.failure
             }
         } else {
             // Treat the argument as the inline snippet itself.
@@ -533,7 +530,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             print("\(label): (empty input)")
             print()
             print("❌ no source to check")
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
 
         // If the snippet is already a full feature set (`(Name: Activity) { … }`),
@@ -626,7 +623,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             }
         }
         if realErrors > 0 {
-            Foundation.exit(1)
+            throw ExitCode.failure
         }
     }
 
@@ -675,29 +672,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             if realErrors > 0 { print("❌ \(realErrors) syntax error(s)") }
             if realWarnings > 0 && warnings { print("⚠️  \(realWarnings) warning(s)") }
         }
-        if realErrors > 0 { Foundation.exit(1) }
-    }
-
-    private func findSourceFiles(in directory: URL) throws -> [URL] {
-        let fileManager = FileManager.default
-
-        guard let enumerator = fileManager.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
-        var sourceFiles: [URL] = []
-
-        for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension == "aro" {
-                sourceFiles.append(fileURL)
-            }
-        }
-
-        return sourceFiles.sorted { $0.path < $1.path }
+        if realErrors > 0 { throw ExitCode.failure }
     }
 
     /// Event types handled anywhere in the application.
@@ -852,9 +827,10 @@ struct PluginCheckSubcommand: ParsableCommand {
             if !plugins.isEmpty {
                 print("")
                 print("Plugin details:")
+                let lockedPlugins = try pm.lockFile.load()
                 for plugin in plugins {
                     let constraint = plugin.manifest.aroVersion ?? "(any)"
-                    let lock = pm.lockFile.load().entry(for: plugin.manifest.name)
+                    let lock = lockedPlugins.entry(for: plugin.manifest.name)
                     let commit = lock?.commit.map { String($0.prefix(7)) } ?? "not locked"
                     print("   \(plugin.manifest.name) v\(plugin.manifest.version)")
                     print("     aro-version: \(constraint)")

@@ -376,7 +376,25 @@ type_name = "String" | "Integer" | "Float" | "Boolean"
 
 ## No Optionals Philosophy
 
-ARO has no optional types and no null values. This is a deliberate design choice that eliminates an entire category of bugs.
+ARO has no optional **types**: there is no `String?`, no `Option<T>`, nothing to
+unwrap, and no way to declare that a field may be absent. A value either exists
+or the statement that needed it fails with a descriptive error. This is a
+deliberate design choice that eliminates an entire category of bugs.
+
+That is a statement about the type system, not about the value space. A `null`
+value does exist:
+
+- `null`, `nil` and `none` are all lexed as the same literal
+  (`AROParser/Lexer.swift:86`) and evaluate to a `NullValue` singleton;
+- `is null`, `is not null` and `= nil` are ordinary equality comparisons against
+  it (`Parser.swift:2639`), and ARO-0035 uses the `= nil` spelling for
+  configuration guards;
+- an absent element binds it — ARO-0038 §6.2, and see GitLab #843 for the
+  out-of-bounds case that is still unsettled.
+
+So the guarantee is "no declared optionality", not "null cannot occur". This
+section used to claim "no null values", which contradicted ARO-0001, ARO-0035
+and ARO-0038 (GitLab #831).
 
 ### The Problem with Optionals
 

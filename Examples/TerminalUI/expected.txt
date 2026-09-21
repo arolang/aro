@@ -1,7 +1,7 @@
 # Example: TerminalUI
 # Type: console
 ---
-ARO Terminal UI System (ARO-0052 + ARO-0053)
+ARO Terminal UI System (ARO-0083 + ARO-0085)
 ================================================
 
 Available Examples:

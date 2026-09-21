@@ -13,6 +13,8 @@
 
 import Testing
 import Foundation
+import AROCompiler
+import ARORuntime
 @testable import AROCLI
 
 @Suite("PluginCompiler — pure helpers (#435)")
@@ -155,6 +157,99 @@ struct PluginCompilerTests {
     func emptyManifest() {
         #expect(!PluginCompiler.manifestDeclaresPythonPlugin(""))
         #expect(!PluginCompiler.manifestDeclaresNativePlugin(""))
+    }
+
+    // MARK: - Link mode reaches the plugin stage (GitLab #815)
+
+    @Test("--dynamic resolves to a dynamic link, and is the only way to get one")
+    func dynamicFlagResolvesToDynamicLink() throws {
+        #expect(try CompilationStrategy.resolveLinkMode(staticLink: false, dynamicLink: true) == .dynamicLink)
+        // Static is the default, with or without the flag.
+        #expect(try CompilationStrategy.resolveLinkMode(staticLink: false, dynamicLink: false) == .staticLink)
+        #expect(try CompilationStrategy.resolveLinkMode(staticLink: true, dynamicLink: false) == .staticLink)
+    }
+
+    @Test("--static and --dynamic together are refused")
+    func mutuallyExclusiveLinkFlags() {
+        #expect(throws: (any Error).self) {
+            _ = try CompilationStrategy.resolveLinkMode(staticLink: true, dynamicLink: true)
+        }
+    }
+
+    @Test("the name baked into the binary is the one the runtime parses (#618)")
+    func recordedLinkModeNamesRoundTrip() {
+        // The compiler writes `recordedName` into the binary and the runtime
+        // reads it back as an AROLinkMode. If these ever drift, a compiled
+        // binary silently falls back to the interpreter default.
+        #expect(AROLinkMode(rawValue: CCompiler.LinkMode.staticLink.recordedName) == .static)
+        #expect(AROLinkMode(rawValue: CCompiler.LinkMode.dynamicLink.recordedName) == .dynamic)
+    }
+
+    // MARK: - findPluginSharedLibrary
+
+    @Test("findPluginSharedLibrary finds a library the managed compile produced")
+    func findsManagedPluginLibrary() throws {
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let sources = dir.appendingPathComponent("Sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        let ext = PluginCompiler.sharedLibraryExtension
+        try touch(sources.appendingPathComponent("libgreeter.\(ext)"))
+
+        #expect(PluginCompiler.findPluginSharedLibrary(in: [dir])?.lastPathComponent == "libgreeter.\(ext)")
+    }
+
+    @Test("findPluginSharedLibrary returns nil when only sources are present")
+    func noLibraryForSourcesOnly() throws {
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try touch(dir.appendingPathComponent("Package.swift"))
+        try touch(dir.appendingPathComponent("plugin.yaml"))
+
+        #expect(PluginCompiler.findPluginSharedLibrary(in: [dir]) == nil)
+    }
+
+    // MARK: - Embedded Python and the standalone contract (GitLab #608)
+
+    /// A compiler configured for one link mode, with no plugin directories —
+    /// the Python policy is decided from the link mode and the plugin names.
+    private func compiler(linkMode: CCompiler.LinkMode) -> PluginCompiler {
+        let nowhere = URL(fileURLWithPath: "/nonexistent-aro-plugin-dir")
+        return PluginCompiler(
+            sourcePluginsDir: nowhere,
+            outputPluginsDir: nowhere,
+            staticBuildDir: nowhere,
+            linkMode: linkMode,
+            verbose: false
+        )
+    }
+
+    @Test("a --static build refuses a Python plugin")
+    func staticBuildRefusesPythonPlugin() {
+        // A standalone binary cannot carry an interpreter it resolved from the
+        // build machine's paths; the build says so rather than the customer's
+        // machine saying it later.
+        #expect(throws: (any Error).self) {
+            try compiler(linkMode: .staticLink)
+                .reportEmbeddedPythonDependency(plugins: ["plugin-python-markdown"], python: nil)
+        }
+    }
+
+    @Test("a --dynamic build allows a Python plugin")
+    func dynamicBuildAllowsPythonPlugin() throws {
+        // --dynamic already means "not one file"; a dependency on a local
+        // Python is consistent with what it promises, and is warned about.
+        try compiler(linkMode: .dynamicLink)
+            .reportEmbeddedPythonDependency(plugins: ["plugin-python-markdown"], python: nil)
+    }
+
+    @Test("a build with no Python plugins is unaffected in either mode")
+    func noPythonPluginsNoPolicy() throws {
+        for mode in [CCompiler.LinkMode.staticLink, .dynamicLink] {
+            try compiler(linkMode: mode).reportEmbeddedPythonDependency(plugins: [], python: nil)
+        }
     }
 }
 

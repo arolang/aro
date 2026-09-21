@@ -72,6 +72,25 @@ public struct SourceSpan: Sendable, Equatable, CustomStringConvertible {
     public static var unknown: SourceSpan {
         SourceSpan(at: SourceLocation())
     }
+
+    /// Whether `location` falls inside this span, both ends inclusive.
+    ///
+    /// Only line and column are compared, because the locations a language
+    /// server builds from an LSP position carry no offset. Every LSP handler
+    /// used to keep a private copy of this test; the span knows its own
+    /// extent, so the test belongs here.
+    public func contains(_ location: SourceLocation) -> Bool {
+        if location.line < start.line || location.line > end.line {
+            return false
+        }
+        if location.line == start.line && location.column < start.column {
+            return false
+        }
+        if location.line == end.line && location.column > end.column {
+            return false
+        }
+        return true
+    }
 }
 
 /// Protocol for AST nodes that have a source location

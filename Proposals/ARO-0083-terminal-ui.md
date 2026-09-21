@@ -847,7 +847,7 @@ Proper full-screen TUI applications:
 
 ## 12. Performance Optimization
 
-For production terminal UIs with frequent updates (dashboards, monitors, progress indicators), ARO provides a **shadow buffer** optimization system detailed in **ARO-0053: Terminal Shadow Buffer Optimization**.
+For production terminal UIs with frequent updates (dashboards, monitors, progress indicators), ARO provides a **shadow buffer** optimization system detailed in **ARO-0085: Terminal Shadow Buffer Optimization**.
 
 ### Key Optimizations
 
@@ -867,7 +867,7 @@ For production terminal UIs with frequent updates (dashboards, monitors, progres
 
 The shadow buffer is automatically enabled for TTY terminals and integrates transparently with the Watch pattern - no syntax changes required.
 
-**See**: ARO-0053 for complete implementation details and benchmarks.
+**See**: ARO-0085 for complete implementation details and benchmarks.
 
 ## 13. Related Proposals
 
@@ -877,14 +877,14 @@ The shadow buffer is automatically enabled for TTY terminals and integrates tran
 - **ARO-0005**: Application architecture and lifecycle
 - **ARO-0007**: Event-driven architecture (EventBus, observers)
 - **ARO-0050**: Template engine (rendering, filters, inclusion)
-- **ARO-0053**: Terminal shadow buffer optimization
+- **ARO-0085**: Terminal shadow buffer optimization
 
 ## 14. Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-02-22 | Initial proposal with reactive Watch pattern |
-| 1.1 | 2026-02-23 | Added ARO-0053 shadow buffer optimization reference |
+| 1.1 | 2026-02-23 | Added the shadow-buffer reference (ARO-0085, renumbered from ARO-0053) |
 
 ## 15. Summary
 

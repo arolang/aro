@@ -89,7 +89,7 @@ enum StatementModifiers {
                 context.bind("_by_var_", value: varName)
             }
             if let order = byClause.order {
-                context.bind("_by_order_", value: order)
+                context.bind("_by_order_", value: order.rawValue)
             }
         }
 

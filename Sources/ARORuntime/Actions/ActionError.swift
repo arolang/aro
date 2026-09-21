@@ -305,7 +305,7 @@ extension ActionError {
         let needle = name.lowercased()
         var best: (name: String, distance: Int)? = nil
         for candidate in candidates {
-            let distance = editDistance(needle, candidate.lowercased())
+            let distance = EditDistance.levenshtein(needle, candidate.lowercased())
             if best == nil || distance < best!.distance {
                 best = (candidate, distance)
             }
@@ -313,26 +313,6 @@ extension ActionError {
         guard let best else { return nil }
         let budget = max(1, needle.count / 3)
         return best.distance <= budget ? best.name : nil
-    }
-
-    /// Levenshtein distance, two-row variant.
-    private static func editDistance(_ a: String, _ b: String) -> Int {
-        let lhs = Array(a), rhs = Array(b)
-        if lhs.isEmpty { return rhs.count }
-        if rhs.isEmpty { return lhs.count }
-        var previous = Array(0...rhs.count)
-        var current = [Int](repeating: 0, count: rhs.count + 1)
-        for i in 1...lhs.count {
-            current[0] = i
-            for j in 1...rhs.count {
-                let cost = lhs[i - 1] == rhs[j - 1] ? 0 : 1
-                current[j] = min(previous[j] + 1,
-                                 current[j - 1] + 1,
-                                 previous[j - 1] + cost)
-            }
-            swap(&previous, &current)
-        }
-        return previous[rhs.count]
     }
 }
 

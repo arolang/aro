@@ -11,6 +11,16 @@ public struct OpenAPILoader {
     public static let contractFilename = "openapi.yaml"
     public static let alternativeFilenames = ["openapi.yml", "openapi.json"]
 
+    /// Every name a contract may have, in the order they are tried.
+    ///
+    /// The CLI and the language server used to write this list out again
+    /// themselves, so a fourth spelling would have had to be added in three
+    /// places (#732). The loader owns the list; callers that need their own
+    /// walk over the names read it from here.
+    public static var contractFilenames: [String] {
+        [contractFilename] + alternativeFilenames
+    }
+
     public static func load(from url: URL) throws -> OpenAPISpec {
         let data = try Data(contentsOf: url)
         return try parse(data: data, filename: url.lastPathComponent)

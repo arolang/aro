@@ -1,9 +1,9 @@
 # plugin-c-hash
 
 A C plugin for ARO that provides various hash functions.
-Implements the **ARO-0073 ABI**.
+Implements the **ARO-0087 plugin ABI**.
 
-> **Note:** For new C plugins, use the [ARO Plugin SDK for C](https://github.com/arolang/aro-plugin-sdk-c) which provides helpers and boilerplate for the ARO-0073 ABI.
+> **Note:** For new C plugins, use the [ARO Plugin SDK for C](https://github.com/arolang/aro-plugin-sdk-c) which provides helpers and boilerplate for the ARO-0087 plugin ABI.
 
 ## Installation
 
@@ -23,7 +23,7 @@ Or manually:
 clang -O2 -fPIC -dynamiclib -o libhash_plugin.dylib src/hash_plugin.c
 ```
 
-## ARO-0073 ABI
+## ARO-0087 plugin ABI
 
 The plugin exposes the following C functions:
 
