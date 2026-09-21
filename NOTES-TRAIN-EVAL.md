@@ -359,3 +359,32 @@ Note on a stale doc claim found on the way: CLAUDE.md says "Log ... to, never
 Log ... for", but `aro_action_catalog.json` (generated from the runtime) gives
 Log the prepositions `for`, `to`, `with`. Not touched — CLAUDE.md is out of
 scope for this branch.
+### Commit 5 — #806 (inverted curriculum)
+
+Added `Train/script/curriculum.py` (28 tests):
+- `CURRICULUM_STAGES` = one_liner -> feature_set -> application -> repair;
+  `stage_of` classifies from task_type first, then the shape of the answer.
+- `order_by_curriculum` orders the training FILE (mlx_lm reads it in order),
+  shuffling within each rung; the train/valid/test split stays random so the
+  splits remain representative.
+- `is_execution_verified` uses markers checked against the real corpus, not
+  guessed: NB09 stamps `exec_stdout` on every pair whose program it ran and
+  nothing else writes that key; NB32 writes `source: learning_notebook` /
+  `task_type: notebook_output|notebook_cell`; reducer.jsonl is `eval_reducer`.
+  `fim` is excluded — its ground truth parsed, it did not run.
+  Verified: the CLI reports `execution-verified 461 (100%)` on the real
+  `data/05_exec_pairs/exec_pairs.jsonl`.
+- `apply_execution_weight` materialises the 2x as repetition, because mlx_lm
+  has no per-sample loss weight and NB17 strips `weight` before writing.
+
+config.py: `TYPE_CAPS_VERSION` v4 -> `v5-2026-09-21`, `correction` 4000 -> 3000
+(at, not above, `code_generation`), with the reasoning in the changelog.
+
+Wired: NB17 (after the verb-floor up-sampling, replacing the second blind
+shuffle) and NB07 (train slice only).
+
+Measured on the real corpus snapshot
+(`data/02_knowledge/knowledge_pairs.jsonl`, 10,008 rows):
+`one_liner 3007 (30%) -> feature_set 2774 (28%) -> application 484 (5%) ->
+repair 3743 (37%)`, and the **second row of the file as it stands is already a
+repair**.

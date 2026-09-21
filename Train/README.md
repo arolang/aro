@@ -124,6 +124,38 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 15 | `15_validation` | Run `aro check` (and other gates) over every emitted sample; drop fragments that fail `is_complete_program`. |
 | 16 | `16_dataset_assembly` | Merge all sources into the final SFT dataset under `data/05_dataset/`; write `stats.json`, `dataset_report.md` (retention funnel + drop reasons), and `drop_reasons.csv`. |
 
+#### The order the trainer reads (GitLab #806)
+
+mlx_lm reads the training file top to bottom, and that file was shuffled twice
+and ordered by nothing, so the model's first exposure to ARO was as likely to
+be book prose or an error-then-fix pair as a working program. The evaluation
+shows the shape that produces: one-liners pass 58 % while feature sets pass
+75 %, the wrong way round for a language whose one-liners are its simplest
+form.
+
+`script/curriculum.py` orders the training file by rung — a single statement,
+then one feature set, then several files, then repairs — shuffling within each
+rung so batches stay varied. The train/valid/test split is still drawn at
+random, so the splits stay representative; only the file the trainer reads is
+ordered. The warm start (NB07) gets the same treatment on its training slice.
+
+It also gives execution-verified pairs twice the weight. `weight` existed but
+never reached training — the mlx files are written as
+`{'messages': …}` and the field is dropped — and execution-verified sources
+(NB09's REPL pairs, NB32's twice-executed notebook cells, `reducer.jsonl`) are
+not in `SOURCE_QUALITY_SCORES` at all, so they took the 0.8 default, *below*
+the 0.95 given to unverified proposal prose. mlx_lm has no per-sample loss
+weight, so the weight is materialised as repetition.
+
+`TYPE_CAPS` is at `v5-2026-09-21`: `correction` drops from 4000 to 3000, at
+rather than above `code_generation`. `eval_derived/` supplies 6,084 correction
+pairs, so error-then-fix was the single largest task type reaching training —
+more of it than of writing a program correctly in the first place.
+
+```bash
+python3 Train/script/curriculum.py Train/data/05_dataset/mlx/train.jsonl
+```
+
 ### Training & evaluation
 
 | # | Notebook | Purpose |
