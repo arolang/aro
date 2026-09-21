@@ -816,7 +816,7 @@ public final class Parser {
             // §Ordering, GitLab #491). Only these two words are consumed;
             // anything else stays for the clauses that follow.
             if case .identifier(let word) = peek().kind,
-               word == "ascending" || word == "descending",
+               let order = SortOrder(rawValue: word),
                let clause = byClause {
                 advance()
                 byClause = ByClause(
@@ -825,7 +825,7 @@ public final class Parser {
                     span: clause.span.merged(with: previous().span),
                     isFieldName: clause.isFieldName,
                     variableName: clause.variableName,
-                    order: word
+                    order: order
                 )
             }
         }

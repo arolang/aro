@@ -188,7 +188,7 @@ struct ModifierBinder {
             // Bind _by_order_ for `by … descending` (GitLab #491)
             if let order = byClause.order {
                 let orderName = ctx.stringConstant("_by_order_")
-                let orderValue = ctx.stringConstant(order)
+                let orderValue = ctx.stringConstant(order.rawValue)
                 _ = ctx.module.insertCall(
                     externals.variableBindString,
                     on: [ctx.currentContextVar!, orderName, orderValue],
