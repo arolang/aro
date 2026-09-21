@@ -124,6 +124,38 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 15 | `15_validation` | Run `aro check` (and other gates) over every emitted sample; drop fragments that fail `is_complete_program`. |
 | 16 | `16_dataset_assembly` | Merge all sources into the final SFT dataset under `data/05_dataset/`; write `stats.json`, `dataset_report.md` (retention funnel + drop reasons), and `drop_reasons.csv`. |
 
+#### The order the trainer reads (GitLab #806)
+
+mlx_lm reads the training file top to bottom, and that file was shuffled twice
+and ordered by nothing, so the model's first exposure to ARO was as likely to
+be book prose or an error-then-fix pair as a working program. The evaluation
+shows the shape that produces: one-liners pass 58 % while feature sets pass
+75 %, the wrong way round for a language whose one-liners are its simplest
+form.
+
+`script/curriculum.py` orders the training file by rung — a single statement,
+then one feature set, then several files, then repairs — shuffling within each
+rung so batches stay varied. The train/valid/test split is still drawn at
+random, so the splits stay representative; only the file the trainer reads is
+ordered. The warm start (NB07) gets the same treatment on its training slice.
+
+It also gives execution-verified pairs twice the weight. `weight` existed but
+never reached training — the mlx files are written as
+`{'messages': …}` and the field is dropped — and execution-verified sources
+(NB09's REPL pairs, NB32's twice-executed notebook cells, `reducer.jsonl`) are
+not in `SOURCE_QUALITY_SCORES` at all, so they took the 0.8 default, *below*
+the 0.95 given to unverified proposal prose. mlx_lm has no per-sample loss
+weight, so the weight is materialised as repetition.
+
+`TYPE_CAPS` is at `v5-2026-09-21`: `correction` drops from 4000 to 3000, at
+rather than above `code_generation`. `eval_derived/` supplies 6,084 correction
+pairs, so error-then-fix was the single largest task type reaching training —
+more of it than of writing a program correctly in the first place.
+
+```bash
+python3 Train/script/curriculum.py Train/data/05_dataset/mlx/train.jsonl
+```
+
 ### Training & evaluation
 
 | # | Notebook | Purpose |
@@ -131,7 +163,141 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 17 | `17_finetune` | Full SFT on the 30B MoE teacher. Writes `models/finetune/round_0/`. |
 | 18 | `18_preference_sft` | Preference-filtered SFT pass on top. |
 | 19 | `19_evaluation` | Score the teacher against held-out prompts; emits `models/loop_metrics.json`. |
+
+#### What counts as a hallucination (GitLab #801)
+
+The hallucination metric was the fraction of statement-leading verbs missing
+from the knowledge base. Every verb in
+
+```aro
+Create the <scores> with [90, 80, 70].
+Compute the <spread: variance> from the <scores>.
+Log <spread> to the <console>.
+```
+
+is real, so that program scored 0.000 while `aro check` says
+`Unknown Compute qualifier 'variance'`. The qualifier namespace has been closed
+since GitLab #486, so an invented qualifier is exactly as much a fabrication as
+an invented verb.
+
+`script/fact_check.py` grounds the check in the catalogs the repo generates
+from the runtime — verbs, action prepositions and qualifiers — and adds the two
+things the report had no way to say:
+
+- `invented_statistics` names the fabricated figures rather than returning a
+  boolean, so the meta probe fails on *which* number was invented. The pipeline
+  provides no mechanism by which the model could know its own pass rate, so any
+  such figure is fabricated by construction.
+- `regression_flags` lists every task the fine-tune left worse than its own
+  base. Run it over a finished report:
+
+```bash
+python3 Train/script/fact_check.py --report Train/data/07_eval/report.json
+```
+
+#### What "good" means (GitLab #813)
+
+It used to mean `aro check` passed. Of the 4 000 rows in the recorded
+`ask-eval` run, 3 495 were judged that way, 494 by keyword and 11 not at all,
+and the reason column holds nothing but the check error — while the run's own
+analysis names "valid but wrong" as the dominant failure. A program that
+parses, runs, and computes the wrong thing scored exactly like one that is
+right.
+
+It now means **the program ran and produced what was asked for**.
+`Train/eval/functional/tasks.json` holds the benchmark; each task is graded
+one of two ways:
+
+- `execution_output` — the program is written to a directory with its
+  fixtures, run with `aro run` under a ten-second timeout, and what it printed
+  is compared to the expected output the way
+  `Tests/IntegrationTestsRunner` compares an example against its
+  `expected.txt` (ANSI stripped, the interpreter's `[Feature Set]` prefixes
+  removed, timings collapsed, placeholders such as `__NUMBER__` and
+  `__TIMESTAMP__` for what cannot be fixed).
+- `aro_test` — the generated application must pass a checked-in Given/When/Then
+  file (ARO-0015). The stronger of the two: it asserts the program's *values*
+  rather than its printing, so a correct answer formatted differently still
+  passes and a plausible wrong number does not.
+
+`aro check` survives only as a third mode for scoring an existing prompt set
+on the same axis, and every grade is reported separately so a headline number
+can never be assembled out of it again.
+
+```bash
+# verify the benchmark itself — no model needed
+python3 Train/script/functional_eval.py --reference
+```
+
+That last command is the guard against the benchmark rotting: every task ships
+a reference solution, and a benchmark whose own answers stop passing is
+measuring itself rather than the model.
+
+#### The human-rated slice
+
+A hundred answers per release, read by a person against four yes/no axes —
+correct, idiomatic, complete, safe. The rubric is
+`Train/eval/human/RUBRIC.md`; `script/human_eval.py` draws a fixed stratified
+slice and scores a filled-in sheet, reporting each axis with an interval and
+refusing to call a small difference between two releases a change.
+
+```bash
+python3 Train/script/human_eval.py sample --prompts Train/eval_prompts.json \
+    --out Train/eval/human/<version>.csv
+python3 Train/script/human_eval.py score Train/eval/human/<version>.csv \
+    --against Train/eval/human/<previous>.csv
+```
 | 20 | `20_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
+
+#### Reading a pass rate (GitLab #786)
+
+A pass rate is a proportion measured on a handful of prompts, and for a long
+time the pipeline printed it as a bare number. The 2026-08 loop reported
+code-generation at 0.700, 0.467, 0.617, 0.333, 0.283, 0.500, 0.533, 0.517
+across eight rounds — a 41.7-point range on a set of 60 prompts, where one
+prompt is worth 1.7 points and the 95 % interval is about ±11. Five of those
+eight rounds are indistinguishable from the "best" one.
+
+`script/eval_stats.py` is the arithmetic for that. It reports Wilson intervals
+rather than bare rates, compares two measurements with a verdict that can say
+*indistinguishable*, and answers "how many prompts would I need" — the loop's
+headline 0.700 → 0.517 needs 111 per arm to call at 95 %/80 %, nearly twice
+what it had. `MIN_PROMPTS_PER_TASK` (100) is the floor below which a per-task
+rate is reported as a measurement at all; below it the convergence test refuses
+to return a verdict instead of returning a wrong one.
+
+Point it at a finished run to see what that run could actually support:
+
+```bash
+python3 Train/script/eval_stats.py Train/data/rounds/round_results.json --n 60
+```
+
+(`--n` is only needed for records written before the loop started recording
+`eval_n` next to every rate.)
+
+#### What leaves the loop (GitLab #787)
+
+The loop does **not** hand its newest round to the next stage. A round is
+promoted only when it is distinguishably better than the model the loop started
+from — non-overlapping intervals plus a two-point absolute floor — and when no
+round clears that bar the starting model stands and `round_results.json`
+records the refusal. `script/loop_policy.py` holds that decision, and can
+re-decide a finished run:
+
+```bash
+python3 Train/script/loop_policy.py Train/data/rounds/round_results.json --n 60
+```
+
+`NUM_ROUNDS` defaults to 2 rather than 8. Eight rounds cost about twelve hours
+and produced a series whose intervals all overlap except the two rounds that
+were distinguishably *worse*; `recommend_max_rounds(eval_n)` says how many
+rounds a given eval size could actually tell apart.
+
+Generated samples join the next round's corpus only when they **run** (where
+they are safely runnable) and are novel against what the corpus already holds.
+`aro check` alone accepted programs that parse and do nothing, and restatements
+of material already present — neither moves the pass rate the loop watches, and
+both make the next round worse.
 
 ### Distillation & packaging
 
@@ -142,6 +308,24 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 24 | `24_thinking_finetune` | **Booster 2** — reasoning fine-tune fused onto the material model → `models/thinking/fused`. |
 | 25 | `25_conversation_finetune` | **Booster 3** — multi-turn fine-tune fused onto the thinking model → `models/conversation/fused` (**the final model**). |
 | 27 | `27_package` | Quantize, write `model_manifest.json`, populate `release/aro-coder-6bit/`, and upload. The **last-numbered** notebook; runs **after** the boosters and selects the final booster model via `find_best_fused_model()`. |
+
+#### Each booster is gated before it fuses (GitLab #791)
+
+The three boosters fuse in sequence, so a stage that loses ground becomes the
+base for the next one and the damage is only visible at the 104-prompt sweep at
+the very end, three fuses later, attributable to none of them. Every stage now
+measures a held-out before/after and passes it to
+`script/fusion_gate.require_fuse_gate` **before** `mlx_lm fuse` runs. A metric
+blocks the fuse when it loses more than two points *and* the two measurements
+are distinguishable at 95 % — so a 20-point swing on the conversation stage's
+five held-out chats passes with a warning rather than a refusal, because five
+chats could not have seen it either way.
+
+NB24 and NB25 also stop falling through to `BASE_MODEL_ID`. A missing student
+directory used to mean training and fusing a 30 B mixture-of-experts LoRA into
+what the rest of the chain calls "the student", announced by one `print`, with
+the next booster then anchoring on that. `fusion_gate.resolve_base` refuses,
+naming what it looked for; `ARO_TRAIN_ALLOW_BASE_FALLBACK=1` says you meant it.
 | 26 | `26_post_release_validation` | Download the published model + smoke-test like a user. Runs **after** `27_package` (it tests the just-uploaded model). |
 
 **Release ordering:** `27_package` is the last-numbered notebook. Execution order (set by the `NOTEBOOKS` list in `00_META_PIPELINE`, not the filename numbers) is `… → distillation → material → thinking → conversation → 27_package(+upload) → 26_post_release_validation`, so the model that gets uploaded is the **final** one after the full booster chain. (Post-release validation keeps a lower number but runs after packaging because it tests the upload.)
