@@ -107,3 +107,25 @@ Bug found while writing the tests: `_parse_version('1.0.0rc1')` returned (1,0,1)
 Commands: `python3 Train/script/mlx_preflight.py --no-record` → OK with a
 below-floor warning (system mlx 0.31.2); `Train/.venv/bin/python … --json` → ok true;
 `bash -n Train/training.sh` → clean; `pytest Train/script/tests -q` → 175 passed.
+
+### #795 — done (commit 3)
+
+`config.HPARAMS` (8 stage rows, `HPARAMS_VERSION = v1-2026-09-21`), `hparams()`,
+`hparams_record()`; all 8 training notebooks rewritten to read `HP[...]` including
+their mlx-lm command lines; `check_hparams.py` (+ `--list`) enforces it;
+`tests/test_hparams.py` (17 tests) incl. a test asserting the shipped notebooks pass.
+NB18 sweep now logs each variant to experiments.db as `NB17-sweep`.
+
+Picks where notebooks disagreed (full reasoning in the commit message):
+- `lora_rank` = 8 everywhere (sweep-measured; 07 and 22 never set one and were
+  already getting mlx-lm's default 8 — the "rank 16" was only a chart label)
+- iterative `learning_rate` 1e-5 → 8e-6; `grad_accum` 4 → 16 (match SFT, the
+  measured stage; the NaN rationale for 4 does not hold up)
+- material `learning_rate` 1e-4 → 2e-5 (match the student's own rate)
+- `lora_layers` left per stage with reasons recorded (16 teacher/student, 8
+  preference/material); warm_start `grad_accum` left at 1 and marked unmeasured
+- `max_seq_len` 4096 shared, 2048 warm_start, 5120 conversation — recorded exceptions
+
+Commands: `check_hparams.py` → 8 notebooks clean; `--list` prints the table;
+per-cell `compile()` over all 9 edited notebooks → 0 syntax errors;
+`pytest Train/script/tests -q` → 189 passed.

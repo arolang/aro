@@ -229,6 +229,178 @@ TYPE_CAPS = {
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
 
+# ── Hyper-parameters (GitLab #795) ───────────────────────────────────────────
+# Every training stage used to declare its own constants in its own notebook.
+# Eight notebooks then disagreed with each other, and — worse — disagreed about
+# WHY. The SFT stage raised gradient accumulation to 16 "to smooth
+# heterogeneous-task gradient noise"; the iterative loop, training the same
+# model on an overlapping mixture, lowered it to 4 "for NaN robustness". Two
+# stages appeared to use LoRA rank 16 and two rank 8, and a reader had no way
+# to tell a deliberate difference from a copy-paste.
+#
+# HPARAMS is now the single table. A stage reads its own row; nothing declares
+# a training constant in a notebook cell any more, and check_hparams.py fails
+# CI if one starts again. HPARAMS_VERSION is bumped whenever a value changes,
+# and every training run records the row it used to experiments.db, so a later
+# comparison is a query rather than archaeology.
+#
+# The rules the table follows:
+#
+#   * A stage differing from another needs a reason on the line. "It was like
+#     that" is not one.
+#   * A value nobody has measured is recorded as unmeasured rather than
+#     dressed up. The sweep in NB18 is the only stage that measures anything,
+#     and its results now land in experiments.db.
+#   * lora_rank is 8 everywhere. NB18's 150-iteration sweep spans rank 4, 8 and
+#     16 and picks 8. The two stages that looked like rank 16 (warm start,
+#     distillation) never set a rank at all — they pass only --num-layers and
+#     inherit mlx-lm's default, which is 8. The "rank 16" in the warm-start
+#     chart title was a label, never a setting.
+#
+HPARAMS_VERSION = 'v1-2026-09-21'
+
+_SHARED = {
+    'lora_rank':     8,       # see note above — measured, not inherited
+    'lora_dropout':  0.0,     # unchanged from every stage; no stage has varied it
+    'lora_scale':    20.0,    # ditto
+    'weight_decay':  0.01,    # AdamW; added in #416 against memorisation
+    'max_seq_len':   4096,
+}
+
+HPARAMS = {
+    # Warm start on the action/syntax reference (07). Short, cheap, and its job
+    # is to teach the DSL before generation stages depend on it.
+    'warm_start': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    4,
+        'grad_accum':    1,     # unmeasured: this stage has never accumulated.
+                                # Left alone deliberately — raising it changes
+                                # the one stage whose output every later stage
+                                # resumes from, and nobody has measured it.
+        'val_batches':   25,
+        'max_seq_len':   2048,  # the only stage below the shared 4096, and
+                                # deliberately: it trains on the action/syntax
+                                # reference, whose pairs are short, so a longer
+                                # window buys padding and nothing else.
+    }),
+
+    # Full SFT on the 30B MoE teacher (18). The best-tuned row in the table:
+    # #440 moved LR 1e-5→8e-6, accumulation 8→16, warmup 40→100, iters 800→1000
+    # against a reported train-loss spike and a val plateau.
+    'sft': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,
+        'batch_size':    2,
+        'grad_accum':    16,    # effective batch 32
+        'iters':         1000,
+        'lr_warmup':     100,
+        'steps_per_eval': 50,
+        'val_batches':   25,
+    }),
+
+    # Preference pass (19). Lower LR because the data is curated and small;
+    # fewer layers and no accumulation headroom because DPO holds a reference
+    # model resident beside the policy.
+    'preference': dict(_SHARED, **{
+        'lora_layers':   8,
+        'learning_rate': 5e-6,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         200,
+        'beta':          0.3,
+    }),
+
+    # Iterative self-improvement rounds (21), on the same teacher as 'sft'.
+    # Both values here were changed to match 'sft': see the commit for #795.
+    'iterative': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,  # was 1e-5. Same model, overlapping mixture, and
+                                # #440 measured 8e-6 as the rate that stops the
+                                # spikes. Two rates for one model was the
+                                # contradiction, not a finding.
+        'batch_size':    2,
+        'grad_accum':    16,    # was 4, "smaller window reduces NaN risk on MoE".
+                                # Accumulation averages gradients: a smaller
+                                # window makes each optimiser step noisier, not
+                                # safer. The notebook's own NaN advice says to
+                                # lower the LR, which is the real lever.
+        'iters_per_round': 400,
+        'steps_per_eval': 50,
+    }),
+
+    # Distillation into the 8B student (22). Higher LR than the teacher stages
+    # because the student is smaller, dense, and starts from base.
+    'student': dict(_SHARED, **{
+        'lora_layers':   16,    # raised from 8 by the round-2 audit, which
+                                # reported it closing the 30B→8B gap. The one
+                                # layer-count change in the pipeline with a
+                                # recorded result behind it.
+        'learning_rate': 2e-5,
+        'batch_size':    1,
+        'grad_accum':    16,
+    }),
+
+    # Booster 1 — curated Material/ on top of the student (23).
+    'material': dict(_SHARED, **{
+        'lora_layers':   8,     # a few hundred curated pairs; 16 layers on that
+                                # much data is capacity looking for something to
+                                # memorise.
+        'learning_rate': 2e-5,  # was 1e-4 — 5× the student's own rate, on less
+                                # and better data, with no rationale recorded
+                                # anywhere. This is the first booster fused onto
+                                # the model that ships.
+        'batch_size':    1,
+        'grad_accum':    8,
+    }),
+
+    # Booster 2 — reasoning traces (24).
+    'thinking': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    2,
+        'grad_accum':    8,
+        'iters':         400,
+    }),
+
+    # Booster 3 — multi-turn conversation (25). The final model.
+    'conversation': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         300,
+        'max_seq_len':   5120,  # justified exception: multi-turn transcripts
+                                # genuinely run past 4096, and truncating one
+                                # mid-turn teaches a conversation that stops.
+    }),
+}
+
+
+def hparams(stage):
+    """The hyper-parameter row for one training stage.
+
+    Raises KeyError naming the known stages rather than returning a default:
+    a typo that silently trains on someone else's settings is the failure this
+    table exists to prevent.
+    """
+    try:
+        return dict(HPARAMS[stage])
+    except KeyError:
+        known = ', '.join(sorted(HPARAMS))
+        raise KeyError(f'unknown training stage {stage!r}; known stages: {known}') from None
+
+
+def hparams_record(stage, **overrides):
+    """The row plus its provenance, shaped for experiment_db.record_run()."""
+    row = hparams(stage)
+    row.update(overrides)
+    row['stage'] = stage
+    row['hparams_version'] = HPARAMS_VERSION
+    row['effective_batch'] = row.get('batch_size', 1) * row.get('grad_accum', 1)
+    return row
+
+
 FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
 ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
 DISTILL_MODELS_DIR = MODELS_DIR / 'distill'

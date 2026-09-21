@@ -223,6 +223,7 @@ to change between runs:
 | `TRAIN_ON_BASE` | `True` → always start from `BASE_MODEL_ID` (fresh run). `False` → resume from the published teacher on HF if it exists. Flip to `False` after the first complete run for iterative improvement. |
 | `CLEAN_ON_RESTART` | When `True`, each notebook removes its previously-emitted rows from `knowledge_pairs.jsonl` on startup. A timestamped backup is written to `data/backups/` first; `rollback_notebook_pairs('NBxx')` restores a tag's rows. |
 | `TYPE_CAPS` / `TYPE_CAPS_VERSION` | Task-type caps applied by `16_dataset_assembly` (versioned with a changelog; the active caps are recorded in `stats.json`). |
+| `HPARAMS` / `HPARAMS_VERSION` | Every training stage's hyper-parameters, one row per stage, each value carrying the reason it is what it is. Read with `hparams('sft')`; no notebook declares a training constant of its own, and `check_hparams.py` fails CI if one starts to. `python3 Train/script/check_hparams.py --list` prints the table. |
 | `CORPUS_SOURCES` | The registry of every root the pipeline mines: label, path, kind, the glob counted in the preflight report, and the notebook tags that consume it. `corpus_preflight()` is generated from it and `corpus_summary()` prints it. Add a corpus here, not inside a notebook — `Learning/` went unmined and unchecked for as long as the roots were a literal list inside the preflight. |
 
 `resolve_model_id()` runs at import time and prints which model was chosen,
