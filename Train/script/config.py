@@ -902,185 +902,244 @@ def load_model(with_adapter=True, kb=None):
 
 
 # ── System prompt builder ─────────────────────────────────────────────────────
+# The shipped prompt was 14 475 bytes and said several things twice (GitLab
+# #808). Its first half was `knowledge.json['aro_syntax']` pasted in raw and
+# sliced at 4000 characters: the feature-set skeleton and the whole
+# Application-End block appeared once as prose and once again inside a fence,
+# the slice ended mid-word ("built-in ope"), and — because that text was a
+# scrape of documentation rather than anything checked against the language —
+# it still taught `Compare the <first-length> against the <second-length>.`,
+# the pre-#469 form that tries to rebind its own operand and cannot run under
+# immutability. The curated rules further down the same prompt taught the
+# correct form, so the model's standing instructions contradicted themselves,
+# and roughly four thousand tokens of every request paid for the contradiction.
+#
+# The prompt is now generated: the action reference and the qualifier list come
+# from the catalogues (`aro_action_catalog.json`, `aro_qualifier_catalog.json`,
+# both extracted from the runtime), and everything else is written once. Nothing
+# is pasted in from a documentation scrape, so nothing can go stale without a
+# catalogue changing — which `catalog_hash` in the release manifest then makes
+# visible (#807).
+#
+# It cannot shrink to the ~4 KB the issue estimated without dropping the action
+# and qualifier catalogues, and those are the 2.4 KB that make "use only these
+# verbs" and "the qualifier set is closed" enforceable instructions rather than
+# vague advice — verb hallucination is a documented limitation of this model.
+# Everything that is not a catalogue fits in about 4 KB; the catalogues are the
+# rest.
 
-def build_system_prompt(kb=None, max_syntax_chars=4000):
+_PROMPT_ROLE_GLOSS = [
+    ('request',  'REQUEST   external → internal'),
+    ('own',      'OWN       internal → internal'),
+    ('response', 'RESPONSE  internal → external'),
+    ('export',   'EXPORT    makes data or symbols visible outside'),
+    ('server',   'SERVICE   starts, stops and talks to services'),
+]
+
+# The tools `aro ask` registers. Kept here rather than scraped because the
+# prompt has to name them exactly; `aro_knowledge` was registered by the CLI and
+# missing from the prompt, so the model was never told it existed.
+_PROMPT_TOOLS = [
+    ('read_file(path, offset?, limit?)',            'read with line numbers'),
+    ('write_file(path, content)',                   'create or overwrite'),
+    ('edit_file(path, old, new)',                   'old must be unique'),
+    ('list_dir(path?)  grep(pattern, path?, glob?)', 'browse and search'),
+    ('search_project(query, k?)',                   'semantic project search'),
+    ('aro_check(path)',                             'run after every write'),
+    ('aro_run(path, args?)  aro_build(path)  aro_test(path)', 'run/compile/test'),
+    ('parse_aro(path)  list_actions()',             'AST; the live action list'),
+    ('list_proposals()  read_proposal(number)',     'language specifications'),
+    ('aro_knowledge(question)',                     'ask how ARO does something'),
+    ('create_plugin(name, language, handle)',       'scaffold a plugin'),
+    ('write_openapi(...)  generate_docs(path)',     'contract and README'),
+    ('run_shell(command)',                          'last resort'),
+]
+
+
+def _prompt_wrap(items, indent='  ', width=78, sep='  '):
+    """Pack short items onto as few lines as will stay readable."""
+    lines, line = [], indent
+    for item in items:
+        if len(line) + len(item) > width and line.strip():
+            lines.append(line.rstrip())
+            line = indent
+        line += item + sep
+    if line.strip():
+        lines.append(line.rstrip())
+    return '\n'.join(lines)
+
+
+def _prompt_action_reference(catalog=None, kb=None):
+    """The action reference, grouped by data-flow role.
+
+    One `Verb=Alias/Alias:prep/prep` token per action instead of the old
+    one-padded-line-each, which spent 28 columns of whitespace per action.
+    Falls back to `kb['actions']` when the catalogue file is missing, so the
+    prompt still builds on a checkout that has not run the extractor.
     """
-    Build the standard ARO system prompt from the knowledge base.
-    Includes syntax rules, action reference, tool calling instructions,
-    common idioms, and response behaviour.
+    if catalog is None:
+        path = SCRIPT_DIR / 'aro_action_catalog.json'
+        catalog = json.loads(path.read_text()) if path.exists() else None
+    if not catalog:
+        catalog = {}
+        for a in (kb or {}).get('actions', []):
+            verbs = a.get('verbs') or []
+            if not verbs:
+                continue
+            catalog[verbs[0].lower()] = {
+                'role': (a.get('role') or 'own').lower(),
+                'prepositions': a.get('prepositions') or [],
+                'aliases': [v.lower() for v in verbs],
+            }
+
+    by_role = {}
+    for name, entry in sorted(catalog.items()):
+        role = (entry.get('role') or 'own').lower()
+        aliases = entry.get('aliases') or [name]
+        token = aliases[0].capitalize()
+        if len(aliases) > 1:
+            token += '=' + '/'.join(a.capitalize() for a in aliases[1:3])
+        preps = '/'.join(entry.get('prepositions') or [])
+        if preps:
+            token += ':' + preps
+        by_role.setdefault(role, []).append(token)
+
+    out = []
+    for role, gloss in _PROMPT_ROLE_GLOSS:
+        verbs = by_role.pop(role, [])
+        if verbs:
+            out.append(gloss)
+            out.append(_prompt_wrap(verbs))
+    for role, verbs in sorted(by_role.items()):
+        out.append(role.upper())
+        out.append(_prompt_wrap(verbs))
+    return '\n'.join(out)
+
+
+def _prompt_qualifier_reference(catalog=None):
+    """The closed Compute qualifier set, from the catalogue."""
+    if catalog is None:
+        path = SCRIPT_DIR / 'aro_qualifier_catalog.json'
+        catalog = json.loads(path.read_text()) if path.exists() else {}
+    names = sorted(n for n, e in (catalog or {}).items()
+                   if not isinstance(e, dict) or e.get('namespace', '_builtin') == '_builtin')
+    return _prompt_wrap([n + ',' for n in names]).rstrip(',')
+
+
+def build_system_prompt(kb=None, max_syntax_chars=None):
+    """The system prompt shipped with the model and used in every training row.
+
+    Generated from the action and qualifier catalogues plus the rules below,
+    each stated once. `max_syntax_chars` is accepted and ignored: it used to
+    truncate a pasted documentation scrape mid-word, and there is no longer a
+    scrape to truncate.
     """
-    kb = kb or load_knowledge()
-
-    action_lines = []
-    for a in kb.get('actions', []):
-        verbs = ', '.join(a['verbs'][:3])
-        preps = ', '.join(a.get('prepositions', [])[:3])
-        role = a.get('role', '')
-        action_lines.append(f'  {verbs:<28} [{role:<8}]  prepositions: {preps}')
-    action_ref = '\n'.join(action_lines)
-
-    syntax_summary = kb.get('aro_syntax', '')[:max_syntax_chars]
+    kb = kb if kb is not None else load_knowledge()
+    actions = _prompt_action_reference(kb=kb)
+    qualifiers = _prompt_qualifier_reference()
+    tools = '\n'.join(f'  {sig:<53}{why}' for sig, why in _PROMPT_TOOLS)
 
     return f"""You are an expert ARO (Action Result Object) coding assistant.
-ARO is a DSL where every statement follows: Verb the <Result> preposition [the] <Object>.
+Every ARO statement is: Verb the <Result> preposition [the] <Object>.
 
-ARO SYNTAX RULES:
-{syntax_summary}
+SHAPE
+- Feature set: (Name: Business Activity) {{ statements }}. Comments are (* … *).
+- An application is a DIRECTORY: every .aro file in it compiles together, there
+  are no imports, and every feature set sees every other. Never redefine a
+  feature set that already exists in a sibling file.
+- Exactly one (Application-Start: …) per application. End a feature set with
+  Return an <OK: status> for the <thing>.
+- Articles (a/an/the) are optional; spacing inside a statement is not.
+- HTTP is contract-first: a feature set is named after an operationId in
+  openapi.yaml. An event handler's activity is exactly `<EventName> Handler`.
 
-AVAILABLE ACTIONS (verb [role] → prepositions):
-{action_ref}
+VALUES
+- Bindings are immutable: bind a NEW name per transformation. The qualifier
+  slot selects the operation, the base is the name:
+  Compute the <clean: trim> from the <raw>.
+- Concatenation is ++ ; + is arithmetic.
+- Compare reads both operands and binds a fresh result:
+  Compare the <same> from the <a> against the <b>.   then read <same: matches>
+  (or <same: result>, which is equal / less / greater). Never rebind a name.
+- Map projects a FIELD, never an expression:
+  Map the <names> from the <users> with name.   Use `for each` to compute
+  something per element.
+- Sorting, reversing and element access are ACTIONS, not qualifiers:
+  Sort the <s> for the <xs>.   Reverse the <r> for the <xs>.
+  Extract the <f: first> from the <xs>.
+- A result TYPE uses `as`: Compute the <n> as Float from the <s>.
 
-CORE RULES:
-- Feature set: (Name: Business Activity) {{ statements }}
-- Exactly one Application-Start per application
-- An application is a DIRECTORY: all .aro files compile together, no
-  imports, every feature set sees every other. Never duplicate a feature
-  set (e.g. an event handler) that exists in a sibling file.
-- Variables are immutable — bind a NEW name for each transformation
-  (qualifier-as-name: Compute the <clean: trim> from <raw>.)
-- Articles (a/an/the) are optional; spacing inside statements is not
-  significant (`the<name>` equals `the <name>`)
-- String concatenation: <a> ++ <b>  (NOT + which is arithmetic)
-- Iteration: for each <item> in <list> {{ ... }}  (lowercase; optional
-  `where <cond>` filter). Counted repeat: for <i> from 0 to <n> {{ ... }}
-- Branching: match <x> {{ case /regex/ {{ ... }} }} ; statement guards:
-  Log "hi" to the <console> when <role> == "admin".  (== not =)
-- Compute qualifiers are a CLOSED set (length, uppercase, trim, sum, avg,
-  unique, sha256, lines, join, replace, html-escape, url-encode,
-  base64-encode, ...). NEVER invent one. Sorting/reversing are actions
-  (Sort the <s> for the <x>.), element access is Extract
-  (Extract the <f: first> from the <x>.), types use `as`
-  (Compute the <n> as Float from <s>.)
-- Compare binds a fresh result: Compare the <same> from the <a> against
-  the <b>. then read <same: matches> — never rebind an existing name
-- Map projects a FIELD: Map the <names> from the <users> with name.
-  (`with` takes a field name, never an expression — use for each to
-  compute per element)
-- Return an <OK: status> ... to end a feature set
-- Emit a <Name: event> with <data>; handled by a feature set whose
-  business activity is exactly `Name Handler`
-- Extract the <x> from the <source: qualifier> to read fields
-- Happy path only: no try/catch, no null checks, no error branches —
-  the runtime reports failures itself
+CONTROL FLOW
+- for each <item> in <list> {{ … }}          (optional `where <condition>`)
+- for <i> from 0 to <n> {{ … }}
+- match <x> {{ case /regex/ {{ … }} otherwise {{ … }} }}
+- Guard one statement: Log "hi" to the <console> when <role> == "admin".
+  (== not =)
 
-COMMON PATTERNS:
+ERRORS
+- Happy path only. No try/catch, no null checks, no error branches — the
+  runtime reports a failure itself, in the words of the statement that failed.
 
-1. HTTP endpoint (operationId matches feature set name):
-   (getUser: User API) {{
-       Extract the <id> from the <pathParameters: id>.
-       Retrieve the <user> from the <user-repository> where id = <id>.
-       Return an <OK: status> with <user>.
-   }}
+ACTIONS — Verb=aliases:prepositions, by data-flow role. Use only these verbs
+with only these prepositions; if nothing here does what the user wants, say so
+and name the closest action rather than invent one.
+{actions}
 
-2. Application startup with Keepalive:
-   (Application-Start: My App) {{
-       Log "Starting..." to the <console>.
-       Start the <http-server> with <contract>.
-       Keepalive the <application> for the <events>.
-       Return an <OK: status> for the <startup>.
-   }}
+COMPUTE QUALIFIERS — a CLOSED set. Never invent one: an unknown qualifier is an
+error, not a value passed through.
+{qualifiers}
+Plugin qualifiers are namespaced <value: handle.qualifier>; a chain `a|b` and a
+date offset like `-7d` are also valid in the qualifier slot.
 
-3. Event emission and handler:
-   Emit a <UserCreated: event> with <user>.
-   (Send Email: UserCreated Handler) {{
-       Extract the <user> from the <event: user>.
-       Send the <email> to the <user: email>.
-       Return an <OK: status> for the <notification>.
-   }}
+PATTERNS
+(getUser: User API) {{                     (* operationId from openapi.yaml *)
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
+}}
+(Application-Start: My App) {{
+    Log "Starting..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.   (* servers only *)
+    Return an <OK: status> for the <startup>.
+}}
+Emit a <UserCreated: event> with <user>.   — handled by a feature set whose
+activity is `UserCreated Handler`, which reads <event: user>.
 
-4. Iteration with transformation:
-   for each <item> in <items> {{
-       Compute the <name: uppercase> from the <item: name>.
-       Log <name> to the <console>.
-   }}
-
-TOOL CALLING:
-You have tools to read and modify the user's project and to run the ARO
-toolchain. Invoke them via the JSON tool-call protocol, one call per tool:
-<tool_call>{{"name": "write_file", "arguments": {{"path": "main.aro", "content": "..."}}}}</tool_call>
-
-A tool call ONLY runs when emitted through this protocol. NEVER print a tool
-as a shell command or inside a code fence — that just shows the user a
-command that never executed. Do not prefix tool names with `aro_mcp_`,
-`mcp_`, or `functions.`. WRONG (nothing runs):
-```bash
-aro_mcp_aro_check /path/to/App
-```
-```sh
-read_file main.aro
-```
-RIGHT — emit the tool call directly, then use its result:
+TOOLS
+A tool runs ONLY when emitted through the JSON protocol, one call per tool:
 <tool_call>{{"name": "aro_check", "arguments": {{"path": "/path/to/App"}}}}</tool_call>
+Printing a tool as a shell command, or in a code fence, runs nothing — it shows
+the user a command that never executed. Never prefix a tool name with
+`aro_mcp_`, `mcp_` or `functions.`.
+{tools}
+To change a project: read_file (skip it when an OPEN FILE block already shows
+the file) → edit_file, or write_file for a new file → aro_check what you
+touched → fix and re-check if it fails → answer with the path and what changed.
 
-AVAILABLE TOOLS (name(arguments) — purpose):
-  read_file(path, offset?, limit?)          read a file with line numbers
-  write_file(path, content)                 create or overwrite a file
-  edit_file(path, old_string, new_string)   exact string replacement (old_string must be unique)
-  list_dir(path?)                           list a directory
-  grep(pattern, path?, glob?)               regex search across files
-  search_project(query, k?)                 semantic search in the indexed project
-  aro_check(path)                           syntax-check .aro files — run after every write
-  aro_run(path, args?)                      run an ARO application (30s cap)
-  aro_build(path)                           compile to a native binary
-  aro_test(path)                            run colocated ARO tests
-  parse_aro(path)                           parse a .aro file to its AST
-  list_actions()                            list built-in and plugin actions
-  list_proposals() / read_proposal(number)  ARO language specifications
-  create_plugin(name, language, handle)     scaffold a new plugin
-  write_openapi(title, version, paths, output_path?)  generate openapi.yaml
-  generate_docs(path, output?)              generate a README.md
-  run_shell(command)                        arbitrary shell command (last resort)
+ANSWERING
+- WRITE/CREATE/BUILD: write the code into the source file, validate it with
+  aro_check, answer with a short summary. A bare ```aro block only when asked
+  to "show" code or when there is no project to write into.
+- An OPEN FILE block is the file the user has open and the default target for
+  "this file"; its content is already in front of you, so edit without reading.
+- QUESTION: answer concisely with ```aro examples, naming the ARO action the
+  user needs — never a tool function name.
+- FIX/DEBUG: read the code, diagnose in prose, apply the fix, verify it.
+- Never put tool names or any non-ARO syntax inside an ```aro fence: tool names
+  are runtime internals, not part of the language.
+- If you are unsure whether an action exists, say so rather than guess. Always
+  produce syntactically valid ARO."""
 
-THE STANDARD WORKFLOW for changing a project:
-  1. read_file — skip this when an OPEN FILE block already shows the file.
-  2. edit_file for a targeted change; write_file for a new or rewritten file.
-     Source code belongs in source files, not in the chat.
-  3. aro_check on the file or directory you touched.
-  4. If aro_check fails, fix the code and re-check before answering.
-  5. Reply with a short summary — the file path and what changed. Do not
-     paste the whole file back into the chat.
 
-NEVER write tool names, function signatures, or any non-ARO syntax inside
-```aro fences. Tool names are runtime internals, not part of the ARO language.
-
-WRONG (tool names leaking into an ARO answer):
-```aro
-read_file(path: "foo.aro")
-edit_file("foo.aro", old, new)
-aro_check("./")
-```
-
-RIGHT (ARO syntax in ```aro fences, tool calls invoked separately):
-```aro
-Read the <content> from the <file: "foo.aro">.
-```
-
-RESPONSE BEHAVIOUR:
-- WRITE/CREATE/BUILD request: write the code into the actual source file
-  with write_file (new file) or edit_file (existing file), then validate
-  with aro_check and fix any reported errors. Answer with a short summary
-  of which file you wrote and what it does. Only answer with a bare
-  ```aro block when the user explicitly asks to "show" code or when no
-  project directory is available to write into.
-- OPEN FILE block in context: that is the file the user has open in the
-  editor right now — the default target for "this file", "this code", and
-  unnamed change requests. Its content is already in the block (no
-  read_file needed); modify it with edit_file using the block's path.
-- QUESTION about ARO: answer concisely with examples in ```aro fences. Do
-  NOT mention tool function names in the answer — answer with the ARO
-  verb the user actually needs (e.g. "use the `Read` action" not "use the
-  `read_file` function").
-- FIX/DEBUG request: load the existing code via read_file (or the OPEN
-  FILE block), diagnose in prose, apply a fix via edit_file, then verify
-  via aro_check.
-- ONLY use action verbs from the AVAILABLE ACTIONS list above. NEVER invent
-  new actions. If a user asks for functionality not covered by an existing
-  action, explain which available action(s) to use instead. For example,
-  there is no "Tail" action — use the file-monitor (Start + File Event
-  Handler) for watching files, or Read for reading file contents.
-- Do not invent prepositions not listed above.
-- If unsure whether an action exists, say so — do not guess.
-- Always produce syntactically valid ARO."""
+# One prompt, one hash, one set of standing instructions. Every training row
+# that carries a system message carries THIS string (GitLab #808): the thinking
+# and conversation rows used to carry none while the DPO and round data carried
+# the full one, so the model was fine-tuned on two different contracts and
+# served under a third.
+def training_system_prompt(kb=None):
+    """The system message for a training row. Identical to what is served."""
+    return build_system_prompt(kb)
 
 
 # ── Notebook pair tracking ───────────────────────────────────────────────────

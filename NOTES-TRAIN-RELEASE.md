@@ -114,3 +114,52 @@ NOT DONE (needs Sources/, outside this MR's remit): having `aro ask` warn on a c
 mismatch. `release_metadata.catalog_drift()` returns the exact sentence to print; the CLI
 side is a one-line comparison. Also note `min_cli_version` is read by nothing in Sources/
 today, so it is currently documentation rather than a check.
+
+## #808 — work done
+
+`config.build_system_prompt` rewritten (delimited block, `# ── System prompt builder ──`
+through `training_system_prompt`). The raw `kb['aro_syntax']` dump is gone; the action
+reference and the closed qualifier set are generated from `aro_action_catalog.json` /
+`aro_qualifier_catalog.json`, everything else stated once.
+
+Measured (`scratchpad/compare_prompt.py`, `scratchpad/tokcount.py` with the tokenizer from
+Train/release/aro-coder-6bit):
+  shipped file            14 475 bytes / 3 549 tokens
+  old builder, today's kb 15 867 bytes
+  new builder              7 518 bytes / 2 106 tokens   (-48% vs shipped, -53% like-for-like,
+                                                          -1 443 tokens per request)
+Issue said "roughly 4000 tokens"; measured 3 549. Corrected.
+
+Contradictions / defects removed:
+ 1. pre-#469 `Compare the <first-length> against the <second-length>.` (line 92 of the
+    shipped file) while the same prompt's CORE RULES taught the #469 form. Gone.
+ 2. mid-word truncation "built-in ope" at the 4000-char slice. Gone (no slice).
+ 3. the feature-set skeleton and the whole Application-End block printed twice, once as
+    prose and once fenced. Gone (test asserts no repeated paragraph *or* line > 40 chars).
+ 4. `aro_knowledge` — registered by the CLI (Sources/AROAsk/Tools/KnowledgeTool.swift),
+    never mentioned in the prompt, so the model could not use it. Added.
+ 5. the hardcoded partial qualifier list ("length, uppercase, trim, sum, … ") replaced by
+    the full closed set from the catalogue, which is what makes "never invent one" checkable.
+
+Training/serving disagreement: only NB24 (thinking) was affected — it built rows with no
+system turn, and its before/after eval also omitted one. NB25 (conversation) was NOT
+affected: gen_conversations.py already calls build_system_prompt (issue is stale on that
+point). NB24 patched in both places; test asserts `"role": "system"` appears twice there.
+
+Tests: Train/script/tests/test_system_prompt.py (25 tests). Whole Train/script/tests suite:
+225 passed, 1 skipped.
+
+### #808 latency, measured
+
+Ran Train/release/aro-coder-6bit locally (mlx_lm, 3 prompts, max_tokens=200, temp 0.2,
+same loaded model for both arms):
+  old prompt  3 549 tokens  times 10.79 / 4.27 / 8.75 s   median 8.75 s
+  new prompt  2 037 tokens  times  5.64 / 3.16 / 5.73 s   median 5.64 s
+-> -1 512 tokens, -36% median latency. (Earlier 2 106 figure was before the final trim
+pass; 2 037 is the shipped number.)
+
+## Merge request
+
+!595 https://git.ausdertechnik.de/arolang/aro/-/merge_requests/595
+Commits: 0f7fc42c (#796), 8d915e5d (#807), 032cb54f (#808).
+Closes #796, #807, #808.
