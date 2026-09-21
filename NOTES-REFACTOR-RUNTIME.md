@@ -189,3 +189,9 @@ check-proposals passes. Examples: HelloWorld (Log), StoreFileDemo (Store), DataP
 Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**.
 Examples: RecursiveActions (deep parent chains: 10!, sum 1..10000, mutual), TemplateEngine
 (templateEscaping inheritance), DateTimeDemo (`<now>`), MetricsDemo (`<metrics>`).
+
+## Done
+MR: https://git.ausdertechnik.de/arolang/aro/-/merge_requests/593
+Six commits on `refactor/runtime-structure`, pushed to origin only.
+Final state: `swift build` clean, `swift test --filter AROuntimeTests` 1840 passed,
+`generate-action-reference.py --check` OK (73), `check-proposals.py` OK.
