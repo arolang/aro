@@ -821,6 +821,41 @@ repl:smoke:
       test "$rc_compute" -eq 0
 
 # =============================================================================
+# The training catalogs are generated from the runtime, not hand-maintained
+# (GitLab #779)
+# =============================================================================
+# Train/script/aro_action_catalog.json and its two siblings are the ground
+# truth the corpus is graded against: the verb-authority gate, the syntax-QA
+# answers and the hallucination metric all read them. They were extracted by
+# scanning Swift sources and had drifted a month behind — `Reverse` was
+# missing, so valid code counted as hallucinated, and `Store … in` was listed
+# as valid although `aro check` rejects it. They come from
+# `aro actions --format json` now, and this job fails when the committed JSON
+# no longer matches the binary that built alongside it.
+train:catalogs:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN" --version
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/extract_action_catalog.py --check
+    - python3 Train/script/extract_action_verbs.py --check
+    - python3 Train/script/extract_qualifier_catalog.py --check
+
+# =============================================================================
 # Documentation Stage
 # =============================================================================
 documentation:

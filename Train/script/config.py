@@ -1614,13 +1614,31 @@ _VP_STMT_RE = _re.compile(r'^\s*([A-Z][A-Za-z]+)\s+(?:the\s+|an?\s+)?<[^>]*>\s+(
 
 
 def build_verb_preposition_map(kb=None):
-    """Return {verb(lower): set(prepositions)} from knowledge.json actions."""
-    kb = kb or load_knowledge()
+    """Return {verb(lower): set(prepositions)}.
+
+    The authoritative catalog comes first (GitLab #779): it is generated from
+    `aro actions --format json`, so it knows every alias a registered action
+    answers to and the prepositions the runtime will accept for it.
+    knowledge.json is mined from prose and had six of those sets wrong —
+    `Compare … from` and `Sort … from` missing, `Store … in` invented — which
+    is a gate rejecting valid code and passing code `aro check` refuses.
+    knowledge.json fills in only verbs the catalog does not cover."""
     vp = {}
+    for meta in authoritative_action_catalog().values():
+        preps = {p.lower() for p in meta.get('prepositions', [])}
+        if not preps:
+            continue
+        for v in meta.get('aliases', []):
+            vp.setdefault(v.lower(), set()).update(preps)
+    try:
+        kb = kb or load_knowledge()
+    except Exception:
+        return vp
     for a in kb.get('actions', []):
         preps = {p.lower() for p in a.get('prepositions', [])}
         for v in a.get('verbs', []):
-            vp.setdefault(v.lower(), set()).update(preps)
+            if v.lower() not in vp:
+                vp.setdefault(v.lower(), set()).update(preps)
     return vp
 
 
