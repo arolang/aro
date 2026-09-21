@@ -156,3 +156,21 @@ max-body, ad-hoc `<validation: timeout>`, unset setting reading null, `Update th
 binary reports "Property 'retries' not found" where the interpreter answers null, which is a
 PRE-EXISTING divergence: `markConfigured` is only ever called by the interpreter's executor
 (no call anywhere in Bridge/), so compiled mode never had ARO-0035 §3.2's optional-read behaviour.
+
+## #729 — ResponseActions.swift split
+1470 lines → nine files, one per action, each carrying its own supporting types:
+ReturnAction 268, ThrowAction 33, SendAction 111 (+MessagingService, SendResult, MessageSentEvent),
+LogAction 248 (+LoggingService, LogLevel, LogResult), StoreAction 281 (+StoreResult,
+DataStoredEvent), WriteAction 273 (+URLWriteResult, WriteResult), PublishAction 54
+(+VariablePublishedEvent), NotifyAction 119 (+NotificationService, NotifyResult,
+NotificationSentEvent), EmitAction 144 (+DomainEvent, EmitResult). Every type kept `public`;
+no declaration edited except LogAction's two stream loops.
+Note: the issue lists Append and Broadcast; neither is in this file (nor is `AppendAction` a
+separate type here) — stale issue text.
+`LogAction.drainStream(_:emit:)` + `line(for:context:)` + `write(_:)` replace the two copied
+drain loops.
+Doc references updated: Book SourceMap table row, ARO-0050 and ARO-0051 file lists, and two
+comments in AROCLI/REPL that named the old file.
+
+Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**;
+check-proposals passes. Examples: HelloWorld (Log), StoreFileDemo (Store), DataPipeline.
