@@ -182,13 +182,18 @@ enum PluginMarketplaceCatalog {
 /// stays mockable in tests. Returns nil on any failure — the
 /// caller falls back to the previous cache.
 struct GitHubMarketplaceFetcher: Sendable {
-    /// Honoured at fetch time; user fills this in Settings →
-    /// Backends → "GitHub PAT" to raise the rate limit.
-    static let patDefaultsKey = "solaro.github.pat"
+    /// The `UserDefaults` key the token used to live under.
+    ///
+    /// Kept only so `SecretStore` can migrate it out on first read. The token
+    /// itself is in the Keychain now: defaults are world-readable to any
+    /// process running as the user, they end up in Time Machine backups, and
+    /// the book tells users to inspect their settings with
+    /// `defaults export com.arolang.SOLARO` (GitLab #745).
+    static let legacyPATDefaultsKey = "solaro.github.pat"
 
     var token: String? {
-        let raw = UserDefaults.standard.string(forKey: Self.patDefaultsKey) ?? ""
-        return raw.isEmpty ? nil : raw
+        SecretStore.migrateFromDefaults(.githubPAT, defaultsKey: Self.legacyPATDefaultsKey)
+        return SecretStore.value(for: .githubPAT)
     }
 
     /// Pages we walk (`per_page=100` × pageLimit = max 300

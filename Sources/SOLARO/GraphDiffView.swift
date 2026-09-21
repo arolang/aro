@@ -283,6 +283,8 @@ struct SelectedDiffNode: Hashable {
 /// the graph the working tree changed.
 struct GraphDiffSheet: View {
     let project: Project
+    /// The repository's branches, for the revision pickers (#767).
+    let gitMonitor: GitStatusMonitor
     var onClose: () -> Void
 
     @State private var model = GraphDiffModel()
@@ -305,21 +307,90 @@ struct GraphDiffSheet: View {
                 .font(SolaroFont.sectionTitle)
                 .foregroundStyle(SolaroColor.textTertiary)
                 .tracking(1.5)
-            TextField("Revision", text: $model.baseRevision)
-                .textFieldStyle(.roundedBorder)
+            // Two revisions, because "what did this branch change in
+            // the graph" is the question a reviewer actually has, and
+            // it needs both ends (#767). The branch list is already
+            // populated by the git monitor; nothing was using it here.
+            revisionField($model.baseRevision, placeholder: "base")
+            Text("..")
                 .font(SolaroFont.monoCaption)
-                .frame(width: 200)
-                .focused($revisionFocused)
-                .onSubmit { Task { await model.load(project: project) } }
+                .foregroundStyle(SolaroColor.textTertiary)
+            revisionField($model.targetRevision, placeholder: "working tree")
             Button("Compare") {
                 Task { await model.load(project: project) }
             }
             .disabled(model.isLoading)
+            Button {
+                exportHTML()
+            } label: {
+                Label("Export HTML…", systemImage: "square.and.arrow.up")
+            }
+            .disabled(model.isLoading || model.isExporting)
+            .help("Write the CLI's own report for this comparison")
             Spacer()
             Button("Close", action: onClose)
                 .keyboardShortcut(.cancelAction)
         }
         .padding(SolaroSpace.m)
+    }
+
+    /// A revision field with the repository's branches behind it.
+    ///
+    /// A typed field as well as a menu: a reviewer often wants a
+    /// commit, a tag or a `HEAD~3`, none of which are branches. Typing
+    /// `main..topic` into either field splits it across both, so a
+    /// range pasted from a terminal does what it says.
+    private func revisionField(_ binding: Binding<String>,
+                               placeholder: String) -> some View {
+        HStack(spacing: 2) {
+            TextField(placeholder, text: binding)
+                .textFieldStyle(.roundedBorder)
+                .font(SolaroFont.monoCaption)
+                .frame(width: 150)
+                .onSubmit {
+                    model.setRange(binding.wrappedValue)
+                    Task { await model.load(project: project) }
+                }
+            Menu {
+                ForEach(branches) { branch in
+                    Button(branch.name) {
+                        binding.wrappedValue = branch.name
+                        Task { await model.load(project: project) }
+                    }
+                }
+                if branches.isEmpty {
+                    Text("No branches").disabled(true)
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 18)
+        }
+    }
+
+    private var branches: [GitBranch] { gitMonitor.branches }
+
+    /// Ask where to write, then let the CLI write it.
+    private func exportHTML() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue =
+            "\(project.displayName)-graph-diff.html"
+        panel.allowedContentTypes = [.html]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let destination = panel.url else {
+            return
+        }
+        Task {
+            await model.exportHTML(project: project, to: destination)
+            // Show the report where the user put it — an export nobody
+            // can find has not really happened.
+            if model.error == nil {
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+            }
+        }
     }
 
     @ViewBuilder

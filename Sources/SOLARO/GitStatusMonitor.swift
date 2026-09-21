@@ -127,6 +127,31 @@ final class GitStatusMonitor {
         return err
     }
 
+    /// `git blame` for one file, as text (#772).
+    ///
+    /// Moved here from `WorkspaceView`, which had spawned its own
+    /// Process with its own pipe handling while every other git call in
+    /// the app already went through this type. Returns the blame output
+    /// on success and a sentence explaining the failure otherwise —
+    /// there is one consumer and it renders a string either way.
+    func blame(path: String, in project: Project) async -> String {
+        await Self.runBlame(path: path, project: project)
+    }
+
+    nonisolated private static func runBlame(path: String,
+                                             project: Project) async -> String {
+        let run = runGit(args: ["blame", "--date=short", path],
+                         project: project)
+        guard run.exitCode == 0 else {
+            let detail = run.stderr.trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            return detail.isEmpty
+                ? "git blame failed (exit \(run.exitCode))"
+                : "git blame failed: \(detail)"
+        }
+        return run.stdout
+    }
+
     /// Combined unstaged + staged diff against HEAD, capped at a
     /// large-but-bounded size so prompts to `aro ask` stay reasonable.
     /// Returns "" if there's nothing to diff or git fails.

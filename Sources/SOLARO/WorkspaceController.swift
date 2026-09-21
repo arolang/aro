@@ -26,7 +26,14 @@ final class WorkspaceController {
     let project: Project
 
     var model: ProjectModel?
-    var currentFile: URL?
+    var currentFile: URL? {
+        didSet {
+            // Switching files is a natural save point, and the debounced
+            // autosave of the file being left should not outlive it (#748).
+            guard oldValue != currentFile else { return }
+            EditorWriteQueue.shared.flush()
+        }
+    }
     /// Files currently open in the center-pane tab bar. The active
     /// tab is `currentFile`; if a tab is closed and was the active
     /// one, the workspace falls back to the previous tab.
@@ -67,7 +74,7 @@ final class WorkspaceController {
         get { debuggerState.pauseSymbols }
         set { debuggerState.pauseSymbols = newValue }
     }
-    var lastExecutedAt: [Int: Date] {
+    var lastExecutedAt: [SourceRef: Date] {
         get { debuggerState.lastExecutedAt }
         set { debuggerState.lastExecutedAt = newValue }
     }
@@ -75,10 +82,23 @@ final class WorkspaceController {
         get { debuggerState.lastExecutedAtPerFeatureSet }
         set { debuggerState.lastExecutedAtPerFeatureSet = newValue }
     }
-    var errorLines: [Int: String] {
+    var errorLines: [SourceRef: String] {
         get { debuggerState.errorLines }
         set { debuggerState.errorLines = newValue }
     }
+    /// Whether a program is running (#765). Mirrors the console's own
+    /// state into the session snapshot the views read.
+    var runIsActive: Bool {
+        get { debuggerState.isRunning }
+        set { debuggerState.isRunning = newValue }
+    }
+
+    /// The map's live-animation inputs, assembled in one place.
+    var projectMapActivity: ProjectMapActivity {
+        ProjectMapActivity(lastExecuted: lastExecutedAtPerFeatureSet,
+                           isRunning: runIsActive)
+    }
+
     var executionTick: UInt64 {
         get { debuggerState.executionTick }
         set { debuggerState.executionTick = newValue }
@@ -306,7 +326,32 @@ final class WorkspaceController {
     /// re-parsing on edit lands in Phase 7. Used by the Sidebar
     /// Features tab, the Inspector AST tree, the Canvas, and the
     /// Map view.
-    var programs: [URL: Program] = [:]
+    var programs: [URL: Program] = [:] {
+        didSet {
+            // The canvas graph is built from these (#749). Any mutation —
+            // a reparse, a file load, a close — retires what was cached.
+            canvasGraphCache.noteProgramsChanged()
+        }
+    }
+
+    /// Derived canvas graphs (#749). `@ObservationIgnored` because it is a
+    /// cache: a body pass that fills it must not invalidate itself.
+    @ObservationIgnored var canvasGraphCache = CanvasGraphCache()
+
+    /// The canvas graph for `url`, rebuilt only when the program or the
+    /// layout sidecar has actually changed.
+    ///
+    /// `build` is the expensive part — a sidecar read, a walk over every
+    /// statement, and a layout pass — and is called only on a miss.
+    func canvasGraph(for url: URL, build: () -> CanvasGraph) -> CanvasGraph {
+        canvasGraphCache.graph(for: url, build: build)
+    }
+
+    /// Tell the cache a layout sidecar was just written, so a drag that
+    /// lands inside the same filesystem timestamp tick is still seen.
+    func noteSidecarWritten() {
+        canvasGraphCache.noteSidecarChanged()
+    }
     /// True while `load()` is parsing the project's `.aro` files
     /// in the background (#286). The Run / Debug / Test buttons
     /// gate on this so the user can't fire a launch with a
@@ -450,6 +495,9 @@ final class WorkspaceController {
         loadTask?.cancel()
         isLoading = true
         parseErrors.removeAll()
+        // A reload may have moved the project marker that decides where
+        // `.layout.json` lives, so drop the resolved roots too (#749).
+        canvasGraphCache.reset()
         let projectRoot = project
         loadTask = Task { [weak self] in
             // File discovery + parse off the main actor (#286). A
@@ -592,7 +640,14 @@ final class WorkspaceController {
         guard let url = currentFile, MarkdownFile.isMarkdown(url) else { return }
         var sidecar = LayoutSidecar.load(for: url)
         sidecar.markdownRawSource.toggle()
-        try? sidecar.save(for: url)
+        do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+        noteSidecarWritten()
         markdownModeTick &+= 1
     }
 
@@ -666,7 +721,9 @@ final class WorkspaceController {
     /// Current live text for `url`: the editor buffer when known, else disk.
     func liveText(for url: URL) -> String? {
         let std = url.standardizedFileURL
-        return liveEditorText[std] ?? (try? String(contentsOf: std, encoding: .utf8))
+        return liveEditorText[std]
+            ?? EditorWriteQueue.shared.pendingText(for: std)
+            ?? (try? String(contentsOf: std, encoding: .utf8))
     }
 
     // MARK: - Editor writes (GitLab #532)
@@ -687,6 +744,26 @@ final class WorkspaceController {
     /// swallowed by a `try?` (GitLab #532). The next change retries
     /// automatically, which is the whole retry story: autosave fires
     /// again, and a write that lands clears the banner.
+    /// The keystroke write path: debounced, and it refreshes git once per
+    /// write instead of once per character (#748).
+    ///
+    /// The in-memory mirror is updated synchronously — the canvas, the AI
+    /// co-pilot and `liveText(for:)` see the edit immediately — while the
+    /// bytes reach disk when the typing stops. `EditorWriteQueue` documents
+    /// the flush points that keep a subprocess from ever reading a stale file.
+    func autosave(_ text: String, to url: URL) {
+        liveEditorText[url.standardizedFileURL] = text
+        EditorWriteQueue.shared.enqueue(text, to: url) { [weak self] text, url in
+            guard let self else { return false }
+            let saved = self.writeToDisk(text, to: url)
+            // The file's bytes just changed, so the cached git status is
+            // stale. Once per flush — the per-keystroke refresh this
+            // replaces defeated the monitor's own five-second cache.
+            self.gitMonitor.refresh(for: self.project)
+            return saved
+        }
+    }
+
     @discardableResult
     func writeToDisk(_ text: String, to url: URL) -> Bool {
         // A notebook is never written as text. Its only legitimate
@@ -1087,7 +1164,14 @@ final class WorkspaceController {
         guard let url = currentFile else { return }
         var sidecar = LayoutSidecar.load(for: url)
         sidecar.paneMode = mode
-        try? sidecar.save(for: url)
+        do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+        noteSidecarWritten()
     }
 }
 

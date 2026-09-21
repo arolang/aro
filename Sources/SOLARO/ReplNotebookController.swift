@@ -88,6 +88,22 @@ final class ReplNotebookController {
     private(set) var kernelInfo: ReplKernelClient.KernelInfo?
 
     private var saveTask: Task<Void, Never>?
+    /// The exact bytes this controller last put on disk (#759).
+    ///
+    /// The notebook's own autosave writes atomically, which the kqueue
+    /// watcher reports as a `.rename` — so every save the notebook makes
+    /// comes straight back as an external change. The guard against
+    /// reloading over the user used to be `saveTask == nil`, which is
+    /// the wrong question twice over: `saveNow` clears it *before* the
+    /// write, and the watcher's 200 ms debounce lands afterwards, so an
+    /// edit made in that window was reloaded away — and `load()`
+    /// replaces the cells wholesale and resets the selection to the
+    /// first cell, so the keystrokes and the reader's place both went.
+    ///
+    /// Comparing the bytes answers the real question: is what is on
+    /// disk the thing I wrote? This is the same `lastSavedText` pattern
+    /// the text-file path already uses.
+    private var lastSavedData: Data?
     private var queueTask: Task<Void, Never>?
 
     /// How long a mutation waits before it hits disk. Injectable so
@@ -123,7 +139,21 @@ final class ReplNotebookController {
     /// their unsaved work outranks a background change — and is left
     /// for them to resolve by saving or reopening.
     func reloadFromDiskIfUnedited() {
-        guard editingMarkdownIDs.isEmpty, saveTask == nil else { return }
+        // Our own write coming back around. Nothing to reload, and
+        // reloading would be actively harmful (#759).
+        if let onDisk = try? Data(contentsOf: url), onDisk == lastSavedData {
+            return
+        }
+        // A save is pending, so the model is ahead of the file and the
+        // file is about to become the model. Reloading here would
+        // discard the very edit that armed the timer.
+        guard saveTask == nil else { return }
+        // Note this covers markdown cells only: `editingMarkdownIDs` is
+        // about a cell whose *source* is open for editing, which code
+        // cells never are — they are always their own source. A code
+        // cell's unsaved keystrokes are protected by the byte check
+        // above and the pending-save check, not by this.
+        guard editingMarkdownIDs.isEmpty else { return }
         load()
     }
 
@@ -137,7 +167,19 @@ final class ReplNotebookController {
             }
             cells = doc.cells
             loadError = nil
-            selectedCellID = cells.first?.id
+            // The model and the file agree as of now, so a watcher
+            // event carrying these same bytes is not news (#759).
+            lastSavedData = try? Data(contentsOf: url)
+            // Keep the reader's place when the cell is still there. A
+            // reload used to jump to the top of the notebook, which is
+            // disorienting after a pull that changed a cell further
+            // down and nothing the user was looking at.
+            if let current = selectedCellID,
+               cells.contains(where: { $0.id == current }) {
+                selectedCellID = current
+            } else {
+                selectedCellID = cells.first?.id
+            }
         } catch {
             loadError = "\(error.localizedDescription)"
         }
@@ -153,6 +195,32 @@ final class ReplNotebookController {
             guard !Task.isCancelled else { return }
             self?.saveNow()
         }
+    }
+
+    /// Whether saves clear outputs (#769).
+    static var stripOutputsOnSave: Bool {
+        Preferences.notebookStripOutputs
+    }
+
+    /// Write this notebook out as a Jupyter `.ipynb` (#769).
+    ///
+    /// Export rather than a second save format: the `.repl` stays the
+    /// document, and this is what you hand to somebody in JupyterLab.
+    func exportIpynb(to destination: URL) throws {
+        let document = ReplNotebookDocument(cells: cells)
+        try NotebookIpynb.export(document).write(to: destination,
+                                                 options: .atomic)
+    }
+
+    /// Replace this notebook's cells with an imported `.ipynb` (#769).
+    func importIpynb(from source: URL) throws {
+        let imported = try NotebookIpynb.importNotebook(Data(contentsOf: source))
+        cells = imported.cells.isEmpty
+            ? [ReplNotebookCell(kind: .code)]
+            : imported.cells
+        selectedCellID = cells.first?.id
+        loadError = nil
+        saveNow()
     }
 
     func saveNow() {
@@ -174,7 +242,26 @@ final class ReplNotebookController {
                 while copy.source.hasSuffix("\n") { copy.source.removeLast() }
                 return copy
             }
-            try ReplNotebookDocument(cells: normalized).save(to: url)
+            // Strip outputs on the way to disk when asked (#769). The
+            // standard fix for notebook diff noise: a notebook that has
+            // been *read* should not show up as changed because its
+            // cells re-rendered. The buffer keeps its outputs — the
+            // user is still looking at them — so this is a property of
+            // the file, not of the session.
+            let stripped = Self.stripOutputsOnSave
+                ? normalized.map { cell -> ReplNotebookCell in
+                    var copy = cell
+                    copy.outputs = []
+                    copy.executionCount = nil
+                    copy.durationMs = nil
+                    return copy
+                }
+                : normalized
+            let data = try ReplNotebookDocument(cells: stripped).encoded()
+            try data.write(to: url, options: .atomic)
+            // Remember what we wrote, so the watcher event this write is
+            // about to produce can be recognised as ours (#759).
+            lastSavedData = data
         } catch {
             FileHandle.standardError.write(
                 Data("[ReplNotebook] Warning: couldn't save \(url.lastPathComponent): \(error)\n".utf8))

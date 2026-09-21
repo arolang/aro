@@ -62,15 +62,15 @@ public final class GitService: @unchecked Sendable {
     public func resolveRepoPath(_ qualifier: String?) -> URL {
         if let q = qualifier, !q.isEmpty {
             if q == "." {
-                return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                return URL(fileURLWithPath: AROWorkingDirectory.base)
             }
             if q.hasPrefix("/") {
                 return URL(fileURLWithPath: q)
             }
-            return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            return URL(fileURLWithPath: AROWorkingDirectory.base)
                 .appendingPathComponent(q)
         }
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: AROWorkingDirectory.base)
         return discoverRepository(from: cwd) ?? cwd
     }
 

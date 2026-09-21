@@ -134,7 +134,13 @@ enum SigningIdentityScanner {
     /// Shell out to `security` and parse. Returns an empty list when
     /// the tool is missing or errors — the settings panel falls back
     /// to the manual field, which is also the CI-only case.
-    static func scan() -> [SigningIdentity] {
+    ///
+    /// Blocking, and deliberately `nonisolated` so the compiler stops
+    /// anyone calling it from the main actor (#753). `find-identity`
+    /// reads the whole login keychain, and on a locked one it can put up
+    /// an unlock prompt and wait — which on the main actor is a deadlock
+    /// with no visible cause. Use `scanInBackground()`.
+    nonisolated static func scan() -> [SigningIdentity] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = ["find-identity", "-v", "-p", "codesigning"]
@@ -149,6 +155,11 @@ enum SigningIdentityScanner {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return parse(String(data: data, encoding: .utf8) ?? "")
+    }
+
+    /// `scan()` off the main actor.
+    static func scanInBackground() async -> [SigningIdentity] {
+        await Task.detached(priority: .userInitiated) { scan() }.value
     }
 }
 
@@ -187,12 +198,32 @@ final class SigningSettings {
         !teamID.isEmpty && !identities.contains { $0.canNotarize && $0.teamID == teamID }
     }
 
+    /// In-flight scan, so opening the tab twice does not start two.
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
+
+    /// Re-read the keychain's codesigning identities.
+    ///
+    /// Asynchronous (#753). This used to set `isScanning` to true, run the
+    /// blocking scan and set it back to false inside one main-actor block,
+    /// so SwiftUI never observed the `true` state and the spinner beside
+    /// it was dead code — while the app beachballed against a large login
+    /// keychain, or waited forever on an unlock prompt nobody could see.
     func rescan() {
+        guard scanTask == nil else { return }
         isScanning = true
-        identities = SigningIdentityScanner.scan()
-        isScanning = false
-        // First run with exactly one usable identity: pre-select it
-        // rather than making the user choose from a list of one.
+        scanTask = Task { @MainActor [weak self] in
+            let found = await SigningIdentityScanner.scanInBackground()
+            guard let self else { return }
+            self.identities = found
+            self.isScanning = false
+            self.scanTask = nil
+            self.preselectSoleIdentity()
+        }
+    }
+
+    /// First run with exactly one usable identity: pre-select it rather
+    /// than making the user choose from a list of one.
+    private func preselectSoleIdentity() {
         if identitySHA1.isEmpty, teamID.isEmpty {
             let notarizing = identities.filter(\.canNotarize)
             if let only = notarizing.count == 1 ? notarizing.first : nil {

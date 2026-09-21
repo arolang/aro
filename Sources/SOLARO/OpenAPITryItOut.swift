@@ -46,6 +46,34 @@ final class TryItOutModel {
     /// the user can copy/paste from a dedicated field.
     var lastCurl: String = ""
 
+    /// Past requests, newest first (#766). Loaded on demand.
+    var history: [OpenAPIHistoryEntry] = []
+
+    /// Read the request log for the history list.
+    func loadHistory(for project: Project) {
+        history = OpenAPIEnvStore.loadHistory(in: project)
+    }
+
+    /// Put a past request back into the form, ready to send again.
+    ///
+    /// It fills the form rather than firing straight away: a replay is
+    /// usually the start of "the same thing but with one field
+    /// changed", and a request that fires on click gives nobody a
+    /// chance to change it. Auth is not restored because it was never
+    /// written down — the current environment's auth applies.
+    func restore(_ entry: OpenAPIHistoryEntry) {
+        pathParamValues = entry.pathParameters ?? [:]
+        queryParamValues = entry.queryParameters ?? [:]
+        headerValues = entry.headers ?? [:]
+        requestBody = entry.body ?? ""
+        if let match = environments.first(where: {
+            $0.name == entry.environment
+        }) {
+            selectedEnvironment = match.id
+            baseURL = match.baseURL
+        }
+    }
+
     struct Response: Equatable {
         let status: Int
         let headers: [String: String]
@@ -117,10 +145,16 @@ final class TryItOutModel {
             environments.first(where: { $0.id == id })?.name
         } ?? "default"
         let start = Date()
+        let replay = ReplayFields(
+            pathParameters: pathParamValues,
+            queryParameters: queryParamValues,
+            headers: headerValues,
+            body: requestBody
+        )
         Task.detached(priority: .userInitiated) {
             await self.perform(request: request, project: project,
                                envName: envName, method: method, path: path,
-                               start: start)
+                               start: start, replay: replay)
         }
     }
 
@@ -148,13 +182,23 @@ final class TryItOutModel {
         return headers
     }
 
+    /// The values that made this a request, carried into the history
+    /// so it can be sent again as itself (#766).
+    struct ReplayFields: Sendable {
+        let pathParameters: [String: String]
+        let queryParameters: [String: String]
+        let headers: [String: String]
+        let body: String
+    }
+
     nonisolated private func perform(
         request: URLRequest,
         project: Project?,
         envName: String,
         method: String,
         path: String,
-        start: Date
+        start: Date,
+        replay: ReplayFields
     ) async {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -176,7 +220,16 @@ final class TryItOutModel {
                 let entry = OpenAPIHistoryEntry(
                     timestamp: start, environment: envName,
                     method: method, path: path,
-                    status: status, durationMS: durationMS
+                    status: status, durationMS: durationMS,
+                    pathParameters: replay.pathParameters,
+                    queryParameters: replay.queryParameters,
+                    // Auth headers are deliberately stripped: secrets
+                    // do not go in a file inside the user's repository
+                    // (#745), so a replay takes auth from whatever the
+                    // environment holds at the time (#766).
+                    headers: OpenAPIHistoryEntry
+                        .redactingSecrets(replay.headers),
+                    body: replay.body.isEmpty ? nil : replay.body
                 )
                 OpenAPIEnvStore.appendHistory(entry, in: project)
             }
@@ -310,6 +363,74 @@ struct OpenAPITryItOutView: View {
             }
             if let response = model.lastResponse {
                 responseView(response)
+            }
+            historySection
+        }
+        .onAppear {
+            if let project { model.loadHistory(for: project) }
+        }
+    }
+
+    /// Past requests, with a way to send one again (#766).
+    ///
+    /// The history file has existed since the try-it-out panel did;
+    /// nothing read it back, so every request had to be retyped.
+    @ViewBuilder
+    private var historySection: some View {
+        let entries = model.history
+            .filter { $0.method == method && $0.path == path }
+            .prefix(10)
+        if !entries.isEmpty {
+            DisclosureGroup("Recent requests") {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(entries)) { entry in
+                        historyRow(entry)
+                    }
+                }
+                .padding(.top, SolaroSpace.xs)
+            }
+            .font(SolaroFont.monoCaption)
+            .foregroundStyle(SolaroColor.textTertiary)
+        }
+    }
+
+    private func historyRow(_ entry: OpenAPIHistoryEntry) -> some View {
+        HStack(spacing: SolaroSpace.xs) {
+            Text("\(entry.status)")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(entry.status < 400
+                                 ? SolaroColor.stateOK
+                                 : SolaroColor.stateError)
+                .frame(width: 30, alignment: .leading)
+            Text(entry.environment)
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            Text("\(entry.durationMS) ms")
+                .font(SolaroFont.monoCaption)
+                .foregroundStyle(SolaroColor.textTertiary)
+            Spacer()
+            if entry.isReplayable {
+                Button {
+                    model.restore(entry)
+                } label: {
+                    Label("Replay", systemImage: "arrow.counterclockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                // It fills the form rather than firing: a replay is
+                // usually the start of "the same thing with one field
+                // changed", and a request that sends on click gives
+                // nobody the chance.
+                .help("Put this request back in the form")
+            } else {
+                // An entry written before the request details were
+                // recorded cannot be sent again as itself, and a button
+                // that quietly sent something else would be worse than
+                // no button.
+                Image(systemName: "clock")
+                    .font(.system(size: 9))
+                    .foregroundStyle(SolaroColor.textTertiary)
+                    .help("Recorded before replay existed — nothing to restore")
             }
         }
     }

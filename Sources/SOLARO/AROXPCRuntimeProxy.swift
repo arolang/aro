@@ -31,6 +31,13 @@ final class AROXPCRuntimeProxy {
     /// dead PID just fails and the caller falls back.
     var servicePID: Int32? { process?.processIdentifier }
     private var process: Process?
+    /// Pending SIGKILL escalation for the child being stopped (#757).
+    ///
+    /// The subprocess backend grew this in GitLab #527 and the XPC one
+    /// never did — which is backwards, since the XPC backend is the one
+    /// recommended for crash isolation, meaning it is the one actually
+    /// asked to stop a service wedged inside native plugin code.
+    private var killEscalation: Task<Void, Never>?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
     private var readBuffer = Data()
@@ -100,6 +107,10 @@ final class AROXPCRuntimeProxy {
             return
         }
         isRunning = true
+        // A previous stop may still be counting down; its target is gone
+        // or about to be, and its pid is no business of this run (#757).
+        killEscalation?.cancel()
+        killEscalation = nil
         let runID = UUID().uuidString
         currentRunID = runID
         let task = Process()
@@ -160,7 +171,25 @@ final class AROXPCRuntimeProxy {
     func stop() {
         guard isRunning, let runID = currentRunID else { return }
         send(.stop(runID: runID))
-        process?.terminate()
+        guard let child = process else { return }
+        child.terminate()
+        // Escalate to SIGKILL after a grace period, the same two seconds
+        // the subprocess backend uses (#757, GitLab #527). A service
+        // wedged in native code never services the SIGTERM and would
+        // keep the project's HTTP port bound.
+        //
+        // Owned and re-checked rather than fired and forgotten, so a
+        // child that exits cleanly inside the window cannot leave a
+        // timer aimed at a pid the system has since reused (#756).
+        killEscalation?.cancel()
+        killEscalation = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            guard let current = self.process, current === child,
+                  current.isRunning
+            else { return }
+            kill(current.processIdentifier, SIGKILL)
+        }
     }
 
     func continueExecution() { sendStep(.stepContinue) }
@@ -248,6 +277,10 @@ final class AROXPCRuntimeProxy {
     }
 
     private func handleTermination(status: Int32) {
+        // The child is gone, so there is nothing left to escalate to and
+        // its pid is now free for the system to hand on (#757).
+        killEscalation?.cancel()
+        killEscalation = nil
         guard isRunning else { return }
         isRunning = false
         isPausedAtBreakpoint = false

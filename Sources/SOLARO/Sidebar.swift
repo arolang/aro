@@ -47,6 +47,9 @@ struct SidebarPaneView: View {
     @Bindable var controller: WorkspaceController
 
     @State private var showAddPlugin = false
+    /// Scaffolding a plugin from the CLI (#768).
+    @State private var showNewPlugin = false
+    @State private var newPluginProcess = NewPluginProcess()
     @State private var showMarketplace = false
     @State private var addPluginProcess = AddPluginProcess()
     /// Bump this to force the Plugins tab to re-scan after an
@@ -92,6 +95,27 @@ struct SidebarPaneView: View {
                         pluginsRefreshToken += 1
                         showAddPlugin = false
                         addPluginProcess.reset()
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showNewPlugin) {
+            if let project = controller.model?.root {
+                NewPluginSheet(
+                    project: project,
+                    existingNames: Set(
+                        (controller.model.map(PluginScanner.scan) ?? [])
+                            .map(\.name)),
+                    process: newPluginProcess,
+                    onCancel: { showNewPlugin = false },
+                    onSuccess: { manifest in
+                        pluginsRefreshToken += 1
+                        showNewPlugin = false
+                        newPluginProcess.reset()
+                        // Open the manifest: it is the file a plugin
+                        // author edits first, and landing in it is the
+                        // difference between scaffolding and starting.
+                        controller.openFile(manifest)
                     }
                 )
             }
@@ -363,6 +387,19 @@ struct SidebarPaneView: View {
                 .buttonStyle(.borderless)
                 .disabled(controller.model == nil)
                 .help("Install a plugin from a Git repository (`aro add`)")
+                // The one verb this tab did not have (#768). ARO-0087
+                // is a whole proposal about plugin developer
+                // experience, and a new plugin should start here.
+                Button {
+                    newPluginProcess.reset()
+                    showNewPlugin = true
+                } label: {
+                    Label("New", systemImage: "wand.and.stars")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .disabled(controller.model == nil)
+                .help("Scaffold a new plugin (`aro new plugin`)")
             }
             .padding(.horizontal, SolaroSpace.m)
             .padding(.top, SolaroSpace.s)

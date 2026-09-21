@@ -435,27 +435,35 @@ final class EmbeddedRuntimeHost {
         )
         onApplication(application)
 
-        // Embedded runs share SOLARO's process, so the runtime's
-        // file I/O resolves relative paths (`./output/foo.md`,
-        // store files, plugin lookups) against whatever cwd macOS
-        // launched the app with — usually `/`. Without a chdir
-        // the Crawler example wrote to `/output/...` and the user
-        // saw zero files appear in the project. Match the
-        // subprocess path's `task.currentDirectoryURL` by
-        // chdir'ing in for the duration of the run and restoring
-        // afterwards so other SOLARO operations (Git, search,
-        // workspace I/O) keep their original cwd.
-        let fm = FileManager.default
-        let originalCWD = fm.currentDirectoryPath
-        let chdirOK = fm.changeCurrentDirectoryPath(appConfig.rootPath.path)
-        defer {
-            if chdirOK {
-                _ = fm.changeCurrentDirectoryPath(originalCWD)
-            }
-        }
+        // Embedded runs share SOLARO's process, so the runtime's file
+        // I/O has to be told where relative paths (`./output/foo.md`,
+        // store files, plugin lookups) resolve from — otherwise they
+        // resolve against whatever cwd macOS launched the app with,
+        // usually `/`, and the Crawler example writes to `/output/...`
+        // while the user watches an empty project.
+        //
+        // This used to be a `chdir` for the duration of the run, with
+        // its own comment acknowledging the hazard (#758). The working
+        // directory is process-global; the run is on a detached task and
+        // is held for the whole life of the program, which for a
+        // `Keepalive` service is forever. Meanwhile the main actor kept
+        // doing its own relative-path work against the project, and two
+        // windows running two projects fought over one setting.
+        //
+        // `AROWorkingDirectory` is the runtime carrying the answer
+        // instead of reading it off the process. The task-local follows
+        // structured concurrency, so everything `application.run()`
+        // starts inherits it and two concurrent runs stay apart; the
+        // process-wide default is a net for work that escapes the task
+        // tree, and is restored when the run ends.
+        let root = appConfig.rootPath.path
+        let previousDefault = AROWorkingDirectory.setProcessDefault(root)
+        defer { AROWorkingDirectory.setProcessDefault(previousDefault) }
 
-        try await Debug.$controller.withValue(controller) {
-            _ = try await application.run()
+        try await AROWorkingDirectory.$current.withValue(root) {
+            try await Debug.$controller.withValue(controller) {
+                _ = try await application.run()
+            }
         }
     }
 }

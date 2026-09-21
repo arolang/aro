@@ -62,7 +62,7 @@ final class ConsoleProcess {
         set { debuggerState.pauseSymbols = newValue }
     }
 
-    var lastExecutedAt: [Int: Date] {
+    var lastExecutedAt: [SourceRef: Date] {
         get { debuggerState.lastExecutedAt }
         set { debuggerState.lastExecutedAt = newValue }
     }
@@ -70,7 +70,7 @@ final class ConsoleProcess {
         get { debuggerState.lastExecutedAtPerFeatureSet }
         set { debuggerState.lastExecutedAtPerFeatureSet = newValue }
     }
-    var errorLines: [Int: String] {
+    var errorLines: [SourceRef: String] {
         get { debuggerState.errorLines }
         set { debuggerState.errorLines = newValue }
     }
@@ -99,12 +99,19 @@ final class ConsoleProcess {
     var repositoryRecords: [String: [[String: String]]] = [:]
     private static let repositoryHistoryDepth = 5
     /// Cap on `log` size. A long verbose run otherwise grows without
-    /// bound and the ForEach in `RunConsoleView` slows to a crawl.
-    /// On overflow we drop the oldest half so SwiftUI re-renders are
-    /// bounded and amortized cost stays O(1) per append.
-    private static let logCap = 10_000
+    /// bound. On overflow we drop the oldest half so SwiftUI re-renders
+    /// are bounded and amortized cost stays O(1) per append.
+    ///
+    /// Raised from 10 000 now that `logView` is lazy (#751). The old cap
+    /// existed because a non-lazy `VStack` materialised every row on every
+    /// append, so the list itself was the limit; a `LazyVStack` builds only
+    /// what is on screen, and the ceiling can go back to being about memory.
+    /// A `LogEntry` is a kind, a line and a timestamp, so 50 000 lines of a
+    /// verbose run cost a few megabytes — and a verbose run is exactly when
+    /// scrolling back matters.
+    static let logCap = 50_000
 
-    /// Shared metrics client read by `MetricsPanel`. Owned here so
+    /// Shared metrics client read by the metrics panel. Owned here so
     /// both transports — the push socket the subprocess opens, and
     /// the synthetic snapshots the embedded runtime publishes —
     /// converge on a single observable target. Created once per
@@ -119,10 +126,10 @@ final class ConsoleProcess {
     let metricsRunHistory = MetricsRunHistory()
     /// Synthetic snapshot produced by the embedded runtime path.
     /// Held directly on ConsoleProcess (an `@Observable` class) so
-    /// SwiftUI re-renders MetricsPanel deterministically on every
+    /// the metrics panel re-renders deterministically on every
     /// update — the previous `metricsClient.latest` route went
     /// through a nested @Observable whose change notifications
-    /// weren't reliably propagating through MetricsPanel's
+    /// weren't reliably propagating through the panel's
     /// computed-property accessor.
     var embeddedMetricsSnapshot: MetricsSnapshot?
 
@@ -166,6 +173,13 @@ final class ConsoleProcess {
     }
 
     private var process: Process?
+    /// Pending SIGKILL escalation for the process being stopped (#756).
+    ///
+    /// Held so it can be cancelled. It used to be an unowned `Task` that
+    /// captured the `Process` strongly and was never stored, so a child
+    /// that exited cleanly at 1.9 seconds left a timer still counting —
+    /// and a new run started in the meantime raced it.
+    private var killEscalation: Task<Void, Never>?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var stdinPipe: Pipe?
@@ -197,6 +211,20 @@ final class ConsoleProcess {
         case run
         case debug
         case test(filter: String?)
+        /// `aro build` — produce a native binary (#763).
+        case build(BuildOptions)
+        /// `aro check` — syntax and semantics, no execution (#763).
+        case check
+
+        /// Whether this mode writes the JSONL event record the canvas
+        /// tails. Build and check do not run the program, so there is
+        /// nothing to light up and no stream to open.
+        var producesEvents: Bool {
+            switch self {
+            case .run, .debug, .test: return true
+            case .build, .check: return false
+            }
+        }
     }
 
     init() {
@@ -224,6 +252,9 @@ final class ConsoleProcess {
     /// path writes them into `ParameterStorage.shared` before the run
     /// begins; subprocess path appends them as `--key value` to argv.
     func startRun(project: Project, parameters: [String: String] = [:]) {
+        // The runtime reads the project from disk, so the editor's debounced
+        // autosaves have to land first (#748). Covers all three backends.
+        EditorWriteQueue.flushNow()
         switch RuntimeBackend.current {
         case .embedded:
             startEmbeddedRun(project: project, parameters: parameters)
@@ -244,6 +275,13 @@ final class ConsoleProcess {
     private func startXPCRun(project: Project,
                              parameters: [String: String] = [:]) {
         if case .running = state { return }
+        // A previous stop may still be counting down to SIGKILL (#756).
+        // Its target is gone or about to be; let it go before its timer
+        // can reach a pid this run now owns.
+        killEscalation?.cancel()
+        killEscalation = nil
+        // `aro` is about to read the files, not the buffers (#748).
+        EditorWriteQueue.flushNow()
         log.removeAll()
         pausedLine = nil
         isPaused = false
@@ -329,6 +367,11 @@ final class ConsoleProcess {
     private func startEmbeddedRun(project: Project,
                                   parameters: [String: String] = [:]) {
         if case .running = state { return }
+        // A previous stop may still be counting down to SIGKILL (#756).
+        // Its target is gone or about to be; let it go before its timer
+        // can reach a pid this run now owns.
+        killEscalation?.cancel()
+        killEscalation = nil
         log.removeAll()
         pausedLine = nil
         isPaused = false
@@ -435,6 +478,20 @@ final class ConsoleProcess {
               breakpointsByFile: [:])
     }
 
+    /// Build the project to a native binary (#763).
+    ///
+    /// Always the external `aro` binary: `aro build` shells out to a
+    /// linker and produces a file on disk, which is not something the
+    /// embedded or XPC runtime backends do — they execute programs.
+    func startBuild(project: Project, options: BuildOptions) {
+        start(project: project, mode: .build(options))
+    }
+
+    /// Check the project without running it (#763).
+    func startCheck(project: Project) {
+        start(project: project, mode: .check)
+    }
+
     /// Lower-level entry that both convenience helpers funnel through.
     func start(project: Project,
                mode: Mode,
@@ -442,6 +499,11 @@ final class ConsoleProcess {
                breakpointConfigs: [Int: LayoutSidecar.BreakpointConfig] = [:],
                parameters: [String: String] = [:]) {
         if case .running = state { return }
+        // A previous stop may still be counting down to SIGKILL (#756).
+        // Its target is gone or about to be; let it go before its timer
+        // can reach a pid this run now owns.
+        killEscalation?.cancel()
+        killEscalation = nil
         log.removeAll()
         pausedLine = nil
         isPaused = false
@@ -535,6 +597,13 @@ final class ConsoleProcess {
             } else {
                 appendInfo("$ aro test \(project.rootPath.lastPathComponent)")
             }
+        case .build(let options):
+            subArgs = ["build", project.rootPath.path] + options.arguments
+            appendInfo(options.commandLine(
+                projectName: project.rootPath.lastPathComponent))
+        case .check:
+            subArgs = ["check", project.rootPath.path]
+            appendInfo("$ aro check \(project.rootPath.lastPathComponent)")
         }
 
         let task = Process()
@@ -578,6 +647,11 @@ final class ConsoleProcess {
         task.terminationHandler = { [weak self] proc in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // The child is gone, so there is nothing left to escalate
+                // to (#756) — and its pid is now free for the system to
+                // hand to somebody else.
+                self.killEscalation?.cancel()
+                self.killEscalation = nil
                 self.state = .exited(code: proc.terminationStatus)
                 self.appendInfo("[exit \(proc.terminationStatus)]")
                 self.liveStream?.stop()
@@ -591,8 +665,12 @@ final class ConsoleProcess {
             state = .running(pid: task.processIdentifier)
             // Begin tailing the JSONL stream so the canvas pulses
             // and updates values in real time as the runtime runs.
-            // Debug + Run both feed the same file path here.
-            startLiveStream(at: recordPath(for: project))
+            // Debug + Run both feed the same file path here. Build and
+            // check never execute the program, so there is nothing to
+            // tail and no stale record to reopen (#763).
+            if mode.producesEvents {
+                startLiveStream(at: recordPath(for: project))
+            }
         } catch {
             state = .failed(error.localizedDescription)
             appendError(error.localizedDescription)
@@ -605,6 +683,12 @@ final class ConsoleProcess {
     /// counter `executionTick` that SwiftUI watches to refresh
     /// animation views.
     private func startLiveStream(at path: String) {
+        // A new run's symbols have nothing to do with the last one's.
+        lastPauseSymbols = nil
+        // Nor does the previous run's evidence about which mechanism
+        // reports pauses (#752) — a run against an older runtime has to
+        // be able to fall back to the console text again.
+        sawStructuredPause = false
         liveStream?.stop()
         let url = URL(fileURLWithPath: path)
         let stream = LiveEventStream(url: url) { [weak self] batch in
@@ -618,7 +702,18 @@ final class ConsoleProcess {
     /// frame so a burst from a hot loop costs a single SwiftUI redraw
     /// instead of one per record. The receiver bumps `executionTick`
     /// exactly once at the end of the batch.
-    private func applyLiveBatch(_ batch: [TimeTravelRecord]) {
+    /// Whether a program is executing right now (#765).
+    ///
+    /// The Project Map animates events travelling along wires, which
+    /// happens between records rather than at one, so it needs to know
+    /// when to keep asking for frames and when to stop.
+    var isRunning: Bool {
+        if case .running = state { return true }
+        return false
+    }
+
+    /// Not private so a test can feed it records without a subprocess.
+    func applyLiveBatch(_ batch: [TimeTravelRecord]) {
         guard !batch.isEmpty else { return }
         let now = Date()
         for record in batch {
@@ -631,10 +726,10 @@ final class ConsoleProcess {
                     msg = String(msg.dropFirst("error(\"".count)
                                     .dropLast("\")".count))
                 }
-                errorLines[line] = msg
+                errorLines[SourceRef(file: record.file, line: line)] = msg
             }
             if let line = record.line, line > 0 {
-                lastExecutedAt[line] = now
+                lastExecutedAt[SourceRef(file: record.file, line: line)] = now
             }
             if let fs = record.featureSet, !fs.isEmpty {
                 lastExecutedAtPerFeatureSet[fs] = now
@@ -645,6 +740,28 @@ final class ConsoleProcess {
                     entry.lastAt = now
                     embeddedAccumulator?.perFS[fs] = entry
                     embeddedAccumulator?.totalEvents += 1
+                }
+            }
+            if record.kind == .pause {
+                // The runtime says where it stopped, so take it from here
+                // rather than parsing an emoji out of the console (#752).
+                sawStructuredPause = true
+                // The bag as of this pause, so `refreshSymbolsFromRecord`
+                // does not have to go back to the file for it (GitLab #747).
+                var bag: [String: SymbolValue] = [:]
+                for sym in record.symbols {
+                    bag[sym.name] = SymbolValue(
+                        name: sym.name,
+                        typeName: sym.typeName,
+                        value: sym.value,
+                        records: sym.records
+                    )
+                }
+                lastPauseSymbols = bag
+                // The bag is in place before this, because entering the
+                // pause refreshes the inspector from it.
+                if let line = record.line, line > 0 {
+                    enterPause(atLine: line)
                 }
             }
             for sym in record.symbols {
@@ -703,14 +820,28 @@ final class ConsoleProcess {
         // The terminationHandler will flip state to .exited.
         // Escalate to SIGKILL after a grace period — an `aro`
         // process wedged in native code never services the SIGTERM
-        // and would keep its ports bound (GitLab #527). The pid is
-        // valid while `isRunning` is true: `Process` only reaps the
-        // child (freeing the pid for reuse) when it actually exits.
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            if process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
-            }
+        // and would keep its ports bound (GitLab #527).
+        //
+        // The pid is valid while `isRunning` is true, because `Process`
+        // only reaps the child — freeing the pid for reuse — when it
+        // actually exits. That is a statement about this Process object,
+        // though, and the escalation used to keep the object alive past
+        // its own child's death (#756): a clean exit at 1.9 seconds, a new
+        // run started immediately, and two overlapping stop/start cycles
+        // racing to signal a pid the system had already handed on.
+        //
+        // So the escalation is owned. It is cancelled when the child
+        // exits, and again when the next run starts.
+        killEscalation?.cancel()
+        killEscalation = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            // Re-read the current process rather than trusting a captured
+            // one: if a new run has begun, this timer belongs to nobody.
+            guard let current = self.process, current === process,
+                  current.isRunning
+            else { return }
+            kill(current.processIdentifier, SIGKILL)
         }
     }
 
@@ -964,7 +1095,7 @@ final class ConsoleProcess {
         // Settings override (UserDefaults) takes precedence over
         // the SOLARO_ARO env var so the user can change it without
         // relaunching with a different environment.
-        let defaultsPath = UserDefaults.standard.string(forKey: SolaroPrefs.aroOverride.rawValue) ?? ""
+        let defaultsPath = Preferences.aroOverride
         if !defaultsPath.isEmpty, fm.isExecutableFile(atPath: defaultsPath) {
             return defaultsPath
         }
@@ -1056,7 +1187,11 @@ final class ConsoleProcess {
         func flush() -> [String] { assembler.flush() }
     }
 
-    private func appendLog(_ entry: LogEntry) {
+    /// Append one line, trimming the oldest half when the cap is hit.
+    ///
+    /// Not private so the bound itself can be tested (#751) — it is the
+    /// only thing standing between a verbose run and unbounded memory.
+    func appendLog(_ entry: LogEntry) {
         log.append(entry)
         if log.count > Self.logCap {
             log.removeFirst(log.count - Self.logCap / 2)
@@ -1075,19 +1210,20 @@ final class ConsoleProcess {
     /// Scan a freshly-logged line for the debugger's pause notice.
     /// Updates pausedLine, flips isPaused, and refreshes the live
     /// symbol table from the JSONL record.
-    private func detectPause(in line: String) {
-        guard line.contains("⏸") else { return }
-        guard
-            let atRange = line.range(of: " at "),
-            let dashRange = line.range(of: " — ", range: atRange.upperBound..<line.endIndex)
-        else { return }
-        let whereSegment = line[atRange.upperBound..<dashRange.lowerBound]
-        guard
-            let colon = whereSegment.lastIndex(of: ":"),
-            let n = Int(whereSegment[whereSegment.index(after: colon)...]
-                .trimmingCharacters(in: .whitespaces))
-        else { return }
-        pausedLine = n
+    /// Whether this run has ever reported a pause through the structured
+    /// event stream (#752).
+    ///
+    /// Once it has, the console-text parse below is switched off for the
+    /// rest of the run: the two would otherwise both fire on the same
+    /// pause, and the record is the one that is actually authoritative.
+    private var sawStructuredPause = false
+
+    /// Enter the paused state at `line` of `file`.
+    ///
+    /// Reached from the structured `pause` record, and from the console
+    /// text as a fallback.
+    private func enterPause(atLine line: Int) {
+        pausedLine = line
         isPaused = true
         refreshSymbolsFromRecord()
 
@@ -1100,17 +1236,60 @@ final class ConsoleProcess {
         // user-initiated.
         if !didAutoContinueFirstPause,
            !breakpointLines.isEmpty,
-           !breakpointLines.contains(n)
+           !breakpointLines.contains(line)
         {
             didAutoContinueFirstPause = true
             sendInput("c")
         }
     }
 
+    /// Fallback pause detection, by reading the console text.
+    ///
+    /// This was the only mechanism (#752): match a `⏸` in a line of the
+    /// child's stdout, find `" at "` and `" — "`, and take the integer
+    /// after the last colon between them. So the debugger's correctness
+    /// rested on the exact wording and emoji of a human-facing message in
+    /// another binary — a CLI rewording would silently leave the Step
+    /// buttons disabled forever, and a user program that printed a `⏸`
+    /// could fake a pause. The structured record drives it now, and this
+    /// remains only for a runtime too old to write one.
+    private func detectPause(in line: String) {
+        guard !sawStructuredPause else { return }
+        guard line.contains("⏸") else { return }
+        guard
+            let atRange = line.range(of: " at "),
+            let dashRange = line.range(of: " — ", range: atRange.upperBound..<line.endIndex)
+        else { return }
+        let whereSegment = line[atRange.upperBound..<dashRange.lowerBound]
+        guard
+            let colon = whereSegment.lastIndex(of: ":"),
+            let n = Int(whereSegment[whereSegment.index(after: colon)...]
+                .trimmingCharacters(in: .whitespaces))
+        else { return }
+        enterPause(atLine: n)
+    }
+
     /// Read the JSONL record file and capture the last pause event's
     /// symbol bag into `pauseSymbols` keyed by name. The record path
     /// is the same one we pass to `aro debug --record`.
+    /// Symbols from the most recent pause seen on the live stream.
+    ///
+    /// `applyLiveBatch` already sees every record, pauses included, so the
+    /// bag is here for free. It used to be fetched by reading and parsing the
+    /// whole events file — once per step, on the main actor — against a file
+    /// that grows for the length of the session, so stepping through a loop
+    /// got slower the longer you stepped (GitLab #747).
+    private var lastPauseSymbols: [String: SymbolValue]?
+
     private func refreshSymbolsFromRecord() {
+        if let cached = lastPauseSymbols {
+            pauseSymbols = cached
+            return
+        }
+
+        // Fallback: no pause has come off the live stream yet. That happens
+        // for the first pause of a subprocess debug session, where the
+        // console line can beat the stream's poll.
         guard let project = lastProject else { return }
         let url = URL(fileURLWithPath: recordPath(for: project))
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
@@ -1317,7 +1496,9 @@ struct ConsolePanelView: View {
     private var logView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Lazy, so appends during a run cost the rows on screen
+                // rather than every row ever logged (#751).
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(process.log) { entry in
                         Text(entry.text)
                             .font(SolaroFont.mono)
