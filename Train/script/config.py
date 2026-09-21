@@ -1349,6 +1349,8 @@ def save_notebook_pair(notebook_tag: str, pair: dict,
     if not _fixtrain_gate_pair(pair, notebook_tag):
         return False
     pair = stamp_provenance(pair, notebook_tag, generation_strategy, lineage)
+    if not _pair_gate(pair, notebook_tag):
+        return False
     _ensure_run_recorded()
     _ensure_pairs_header()
     PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1372,6 +1374,7 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     _ensure_pairs_header()
     written = 0
     gate_dropped = 0
+    runtime_dropped = 0
     with open(PAIRS_FILE, 'a') as f:
         for pair in pairs:
             pair['notebook'] = notebook_tag
@@ -1380,11 +1383,17 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
                 gate_dropped += 1
                 continue
             pair = stamp_provenance(pair, notebook_tag, generation_strategy)
+            if not _pair_gate(pair, notebook_tag):
+                runtime_dropped += 1
+                continue
             f.write(json.dumps(pair) + '\n')
             written += 1
     if gate_dropped:
         print(f'[{notebook_tag}] fixtrain-gate dropped {gate_dropped} pairs '
               f'(run fixtrain_report() for the per-rule breakdown)')
+    if runtime_dropped:
+        print(f'[{notebook_tag}] pair-gate dropped {runtime_dropped} pairs the '
+              f'runtime rejects (run pair_gate_report() for the per-source table)')
     return written
 
 
@@ -2093,6 +2102,125 @@ def _fixtrain_gate_pair(pair, notebook_tag=''):
         print(f'  {tag}fixtrain-gate drop: {v["rule"]} — {v["match"][:60]!r}',
               flush=True)
     return False
+
+
+# ── The save-time runtime gate (GitLab #780) ─────────────────────────────────
+# The verb-authority and FIXTRAIN gates existed, but only the eval-derived
+# merge stage applied them. Everything that writes through save_notebook_pairs
+# — the git pairs, the actions rows, the knowledge extraction, the book QA —
+# went in ungated, and about a hundred and seventy pairs carrying verbs no
+# action implements (Hash, Grant, Process, Encrypt, Require, Greet, Deduct …)
+# reached the corpus that way. Hallucinated actions are the top failure class
+# in the eval results; training on these re-teaches them.
+#
+# So the gate moves to the one door every stage goes through, and it asks the
+# binary as well as the catalogs. ARO_TRAIN_PAIR_GATE picks how much:
+#
+#   full    (default) catalogs + `aro check` on every ```aro block
+#   static            catalogs only — no subprocess, for a fast dry run
+#   off               nothing, for bootstrapping a corpus before a build
+PAIR_GATE_MODE = os.environ.get('ARO_TRAIN_PAIR_GATE', 'full').strip().lower()
+PAIR_GATE_STATS = _Counter()
+PAIR_GATE_BY_SOURCE = {}
+_PAIR_GATE_DROP_LOG_LIMIT = 10
+_pair_gate_drops_logged = {'count': 0}
+_pair_gate_cache = {}
+
+
+def _pair_gate_tools():
+    """The validator's gates, imported lazily so importing config stays cheap
+    and a host without an `aro` binary can still import it."""
+    import revalidate_corpus as _rc
+    if 'catalogs' not in _pair_gate_cache:
+        _pair_gate_cache['catalogs'] = _rc.load_catalogs()
+        _pair_gate_cache['checks'] = {}
+    return _rc, _pair_gate_cache['catalogs']
+
+
+def validate_pair_aro(pair, mode=None):
+    """Ask the runtime about a pair's ```aro blocks before it is written.
+
+    Returns the verdict dict that is stored on the pair as `validation`:
+    `valid`, the `aro_version` that said so, and the specific complaints.
+    Never raises — a gate that dies on a malformed pair stops a pipeline that
+    should merely have dropped one row.
+    """
+    mode = (mode or PAIR_GATE_MODE)
+    if mode == 'off':
+        return {'valid': True, 'gate': 'off'}
+    try:
+        rc, (verbs, vp, qualifier_known) = _pair_gate_tools()
+    except Exception as exc:                                   # pragma: no cover
+        return {'valid': True, 'gate': f'unavailable: {exc}'}
+    cache = None
+    if mode != 'static':
+        binary = rc.aro_oracle.aro_bin()
+        if binary:
+            cache = _pair_gate_cache.setdefault(
+                'cache', rc.CheckCache(binary))
+    try:
+        verdict = rc.validate_pair(pair, verbs, vp, qualifier_known, cache)
+    except Exception as exc:                                   # pragma: no cover
+        return {'valid': True, 'gate': f'error: {exc}'}
+    verdict['gate'] = mode if cache else f'{mode} (no binary)'
+    return verdict
+
+
+def _pair_gate(pair, notebook_tag=''):
+    """True when the pair may be written. Records why, when it may not."""
+    if PAIR_GATE_MODE == 'off':
+        return True
+    verdict = validate_pair_aro(pair)
+    prov = pair.get('provenance') or {}
+    source = (prov.get('source') or pair.get('source')
+              or prov.get('generation_strategy') or pair.get('category')
+              or notebook_tag or '?')
+    bucket = PAIR_GATE_BY_SOURCE.setdefault(source, _Counter())
+    bucket['seen'] += 1
+    if verdict.get('valid'):
+        bucket['passed'] += 1
+        pair['validation'] = verdict
+        return True
+    import revalidate_corpus as _rc
+    reasons = _rc.failure_reasons(verdict) or ['unknown']
+    PAIR_GATE_STATS.update(reasons)
+    _pair_gate_drops_logged['count'] += 1
+    if _pair_gate_drops_logged['count'] <= _PAIR_GATE_DROP_LOG_LIMIT:
+        detail = (verdict.get('unknown_verbs') or verdict.get('bad_prepositions')
+                  or verdict.get('unknown_qualifiers')
+                  or [(verdict.get('check_errors') or [''])[0][:80]])
+        tag = f'[{notebook_tag}] ' if notebook_tag else ''
+        print(f'  {tag}pair-gate drop ({", ".join(reasons)}): {detail}',
+              flush=True)
+    return False
+
+
+def pair_gate_report(reset=False):
+    """Per-source pass rates for everything written this run.
+
+    This table is what was missing: the gate ran at one stage, so nobody could
+    see that the git pairs failed nine times as often as the curated ones.
+    """
+    if not PAIR_GATE_BY_SOURCE:
+        print('pair-gate: nothing recorded this run '
+              f'(mode={PAIR_GATE_MODE})')
+        return {}
+    print(f'pair-gate ({PAIR_GATE_MODE}) per-source pass rate:')
+    print(f'  {"source":<44} {"seen":>7} {"kept":>7} {"pass %":>7}')
+    rows = sorted(PAIR_GATE_BY_SOURCE.items(),
+                  key=lambda kv: (kv[1]['passed'] / max(1, kv[1]['seen']), kv[0]))
+    for source, counts in rows:
+        seen, passed = counts['seen'], counts['passed']
+        print(f'  {source[:44]:<44} {seen:>7} {passed:>7} '
+              f'{100.0 * passed / seen if seen else 0:>6.1f}%')
+    if PAIR_GATE_STATS:
+        print(f'  drop reasons: {dict(PAIR_GATE_STATS)}')
+    snapshot = {s: dict(c) for s, c in PAIR_GATE_BY_SOURCE.items()}
+    if reset:
+        PAIR_GATE_BY_SOURCE.clear()
+        PAIR_GATE_STATS.clear()
+        _pair_gate_drops_logged['count'] = 0
+    return snapshot
 
 
 # ── Semantic near-duplicate detection (issue #404) ───────────────────────────

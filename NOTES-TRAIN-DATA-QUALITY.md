@@ -104,3 +104,32 @@ CI: `train:tests` (test stage, python:3.12-slim, pytest) and `train:corpus`
 (integration stage, ARO_BIN from build:linux, `--fail-under 97`).
 26 new tests; full Train suite 179 passed.
 
+## #780 — ~150 statements with invented verbs (VERIFIED; number corrected upward)
+
+Scanned every checkable ```aro block on the answer side of all 10 007 rows
+against the *corrected* catalog (so `Reverse`/`Flip` no longer count):
+
+```
+rows with an unknown statement verb : 172
+unknown statement occurrences       : 322  (238 excluding English prose
+                                            words fenced as ```aro)
+distinct names                      : 121  (108 excluding prose words)
+```
+Per-verb, matching the issue almost exactly: Hash 20, Grant 18, Encrypt 15,
+Process 14, Line 7, Require 7, Greet 6, Farewell 6, Deduct 5, Redirect 5,
+Encode 4. So "~150" is really **238**.
+
+Confirmed the cause: only the eval-derived merge stage applied the gate.
+`save_notebook_pairs()` ran the FIXTRAIN lint and nothing else.
+
+**Fix:** `config._pair_gate()` runs on every write through
+`save_notebook_pair(s)` — the four gates of `revalidate_corpus` — and stamps
+`validation` on every kept pair. `ARO_TRAIN_PAIR_GATE=full|static|off`
+(default `full`); `static` skips the subprocess for hosts with no binary.
+`config.pair_gate_report()` prints the per-source pass-rate table the issue
+asked for. 8 new tests.
+
+Applied to the existing corpus, the gate would drop **640 of 10 007 pairs**
+(6.4%): aro_check 484, unknown_verb 172, bad_preposition 65,
+unknown_qualifier 2 (a pair can fail for more than one reason).
+
