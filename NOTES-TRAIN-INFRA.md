@@ -86,3 +86,24 @@ Commands run: `pytest Train/script/tests/test_run_archive.py -q` → 10 passed;
 `pytest Train/script/tests -q` → 163 passed;
 `python3 Train/script/run_archive.py --dry-run` → reports both required artifacts
 missing in this worktree (expected — data/ is gitignored and absent here).
+
+### #793 — done (commit 2)
+
+**Correction to the issue**: the patched-mlx dependency is stale. Verified by
+`strings`-scanning the metallibs of both mlx installs on this machine:
+- `Train/.venv` mlx **0.32.2** → gather kernels for bfloat16, float16, **float32**
+- system python mlx **0.31.2** → same three
+So the float32 instantiation is upstream from 0.31.2 on (report was against 0.31.1).
+requirements.txt therefore floors `mlx>=0.32.2` rather than pinning a private build.
+
+Written: `Train/script/mlx_preflight.py` (metallib kernel scan; `--lora` one-iteration
+smoke test; `--json`; exit 0/1/2), `tests/test_mlx_preflight.py` (12 tests, synthetic
+metallibs — no GPU needed), training.sh preflight gate (exit 3 on failure,
+`ARO_TRAIN_SKIP_MLX_PREFLIGHT=1` overrides), an 01_init preflight cell, ISSUE-MLX.md
+status header, README env-var rows.
+
+Bug found while writing the tests: `_parse_version('1.0.0rc1')` returned (1,0,1).
+
+Commands: `python3 Train/script/mlx_preflight.py --no-record` → OK with a
+below-floor warning (system mlx 0.31.2); `Train/.venv/bin/python … --json` → ok true;
+`bash -n Train/training.sh` → clean; `pytest Train/script/tests -q` → 175 passed.

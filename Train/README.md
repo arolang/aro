@@ -236,6 +236,9 @@ so every notebook logs the resolved base.
 | `ARO_APPLICATION_OPTIONAL` | Set to `1` to knowingly continue without ARO-Application (incomplete corpus). |
 | `ARO_TRAIN_SESSION` | Pin a single provenance session ID across all notebooks of one pipeline run. Defaults to a fresh ID per notebook execution. |
 | `ARO_TRAIN_SKIP` | Comma-separated notebook numbers the meta pipeline skips (default `09,12`). |
+| `ARO_TRAIN_FRESH` | `1` allows `01_init` to wipe stage directories that still hold output. Without it the wipe refuses and names what it would destroy. |
+| `ARO_TRAIN_RELEASE` | Release label used for `Train/runs/<release>/`. Defaults to `PIPELINE_VERSION`. |
+| `ARO_TRAIN_SKIP_MLX_PREFLIGHT` | `1` starts a run even when `mlx_preflight.py` says this mlx build cannot train a MoE model. |
 
 ### Provenance
 
