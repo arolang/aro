@@ -65,7 +65,7 @@ public struct RenameHandler: Sendable {
     }
 
     private func findPrepareRenameInAROStatement(_ aro: AROStatement, position: SourceLocation, lines: LineIndex) -> [String: Any]? {
-        if isPositionInSpan(position, aro.result.span) {
+        if aro.result.span.contains(position) {
             let lspRange = PositionConverter.toLSP(aro.result.span, using: lines)
             return [
                 "range": [
@@ -75,7 +75,7 @@ public struct RenameHandler: Sendable {
                 "placeholder": aro.result.base
             ]
         }
-        if isPositionInSpan(position, aro.object.noun.span) {
+        if aro.object.noun.span.contains(position) {
             let lspRange = PositionConverter.toLSP(aro.object.noun.span, using: lines)
             return [
                 "range": [
@@ -146,7 +146,7 @@ public struct RenameHandler: Sendable {
         lines: LineIndex
     ) -> [String: Any]? {
         if let varRef = expression as? VariableRefExpression {
-            if isPositionInSpan(position, varRef.span) {
+            if varRef.span.contains(position) {
                 let lspRange = PositionConverter.toLSP(varRef.span, using: lines)
                 return [
                     "range": [
@@ -186,8 +186,8 @@ public struct RenameHandler: Sendable {
     private func findSymbolInStatements(_ statements: [Statement], position: SourceLocation) -> (String, SourceSpan)? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.result.span) { return (aro.result.base, aro.result.span) }
-                if isPositionInSpan(position, aro.object.noun.span) { return (aro.object.noun.base, aro.object.noun.span) }
+                if aro.result.span.contains(position) { return (aro.result.base, aro.result.span) }
+                if aro.object.noun.span.contains(position) { return (aro.object.noun.base, aro.object.noun.span) }
                 if let expr = aro.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
             } else if let forEachLoop = statement as? ForEachLoop {
                 if let result = findSymbolInStatements(forEachLoop.body, position: position) { return result }
@@ -201,8 +201,8 @@ public struct RenameHandler: Sendable {
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.result.span) { return (stage.result.base, stage.result.span) }
-                    if isPositionInSpan(position, stage.object.noun.span) { return (stage.object.noun.base, stage.object.noun.span) }
+                    if stage.result.span.contains(position) { return (stage.result.base, stage.result.span) }
+                    if stage.object.noun.span.contains(position) { return (stage.object.noun.base, stage.object.noun.span) }
                     if let expr = stage.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
                 }
             }
@@ -249,7 +249,7 @@ public struct RenameHandler: Sendable {
 
     private func findSymbolInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> (String, SourceSpan)? {
         if let varRef = expression as? VariableRefExpression {
-            if isPositionInSpan(position, varRef.span) {
+            if varRef.span.contains(position) {
                 return (varRef.noun.base, varRef.span)
             }
         } else if let binary = expression as? BinaryExpression {
@@ -310,22 +310,6 @@ public struct RenameHandler: Sendable {
     }
 
     // MARK: - Helpers
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-
-        return true
-    }
 
     private func createTextEdit(span: SourceSpan, newText: String, lines: LineIndex) -> [String: Any] {
         let lspRange = PositionConverter.toLSP(span, using: lines)

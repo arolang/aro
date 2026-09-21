@@ -330,7 +330,16 @@ struct PluginCompiler: Sendable {
                             compileProcess.arguments = ["-c", "-fPIC", "-O2"] + includeFlags + ["-o", oPath, cFile.path]
                             compileProcess.standardOutput = FileHandle.nullDevice
                             compileProcess.standardError = FileHandle.nullDevice
-                            try? compileProcess.run()
+                            // A launch failure (no clang at that path) must not
+                            // fall through: `waitUntilExit` and
+                            // `terminationStatus` on a Process that was never
+                            // started raise, so the old `try?` turned a missing
+                            // compiler into a crash instead of a skipped file.
+                            do {
+                                try compileProcess.run()
+                            } catch {
+                                continue
+                            }
                             compileProcess.waitUntilExit()
                             if compileProcess.terminationStatus == 0 {
                                 objectFiles.append(oPath)

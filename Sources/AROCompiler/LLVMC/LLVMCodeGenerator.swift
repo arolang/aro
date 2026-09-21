@@ -1366,6 +1366,17 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Publish Statement Generation
 
+    /// A bare `<name>` with no qualifier, for the statements whose descriptors
+    /// name a variable rather than a noun the author wrote.
+    ///
+    /// `Publish` and `Require` used to open-code both descriptor structs field
+    /// by field — alloca, base, specifiers, count — although `DescriptorBuilder`
+    /// does exactly that for every other statement. Handing it a synthetic noun
+    /// keeps the layout in one place.
+    private static func plainNoun(_ name: String) -> QualifiedNoun {
+        QualifiedNoun(base: name, span: .unknown)
+    }
+
     private func generatePublishStatement(_ statement: PublishStatement, index: Int, errorBlock: BasicBlock) {
         let ip = ctx.insertionPoint
 
@@ -1387,55 +1398,16 @@ public final class LLVMCodeGenerator {
             at: ip
         )
 
-        // Build result descriptor for the publish action
-        let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        let baseStr = ctx.stringConstant(statement.externalName)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 0, at: ip
+        // Descriptors for the publish action: the alias is the result, the
+        // internal variable the object. Neither carries specifiers.
+        let prefix = "pub\(index)"
+        let resultDesc = descriptors.buildResultDescriptor(
+            Self.plainNoun(statement.externalName), prefix: prefix
         )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        // Specifiers = null
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 1, at: ip
+        let objectDesc = descriptors.buildObjectDescriptor(
+            ObjectClause(preposition: .from, noun: Self.plainNoun(statement.internalVariable)),
+            prefix: prefix
         )
-        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-
-        // Count = 0
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
-
-        // Build object descriptor for the internal variable
-        let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
-
-        let objBaseStr = ctx.stringConstant(statement.internalVariable)
-        let objBasePtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 0, at: ip
-        )
-        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
-
-        // Preposition = from (0)
-        let prepPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 1, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
-
-        // Specifiers = null
-        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
-
-        // Count = 0
-        let objCountPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 3, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
 
         // Call publish action
         if let publishFunc = externals.actionFunction(for: "publish") {
@@ -1488,55 +1460,16 @@ public final class LLVMCodeGenerator {
             at: ip
         )
 
-        // Build result descriptor for the require action
-        let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        let baseStr = ctx.stringConstant(statement.variableName)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 0, at: ip
+        // Descriptors for the require action: the required name is the result,
+        // the source the object. Neither carries specifiers.
+        let prefix = "req\(index)"
+        let resultDesc = descriptors.buildResultDescriptor(
+            Self.plainNoun(statement.variableName), prefix: prefix
         )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        // Specifiers = null
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 1, at: ip
+        let objectDesc = descriptors.buildObjectDescriptor(
+            ObjectClause(preposition: .from, noun: Self.plainNoun(sourceValue)),
+            prefix: prefix
         )
-        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-
-        // Count = 0
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
-
-        // Build object descriptor for the source
-        let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
-
-        let objBaseStr = ctx.stringConstant(sourceValue)
-        let objBasePtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 0, at: ip
-        )
-        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
-
-        // Preposition = from (0)
-        let prepPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 1, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
-
-        // Specifiers = null
-        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
-
-        // Count = 0
-        let objCountPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 3, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
 
         // Call require action (extract)
         if let extractFunc = externals.actionFunction(for: "extract") {

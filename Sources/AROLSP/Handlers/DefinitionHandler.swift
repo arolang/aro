@@ -46,12 +46,12 @@ public struct DefinitionHandler: Sendable {
     ) -> [String: Any]? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.result.span) {
+                if aro.result.span.contains(position) {
                     if let symbol = symbolTable.lookup(aro.result.base) {
                         return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                     }
                 }
-                if isPositionInSpan(position, aro.object.noun.span) {
+                if aro.object.noun.span.contains(position) {
                     if let symbol = symbolTable.lookup(aro.object.noun.base) {
                         return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                     }
@@ -81,12 +81,12 @@ public struct DefinitionHandler: Sendable {
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.result.span) {
+                    if stage.result.span.contains(position) {
                         if let symbol = symbolTable.lookup(stage.result.base) {
                             return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                         }
                     }
-                    if isPositionInSpan(position, stage.object.noun.span) {
+                    if stage.object.noun.span.contains(position) {
                         if let symbol = symbolTable.lookup(stage.object.noun.base) {
                             return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                         }
@@ -112,7 +112,7 @@ public struct DefinitionHandler: Sendable {
         lines: LineIndex
     ) -> [String: Any]? {
         if let varRef = expression as? VariableRefExpression {
-            if isPositionInSpan(position, varRef.span) {
+            if varRef.span.contains(position) {
                 let name = varRef.noun.base
                 if let symbol = symbolTable.lookup(name) {
                     return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
@@ -146,22 +146,6 @@ public struct DefinitionHandler: Sendable {
     }
 
     // MARK: - Helpers
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-
-        return true
-    }
 
     private func createLocationResponse(uri: String, span: SourceSpan, lines: LineIndex) -> [String: Any] {
         let lspRange = PositionConverter.toLSP(span, using: lines)
