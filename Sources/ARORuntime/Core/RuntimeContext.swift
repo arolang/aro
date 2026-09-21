@@ -523,41 +523,71 @@ public actor RuntimeContext: ExecutionContext {
         resolveAnyWithoutDraining(name)
     }
 
-    nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
-        // Magic variable: <now> returns current date/time
-        if name == "now" {
+    // MARK: - Magic Variables
+
+    /// What a framework-provided name resolves to, if it is one.
+    enum MagicResolution {
+        /// The name is the framework's to answer — with this value, which may
+        /// itself be nil (a `<contract>` read in an application with no
+        /// contract resolves to nothing rather than to a variable).
+        case resolved((any Sendable)?)
+        /// Not a framework name, or — for `<http-server>` with no contract
+        /// loaded — a framework name that defers to the variable store.
+        case notMagic
+    }
+
+    /// The names the framework answers itself.
+    ///
+    /// The list was written out three times, once per resolve entry point, so
+    /// adding a magic variable meant remembering all three; `resolveAnyRaw` and
+    /// `resolveAnyAsync` only need to know that a name *is* magic, because a
+    /// magic name never holds a future.
+    static let magicNames: Set<String> = [
+        "now", "contract", "Contract", "http-server", "httpServer",
+        "metrics", "application"
+    ]
+
+    /// Resolve a framework-provided name.
+    nonisolated func resolveMagic(_ name: String) -> MagicResolution {
+        switch name {
+        case "now":
             // Through `service(_:)`, not the local dictionary: services are
             // registered on the root context, and a statement scope has none of
             // its own (ARO-0088 §2).
             let dateService = service(DateService.self) ?? DefaultDateService()
-            return dateService.now(timezone: nil)
-        }
+            return .resolved(dateService.now(timezone: nil))
 
-        // Magic variable: <Contract> or <contract> returns OpenAPI contract metadata
-        if name == "contract" || name == "Contract" {
-            return buildContractObject()
-        }
+        case "contract", "Contract":
+            // <Contract> or <contract> returns OpenAPI contract metadata
+            return .resolved(buildContractObject())
 
-        // Magic variable: <http-server> returns Contract.http-server
-        // This allows both <Contract> and <http-server> to work
-        // Falls through to regular variable store if contract is not available
-        // (e.g. in binary mode after `Start the <http-server>` binds a ServerStartResult)
-        if name == "http-server" || name == "httpServer" {
+        case "http-server", "httpServer":
+            // <http-server> returns Contract.http-server, so both <Contract>
+            // and <http-server> work. Falls through to the regular variable
+            // store when no contract is available — e.g. in binary mode after
+            // `Start the <http-server>` binds a ServerStartResult.
             if let httpServer = buildContractObject()?.httpServer {
-                return httpServer
+                return .resolved(httpServer)
             }
-            // Fall through to regular variable lookup below
-        }
+            return .notMagic
 
-        // Magic variable: <metrics> returns current execution metrics
-        if name == "metrics" {
-            return container.metricsCollector.snapshot()
-        }
+        case "metrics":
+            // <metrics> returns current execution metrics
+            return .resolved(container.metricsCollector.snapshot())
 
-        // Magic variable: <application> provides application context (used in Stop/Close actions)
-        if name == "application" {
-            return ["type": "application"] as [String: any Sendable]
+        case "application":
+            // <application> provides application context (Stop/Close actions)
+            return .resolved(["type": "application"] as [String: any Sendable])
+
+        default:
+            return .notMagic
         }
+    }
+
+    nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
+        // Names the framework answers itself, before any variable store is
+        // consulted (`<now>`, `<contract>`, `<metrics>`, …).
+        if case .resolved(let value) = resolveMagic(name) { return value }
 
         // Iterative walk without the drain fallback — see `resolveWithoutDraining`
         // for the drain reasoning and `ancestorHolding` for why it is a loop.
@@ -599,9 +629,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
     /// fall through to the regular resolveAny path.
     public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
-        if name == "now" || name == "contract" || name == "Contract"
-            || name == "http-server" || name == "httpServer"
-            || name == "metrics" || name == "application" {
+        if Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -618,9 +646,7 @@ public actor RuntimeContext: ExecutionContext {
     public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
         // Magic variables short-circuit through the sync path — they don't
         // produce futures.
-        if name == "now" || name == "contract" || name == "Contract"
-            || name == "http-server" || name == "httpServer"
-            || name == "metrics" || name == "application" {
+        if Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -712,12 +738,33 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether `category` was Configure-written in this context or any
     /// ancestor (children read configuration through the parent chain,
     /// like every other resolution).
+    ///
+    /// A loop, not a recursion: this sits on the miss path of `ExtractAction`,
+    /// so it is reached inside recursive user actions — exactly the depth that
+    /// `ancestorHolding` documents as fatal for a per-level stack frame.
     public nonisolated func isConfigured(_ category: String) -> Bool {
-        storageLock.lock()
-        let local = configuredCategories.contains(category)
-        storageLock.unlock()
-        if local { return true }
-        return (parent as? RuntimeContext)?.isConfigured(category) ?? false
+        firstInChain { context in
+            context.storageLock.lock()
+            let local = context.configuredCategories.contains(category)
+            context.storageLock.unlock()
+            return local ? true : nil
+        } ?? false
+    }
+
+    /// The first non-nil answer from this context or a `RuntimeContext`
+    /// ancestor, nearest first.
+    ///
+    /// Iterative for the reason spelled out on `ancestorHolding`: a chain is as
+    /// deep as the program's recursion, and one native frame per level killed a
+    /// recursive program with SIGBUS at ~1300 frames (GitLab #473). Anything
+    /// that reads through the parent chain is written this way.
+    private nonisolated func firstInChain<T>(_ read: (RuntimeContext) -> T?) -> T? {
+        var current: RuntimeContext = self
+        while true {
+            if let found = read(current) { return found }
+            guard let runtimeParent = current.parent as? RuntimeContext else { return nil }
+            current = runtimeParent
+        }
     }
 
     public nonisolated func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
@@ -1503,8 +1550,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Inherited from the parent so a template that `Include`s another keeps the
     /// outer template's escaping unless the inner one sets its own.
     public nonisolated var templateEscaping: TemplateEscaping {
-        if _templateEscaping != .none { return _templateEscaping }
-        return (parent as? RuntimeContext)?.templateEscaping ?? .none
+        firstInChain { $0._templateEscaping != .none ? $0._templateEscaping : nil } ?? .none
     }
 
     /// Sets the escaping mode for this render. Called by the template engine.
@@ -1518,12 +1564,17 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Get the schema registry for typed event extraction
     /// Falls back to parent context if not set locally
+    ///
+    /// Iterative for the reason given on `firstInChain`; a parent that is not a
+    /// `RuntimeContext` answers for itself, as it did when this recursed.
     public nonisolated var schemaRegistry: SchemaRegistry? {
-        if let registry = _schemaRegistry {
-            return registry
+        var current: RuntimeContext = self
+        while true {
+            if let registry = current._schemaRegistry { return registry }
+            guard let parent = current.parent else { return nil }
+            guard let runtimeParent = parent as? RuntimeContext else { return parent.schemaRegistry }
+            current = runtimeParent
         }
-        // Try parent context
-        return parent?.schemaRegistry
     }
 
     /// Set the schema registry (called during application startup)

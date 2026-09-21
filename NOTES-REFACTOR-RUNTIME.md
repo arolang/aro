@@ -174,3 +174,18 @@ comments in AROCLI/REPL that named the old file.
 
 Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**;
 check-proposals passes. Examples: HelloWorld (Log), StoreFileDemo (Store), DataPipeline.
+
+## #731 — RuntimeContext: one magic-name list, three loops
+- `magicNames` (one `static let Set`) + `resolveMagic(_:) -> MagicResolution`. The enum exists
+  because two of the old branches were not "return a value": `<contract>` may legitimately resolve
+  to nil (and must NOT fall through to the variable store), while `<http-server>` with no contract
+  loaded MUST fall through — which is why it is `.notMagic` there. `resolveAnyRaw` and
+  `resolveAnyAsync` only ask `magicNames.contains`, exactly as their `||` chains did.
+- `isConfigured` and `templateEscaping` now go through a new iterative `firstInChain(_:)`;
+  `schemaRegistry` has its own loop because a non-RuntimeContext parent has to answer for itself.
+  All three were recursive; `isConfigured` is on `ExtractAction`'s miss path, i.e. reached at
+  recursion depth — the case `ancestorHolding` documents as SIGBUS at ~1300 frames.
+
+Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**.
+Examples: RecursiveActions (deep parent chains: 10!, sum 1..10000, mutual), TemplateEngine
+(templateEscaping inheritance), DateTimeDemo (`<now>`), MetricsDemo (`<metrics>`).
