@@ -208,7 +208,10 @@ def check_block(code: str, timeout: int = 20, binary: str | None = None,
         return False, 'timeout'
     except OSError as exc:
         return None, f'aro_not_runnable: {exc}'
-    return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
+    # Warnings matter as much as the exit code here — `aro check` reports a
+    # preposition an action does not take as a warning and still exits 0 — so
+    # keep enough of the output to read them, not just the first error.
+    return r.returncode == 0, (r.stderr or r.stdout).strip()[:4000]
 
 
 ARO_FENCE_RE = re.compile(r'```aro\b[^\n]*\n(.*?)```', re.DOTALL)

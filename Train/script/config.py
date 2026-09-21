@@ -1603,9 +1603,14 @@ def hallucinated_verbs_in_code(code, valid_verbs=None):
 # extracted verb+preposition combinations against the metadata mined from
 # Swift source in knowledge.json (e.g. `Log … to`, never `Log … for`).
 
+# `as` was in this set and should never have been: it introduces a result
+# type (`Compute the <n> as Float from <s>.`) and the Publish alias
+# (`Publish as <alias> <variable>.`), not an action's object. With it here the
+# gate reported seventeen perfectly valid Compute statements as using a
+# preposition Compute does not take.
 ARO_PREPOSITIONS = frozenset({
     'from', 'to', 'with', 'for', 'on', 'into', 'at', 'by',
-    'where', 'against', 'via', 'using', 'in', 'as',
+    'where', 'against', 'via', 'using', 'in',
 })
 # Always allowed regardless of the action: `when` guards and `where` queries.
 _ALWAYS_ALLOWED_PREPS = frozenset({'when', 'where'})

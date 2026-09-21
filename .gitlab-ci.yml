@@ -231,6 +231,19 @@ action-reference:
     - python3 Scripts/generate-action-reference.py --check
 
 # =============================================================================
+# The training pipeline's own unit tests (GitLab #783)
+# =============================================================================
+# Pure python: pair shapes, the corpus gates, the config helpers. The tests
+# that need an `aro` binary skip themselves here and run for real in
+# train:corpus, which has one.
+train:tests:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --quiet pytest
+    - python3 -m pytest Train/script/tests -q
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
@@ -847,13 +860,50 @@ train:catalogs:
     - chmod +x ./aro-dist/aro
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
-    - "$ARO_BIN" --version
+    - "$ARO_BIN --version"
   script:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
     - python3 Train/script/extract_action_catalog.py --check
     - python3 Train/script/extract_action_verbs.py --check
     - python3 Train/script/extract_qualifier_catalog.py --check
+
+# =============================================================================
+# The corpus is re-validated when the language changes (GitLab #783)
+# =============================================================================
+# Training data was validated against the binary of the day it was generated
+# and then never asked again, so rows survived teaching a `where` form, a
+# qualifier and a `Compare` shape the language had since changed. This runs
+# the re-validator over the training data that lives in the repository —
+# Train/Material/curated.jsonl, the highest-weighted source in the mixture —
+# against the binary from this very pipeline. The generated corpora under
+# Train/data/ are not in the repository; the same command validates them on
+# the training host.
+train:corpus:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN --version"
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/revalidate_corpus.py Train/Material/curated.jsonl --jobs 4 --fail-under 97 --report corpus-validation.json
+  artifacts:
+    when: always
+    paths:
+      - corpus-validation.json
+    expire_in: 1 week
 
 # =============================================================================
 # Documentation Stage

@@ -117,6 +117,48 @@ swift build --product aro
 ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --aro-check
 ```
 
+### Re-validating a corpus that already exists (GitLab #783)
+
+Every pair was validated — if at all — against the `aro` of the day it was
+generated, and then never asked again, while the language moved: `where id =
+<id>` became legal, the qualifier namespace closed, `Compare` grew a result
+binding. `revalidate_corpus.py` is the standing re-ask. It takes any JSONL of
+pairs (`instruction`/`output`, chat `messages`, or DPO
+`prompt`/`chosen`/`rejected`), re-checks every ```aro block with the current
+binary, and stamps the verdict and the version onto each pair.
+
+```bash
+# look at a corpus
+python3 Train/script/revalidate_corpus.py Train/data/02_knowledge/knowledge_pairs.jsonl
+
+# gate a pipeline on it, and keep the numbers
+python3 Train/script/revalidate_corpus.py CORPUS --fail-under 95 --report r.json
+
+# write the verdicts back, or write a cleaned copy
+python3 Train/script/revalidate_corpus.py CORPUS --annotate annotated.jsonl
+python3 Train/script/revalidate_corpus.py CORPUS --drop-failures clean.jsonl
+```
+
+Four gates run per block, in the order they cost: the FIXTRAIN lint and the
+closed qualifier namespace, statement verbs against the generated action
+catalog, verb+preposition, and `aro check` itself. They are not redundant —
+`aro check` accepts `Hash the <digest> from the <password>.` with no action
+named Hash, and reports a preposition an action does not take as a *warning*,
+exit code 0. A corpus graded on exit codes alone sees neither.
+
+Blocks framed as counter-examples ("this is wrong:") and fences that are not
+ARO (diagrams, `<statements>` placeholders) are skipped rather than failed: a
+corpus that teaches what is wrong needs wrong code in it. A bare statement
+whose only complaint is a free variable passes too — `Publish the <result> as
+<alias>.` is the right way to teach Publish, and is undefined only because
+nothing else is in the file. `--strict-fragments` turns that off.
+
+The binary is found through `ARO_BIN`, then `.build/release`, then `PATH`
+(`Train/script/aro_oracle.py`), and the same resolution feeds the catalog
+extractors. CI runs the validator over `Train/Material/curated.jsonl` against
+the binary of that very pipeline (`train:corpus`), and the unit tests under
+`script/tests/` in `train:tests`.
+
 ### Validation & assembly
 
 | # | Notebook | Purpose |

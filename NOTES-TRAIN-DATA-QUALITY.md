@@ -63,3 +63,44 @@ python3 Train/script/extract_qualifier_catalog.py # 33 -> 34 qualifiers
 python3 Train/script/extract_action_catalog.py --check   # passes
 ```
 
+## #783 — nothing re-validates the corpus (VERIFIED; the central mechanism)
+
+Confirmed: `_metadata.aro_lang_commit` is stamped at save, `data/04_validated/`
+is empty, and the validation notebook only runs inside a full pipeline run.
+
+Built `Train/script/revalidate_corpus.py` + `Train/script/aro_oracle.py`.
+Oracle design notes (probed against 0.12.0 by hand before writing):
+- `aro check <dir>` demands an Application-Start → useless for snippets.
+- `aro check --syntax -` takes fragments, feature-set bodies and whole
+  programs, BUT mis-parses a `(* banner *)` that precedes a feature-set
+  header. So: blocks with a feature-set header go through a temp-directory
+  check (an `Application-Start` is supplied when absent); bare statements go
+  through `--syntax`.
+- **`aro check` does NOT catch invented verbs.** `Hash the <digest> from the
+  <password>.` exits 0 with only a use-before-definition warning. The catalog
+  gate is therefore not redundant with the binary — this is the concrete
+  evidence for #798's "check is not enough".
+- **`aro check` reports a wrong preposition as a WARNING, exit 0** —
+  "Action 'Render' does not accept the preposition 'from'". A corpus graded
+  on exit codes never sees these. The validator reads the binary's own
+  warnings instead of a regex; the regex fallback is only for `--no-binary`.
+- **Bug found in the existing gate:** `as` was in `config.ARO_PREPOSITIONS`,
+  so `Compute the <n> as Float from <s>.` (valid, CLAUDE.md) was flagged 17×.
+  Removed from both `config.py` and the validator.
+
+### Full-corpus baseline (10 007 pairs, 4 411 with ```aro blocks)
+```
+pass rate 93.6%   640 failing
+reasons: aro_check 484, unknown_verb 172, bad_preposition 65, unknown_qualifier 2
+3 730 unique blocks checked in 52 s (10 jobs)
+```
+By notebook: NB00_git 456/3580 failing (87.3%), NB08 64/3228, NB04 57/1140,
+03_material 20/1065, 03_material_runner 17/178, NB00_fix 14/142, NB06 12/194,
+NB07 0/480.
+
+`Train/Material/curated.jsonl` (committed): 1069 pairs, 24 failing, 97.8%.
+
+CI: `train:tests` (test stage, python:3.12-slim, pytest) and `train:corpus`
+(integration stage, ARO_BIN from build:linux, `--fail-under 97`).
+26 new tests; full Train suite 179 passed.
+
