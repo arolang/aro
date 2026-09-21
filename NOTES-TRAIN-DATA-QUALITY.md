@@ -133,3 +133,27 @@ Applied to the existing corpus, the gate would drop **640 of 10 007 pairs**
 (6.4%): aro_check 484, unknown_verb 172, bad_preposition 65,
 unknown_qualifier 2 (a pair can fail for more than one reason).
 
+## #798 — `aro check` is the only oracle (VERIFIED; the gap is bigger than filed)
+
+Added `run_block` / `test_block` / `grade_block` to `aro_oracle.py` and `--run`
+to the validator. Measured over the whole 10 007-pair corpus:
+
+```
+blocks that are complete, non-server programs : 950
+ran green                                     : 478
+FAILED AT RUNTIME while passing `aro check`   : 472   (~50%)
+pairs that gained an expected_output          : 475
+blocks carrying colocated tests               : 37  (28 green, 9 failing)
+pass rate with the run oracle                 : 89.2%  (93.6% on check alone)
+```
+
+`aro test` had never been used by the pipeline at all; 9 failing suites were
+invisible. Runtime cost: 52 s for the whole corpus at 10 jobs, so the "budget"
+the evaluation stage imposed (n = 6 in the August run) was never necessary.
+
+Design points: `run` returns `None` for "not attempted" (server / no entry
+point / no binary) and that is never conflated with success — the old 0.8/0.9
+scores made a skipped server and a missing binary indistinguishable.
+`ARO_NO_DEFER=1` so two runs of a program agree (ARO-0088 statement overlap).
+Servers are detected by shape (Keepalive / Listen / Start the <http-server> …).
+

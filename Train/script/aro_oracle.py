@@ -200,7 +200,7 @@ def check_block(code: str, timeout: int = 20, binary: str | None = None,
                 for name, content in (extra_files or {}).items():
                     (Path(tmp) / name).write_text(content)
                 r = subprocess.run([binary, 'check', tmp], capture_output=True,
-                                   text=True, timeout=timeout)
+                                   text=True, timeout=timeout, cwd=tmp)
         else:
             r = subprocess.run([binary, 'check', '--syntax', '-'], input=code,
                                capture_output=True, text=True, timeout=timeout)
@@ -212,6 +212,137 @@ def check_block(code: str, timeout: int = 20, binary: str | None = None,
     # preposition an action does not take as a warning and still exits 0 — so
     # keep enough of the output to read them, not just the first error.
     return r.returncode == 0, (r.stderr or r.stdout).strip()[:4000]
+
+
+# ── `aro run` and `aro test` (GitLab #798) ───────────────────────────────────
+# `aro check` is syntax plus limited semantics. It accepts a verb no action
+# implements, it reports a wrong preposition as a warning, and it has nothing
+# to say about whether the program does what the instruction asked — "passes
+# `aro check` but does not address the instruction" is a recorded failure
+# class with 161 entries. Running the thing is the next oracle, and the only
+# one that produces an expected output to train against.
+
+# A program that waits: running it to completion is not a finite question.
+# Keepalive blocks until a signal; a bound socket or file monitor keeps the
+# process alive the same way.
+SERVER_SHAPE_RE = re.compile(
+    r'\bKeepalive\b|\bListen\s|\bStart\s+the\s+<(?:http-server|socket-server|'
+    r'file-monitor|websocket-server)', re.IGNORECASE)
+
+# A feature set whose business activity ends in Test — what `aro test` runs.
+TEST_FEATURE_SET_RE = re.compile(r'\([^()\n:]+:\s*[^()\n]*\bTests?\s*\)\s*\{')
+
+
+def is_server_program(code: str) -> bool:
+    return bool(SERVER_SHAPE_RE.search(code or ''))
+
+
+def has_tests(code: str) -> bool:
+    return bool(TEST_FEATURE_SET_RE.search(code or ''))
+
+
+def _application_dir(tmp: Path, code: str, extra_files: dict | None):
+    (tmp / 'main.aro').write_text(code)
+    for name, content in (extra_files or {}).items():
+        (tmp / name).write_text(content)
+
+
+def run_block(code: str, timeout: int = 10, binary: str | None = None,
+              extra_files: dict | None = None) -> tuple[bool | None, str]:
+    """`aro run` on a complete program. Returns (ok, output).
+
+    `ok is None` means the question was not asked — no binary, no entry point,
+    or a program that waits for events and therefore has no completion to
+    observe. The output of a successful run is the expected-output field a
+    sample can be trained against.
+
+    ARO_NO_DEFER=1 so two runs of the same program produce the same output:
+    statements otherwise overlap and interleave (ARO-0088).
+    """
+    binary = binary or aro_bin()
+    if not binary:
+        return None, 'aro_not_found'
+    if 'Application-Start' not in (code or ''):
+        return None, 'no entry point'
+    if is_server_program(code):
+        return None, 'server: waits for events'
+    env = dict(os.environ)
+    env['ARO_NO_DEFER'] = '1'
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            _application_dir(Path(tmp), code, extra_files)
+            # cwd=tmp: a program under validation writes files, and corpus
+            # code writes to relative paths — `users.csv`, `output.json`,
+            # `config/app.yaml`. Running from the repository root scatters
+            # them through the working tree.
+            r = subprocess.run([binary, 'run', tmp], capture_output=True,
+                               text=True, timeout=timeout, env=env, cwd=tmp)
+    except subprocess.TimeoutExpired:
+        return False, f'timeout after {timeout}s'
+    except OSError as exc:
+        return None, f'aro_not_runnable: {exc}'
+    output = (r.stdout or '').strip()
+    if r.returncode != 0:
+        return False, ((r.stderr or r.stdout).strip()[:1000] or
+                       f'exit {r.returncode}')
+    return True, output[:4000]
+
+
+def test_block(code: str, timeout: int = 30, binary: str | None = None,
+               extra_files: dict | None = None) -> tuple[bool | None, str]:
+    """`aro test` on a program that carries colocated tests (ARO-0015).
+
+    `ok is None` means there were no tests to run, which is not a failure.
+    """
+    binary = binary or aro_bin()
+    if not binary:
+        return None, 'aro_not_found'
+    if not has_tests(code):
+        return None, 'no tests'
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            _application_dir(Path(tmp), code, extra_files)
+            r = subprocess.run([binary, 'test', tmp], capture_output=True,
+                               text=True, timeout=timeout, cwd=tmp)
+    except subprocess.TimeoutExpired:
+        return False, f'timeout after {timeout}s'
+    except OSError as exc:
+        return None, f'aro_not_runnable: {exc}'
+    output = ((r.stdout or '') + (r.stderr or '')).strip()
+    if 'No tests found' in output:
+        return None, 'no tests'
+    return r.returncode == 0, output[:2000]
+
+
+def grade_block(code: str, binary: str | None = None,
+                extra_files: dict | None = None,
+                run_timeout: int = 10) -> dict:
+    """The (check, run, test) tuple for one block, and what each one said.
+
+    Stored rather than collapsed to a number: "check passed, run skipped
+    because it is a server" and "check passed, run unavailable" were both
+    scored 0.8-0.9 and were indistinguishable afterwards.
+    """
+    binary = binary or aro_bin()
+    check_ok, check_out = check_block(code, binary=binary,
+                                      extra_files=extra_files)
+    grade = {'check': check_ok, 'check_output': check_out,
+             'aro_version': aro_version()}
+    if check_ok is not True:
+        grade.update({'run': None, 'run_output': 'not attempted: check failed',
+                      'test': None})
+        return grade
+    run_ok, run_out = run_block(code, timeout=run_timeout, binary=binary,
+                                extra_files=extra_files)
+    grade['run'] = run_ok
+    grade['run_output'] = run_out
+    if run_ok:
+        grade['expected_output'] = run_out
+    test_ok, test_out = test_block(code, binary=binary, extra_files=extra_files)
+    grade['test'] = test_ok
+    if test_ok is not None:
+        grade['test_output'] = test_out
+    return grade
 
 
 ARO_FENCE_RE = re.compile(r'```aro\b[^\n]*\n(.*?)```', re.DOTALL)

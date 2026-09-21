@@ -146,6 +146,15 @@ catalog, verb+preposition, and `aro check` itself. They are not redundant —
 named Hash, and reports a preposition an action does not take as a *warning*,
 exit code 0. A corpus graded on exit codes alone sees neither.
 
+`--run` adds the two oracles above `aro check` (GitLab #798): every complete
+non-server program is executed with `ARO_NO_DEFER=1` for determinism and its
+stdout becomes the pair's `expected_output`, and any program carrying
+colocated tests gets `aro test`. The verdict keeps the tuple rather than
+collapsing it — `run: null` means *not attempted* (a server, no entry point,
+no binary), never *fine*. On the 10 007-pair corpus: 950 blocks are runnable
+programs, 478 run green, **472 pass `aro check` and fail when run**, and 37
+carry tests of which 9 fail.
+
 Blocks framed as counter-examples ("this is wrong:") and fences that are not
 ARO (diagrams, `<statements>` placeholders) are skipped rather than failed: a
 corpus that teaches what is wrong needs wrong code in it. A bare statement

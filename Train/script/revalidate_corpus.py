@@ -282,13 +282,23 @@ def error_is_only_free_variables(error: str) -> bool:
 # ── the binary ───────────────────────────────────────────────────────────────
 
 class CheckCache:
-    """`aro check` verdicts keyed by block, because a corpus repeats itself."""
+    """`aro check` verdicts keyed by block, because a corpus repeats itself.
 
-    def __init__(self, binary, timeout=20):
+    With `execute=True` it also runs what can be run (GitLab #798): a complete
+    non-server program is executed with ARO_NO_DEFER=1 and its stdout becomes
+    the sample's expected output, and a program carrying colocated tests gets
+    `aro test`.
+    """
+
+    def __init__(self, binary, timeout=20, execute=False, run_timeout=10):
         self.binary = binary
         self.timeout = timeout
+        self.execute = execute
+        self.run_timeout = run_timeout
         self._cache: dict[str, tuple] = {}
+        self._grades: dict[str, dict] = {}
         self.calls = 0
+        self.runs = 0
 
     def check(self, code: str):
         key = hashlib.sha1(code.encode('utf-8', 'replace')).hexdigest()
@@ -300,6 +310,20 @@ class CheckCache:
                                          binary=self.binary)
         self._cache[key] = verdict
         return verdict
+
+    def grade(self, code: str) -> dict:
+        """The (check, run, test) tuple, cached alongside the check."""
+        key = hashlib.sha1(code.encode('utf-8', 'replace')).hexdigest()
+        hit = self._grades.get(key)
+        if hit is not None:
+            return hit
+        self.runs += 1
+        self.calls += 1
+        grade = aro_oracle.grade_block(code, binary=self.binary,
+                                       run_timeout=self.run_timeout)
+        self._cache[key] = (grade['check'], grade['check_output'])
+        self._grades[key] = grade
+        return grade
 
 
 # ── validation ───────────────────────────────────────────────────────────────
@@ -313,6 +337,10 @@ def validate_pair(pair: dict, verbs, vp, qualifier_known, cache,
     checked = skipped = passed = 0
     free_vars: list[str] = []
     errors: list[str] = []
+    runs: list[bool] = []
+    tests: list[bool] = []
+    outputs: list[str] = []
+    run_errors: list[str] = []
     bad_verbs: list[str] = []
     bad_preps: list[str] = []
     bad_quals: list[str] = []
@@ -332,7 +360,19 @@ def validate_pair(pair: dict, verbs, vp, qualifier_known, cache,
                               if p not in bad_preps]
                 passed += 1
                 continue
-            ok, error = cache.check(code)
+            if cache.execute:
+                grade = cache.grade(code)
+                ok, error = grade['check'], grade['check_output']
+                if grade.get('run') is not None:
+                    runs.append(bool(grade['run']))
+                    if grade.get('expected_output'):
+                        outputs.append(grade['expected_output'])
+                    elif grade['run'] is False:
+                        run_errors.append(grade['run_output'][:400])
+                if grade.get('test') is not None:
+                    tests.append(bool(grade['test']))
+            else:
+                ok, error = cache.check(code)
             bad_preps += [p for p in preposition_warnings(error)
                           if p not in bad_preps]
             is_fragment = not aro_oracle.FEATURE_SET_RE.search(code)
@@ -354,8 +394,18 @@ def validate_pair(pair: dict, verbs, vp, qualifier_known, cache,
         'blocks_skipped': skipped,
         'check_passed': passed,
         'valid': (not errors and not bad_verbs and not bad_preps
-                  and not bad_quals),
+                  and not bad_quals and not run_errors),
     }
+    if runs:
+        verdict['run_passed'] = sum(1 for r in runs if r)
+        verdict['run_attempted'] = len(runs)
+    if run_errors:
+        verdict['run_errors'] = run_errors[:3]
+    if outputs:
+        verdict['expected_output'] = outputs[0]
+    if tests:
+        verdict['test_passed'] = sum(1 for t in tests if t)
+        verdict['test_attempted'] = len(tests)
     if free_vars:
         verdict['free_variable_fragments'] = len(free_vars)
     if errors:
@@ -373,6 +423,8 @@ def failure_reasons(verdict: dict) -> list[str]:
     reasons = []
     if verdict.get('check_errors'):
         reasons.append('aro_check')
+    if verdict.get('run_errors'):
+        reasons.append('aro_run')
     if verdict.get('unknown_verbs'):
         reasons.append('unknown_verb')
     if verdict.get('bad_prepositions'):
@@ -436,6 +488,12 @@ def main(argv=None):
                         help='also check ```aro blocks in the prompt')
     parser.add_argument('--no-binary', action='store_true',
                         help='static gates only; do not run `aro check`')
+    parser.add_argument('--run', action='store_true',
+                        help='also `aro run` every complete non-server program '
+                             'and record its stdout as the expected output, '
+                             'and `aro test` any that carry tests (GitLab #798)')
+    parser.add_argument('--run-timeout', type=int, default=10,
+                        help='seconds per `aro run` (default: 10)')
     parser.add_argument('--strict-fragments', action='store_true',
                         help='fail bare statements whose only error is a free '
                              'variable (default: report them, do not fail)')
@@ -455,7 +513,9 @@ def main(argv=None):
               '--no-binary to run the static gates alone.', file=sys.stderr)
         return 2
     verbs, vp, qualifier_known = load_catalogs()
-    cache = CheckCache(binary) if binary else None
+    cache = (CheckCache(binary, execute=args.run,
+                        run_timeout=args.run_timeout)
+             if binary else None)
 
     overall = {'files': [], 'aro_version': aro_oracle.aro_version()}
     worst_rate = 100.0
@@ -495,6 +555,15 @@ def main(argv=None):
             print(f'   reasons      : {dict(reasons)}')
             if cache:
                 print(f'   aro check    : {cache.calls} unique blocks in {elapsed:.0f}s')
+            if cache and cache.execute:
+                ran = sum(v.get('run_attempted', 0) for v in verdicts)
+                ran_ok = sum(v.get('run_passed', 0) for v in verdicts)
+                tested = sum(v.get('test_attempted', 0) for v in verdicts)
+                tested_ok = sum(v.get('test_passed', 0) for v in verdicts)
+                with_output = sum(1 for v in verdicts if v.get('expected_output'))
+                print(f'   aro run      : {ran_ok}/{ran} blocks ran green, '
+                      f'{with_output} pairs gained an expected output')
+                print(f'   aro test     : {tested_ok}/{tested} test suites green')
             print()
             print(source_table(rows, verdicts))
 
