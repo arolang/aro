@@ -208,15 +208,17 @@ public final class DocumentManager: @unchecked Sendable {
 
         for change in changes {
             if let range = change.range {
-                // Incremental change
-                let lspRange = range
-                let startOffset = PositionConverter.calculateOffset(lspRange.start, in: content)
-                let endOffset = PositionConverter.calculateOffset(lspRange.end, in: content)
+                // Incremental change. Both ends are resolved against one line
+                // table built from the *current* content — the table is rebuilt
+                // per change because each change shifts the text under the next
+                // one. Resolving to `String.Index` rather than an integer keeps
+                // the UTF-16 offsets the client sent from being re-read as
+                // grapheme counts on the way back out (GitLab #676).
+                let index = LineIndex(content)
+                let startIndex = index.index(of: range.start)
+                let endIndex = index.index(of: range.end)
 
-                let startIndex = content.index(content.startIndex, offsetBy: startOffset)
-                let endIndex = content.index(content.startIndex, offsetBy: min(endOffset, content.count))
-
-                content.replaceSubrange(startIndex..<endIndex, with: change.text)
+                content.replaceSubrange(startIndex..<max(startIndex, endIndex), with: change.text)
             } else {
                 // Full content replacement
                 content = change.text

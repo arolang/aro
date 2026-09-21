@@ -14,14 +14,17 @@ public struct DocumentSymbolHandler: Sendable {
     public init() {}
 
     /// Handle a document symbol request
-    public func handle(compilationResult: CompilationResult?) -> [[String: Any]]? {
+    public func handle(content: String, compilationResult: CompilationResult?) -> [[String: Any]]? {
         guard let result = compilationResult else { return nil }
+
+        // Spans carry scalar columns; LSP wants UTF-16. One table, one scan.
+        let lines = LineIndex(content)
 
         var symbols: [[String: Any]] = []
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
-            let fsRange = PositionConverter.toLSP(fs.span)
+            let fsRange = PositionConverter.toLSP(fs.span, using: lines)
 
             // Create feature set symbol
             var fsSymbol: [String: Any] = [
@@ -37,7 +40,7 @@ public struct DocumentSymbolHandler: Sendable {
 
             for statement in fs.statements {
                 if let aro = statement as? AROStatement {
-                    let stmtRange = PositionConverter.toLSP(aro.span)
+                    let stmtRange = PositionConverter.toLSP(aro.span, using: lines)
 
                     // Determine symbol kind based on action semantic role
                     let kind: Int
@@ -59,12 +62,12 @@ public struct DocumentSymbolHandler: Sendable {
                         "detail": formatStatementDetail(aro),
                         "kind": kind,
                         "range": rangeToDict(stmtRange),
-                        "selectionRange": rangeToDict(PositionConverter.toLSP(aro.action.span))
+                        "selectionRange": rangeToDict(PositionConverter.toLSP(aro.action.span, using: lines))
                     ]
 
                     children.append(stmtSymbol)
                 } else if let publish = statement as? PublishStatement {
-                    let publishRange = PositionConverter.toLSP(publish.span)
+                    let publishRange = PositionConverter.toLSP(publish.span, using: lines)
 
                     let publishSymbol: [String: Any] = [
                         "name": "<Publish> \(publish.externalName)",
@@ -76,7 +79,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     children.append(publishSymbol)
                 } else if let matchStmt = statement as? MatchStatement {
-                    let matchRange = PositionConverter.toLSP(matchStmt.span)
+                    let matchRange = PositionConverter.toLSP(matchStmt.span, using: lines)
 
                     let matchSymbol: [String: Any] = [
                         "name": "match",
@@ -88,7 +91,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     children.append(matchSymbol)
                 } else if let forEachStmt = statement as? ForEachLoop {
-                    let forRange = PositionConverter.toLSP(forEachStmt.span)
+                    let forRange = PositionConverter.toLSP(forEachStmt.span, using: lines)
 
                     let forSymbol: [String: Any] = [
                         "name": "for each \(forEachStmt.itemVariable)",
@@ -100,7 +103,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     children.append(forSymbol)
                 } else if let rangeLoop = statement as? RangeLoop {
-                    let rangeLoopRange = PositionConverter.toLSP(rangeLoop.span)
+                    let rangeLoopRange = PositionConverter.toLSP(rangeLoop.span, using: lines)
 
                     let rangeLoopSymbol: [String: Any] = [
                         "name": "for \(rangeLoop.variable)",
@@ -112,7 +115,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     children.append(rangeLoopSymbol)
                 } else if let whileLoop = statement as? WhileLoop {
-                    let whileRange = PositionConverter.toLSP(whileLoop.span)
+                    let whileRange = PositionConverter.toLSP(whileLoop.span, using: lines)
 
                     let whileSymbol: [String: Any] = [
                         "name": "while",
@@ -124,7 +127,7 @@ public struct DocumentSymbolHandler: Sendable {
 
                     children.append(whileSymbol)
                 } else if let pipeline = statement as? PipelineStatement {
-                    let pipelineRange = PositionConverter.toLSP(pipeline.span)
+                    let pipelineRange = PositionConverter.toLSP(pipeline.span, using: lines)
 
                     let pipelineSymbol: [String: Any] = [
                         "name": "pipeline",

@@ -63,6 +63,23 @@ public enum LexerError: CompilerError {
             return "Triple-quoted strings were removed — a plain \"…\" string spans multiple lines"
         }
     }
+
+    /// The same error reported at `location` instead of where it was raised.
+    ///
+    /// Used when a sub-lexer runs over a slice of a document — the inside of a
+    /// `${…}` interpolation — and its locations are relative to that slice.
+    /// Without this the error points at line 1 of a fragment nobody can see
+    /// (GitLab #659).
+    public func relocated(to location: SourceLocation) -> LexerError {
+        switch self {
+        case .unexpectedCharacter(let char, _): return .unexpectedCharacter(char, at: location)
+        case .unterminatedString: return .unterminatedString(at: location)
+        case .invalidEscapeSequence(let char, _): return .invalidEscapeSequence(char, at: location)
+        case .invalidNumber(let num, _): return .invalidNumber(num, at: location)
+        case .invalidUnicodeEscape(let hex, _): return .invalidUnicodeEscape(hex, at: location)
+        case .tripleQuotedStringRemoved: return .tripleQuotedStringRemoved(at: location)
+        }
+    }
 }
 
 // MARK: - Parser Errors

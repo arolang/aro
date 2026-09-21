@@ -22,7 +22,8 @@ public struct ReferencesHandler: Sendable {
     ) -> [[String: Any]]? {
         guard let result = compilationResult else { return nil }
 
-        let aroPosition = PositionConverter.fromLSP(position)
+        let lines = LineIndex(content)
+        let aroPosition = PositionConverter.fromLSP(position, using: lines)
 
         // Find the symbol name at the position
         var targetName: String?
@@ -42,7 +43,7 @@ public struct ReferencesHandler: Sendable {
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
-            references.append(contentsOf: findReferencesInStatements(fs.statements, name: symbolName, uri: uri))
+            references.append(contentsOf: findReferencesInStatements(fs.statements, name: symbolName, uri: uri, lines: lines))
         }
 
         return references.isEmpty ? nil : references
@@ -51,48 +52,49 @@ public struct ReferencesHandler: Sendable {
     private func findReferencesInStatements(
         _ statements: [Statement],
         name symbolName: String,
-        uri: String
+        uri: String,
+        lines: LineIndex
     ) -> [[String: Any]] {
         var references: [[String: Any]] = []
 
         for statement in statements {
             if let aro = statement as? AROStatement {
                 if aro.result.base == symbolName {
-                    references.append(createLocationDict(uri: uri, span: aro.result.span))
+                    references.append(createLocationDict(lines: lines, uri: uri, span: aro.result.span))
                 }
                 if aro.object.noun.base == symbolName {
-                    references.append(createLocationDict(uri: uri, span: aro.object.noun.span))
+                    references.append(createLocationDict(lines: lines, uri: uri, span: aro.object.noun.span))
                 }
                 if let expr = aro.valueSource.asExpression {
-                    references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
+                    references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri, lines: lines))
                 }
                 for predicate in aro.queryModifiers.whereCondition?.predicates ?? [] {
-                    references.append(contentsOf: findReferencesInExpression(predicate.value, name: symbolName, uri: uri))
+                    references.append(contentsOf: findReferencesInExpression(predicate.value, name: symbolName, uri: uri, lines: lines))
                 }
             } else if let publish = statement as? PublishStatement {
                 if publish.internalVariable == symbolName {
-                    references.append(createLocationDict(uri: uri, span: publish.span))
+                    references.append(createLocationDict(lines: lines, uri: uri, span: publish.span))
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
-                references.append(contentsOf: findReferencesInStatements(forEachLoop.body, name: symbolName, uri: uri))
+                references.append(contentsOf: findReferencesInStatements(forEachLoop.body, name: symbolName, uri: uri, lines: lines))
             } else if let rangeLoop = statement as? RangeLoop {
-                references.append(contentsOf: findReferencesInStatements(rangeLoop.body, name: symbolName, uri: uri))
+                references.append(contentsOf: findReferencesInStatements(rangeLoop.body, name: symbolName, uri: uri, lines: lines))
             } else if let whileLoop = statement as? WhileLoop {
-                references.append(contentsOf: findReferencesInStatements(whileLoop.body, name: symbolName, uri: uri))
+                references.append(contentsOf: findReferencesInStatements(whileLoop.body, name: symbolName, uri: uri, lines: lines))
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
-                    references.append(contentsOf: findReferencesInStatements(caseClause.body, name: symbolName, uri: uri))
+                    references.append(contentsOf: findReferencesInStatements(caseClause.body, name: symbolName, uri: uri, lines: lines))
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
                     if stage.result.base == symbolName {
-                        references.append(createLocationDict(uri: uri, span: stage.result.span))
+                        references.append(createLocationDict(lines: lines, uri: uri, span: stage.result.span))
                     }
                     if stage.object.noun.base == symbolName {
-                        references.append(createLocationDict(uri: uri, span: stage.object.noun.span))
+                        references.append(createLocationDict(lines: lines, uri: uri, span: stage.object.noun.span))
                     }
                     if let expr = stage.valueSource.asExpression {
-                        references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
+                        references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri, lines: lines))
                     }
                 }
             }
@@ -166,30 +168,30 @@ public struct ReferencesHandler: Sendable {
         return nil
     }
 
-    private func findReferencesInExpression(_ expression: any AROParser.Expression, name: String, uri: String) -> [[String: Any]] {
+    private func findReferencesInExpression(_ expression: any AROParser.Expression, name: String, uri: String, lines: LineIndex) -> [[String: Any]] {
         var references: [[String: Any]] = []
 
         if let varRef = expression as? VariableRefExpression {
             if varRef.noun.base == name {
-                references.append(createLocationDict(uri: uri, span: varRef.span))
+                references.append(createLocationDict(lines: lines, uri: uri, span: varRef.span))
             }
         } else if let binary = expression as? BinaryExpression {
-            references.append(contentsOf: findReferencesInExpression(binary.left, name: name, uri: uri))
-            references.append(contentsOf: findReferencesInExpression(binary.right, name: name, uri: uri))
+            references.append(contentsOf: findReferencesInExpression(binary.left, name: name, uri: uri, lines: lines))
+            references.append(contentsOf: findReferencesInExpression(binary.right, name: name, uri: uri, lines: lines))
         } else if let unary = expression as? UnaryExpression {
-            references.append(contentsOf: findReferencesInExpression(unary.operand, name: name, uri: uri))
+            references.append(contentsOf: findReferencesInExpression(unary.operand, name: name, uri: uri, lines: lines))
         } else if let member = expression as? MemberAccessExpression {
-            references.append(contentsOf: findReferencesInExpression(member.base, name: name, uri: uri))
+            references.append(contentsOf: findReferencesInExpression(member.base, name: name, uri: uri, lines: lines))
         } else if let subscript_ = expression as? SubscriptExpression {
-            references.append(contentsOf: findReferencesInExpression(subscript_.base, name: name, uri: uri))
-            references.append(contentsOf: findReferencesInExpression(subscript_.index, name: name, uri: uri))
+            references.append(contentsOf: findReferencesInExpression(subscript_.base, name: name, uri: uri, lines: lines))
+            references.append(contentsOf: findReferencesInExpression(subscript_.index, name: name, uri: uri, lines: lines))
         } else if let array = expression as? ArrayLiteralExpression {
             for element in array.elements {
-                references.append(contentsOf: findReferencesInExpression(element, name: name, uri: uri))
+                references.append(contentsOf: findReferencesInExpression(element, name: name, uri: uri, lines: lines))
             }
         } else if let map = expression as? MapLiteralExpression {
             for entry in map.entries {
-                references.append(contentsOf: findReferencesInExpression(entry.value, name: name, uri: uri))
+                references.append(contentsOf: findReferencesInExpression(entry.value, name: name, uri: uri, lines: lines))
             }
         }
 
@@ -214,8 +216,8 @@ public struct ReferencesHandler: Sendable {
         return true
     }
 
-    private func createLocationDict(uri: String, span: SourceSpan) -> [String: Any] {
-        let lspRange = PositionConverter.toLSP(span)
+    private func createLocationDict(lines: LineIndex, uri: String, span: SourceSpan) -> [String: Any] {
+        let lspRange = PositionConverter.toLSP(span, using: lines)
 
         return [
             "uri": uri,

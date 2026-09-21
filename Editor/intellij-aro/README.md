@@ -269,7 +269,11 @@ intellij-aro/
 │           ├── META-INF/
 │           │   └── plugin.xml    # Plugin descriptor
 │           ├── textmate/
-│           │   └── aro.tmLanguage.json   # TextMate grammar
+│           │   └── aro-bundle/           # TextMate bundle (loaded at runtime)
+│           │       ├── package.json
+│           │       ├── language-configuration.json
+│           │       └── syntaxes/
+│           │           └── aro.tmLanguage.json   # generated copy
 │           └── liveTemplates/
 │               └── ARO.xml       # Live templates
 └── README.md                 # This file
@@ -299,11 +303,27 @@ intellij-aro/
 
 ### Modifying the Grammar
 
-The TextMate grammar is in `src/main/resources/textmate/aro.tmLanguage.json`. To test changes:
+The grammar this plugin loads —
+`src/main/resources/textmate/aro-bundle/syntaxes/aro.tmLanguage.json` — is a
+**generated copy** of the canonical one in `Editor/vscode-aro/syntaxes/`. Edits
+made here are overwritten. There used to be a second, unused grammar at
+`src/main/resources/textmate/aro.tmLanguage.json` with different contents; it
+has been removed, because only the bundle path is ever read
+(`AROTextMateBundleProvider`).
 
-1. Edit the grammar file
-2. Run `./gradlew runIde`
-3. Open an `.aro` file to verify highlighting
+The action verb lists inside the grammar are generated from the runtime's
+action registry and must not be hand-edited either — they had drifted to 67 of
+130 verbs, with no Git verbs at all (GitLab #695).
+
+1. Edit `Editor/vscode-aro/syntaxes/aro.tmLanguage.json` for anything except
+   the `actions` node
+2. Run `python3 Scripts/generate-editor-grammars.py` from the repository root
+   to regenerate the `actions` node and refresh this copy
+3. Run `./gradlew runIde`
+4. Open an `.aro` file to verify highlighting
+
+CI runs `python3 Scripts/generate-editor-grammars.py --check` and fails if the
+committed grammars no longer match the registry.
 
 ### Adding Live Templates
 

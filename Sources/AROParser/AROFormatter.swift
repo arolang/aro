@@ -1,11 +1,15 @@
 // ============================================================
 // AROFormatter.swift
-// SOLARO — deterministic indent / cleanup for .aro source
+// AROParser — deterministic indent / cleanup for .aro source
 // ============================================================
 //
-// Triggered by the editor's right-click ▸ Reformat Code item
-// (see `AROHoverTextView.menu(for:)`) and reused on save when
-// the "Format on save" preference is on.
+// **The** formatter. SOLARO's right-click ▸ Reformat Code item
+// (see `AROHoverTextView.menu(for:)`), its format-on-save path,
+// and the language server's `textDocument/formatting` all call
+// this one function, so an editor and an LSP client cannot
+// disagree about what formatted ARO looks like (GitLab #677).
+// It lives in AROParser because that is the lowest module both
+// surfaces already depend on.
 //
 // Rules:
 //   * Re-indent each line based on bracket depth — `{`, `[` and
@@ -15,6 +19,9 @@
 //     `(* … *)` block comments — feature-set headers like
 //     `(Application-Start: Foo) {` close their `(` on the same
 //     line, so balanced runs are a no-op for depth.
+//   * Collapse runs of spaces *within* a statement, outside
+//     strings and comments, so `Extract  the   <a>` comes back as
+//     `Extract the <a>`.
 //   * Block-comment continuation lines (between `(*` and `*)`)
 //     pass through with only trailing whitespace stripped — we
 //     don't want the formatter rewriting asterisk alignment.
@@ -25,21 +32,27 @@
 //   * Three or more consecutive blank lines collapsed to one.
 //   * File ends with exactly one trailing newline.
 //
-// Indent width is hard-coded to four spaces — that matches every
-// example under `Examples/` (run `grep -P "^    " Examples/**.aro
-// | head` and the same width comes back) and the canonical
-// formatting in the language guide.
+// Indent defaults to four spaces — that matches every example
+// under `Examples/` (run `grep -P "^    " Examples/**.aro | head`
+// and the same width comes back) and the canonical formatting in
+// the language guide. The LSP passes the client's `tabSize` and
+// `insertSpaces` instead, which is the only reason the width is a
+// parameter at all.
 
 import Foundation
 
-enum AROFormatter {
-    static let indentWidth = 4
+public enum AROFormatter {
+    public static let indentWidth = 4
 
     /// Reformat the entire file. Idempotent: running twice gives
     /// the same output as running once, which is what the caller
     /// in `CodeEditor` relies on when it diffs the result against
     /// the live buffer to decide whether to write back.
-    static func format(_ source: String) -> String {
+    public static func format(
+        _ source: String,
+        indentWidth: Int = AROFormatter.indentWidth,
+        useTabs: Bool = false
+    ) -> String {
         // Normalize CRLF → LF up front so the line walker stays
         // simple. We re-emit with LF; SOLARO writes UTF-8 LF
         // everywhere else.
@@ -76,17 +89,19 @@ enum AROFormatter {
             // *next* line.
             let scan = scanBrackets(stripped)
             let lineDepth = max(0, depth - scan.leadingClosers)
-            let indent = String(
-                repeating: " ",
-                count: lineDepth * indentWidth)
+            let unit = useTabs ? "\t" : String(repeating: " ", count: indentWidth)
+            let indent = String(repeating: unit, count: lineDepth)
 
             // Collapse `..` (or any run of dots) at the end of the
             // line into a single `.`. We only touch trailing dots
             // outside string literals — the bracket scanner already
             // told us whether the line ended inside a string.
+            // Runs of spaces inside the statement collapse too, so
+            // the formatter actually formats the statement and not
+            // only the column it starts in (GitLab #677).
             let body = scan.endedInString
                 ? stripped
-                : collapseTrailingDots(stripped)
+                : collapseTrailingDots(collapseInteriorSpaces(stripped))
 
             output.append(indent + body)
 
@@ -201,6 +216,84 @@ enum AROFormatter {
             delta: delta,
             leadingClosers: leadingClosers,
             endedInString: inString)
+    }
+
+    /// Collapses runs of two or more spaces down to one, but only
+    /// where the spaces are part of the statement — never inside a
+    /// `"…"` literal (whose spaces are data) or a `(* … *)` comment
+    /// (whose spacing is the author's layout).
+    ///
+    /// This is the statement-level half of formatting. The LSP
+    /// formatter had its own copy of this idea which no statement
+    /// ever reached, because it was gated on the line starting with
+    /// `<` — a shape statements lost when bracketed verbs were
+    /// removed (GitLab #514 / #574). Folding it into the shared
+    /// formatter is what makes it run for both surfaces at once
+    /// rather than for neither (GitLab #677).
+    static func collapseInteriorSpaces(_ line: String) -> String {
+        var result = ""
+        result.reserveCapacity(line.count)
+
+        var inString = false
+        var blockCommentDepth = 0
+        var lastWasSpace = false
+        var i = line.startIndex
+
+        while i < line.endIndex {
+            let ch = line[i]
+            let next = line.index(after: i)
+
+            if blockCommentDepth > 0 {
+                result.append(ch)
+                if ch == "*", next < line.endIndex, line[next] == ")" {
+                    result.append(")")
+                    blockCommentDepth -= 1
+                    i = line.index(after: next)
+                    continue
+                }
+                i = next
+                continue
+            }
+
+            if inString {
+                result.append(ch)
+                if ch == "\\", next < line.endIndex {
+                    result.append(line[next])
+                    i = line.index(after: next)
+                    continue
+                }
+                if ch == "\"" { inString = false }
+                i = next
+                continue
+            }
+
+            if ch == "\"" {
+                inString = true
+                lastWasSpace = false
+                result.append(ch)
+                i = next
+                continue
+            }
+
+            if ch == "(", next < line.endIndex, line[next] == "*" {
+                blockCommentDepth += 1
+                lastWasSpace = false
+                result.append("(*")
+                i = line.index(after: next)
+                continue
+            }
+
+            if ch == " " {
+                if !lastWasSpace { result.append(ch) }
+                lastWasSpace = true
+            } else {
+                lastWasSpace = false
+                result.append(ch)
+            }
+            i = next
+        }
+
+        return result
     }
 
     private static func stripTrailingWhitespace(_ line: String) -> String {

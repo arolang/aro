@@ -242,6 +242,20 @@ grammar-appendix:
     - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
 
 # =============================================================================
+# Editor grammars are generated, not hand-maintained (GitLab #695)
+# =============================================================================
+# The VS Code and IntelliJ TextMate grammars listed 67 of 130 runtime verbs and
+# none of the Git verbs, while every other surface reads AROCatalog. They are
+# now derived from the same scrape as the action reference, with the IntelliJ
+# bundle a byte-identical copy of the canonical grammar. This job fails if the
+# committed grammars no longer match the registry.
+editor-grammars:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-editor-grammars.py --check
+
+# =============================================================================
 # The integration harness has logic of its own, and it is testable
 # =============================================================================
 # Unit tests for Tests/IntegrationTestsRunner/lib — pure Perl, no toolchain,

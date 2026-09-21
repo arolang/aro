@@ -880,6 +880,88 @@ struct StringInterpolationTests {
         let ends = tokens.filter { $0.kind == .interpolationEnd }
         #expect(ends.count == 1)
     }
+
+    // MARK: - Spans and diagnostics inside ${…} (GitLab #659)
+
+    @Test("Tokens inside an interpolation carry spans in the enclosing file")
+    func testInterpolationTokenSpans() throws {
+        //          1234567890123456789
+        let source = "\"Hello, ${<name>}!\""
+        let tokens = try Lexer.tokenize(source)
+
+        let name = try #require(tokens.first { $0.kind == .identifier("name") })
+        // `name` starts at column 12 of the *document*. Re-lexing the
+        // interpolation's content on its own put it at column 2.
+        #expect(name.span.start.line == 1)
+        #expect(name.span.start.column == 12)
+
+        let leftAngle = try #require(tokens.first { $0.kind == .leftAngle })
+        #expect(leftAngle.span.start.column == 11)
+    }
+
+    @Test("A second interpolation's spans do not restart at column 1")
+    func testSecondInterpolationSpans() throws {
+        let source = "\"${<first>} ${<second>}\""
+        let tokens = try Lexer.tokenize(source)
+
+        let first = try #require(tokens.first { $0.kind == .identifier("first") })
+        let second = try #require(tokens.first { $0.kind == .identifier("second") })
+        #expect(first.span.start.column < second.span.start.column)
+        #expect(second.span.start.column == 16)
+    }
+
+    @Test("A lex error inside an interpolation is thrown, not swallowed")
+    func testInterpolationLexErrorThrows() throws {
+        // `#` is not a character the lexer knows. Re-lexing with `try?` turned
+        // this into an empty interpolation and no error at all.
+        let error = try #require(
+            performThrowing { try Lexer.tokenize("\"x ${<a> # <b>}\"") } as? LexerError
+        )
+        guard case .unexpectedCharacter(let char, let location) = error else {
+            Issue.record("expected unexpectedCharacter, got \(error)")
+            return
+        }
+        #expect(char == "#")
+        // Column 10 of the document, not column 6 of the fragment `<a> # <b>`.
+        #expect(location.line == 1)
+        #expect(location.column == 10)
+    }
+
+    @Test("A lex error inside an interpolation reaches the diagnostics collector")
+    func testInterpolationLexErrorDiagnosed() throws {
+        let collector = DiagnosticCollector()
+        // With a collector the lexer recovers rather than throwing — the mode
+        // the language server and `aro check` run in.
+        _ = try Lexer.tokenize("\"x ${<a> # <b>}\"", diagnostics: collector)
+
+        let diagnostic = try #require(collector.errors.first)
+        #expect(diagnostic.message.contains("#"))
+        let location = try #require(diagnostic.location)
+        #expect(location.line == 1)
+        #expect(location.column == 10)
+    }
+
+    @Test("An interpolation on a later line reports on that line")
+    func testInterpolationOnLaterLine() throws {
+        let collector = DiagnosticCollector()
+        let source = "(F: B) {\n    Log \"v ${<a> # <b>}\" to the <console>.\n}"
+        _ = try Lexer.tokenize(source, diagnostics: collector)
+
+        let diagnostic = try #require(collector.errors.first)
+        let location = try #require(diagnostic.location)
+        #expect(location.line == 2)
+        #expect(location.column == 18)
+    }
+
+    /// Runs `body` and returns whatever it threw, or nil.
+    private func performThrowing(_ body: () throws -> Any) -> (any Error)? {
+        do {
+            _ = try body()
+            return nil
+        } catch {
+            return error
+        }
+    }
 }
 
 // MARK: - Lexer Feature Set Tests

@@ -130,7 +130,7 @@ public struct CodeActionHandler: Sendable {
         content: String
     ) -> [[String: Any]] {
         var actions: [[String: Any]] = []
-        let aroPosition = PositionConverter.fromLSP(range.start)
+        let aroPosition = PositionConverter.fromLSP(range.start, in: content)
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
