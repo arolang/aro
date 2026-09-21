@@ -224,3 +224,40 @@ comment_pairs.jsonl    23 057 -> 3 311 rows (-19 746: exact_pair 12 122,
 ```
 Again a report, not a rewrite of the shared corpus (concurrent branches).
 
+## #781 — git-diff pairs (VERIFIED; one claim corrected)
+
+`git_examples_pairs.jsonl` 3 514 rows, `git_applications_pairs.jsonl` 110 —
+confirmed. NB00_git is 3 580 of 10 007 rows = **35.8%**. All tagged
+`debugging`. No generator in the repository (searched `Train/`).
+
+Validated them for the first time:
+```
+git_examples_pairs.jsonl      3 514 pairs, 478 failing, 86.4% pass
+                              (aro_check 458, unknown_verb 97)
+git_applications_pairs.jsonl    110 pairs,  17 failing, 84.6% pass
+```
+
+**Claim corrected:** the issue says "the `.aro` suffix rule gives it a high
+default quality". It does not — those sources end `.aro@<sha>`, so
+`source_quality_score` matched no rule and returned the 0.8 DEFAULT. The
+deeper problem is the same one in a different place: every row carried its own
+`path@sha`, so `SOURCE_SOFT_CAP_SHARE = 0.30` saw three thousand sources of
+one row each and never fired on a source holding 36% of the corpus.
+
+**Fix:** `Train/script/33_git_diff_pairs.py` — the generator, in the
+repository. Whole files at both SHAs (`git show <sha>:<path>`), both run
+through `aro check`, pair kept only when the NEW side checks green, labelled
+`correction` when the old side failed and `code_transformation` otherwise, the
+answer being commit subject + body + the unified diff + the old side's actual
+diagnostic. Source `git:<repo>/<path>@<sha>`.
+Plus `config.source_family()` (`.aro@<sha>` → `git`), `SOURCE_QUALITY_SCORES['git'] = 0.6`,
+`SOURCE_CAPS = {'git': 1200}` and `source_cap()`.
+
+Proof run over this repository's last 60 `.aro`-touching commits:
+```
+60 commits, 98 files, 51 usable -> 102 pairs
+4 corrections, 47 transformations, 2 rejected because the new side does
+not pass aro check
+```
+9 new tests (they build throwaway git repos).
+

@@ -2600,8 +2600,22 @@ SOURCE_QUALITY_SCORES = {
     'readme':                 0.7,
     'external_repo':          0.7,
     'readme_to_code':         0.7,
+    # Mined from git history (GitLab #781). Real code, but the answer side is
+    # a commit message and a diff, which is the weakest supervision in the
+    # mixture; it was 36% of the corpus scoring the 0.8 default because every
+    # row carried its own `path@sha` as its source and no two rows shared one.
+    'git':                    0.6,
 }
 DEFAULT_SOURCE_QUALITY = 0.8
+
+# Per-source ceilings, counted on the family rather than the tag (GitLab
+# #781). The share knobs below act on a source's share of the train set, which
+# only works when a source is one name: git-mined pairs were three thousand
+# distinct sources of one row each, so the 0.30 soft cap never saw the 36%.
+SOURCE_CAPS = {
+    'git': 1200,
+}
+DEFAULT_SOURCE_CAP = None
 
 # Assembly-time policy knobs (used by NB16)
 AUTO_WRAP_MAX_SHARE   = 0.35   # max share of code_generation pairs that may be auto-wrapped (issue #380)
@@ -2609,14 +2623,42 @@ SOURCE_SOFT_CAP_SHARE = 0.30   # sources above this share get soft down-weighted
 SOURCE_SHARE_FLAG     = 0.40   # flag any source above this share of the train set
 
 
+_GIT_SOURCE_RE = _re.compile(r'\.aro@[0-9a-f]{6,40}$', _re.IGNORECASE)
+
+
+def source_family(source):
+    """The one name a source tag belongs to.
+
+    Share caps and quality scores are computed per source, so a stage that
+    tags every row with its own file path and SHA is not one source at 36% of
+    the corpus but three thousand sources of one row each — and no cap ever
+    fires. `path.aro@<sha>` is the git miner; a bare absolute path is NB14's
+    comment extraction.
+    """
+    src = (source or '').strip()
+    if not src:
+        return 'unknown'
+    if _GIT_SOURCE_RE.search(src):
+        return 'git'
+    if src.startswith('/') or src.endswith('.aro'):
+        return 'comment'
+    return src.split(':')[0].strip().lower()
+
+
 def source_quality_score(source, notebook=None):
     """Quality score in (0, 1] for a pair's `source` tag."""
-    src = (source or '').strip()
-    # NB14 comment pairs carry a file path as source — real hand-written code.
-    if src.startswith('/') or src.endswith('.aro'):
-        return 0.95
-    prefix = src.split(':')[0].strip().lower()
-    return SOURCE_QUALITY_SCORES.get(prefix, DEFAULT_SOURCE_QUALITY)
+    family = source_family(source)
+    if family == 'unknown':
+        return DEFAULT_SOURCE_QUALITY
+    if family == 'comment':
+        # NB14 comment pairs carry a file path as source — hand-written code.
+        return SOURCE_QUALITY_SCORES.get('comment', 0.95)
+    return SOURCE_QUALITY_SCORES.get(family, DEFAULT_SOURCE_QUALITY)
+
+
+def source_cap(source):
+    """How many pairs of this source's family the dataset will take, or None."""
+    return SOURCE_CAPS.get(source_family(source), DEFAULT_SOURCE_CAP)
 
 
 def derive_source_quality_from_validation(validated_samples, min_count=20):
