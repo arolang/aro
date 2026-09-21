@@ -133,6 +133,32 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 19 | `19_evaluation` | Score the teacher against held-out prompts; emits `models/loop_metrics.json`. |
 | 20 | `20_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
 
+#### Reading a pass rate (GitLab #786)
+
+A pass rate is a proportion measured on a handful of prompts, and for a long
+time the pipeline printed it as a bare number. The 2026-08 loop reported
+code-generation at 0.700, 0.467, 0.617, 0.333, 0.283, 0.500, 0.533, 0.517
+across eight rounds — a 41.7-point range on a set of 60 prompts, where one
+prompt is worth 1.7 points and the 95 % interval is about ±11. Five of those
+eight rounds are indistinguishable from the "best" one.
+
+`script/eval_stats.py` is the arithmetic for that. It reports Wilson intervals
+rather than bare rates, compares two measurements with a verdict that can say
+*indistinguishable*, and answers "how many prompts would I need" — the loop's
+headline 0.700 → 0.517 needs 111 per arm to call at 95 %/80 %, nearly twice
+what it had. `MIN_PROMPTS_PER_TASK` (100) is the floor below which a per-task
+rate is reported as a measurement at all; below it the convergence test refuses
+to return a verdict instead of returning a wrong one.
+
+Point it at a finished run to see what that run could actually support:
+
+```bash
+python3 Train/script/eval_stats.py Train/data/rounds/round_results.json --n 60
+```
+
+(`--n` is only needed for records written before the loop started recording
+`eval_n` next to every rate.)
+
 ### Distillation & packaging
 
 | # | Notebook | Purpose |
