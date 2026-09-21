@@ -96,3 +96,20 @@ EventListener.
 Noted, not fixed (pre-existing, unrelated to this change): `aro check` warns "event emitted but
 no handler exists" for ANY guarded handler — `OrderUpdated Handler<status:paid>` warns the same
 way on main. The GitHub wiki also documents CrawlPage dedup; it is outside this repo.
+
+## #726 — FeatureSetExecutor.swift split
+- 2116 lines → `FeatureSetExecutor.swift` 1571, `Runtime.swift` 339, `SignalHandling.swift` 73,
+  `StatementModifiers.swift` 169. `Runtime` and `RuntimeSignalHandler` moved byte-for-byte
+  (only a file header added); access levels untouched, everything stays `public` as before.
+- `StatementModifiers.bind(_:into:evaluator:)` now holds the twelve consecutive framework-variable
+  binding blocks that sat in the middle of `executeAROStatement` (literal, aggregation, where,
+  by, default, matching/recursive, to, with, against, sink expression), in the same order.
+- The `_literal_` switch turned out to be `convertLiteralValue` spelled out a second time —
+  identical case for case — so the three private `convertLiteral*` helpers became
+  `StatementModifiers.value/array/object`, and `matchesLiteral` uses the same one.
+- The two lifecycle bugs the issue mentions (Application-End twice, Application-End losing
+  published symbols) are filed separately and were NOT touched; the code moved as it stands.
+
+Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1840 passed**.
+Examples: DataPipeline (where/aggregation modifiers), Computations (literals, qualifiers),
+ApplicationEnd (Runtime lifecycle + shutdown).
