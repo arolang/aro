@@ -269,6 +269,28 @@ harness:unit:
     - prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
 
 # =============================================================================
+# The model promotion gate is a decision procedure, and it was never tested
+# =============================================================================
+# Train/script/release_gate.py decides whether a fine-tuned model may be
+# distributed (GitLab #796). The gate it replaces could not fail: it asked for a
+# 40% syntax pass rate from a model that measured 75.5%. A gate nobody runs
+# against a bad model is the same thing, so this job runs the unit tests — every
+# one of which is a model the old thresholds accepted — and then the demo, which
+# exits non-zero unless it actually demonstrates a refusal.
+#
+# Pure stdlib: no mlx, no model, no aro binary, so a slim python image is the
+# whole environment. When train/training-eval (!591) lands, its `train:unit` job
+# runs all of Train/script/tests and this one can fold into it; the demo step
+# stays either way.
+train:release-gate:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir --quiet pytest
+    - python3 -m pytest Train/script/tests/test_release_gate.py -q
+    - python3 Train/script/release_gate.py --demo
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:

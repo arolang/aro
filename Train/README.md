@@ -239,3 +239,41 @@ The intended cadence after the first complete run:
 3. Re-run the meta pipeline. Each round starts from the previously-published
    teacher, evaluates against the same held-out prompts in NB20, and writes a
    new entry to `models/loop_metrics.json` so regressions are visible.
+
+<!-- begin: release gate (GitLab #796) -->
+## The promotion gate
+
+`script/release_gate.py` decides whether a candidate model may be distributed.
+NB27 measures; this module decides, which is why it is a plain Python file with
+unit tests rather than a cell.
+
+The gate that shipped v1.1.0 asked five questions with fixed answers — reply
+rate ≥ 50 %, empty-think ≤ 20 %, syntax pass ≥ 40 %, tool leakage ≤ 2 %, URL
+contamination ≤ 5 %. v1.1.0 measured 75.5 % syntax pass, so a model could lose
+thirty-five points of the one capability it exists for and still be promoted.
+
+The decision is now the comparison that means something: **the candidate against
+the release it would replace, on the same prompts.**
+
+| Rule | What it refuses |
+|---|---|
+| Paired non-regression | Any metric worse than the previous release beyond the measurement's own confidence — exact McNemar over the prompts the two models disagree about (α = 0.05), or non-overlapping Wilson intervals where the baseline stored only aggregates |
+| Execution pass | A model whose programs parse and do not run (`functional_eval`, GitLab #813) |
+| Tool-call format | A model that prints `aro_check ./App` in a fence instead of emitting a call the CLI executes |
+| Dropped metric | A candidate that simply stops measuring something the previous release measured |
+| Benchmark drift / shrinkage | A comparison between two different exams, or one narrowed until regressions stop being visible |
+| Absolute floors | Total collapse — kept, but no longer the decision |
+
+Per-prompt results are written into `release/version_history.json`, so each
+release is compared to the previous one prompt by prompt.
+
+```bash
+python3 Train/script/release_gate.py --demo          # replays v1.1.0 vs a degraded candidate
+python3 Train/script/release_gate.py --candidate release/aro-coder-6bit/promotion_gate.json \
+                                     --history   release/version_history.json
+python3 -m pytest Train/script/tests/test_release_gate.py -q
+```
+
+`--demo` exits non-zero unless it demonstrates its point: the old thresholds
+accept a 45 % model and the new gate refuses it.
+<!-- end: release gate (GitLab #796) -->
