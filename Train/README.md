@@ -131,6 +131,37 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 | 17 | `17_finetune` | Full SFT on the 30B MoE teacher. Writes `models/finetune/round_0/`. |
 | 18 | `18_preference_sft` | Preference-filtered SFT pass on top. |
 | 19 | `19_evaluation` | Score the teacher against held-out prompts; emits `models/loop_metrics.json`. |
+
+#### What counts as a hallucination (GitLab #801)
+
+The hallucination metric was the fraction of statement-leading verbs missing
+from the knowledge base. Every verb in
+
+```aro
+Create the <scores> with [90, 80, 70].
+Compute the <spread: variance> from the <scores>.
+Log <spread> to the <console>.
+```
+
+is real, so that program scored 0.000 while `aro check` says
+`Unknown Compute qualifier 'variance'`. The qualifier namespace has been closed
+since GitLab #486, so an invented qualifier is exactly as much a fabrication as
+an invented verb.
+
+`script/fact_check.py` grounds the check in the catalogs the repo generates
+from the runtime — verbs, action prepositions and qualifiers — and adds the two
+things the report had no way to say:
+
+- `invented_statistics` names the fabricated figures rather than returning a
+  boolean, so the meta probe fails on *which* number was invented. The pipeline
+  provides no mechanism by which the model could know its own pass rate, so any
+  such figure is fabricated by construction.
+- `regression_flags` lists every task the fine-tune left worse than its own
+  base. Run it over a finished report:
+
+```bash
+python3 Train/script/fact_check.py --report Train/data/07_eval/report.json
+```
 | 20 | `20_iterative_loop` | Self-improvement: generate → judge → retrain rounds, each writing into `models/iterative/`. |
 
 #### Reading a pass rate (GitLab #786)

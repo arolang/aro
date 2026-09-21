@@ -299,3 +299,63 @@ Deliberately NOT done: the issue's "one mixed SFT on the student instead of
 three fuses" is a restructure of the whole booster chain that cannot be
 validated without a training run. The gate is what makes the current chain
 safe; the restructure is a separate piece of work.
+### Commit 4 — #801 (keyword metrics)
+
+**The demonstration.** This program's verbs are all real, so the old
+`hallucination_score` returns exactly 0.000:
+
+```aro
+(Application-Start: Report) {
+    Create the <scores> with [90, 80, 70].
+    Compute the <spread: variance> from the <scores>.
+    Log <spread> to the <console>.
+    Return an <OK: status> for the <report>.
+}
+```
+
+`aro check` (0.12.0) on that exact text:
+
+```
+3:18: error: Unknown Compute qualifier 'variance'
+  hint: Plugin qualifiers are namespaced: <spread: handle.variance>
+```
+
+`fact_check.py` on the same text: rate 0.200, one qualifier finding. The two
+metrics disagreeing on this case is pinned by
+`TheOldMetricMissesItTest.test_the_two_metrics_disagree_on_exactly_this_case`,
+with NB20's scoring function copied verbatim into the test for the comparison.
+
+Added `Train/script/fact_check.py` (33 tests):
+- `load_catalog` reads `aro_action_verbs.json`, `aro_action_catalog.json` and
+  `aro_qualifier_catalog.json` — all generated from the runtime's registries.
+- `hallucinated_verbs` / `hallucinated_qualifiers` / `bad_prepositions` /
+  `grounded_findings` / `hallucination_rate` (fabrications per checkable site,
+  qualifier slots now in the denominator).
+  Only the **Compute** qualifier slot is checked — `<request: body>`,
+  `<OK: status>` etc. are open by design; only Compute's is closed (#486).
+- `invented_statistics` returns the sentences and the figures, not a boolean;
+  `refuses_invented_statistics` is the gate.
+- `regression_flags` flags every task where ft < base, inverting
+  `*_hallucination_rate` where lower is better.
+
+Run against the real recorded report:
+
+```
+4 below-base result(s):
+  code_explanation   fact_f1        ft 0.000  base 0.333  (0.333 worse)
+  code_explanation   token_overlap  ft 0.066  base 0.287  (0.221 worse)
+  code_explanation   rouge_l        ft 0.021  base 0.149  (0.128 worse)
+  code_generation    semantic_score ft 0.425  base 0.437  (0.012 worse)
+```
+
+The issue names the first and third of those; the token_overlap and
+semantic_score rows are extra.
+
+Wired into NB20: `hallucination_score` delegates to the grounded rate, the
+meta probe also fails on invented statistics and prints which figures, and the
+report carries `_meta.below_base`.
+
+Note on a stale doc claim found on the way: CLAUDE.md says "Log ... to, never
+Log ... for", but `aro_action_catalog.json` (generated from the runtime) gives
+Log the prepositions `for`, `to`, `with`. Not touched — CLAUDE.md is out of
+scope for this branch.
