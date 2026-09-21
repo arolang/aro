@@ -239,6 +239,44 @@ Use dot notation for nested fields:
 - Field values are compared case-insensitively
 - Non-matching events are silently skipped
 
+### 3.6 Deduplication with `dedupe`
+
+A handler that may be told the same thing twice declares the payload field that
+identifies an event. The first event carrying a given value runs the handler;
+later events carrying the same value are skipped.
+
+```aro
+(* Each URL is crawled once, however many pages link to it *)
+(Crawl Page: CrawlPage Handler<dedupe:url>) {
+    Extract the <url> from the <event: url>.
+    Fetch the <page> from <url>.
+    Extract the <links> from the <page: links>.
+
+    for each <link> in <links> {
+        Emit a <CrawlPage: event> with { url: <link>, base: <base> }.
+    }
+
+    Return an <OK: status> for the <crawl>.
+}
+```
+
+- `dedupe` is a **declaration**, not a comparison, and can be combined with
+  state guards: `Handler<status:new;dedupe:url>`
+- The field is resolved in the event payload, one level down into a nested
+  object, or by dotted path — so it finds `url` whether the emitter spread an
+  object literal or wrapped a named variable
+- An event whose payload does not carry the field has no identity and is never
+  skipped
+- The store belongs to the handler and holds the most recent **100 000**
+  identities, evicting oldest-first, so an endless stream cannot exhaust memory
+- To remember more than that, or to revisit deliberately, keep visited state in
+  a repository instead
+
+Deduplication is opt-in. Before this section existed, the runtime applied it to
+one hard-coded event name (`CrawlPage`) and only when the payload happened to be
+keyed `data` — no other event could ask for it, the compiled runtime did not do
+it at all, and the documented emit shape never triggered it (GitLab #727).
+
 ---
 
 ## 4. State Objects

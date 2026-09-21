@@ -214,6 +214,7 @@ extension ExecutionEngine {
     /// Register domain event handlers for feature sets with "Handler" business activity pattern
     /// For example: "UserCreated Handler", "OrderPlaced Handler"
     /// Supports state guards: "UserCreated Handler<status:active>"
+    /// and a dedupe declaration: "CrawlPage Handler<dedupe:url>" (ARO-0007 §3.6)
     private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
         let domainHandlers = program.domainHandlers
 
@@ -239,19 +240,22 @@ extension ExecutionEngine {
             // The handler must NOT call back into the actor since the actor may be
             // blocked waiting for handlers to complete (via publishAndTrack).
             let deps = handlerDependencies
-            let capturedVisitedUrls = visitedUrls
+
+            // A handler that declares `<dedupe:field>` sees each distinct value
+            // of that field once (ARO-0007 §3.6). The store belongs to this
+            // handler, and is bounded with FIFO eviction so a crawl that never
+            // ends cannot exhaust memory (GitLab #154).
+            let seen = DedupeGuard.field(in: activity).map { field in
+                (field: field, store: VisitedURLStore(maxSize: RuntimeDefaults.visitedURLStoreMaxSize))
+            }
 
             eventBus.subscribe(to: DomainEvent.self) { event in
                 // Only handle events that match this handler's event type
                 guard event.domainEventType == eventType else { return }
 
-                // CrawlPage visited-URL deduplication (issue #154):
-                // Skip URLs that have already been crawled. Uses a bounded store
-                // so long-running crawlers cannot exhaust memory.
-                if eventType == "CrawlPage",
-                   let data = event.payload["data"] as? [String: any Sendable],
-                   let url = data["url"] as? String {
-                    guard capturedVisitedUrls.tryInsert(url) else { return }
+                if let seen,
+                   let identity = DedupeGuard.identity(ofField: seen.field, in: event.payload) {
+                    guard seen.store.tryInsert(identity) else { return }
                 }
 
                 // Apply state guards if present

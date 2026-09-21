@@ -59,3 +59,40 @@ What I did (no behaviour change intended):
 Verified: `swift build` clean; `swift test --filter AROuntimeTests` → **1830 passed**.
 Examples run: EventExample (5 handlers fire in order), RepositoryObserver (server starts),
 StateMachine (state observers fire).
+
+## #727 — the CrawlPage special case
+**What I found out before touching it** (this is the evidence the brief asked for):
+- Only production use of `VisitedURLStore` was the engine's `if eventType == "CrawlPage"`.
+- No example, no proposal, no runtime test depends on it. `Tests/.../BoundedSetTests.swift`
+  tests `VisitedURLStore` directly (the type survives, so those tests are untouched).
+- `Book/TheLanguageGuide/Chapter39-Concurrency.md` documented it as language behaviour.
+  `Book/AROByExample/*` builds a crawler that dedupes **explicitly** via a repository and says
+  in Chapter 5 "Notice what is *not* here: deduplication".
+- The compiled runtime (`aro build`) never implemented it — interpreter and binary disagreed.
+- **The documented form never triggered it.** The check reads
+  `payload["data"]["url"]`, but `Emit a <CrawlPage: event> with { url: … }` *spreads* the object
+  literal across the payload (EmitAction), so `payload["data"]` does not exist. Probe app
+  (scratchpad `CrawlDedupe/`): three emits, two identical → handler ran 3 times, no dedup.
+  A second probe (`CrawlDedupe2/`) emitting a variable *named* `data` DID dedup — i.e. the
+  feature was reachable only by accidentally naming your variable `data`.
+
+**What I did**: generalised rather than deleted. `Handler<dedupe:field>` (new `DedupeGuard` in
+`Events/StateGuard.swift`), one bounded store per handler, field resolved top-level / one level
+down / by dotted path. `StateGuardSet.parse` now skips the `dedupe:` component so it is not read
+as a field comparison (which would match nothing). Engine-wide `visitedUrls` deleted.
+Recorded in `Proposals/ARO-0007` §3.6; Book Chapter 39 section rewritten; summary table row
+updated.
+
+Behaviour change, stated plainly: an event named `CrawlPage` emitted with a variable named `data`
+is no longer de-duplicated unless the handler declares `<dedupe:url>`. Everything else is
+unchanged, because nothing else was ever de-duplicated.
+
+Verified: probe `CrawlDedupe3/` — `CrawlPage Handler<dedupe:url>` runs twice for three emits
+(one repeat dropped), an undeclared `VisitPage Handler` runs for both of its identical emits.
+`swift test --filter AROuntimeTests` → **1840 passed** (1830 + 10 new in `DedupeGuardTests.swift`,
+no existing test touched). `Scripts/check-proposals.py` passes. Examples: EventExample,
+EventListener.
+
+Noted, not fixed (pre-existing, unrelated to this change): `aro check` warns "event emitted but
+no handler exists" for ANY guarded handler — `OrderUpdated Handler<status:paid>` warns the same
+way on main. The GitHub wiki also documents CrawlPage dedup; it is outside this repo.

@@ -40,11 +40,6 @@ public actor ExecutionEngine {
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
-    /// Visited-URL store for CrawlPage deduplication (issue #154).
-    /// Uses a bounded FIFO-evicting set so long-running crawlers cannot exhaust memory.
-    /// Read by the domain-handler subscription in `ExecutionEngine+EventHandlers.swift`.
-    let visitedUrls = VisitedURLStore(maxSize: RuntimeDefaults.visitedURLStoreMaxSize)
-
     /// Track if the application entered wait state (Keepalive action)
     private var _enteredWaitState: Bool = false
 
