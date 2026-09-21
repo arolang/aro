@@ -179,3 +179,40 @@ dropped out as non-reproducible between the two passes.
 
 Commands: `pytest Train/script/tests/test_sandbox.py -q` → 17 passed;
 full suite → 219 passed (before the new file) / see next run.
+
+### #812 — done (commit 6)
+
+`experiment_db.py` extended: schema migrated with ALTER TABLE (session_id,
+pipeline_version, hparams_version, aro_version, rows_in, rows_out, drop_reasons);
+`record_data_stage()`, `record_funnel()`, `export_csv()`, a CLI
+(`--export --release X`, `--list --stage NB17`), `ARO_TRAIN_DB` override.
+`config.save_notebook_pairs()` now records every data stage automatically (the one
+funnel they all use). Recording cells appended to 07, 22, 23, 24, 25, 27.
+`Train/.gitignore`: `experiments.db` (+ journal/wal).
+`Train/script/tests/conftest.py` points the suite at a temp DB.
+
+**What replaced experiments.db**: nothing — it stays as the working store and stays
+gitignored. The *record* is `Train/runs/<release>/experiments.csv`, exported from it.
+`Train/runs/2026.09/experiments.csv` is committed here: the real 22 rows of the
+September run, exported from a copy of the main checkout's database (the original
+was not modified).
+
+Commands: `experiment_db.py --export --release 2026.09 --db <copy of sept.db>`
+→ "wrote 22 run(s)"; `pytest Train/script/tests -q` → 228 passed;
+`check_hparams.py` → clean; per-cell compile of all edited notebooks → 0 errors.
+
+## Done
+
+MR: https://git.ausdertechnik.de/arolang/aro/-/merge_requests/594
+Branch `train/infra` pushed to `origin` (never to `public`).
+
+Commits:
+- cc85e501  train: make a pipeline run reproducible from the repository (#792)
+- 6aad95b9  train: check mlx can train a MoE model before spending GPU time on it (#793)
+- 89973364  train: one hyper-parameter table, and a reason on every line (#795)
+- f0b91e70  train: a stage that stops writing is killed; a stage that runs long is not (#803)
+- 7daf9c1e  train: generated programs run in a sandbox, not in the repository (#804)
+- 2066fd0a  train: every stage records, and the record is a CSV you can read (#812)
+
+Scope: only `Train/`, `.gitlab-ci.yml` and this file. Nothing in Sources/, Examples/,
+Book/, Proposals/, CLAUDE.md.

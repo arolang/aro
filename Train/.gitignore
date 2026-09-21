@@ -32,3 +32,11 @@ script/events.jsonl
 data/
 models/
 release/
+
+# The experiment store stays out of git — it is binary, it does not diff, and
+# a review cannot read it. The committed record is the CSV exported from it
+# into Train/runs/<release>/ (GitLab #812):
+#   python3 Train/script/experiment_db.py --export --release <release>
+experiments.db
+experiments.db-journal
+experiments.db-wal

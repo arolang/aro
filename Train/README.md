@@ -291,6 +291,27 @@ runtime resolves a relative path against the process working directory — so
 `decoded.txt` and a fabricated `events.jsonl` were sitting untracked there
 (GitLab #804).
 
+### Experiment tracking
+
+Every stage records to `Train/experiments.db` under one session id — the
+training passes explicitly, and every data stage automatically, because
+`save_notebook_pairs()` is the single funnel they all write through and it logs
+the row count, the drop reasons, the ARO version and the session as a side
+effect of saving. Set `ARO_TRAIN_SESSION` to join a whole pipeline run together;
+`ARO_TRAIN_DB` redirects the store.
+
+The database itself is gitignored: it is binary, it does not diff, and a review
+cannot read it. What is committed is the CSV exported from it:
+
+```bash
+python3 Train/script/experiment_db.py --export --release 2026.09
+python3 Train/script/experiment_db.py --list --stage NB17
+```
+
+One row per stage-run, fixed column order, JSON columns key-sorted, so two runs
+compare with `diff`. `Train/runs/2026.09/experiments.csv` is the first such
+record — the 22 rows the September run had left in the untracked database.
+
 ### Provenance
 
 Every pair saved through `save_notebook_pair(s)` is stamped with a

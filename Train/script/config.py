@@ -1634,7 +1634,35 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     if gate_dropped:
         print(f'[{notebook_tag}] fixtrain-gate dropped {gate_dropped} pairs '
               f'(run fixtrain_report() for the per-rule breakdown)')
+    _record_pairs_saved(notebook_tag, len(pairs), written, gate_dropped,
+                        generation_strategy)
     return written
+
+
+def _record_pairs_saved(notebook_tag, offered, written, gate_dropped,
+                        generation_strategy=None):
+    """Log every data stage to experiments.db (GitLab #812).
+
+    Only four stages used to record anything, and all four were training
+    stages — so the half of the pipeline that decides WHAT the model learns
+    was the half with no record. Rather than editing every data notebook to
+    remember, the recording happens here: this is the one funnel every stage
+    writes its pairs through, so a stage that saves pairs is a stage that is
+    logged, including one added tomorrow.
+
+    Never raises. Bookkeeping must not be able to fail a run.
+    """
+    try:
+        from experiment_db import record_data_stage
+        record_data_stage(
+            notebook_tag, rows_in=offered, rows_out=written,
+            drop_reasons={'fixtrain_gate': gate_dropped} if gate_dropped else {},
+            artifacts={'pairs_file': str(PAIRS_FILE)},
+            generation_strategy=generation_strategy,
+            type_caps_version=TYPE_CAPS_VERSION)
+    except Exception as exc:
+        print(f'[{notebook_tag}] experiments.db not updated: {exc}',
+              file=sys.stderr)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
