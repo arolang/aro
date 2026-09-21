@@ -120,6 +120,9 @@ public final class LLVMCodeGenerator {
     ///   - staticPlugins: Optional array of statically-linked plugin metadata (native plugins)
     ///   - pythonPlugins: Optional array of embedded Python plugin metadata
     ///   - pythonBundle: Optional Python stdlib/deps bundle paths
+    ///   - linkMode: How the binary will be linked ("static" / "dynamic"),
+    ///     baked into `main` so the runtime can answer "may I dlopen a plugin?"
+    ///     from the build's decision rather than probing the loader (GitLab #618)
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
@@ -130,6 +133,7 @@ public final class LLVMCodeGenerator {
         staticPlugins: [StaticPluginIRInfo]? = nil,
         pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
         pythonBundle: PythonBundleIRInfo? = nil,
+        linkMode: String? = nil,
         sourceFilename: String? = nil,
         sourceDirectory: String? = nil,
         sourceFileMap: [String: String]? = nil
@@ -181,7 +185,7 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle, linkMode: linkMode)
 
         // Fail explicitly if any errors were recorded during generation
         if ctx.hasErrors {
@@ -1559,7 +1563,7 @@ public final class LLVMCodeGenerator {
     /// phase is a private `emit*` helper below; the emission order here is the
     /// contract — the helpers only move cohesive blocks of IR emission out of
     /// this method, they must never reorder it.
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil, linkMode: String? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1571,6 +1575,15 @@ public final class LLVMCodeGenerator {
 
         // Store runtime in global
         ctx.module.insertStore(runtime, to: globalRuntime!, at: ip)
+
+        // Phase 0: record how this binary was linked (GitLab #618). It has to
+        // run before any plugin is registered or loaded, because that is what
+        // consults it — and it is a fact only the build knows. The interpreter
+        // never reaches this code and keeps its own default.
+        if let linkMode {
+            let modeStr = ctx.stringConstant(linkMode)
+            _ = ctx.module.insertCall(externals.setBuildLinkMode, on: [modeStr], at: ip)
+        }
 
         // Parse command-line arguments (ARO-0047)
         let argc = mainFunc.parameters[0]

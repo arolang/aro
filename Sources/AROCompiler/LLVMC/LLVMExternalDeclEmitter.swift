@@ -36,6 +36,7 @@ public final class LLVMExternalDeclEmitter {
     private var _contextHasError: Function?
     private var _contextPrintError: Function?
     private var _contextDrainDeferred: Function?
+    private var _setBuildLinkMode: Function?
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
     private var _httpSetBodyPolicy: Function?
@@ -246,6 +247,15 @@ public final class LLVMExternalDeclEmitter {
         // void @aro_context_drain_deferred(ptr) — ARO-0088 §3 feature-set exit
         _contextDrainDeferred = ctx.module.declareFunction(
             "aro_context_drain_deferred",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_set_build_link_mode(ptr mode) — GitLab #618
+        // Records how this binary was linked, so the runtime answers "may I
+        // dlopen a plugin?" from the build's own decision instead of probing
+        // the loader for something else.
+        _setBuildLinkMode = ctx.module.declareFunction(
+            "aro_set_build_link_mode",
             types.voidFunctionType(parameters: [ptr])
         )
 
@@ -594,6 +604,7 @@ public final class LLVMExternalDeclEmitter {
     public var contextHasError: Function { _contextHasError! }
     public var contextPrintError: Function { _contextPrintError! }
     public var contextDrainDeferred: Function { _contextDrainDeferred! }
+    public var setBuildLinkMode: Function { _setBuildLinkMode! }
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
     public var httpSetBodyPolicy: Function { _httpSetBodyPolicy! }

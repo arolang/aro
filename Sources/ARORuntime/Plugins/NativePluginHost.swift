@@ -287,6 +287,19 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     // MARK: - Library Loading
 
     private func loadLibrary(config: UnifiedProvideEntry) throws {
+        // GitLab #618 — ask whether this binary may load a plugin shared
+        // object, not whether the loader happens to answer right now. The
+        // answer was fixed when the binary was linked, and `DynamicLoading`
+        // holds what the build recorded. Checked before the compile fallback
+        // below, so we don't spend a `swift build` producing something that
+        // could never be loaded.
+        guard DynamicLoading.canLoadPlugin(ofType: config.type) else {
+            throw NativePluginError.dynamicLoadingUnavailable(
+                pluginName,
+                message: DynamicLoading.unavailableReason(plugin: pluginName, pluginType: config.type)
+            )
+        }
+
         // Determine library path
         var libraryPath: URL?
 
@@ -1670,6 +1683,9 @@ public enum NativePluginError: Error, CustomStringConvertible {
     case missingFunction(String, function: String)
     case executionFailed(String, message: String)
     case compilationFailed(String, message: String)
+    /// This binary was not linked in a way that can load a plugin shared
+    /// object (GitLab #618). The message explains it for this platform.
+    case dynamicLoadingUnavailable(String, message: String)
 
     public var description: String {
         switch self {
@@ -1685,6 +1701,8 @@ public enum NativePluginError: Error, CustomStringConvertible {
             return "Native plugin '\(name)' execution failed: \(message)"
         case .compilationFailed(let name, let message):
             return "Failed to compile native plugin '\(name)': \(message)"
+        case .dynamicLoadingUnavailable(_, let message):
+            return message
         }
     }
 }

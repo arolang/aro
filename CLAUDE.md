@@ -488,6 +488,11 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
   `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
   Python plugins ship as source beside it
 
+Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
+the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
+from that rather than probing the loader, which answers a different question
+(GitLab #618).
+
 ## ARO Syntax
 
 ```aro

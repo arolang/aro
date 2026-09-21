@@ -92,6 +92,18 @@ struct CompilationStrategy: Sendable {
     ///   write, object emission, missing runtime, mutually-exclusive link flags,
     ///   or linking) — matching the previous inline behaviour.
     func execute(_ request: Request) throws -> Outcome {
+        // --static and --dynamic are mutually exclusive; --dynamic wins if both
+        // are set (caller asked for dynamic explicitly). Default is static.
+        //
+        // Resolved here, first, because code generation needs it: the answer to
+        // "may this binary load a plugin shared object?" is fixed when it is
+        // linked, so it has to be written into the binary (GitLab #618).
+        if request.staticLink && request.dynamicLink {
+            print("Error: --static and --dynamic are mutually exclusive.")
+            throw ExitCode.failure
+        }
+        let effectiveLinkMode: CCompiler.LinkMode = request.dynamicLink ? .dynamicLink : .staticLink
+
         let llvmResult: LLVMCodeGenerationResult
 
         do {
@@ -103,6 +115,7 @@ struct CompilationStrategy: Sendable {
                 embeddedPlugins: request.embeddedPlugins.isEmpty ? nil : request.embeddedPlugins,
                 staticPlugins: request.staticPluginIRInfos.isEmpty ? nil : request.staticPluginIRInfos,
                 pythonPlugins: request.pythonPluginIRInfos.isEmpty ? nil : request.pythonPluginIRInfos,
+                linkMode: effectiveLinkMode.recordedName,
                 sourceFilename: request.entryFilename,
                 sourceDirectory: request.sourceDirectory,
                 sourceFileMap: request.sourceFileMap
@@ -201,14 +214,6 @@ struct CompilationStrategy: Sendable {
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: request.verbose)
 
         AROLogger.debug("CCompiler created", subsystem: "build")
-
-        // --static and --dynamic are mutually exclusive; --dynamic wins if both
-        // are set (caller asked for dynamic explicitly). Default is static.
-        if request.staticLink && request.dynamicLink {
-            print("Error: --static and --dynamic are mutually exclusive.")
-            throw ExitCode.failure
-        }
-        let effectiveLinkMode: CCompiler.LinkMode = request.dynamicLink ? .dynamicLink : .staticLink
 
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
