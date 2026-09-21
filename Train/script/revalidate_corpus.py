@@ -88,8 +88,10 @@ ARO_PREPOSITIONS = frozenset({
     'where', 'against', 'via', 'using', 'in',
 })
 ALWAYS_ALLOWED_PREPS = frozenset({'when', 'where'})
-CONTROL_FLOW_WORDS = frozenset({'for', 'when', 'match', 'if', 'case',
-                                'parallel', 'otherwise', 'given', 'then'})
+# Reserved words that open a statement without being an action call. The
+# ActionRegistry has never heard of `require`, and Examples/Conditionals runs
+# on it — see aro_oracle.LANGUAGE_KEYWORDS.
+CONTROL_FLOW_WORDS = aro_oracle.LANGUAGE_KEYWORDS | frozenset({'given'})
 
 
 # ── catalogs ─────────────────────────────────────────────────────────────────

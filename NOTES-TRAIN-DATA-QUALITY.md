@@ -329,3 +329,72 @@ dpo_pairs_raw.jsonl   717 pairs  chosen longer 68.6%  median +3 chars
 Not done: swapping the custom hinge loss for ORPO/DPO in mlx-lm — that is the
 training stage, which belongs to `train/training-eval`, not to data quality.
 
+## #809 — the highest-weighted source predates the language (VERIFIED; dates corrected)
+
+Dates from git, not mtimes: the 191 `Train/Material/*.json` probe files are
+from **2026-05-23** (issue ✓); `curated.jsonl` was last expanded **2026-08-07**
+(issue said 2026-08-25).
+
+Confirmed the `Compare` claim precisely. `Train/release/aro_system_prompt.txt`
+line 92 carries `Compare the <first-length> against the <second-length>.` —
+the two-operand form GitLab #469 made unrunnable. Current CLAUDE.md has the
+corrected form, so the shipped prompt is stale against its own source.
+`Train/Material/curated.jsonl` also carried a Q&A row asserting "The Compare
+action currently mis-binds its operand and is unusable" — advice that was true
+before #469 and now steers the model away from a working action.
+
+**Validator bug found and fixed along the way:** `Require the <console> from
+the <framework>.` was counted as a hallucinated verb. `require` is a *lexer
+keyword* (Sources/AROParser/Lexer.swift), and Examples/Conditionals runs on
+that exact line. Added `aro_oracle.LANGUAGE_KEYWORDS` from the lexer's own
+table; the corpus's unknown-verb count drops 172 → 164 as a result.
+
+**Repairs to `Train/Material/curated.jsonl` + `Train/tools/curate_material.py`**
+(every replacement probed against the binary first):
+| was | now | why |
+|---|---|---|
+| `Render … from the <template>` ×13 | `Transform … from the <template>` | Render takes only `to`; ARO-0050 / Examples/TemplateEngine |
+| `Close … for the <application>` | `Close … with <application>` | Close takes from/with |
+| `Accept the <transition> for … with "shipped"` | `Accept the <transition: to_shipped> on <order: status>` | Accept takes only `on` |
+| `Copy the <r> from "a" to "b"` ×2 | `Copy the <file: "a"> to the <destination: "b">` | Copy takes only `to` |
+| `Move the <r> from "a" to "b"` | `Move the <file: "a"> to the <destination: "b">` | Move takes only `to` |
+| `Split … with " "` | `Split … by " "` | ARO-0037 |
+| `Compute the <t: last>` | `Extract the <t: last> from …` | element access is an Extract qualifier |
+| `Parameters the <args> for the <application>` | `Extract the <args> from the <parameter>` | no Parameters action; ARO-0047 |
+| `+1mo`, `+6months` | `+1M`, `+6M` | date offsets take a single-letter unit |
+| the "Compare is unusable" Q&A row | the #469 form, verified green | |
+
+```
+Train/Material/curated.jsonl   before: 1069 pairs, 24 failing, 97.75%
+                               after : 1069 pairs,  0 failing, 100.0%
+                               with --run: 2 fail, both environmental
+                               (a git branch that does not exist, a CLI
+                               parameter not supplied) — they check green
+```
+
+Also added `config.stale_teaching()` and wired it into
+`validate_syntax_reference()`, so a reference that still teaches a dead form
+fails at NB01/NB02 instead of shipping. Verified it catches the released
+prompt's `Compare` and passes the current CLAUDE.md. CI gate tightened from
+`--fail-under 97` to `--fail-under 100`.
+
+## Done
+
+MR: https://git.ausdertechnik.de/arolang/aro/-/merge_requests/592
+Branch: `train/data-quality-840` (pushed to origin only).
+
+Ten commits, newest first:
+```
+c220dbf4  train: re-curate the material against the binary it is supposed to teach (#809)
+2443cd35  train: make the preferred answer better rather than longer (#799)
+33a3b277  train: distil thinking traces from the repair loop instead of a template (#789)
+f1e86685  train: put the git-history miner in the repository, and make it check (#781)
+3b44ad0d  train: cap the repeats, and count them on the answer side too (#784)
+3936c49e  train: a pair without a task_type is a pair nobody can account for (#782)
+01ddf879  train: run the code, don't only check it (#798)
+05087cfd  train: gate every pair on the way in, not at one stage out of nine (#780)
+aa3f5189  train: re-validate the corpus against the binary that will judge it (#783)
+f21917f5  train: generate the action catalogs from the binary, not from a source scan (#779)
+```
+`python3 -m pytest Train/script/tests -q` → 260 passed (81 new).
+Diff: 29 files, +5 119 / -280, all inside Train/ plus 3 CI jobs.

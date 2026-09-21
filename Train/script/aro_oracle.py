@@ -345,6 +345,22 @@ def grade_block(code: str, binary: str | None = None,
     return grade
 
 
+# ── words that start a statement without being an action ─────────────────────
+# `Require the <console> from the <framework>.` is not an action call — it is
+# the `require` keyword, and Examples/Conditionals runs on it. A verb gate
+# that knows only the ActionRegistry calls it a hallucination, which is the
+# same mistake as a stale catalog, made one layer up. These are the reserved
+# words from Sources/AROParser/Lexer.swift that can open a statement.
+LANGUAGE_KEYWORDS = frozenset({
+    'require', 'import', 'publish', 'as',
+    'if', 'then', 'else', 'when', 'match', 'case', 'otherwise', 'where',
+    'for', 'each', 'in', 'at', 'parallel', 'concurrency',
+    'while', 'break',
+    'type', 'enum', 'protocol',
+    'error', 'guard', 'defer', 'assert', 'precondition',
+    'and', 'or', 'not', 'is', 'exists', 'defined',
+})
+
 ARO_FENCE_RE = re.compile(r'```aro\b[^\n]*\n(.*?)```', re.DOTALL)
 
 

@@ -898,7 +898,7 @@ train:corpus:
   script:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
-    - python3 Train/script/revalidate_corpus.py Train/Material/curated.jsonl --jobs 4 --fail-under 97 --report corpus-validation.json
+    - python3 Train/script/revalidate_corpus.py Train/Material/curated.jsonl --jobs 4 --fail-under 100 --report corpus-validation.json
   artifacts:
     when: always
     paths:

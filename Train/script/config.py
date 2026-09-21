@@ -1425,6 +1425,34 @@ SYNTAX_REFERENCE_REQUIRED_SECTIONS = (
 )
 SYNTAX_REFERENCE_MIN_CHARS = 1500
 
+# Forms the language used to accept and no longer does (GitLab #809). The
+# shipped system prompt is generated from this reference, so a stale form here
+# is a stale form in every prompt the model is trained and served with — and
+# the released prompt did carry the two-operand `Compare`, which GitLab #469
+# made unrunnable. These are cheap to check and expensive to miss.
+STALE_TEACHING_PATTERNS = (
+    (_re.compile(r'^\s*Compare the <[\w-]+>\s+against\b', _re.MULTILINE),
+     'the two-operand `Compare … against` — it rebinds its own first operand '
+     'and cannot run; Compare binds a fresh result (GitLab #469)'),
+    (_re.compile(r'\bStore the <[^>]+>\s+in the\b'),
+     '`Store … in` — `in` is a keyword, not a preposition; Store takes '
+     '`into` or `to`'),
+    (_re.compile(r'\bRender the <[^>]+>\s+from the\b'),
+     '`Render … from` — Render takes only `to`; rendering a template is '
+     '`Transform … from the <template: …>` (ARO-0050)'),
+    (_re.compile(r'\bSplit the <[^>]+>\s+from\s+[^.\n]*\bwith\b'),
+     '`Split … with` — Split takes its delimiter after `by` (ARO-0037)'),
+    (_re.compile(r'\bCompute the <[\w-]+:\s*(?:first|last)>'),
+     'element access as a Compute qualifier — it is an Extract qualifier '
+     '(ARO-0038)'),
+)
+
+
+def stale_teaching(text):
+    """Forms in `text` the runtime no longer accepts. Empty means clean."""
+    return [why for pattern, why in STALE_TEACHING_PATTERNS
+            if pattern.search(text or '')]
+
 
 def validate_syntax_reference(text,
                               min_chars=SYNTAX_REFERENCE_MIN_CHARS,
@@ -1447,6 +1475,9 @@ def validate_syntax_reference(text,
     for marker in ('command not found', 'unknown subcommand', 'traceback (most recent call last)'):
         if marker in text[:400].lower():
             problems.append(f'looks like an error message (contains {marker!r})')
+    # A form the runtime has stopped accepting poisons every prompt generated
+    # from this reference (GitLab #809).
+    problems += [f'teaches {why}' for why in stale_teaching(text)]
     if problems:
         raise ValueError(
             'aro_syntax reference failed validation:\n  - ' + '\n  - '.join(problems)
@@ -1556,8 +1587,20 @@ VERB_SUPPLEMENT = frozenset({
     'tee',                                    # ARO-0051 streaming
 })
 
-# Control-flow keywords that can start a statement-like line.
-CONTROL_FLOW_WORDS = frozenset({'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'})
+# Reserved words that can open a statement without being an action call —
+# `require`, `if`, `for each`, `while`. The list is aro_oracle's, taken from
+# the lexer's own table; a gate that knows only the ActionRegistry calls
+# `Require the <console> from the <framework>.` a hallucination, and
+# Examples/Conditionals runs on exactly that line.
+def _language_keywords():
+    try:
+        import aro_oracle
+        return set(aro_oracle.LANGUAGE_KEYWORDS)
+    except Exception:
+        return {'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'}
+
+
+CONTROL_FLOW_WORDS = frozenset(_language_keywords())
 
 
 def authoritative_action_verbs():
