@@ -25,7 +25,7 @@
     Return a <BadRequest: status> with "Missing 'cmd' parameter" when <cmd> == "".
 
     (* Execute the command *)
-    Exec the <result> for the <command> with <cmd>.
+    Execute the <result> for the <command> with <cmd>.
 
     (* Return error if command failed *)
     Return a <ServerError: status> with <result> when <result: error> == true.
@@ -49,7 +49,7 @@
 
     (* Execute ls command with directory *)
     Create the <command> with "ls -la ${directory}".
-    Exec the <result> for the <listing> with <command>.
+    Execute the <result> for the <listing> with <command>.
 
     Return a <NotFound: status> with <result> when <result: error> == true.
 
@@ -58,7 +58,7 @@
 
 (* Check disk usage - operationId: checkDisk *)
 (checkDisk: System Monitor API) {
-    Exec the <result> for the <command: "df"> with "-h".
+    Execute the <result> for the <command: "df"> with "-h".
 
     Return a <ServerError: status> with <result> when <result: error> == true.
 
@@ -70,7 +70,7 @@
     (* A pipeline needs the shell, so it goes in the qualifier as one command
        line. Passing "aux | head -20" via `with` would make the pipe a literal
        argument to ps — `with` values are never shell-interpreted. *)
-    Exec the <result> for the <command: "ps aux | head -20">.
+    Execute the <result> for the <command: "ps aux | head -20">.
 
     Return a <ServerError: status> with <result> when <result: error> == true.
 

@@ -101,7 +101,7 @@ Work begins at the statement; only the *wait* moves. The alternative — startin
 Deferral is an allowlist of verbs that either compute a value or read one, never both-and-something-else:
 
 - **Reads** — `Retrieve`, `Fetch`, `Read`, `Request`, `Load`, `Find`, `Probe`, `Receive`, `Extract`, `Parse`, `Get`
-- **Pure transformations** — `Compute`, `Calculate`, `Derive`, `Transform`, `Create`, `Build`, `Construct`, `Filter`, `Map`, `Reduce`, `Aggregate`, `Split`, `Group`, `Sort`, `Merge`, `Combine`, `Join`, `Concat`, `Render`, `Format`
+- **Pure transformations** — `Compute`, `Calculate`, `Derive`, `Transform`, `Create`, `Build`, `Construct`, `Filter`, `Map`, `Reduce`, `Aggregate`, `Split`, `Group`, `Sort`, `Merge`, `Combine`, `Join`, `Concat`, `Format`
 
 An allowlist, not "everything that is not an effect", because semantic role is too coarse to decide this: `ActionSemanticRole.classify` files `Update` and `Delete` under `.own` next to `Compute`, and deferring a repository delete would move a world-changing effect to wherever someone happened to read its result.
 
@@ -115,7 +115,7 @@ Deliberately excluded, with reasons:
 | `Compare`, `Validate`, `Accept` | Feed branches; a guard that has not decided yet is not a guard. |
 | `Start`, `Stop`, `Connect`, `Close`, `Keepalive` | Service lifecycle, ordered against everything by definition. |
 | `Assert`, `Then` | A test that runs only if someone reads it is not a test. |
-| `Render`, `Repaint` | They paint a terminal. `ActionSemanticRole.classify` files both under `.response`; deferring `Render` floated a menu banner above the log lines that precede it in source. |
+| `Render`, `Repaint` | They paint a terminal. `ActionSemanticRole.classify` files both under `.response`; deferring `Render` floated a menu banner above the log lines that precede it in source. (`Render` was listed as deferrable *and* excluded here until GitLab #831. `LazyActionPolicy.deferrableVerbs` excludes it, and the exclusion is the one that was meant.) |
 
 ### Statement scope
 
@@ -260,7 +260,7 @@ Compiled binaries reach the same model through the C ABI: a deferred action retu
 
 | Variable | Default | Effect |
 |---|---|---|
-| `ARO_ASYNC_OBSERVERS` | off | Route repository observers through the bounded pool. **Changes ordering** — see §6. |
+| `ARO_ASYNC_OBSERVERS` | off | Route repository observers through the bounded pool. **Changes ordering** — see §7. |
 | `ARO_OBSERVER_WORKERS` | `max(4, cores × 2)` | Worker count for the pooled path. |
 | `ARO_OBSERVER_QUEUE_CAPACITY` | 4096 | Queued work ceiling; producers suspend when full. |
 | `ARO_FORCE_WARN_SECONDS` | 5 | Warn when a read blocks this long on a pending value. `0` disables. |

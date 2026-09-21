@@ -52,24 +52,24 @@ Observers receive an event with these fields:
 swift build
 
 # Run the example
-.build/debug/aro run ./Examples/RepositoryObserver
+aro run ./Examples/RepositoryObserver
 ```
 
 ## Testing
 
 ```bash
 # Create a user (triggers "created" event)
-curl -X POST http://localhost:8080/users \
+curl -X POST http://localhost:8082/users \
   -H 'Content-Type: application/json' \
   -d '{"name":"Alice","email":"alice@example.com"}'
 
 # Update the user (triggers "updated" event - observers see old and new values)
-curl -X PUT http://localhost:8080/users/{id} \
+curl -X PUT http://localhost:8082/users/{id} \
   -H 'Content-Type: application/json' \
   -d '{"name":"Alice Smith","email":"alice@example.com"}'
 
 # Delete the user (triggers "deleted" event)
-curl -X DELETE http://localhost:8080/users/{id}
+curl -X DELETE http://localhost:8082/users/{id}
 ```
 
 Watch the console for observer output showing the change type and entity details.

@@ -19,7 +19,7 @@ Starts an HTTP server on port 8080 with routes defined in `openapi.yaml`. Provid
 ## Related Proposals
 
 - [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
-- [ARO-0022: HTTP Server](../../Proposals/ARO-0022-http-server.md)
+- [ARO-0008: I/O Services](../../Proposals/ARO-0008-io-services.md)
 - [ARO-0005: Application Architecture](../../Proposals/ARO-0005-application-architecture.md)
 
 ## Usage

@@ -341,6 +341,11 @@ File operations follow ARO's error philosophy—errors are descriptive and autom
 | **List** | List directory | `List the <r> from the <directory: p>.` |
 | **Delete** | Remove file/dir | `Delete the <r> from the <file: p>.` |
 
+`Make` accepts `to`, `at` **and** `for` (`MakeAction.validPrepositions`), so the
+`at` spelling used throughout ARO-0008 §4 and the `to` spelling used here are
+both valid — they looked like a contradiction (GitLab #831) and are not. `to` is
+the spelling this proposal uses; either parses.
+
 ---
 
 ## References

@@ -1,6 +1,6 @@
 # Terminal UI Examples
 
-These examples demonstrate ARO's Terminal UI system (ARO-0052) with reactive Watch patterns.
+These examples demonstrate ARO's Terminal UI system (ARO-0083) with reactive Watch patterns.
 
 ## Examples
 
@@ -108,7 +108,7 @@ Access terminal capabilities in templates:
 
 ## See Also
 
-- **ARO-0052**: Terminal UI Proposal
+- **ARO-0083**: Terminal UI
 - **ARO-0007**: Event-Driven Architecture
 - **ARO-0050**: Template Engine
 - **Chapter 41**: Terminal UI (The Language Guide)

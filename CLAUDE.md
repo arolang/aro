@@ -129,7 +129,11 @@ ARO source:
 import ../ModuleA
 import ../ModuleB
 
-(Application-Start: Combined) { … }
+(Application-Start: Combined) {
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
 ```
 
 The path is relative to the importing file's directory, and every feature set,
@@ -237,7 +241,15 @@ paths:
 - `Extract the <data> from the <request: body>.`
 
 ### Happy Case
-Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
+Code contains only the happy case. Errors are handled by the runtime, which
+reconstructs the failed statement with its values:
+`Cannot retrieve the user from the user-repository where id = 530`.
+
+**A `Retrieve` that matches nothing is not one of those errors.** It binds an
+empty list (`ExtractAction.swift:860`); with a `where` clause matching exactly
+one row it binds that record rather than a one-element list. The only throw on
+that path is a repository that does not exist. Guard on the result — the
+statement does not fail for you (GitLab #835).
 
 Do not use it for production code, it is terribly insecure.
 
@@ -262,11 +274,18 @@ Do not use it for production code, it is terribly insecure.
 
 ### Action Semantic Roles
 
-Actions are classified by data flow direction:
+Five roles, classified by data flow direction. `aro actions` prints the live
+table and ARO-0004 §11 is generated from it — prefer either over this summary:
+
 - **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
-- **RESPONSE** (Return, Throw): Internal → External
-- **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
+- **RESPONSE** (Return, Throw, **Store, Log, Send, Write**, Render): Internal → External
+- **EXPORT** (Publish, Emit, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
+- **SERVER** (Start, Stop, Listen, Connect, Close, WaitForEvents): Service lifecycle
+
+`Store`, `Log`, `Send` and `Write` read as exports and declare `.response`. That
+is a known, deliberate inconsistency (GitLab #480, ARO-0004 §2.4), not a typo to
+fix here — roles drive data-flow analysis, so changing one changes behaviour.
 
 ### Statement Execution (ARO-0088)
 
@@ -361,8 +380,13 @@ logic.
     Return an <OK: status> with <result>.
 }
 
-(* Call site uses the same shape as plugin actions: *)
-Application.SumAndDouble the <res> from { a: 3, b: 4 }.
+(* Call site uses the same shape as plugin actions. `SumAndDouble` declares
+   no `takes`, so the argument object goes through `with`, not `from`. *)
+(Application-Start: Demo) {
+    Application.SumAndDouble the <res> with { a: 3, b: 4 }.
+    Log <res> to the <console>.
+    Return an <OK: status> for the <startup>.
+}
 ```
 
 `takes <name>` is sugar for a single positional argument extracted as
@@ -413,6 +437,15 @@ MyApp/
         ├── plugin.yaml      # Plugin manifest (required)
         └── src/             # Source files
 ```
+
+**`Plugins/` and `plugins/` are two different loaders, not two spellings**
+(GitLab #848). `loadManagedPlugins` reads `Plugins/` and requires one
+subdirectory per plugin with a `plugin.yaml` — the layout `aro add` installs
+and `aro new plugin` scaffolds. `loadPlugins` reads lowercase `plugins/` and
+takes loose `.swift` files, prebuilt dylibs and bare Swift packages with no
+manifest. On macOS both walk the same directory because the filesystem is
+case-insensitive; on Linux only the matching one does. Use `Plugins/` with a
+manifest for anything new.
 
 ### Key Files
 
@@ -490,13 +523,14 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
 
 ## ARO Syntax
 
+<!-- aro-check: skip — the shape of a feature set, with placeholder names -->
 ```aro
 (Feature Name: Business Activity) {
     Require the <token> from the <environment>.
     Extract the <result: qualifier> from the <source: qualifier>.
     Compute the <output> for the <input>.
     Return an <OK: status> for a <valid: result>.
-    Publish as <alias> <variable>.
+    Publish as <alias> <output>.
 }
 ```
 
@@ -679,13 +713,13 @@ Commit the <result> to the <git> with "feat: add feature".
 Pull the <updates> from the <git>.
 Push the <result> to the <git>.
 
-(* Branching and tagging *)
-Checkout the <branch> from the <git> with "feature/new".
+(* Branching and tagging — a new name, because <branch> is already bound *)
+Checkout the <switched> from the <git> with "feature/new".
 Tag the <release> for the <git> with "v1.0.0".
 
 (* Clone — optional `branch:` checks out that ref at clone time *)
 Clone the <repo> from the <git> with { url: "https://github.com/user/repo.git", path: "./cloned" }.
-Clone the <repo> from the <git> with { url: "...", path: "./cloned", branch: "develop" }.
+Clone the <repo-on-develop> from the <git> with { url: "...", path: "./other", branch: "develop" }.
 ```
 
 | Action | Verb | Role | Prepositions |
@@ -763,6 +797,15 @@ Sources/
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
 Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
+│                       #
+│                       # plan.md is the canonical description of an example:
+│                       # 100 of the 110 have one, and it is the prompt the
+│                       # example was written from. expected.txt is its
+│                       # executable contract, and test.hint tells the
+│                       # integration harness how (or whether) to run it.
+│                       # README.md is optional narrative — 40 have one — and
+│                       # is the layer that goes stale, so when they disagree,
+│                       # plan.md and expected.txt win (GitLab #818).
 │
 │   # Getting Started
 ├── HelloWorld/         # Minimal single-file example
@@ -918,7 +961,7 @@ The `Proposals/` directory contains language specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
-| **0011 HTML/XML Parsing** | Parse action for HTML/XML documents |
+| **0011 HTML Parsing** | Parse action for HTML documents (XML is a sketch) |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |
@@ -948,7 +991,7 @@ The `Proposals/` directory contains language specifications:
 | **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 | **0082 Numeric Separators** | Underscores in decimal literals (supersedes 0056) |
 | **0083 Terminal UI** | Terminal UI system |
-| **0084 Local LLM** | `aro lm` (superseded by `aro ask`) |
+| **0084 Local LLM** | `aro lm` (superseded by `aro ask`, ARO-0092) |
 | **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
@@ -956,6 +999,7 @@ The `Proposals/` directory contains language specifications:
 | **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
+| **0092 `aro ask` Assistant** | Local model, tool registry, approval model, `.context` |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab

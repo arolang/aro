@@ -22,14 +22,14 @@
 
     Compute the <today> from <now>.
 
-    For each <repo> in <repos> {
+    for each <repo> in <repos> {
         Extract the <name> from the <repo: name>.
         Extract the <url>  from the <repo: url>.
 
         (* Per-repo destination — the canvas paints a fresh node
            every iteration so the user can see which one is in
            flight. *)
-        Create the <destination> with "/tmp/backups/" + <today> + "/" + <name>.
+        Create the <destination> with "/tmp/backups/" ++ <today> ++ "/" ++ <name>.
 
         Log "Cloning " to the <console>.
         Log <name> to the <console>.

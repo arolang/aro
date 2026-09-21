@@ -2,10 +2,25 @@
 
 **Proposal-ID:** ARO-0045
 **Author:** ARO Language Team
-**Status:** Draft
+**Status:** Implemented, with four documented departures (see below)
 **Created:** 2026-02-11
-**Branch:** `features/package-manager`
-**Requires:** Core Runtime, Plugin System (existing)
+**Requires:** ARO-0004, ARO-0016, ARO-0087
+
+---
+
+> **Four things in this document are not what shipped** (GitLab #833). It read
+> as Draft while `aro add`, `aro remove`, `aro plugins` and `plugin.yaml` had
+> all shipped, so the differences were easy to miss:
+>
+> | This document | What ships |
+> |---|---|
+> | `handler:` inside `provides:` | a root-level `handle:` in PascalCase; `handler:` still works and warns (GitLab #95) |
+> | PythonKit, Python in-process | `PythonPluginHost` runs Python in a subprocess |
+> | `<FormatCSV> the <file>.` call syntax | `Handle.Verb the <result> from <input>.` |
+> | `(Define Action: …)` | `(Name: Action)` feature sets, ARO-0081 |
+>
+> Everything else — the manifest fields, the resolution order, `aro add
+> github:org/repo`, the per-language plugin types — is current.
 
 ---
 

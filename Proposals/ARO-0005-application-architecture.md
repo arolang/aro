@@ -71,26 +71,54 @@ All `.aro` files in the directory are **automatically discovered and parsed**:
 Within an application:
 
 - All feature sets are globally visible
-- All published variables are accessible from any file
 - User-defined actions (ARO-0081) are callable as `Application.<Name>` from any file, wherever they are declared
 - No import statements needed between files in the same directory
 
-**users.aro:**
+**Published variables are not application-wide.** Two conditions gate them, and
+both are enforced at run time by `GlobalSymbolStorage`
+(`Core/ExecutionEngine.swift:1517`):
+
+1. **Same business activity.** A reader whose business activity differs from the
+   publisher's gets `nil` and the "not accessible from" error. An empty business
+   activity on either side passes, which is how framework and external lookups
+   work.
+2. **Lifetime of the publishing execution.** Every published symbol carries the
+   `executionId` that published it, and `evict(executionId:)` drops them all when
+   that feature-set execution returns — on the success path, the default path and
+   the error path alike (`Core/FeatureSetExecutor.swift:212`). The exception is
+   `Application-Start`, whose publications live for the life of the process.
+
+So the useful pattern is publishing from `Application-Start` under the same
+business activity the readers use. The files they live in are irrelevant; the
+activity string is what matters. This section claimed "accessible from any file"
+until GitLab #831; ARO-0001 has always had it right, and `Examples/Scoping`
+demonstrates the working shape.
+
+**main.aro:**
 ```aro
-(Load User Config: Startup) {
-    Read the <config> from the <file> with "./users.json".
+(Application-Start: Order Service) {
+    Create the <config> with { currency: "EUR" }.
     Publish as <user-config> <config>.
-    Return an <OK: status> for the <config>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
 **orders.aro:**
 ```aro
-(Create Order: Order API) {
-    (* Access published variable from users.aro *)
-    <Use> the <user-config> in the <order-creation>.
-    Return an <OK: status> with <order>.
+(createOrder: Order Service) {
+    (* Reachable: same business activity, and Application-Start's
+       publications are never evicted *)
+    Extract the <currency> from the <user-config: currency>.
+    Create the <order> with { currency: <currency> }.
+    Return a <Created: status> with <order>.
 }
+```
+
+A reader with a different activity gets a named error rather than a nil:
+
+```
+Variable 'user-config' is not accessible from 'Ready Handler':
+it was published in 'Order Service'
 ```
 
 ---
@@ -334,20 +362,32 @@ Feature sets trigger other feature sets via events:
     Create the <user> with <data>.
     Store the <user> into the <user-repository>.
 
-    (* Triggers other feature sets asynchronously *)
+    (* Every UserCreated handler runs, and Emit waits for all of them *)
     Emit a <UserCreated: event> with <user>.
 
-    (* Continues immediately, doesn't wait for handlers *)
     Return a <Created: status> with <user>.
 }
 
-(* Runs asynchronously when UserCreated is emitted *)
+(* Runs when UserCreated is emitted; handlers of one event run concurrently
+   with each other *)
 (Send Welcome Email: UserCreated Handler) {
     Extract the <user> from the <event: user>.
     Send the <welcome-email> to the <user: email>.
     Return an <OK: status> for the <welcome-email>.
 }
 ```
+
+**`Emit` blocks.** The handlers of a single event run concurrently with each
+other, but the emitting feature set does not continue until the last of them has
+returned — `EmitAction` calls `EventBus.publishAndTrack`, which awaits a task
+group (`ResponseActions.swift:1455`, `EventBus.swift:507`), and the compiled
+bridge does the same (`ActionBridge.swift:500`). This document said the opposite
+until GitLab #831; ARO-0007 §7.3, ARO-0009 §4 and ARO-0088 have always said it
+blocks.
+
+The consequence is worth stating plainly: a slow handler delays the HTTP
+response of the feature set that emitted the event. `Emit` is a call to
+everything subscribed, not a post to a queue.
 
 ---
 

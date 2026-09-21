@@ -1,6 +1,6 @@
 # Numeric Separators Example
 
-This example demonstrates underscore separators in numeric literals (ARO-0052).
+This example demonstrates underscore separators in numeric literals (ARO-0082).
 
 ## Features
 
