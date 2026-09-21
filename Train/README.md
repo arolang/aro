@@ -146,6 +146,46 @@ ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --a
 
 **Release ordering:** `27_package` is the last-numbered notebook. Execution order (set by the `NOTEBOOKS` list in `00_META_PIPELINE`, not the filename numbers) is `… → distillation → material → thinking → conversation → 27_package(+upload) → 26_post_release_validation`, so the model that gets uploaded is the **final** one after the full booster chain. (Post-release validation keeps a lower number but runs after packaging because it tests the upload.)
 
+## Reproducing a run
+
+A pipeline run used to be reproducible only by the person whose laptop had run
+it: nothing pinned the Python stack, nothing recorded which stack had been used,
+and every summary of a finished run lived in a gitignored directory
+(GitLab #792). What follows is the sequence that now works from a clean
+checkout on Apple Silicon.
+
+```bash
+# 1. The environment. requirements.txt pins the training/inference stack and
+#    floors the rest; the lock file is the exact set the last release used.
+Train/training.sh --no-execute            # creates Train/.venv, installs, exits
+Train/.venv/bin/pip install -r Train/requirements.lock.darwin-py312.txt   # optional: exact
+
+# 2. The preflight. Fails fast when mlx cannot train a MoE model, instead of
+#    dying hours later inside the warm start. (See ISSUE-MLX.md.)
+Train/.venv/bin/python Train/script/mlx_preflight.py
+
+# 3. The corpus. Both roots must resolve, or the run silently trains on less.
+ARO_APPLICATION_PATH=/path/to/ARO-Application \
+  Train/.venv/bin/python -c "import sys; sys.path.insert(0,'Train/script'); \
+    import config; config.corpus_preflight(); print(config.corpus_summary())"
+
+# 4. The run. One session id across every stage, so experiments.db can join
+#    the stages of one run together.
+ARO_TRAIN_SESSION=$(date +%Y%m%dT%H%M%S)-repro Train/training.sh
+
+# 5. The record. Both write into the tracked Train/runs/<release>/.
+python3 Train/script/run_archive.py   --release <release>
+python3 Train/script/experiment_db.py --export --release <release>
+```
+
+Step 4 needs an Apple Silicon machine with enough unified memory for the 30B
+MoE teacher and takes GPU-days; steps 1–3 and 5 run anywhere and are what make
+step 4 repeatable rather than merely repeated. Re-running `01_init` now refuses
+to wipe a populated `data/` or `models/` unless you set `ARO_TRAIN_FRESH=1`, so
+resuming with `Train/training.sh --from NN` is the safe default.
+
+Comparing two runs is then a diff of two directories under `Train/runs/`.
+
 ## Running the pipeline
 
 ### Full run

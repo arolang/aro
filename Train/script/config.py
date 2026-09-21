@@ -104,12 +104,89 @@ RUNS_DIR = DATA_ROOT / 'runs'
 # when notebooks change what/how they emit. SESSION_ID identifies one notebook
 # (or full-pipeline) execution — the META pipeline can pin a single session
 # across all notebooks by exporting ARO_TRAIN_SESSION.
-
-PIPELINE_VERSION = '2026.07'
+#
+# Changelog:
+#   2026.07 — renumbered notebooks; provenance stamping on every pair.
+#   2026.09 — NB28–NB32 script stages; eval-derived merge; TYPE_CAPS v4.
+#             The version sat at 2026.07 through all of that, so nothing
+#             written in September recorded the shape it was written by
+#             (GitLab #792). Bump it when the emitted shape changes, and the
+#             run archive under Train/runs/ records which shape produced it.
+PIPELINE_VERSION = '2026.09'
 
 RUN_TIMESTAMP = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
                  or f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}")
+
+# ── Committed run archive (GitLab #792) ──────────────────────────────────────
+# data/, models/ and release/ are gitignored and regenerated, which is right —
+# but it left nothing behind describing a finished run. RUN_ARCHIVE_ROOT is
+# tracked: `run_archive.py` copies the small, text-shaped summaries of a run
+# (stats.json, dataset_report.md, drop_reasons.csv, promotion_gate.json,
+# loop_metrics.json, model_manifest.json, the experiments CSV) into
+# Train/runs/<release>/ so a finished run is describable from the repository
+# alone. Weights stay out; nothing here is larger than a few hundred KB.
+RUN_ARCHIVE_ROOT = TRAIN_ROOT / 'runs'
+
+
+def run_archive_dir(release=None):
+    """Directory holding the committed summary of one release's run."""
+    release = release or os.environ.get('ARO_TRAIN_RELEASE') or PIPELINE_VERSION
+    return RUN_ARCHIVE_ROOT / str(release)
+
+
+# ── Fresh-run guard (GitLab #792) ────────────────────────────────────────────
+# 01_init wipes every stage directory unconditionally. That is what it is for —
+# but it also wipes the outputs of the expensive later stages, and a mis-started
+# meta run (or a re-run of 01 to regenerate the fix pairs) silently destroyed a
+# validated dataset and a set of adapters that cost GPU-days. Nothing recorded
+# that it had happened, which is one reason the last run cannot be reproduced.
+#
+# assert_fresh_allowed() refuses when a directory produced by a LATER stage
+# still holds files, unless the caller opts in. From a notebook the opt-in is
+# the ARO_TRAIN_FRESH=1 environment variable; from a script it is --fresh.
+
+class NotAFreshRun(RuntimeError):
+    """Raised when a wipe would destroy outputs a later stage produced."""
+
+
+def fresh_requested():
+    """True when the operator asked for a destructive fresh run."""
+    return os.environ.get('ARO_TRAIN_FRESH', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def _files_in(path):
+    p = Path(path)
+    if not p.exists():
+        return 0
+    return sum(1 for f in p.rglob('*') if f.is_file())
+
+
+def assert_fresh_allowed(protected_dirs, fresh=None):
+    """Refuse to wipe when `protected_dirs` still hold later-stage output.
+
+    `protected_dirs` is an iterable of (path, label). Returns the list of
+    (path, label, file_count) that would be destroyed; raises NotAFreshRun
+    when that list is non-empty and the operator has not opted in.
+    """
+    if fresh is None:
+        fresh = fresh_requested()
+    at_risk = [(Path(d), label, _files_in(d)) for d, label in protected_dirs]
+    at_risk = [row for row in at_risk if row[2] > 0]
+    if at_risk and not fresh:
+        listing = '\n'.join(f'    {p}  ({n} files)  — {label}'
+                            for p, label, n in at_risk)
+        raise NotAFreshRun(
+            'Refusing to wipe: these directories hold output produced by a '
+            'later pipeline stage.\n\n'
+            f'{listing}\n\n'
+            'Re-running 01_init would destroy work that cost GPU time and is '
+            'not reproducible from the repository.\n'
+            'If that is genuinely what you want, set ARO_TRAIN_FRESH=1 '
+            '(notebook) or pass --fresh (script) and run again.\n'
+            'To keep them, skip 01_init: Train/training.sh --from 02'
+        )
+    return at_risk
 
 # ── Dataset assembly type caps (used by 17_dataset_assembly) ─────────────────
 # Versioned so stats.json records which caps produced a given dataset

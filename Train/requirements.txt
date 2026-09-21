@@ -1,28 +1,59 @@
 # Python dependencies for the ARO training pipeline.
 #
-# Installed automatically into Train/.venv by `Train/training.sh`. Pin only
-# where a specific version is load-bearing (see comments). Otherwise use
-# the latest stable so we pick up bug fixes for free.
+# Installed into Train/.venv by `Train/training.sh`.
+#
+# ── Why the load-bearing packages are pinned ────────────────────────────────
+# This file used to pin nothing at all, under a comment saying "pin only where
+# load-bearing" — which in practice meant `pip install --upgrade` resolved a
+# different stack on every run, and the model that shipped could not be rebuilt
+# from the repository (GitLab #792). Worse, that upgrade silently replaced the
+# mlx build the 30B MoE LoRA run depends on (GitLab #793).
+#
+# So: the training/inference stack is pinned. The notebook-execution and
+# plotting stack is floored (`>=`) — those only have to be new enough, and a
+# security fix there should not need a commit here.
+#
+# `requirements.lock.darwin-py312.txt` is the full transitive freeze of the
+# environment that produced the last release; install that instead when you
+# want byte-identical dependencies rather than merely compatible ones.
+# Regenerate it with:
+#     Train/.venv/bin/pip freeze > Train/requirements.lock.darwin-py312.txt
 
 # ── Notebook execution ───────────────────────────────────────────────────
-jupyter
-nbconvert
-nbclient
-nbformat
-ipykernel
-ipywidgets
-IPython
+jupyter>=1.1
+nbconvert>=7.16
+nbclient>=0.10
+nbformat>=5.10
+ipykernel>=6.29
+ipywidgets>=8.1
+IPython>=8.30
 
 # ── Data / plotting helpers ──────────────────────────────────────────────
-numpy
-matplotlib
-tqdm
-PyYAML
+numpy>=2.0
+matplotlib>=3.9
+tqdm>=4.66
+PyYAML>=6.0
 
-# ── Hugging Face stack (model downloads, tokenizer, chat templates) ──────
-huggingface_hub
-transformers
+# ── Tests (Train/script/tests — run in CI) ───────────────────────────────
+pytest>=8.0
 
-# ── MLX (Apple Silicon only — pip silently skips on Linux/Windows) ───────
-mlx; sys_platform == "darwin"
-mlx-lm; sys_platform == "darwin"
+# ── Hugging Face stack ───────────────────────────────────────────────────
+# Pinned: the chat template applied at training time must be the one applied
+# at inference time, and transformers has changed Qwen3 template handling
+# between minor releases.
+huggingface_hub==1.30.0
+transformers==5.16.1
+tokenizers==0.23.2
+safetensors==0.8.0
+
+# ── MLX (Apple Silicon only — pip skips these on Linux/Windows) ──────────
+# A floor rather than an exact pin, and the floor is 0.32.2: that is the first
+# release whose shipped metallib carries the float32 `steel_gather_mm_rhs_nax`
+# instantiation LoRA on a MoE teacher needs (see ISSUE-MLX.md). Below it,
+# training crashed unless you had built mlx from source with a one-line patch.
+# A floor lets bug fixes in while keeping the crash out — and
+# `Train/script/mlx_preflight.py` verifies the kernel is actually present in
+# the installed metallib rather than trusting the version string alone.
+mlx>=0.32.2; sys_platform == "darwin"
+mlx-metal>=0.32.2; sys_platform == "darwin"
+mlx-lm>=0.31.3; sys_platform == "darwin"
