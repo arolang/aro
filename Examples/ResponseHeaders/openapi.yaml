@@ -2,6 +2,11 @@ openapi: 3.0.3
 info:
   title: Response Headers Demo API
   version: 1.0.0
+# An explicit port keeps a manual `aro run` off 8080, which anything on the
+# machine may already hold. The example reads <http-server: port> to build its
+# own URL, and ARO_HTTP_PORT still overrides this (the test harness sets it).
+servers:
+  - url: http://localhost:18785
 paths:
   /demo:
     get:

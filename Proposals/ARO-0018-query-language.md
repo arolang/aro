@@ -1,5 +1,10 @@
 # ARO-0018: Data Pipelines
 
+> The filename is still `ARO-0018-query-language.md`. The proposal was retitled
+> when its scope settled on collection pipelines rather than a query language,
+> and the file was left alone so the many links to it keep resolving
+> (GitLab #832). The title is the authority; the filename is history.
+
 * Proposal: ARO-0018
 * Author: ARO Language Team
 * Status: **Implemented**
@@ -307,7 +312,16 @@ Fetch the <page: List<User>> from the <users>
 
 ---
 
-## 6. Window Functions
+## 6. Window Functions — **not implemented**
+
+> Nothing in this section exists (GitLab #833). `rank()`, `row_number()` and
+> `… over (partition by …)` do not parse: there is no `over` keyword, and
+> function-call syntax is not part of the language at all. It is kept as a
+> design sketch, not as a reference.
+>
+> What works today for the same problems: `Group` partitions a collection by a
+> field, `Sort` orders one, and `Reduce`/`aggregate` computes a total over one.
+> A per-partition rank needs a `for each` over the groups.
 
 Basic window functions for ranking and running totals.
 

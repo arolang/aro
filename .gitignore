@@ -119,6 +119,10 @@ testrun.log
 /Examples/AssertDemo/AssertDemo
 /Book/ThePluginGuide/output
 /Book/TheEssentialPrimer/output
+# Every book build now renders from a stamped copy of its sources rather than
+# from the checked-in markdown, so the copy is build output like the PDF.
+/Book/*/output/staged/
+/Book/TheConstructionStudies/processed/
 **/__pycache__/
 **/*.pyc
 **/Plugins/**/*.dylib

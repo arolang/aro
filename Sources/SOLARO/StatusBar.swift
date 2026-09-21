@@ -40,6 +40,12 @@ struct StatusBarView: View {
 
             Spacer(minLength: 0)
 
+            // A failure that used to vanish (#755): a layout sidecar or
+            // the recents list that would not write. Not modal — losing
+            // some node positions should not interrupt anyone — but not
+            // a secret either.
+            diagnosticChip
+
             paletteButton
             timeTravelButton
             Divider().frame(height: 14).background(SolaroColor.divider)
@@ -52,6 +58,27 @@ struct StatusBarView: View {
             Rectangle()
                 .fill(SolaroColor.divider)
                 .frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var diagnosticChip: some View {
+        if let warning = SolaroDiagnostics.shared.latest {
+            Button {
+                SolaroDiagnostics.shared.dismiss()
+            } label: {
+                HStack(spacing: SolaroSpace.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(warning.message)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .font(SolaroFont.caption)
+                .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .help(warning.message + " — click to dismiss")
+            Divider().frame(height: 14).background(SolaroColor.divider)
         }
     }
 

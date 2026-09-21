@@ -75,6 +75,26 @@ public actor DebugEventLogWriter {
     private let handle: FileHandle
     private let startedAt: Date
 
+    /// Stop writing once the log reaches this many bytes.
+    ///
+    /// The file is truncated per run, but one run has no bound: every
+    /// statement of every loop iteration appends a record carrying its whole
+    /// symbol bag. A service left running for an afternoon wrote a
+    /// multi-gigabyte file into the user's project directory, and the readers
+    /// that load it whole then tried to hold all of it (GitLab #746).
+    ///
+    /// Stopping beats rotating here: the consumers — SOLARO's time-travel
+    /// scrubber, `aro debug --replay` — read a session from the beginning, so
+    /// a rotated log would silently lose the start of the story it is used to
+    /// tell. A capped one is honest and still replays.
+    ///
+    /// `ARO_DEBUG_LOG_MAX_BYTES` overrides it; `0` means no limit.
+    public static let defaultMaxBytes = 256 * 1024 * 1024
+
+    private let maxBytes: Int
+    private var bytesWritten = 0
+    private var stoppedAtCap = false
+
     public init(path: String) throws {
         FileManager.default.createFile(atPath: path, contents: nil)
         guard let h = FileHandle(forWritingAtPath: path) else {
@@ -82,12 +102,42 @@ public actor DebugEventLogWriter {
         }
         self.handle = h
         self.startedAt = Date()
+        if let raw = ProcessInfo.processInfo.environment["ARO_DEBUG_LOG_MAX_BYTES"],
+           let parsed = Int(raw), parsed >= 0 {
+            self.maxBytes = parsed
+        } else {
+            self.maxBytes = Self.defaultMaxBytes
+        }
     }
 
     public func write(_ kind: DebugEventRecord.Kind, body: [String: String]) {
+        guard !stoppedAtCap else { return }
         let t = Date().timeIntervalSince(startedAt)
         let record = DebugEventRecord(time: t, kind: kind, body: body)
-        try? handle.write(contentsOf: record.encodeJSONLine())
+        let line = record.encodeJSONLine()
+
+        if maxBytes > 0, bytesWritten + line.count > maxBytes {
+            stoppedAtCap = true
+            // One last record, so a reader can tell a capped log from a
+            // crashed one — the difference matters when the scrubber runs out
+            // of frames earlier than the user expects.
+            let notice = DebugEventRecord(
+                time: t,
+                kind: kind,
+                body: [
+                    "note": "debug log reached \(maxBytes) bytes; recording stopped",
+                    "cap": String(maxBytes),
+                ]
+            )
+            try? handle.write(contentsOf: notice.encodeJSONLine())
+            FileHandle.standardError.write(Data(
+                "[DebugEventLog] recording stopped at \(maxBytes) bytes; set ARO_DEBUG_LOG_MAX_BYTES to change\n".utf8
+            ))
+            return
+        }
+
+        bytesWritten += line.count
+        try? handle.write(contentsOf: line)
     }
 
     public func close() {

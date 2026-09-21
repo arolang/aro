@@ -8,4 +8,3 @@ aro-version: '>=0.1.0'
 provides:
 - type: c-plugin
   path: src/
-  handler: list

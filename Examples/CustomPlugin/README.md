@@ -4,15 +4,22 @@ Demonstrates extending ARO with custom service plugins written in Swift.
 
 ## What It Does
 
-Loads a custom greeting service from a Swift plugin and calls its methods (`hello`, `goodbye`) from ARO code. Shows the plugin initialization and C-compatible interface used for ARO integration.
+Loads a Swift plugin from `Plugins/GreetingService/` and invokes the two actions
+it exports, `Greeting.Hello` and `Greeting.Goodbye`, as ordinary statements.
 
 ## Features Tested
 
-- **Plugin loading** - `aro.yaml` configuration for plugin discovery
-- **Service registration** - Plugins expose services via `aro_plugin_init`
-- **Method invocation** - `<Call>` action with service and method syntax
-- **C-compatible interface** - JSON-based input/output for cross-language calls
-- **Application lifecycle** - `Application-End: Success` for cleanup
+- **Plugin loading** — a `plugin.yaml` manifest inside `Plugins/<name>/`
+- **Namespaced actions** — `Handle.Verb`, where `Greeting` is the plugin's
+  root-level `handle:` (ARO-0087)
+- **C-compatible interface** — JSON in, JSON out, across the
+  `aro_plugin_info`/`execute`/`free` ABI the SDK generates
+- **Application lifecycle** — `Application-End: Success` for cleanup
+
+This README described `plugins/GreetingService.swift`, the `Call` action and
+`aro_plugin_init` — the pre-plugin model ARO-0016 documented and which never
+shipped (GitLab #818, #833). The plugin is a Swift package under `Plugins/` and
+is built by `aro run` on first use.
 
 ## Related Proposals
 
@@ -55,7 +62,7 @@ This is a **macOS security feature**, not an ARO bug. The code is correct.
    ```bash
    swift build -c debug
    rm -f .aro-cache/GreetingService.dylib
-   .build/debug/aro run ./Examples/CustomPlugin
+   aro run ./Examples/CustomPlugin
    ```
 
 **Production Solution:**
@@ -67,8 +74,12 @@ Code-sign both ARO and plugins with the same Apple Developer Team ID.
 CustomPlugin/
 ├── main.aro              # ARO code calling the plugin
 ├── aro.yaml              # Plugin configuration
-└── plugins/
-    └── GreetingService.swift  # Plugin source
+└── Plugins/
+    └── GreetingService/
+        ├── plugin.yaml            # Manifest: name, handle, provides
+        ├── Package.swift          # Swift package
+        └── Sources/
+            └── GreetingService.swift
 ```
 
 ## Example Output

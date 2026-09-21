@@ -139,12 +139,15 @@ Pratt parsing handles it with a single table of precedence levels:
 | or | 1 | `or` |
 | and | 2 | `and` |
 | not | 3 | `not` (prefix) |
-| equality | 4 | `==`, `!=`, `is`, `contains`, `matches` |
+| equality | 4 | `==`, `!=`, `is`, `is not`, `contains`, `matches` |
 | comparison | 5 | `<`, `>`, `<=`, `>=` |
-| term | 6 | `+`, `-`, `++` |
-| factor | 7 | `*`, `/`, `%` |
-| unary | 8 | unary `-` |
-| postfix | 9 | `.`, `[]` |
+| defaulting | 6 | `default` |
+| term | 7 | `+`, `-`, `++` |
+| factor | 8 | `*`, `/`, `%` |
+| unary | 9 | unary `-` |
+| postfix | 10 | `.`, `[]` |
+
+Two entries in that table are choices rather than consequences. `not` sits *below* the comparisons, as in Python rather than C, so `not <a> == <b>` groups as `not (<a> == <b>)` and reads the way it is spoken. Unary `-` is the exception that proves it: it stays up at level 9, above `*`, so `-<a> * <b>` is `(-<a>) * <b>`. And `default` sits between arithmetic and comparison so that `<a> default 1 + 2` defaults to the whole sum while `<a> default 3 > 2` compares the defaulted value instead of defaulting to a boolean.
 
 The algorithm is simple: parse a prefix (a primary expression or unary op), then keep consuming infix operators as long as they bind tighter than what the caller expects. That is the entire engine for correct precedence — no grammar rewrites needed.
 

@@ -130,13 +130,13 @@ public struct CodeActionHandler: Sendable {
         content: String
     ) -> [[String: Any]] {
         var actions: [[String: Any]] = []
-        let aroPosition = PositionConverter.fromLSP(range.start)
+        let aroPosition = PositionConverter.fromLSP(range.start, in: content)
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
 
             // Check if cursor is in this feature set
-            if isPositionInSpan(aroPosition, fs.span) {
+            if fs.span.contains(aroPosition) {
                 // Check if feature set is missing a Return statement
                 let hasReturn = fs.statements.contains { statement in
                     if let aro = statement as? AROStatement {
@@ -190,7 +190,7 @@ public struct CodeActionHandler: Sendable {
         var matches: [(String, Int)] = []
 
         for verb in Self.knownVerbs {
-            let distance = levenshteinDistance(lowercaseInput, verb.lowercased())
+            let distance = EditDistance.levenshtein(lowercaseInput, verb.lowercased())
             if distance <= 3 {
                 matches.append((verb, distance))
             }
@@ -198,57 +198,6 @@ public struct CodeActionHandler: Sendable {
 
         // Sort by distance and return top 3
         return matches.sorted { $0.1 < $1.1 }.prefix(3).map { $0.0 }
-    }
-
-    private func levenshteinDistance(_ s1: String, _ s2: String) -> Int {
-        let s1Array = Array(s1)
-        let s2Array = Array(s2)
-        let m = s1Array.count
-        let n = s2Array.count
-
-        if m == 0 { return n }
-        if n == 0 { return m }
-
-        var matrix = [[Int]](repeating: [Int](repeating: 0, count: n + 1), count: m + 1)
-
-        for i in 0...m {
-            matrix[i][0] = i
-        }
-        for j in 0...n {
-            matrix[0][j] = j
-        }
-
-        for i in 1...m {
-            for j in 1...n {
-                if s1Array[i - 1] == s2Array[j - 1] {
-                    matrix[i][j] = matrix[i - 1][j - 1]
-                } else {
-                    matrix[i][j] = min(
-                        matrix[i - 1][j] + 1,      // deletion
-                        matrix[i][j - 1] + 1,      // insertion
-                        matrix[i - 1][j - 1] + 1   // substitution
-                    )
-                }
-            }
-        }
-
-        return matrix[m][n]
-    }
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-
-        return true
     }
 
     private func createReplaceAction(

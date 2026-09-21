@@ -2,7 +2,7 @@
 
 ## How a Language Gets Built in Ten Pages
 
-*ARO Language Project · March 2026 · ARO 0.8.0*
+*ARO Language Project · @ARO_DATE@ · ARO @ARO_VERSION@*
 
 ---
 
@@ -34,10 +34,11 @@ Every action is classified by data flow direction — not as documentation, but 
 
 | Role | Direction | Examples |
 |------|-----------|---------|
-| `request` | External → Internal | Extract, Retrieve, Fetch, Read |
+| `request` | External → Internal | Extract, Retrieve, Read, Request |
 | `own` | Internal → Internal | Compute, Validate, Compare, Create |
-| `response` | Internal → External | Return, Throw |
-| `export` | Internal → Global | Store, Emit, Log, Send |
+| `response` | Internal → External | Return, Throw, Log, Send, Store, Write |
+| `export` | Internal → Global | Publish, Emit, Schedule |
+| `server` | Service lifecycle | Start, Stop, Listen, Connect, Close |
 
 The role determines valid prepositions, what bridge functions the compiler calls, and what optimizations are legal.
 
@@ -76,17 +77,22 @@ The parser is a hybrid: **recursive descent for statements, Pratt parsing for ex
 
 Recursive descent is the right choice for statements — each statement type is distinct enough that a top-level `switch` on the first token routes cleanly. The eight statement types map to eight parsing functions.
 
-Pratt parsing handles expressions. The insight is that each token has a *binding power* — how tightly it grabs its neighbors. Addition is weaker than multiplication, which is weaker than unary negation, which is weaker than function call. Parse at the right power level and precedence falls out automatically.
+Pratt parsing handles expressions. The insight is that each token has a *binding power* — how tightly it grabs its neighbors. Addition is weaker than multiplication, which is weaker than unary negation, which is weaker than member access. Parse at the right power level and precedence falls out automatically.
 
 | Precedence Level | Operators |
 |-----------------|-----------|
 | 1 (lowest) | `or` |
 | 2 | `and` |
-| 3 | `not` |
-| 4 | `==`, `!=`, `<`, `>`, `<=`, `>=` |
-| 5 | `+`, `-`, `++` (concat) |
-| 6 | `*`, `/`, `%` |
-| 7 (highest) | unary `-` |
+| 3 | `not` (prefix) |
+| 4 | `==`, `!=`, `is`, `is not`, `contains`, `matches` |
+| 5 | `<`, `>`, `<=`, `>=` |
+| 6 | `default` |
+| 7 | `+`, `-`, `++` (concat) |
+| 8 | `*`, `/`, `%` |
+| 9 | unary `-` |
+| 10 (highest) | `.`, `[]` |
+
+`not` below the comparisons is the Python convention, not the C one: `not <a> == <b>` is `not (<a> == <b>)`. Unary `-` is the exception, up at level 9 so that `-<a> * <b>` is `(-<a>) * <b>`.
 
 The core statement shape that nearly everything reduces to:
 
@@ -126,9 +132,10 @@ The semantic analyzer makes four passes over the AST:
 | `createVerbs` | create, make, build | Entity creation path |
 | `responseVerbs` | log, print, send, emit | Skip the expression shortcut |
 | `serverVerbs` | start, stop, keepalive, schedule | Force execution even with literal object |
-| `storeVerbs` | store, save, persist | Trigger repository observers |
 
-These sets live in `VerbSets.swift`, shared by both the interpreter and the compiler. One authoritative source — no duplication, no drift.
+There is no `storeVerbs`: `store`, `save` and `persist` sit in `responseVerbs` alongside `log` and `send`, because what they have in common is that the result must not be rebound to the expression value.
+
+These eleven sets live in `VerbSets.swift`, shared by both the interpreter and the compiler. One authoritative source — no duplication, no drift.
 
 **Immutability** is the rule with the most impact on users: once a variable is bound in a feature set, it can't be rebound. The only escape is renaming — compute a new name. This feels annoying until you debug a feature set and realize you always know exactly what a variable contains at any point.
 
@@ -152,7 +159,7 @@ ExecutionEngine  →  EventBus  →  FeatureSetExecutor (×N)
 3. Calls `action.execute(result:object:context:)`
 4. Checks if the action set a response (short-circuit) or threw
 
-**ActionRegistry** maps verb strings to action implementations. 61 built-in actions, registered at startup. Adding a new action is implementing one protocol method and registering the type.
+**ActionRegistry** maps verb strings to action implementations. 71 built-in actions at the version on the cover, registered at startup from eleven modules. Adding a new action is implementing one protocol method and listing the type in a module. `aro actions` prints the live set with each one's role, verbs and prepositions — and since the count moves with every release, that command is the number to quote rather than this paragraph.
 
 **ExecutionContext** is what actions see. A flat protocol that hides whether you're running in the interpreter, a compiled binary, or a test:
 
@@ -288,10 +295,10 @@ The `mode: both` test directive is the defense mechanism. Every example runs in 
 - Nine statement types kept every backend small. Every new execution target (interpreter, LLVM, future transpiler) starts with nine cases.
 - `mode: both` testing caught divergence that would otherwise be invisible for months.
 - VerbSets as a shared module eliminated the drift between interpreter and compiler verb classification.
+- Reaching the runtime through one C ABI rather than reimplementing it for compiled code. The built binary drives the same SwiftNIO `AROHTTPServer` the interpreter does — `Examples/HTTPServer` and `Examples/UserService` both carry `mode: both`, so CI runs each of them twice and compares.
 
 **The things that didn't:**
 
-- HTTP doesn't work in compiled binaries. SwiftNIO relies on Swift type metadata that isn't properly initialized when the runtime starts from LLVM-compiled code. The crash is in `_swift_allocObject_` with a null metadata pointer. The workaround is a native BSD socket server — less robust but functional.
 - `@_cdecl` can't be `async`. The semaphore bridge works but is fragile under load.
 - Business activity scope confused everyone. Variables visible only within the same activity string is neither global scope nor lexical scope. Users expected one or the other.
 - Prepositions carry semantic meaning (`from` = source, `into` = destination, `with` = modification) but the distinctions are too subtle. Developers guess wrong and get cryptic errors.
@@ -308,6 +315,9 @@ The `mode: both` test directive is the defense mechanism. Every example runs in 
 | 0.7.1 | Integer division parity; KeyboardService binary mode; SocketClient (#134 open) |
 | 0.8.0 | PipelineStatement (9 types); KeyPress/WebSocket handlers (7 handler types); package manager (`aro add`/`aro remove`); LSP server; terminal UI subsystem |
 | 0.9.x | Lazy action execution (`AROFuture` + `ActionTaskExecutor`); user-defined actions (`Application.<Name>`, ARO-0081); native Git via libgit2 (ARO-0080); MCP server (`aro mcp`); `aro ask` coding assistant with native MLX inference on Apple Silicon; piped source on stdin |
+| 0.10.x | SOLARO, ARO's own IDE — feature-set canvas, debugger, notebooks; tool calling and risk-tiered approval in `aro ask` |
+| 0.11.x | The qualifier namespace closed — an invented Compute qualifier is an error rather than a no-op that returns its input; encoding and escaping primitives; action middleware; preposition validation at check time; the concurrency model written down as ARO-0088; streaming request bodies with per-route limits (ARO-0090); a native Jupyter kernel over ZeroMQ (ARO-0091) |
+| 0.12.x | Learning notebooks on SOLARO's first launch; ranges specified as ARO-0089; a run of correctness fixes across `default`, OpenAPI query defaults and identifier naming |
 
 **For the next implementer:**
 

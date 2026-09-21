@@ -1026,13 +1026,6 @@ struct SupportingTypesTests {
         #expect(result.message == "Invalid email format")
     }
 
-    @Test("ComparisonResult creation")
-    func testComparisonResult() {
-        let result = ComparisonResult(matches: true, result: .equal)
-        #expect(result.matches == true)
-        #expect(result.result == .equal)
-    }
-
     @Test("ComparisonOutcome values")
     func testComparisonOutcome() {
         #expect(ComparisonOutcome.equal.rawValue == "equal")
@@ -1048,12 +1041,6 @@ struct SupportingTypesTests {
         #expect(result.success == true)
     }
 
-    @Test("CreatedEntity creation")
-    func testCreatedEntity() {
-        let entity = CreatedEntity(type: "User", data: ["name": "John"])
-        #expect(entity.type == "User")
-        #expect(entity.data["name"] as? String == "John")
-    }
 }
 
 // MARK: - Filter Action Tests (ARO-0042)

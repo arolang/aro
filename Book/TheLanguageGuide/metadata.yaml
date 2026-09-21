@@ -2,8 +2,8 @@
 title: "ARO: Business Logic as Language"
 subtitle: "The Language Guide"
 author: "ARO Project"
-date: "March 2026"
-version: "0.8.0"
+date: "@ARO_DATE@"
+version: "@ARO_VERSION@"
 lang: en
 documentclass: book
 classoption:

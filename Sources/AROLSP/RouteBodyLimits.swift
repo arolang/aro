@@ -74,7 +74,11 @@ public struct RouteBodyLimits: Sendable {
         candidates.append(contentsOf: roots)
 
         for directory in candidates {
-            for name in ["openapi.yaml", "openapi.yml", "openapi.json"] {
+            // Each name is tried in this directory before moving to the next
+            // candidate, so a contract that exists but does not parse still
+            // lets a sibling spelling answer. The names themselves come from
+            // the loader (#732).
+            for name in OpenAPILoader.contractFilenames {
                 let path = directory.appendingPathComponent(name)
                 guard FileManager.default.fileExists(atPath: path.path) else { continue }
                 guard let spec = try? OpenAPILoader.load(from: path) else { continue }

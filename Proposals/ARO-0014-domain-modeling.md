@@ -3,11 +3,17 @@
 * Proposal: ARO-0014
 * Author: ARO Language Team
 * Status: **Implemented**
-* Requires: ARO-0001, ARO-0006, ARO-0012
+* Requires: ARO-0001, ARO-0003, ARO-0005
 
 ## Abstract
 
-This proposal documents how ARO implements Domain-Driven Design (DDD) concepts through existing language features. ARO follows a "conventions over syntax" approach: types are defined in OpenAPI, behavior lives in feature sets, and DDD patterns emerge from their combination.
+This proposal documents how ARO implements Domain-Driven Design (DDD) concepts through existing language features. ARO follows a "conventions over syntax" approach: types are defined in OpenAPI (ARO-0003), behavior lives in feature sets (ARO-0005), and DDD patterns emerge from their combination.
+
+> The `Requires:` line above used to read `ARO-0001, ARO-0006, ARO-0012`.
+> ARO-0012 does not exist and never did, and ARO-0006 (error philosophy) was
+> cited for the claim that types come from OpenAPI, which is ARO-0003
+> (GitLab #832). `Scripts/check-proposals.py` now validates `Requires:` lines,
+> so a dependency on a proposal that does not exist fails CI.
 
 ## Motivation
 

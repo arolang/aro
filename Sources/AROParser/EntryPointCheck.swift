@@ -54,11 +54,17 @@ public enum EntryPointCheck {
         /// entry point, which the loader rejects.
         case multiple([Declaration])
 
-        /// Several, each in its own group: not a broken application but a
+        /// Entry points in more than one group: not one application but a
         /// *directory of* applications. `Examples/ModulesExample` is one, and
-        /// `aro run` already tells the two apart, so the check must too —
-        /// otherwise it reports an error the author cannot act on.
-        case separateApplications(groups: [String])
+        /// `aro run` and `aro build` both refuse such a path and name a
+        /// subdirectory to point at instead, so the check says the same.
+        ///
+        /// `groups` is every group declaring an entry point. `multipleWithin`
+        /// is the subset declaring more than one — each of those is itself an
+        /// application with too many, and naming them here is the difference
+        /// between "check one of these" and "check one of these, and two of
+        /// them are broken".
+        case separateApplications(groups: [String], multipleWithin: [String])
     }
 
     /// Classify `declarations` — every feature set in the application.
@@ -72,9 +78,22 @@ public enum EntryPointCheck {
             return .missing(swapped: swapped)
         }
 
-        let groups = Set(starts.map(\.group)).sorted()
-        if groups.count == starts.count, groups.count > 1 {
-            return .separateApplications(groups: groups)
+        // More than one group means the path is a directory of applications,
+        // whether or not each of them is itself well formed.
+        //
+        // Requiring one start per group (`groups.count == starts.count`) made
+        // a whole tree collapse into "one application" as soon as any single
+        // application inside it had two entry points: `aro check ./Examples`
+        // answered "error: 111 Application-Start feature sets — an application
+        // must have exactly one" and listed all 111, because one of the 109
+        // examples is itself a directory of three (GitLab #824). Group first,
+        // then report the groups that are individually broken.
+        let startsByGroup = Dictionary(grouping: starts, by: \.group)
+        if startsByGroup.count > 1 {
+            return .separateApplications(
+                groups: startsByGroup.keys.sorted(),
+                multipleWithin: startsByGroup.filter { $0.value.count > 1 }.keys.sorted()
+            )
         }
         return .multiple(starts)
     }

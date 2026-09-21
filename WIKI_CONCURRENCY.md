@@ -1,6 +1,6 @@
 # Concurrency
 
-ARO runs things at the same time without asking you to say so. This page is the practical version; the specification is [ARO-0088](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Proposals/ARO-0088-concurrency-model.md).
+ARO runs things at the same time without asking you to say so. This page is the practical version; the specification is [ARO-0088](https://github.com/arolang/aro/blob/main/Proposals/ARO-0088-concurrency-model.md).
 
 ## The one rule
 
@@ -95,6 +95,6 @@ If something looks order-dependent, run it with `ARO_NO_DEFER=1`. If the behavio
 
 ## See also
 
-- [ARO-0088 Concurrency Model](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Proposals/ARO-0088-concurrency-model.md) — the specification
-- [ARO-0007 Events & Reactive](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Proposals/ARO-0007-events-reactive.md) — event dispatch
-- [ARO-0051 Streaming Execution](https://git.ausdertechnik.de/arolang/aro/-/blob/main/Proposals/ARO-0051-streaming-execution.md) — streaming pipelines
+- [ARO-0088 Concurrency Model](https://github.com/arolang/aro/blob/main/Proposals/ARO-0088-concurrency-model.md) — the specification
+- [ARO-0007 Events & Reactive](https://github.com/arolang/aro/blob/main/Proposals/ARO-0007-events-reactive.md) — event dispatch
+- [ARO-0051 Streaming Execution](https://github.com/arolang/aro/blob/main/Proposals/ARO-0051-streaming-execution.md) — streaming pipelines

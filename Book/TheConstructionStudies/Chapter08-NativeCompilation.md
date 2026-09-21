@@ -395,7 +395,9 @@ A `when` condition is serialized to JSON and passed to the runtime's `aro_evalua
 
 Note what that means: the basic-block structure is genuine LLVM control flow, but the *condition* is not compiled. `ExpressionSerializer` renders the expression AST as JSON (`ConstantFolder` first folding whatever it can), the string becomes a global constant, and a runtime call returns an `i32` that the generated code compares against zero. Same for `while` conditions.
 
-The cost of that design is that the serializer and the evaluator are two halves of one protocol maintained in separate modules, and they can disagree. They currently do: the serializer emits `{"$unary":{…}}` for a `not` or a negation, and the bridge's `evaluateExpressionJSON` knows only `$lit`, `$var`, `$binary` and `$interpolated`. Constant folding hides most cases — `not true` never reaches the wire — but a non-constant `not <flag>` in a compiled guard falls through to the default. A JSON protocol between two hand-written ends needs a shared schema and a round-trip test; this one has neither yet.
+The cost of that design is that the serializer and the evaluator are two halves of one protocol maintained in separate modules, and they can disagree. They once did: the serializer emitted `{"$unary":{…}}` for a `not` or a negation and the bridge's `evaluateExpressionJSON` knew only `$lit`, `$var`, `$binary` and `$interpolated`, so a non-constant `not <flag>` in a compiled guard fell through to the empty-string default while `aro run` answered correctly. Constant folding had hidden it — `not true` never reaches the wire.
+
+The decoder now handles `$unary` for both `not` and unary minus, and it no longer dispatches on a list of remembered node names: any key beginning with `$` is treated as an expression node and routed to `evaluateExpressionJSON`, so a newly serialized form fails loudly at the switch inside rather than silently at the object branch outside. That is the structural half of the lesson. The other half is still owed: a JSON protocol between two hand-written ends wants a shared schema and a round-trip test, and this one has neither.
 
 ---
 

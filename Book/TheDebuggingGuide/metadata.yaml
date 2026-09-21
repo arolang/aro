@@ -2,8 +2,8 @@
 title: "ARO Debugging Guide"
 subtitle: "Step, Inspect, Replay"
 author: "ARO Project"
-date: "June 2026"
-version: "1.0.0"
+date: "@ARO_DATE@"
+version: "@ARO_VERSION@"
 lang: en
 documentclass: book
 classoption:

@@ -17,8 +17,8 @@ Processes arrays of numbers and objects through pipeline operations: filters act
 
 ## Related Proposals
 
-- [ARO-0018: Data Pipeline Operations](../../Proposals/ARO-0018-data-pipeline.md)
-- [ARO-0002: Expressions](../../Proposals/ARO-0002-expressions.md)
+- [ARO-0018: Data Pipelines](../../Proposals/ARO-0018-query-language.md)
+- [ARO-0002: Control Flow](../../Proposals/ARO-0002-control-flow.md)
 
 ## Usage
 

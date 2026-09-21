@@ -431,7 +431,13 @@ stores:
 **Rejected because:**
 - Unexpected disk writes are dangerous
 - Read-only should be the safe default
-- Compiled binaries cannot write back
+
+This list used to end with "compiled binaries cannot write back", which stopped
+being true with GitLab #442 and contradicted §6 of this same document:
+`RuntimeCoreBridge.swift:369` wires a `StoreFlushService` for every writable
+store and `aro_runtime_shutdown` flushes it, on normal exit and on the
+keepalive SIGINT path alike. The permission gate is what makes always-writable
+the wrong default — not a limitation of the compiled path (GitLab #831).
 
 ---
 

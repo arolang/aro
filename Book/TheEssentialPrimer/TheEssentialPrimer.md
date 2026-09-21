@@ -332,7 +332,7 @@ Nothing in the program says which is which. `Write the <upload> to the <file: ta
 
 ## 7. User-Defined Actions
 
-A feature set whose business activity is exactly `Action` becomes a **user-defined action** (ARO-0081), callable application-wide as `Application.<Name>`:
+A feature set whose business activity is exactly `Action` becomes a **user-defined action** (ARO-0081), callable as `Application.<Name>` from anywhere in the application — any `.aro` file, any depth of subdirectory, and the `aro repl` prompt. There are no imports: every file in the directory is discovered and its actions join one flat `Application.` namespace, which is also why a name may be declared only once across the whole application.
 
 ```aro
 (DoubleValue: Action takes <number>) {
@@ -440,8 +440,6 @@ ARO is beta software. The following limitations are current facts, not future ri
 **Growing ecosystem.** The package manager (`aro add`, `aro remove`) enables plugin installation from git repositories. However, there is no centralised package index comparable to npm or PyPI. The action vocabulary covers common cases; unusual requirements need custom implementations via plugins in Swift, Rust, C, or Python.
 
 **Limited conditional branching.** The `when` guard, `match` expression, and `while` loop handle common cases. Complex nested conditionals require escape to plugins or custom actions. Applications with fundamentally conditional logic — tax calculations, permission systems with many rules — will spend more time in the extension layer than in ARO itself.
-
-**Cross-file user-defined actions.** An `Action` feature set is callable as `Application.<Name>` from the file that declares it, but not from another file in the same application, and not at all from the `aro repl` prompt. Events do cross both boundaries. Keep an action and its callers in one file, or hop through an event.
 
 **Breaking changes.** Action signatures, preposition semantics, and the plugin ABI are stabilising but not yet frozen. Applications built today may require updates as the language matures toward 1.0.
 

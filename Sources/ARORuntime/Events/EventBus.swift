@@ -602,13 +602,6 @@ public actor EventBus {
         }
     }
 
-    /// Configure the staleness timeout for flush continuations.
-    /// After this duration a waiting awaitPendingEvents call is released even if
-    /// handlers are still in flight. Expose via the Configure action.
-    /// - Parameter timeout: Staleness duration in seconds (default: 30)
-    public func configure(flushContinuationStaleness timeout: TimeInterval) {
-        flushContinuationStaleness = timeout
-    }
 
     /// Get the count of pending event handlers currently in flight
     /// - Returns: The number of event handlers currently executing

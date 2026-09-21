@@ -39,7 +39,7 @@ When computing multiple values of the same type, use the qualifier-as-name synta
 ```bash
 # From the ARO-Lang root directory
 swift build
-.build/debug/aro run ./Examples/Computations
+aro run ./Examples/Computations
 ```
 
 ## Expected Output
@@ -64,6 +64,4 @@ Number of items: 4
 
 ## See Also
 
-- [Documentation: Computations](../../Documentation/LanguageGuide/Computations.md)
-- [Book: Chapter 7 - Computations](../../Book/TheLanguageGuide/Chapter07-Computations.md)
-- [Proposal: ARO-0035 Qualifier-as-Name](../../Proposals/ARO-0035-qualifier-as-name.md)
+- [ARO-0019: Standard Library](../../Proposals/ARO-0019-standard-library.md) — the closed Compute-qualifier set

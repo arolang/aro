@@ -78,6 +78,11 @@ struct GlobalSearchHit: Identifiable, Hashable {
         case featureSet = "Feature sets"
         case content = "Content"
         case book = "Books"
+        /// Answers from `textDocument/references` (#764). Shares this
+        /// panel because "every place this is used" is the same shape
+        /// of result as a search, and the panel already knows how to
+        /// open one.
+        case reference = "References"
 
         var symbol: String {
             switch self {
@@ -85,8 +90,33 @@ struct GlobalSearchHit: Identifiable, Hashable {
             case .featureSet: return "square.grid.2x2"
             case .content:    return "text.magnifyingglass"
             case .book:       return "book"
+            case .reference:  return "arrow.triangle.branch"
             }
         }
+    }
+
+    /// Build a row for one `textDocument/references` answer (#764).
+    ///
+    /// `snippet` is the source line, read from the buffer so an unsaved
+    /// edit reads correctly.
+    static func reference(at location: AROLSPClient.DefinitionLocation,
+                          symbol: String,
+                          snippet: String?,
+                          projectRoot: URL) -> GlobalSearchHit {
+        let text = (snippet ?? "").trimmingCharacters(in: .whitespaces)
+        let headline = text.isEmpty ? symbol : text
+        let relative = location.url.path
+            .replacingOccurrences(of: projectRoot.path + "/", with: "")
+        return GlobalSearchHit(
+            id: "ref:\(location.url.path):\(location.line):\(location.character)",
+            kind: .reference,
+            url: location.url,
+            line: location.line,
+            headline: headline,
+            highlightRange: headline.range(of: symbol),
+            breadcrumb: "\(relative):\(location.line)",
+            bookContext: nil
+        )
     }
 }
 

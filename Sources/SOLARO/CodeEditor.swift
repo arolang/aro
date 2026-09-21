@@ -951,6 +951,14 @@ struct AROCodeEditor: NSViewRepresentable {
         // selection; do it once on initial frame.
         textView.text = text
         applyHighlight(textView)
+        // Scrolling brings lines into view that the windowed highlighter
+        // has not painted yet (#750), so re-run it when the viewport
+        // moves. Debounced through the same path as typing, so a flick
+        // scroll costs one pass rather than one per frame. Harmless for
+        // small files, where the window is the whole document and the
+        // pass finds nothing to change.
+        scroll.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.observeScrolling(of: scroll, textView: textView)
         // Stash a weak reference for updateNSView to find the
         // text view inside the scroll view on subsequent passes.
         context.coordinator.textView = textView
@@ -1522,35 +1530,66 @@ struct AROCodeEditor: NSViewRepresentable {
     fileprivate func applyHighlight(_ textView: STTextView) {
         let source = textView.text ?? ""
         let nsString = source as NSString
-        let fullRange = NSRange(location: 0, length: nsString.length)
+        guard nsString.length > 0 else { return }
+
+        // Highlight a window of whole lines around what is on screen rather
+        // than the entire document (#750). For anything under 64 KB — which
+        // is every real `.aro` file — the window IS the document, so the
+        // common case is byte-for-byte the old behaviour.
+        let window = HighlightWindow.range(
+            in: nsString,
+            viewport: Self.viewportRange(of: textView)
+        )
+        guard window.length > 0 else { return }
 
         // Resolve the size from the preference on every pass. This
         // used to be a hardcoded 13pt, and since `applyHighlight`
-        // re-stamps the ENTIRE document (debounced ~40ms after every
+        // re-stamps the document (debounced ~40ms after every
         // keystroke), a user's font-size setting survived exactly
         // until they typed the first character (GitLab #533).
         textView.setAttributes(
             EditorTypography.current()
                 .baseAttributes(foreground: NSColor(SolaroColor.textPrimary)),
-            range: fullRange
+            range: window
         )
 
-        let mutable = NSMutableAttributedString(string: source)
+        let fragment = nsString.substring(with: window)
+        let mutable = NSMutableAttributedString(string: fragment)
         switch language {
         case .aro:
-            AROSyntaxHighlighter.apply(to: mutable, source: source)
+            AROSyntaxHighlighter.apply(to: mutable, source: fragment)
         case .yaml:
-            YAMLSyntaxHighlighter.apply(to: mutable, source: source)
+            YAMLSyntaxHighlighter.apply(to: mutable, source: fragment)
         case .plain:
             break
         }
+        // The highlighter worked in the fragment's coordinates; shift each
+        // colour run back into the document's.
         mutable.enumerateAttribute(
-            .foregroundColor, in: fullRange, options: []
+            .foregroundColor,
+            in: NSRange(location: 0, length: mutable.length),
+            options: []
         ) { value, range, _ in
-            if let color = value as? NSColor {
-                textView.addAttributes([.foregroundColor: color], range: range)
-            }
+            guard let color = value as? NSColor else { return }
+            textView.addAttributes(
+                [.foregroundColor: color],
+                range: NSRange(location: window.location + range.location,
+                               length: range.length)
+            )
         }
+    }
+
+    /// The character range the text view currently has laid out, or `nil`
+    /// before the first layout pass.
+    ///
+    /// TextKit 2 keeps this on the viewport layout controller. It is only a
+    /// hint — `HighlightWindow` pads it and falls back to the head of the
+    /// document when it is missing.
+    fileprivate static func viewportRange(of textView: STTextView) -> NSRange? {
+        guard let viewport = textView.textLayoutManager
+            .textViewportLayoutController.viewportRange
+        else { return nil }
+        return NSRange(viewport, in: textView.textContentManager)
     }
 
     // MARK: - Coordinator
@@ -1618,6 +1657,38 @@ struct AROCodeEditor: NSViewRepresentable {
         /// file each pass tokenises the full source; bursts of
         /// typing kept blocking the main thread (#274).
         var highlightDebounceTask: Task<Void, Never>?
+        /// Bounds-change observer for the enclosing scroll view (#750).
+        private var scrollObserver: (any NSObjectProtocol)?
+
+        // No `deinit` unregistration: the observer is scoped to one clip
+        // view's `boundsDidChangeNotification`, and its block holds both
+        // the coordinator and the text view weakly, so once either is gone
+        // the block is a no-op. A nonisolated deinit cannot touch the
+        // token anyway under strict concurrency. Re-observing the same
+        // coordinator does remove the previous token, below.
+
+        /// Re-highlight when the viewport moves.
+        ///
+        /// The highlight window is computed from what is laid out, so a
+        /// scroll into never-painted territory needs a fresh pass. Routed
+        /// through `scheduleHighlight` so it shares the 40 ms debounce with
+        /// typing instead of firing per scroll event.
+        @MainActor
+        func observeScrolling(of scroll: NSScrollView, textView: STTextView) {
+            if let scrollObserver {
+                NotificationCenter.default.removeObserver(scrollObserver)
+            }
+            scrollObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scroll.contentView,
+                queue: .main
+            ) { [weak self, weak textView] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let textView else { return }
+                    self.scheduleHighlight(textView)
+                }
+            }
+        }
 
         init(parent: AROCodeEditor) {
             self.parent = parent

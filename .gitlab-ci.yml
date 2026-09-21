@@ -230,6 +230,80 @@ action-reference:
   script:
     - python3 Scripts/generate-action-reference.py --check
 
+# The Construction Studies' grammar appendix had the same problem in its
+# precedence, preposition and reserved-word tables — `not` was documented as
+# binding tighter than the comparisons, which is the opposite of what the
+# parser does. Those three tables are now derived from Parser.swift,
+# Token.swift and Lexer.swift, and this job fails when they stop matching.
+grammar-appendix:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
+
+# =============================================================================
+# Editor grammars are generated, not hand-maintained (GitLab #695)
+# =============================================================================
+# The VS Code and IntelliJ TextMate grammars listed 67 of 130 runtime verbs and
+# none of the Git verbs, while every other surface reads AROCatalog. They are
+# now derived from the same scrape as the action reference, with the IntelliJ
+# bundle a byte-identical copy of the canonical grammar. This job fails if the
+# committed grammars no longer match the registry.
+editor-grammars:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-editor-grammars.py --check
+
+# =============================================================================
+# The integration harness has logic of its own, and it is testable
+# =============================================================================
+# Unit tests for Tests/IntegrationTestsRunner/lib — pure Perl, no toolchain,
+# no examples, no build. They pin behaviour that used to be discovered only by
+# an example failing in the wrong executor (GitLab #837). Core Perl only, so
+# any perl image works and nothing needs installing.
+harness:unit:
+  stage: test
+  image: perl:5.38-slim
+  script:
+    - prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
+
+# =============================================================================
+# Fenced ARO blocks in the documentation must parse (GitLab #834)
+# =============================================================================
+# The proposals and the examples are the reference *and* the corpus `aro ask`
+# is trained on, so a block the parser rejects teaches syntax the language does
+# not have. #834 catalogued thirteen invented verbs presented as built-ins,
+# `if … then { }` where the language has `when`, and method-call syntax that
+# does not exist.
+#
+# It runs against a real `aro`, so it needs build:linux's artifact and sits in
+# the integration stage. It is baselined
+# (`Scripts/doc-examples-baseline.txt`): every failure that existed when the
+# check was introduced is listed there, and the job fails only on failures that
+# are not. The baseline is debt to burn down, not a set of exemptions — a block
+# that is deliberately not ARO belongs behind an `aro-check: skip` directive
+# where a reader of the document can see it.
+#
+# `Book/` is not in the default roots yet; its own sweep is #836, and
+# baselining a tree someone is actively editing fights that work, because the
+# baseline is keyed on line numbers. Add "Book" to DEFAULT_ROOTS once #836 has
+# landed.
+doc-examples:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  script:
+    - chmod +x aro-dist/aro
+    - ARO_BIN=aro-dist/aro python3 Scripts/check-doc-examples.py
+
 # =============================================================================
 # The training pipeline's Python was never tested by CI (GitLab #803)
 # =============================================================================

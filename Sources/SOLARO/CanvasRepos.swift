@@ -66,6 +66,20 @@ struct RepoNodesLayer: View {
                     // taller card doesn't move the connection point.
                     .offset(x: p.x, y: p.y)
                     .gesture(dragGesture(id: repo.id, livePosition: p))
+                    // One element per repository (#770), with the row
+                    // count as its value so the reader hears how much
+                    // is in it only when they ask.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        CanvasAccessibility.repositoryLabel(
+                            name: repo.name,
+                            rowCount: repositoryRecords[repo.name]?.count))
+                    .accessibilityValue(
+                        repositoryValues[repo.name]?.value ?? "")
+                    .accessibilityHint("Double-tap to inspect this repository")
+                    .accessibilityAddTraits(
+                        selectedRepositoryName == repo.name
+                            ? [.isButton, .isSelected] : [.isButton])
             }
         }
     }

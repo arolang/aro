@@ -129,6 +129,42 @@ Sources/
 | 013 | `solaro` launcher CLI helps terminal users — no community chat plumbing |
 | 014 | Plugin loading happens at the `aro` CLI; SOLARO embeds the same loader code via `ARORuntime` |
 | 016 | `InspectorPane`, `CanvasView`, `ProjectMapView`, `OpenAPIPaletteView`, `TimeTravelView` all show honest empty states |
+| 017 | English-only interface, deliberately — see below |
+
+## ADR-017 — the interface is English only, for now
+
+**Decision.** SOLARO ships one language. There is no localisation
+infrastructure, no `.xcstrings` catalogue, and strings stay as literals
+in the views. New code does not need to reach for `String(localized:)`.
+
+**Why.** ARO's own keywords are English and are not translatable: a
+feature set is written `Create the <user> with <data>.` in every locale,
+and `aro check` says so in English. Translating the chrome around an
+untranslatable language buys a user very little, and it buys nothing at
+all to the one group this would plausibly serve — a developer reading
+ARO source is already reading English.
+
+**What this costs, said out loud.** Every literal added now is migration
+work later, and the count grows daily. That is accepted rather than
+overlooked: Swift's `LocalizedStringResource` makes the point-of-use
+cost of adopting this small enough that a future migration is a
+mechanical sweep, not a redesign. The decision to defer is therefore
+cheap to reverse, which is exactly why it is safe to make.
+
+**What would change it.** A localised ARO — keywords in another
+language, which ARO-0001 does not currently contemplate — or a concrete
+institutional requirement. Either would be a new ADR, not a quiet drift
+into half-translated screens.
+
+**What this is not.** It is not a statement about accessibility, which
+is a separate obligation and is being addressed (GitLab #770), and it is
+not licence to write strings that assume an English-speaking *locale*:
+dates, numbers and sort order still go through Foundation's formatters,
+which are locale-aware whether or not the words around them are
+translated.
+
+Recorded for GitLab #771, which asked for the decision to be made
+explicitly rather than left as an absence.
 
 ## Build / run / test
 

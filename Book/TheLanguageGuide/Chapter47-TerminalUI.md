@@ -102,7 +102,7 @@ expression; static text belongs outside the braces (Section 44.3).
 
 A filtered literal used to be a parse error — `Expected action verb …, but got
 string` — because classification required a `<` prefix
-([GitLab #568](https://git.ausdertechnik.de/arolang/aro/-/issues/568)). If you
+(GitLab #568). If you
 bound headings in the feature set to work around that, both spellings work now:
 
 ```aro
@@ -167,7 +167,7 @@ Total: {{ <tasks> | length }} tasks     (* elements in a collection *)
 
 `length` used to be missing from the table, and an unknown filter was skipped
 in silence — so `{{ <tasks> | length }}` printed the whole collection with no
-diagnostic ([GitLab #568](https://git.ausdertechnik.de/arolang/aro/-/issues/568)).
+diagnostic (GitLab #568).
 Counting in the feature set (`Compute the <task-count: length> from <tasks>.`)
 still works and is the better choice when the count is used more than once.
 

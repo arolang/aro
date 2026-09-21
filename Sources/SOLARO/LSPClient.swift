@@ -146,6 +146,29 @@ final class AROLSPClient {
         let character: Int     // 0-based — the editor doesn't track columns yet
     }
 
+    /// One entry from `textDocument/documentSymbol` (#764).
+    ///
+    /// Flattened rather than nested: the server may answer with either
+    /// the hierarchical `DocumentSymbol` shape or the older flat
+    /// `SymbolInformation` one, and every consumer here wants a list.
+    /// `containerName` keeps the parent's name so a statement still
+    /// reads as belonging to its feature set.
+    struct DocumentSymbol: Equatable, Identifiable {
+        let name: String
+        /// LSP `SymbolKind`, as the protocol's integer.
+        let kind: Int
+        let containerName: String?
+        let url: URL
+        let line: Int          // 1-based
+        let character: Int     // 0-based
+
+        var id: String { "\(url.path):\(line):\(character):\(name)" }
+
+        var location: DefinitionLocation {
+            DefinitionLocation(url: url, line: line, character: character)
+        }
+    }
+
     /// One row in a completion response. Mirrors the subset of
     /// `CompletionItem` we actually display: label, detail line,
     /// the text that gets inserted, and a kind for the icon. We
@@ -414,6 +437,64 @@ final class AROLSPClient {
         ])
     }
 
+    /// Send `textDocument/references` — every place a symbol is used.
+    ///
+    /// "Where is this event handled?" is the question an event-driven
+    /// language is built around, and it was the one navigation the IDE
+    /// could not answer (#764). The server has advertised
+    /// `referencesProvider` all along; nothing asked it.
+    ///
+    /// `includeDeclaration` is true because in ARO the declaration of a
+    /// feature set is usually what the reader wants to land on first.
+    func references(
+        url: URL,
+        line0: Int,
+        character0: Int,
+        includeDeclaration: Bool = true,
+        completion: @escaping ([DefinitionLocation]) -> Void
+    ) {
+        guard isReady else { completion([]); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            completion(Self.parseLocations(raw))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "textDocument/references",
+            "params": [
+                "textDocument": ["uri": url.absoluteString],
+                "position": ["line": line0, "character": character0],
+                "context": ["includeDeclaration": includeDeclaration],
+            ],
+        ])
+    }
+
+    /// Send `textDocument/documentSymbol`.
+    ///
+    /// The symbol palette builds its list locally from the parsed
+    /// programs, which works but means the IDE and the server can
+    /// disagree about what a file contains. Asking the server is the
+    /// answer that matches what go-to-definition will do.
+    func documentSymbols(
+        url: URL,
+        completion: @escaping ([DocumentSymbol]) -> Void
+    ) {
+        guard isReady else { completion([]); return }
+        let id = nextID
+        nextID += 1
+        pendingResults[id] = { raw in
+            completion(Self.parseDocumentSymbols(raw, url: url))
+        }
+        send(jsonObject: [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "textDocument/documentSymbol",
+            "params": ["textDocument": ["uri": url.absoluteString]],
+        ])
+    }
+
     /// Send `textDocument/hover` and call back with the textual
     /// content the server returned (Markdown or plain). Returns nil
     /// when the server has nothing to say at the position.
@@ -626,6 +707,78 @@ final class AROLSPClient {
             let kind = CompletionItem.Kind(rawValue: rawKind) ?? .text
             return CompletionItem(label: label, detail: detail,
                                   insertText: insertText, kind: kind)
+        }
+    }
+
+    /// `parseLocations`, reachable from tests.
+    static func parseLocationsForTesting(_ raw: Any?) -> [DefinitionLocation] {
+        parseLocations(raw)
+    }
+
+    /// Parse a `Location[]` — what `references` answers with.
+    private static func parseLocations(_ raw: Any?) -> [DefinitionLocation] {
+        guard let items = raw as? [[String: Any]] else { return [] }
+        return items.compactMap(parseLocation)
+    }
+
+    private static func parseLocation(_ dict: [String: Any]) -> DefinitionLocation? {
+        guard
+            let uri = dict["uri"] as? String,
+            let target = URL(string: uri),
+            let range = dict["range"] as? [String: Any],
+            let start = range["start"] as? [String: Any],
+            let l = start["line"] as? Int,
+            let c = start["character"] as? Int
+        else { return nil }
+        return DefinitionLocation(url: target, line: l + 1, character: c)
+    }
+
+    /// Parse either shape `documentSymbol` may answer with.
+    ///
+    /// The hierarchical `DocumentSymbol` carries `selectionRange` and
+    /// nests its children; the older `SymbolInformation` carries a
+    /// `location` and a flat `containerName`. Both are legal answers to
+    /// the same request, so both are read, and the result is flattened
+    /// either way.
+    static func parseDocumentSymbols(_ raw: Any?, url: URL) -> [DocumentSymbol] {
+        guard let items = raw as? [[String: Any]] else { return [] }
+        var out: [DocumentSymbol] = []
+        for item in items {
+            appendSymbol(item, url: url, container: nil, into: &out)
+        }
+        return out
+    }
+
+    private static func appendSymbol(_ item: [String: Any], url: URL,
+                                     container: String?,
+                                     into out: inout [DocumentSymbol]) {
+        guard let name = item["name"] as? String else { return }
+        let kind = item["kind"] as? Int ?? 0
+
+        // SymbolInformation: the position lives under `location`, and
+        // the file may not be the one that was asked about.
+        if let location = item["location"] as? [String: Any],
+           let parsed = parseLocation(location) {
+            out.append(DocumentSymbol(
+                name: name, kind: kind,
+                containerName: item["containerName"] as? String ?? container,
+                url: parsed.url, line: parsed.line, character: parsed.character))
+            return
+        }
+
+        // DocumentSymbol: `selectionRange` is the name itself, which is
+        // where a reader wants the caret; `range` is the whole body.
+        let range = (item["selectionRange"] as? [String: Any])
+            ?? (item["range"] as? [String: Any])
+        if let start = range?["start"] as? [String: Any],
+           let l = start["line"] as? Int,
+           let c = start["character"] as? Int {
+            out.append(DocumentSymbol(
+                name: name, kind: kind, containerName: container,
+                url: url, line: l + 1, character: c))
+        }
+        for child in (item["children"] as? [[String: Any]]) ?? [] {
+            appendSymbol(child, url: url, container: name, into: &out)
         }
     }
 

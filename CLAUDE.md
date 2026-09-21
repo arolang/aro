@@ -32,6 +32,8 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
+aro check -r ./Apps   # Check every application under a directory separately;
+                      # without -r a directory of applications is an error (#824)
 aro diff --graph main..my-branch          # Feature-graph diff: nodes, statements, wires
 aro diff --graph main..my-branch --html report.html   # Same comparison, two graphs side by side
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
@@ -109,6 +111,39 @@ MyApp/
 - At most ONE `Application-End: Success` and ONE `Application-End: Error` (both optional)
 - Feature sets are triggered by **events**, not direct calls
 - **Contract-First HTTP**: `openapi.yaml` is required for HTTP server (no contract = no server)
+
+**A directory of applications is not an application.** `aro run`, `aro build` and
+`aro check` all refuse a path holding several `Application-Start` feature sets in
+different subdirectories, and name one to point at instead. `aro check --recursive`
+checks each of them separately — without it, every `.aro` file under the path is
+pooled into one pseudo-application, so sibling applications appear to share feature
+sets and entry points (GitLab #824).
+
+### Importing another application (ARO-0005 §3)
+
+No imports are needed *within* an application. `import` is for pulling in a
+**separate** application's feature sets, and it is the one place a path appears in
+ARO source:
+
+```aro
+import ../ModuleA
+import ../ModuleB
+
+(Application-Start: Combined) {
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+The path is relative to the importing file's directory, and every feature set,
+type and published variable of the imported application becomes visible — so
+`Examples/ModulesExample/Combined` serves the routes whose handlers live in
+`ModuleA` and `ModuleB`. Remove the two lines and startup fails with "Missing
+ARO feature set handlers".
+
+It is resolved by `Application.resolveImports`; there are no visibility modifiers
+and no partial imports.
 
 ### Compilation Pipeline
 
@@ -206,7 +241,15 @@ paths:
 - `Extract the <data> from the <request: body>.`
 
 ### Happy Case
-Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
+Code contains only the happy case. Errors are handled by the runtime, which
+reconstructs the failed statement with its values:
+`Cannot retrieve the user from the user-repository where id = 530`.
+
+**A `Retrieve` that matches nothing is not one of those errors.** It binds an
+empty list (`ExtractAction.swift:860`); with a `where` clause matching exactly
+one row it binds that record rather than a one-element list. The only throw on
+that path is a repository that does not exist. Guard on the result — the
+statement does not fail for you (GitLab #835).
 
 Do not use it for production code, it is terribly insecure.
 
@@ -231,11 +274,18 @@ Do not use it for production code, it is terribly insecure.
 
 ### Action Semantic Roles
 
-Actions are classified by data flow direction:
+Five roles, classified by data flow direction. `aro actions` prints the live
+table and ARO-0004 §11 is generated from it — prefer either over this summary:
+
 - **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
-- **RESPONSE** (Return, Throw): Internal → External
-- **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
+- **RESPONSE** (Return, Throw, **Store, Log, Send, Write**, Render): Internal → External
+- **EXPORT** (Publish, Emit, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
+- **SERVER** (Start, Stop, Listen, Connect, Close, WaitForEvents): Service lifecycle
+
+`Store`, `Log`, `Send` and `Write` read as exports and declare `.response`. That
+is a known, deliberate inconsistency (GitLab #480, ARO-0004 §2.4), not a typo to
+fix here — roles drive data-flow analysis, so changing one changes behaviour.
 
 ### Statement Execution (ARO-0088)
 
@@ -330,8 +380,13 @@ logic.
     Return an <OK: status> with <result>.
 }
 
-(* Call site uses the same shape as plugin actions: *)
-Application.SumAndDouble the <res> from { a: 3, b: 4 }.
+(* Call site uses the same shape as plugin actions. `SumAndDouble` declares
+   no `takes`, so the argument object goes through `with`, not `from`. *)
+(Application-Start: Demo) {
+    Application.SumAndDouble the <res> with { a: 3, b: 4 }.
+    Log <res> to the <console>.
+    Return an <OK: status> for the <startup>.
+}
 ```
 
 `takes <name>` is sugar for a single positional argument extracted as
@@ -382,6 +437,22 @@ MyApp/
         ├── plugin.yaml      # Plugin manifest (required)
         └── src/             # Source files
 ```
+
+**`Plugins/` is the only plugin directory** (GitLab #848). A lowercase
+`plugins/` is still read, with a deprecation warning, and will stop being read.
+
+The two were never interchangeable, which is why this is worth a paragraph.
+They used to be handled by two different loaders: `loadManagedPlugins` read
+`Plugins/` and required one subdirectory per plugin with a `plugin.yaml` — the
+layout `aro add` installs and `aro new plugin` scaffolds — while `loadPlugins`
+read lowercase `plugins/` and took loose `.swift` files, prebuilt libraries and
+bare Swift packages with no manifest. On macOS and Windows those are the same
+directory, so both loaders walked it and one of them succeeded; on Linux they
+are two, and only the matching one ran. A project therefore loaded a different
+set of plugins depending on the developer's filesystem.
+
+One directory is resolved now, and every layout above is loaded from it. Use
+`Plugins/` with a manifest for anything new.
 
 ### Key Files
 
@@ -438,7 +509,14 @@ provides:
 The root-level `handle:` field (PascalCase) is the canonical way to declare the namespace.
 - Qualifiers are accessed as `handle.qualifier` (e.g., `Collections.pick-random`)
 - Actions are invoked as `Handle.Verb` (e.g., `Markdown.ToHTML`)
-- The legacy `handler:` inside `provides:` still works but emits a deprecation warning
+- The legacy `handler:` inside `provides:` still works but emits a deprecation
+  warning — including when a root-level `handle:` is also present, which it did
+  not before (GitLab #825). If the two name different namespaces, the root-level
+  one wins and the warning says so.
+- A plugin whose **code** declares a handle that disagrees with its manifest
+  warns too. The manifest wins, because it is what the loader reads and what
+  `aro add` writes; it used to win silently, so a plugin could ship every
+  qualifier under a namespace its own source never mentioned.
 
 Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
 The runtime automatically registers them as `handle.qualifier` in `QualifierRegistry`.
@@ -449,24 +527,76 @@ The runtime automatically registers them as `handle.qualifier` in `QualifierRegi
 
 ### Binary Mode Support
 
-Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes:
-- During `aro build`, plugins in `Plugins/` are compiled and bundled
-- Swift/C plugins are compiled to dynamic libraries
-- Python plugins are copied with their source files
-- Native plugins are linked INTO the binary, their symbols renamed
-  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
-  Python plugins ship as source beside it
+Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes,
+but the two link modes bundle them differently — and the choice is resolved once, in
+`BuildCommand`, before plugins are compiled, so the plugin stage knows which build it
+is in (GitLab #815).
+
+**`--static` (the default) bakes native plugins in.** A Swift package plugin is built
+with `swift build -c release` if nothing built it already, C sources are compiled, and
+a Rust crate gets a `staticlib`; the resulting `.o` files are linked INTO the binary
+with their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexist
+(`Linker.swift`). No `dlopen` at run time.
+
+**`--dynamic` ships the plugin's shared library beside the binary** and loads it at
+startup the way the interpreter does. Nothing is baked in, and no object files are
+needed.
+
+**Python plugins cannot be made standalone** (GitLab #608). They need a CPython
+interpreter and its standard library at run time, and the build resolves both from the
+*build* machine — an absolute path to a framework or `libpython`, plus that machine's
+`sys.prefix`. So `aro build --static` refuses one, naming the plugin and the exact
+Python installation it would have depended on; `--dynamic` builds it with a warning
+saying the same, because that mode never promised a single file.
+`ARO_ALLOW_EMBEDDED_PYTHON=1` builds anyway, for people who build on the machine that
+will run it.
+
+Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
+the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
+from that rather than probing the loader, which answers a different question
+(GitLab #618).
 
 ## ARO Syntax
 
+<!-- aro-check: skip — the shape of a feature set, with placeholder names -->
 ```aro
 (Feature Name: Business Activity) {
+    Require the <token> from the <environment>.
     Extract the <result: qualifier> from the <source: qualifier>.
     Compute the <output> for the <input>.
     Return an <OK: status> for a <valid: result>.
-    Publish as <alias> <variable>.
+    Publish as <alias> <output>.
 }
 ```
+
+### Statements that are not actions
+
+Four forms are part of the grammar rather than the action registry, so they have
+no role, no prepositions, and no entry in `aro actions` — which explains them
+instead of reporting "no action named" (GitLab #828):
+
+| Form | Meaning |
+|------|---------|
+| `Publish as <alias> <variable>.` | Makes a variable visible to other feature sets in the same business activity |
+| `Require the <name> from the <source>.` | Declares an external dependency (below) |
+| `match <noun> { case <pattern> { … } otherwise { … } }` | Branches on a value; the first matching case wins |
+| `Break.` | Leaves the innermost loop |
+
+**`Require`** names something the feature set expects to be there, and the source
+decides who provides it:
+
+```aro
+Require the <console> from the <framework>.      (* provided by the runtime *)
+Require the <API_TOKEN> from the <environment>.  (* binds that environment variable *)
+Require the <settings> from the <ConfigLoader>.  (* expects that feature set to Publish it *)
+```
+
+`framework` is a no-op that documents the dependency. `environment` binds the
+variable of that name, and reading it when the variable is unset fails the
+statement in the usual way. Any other source names a feature set, and `aro check`
+warns when nothing publishes that symbol — the one case where the warning is the
+point. The source name is a single identifier, so a multi-word feature set cannot
+be named here.
 
 Application lifecycle handlers:
 ```aro
@@ -618,13 +748,13 @@ Commit the <result> to the <git> with "feat: add feature".
 Pull the <updates> from the <git>.
 Push the <result> to the <git>.
 
-(* Branching and tagging *)
-Checkout the <branch> from the <git> with "feature/new".
+(* Branching and tagging — a new name, because <branch> is already bound *)
+Checkout the <switched> from the <git> with "feature/new".
 Tag the <release> for the <git> with "v1.0.0".
 
 (* Clone — optional `branch:` checks out that ref at clone time *)
 Clone the <repo> from the <git> with { url: "https://github.com/user/repo.git", path: "./cloned" }.
-Clone the <repo> from the <git> with { url: "...", path: "./cloned", branch: "develop" }.
+Clone the <repo-on-develop> from the <git> with { url: "...", path: "./other", branch: "develop" }.
 ```
 
 | Action | Verb | Role | Prepositions |
@@ -702,6 +832,15 @@ Sources/
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
 Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
+│                       #
+│                       # plan.md is the canonical description of an example:
+│                       # 100 of the 110 have one, and it is the prompt the
+│                       # example was written from. expected.txt is its
+│                       # executable contract, and test.hint tells the
+│                       # integration harness how (or whether) to run it.
+│                       # README.md is optional narrative — 40 have one — and
+│                       # is the layer that goes stale, so when they disagree,
+│                       # plan.md and expected.txt win (GitLab #818).
 │
 │   # Getting Started
 ├── HelloWorld/         # Minimal single-file example
@@ -857,7 +996,7 @@ The `Proposals/` directory contains language specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
-| **0011 HTML/XML Parsing** | Parse action for HTML/XML documents |
+| **0011 HTML Parsing** | Parse action for HTML documents (XML is a sketch) |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |
@@ -887,7 +1026,7 @@ The `Proposals/` directory contains language specifications:
 | **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 | **0082 Numeric Separators** | Underscores in decimal literals (supersedes 0056) |
 | **0083 Terminal UI** | Terminal UI system |
-| **0084 Local LLM** | `aro lm` (superseded by `aro ask`) |
+| **0084 Local LLM** | `aro lm` (superseded by `aro ask`, ARO-0092) |
 | **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
@@ -895,6 +1034,7 @@ The `Proposals/` directory contains language specifications:
 | **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
+| **0092 `aro ask` Assistant** | Local model, tool registry, approval model, `.context` |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab

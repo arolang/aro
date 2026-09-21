@@ -203,7 +203,7 @@ public struct StreamAction: ActionImplementation {
         if source.hasPrefix("/") {
             fileURL = URL(fileURLWithPath: source)
         } else {
-            fileURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            fileURL = URL(fileURLWithPath: AROWorkingDirectory.base)
                 .appendingPathComponent(source)
         }
 

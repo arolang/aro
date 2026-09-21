@@ -154,6 +154,11 @@ enum KeybindingRegistry {
                           category: .navigation,
                           defaultKey: "p",
                           defaultModifiers: [.command]),
+        KeybindingCommand(id: "navigation.findReferences",
+                          displayName: "Find References",
+                          category: .navigation,
+                          defaultKey: "f",
+                          defaultModifiers: [.control, .command, .shift]),
         KeybindingCommand(id: "navigation.findInProject",
                           displayName: "Find in Project",
                           category: .search,
@@ -264,6 +269,39 @@ enum KeybindingRegistry {
                           defaultKey: "u",
                           defaultModifiers: [.command, .shift]),
         // Run
+        //
+        // Run, Debug and Stop had their shortcuts hardcoded on the menu
+        // items instead of living here (#762), so they worked but could
+        // not be remapped and did not appear in the Settings table —
+        // which is where a user goes to find out what the app's keys
+        // are. The defaults are the ones they already had: ⌘R for run
+        // (Xcode's), ⌘Y for debug, and ⌘. for stop, which is the
+        // standard macOS cancel.
+        KeybindingCommand(id: "run.play",
+                          displayName: "Run",
+                          category: .run,
+                          defaultKey: "r",
+                          defaultModifiers: [.command]),
+        KeybindingCommand(id: "run.debug",
+                          displayName: "Debug",
+                          category: .run,
+                          defaultKey: "y",
+                          defaultModifiers: [.command]),
+        KeybindingCommand(id: "run.stop",
+                          displayName: "Stop",
+                          category: .run,
+                          defaultKey: ".",
+                          defaultModifiers: [.command]),
+        KeybindingCommand(id: "run.build",
+                          displayName: "Build",
+                          category: .run,
+                          defaultKey: "b",
+                          defaultModifiers: [.command]),
+        KeybindingCommand(id: "run.check",
+                          displayName: "Check",
+                          category: .run,
+                          defaultKey: "k",
+                          defaultModifiers: [.command, .shift]),
         KeybindingCommand(id: "run.tests",
                           displayName: "Run Tests",
                           category: .run,
@@ -335,7 +373,9 @@ enum KeybindingRegistry {
 final class KeybindingStore {
     static let shared = KeybindingStore(defaults: .standard)
 
-    private static let defaultsKey = "solaro.keybindings.overrides"
+    /// Where overrides are stored. The key itself now lives in
+    /// `SolaroPrefs` so the app can enumerate what it persists (#776).
+    private static let defaultsKey = SolaroPrefs.keybindingOverrides.rawValue
 
     private(set) var overrides: [String: KeybindingBinding]
 

@@ -102,20 +102,60 @@ struct EntryPointCheckTests {
             declaration("Application-Start", "ModuleA", group: "ModuleA"),
             declaration("Application-Start", "ModuleB", group: "ModuleB"),
             declaration("Application-Start", "Combined", group: "Combined"),
-        ]) == .separateApplications(groups: ["Combined", "ModuleA", "ModuleB"]))
+        ]) == .separateApplications(
+            groups: ["Combined", "ModuleA", "ModuleB"],
+            multipleWithin: []
+        ))
     }
 
-    @Test("A mix of grouped and ungrouped entry points is an error, not a directory")
-    func mixedGroupingIsAnError() {
-        // Two in one group and one in another is not "three applications".
-        let result = EntryPointCheck.classify([
+    @Test("A group with two entry points among others is still a directory of applications")
+    func mixedGroupingIsADirectory() {
+        // Two in one group and one in another is not "three applications" —
+        // it is two, one of which has two entry points. Saying "one
+        // application with three" was wrong in a way that got worse with
+        // scale: `aro check ./Examples` answered "111 Application-Start
+        // feature sets" and listed all 111, because one of its 109
+        // applications is itself a directory of three (GitLab #824).
+        #expect(EntryPointCheck.classify([
             declaration("Application-Start", "One", group: "sources"),
             declaration("Application-Start", "Two", group: "sources"),
             declaration("Application-Start", "Three", group: "other"),
+        ]) == .separateApplications(
+            groups: ["other", "sources"],
+            multipleWithin: ["sources"]
+        ))
+    }
+
+    @Test("A directory of applications names the ones that are themselves broken")
+    func multipleWithinIsReported() {
+        // The caller needs both halves: which subdirectories to check, and
+        // which of them will complain when checked.
+        let result = EntryPointCheck.classify([
+            declaration("Application-Start", "A", group: "a"),
+            declaration("Application-Start", "B1", group: "b"),
+            declaration("Application-Start", "B2", group: "b"),
+            declaration("Application-Start", "C1", group: "c"),
+            declaration("Application-Start", "C2", group: "c"),
         ])
-        guard case .multiple = result else {
+        #expect(result == .separateApplications(
+            groups: ["a", "b", "c"],
+            multipleWithin: ["b", "c"]
+        ))
+    }
+
+    @Test("Two entry points in one group, with no other group, stays a broken application")
+    func singleGroupWithTwoIsStillMultiple() {
+        // The narrowing that matters: grouping only decides "directory of
+        // applications" when there is more than one group. One group with two
+        // entry points is the case `aro run` rejects, and must stay .multiple.
+        let result = EntryPointCheck.classify([
+            declaration("Application-Start", "One", group: "sources"),
+            declaration("Application-Start", "Two", group: "sources"),
+        ])
+        guard case .multiple(let starts) = result else {
             return #expect(Bool(false), "expected .multiple, got \(result)")
         }
+        #expect(starts.count == 2)
     }
 
     // MARK: - The name the rule is about

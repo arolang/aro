@@ -228,10 +228,19 @@ Error messages also adapt to context:
 
 ```json
 {
-  "error": "Cannot retrieve the user from the user-repository where id = 999",
-  "status": 404
+  "error": "Cannot retrieve the user from the user-repository where id = 999"
 }
 ```
+
+The status is the HTTP status line, not a body field. Both execution paths emit
+exactly `{"error": "…"}` for a runtime failure — `Application.swift:531` and
+`Bridge/ServiceBridge.swift:1446` — which is the shape ARO-0006 specifies. This
+section carried a second `"status"` key until GitLab #831.
+
+A handful of specific failures add a second key, and it is always `message` or
+`path`, never `status`: `{"error":"Not Found","message":"…"}` for a missing
+template, `{"error":"Bad Request","message":"…"}` for OpenAPI validation, and
+`{"error":"Not Found","path":"…"}` for an unrouted request.
 
 ### 6.2 Human Context
 

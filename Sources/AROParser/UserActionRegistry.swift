@@ -156,33 +156,13 @@ public struct UserActionRegistry: Sendable, Equatable {
     public func closestNames(to name: String, limit: Int = 3) -> [String] {
         var scored: [(name: String, distance: Int)] = []
         for candidate in actions.keys {
-            let distance = Self.editDistance(candidate.lowercased(), name.lowercased())
+            let distance = EditDistance.levenshtein(candidate.lowercased(), name.lowercased())
             if distance <= 2 { scored.append((candidate, distance)) }
         }
         scored.sort { lhs, rhs in
             lhs.distance == rhs.distance ? lhs.name < rhs.name : lhs.distance < rhs.distance
         }
         return scored.prefix(limit).map(\.name)
-    }
-
-    /// Plain Levenshtein distance over Characters.
-    private static func editDistance(_ a: String, _ b: String) -> Int {
-        let x = Array(a), y = Array(b)
-        if x.isEmpty { return y.count }
-        if y.isEmpty { return x.count }
-
-        var previous = Array(0...y.count)
-        var current = [Int](repeating: 0, count: y.count + 1)
-
-        for i in 1...x.count {
-            current[0] = i
-            for j in 1...y.count {
-                let substitution = previous[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1)
-                current[j] = Swift.min(previous[j] + 1, current[j - 1] + 1, substitution)
-            }
-            swap(&previous, &current)
-        }
-        return previous[y.count]
     }
 }
 

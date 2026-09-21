@@ -131,4 +131,4 @@ Unit tests verify:
 ## Related
 
 - ARO-0001: Language Fundamentals (defines lexical structure)
-- [GitHub Issue #96](https://git.ausdertechnik.de/arolang/aro/-/issues/96)
+- GitLab #96

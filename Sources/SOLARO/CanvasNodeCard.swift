@@ -59,6 +59,32 @@ struct CanvasNodeCard: View {
                                 paused: !isPulseLive)) { context in
             cardContent(at: context.date)
         }
+        // One element per statement (#770). The card's insides are a
+        // rail, a verb chip, a summary, a line number and up to three
+        // state glyphs; read separately they are noise, and read as one
+        // sentence they are the statement.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityValue(accessibilityLiveValue ?? "")
+        .accessibilityHint(CanvasAccessibility.nodeHint)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected]
+                                           : [.isButton])
+    }
+
+    private var accessibilityDescription: String {
+        CanvasAccessibility.nodeLabel(
+            summary: node.summaryDisplay,
+            line: node.lineHint,
+            isPaused: isPaused,
+            hasBreakpoint: hasBreakpoint,
+            hasExecuted: lastExecutedAt != nil,
+            errorMessage: errorMessage)
+    }
+
+    /// Live bindings, read only when the reader asks for the value.
+    private var accessibilityLiveValue: String? {
+        CanvasAccessibility.nodeValue(
+            symbols: symbols.map { ($0.name, $0.value) })
     }
 
     @ViewBuilder

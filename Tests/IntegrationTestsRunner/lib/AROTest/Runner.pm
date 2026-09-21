@@ -26,6 +26,7 @@ use AROTest::Normalize qw(normalize_output normalize_dict_literals);
 use AROTest::Match qw(matches_pattern check_output_occurrences);
 use AROTest::Reporting qw(print_summary create_diff_file _emit_result_line);
 use AROTest::Pool qw(run_pool requires_serial_run);
+use AROTest::Ports qw(http_port socket_port);
 use AROTest::Executor::Console qw(run_console_example_internal);
 use AROTest::Executor::HTTP qw(run_http_example_internal);
 use AROTest::Executor::Socket qw(run_socket_example_internal run_socket_client_example_internal);
@@ -161,6 +162,14 @@ sub run_single_mode_test {
         # Set ARO_BIN environment variable for test-script to use
         my $aro_bin = find_aro_binary();
         local $ENV{ARO_BIN} = $aro_bin;
+
+        # A test-script starts its own servers, so it needs a port the same way
+        # a console example does. Without this it binds whatever its contract
+        # says -- 8080 for FileUpload -- and collides with any other example in
+        # the parallel pool doing the same (GitLab #829). The script decides how
+        # to use it; FileUpload exports it onward to the servers it launches.
+        local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // http_port(8080);
+        local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // socket_port(9000);
 
         my ($test_out, $test_err, $exit_code) = run_script(
             $hints->{'test-script'},
