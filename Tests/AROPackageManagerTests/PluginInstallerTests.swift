@@ -52,19 +52,31 @@ struct PluginInstallerTests {
             to: repoDir.appendingPathComponent("features/placeholder.aro"),
             atomically: true, encoding: .utf8)
 
-        func git(_ args: [String]) throws {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["git", "-C", repoDir.path] + args
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
-            try process.run()
-            process.waitUntilExit()
-        }
-        try git(["init", "-q"])
-        try git(["-c", "user.email=t@t", "-c", "user.name=t", "add", "-A"])
+        try git(["init", "-q"], in: repoDir)
+        try git(["-c", "user.email=t@t", "-c", "user.name=t", "add", "-A"], in: repoDir)
         try git(["-c", "user.email=t@t", "-c", "user.name=t",
-                 "commit", "-qm", "plugin"])
+                 "commit", "-qm", "plugin"], in: repoDir)
+    }
+
+    private func git(_ args: [String], in repoDir: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git", "-C", repoDir.path] + args
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+    }
+
+    /// Move the upstream repository on by one commit so an `update` has
+    /// something to pull.
+    private func commitAnotherChange(in repoDir: URL) throws {
+        try "(* second *)\n".write(
+            to: repoDir.appendingPathComponent("features/second.aro"),
+            atomically: true, encoding: .utf8)
+        try git(["-c", "user.email=t@t", "-c", "user.name=t", "add", "-A"], in: repoDir)
+        try git(["-c", "user.email=t@t", "-c", "user.name=t",
+                 "commit", "-qm", "second"], in: repoDir)
     }
 
     private func makeTempDir(_ label: String) throws -> URL {
@@ -114,6 +126,67 @@ struct PluginInstallerTests {
         #expect(installedManifest.handle == "Stats")
         // The rewrite's actual purpose still happens: source info added.
         #expect(installedManifest.source?.git?.contains(repo.lastPathComponent) == true)
+    }
+
+    /// `update` rebuilt the manifest field by field and left `handle:` off the
+    /// list, so a plugin's qualifier namespace silently changed the first time
+    /// the user updated it and `Collections.pick-random` stopped resolving
+    /// (GitLab #661). Both rewrites now go through `PluginManifest.with(source:)`.
+    @Test("The handle survives an install/update round trip")
+    func handleSurvivesUpdate() throws {
+        let root = try makeTempDir("update-handle")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("repo")
+        try makePluginRepo(at: repo, name: "handled-plugin", handle: "Stats")
+
+        let pluginsDir = root.appendingPathComponent("Plugins")
+        let installer = PluginInstaller(directory: pluginsDir)
+        let installed = try installer.install(from: "file://\(repo.path)")
+
+        let manifestPath = installed.path.appendingPathComponent("plugin.yaml")
+        #expect(try PluginManifest.parse(from: manifestPath).handle == "Stats")
+
+        // Move the upstream repository on so there is something to pull.
+        try commitAnotherChange(in: repo)
+
+        let result = try installer.update(name: "handled-plugin")
+        #expect(result.name == "handled-plugin")
+
+        let afterUpdate = try PluginManifest.parse(from: manifestPath)
+        #expect(afterUpdate.handle == "Stats")
+        // The rewrite's actual purpose still happens.
+        #expect(afterUpdate.source?.commit == result.newCommit)
+        // And nothing else was dropped on the way through.
+        #expect(afterUpdate.description == "test plugin")
+        #expect(afterUpdate.license == "MIT")
+        #expect(afterUpdate.provides.count == 1)
+    }
+
+    @Test("with(source:) preserves every field but the source")
+    func withSourcePreservesEveryField() throws {
+        let original = PluginManifest(
+            name: "plugin-collection",
+            version: "2.3.4",
+            handle: "Collections",
+            description: "collection helpers",
+            author: "Someone",
+            license: "MIT",
+            aroVersion: ">=1.0.0",
+            source: SourceInfo(git: "https://example.com/old.git", ref: "v1", commit: "old"),
+            provides: [ProvideEntry(type: .aroFiles, path: "features/")],
+            dependencies: ["other": DependencySpec(git: "https://example.com/other.git", ref: "main")],
+            system: ["libsqlite3"],
+            build: BuildConfig(swift: SwiftBuildConfig(minimumVersion: "5.9"))
+        )
+
+        let stamped = original.with(source: SourceInfo(git: "https://example.com/new.git", ref: "v2", commit: "new"))
+
+        #expect(stamped.source?.commit == "new")
+        // Everything else must come through untouched. Comparing the whole
+        // value — with the source put back — catches a field added later and
+        // forgotten here, which is the shape of the original bug.
+        #expect(stamped.with(source: original.source) == original)
     }
 
     @Test("A second install of the same plugin is refused by manifest name")
