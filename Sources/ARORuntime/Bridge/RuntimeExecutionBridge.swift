@@ -42,17 +42,23 @@ public func aro_context_create(_ runtimePtr: UnsafeMutableRawPointer?) -> Unsafe
 /// - Parameters:
 ///   - runtimePtr: Runtime handle
 ///   - name: Feature set name (C string)
+///   - activity: Business activity (C string, may be null) — carried so a
+///     compiled error reports the same frame as the interpreter (GitLab #692)
 /// - Returns: Opaque pointer to context handle
 @_cdecl("aro_context_create_named")
 public func aro_context_create_named(
     _ runtimePtr: UnsafeMutableRawPointer?,
-    _ name: UnsafePointer<CChar>?
+    _ name: UnsafePointer<CChar>?,
+    _ activity: UnsafePointer<CChar>?
 ) -> UnsafeMutableRawPointer? {
     guard let ptr = runtimePtr else { return nil }
     let featureSetName = name.map { String(cString: $0) } ?? "compiled"
+    let businessActivity = activity.map { String(cString: $0) } ?? ""
 
     let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
-    let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: featureSetName)
+    let contextHandle = AROCContextHandle(runtime: runtimeHandle,
+                                          featureSetName: featureSetName,
+                                          businessActivity: businessActivity)
     let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
 
     handleLock.lock()

@@ -1712,9 +1712,10 @@ public final class LLVMCodeGenerator {
 
             // Create context for this Application-Start
             let contextName = ctx.stringConstant(isMain ? "Application-Start" : "Application-Start:\(activity)")
+            let activityStr = ctx.stringConstant(activity)
             let appCtx = ctx.module.insertCall(
                 externals.contextCreateNamed,
-                on: [runtime, contextName],
+                on: [runtime, contextName, activityStr],
                 at: ip
             )
 
@@ -1755,9 +1756,10 @@ public final class LLVMCodeGenerator {
             let endFuncName = applicationEndFunctionName(endHandler.featureSet.businessActivity)
             if let endFunc = ctx.module.function(named: endFuncName) {
                 let endContextName = ctx.stringConstant("Application-End")
+                let endActivity = ctx.stringConstant(endHandler.featureSet.businessActivity)
                 let endCtx = ctx.module.insertCall(
                     externals.contextCreateNamed,
-                    on: [runtime, endContextName],
+                    on: [runtime, endContextName, endActivity],
                     at: ip
                 )
                 _ = ctx.module.insertCall(endFunc, on: [endCtx], at: ip)

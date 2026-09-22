@@ -208,10 +208,10 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr], returning: ptr)
         )
 
-        // ptr @aro_context_create_named(ptr, ptr)
+        // ptr @aro_context_create_named(ptr name, ptr activity) — GitLab #692
         _contextCreateNamed = ctx.module.declareFunction(
             "aro_context_create_named",
-            types.functionType(parameters: [ptr, ptr], returning: ptr)
+            types.functionType(parameters: [ptr, ptr, ptr], returning: ptr)
         )
 
         // ptr @aro_context_create_child(ptr, ptr)

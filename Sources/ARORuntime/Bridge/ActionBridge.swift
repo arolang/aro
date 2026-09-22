@@ -227,10 +227,49 @@ private func executeAction(
     ctxHandle.context.unbind("_expression_")
     ctxHandle.context.unbind("_literal_")
 
-    // If action failed, store error in context
-    // Error will be printed by the error block's aro_context_print_error call
+    // If action failed, store error in context.
+    //
+    // Wrapped in an `AROError` carrying the statement, exactly as
+    // `FeatureSetExecutor` does for the interpreter (GitLab #692). Storing the
+    // bare message meant a compiled binary printed whatever Foundation said —
+    //
+    //   Runtime error: Error Domain=NSCocoaErrorDomain Code=642 "You can't
+    //   save the file …" UserInfo={NSFilePath=…}
+    //
+    // where `aro run` printed
+    //
+    //   Runtime Error: Cannot write the _sink_ to the file: /nope/out.txt.
+    //     Feature: … / Business Activity: … / Statement: …
+    //
+    // "The code is the error message" (ARO-0006) is a language promise, and
+    // the compiled half was leaking a Swift type name and dropping the frame
+    // that says which statement failed.
     if !actionResult.succeeded, let errorMsg = actionResult.error {
-        ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
+        // A `Throw` already carries ARO's own shape — the formatter
+        // reconstructs `Cannot throw the <Type> for the <reason> when
+        // <condition>` from it. Wrapping that would replace a message the
+        // language composed with one composed from descriptors, losing the
+        // guard clause. Everything else has no shape of its own and gets one.
+        if parseThrowErrorMessage(errorMsg) != nil {
+            ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
+        } else {
+        ctxHandle.context.setExecutionError(
+            ActionError.statementFailed(AROError.fromStatement(
+                // Capitalised to match the interpreter, which renders the verb
+                // as the statement wrote it; the bridge only has the canonical
+                // lowercase form.
+                verb: verb.prefix(1).uppercased() + verb.dropFirst(),
+                result: resultDesc.fullName,
+                preposition: objectDesc.preposition.rawValue,
+                object: objectDesc.fullName,
+                featureSet: ctxHandle.context.featureSetName,
+                businessActivity: ctxHandle.context.businessActivity
+                // No `hint:`. The underlying message is whatever Foundation
+                // said — an `NSCocoaErrorDomain` dump with a file URL in it —
+                // and appending it is the leak this fix removes. The
+                // interpreter adds only its own curated hints.
+            )))
+        }
     }
 
     // GitLab #495: an immutable rebind the action attempted internally was
