@@ -63,7 +63,7 @@ Almost everything else is macOS and Linux. Tracked by #203 and #679–#701.
 | Socket client (`Connect`) | yes | yes | **missing** (#681) |
 | HTTP server | SwiftNIO | SwiftNIO | FlyingFox: no body streaming, no WebSocket |
 | Git actions (ARO-0080) | yes | yes | **whole module compiled out** (#683) |
-| `Exec` / `Shell` / `Run` | yes | yes | **hard-codes `/bin/sh` and `/usr/bin/env`** (#682) |
+| `Exec` / `Shell` / `Run` | yes | yes | `%COMSPEC% /c`; bare executables resolved with `where.exe` (#682) |
 | `aro lsp`, `aro mcp`, `aro ask`, `aro kernel` | yes | yes | **not registered as subcommands** (#701) |
 | File monitor | FSEvents | inotify | 1 s polling |
 | Terminal UI | full | full | Windows Terminal only; **hidden prompt echoes the password** (#699) |
