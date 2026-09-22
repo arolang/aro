@@ -12,6 +12,11 @@ public struct AskSessionConfig: Sendable {
     public var autoApproveAll: Bool
     public var maxToolCallRounds: Int
     public var temperature: Double
+    /// Nucleus mass and top-k cutoff (GitLab #877). Defaults tuned for
+    /// generating a language with a closed vocabulary — see
+    /// `SamplingDefaults.aroCoding`.
+    public var topP: Double
+    public var topK: Int
     public var skipMCP: Bool
     /// File the user currently has open (editor focus). Its fresh content
     /// is injected into every request as a transient context block — never
@@ -31,7 +36,9 @@ public struct AskSessionConfig: Sendable {
         model: String = "ARO-Lang/aro-coder-6bit",
         autoApproveAll: Bool = false,
         maxToolCallRounds: Int = 25,
-        temperature: Double = 0.2,
+        temperature: Double = SamplingDefaults.aroCoding.temperature,
+        topP: Double = SamplingDefaults.aroCoding.topP,
+        topK: Int = SamplingDefaults.aroCoding.topK,
         skipMCP: Bool = false,
         focusFile: URL? = nil,
         quiet: Bool = false,
@@ -42,6 +49,8 @@ public struct AskSessionConfig: Sendable {
         self.autoApproveAll = autoApproveAll
         self.maxToolCallRounds = maxToolCallRounds
         self.temperature = temperature
+        self.topP = topP
+        self.topK = topK
         self.skipMCP = skipMCP
         self.focusFile = focusFile
         self.quiet = quiet
@@ -480,7 +489,9 @@ public actor AskSession {
                 tools: tools.isEmpty ? nil : tools,
                 temperature: config.temperature,
                 stream: false,
-                maxTokens: allowance
+                maxTokens: allowance,
+                topP: config.topP,
+                topK: config.topK
             )
             var reply = try await backend.chat(request: request)
 
@@ -540,7 +551,9 @@ public actor AskSession {
                     messages: await requestMessages(from: retryMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let retryReply = try await backend.chat(request: retryRequest)
                 if Self.isVerbose, let raw = retryReply.content, !raw.isEmpty {
@@ -593,7 +606,9 @@ public actor AskSession {
                     messages: await requestMessages(from: directiveMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let directiveReply = try await backend.chat(request: directiveRequest)
                 if Self.isVerbose, let raw = directiveReply.content, !raw.isEmpty {
@@ -646,7 +661,9 @@ public actor AskSession {
                     messages: await requestMessages(from: nudgeMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let nudgeReply = try await backend.chat(request: nudgeRequest)
                 if Self.isVerbose, let raw = nudgeReply.content, !raw.isEmpty {
@@ -1157,7 +1174,9 @@ public actor AskSession {
                 messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: temp,
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
             let reply = try await backend.chat(request: request)
             let repairStripped = stripThinking(reply.content ?? "").text
@@ -1294,7 +1313,9 @@ public actor AskSession {
             ],
             tools: nil,
             temperature: 0.1,
-            stream: false
+            stream: false,
+            topP: SamplingDefaults.aroCoding.topP,
+            topK: SamplingDefaults.aroCoding.topK
         )
 
         let summaryReply = try await backend.chat(request: summaryRequest)
@@ -1490,7 +1511,9 @@ public actor AskSession {
                 ],
                 tools: nil,
                 temperature: 0.2,
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
 
             guard let reply = try? await backend.chat(request: request),
@@ -1610,7 +1633,9 @@ public actor AskSession {
                 // line five times. Retrying is only worth the tokens if the
                 // next sample can differ.
                 temperature: min(0.7, 0.2 + Double(attempt - 1) * 0.15),
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
 
             let reply = try await backend.chat(request: request)

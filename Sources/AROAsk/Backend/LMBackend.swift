@@ -73,10 +73,17 @@ public struct LMChatRequest: Codable, Sendable {
     /// exceeding the window is no answer at all. `nil` leaves each backend's
     /// own default in place.
     public var maxTokens: Int?
+    /// Nucleus mass kept after truncation (GitLab #877). `nil` leaves the
+    /// backend's own default.
+    public var topP: Double?
+    /// Top-k cutoff applied before sampling (GitLab #877).
+    public var topK: Int?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, tools, temperature, stream
         case maxTokens = "max_tokens"
+        case topP = "top_p"
+        case topK = "top_k"
     }
 }
 

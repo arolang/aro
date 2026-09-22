@@ -205,10 +205,13 @@ public actor NativeMLXBackend: LMBackend {
         // not enough headroom and the model frequently got cut off mid-
         // `<think>` with no visible output. Qwen3-Coder's context window
         // is 32k+, so 16k of output budget is safe.
+        // From the caller where it said, from the shared defaults otherwise
+        // (GitLab #877) — so the three backends stop decoding differently.
         var genParams = GenerateParameters(
-            temperature: Float(request.temperature ?? 0.2),
-            topP: 0.9
+            temperature: Float(request.temperature ?? SamplingDefaults.aroCoding.temperature),
+            topP: Float(request.topP ?? SamplingDefaults.aroCoding.topP)
         )
+        genParams.topK = request.topK ?? SamplingDefaults.aroCoding.topK
         // The caller's reservation where it set one (GitLab #869), which is
         // how a prompt near the window still gets an answer instead of an
         // overflow; 16 384 otherwise, for the reason above.
