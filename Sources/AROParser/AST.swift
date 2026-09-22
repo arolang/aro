@@ -82,6 +82,16 @@ public struct FeatureSet: ASTNode {
     public let userActionTakesField: String?
     /// Optional type annotation for the `takes` field (e.g. "Integer").
     public let userActionTakesType: String?
+    /// Positional command-line arguments declared by an `Application-Start`
+    /// header (ARO-0047 §Positional Arguments, GitLab #857):
+    ///
+    /// ```aro
+    /// (Application-Start: Crawler takes <url> <depth>) { … }
+    /// ```
+    ///
+    /// Each name binds the positional at the same index, readable as
+    /// `<parameter: url>`. Empty for every other feature set.
+    public let positionalParameters: [String]
     public let span: SourceSpan
 
     public init(
@@ -91,6 +101,7 @@ public struct FeatureSet: ASTNode {
         whenCondition: (any Expression)? = nil,
         userActionTakesField: String? = nil,
         userActionTakesType: String? = nil,
+        positionalParameters: [String] = [],
         span: SourceSpan
     ) {
         self.name = name
@@ -99,6 +110,7 @@ public struct FeatureSet: ASTNode {
         self.whenCondition = whenCondition
         self.userActionTakesField = userActionTakesField
         self.userActionTakesType = userActionTakesType
+        self.positionalParameters = positionalParameters
         self.span = span
     }
 

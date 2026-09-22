@@ -55,6 +55,8 @@ public enum ComputeQualifierCatalog {
         "json-escape",
         // Collections / text (GitLab #486)
         "lines", "join", "sum", "avg", "average", "unique", "random",
+        // Regex capture groups (ARO-0037 §7, GitLab #858)
+        "captures", "all-captures",
         // Money (GitLab #517)
         "fixed",
     ]

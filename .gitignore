@@ -4,6 +4,9 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/PositionalArguments/PositionalArguments
+/Examples/CaptureGroups/CaptureGroups
+/Examples/ApplicationLimits/ApplicationLimits
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat
