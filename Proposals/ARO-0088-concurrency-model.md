@@ -288,9 +288,13 @@ other. One request at a time still exceeds a per-minute quota if each takes
 ```aro
 (Application-Start: Crawler) {
     Configure the <application: concurrency> with 8.      (* a ceiling *)
-    Configure the <http-client: rate> with "10/s".        (* a rate *)
-    Configure the <http-client: concurrency> with 4.      (* one service's ceiling *)
-    ...
+
+    (* Several settings for one category go in ONE object. Two statements
+       naming <http-client> would rebind an immutable binding — the parser
+       says so, and points here. *)
+    Configure the <http-client> with { concurrency: 4, rate: "10/s" }.
+
+    Return an <OK: status> for the <startup>.
 }
 ```
 

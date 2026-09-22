@@ -1,4 +1,14 @@
 {
+ "all-captures": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Every regex match, as a list of capture records; by /pattern/flags",
+  "source": "aro actions --qualifiers --format json"
+ },
  "average": {
   "namespace": "_builtin",
   "builtin": true,
@@ -57,6 +67,16 @@
   ],
   "accepts_parameters": false,
   "description": "URL-safe Base64 encode (JWTs)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "captures": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "First regex match as a record of its capture groups; by /pattern/flags",
   "source": "aro actions --qualifiers --format json"
  },
  "clip": {

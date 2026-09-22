@@ -20,6 +20,7 @@
 // express a rate; and a rate says nothing about how many may pile up at once.
 
 import Foundation
+import Synchronization
 
 // MARK: - Concurrency gate
 
@@ -260,10 +261,8 @@ public enum ApplicationLimits {
     ///
     /// `0` — the default — is unlimited, which is what the runtime did before
     /// GitLab #862. Set it with `Configure the <application: concurrency>
-    /// with 8.` or `ARO_CONCURRENCY`.
-    nonisolated(unsafe) private static var _concurrency: Int = {
-        ProcessInfo.processInfo.environment["ARO_CONCURRENCY"].flatMap(Int.init) ?? 0
-    }()
+    /// with 8.` or `ARO_CONCURRENCY`. Stored atomically — see
+    /// `concurrencyValue`.
 
     /// Outbound HTTP rate limit; `nil` is unlimited.
     /// `Configure the <http-client: rate> with "10/s".` or `ARO_HTTP_RATE`.
@@ -271,9 +270,22 @@ public enum ApplicationLimits {
         ProcessInfo.processInfo.environment["ARO_HTTP_RATE"].flatMap(RateSpec.parse)
     }()
 
+    /// The ceiling, readable without taking a lock.
+    ///
+    /// `withSlot` runs on **every** feature-set execution, which for a
+    /// recursive user-defined action is once per frame. Reading the setting
+    /// through `settingsLock` put an uncontended-but-real mutex acquire in
+    /// that path and made deep recursion measurably slower — enough that
+    /// `Examples/RecursiveActions` went from 2s to a CI timeout. An atomic
+    /// read costs nothing when no ceiling is configured, which is the case
+    /// almost every program is in.
+    private static let concurrencyValue = Atomic<Int>(
+        ProcessInfo.processInfo.environment["ARO_CONCURRENCY"].flatMap(Int.init) ?? 0
+    )
+
     public static var applicationConcurrency: Int {
-        get { settingsLock.lock(); defer { settingsLock.unlock() }; return _concurrency }
-        set { settingsLock.lock(); defer { settingsLock.unlock() }; _concurrency = max(0, newValue) }
+        get { concurrencyValue.load(ordering: .relaxed) }
+        set { concurrencyValue.store(max(0, newValue), ordering: .relaxed) }
     }
 
     /// How many outbound HTTP fetches may be in flight. Defaults to 8;
