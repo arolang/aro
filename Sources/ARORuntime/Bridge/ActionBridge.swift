@@ -922,6 +922,44 @@ public func aro_action_make(
     return executeAction(verb: "make", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+// `touch`, `mkdir` and `rename` are documented aliases of `make`, `make` and
+// `move` — `ActionCatalog` lists all three and `FileActions` implements them —
+// but no bridge export existed, so `LLVMCodeGenerator` emitted a call to a
+// symbol that was not there and a valid program became a **linker error** with
+// no ARO-level diagnostic (GitLab #679):
+//
+//     Undefined symbols for architecture arm64:
+//       "_aro_action_touch", referenced from: _aro_fs_application_start_entry
+//
+// GitLab #336 tied the code generator to the catalog; nothing tied the catalog
+// to these exports. `ActionBridgeCoverageTests` does that now.
+@_cdecl("aro_action_touch")
+public func aro_action_touch(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "touch", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_mkdir")
+public func aro_action_mkdir(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "mkdir", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_rename")
+public func aro_action_rename(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "rename", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_copy")
 public func aro_action_copy(
     _ contextPtr: UnsafeMutableRawPointer?,
