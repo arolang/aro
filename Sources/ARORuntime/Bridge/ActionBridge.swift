@@ -222,6 +222,21 @@ private func executeAction(
         context: ctxHandle.context
     )
 
+    // A `Configure` statement marks its category, so a later read of an UNSET
+    // setting answers nil instead of the happy-path error — configuration is
+    // optional by definition (ARO-0035 §3.2, GitLab #506).
+    //
+    // `FeatureSetExecutor` did this for the interpreter and nothing did it
+    // here, so a compiled binary never recorded that a setting was configured
+    // and the optional read was unreachable in compiled code (GitLab #853).
+    // The divergence is silent in the direction that matters: the interpreter
+    // is the permissive one, so the program is developed and tested under
+    // `aro run`, behaves correctly, and fails only after `aro build` — in
+    // front of whoever the binary was shipped to.
+    if actionResult.succeeded, ConfigureAction.handles(verb) {
+        (ctxHandle.context as? RuntimeContext)?.markConfigured(resultDesc.base)
+    }
+
     // Clear temporary expression/literal bindings after action execution
     // These are statement-scoped and should not persist to subsequent statements
     ctxHandle.context.unbind("_expression_")
