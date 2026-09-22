@@ -4,6 +4,7 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/HTMLAttributes/HTMLAttributes
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

@@ -37,11 +37,12 @@ public struct ParseDispatchAction: ActionImplementation {
     /// Qualifiers served by the HTML parser. `html` is an alias for the
     /// combined `page` parse (title + markdown + links).
     private static let htmlQualifiers: Set<String> = [
-        "html", "page", "links", "content", "text", "markdown",
+        "html", "page", "links", "content", "text", "markdown", "select",
     ]
 
     private static let validFormats = [
-        "json", "html", "page", "links", "content", "text", "markdown", "link-header",
+        "json", "html", "page", "links", "content", "text", "markdown", "select",
+        "link-header",
     ]
 
     public init() {}
@@ -331,6 +332,20 @@ public struct ParseHtmlAction: ActionImplementation {
         case "markdown":
             return try parseHtmlToMarkdown(input)
 
+        case "select":
+            // ARO-0011 §1.5 (GitLab #860). The selector is the `with` clause,
+            // and `@name` on the end reads an attribute instead of the text.
+            // Without it there was no way to reach an attribute at all, so
+            // `img[src]`, `a[href]` and a meta tag's `content` — the ordinary
+            // tasks — could not be written.
+            guard let selector: String = context.resolve("_expression_"),
+                  !selector.isEmpty else {
+                throw ActionError.missingRequiredField(
+                    field: "a CSS selector, e.g. with \"a@href\"",
+                    action: "Parse the <…: select>")
+            }
+            return try parseHtmlSelect(input, selector: selector)
+
         case "page":
             // Single-parse mode — title + markdown + links from one SwiftSoup parse.
             // Callers that need all three (e.g. a crawler) save a full DOM parse
@@ -338,7 +353,7 @@ public struct ParseHtmlAction: ActionImplementation {
             return try parseHtmlPage(input)
 
         default:
-            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["links", "content", "text", "markdown", "page"])
+            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["links", "content", "text", "markdown", "page", "select"])
         }
     }
 
@@ -380,6 +395,56 @@ public struct ParseHtmlAction: ActionImplementation {
         let doc = try SwiftSoup.parse(html)
         let elements = try doc.select(selector)
         return try elements.array().map { try $0.text() }
+    }
+
+    /// `Parse the <hrefs: select> from the <page> with "a@href".`
+    ///
+    /// The selector is an ordinary CSS selector, optionally followed by
+    /// `@attribute`. With `@` it yields the attribute's value; without, the
+    /// element's text — so one qualifier covers "the link texts" and "the link
+    /// targets" and nobody has to remember two.
+    ///
+    /// **An element without the attribute contributes nothing.** The result is
+    /// the attributes that exist, not a list with holes at the indexes where
+    /// they do not — a list with holes is only useful if you are correlating
+    /// it with another list by index, and CSS can already say what you meant:
+    /// `a[href]@href` selects exactly the elements that have one, so the
+    /// positions line up by construction.
+    private func parseHtmlSelect(_ html: String, selector: String) throws -> [String] {
+        let (query, attribute) = Self.splitSelector(selector)
+        let doc = try SwiftSoup.parse(html)
+        let elements = try doc.select(query).array()
+
+        guard let attribute else {
+            return try elements.map { try $0.text() }
+        }
+        return try elements.compactMap { element in
+            guard element.hasAttr(attribute) else { return nil }
+            let value = try element.attr(attribute)
+            // `hasAttr` is true for `<img src>` with no value; an empty
+            // attribute is present, so it is reported as the empty string
+            // rather than dropped. Dropping it would conflate "no src" with
+            // "src=''", and only the first is a missing attribute.
+            return value
+        }
+    }
+
+    /// Split `"a@href"` into the selector and the attribute.
+    ///
+    /// On the **last** `@`, because an attribute name cannot contain one and a
+    /// CSS selector can — `[data-x="a@b"]` is a valid selector, and splitting
+    /// on the first `@` would cut it in half.
+    static func splitSelector(_ selector: String) -> (query: String, attribute: String?) {
+        guard let at = selector.lastIndex(of: "@") else { return (selector, nil) }
+        let attribute = String(selector[selector.index(after: at)...])
+        let query = String(selector[..<at])
+        // `@` with nothing after it is not an attribute request, and an empty
+        // query is not a selector; either way, treat the whole string as the
+        // selector and let SwiftSoup report it.
+        guard !attribute.isEmpty, !query.isEmpty,
+              attribute.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == ":" })
+        else { return (selector, nil) }
+        return (query, attribute)
     }
 
     // MARK: - Markdown Conversion

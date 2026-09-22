@@ -1036,7 +1036,7 @@ The `Proposals/` directory contains language specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
-| **0011 HTML Parsing** | Parse action for HTML documents (XML is a sketch) |
+| **0011 HTML Parsing** | Parse action for HTML documents, CSS `select` with `@attr` (XML is a sketch) |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |
