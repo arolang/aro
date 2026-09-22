@@ -11,6 +11,10 @@ import Darwin
 import Glibc
 #endif
 
+#if os(Windows)
+import WinSDK
+#endif
+
 /// Metrics for a single feature set
 public struct FeatureSetMetrics: Sendable, Equatable {
     /// Feature set name
@@ -166,6 +170,8 @@ public struct ProcessMetrics: Sendable {
         return collectDarwin()
         #elseif os(Linux)
         return collectLinux()
+        #elseif os(Windows)
+        return collectWindows()
         #else
         return ProcessMetrics(
             cpuUserTime: 0,
@@ -178,6 +184,77 @@ public struct ProcessMetrics: Sendable {
         )
         #endif
     }
+
+    #if os(Windows)
+    /// Windows process metrics.
+    ///
+    /// This branch used to return a `ProcessMetrics` of all zeros, and zero is
+    /// the one answer a dashboard cannot read as "unknown": a scrape showed a
+    /// process using no CPU and no memory, which is indistinguishable from an
+    /// idle one and is simply false (GitLab #700).
+    ///
+    /// The three calls are the documented counterparts of what the other two
+    /// platforms use: `GetProcessTimes` for `getrusage`, `GetProcessMemoryInfo`
+    /// for `task_info` / `/proc/self/statm`.
+    private static func collectWindows() -> ProcessMetrics {
+        let process = GetCurrentProcess()
+
+        var creation = FILETIME(), exit = FILETIME()
+        var kernel = FILETIME(), user = FILETIME()
+
+        var cpuUserTime = 0.0
+        var cpuSystemTime = 0.0
+        var processStartTime = Date().timeIntervalSince1970
+
+        if GetProcessTimes(process, &creation, &exit, &kernel, &user) {
+            cpuUserTime = seconds(from: user)
+            cpuSystemTime = seconds(from: kernel)
+            processStartTime = unixTime(from: creation)
+        }
+
+        var counters = PROCESS_MEMORY_COUNTERS()
+        counters.cb = DWORD(MemoryLayout<PROCESS_MEMORY_COUNTERS>.size)
+
+        var virtualMemoryBytes = 0
+        var residentMemoryBytes = 0
+
+        if GetProcessMemoryInfo(process, &counters, counters.cb) {
+            // `PagefileUsage` is the private commit — the closest counterpart
+            // of the virtual size the other platforms report. `WorkingSetSize`
+            // is the resident set by definition.
+            virtualMemoryBytes = Int(counters.PagefileUsage)
+            residentMemoryBytes = Int(counters.WorkingSetSize)
+        }
+
+        // Windows has no file descriptors and no per-process handle limit
+        // worth reporting, so these stay zero — as they do in the fallback
+        // branch, and for the same reason the CPU numbers no longer do: there
+        // is genuinely nothing to count, rather than something uncounted.
+        return ProcessMetrics(
+            cpuUserTime: cpuUserTime,
+            cpuSystemTime: cpuSystemTime,
+            virtualMemoryBytes: virtualMemoryBytes,
+            residentMemoryBytes: residentMemoryBytes,
+            openFileDescriptors: 0,
+            maxFileDescriptors: 0,
+            processStartTime: processStartTime
+        )
+    }
+
+    /// A `FILETIME` duration in seconds. Its unit is 100-nanosecond intervals.
+    private static func seconds(from time: FILETIME) -> Double {
+        let ticks = (UInt64(time.dwHighDateTime) << 32) | UInt64(time.dwLowDateTime)
+        return Double(ticks) / 10_000_000.0
+    }
+
+    /// A `FILETIME` instant as a Unix timestamp.
+    ///
+    /// `FILETIME`'s epoch is 1601-01-01 UTC; the constant is the number of
+    /// seconds from there to 1970-01-01.
+    private static func unixTime(from time: FILETIME) -> Double {
+        seconds(from: time) - 11_644_473_600.0
+    }
+    #endif
 
     #if os(macOS)
     private static func collectDarwin() -> ProcessMetrics {

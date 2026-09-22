@@ -11,6 +11,10 @@ import Darwin
 import Glibc
 #endif
 
+#if os(Windows)
+import WinSDK
+#endif
+
 /// Collects real system-wide CPU, memory, and disk metrics.
 ///
 /// Used by `RetrieveAction` when the object is `<system>`:
@@ -58,10 +62,52 @@ public struct SystemMetricsService {
         return await collectCPUDarwin()
         #elseif os(Linux)
         return await collectCPULinux()
+        #elseif os(Windows)
+        return await collectCPUWindows()
         #else
         return 0
         #endif
     }
+
+    #if os(Windows)
+    /// System-wide CPU ticks, from `GetSystemTimes`.
+    ///
+    /// Windows reports idle, kernel and user time; *kernel time includes idle
+    /// time*, which is the trap here — treating it as busy makes a machine
+    /// doing nothing look fully loaded. Active is therefore
+    /// `(kernel - idle) + user`, and total is `kernel + user`.
+    private static func cpuTicksWindows() -> (active: UInt64, total: UInt64)? {
+        var idle = FILETIME(), kernel = FILETIME(), user = FILETIME()
+        guard GetSystemTimes(&idle, &kernel, &user) else { return nil }
+
+        func ticks(_ t: FILETIME) -> UInt64 {
+            (UInt64(t.dwHighDateTime) << 32) | UInt64(t.dwLowDateTime)
+        }
+
+        let idleTicks = ticks(idle)
+        let kernelTicks = ticks(kernel)
+        let userTicks = ticks(user)
+        guard kernelTicks >= idleTicks else { return nil }
+
+        return (active: (kernelTicks - idleTicks) + userTicks, total: kernelTicks + userTicks)
+    }
+
+    private static func collectCPUWindows() async -> Int {
+        guard let s1 = cpuTicksWindows() else { return 0 }
+        // GCD asyncAfter for the sampling delay, for the same reason the other
+        // two platforms use it: it is not cancelled when the calling task is.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                continuation.resume()
+            }
+        }
+        guard let s2 = cpuTicksWindows() else { return 0 }
+        let deltaTotal = s2.total - s1.total
+        let deltaActive = s2.active - s1.active
+        guard deltaTotal > 0 else { return 0 }
+        return Int((Double(deltaActive) / Double(deltaTotal) * 100.0).rounded())
+    }
+    #endif
 
     #if os(macOS)
     private static func cpuTicksDarwin() -> (active: UInt64, total: UInt64)? {
@@ -142,11 +188,35 @@ public struct SystemMetricsService {
         return collectMemoryDarwin()
         #elseif os(Linux)
         return collectMemoryLinux()
+        #elseif os(Windows)
+        return collectMemoryWindows()
         #else
         let totalGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
         return ["used": 0, "total": totalGB, "percent": 0]
         #endif
     }
+
+    #if os(Windows)
+    /// System-wide memory, from `GlobalMemoryStatusEx`.
+    ///
+    /// `used = total - available`, the same definition Linux takes from
+    /// `MemAvailable` — what the OS believes can be handed out without
+    /// swapping, rather than what is merely unallocated.
+    private static func collectMemoryWindows() -> [String: any Sendable] {
+        var status = MEMORYSTATUSEX()
+        status.dwLength = DWORD(MemoryLayout<MEMORYSTATUSEX>.size)
+
+        let totalGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        guard GlobalMemoryStatusEx(&status) else {
+            return ["used": 0, "total": totalGB, "percent": 0]
+        }
+
+        let total = Int(status.ullTotalPhys / 1_073_741_824)
+        let used = Int((status.ullTotalPhys - status.ullAvailPhys) / 1_073_741_824)
+        let percent = total > 0 ? min(100, used * 100 / total) : 0
+        return ["used": used, "total": total, "percent": percent]
+    }
+    #endif
 
     #if os(macOS)
     private static func collectMemoryDarwin() -> [String: any Sendable] {
@@ -210,7 +280,16 @@ public struct SystemMetricsService {
     // MARK: - Disk
 
     private static func collectDisk() -> [String: any Sendable] {
-        let attrs      = try? FileManager.default.attributesOfFileSystem(forPath: "/")
+        // `/` is not a volume on Windows, so the query returned nothing and
+        // the disk series reported 0 GB of 0 GB — another zero standing in for
+        // an answer (GitLab #700). `%SystemDrive%` is where Windows is
+        // installed and is the closest counterpart of the root filesystem.
+        #if os(Windows)
+        let root = (ProcessInfo.processInfo.environment["SystemDrive"] ?? "C:") + "\\"
+        #else
+        let root = "/"
+        #endif
+        let attrs      = try? FileManager.default.attributesOfFileSystem(forPath: root)
         let totalBytes = (attrs?[.systemSize]     as? Int) ?? 0
         let freeBytes  = (attrs?[.systemFreeSize] as? Int) ?? 0
         let usedBytes  = totalBytes - freeBytes

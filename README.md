@@ -197,7 +197,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | Git actions (ARO-0080) | ✅ | ✅ | ❌ ⁵ |
 | `.store` write-back | ✅ opt-in | ✅ opt-in | ✅ opt-in ⁶ |
 | Terminal UI | ✅ | ✅ | ✅ ⁷ |
-| Metrics | ✅ | ✅ | ❌ ⁸ |
+| Metrics | ✅ | ✅ | ✅ ⁸ |
 | **Tools** ||||
 | `aro lsp`, `mcp`, `ask`, `kernel` | ✅ | ✅ | ❌ ¹⁰ |
 | Jupyter kernel | ✅ native | ✅ native | ⚠️ Python shim |
@@ -214,7 +214,9 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ⁷ registered whenever stdout is a console (cmd.exe and PowerShell included);
    size from `GetConsoleScreenBufferInfo`, hidden input via `ENABLE_ECHO_INPUT`
    — GitLab #699
-⁸ reports zeros rather than absence — GitLab #700
+⁸ `GetProcessTimes`, `GetProcessMemoryInfo`, `GetSystemTimes`,
+   `GlobalMemoryStatusEx`; file-descriptor counts stay 0, as Windows has none
+   — GitLab #700
 ⁹ `Log` output is captured; stray `print`s from plugins are not
 ¹⁰ not registered as subcommands — GitLab #701
 ¹¹ needs `ARO_STATIC_PYTHON` pointing at an embeddable CPython; otherwise the
