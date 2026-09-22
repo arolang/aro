@@ -25,9 +25,12 @@ Output: aro_qualifier_catalog.json
 """
 import json
 import re
-import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import aro_oracle  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 COMPUTE_SRC = (REPO / "Sources" / "ARORuntime" / "Actions" / "BuiltIn"
@@ -49,9 +52,9 @@ _DATE_OFFSET_RE = re.compile(r"^[+-]\d+[smhdwMy]$")
 
 
 def _from_cli():
-    """Ask the runtime. Returns None when no usable `aro` is on PATH."""
-    aro = shutil.which("aro") or str(REPO / ".build" / "debug" / "aro")
-    if not Path(aro).exists() and not shutil.which("aro"):
+    """Ask the runtime. Returns None when there is no usable `aro`."""
+    aro = aro_oracle.aro_bin()
+    if not aro:
         return None
     try:
         proc = subprocess.run(
@@ -141,8 +144,25 @@ def is_known(name, catalog=None):
 
 
 if __name__ == "__main__":
+    if "--check" in sys.argv and not aro_oracle.aro_bin():
+        print("cannot verify the qualifier catalog without an `aro` binary — "
+              "set ARO_BIN or build one.", file=sys.stderr)
+        sys.exit(2)
     catalog = extract()
-    OUT.write_text(json.dumps(catalog, indent=1) + "\n")
+    text = json.dumps(catalog, indent=1) + "\n"
+    if "--check" in sys.argv:
+        committed = OUT.read_text() if OUT.exists() else ""
+        if committed != text:
+            old = json.loads(committed) if committed else {}
+            print(f"{OUT.name} is stale against the runtime.", file=sys.stderr)
+            print(f"  missing: {sorted(set(catalog) - set(old))}", file=sys.stderr)
+            print(f"  extra:   {sorted(set(old) - set(catalog))}", file=sys.stderr)
+            print("Regenerate: python3 Train/script/extract_qualifier_catalog.py",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"{OUT.name} matches the runtime ({len(catalog)} qualifiers)")
+        sys.exit(0)
+    OUT.write_text(text)
     builtins = sum(1 for v in catalog.values() if v["builtin"])
     source = next(iter(catalog.values()), {}).get("source", "(none)")
     print(f"wrote {len(catalog)} qualifiers ({builtins} built-in) -> {OUT}")
