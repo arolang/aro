@@ -686,6 +686,10 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `basename` / `dirname` | Path head and tail | `Compute the <n: basename> from <path>.` |
+| `extension` / `stem` | Type and name, no dot | `Compute the <e: extension> from <path>.` |
+| `absolute` | Resolve `.`/`..` against the working directory | `Compute the <a: absolute> from <path>.` |
+| `path-join` | Join with exactly one separator | `Compute the <p: path-join> from <dir> with <name>.` |
 | `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
@@ -725,6 +729,19 @@ and `Map the <ns: name> from the <us>.` are the same statement. There is no
 per-element binding, so `with <item> * 0.9` has nothing to range over — it used
 to parse and die on `Undefined variable: item`, and `with 3` was discarded
 silently; both are check-time errors now. Use `for each` to compute per element.
+
+**Path qualifiers are pure functions** (ARO-0036 §9, GitLab #861) — none of
+them touches the filesystem. `extension` has no dot, a dotfile is a name rather
+than an extension, `dirname` of a bare filename is `"."`, and `path-join` uses
+exactly one separator. **An absolute right-hand component does not reset the
+path**: `path-join` of `/uploads` and `/etc/passwd` is `/uploads/etc/passwd`,
+deliberately unlike Python, because the call it exists for is joining a trusted
+directory to an untrusted name.
+
+`Configure the <mode> for the <file: "./run.sh"> with { permissions: "755" }.`
+sets permissions and binds `{ path, permissions, octal, previous }`; octal and
+the symbolic form `Stat` prints are both accepted, so a mode read off one file
+applies to another. `Touch the <m> for the <file: p>.` creates or stamps.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
@@ -918,6 +935,7 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 ├── FileWatcher/        # File system monitoring
 ├── FileOperations/     # File I/O (read, write, copy, move)
 ├── FileMetadata/       # File stats and attributes
+├── PathOperations/     # basename/dirname/extension/stem/absolute/path-join, chmod, touch (ARO-0036 §9-10)
 ├── FormatAwareIO/      # Auto-detect JSON, YAML, CSV
 ├── DirectoryReplicator/ # Directory operations
 │
@@ -1047,7 +1065,7 @@ The `Proposals/` directory contains language specifications:
 | **0031 Context-Aware Formatting** | Adaptive output for machine/human/developer |
 | **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
 | **0035 Configurable Runtime** | Configure action for timeouts and settings |
-| **0036 Extended File Operations** | Exists, Stat, Make, Copy, Move actions |
+| **0036 Extended File Operations** | Exists, Stat, Make, Touch, Copy, Move, path qualifiers, permissions |
 | **0037 Regex Split** | Split action with regex delimiters |
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |

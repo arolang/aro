@@ -444,7 +444,7 @@ public struct ExistsAction: ActionImplementation {
 /// - `mkdir` (synonym)
 public struct MakeAction: ActionImplementation {
     public static let role: ActionRole = .server
-    public static let verbs: Set<String> = ["make", "touch", "createdirectory", "mkdir"]
+    public static let verbs: Set<String> = ["make", "createdirectory", "mkdir"]
     public static let validPrepositions: Set<Preposition> = [.to, .for, .at]
 
     public init() {}
@@ -456,11 +456,16 @@ public struct MakeAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get path from specifiers or base
+        // Get path from specifiers or base. `file` and `directory` are
+        // excluded alongside `path` so that the object reads the way it does
+        // for every other ARO-0036 action — `for the <file: "./x">` (GitLab
+        // #861). Without them, `Touch the <t> for the <file: "./probe.txt">.`
+        // took the *base name* as the path and created a directory called
+        // `file`, silently.
         let path = try context.resolveString(
             base: object.base,
             specifiers: object.specifiers,
-            excluding: ["path"],
+            excluding: ["path", "file", "directory"],
             field: "a path",
             action: "Make"
         )
@@ -470,8 +475,15 @@ public struct MakeAction: ActionImplementation {
             throw ActionError.missingService("FileSystemService")
         }
 
-        // Determine if creating file or directory based on result.base
-        let isFile = result.base == "file"
+        // File or directory? The object says so — `<file: …>` is a file,
+        // `<directory: …>` and `<path: …>` are a directory — and the legacy
+        // `result.base == "file"` test stays as the fallback, so
+        // `Make the <file> to the <path: "./x">.` keeps working.
+        //
+        // `touch` is no longer one of this action's verbs: it is always a
+        // file, so deciding from the result name made it reachable only as
+        // `Make the <file> …` (GitLab #861). `TouchAction` below owns it.
+        let isFile = object.base == "file" || result.base == "file"
 
         if isFile {
             // Touch creates or updates a file
@@ -494,6 +506,62 @@ public struct MakeResult: Sendable, Equatable {
     public let path: String
     public let success: Bool
     public let isFile: Bool
+}
+
+// MARK: - Touch Action (ARO-0036 §3.4, GitLab #861)
+
+/// Creates an empty file, or updates an existing file's modification time.
+///
+/// ```aro
+/// Touch the <marker> for the <file: "./.build-stamp">.
+/// ```
+///
+/// This used to be a verb on `MakeAction`, which decided between file and
+/// directory from the *result* name — so the only spelling that touched
+/// anything was `Make the <file> to the <path: …>`, and
+/// `Touch the <t> for the <file: "./probe.txt">.` silently created a
+/// directory called `file`. A verb that only ever means "file" does not need
+/// to ask, which is why it is its own action now.
+public struct TouchAction: ActionImplementation {
+    // `.server` to match `Make`: this creates or stamps something outside the
+    // program, and the role table drives data-flow analysis.
+    public static let role: ActionRole = .server
+    public static let verbs: Set<String> = ["touch"]
+    public static let validPrepositions: Set<Preposition> = [.to, .for, .at]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["path", "file", "directory"],
+            field: "a file path",
+            action: "Touch"
+        )
+
+        guard let fileService = context.service(FileSystemService.self) else {
+            throw ActionError.missingService("FileSystemService")
+        }
+
+        let existed = fileService.exists(path: path)
+        try await fileService.touch(path: path)
+
+        // `created` is the half a caller can act on: a marker file that was
+        // already there means the work was already done.
+        let record: [String: any Sendable] = [
+            "path": path,
+            "created": !existed
+        ]
+        context.bind(result.base, value: record, allowRebind: true)
+        return record
+    }
 }
 
 // MARK: - Copy Action

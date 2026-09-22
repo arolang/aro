@@ -55,6 +55,8 @@ public enum ComputeQualifierCatalog {
         "json-escape",
         // Collections / text (GitLab #486)
         "lines", "join", "sum", "avg", "average", "unique", "random",
+        // Paths (ARO-0036 §9, GitLab #861)
+        "basename", "dirname", "extension", "stem", "absolute", "path-join",
         // Money (GitLab #517)
         "fixed",
     ]

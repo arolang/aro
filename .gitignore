@@ -4,6 +4,8 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/PathOperations/PathOperations
+/Examples/PathOperations/build-stamp.txt
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

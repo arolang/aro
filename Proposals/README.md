@@ -140,7 +140,7 @@ prints the live table, including each action's valid prepositions.
 | OWN | Accept, Assert, Call, Clear, Compare, Compute, Configure, Create, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
 | RESPONSE | Append, Broadcast, Log, Notify, Render, Repaint, Return, Send, Store, Throw, Write |
 | EXPORT | Emit, GitCommit, Publish, Push, Schedule, Tag |
-| SERVER | Close, Connect, Copy, Listen, Make, Move, Start, Stop, WaitForEvents |
+| SERVER | Close, Connect, Copy, Listen, Make, Move, Start, Stop, Touch, WaitForEvents |
 
 <!-- END GENERATED ROLE SUMMARY -->
 
