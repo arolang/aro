@@ -384,6 +384,46 @@ naming what it looked for; `ARO_TRAIN_ALLOW_BASE_FALLBACK=1` says you meant it.
 
 **Release ordering:** `27_package` is the last-numbered notebook. Execution order (set by the `NOTEBOOKS` list in `00_META_PIPELINE`, not the filename numbers) is `… → distillation → material → thinking → conversation → 27_package(+upload) → 26_post_release_validation`, so the model that gets uploaded is the **final** one after the full booster chain. (Post-release validation keeps a lower number but runs after packaging because it tests the upload.)
 
+## Reproducing a run
+
+A pipeline run used to be reproducible only by the person whose laptop had run
+it: nothing pinned the Python stack, nothing recorded which stack had been used,
+and every summary of a finished run lived in a gitignored directory
+(GitLab #792). What follows is the sequence that now works from a clean
+checkout on Apple Silicon.
+
+```bash
+# 1. The environment. requirements.txt pins the training/inference stack and
+#    floors the rest; the lock file is the exact set the last release used.
+Train/training.sh --no-execute            # creates Train/.venv, installs, exits
+Train/.venv/bin/pip install -r Train/requirements.lock.darwin-py312.txt   # optional: exact
+
+# 2. The preflight. Fails fast when mlx cannot train a MoE model, instead of
+#    dying hours later inside the warm start. (See ISSUE-MLX.md.)
+Train/.venv/bin/python Train/script/mlx_preflight.py
+
+# 3. The corpus. Both roots must resolve, or the run silently trains on less.
+ARO_APPLICATION_PATH=/path/to/ARO-Application \
+  Train/.venv/bin/python -c "import sys; sys.path.insert(0,'Train/script'); \
+    import config; config.corpus_preflight(); print(config.corpus_summary())"
+
+# 4. The run. One session id across every stage, so experiments.db can join
+#    the stages of one run together.
+ARO_TRAIN_SESSION=$(date +%Y%m%dT%H%M%S)-repro Train/training.sh
+
+# 5. The record. Both write into the tracked Train/runs/<release>/.
+python3 Train/script/run_archive.py   --release <release>
+python3 Train/script/experiment_db.py --export --release <release>
+```
+
+Step 4 needs an Apple Silicon machine with enough unified memory for the 30B
+MoE teacher and takes GPU-days; steps 1–3 and 5 run anywhere and are what make
+step 4 repeatable rather than merely repeated. Re-running `01_init` now refuses
+to wipe a populated `data/` or `models/` unless you set `ARO_TRAIN_FRESH=1`, so
+resuming with `Train/training.sh --from NN` is the safe default.
+
+Comparing two runs is then a diff of two directories under `Train/runs/`.
+
 ## Running the pipeline
 
 ### Full run
@@ -398,9 +438,34 @@ Open `script/00_META_PIPELINE.ipynb` and run all cells. The meta notebook:
 - renders a live status table with elapsed time and the last error line on
   failure.
 
-Per-stage timeouts live in `TIMEOUT_OVERRIDES` inside the meta notebook
-(`0` means "no timeout"). Long-running stages (10, 17, 20, 21) default to
-no timeout.
+A stage is killed when it stops **writing**, not when it has been running for
+too long. Every timeout in the meta notebook used to be `0`, because a
+wall-clock cap kept killing fine-tunes that legitimately run for hours — and
+the cost was that a genuinely wedged stage blocked the pipeline until someone
+noticed. `stage_runner.run_notebook()` watches the stage's log instead: no
+growth for `ARO_TRAIN_STALL_TIMEOUT` seconds (default 1800) and the stage is
+killed and reported as `stalled`. A six-hour training run printing loss lines
+is never touched. Hard wall-clock caps remain available per stage in
+`MAX_RUNTIME_OVERRIDES`, and are empty by default.
+
+### Dry runs and smoke tests
+
+Every stage understands the same two switches. Scripts take them as flags;
+notebooks read them from `ARO_TRAIN_DRY_RUN` / `ARO_TRAIN_LIMIT`.
+
+| Switch | Meaning |
+|--------|---------|
+| `--dry-run` | run the whole data path, save nothing |
+| `--limit N` | stop after N items (0 = no limit) |
+
+```bash
+python3 Train/script/30_fim_pairs.py --dry-run --limit 5
+ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --limit 1
+```
+
+That combination is what proves the data path without a GPU, and is what CI
+runs. (`29_multimodel_doc_qa.py` keeps its own older `--limit`, which counts
+documents rather than pairs.)
 
 ### Single stage
 
@@ -421,6 +486,7 @@ to change between runs:
 | `TRAIN_ON_BASE` | `True` → always start from `BASE_MODEL_ID` (fresh run). `False` → resume from the published teacher on HF if it exists. Flip to `False` after the first complete run for iterative improvement. |
 | `CLEAN_ON_RESTART` | When `True`, each notebook removes its previously-emitted rows from `knowledge_pairs.jsonl` on startup. A timestamped backup is written to `data/backups/` first; `rollback_notebook_pairs('NBxx')` restores a tag's rows. |
 | `TYPE_CAPS` / `TYPE_CAPS_VERSION` | Task-type caps applied by `16_dataset_assembly` (versioned with a changelog; the active caps are recorded in `stats.json`). |
+| `HPARAMS` / `HPARAMS_VERSION` | Every training stage's hyper-parameters, one row per stage, each value carrying the reason it is what it is. Read with `hparams('sft')`; no notebook declares a training constant of its own, and `check_hparams.py` fails CI if one starts to. `python3 Train/script/check_hparams.py --list` prints the table. |
 | `CORPUS_SOURCES` | The registry of every root the pipeline mines: label, path, kind, the glob counted in the preflight report, and the notebook tags that consume it. `corpus_preflight()` is generated from it and `corpus_summary()` prints it. Add a corpus here, not inside a notebook — `Learning/` went unmined and unchecked for as long as the roots were a literal list inside the preflight. |
 
 `resolve_model_id()` runs at import time and prints which model was chosen,
@@ -434,6 +500,55 @@ so every notebook logs the resolved base.
 | `ARO_APPLICATION_OPTIONAL` | Set to `1` to knowingly continue without ARO-Application (incomplete corpus). |
 | `ARO_TRAIN_SESSION` | Pin a single provenance session ID across all notebooks of one pipeline run. Defaults to a fresh ID per notebook execution. |
 | `ARO_TRAIN_SKIP` | Comma-separated notebook numbers the meta pipeline skips (default `09,12`). |
+| `ARO_TRAIN_FRESH` | `1` allows `01_init` to wipe stage directories that still hold output. Without it the wipe refuses and names what it would destroy. |
+| `ARO_TRAIN_RELEASE` | Release label used for `Train/runs/<release>/`. Defaults to `PIPELINE_VERSION`. |
+| `ARO_TRAIN_SKIP_MLX_PREFLIGHT` | `1` starts a run even when `mlx_preflight.py` says this mlx build cannot train a MoE model. |
+
+### Running generated programs
+
+The pipeline executes model output. Anything it generated — a program under
+`aro run`, a snippet under `aro check`, a course cell under `aro repl --json` —
+goes through `script/sandbox.py`, never a bare `subprocess.run`.
+
+A generated program gets its own throwaway directory as the working directory,
+its own empty `$HOME` and `$TMPDIR` inside it, and an allowlisted environment.
+So it can read and write inside that directory and nothing else by a relative
+path; it cannot see the checkout, the operator's home, or any `ARO_*`, `HF_*` or
+credential variable; and every proxy variable points at a closed port so a
+library that honours them fails immediately.
+
+Two limits, stated rather than implied: an **absolute** path is not blocked
+(`/tmp/x` is still `/tmp/x`), and a program that opens a socket directly is not
+stopped by an environment variable. Programs that would start a server or make a
+request are kept from being run at all by `eval_metrics.is_safely_runnable`.
+
+Before this, the subprocess inherited the pipeline's working directory, and the
+runtime resolves a relative path against the process working directory — so
+`Write … to the <file: "test.txt">.` in a generated program wrote
+`Train/script/test.txt`. It did: `app.log`, `test.txt`, `encoded.txt`,
+`decoded.txt` and a fabricated `events.jsonl` were sitting untracked there
+(GitLab #804).
+
+### Experiment tracking
+
+Every stage records to `Train/experiments.db` under one session id — the
+training passes explicitly, and every data stage automatically, because
+`save_notebook_pairs()` is the single funnel they all write through and it logs
+the row count, the drop reasons, the ARO version and the session as a side
+effect of saving. Set `ARO_TRAIN_SESSION` to join a whole pipeline run together;
+`ARO_TRAIN_DB` redirects the store.
+
+The database itself is gitignored: it is binary, it does not diff, and a review
+cannot read it. What is committed is the CSV exported from it:
+
+```bash
+python3 Train/script/experiment_db.py --export --release 2026.09
+python3 Train/script/experiment_db.py --list --stage NB17
+```
+
+One row per stage-run, fixed column order, JSON columns key-sorted, so two runs
+compare with `diff`. `Train/runs/2026.09/experiments.csv` is the first such
+record — the 22 rows the September run had left in the untracked database.
 
 ### Provenance
 
