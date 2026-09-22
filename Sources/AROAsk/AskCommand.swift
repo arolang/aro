@@ -55,6 +55,9 @@ public struct AskCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Read-only: the model is not given the tools that write files or run commands, so it explains the change instead of making it.")
     public var readOnly: Bool = false
 
+    @Flag(name: .long, help: "After the answer, print what the run cost and what the harness had to correct.")
+    public var stats: Bool = false
+
     @Option(name: .long, help: "Sampling temperature (default 0.2)")
     public var temperature: Double = 0.2
 
@@ -98,6 +101,12 @@ public struct AskCommand: AsyncParsableCommand {
         let promptText = prompt.joined(separator: " ")
         let answer = try await session.ask(noThink ? "/no_think \(promptText)" : promptText)
         print(answer)
+        if stats {
+            // To stderr: the answer is the output, and a pipeline reading it
+            // should not have to strip a bill off the end (GitLab #878).
+            FileHandle.standardError.write(
+                Data("\n\(await session.statisticsSummary())\n".utf8))
+        }
     }
 
     // MARK: - Slash dispatch

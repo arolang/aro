@@ -122,6 +122,9 @@ public actor AskSession {
     /// What this session has already handed the model, so a second search
     /// returns other things (GitLab #874).
     private let retrievalMemory = RetrievalMemory()
+    /// What this session cost, and what the harness had to correct in it
+    /// (GitLab #878).
+    private let tally = SessionTally()
     private var focusFile: URL?
     private var eventSink: (@Sendable (AskEvent) -> Void)?
     private var editorHooks: AskEditorHooks?
@@ -241,6 +244,18 @@ public actor AskSession {
     /// Workspace-relative display path of the current focus file, or nil.
     public func focusFilePath() -> String? {
         focusFile.map { displayPath(for: $0) }
+    }
+
+    /// What this session cost, and what the harness had to correct in it
+    /// (GitLab #878). `aro ask --stats` prints it; the training pipeline is
+    /// the real consumer.
+    public func statistics() async -> SessionTally.Snapshot {
+        await tally.current()
+    }
+
+    /// The tally as one line.
+    public func statisticsSummary() async -> String {
+        await tally.summary()
     }
 
     /// Receive status + tool-activity events while `ask()` runs. Used by
@@ -435,6 +450,7 @@ public actor AskSession {
         guard let backend = backend else { throw LMBackendError.notStarted }
 
         var context = try contextStore.loadOrCreate(model: config.model)
+        await tally.record(turn: true)
         context.messages.append(AskMessage(role: "user", content: prompt))
         try contextStore.save(context)
 
@@ -499,6 +515,7 @@ public actor AskSession {
                         TokenBudget.tokens(in: msgs, charsPerToken: ratio) < ceiling
                     })
                 if report.didAnything {
+                    await tally.record(compacted: report.compacted)
                     emitStatus("context is filling up — elided \(report.compacted) earlier "
                              + "tool result(s), keeping their paths")
                 }
@@ -531,6 +548,7 @@ public actor AskSession {
                 .first { $0.isCompellable && !forcedAlready.contains($0.preferred) }
             if let forced {
                 forcedAlready.insert(forced.preferred)
+                await tally.record(forcedCall: true)
                 emitStatus("requiring \(forced.preferred) — \(forced.reason)")
             }
 
@@ -588,6 +606,7 @@ public actor AskSession {
                 && Self.thinkingTail(reply.content ?? "") == nil
                 && !prompt.hasPrefix("/no_think") {
                 emitStatus("model stalled while thinking — retrying with /no_think…")
+                await tally.recordRetry("no-think")
                 var retryMessages = context.messages
                 if let lastUser = retryMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = retryMessages[lastUser].content ?? ""
@@ -642,6 +661,7 @@ public actor AskSession {
                 && (reply.toolCalls ?? []).isEmpty
                 && !prompt.contains(directivePrefix) {
                 emitStatus("model returned no content — retrying with code-only directive…")
+                await tally.recordRetry("code-only")
                 var directiveMessages = context.messages
                 if let lastUser = directiveMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = directiveMessages[lastUser].content ?? ""
@@ -693,6 +713,7 @@ public actor AskSession {
                     "model wrote a tool call as a code block instead of invoking it — " +
                     "retrying via the tool-call protocol…"
                 )
+                await tally.recordRetry("disguised-tool-call")
                 var nudgeMessages = context.messages
                 nudgeMessages.append(AskMessage(
                     role: "assistant",
@@ -762,10 +783,17 @@ public actor AskSession {
             // Done before persist so the saved turn, the self-repair `aro
             // check`, and the returned text all see the corrected code.
             if !stripped.text.isEmpty {
+                let beforeNormalisation = stripped.text
                 stripped = StrippedReply(
                     text: normalizeAROWhitespace(stripped.text),
                     truncatedDuringThinking: stripped.truncatedDuringThinking
                 )
+                // A repair is a defect the prompt was supposed to prevent.
+                // Counting it keeps the prompt failure visible instead of
+                // quietly papered over (GitLab #878).
+                if stripped.text != beforeNormalisation {
+                    await tally.recordRepair("aro-whitespace")
+                }
             }
 
             // Persist assistant turn (stripped)
@@ -792,6 +820,7 @@ public actor AskSession {
                     toolCallsMade: toolCallsMade,
                     alreadyFired: bailoutsFired) {
                     bailoutsFired.insert(finding)
+                    await tally.recordRetry("bail-out")
                     emitStatus(Self.bailoutStatus(for: finding))
                     context.messages.append(AskMessage(
                         role: "assistant",
@@ -810,6 +839,7 @@ public actor AskSession {
                     groundingChecked = true
                     let findings = grounding.inspect(answer: stripped.text)
                     if !findings.isEmpty {
+                        await tally.recordRetry("ungrounded-claim")
                         emitStatus("answer makes \(findings.count) claim(s) this project "
                                  + "contradicts — asking for it again…")
                         context.messages.append(AskMessage(
@@ -892,6 +922,7 @@ public actor AskSession {
                     toolConsecutiveFailures[name] = 0
                 }
                 toolCallsMade.append(name)
+                await tally.record(toolCall: true, toolFailure: failed)
                 if ToolRequirement.wroteARO(tool: name, argumentsJSON: call.function.arguments) {
                     wroteAROFile = true
                 }
@@ -1245,6 +1276,7 @@ public actor AskSession {
             // Vary temperature across attempts. Same temperature reproduces
             // the same wrong output, which is what the original loop did.
             let temp = min(1.5, config.temperature + Self.repairTempOffsets[attempt - 1])
+            await tally.recordRepair("aro-check")
 
             let request = LMChatRequest(
                 model: config.model,
