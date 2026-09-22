@@ -2535,6 +2535,7 @@ extension Parser {
         .is:           .equality,
         .isNot:        .equality,
         .contains:     .equality,
+        .subset:       .equality,
         // Temporal comparison sits with the other comparisons, so
         // `when <a> before <b> and <c> after <d>` groups the way it
         // reads (GitLab #516).
@@ -2562,6 +2563,13 @@ extension Parser {
         // position tells them apart with no lookahead.
         case .identifier(let name) where name == "before" || name == "after":
             return .comparison
+
+        // `subset` is a set-containment predicate in operator position and an
+        // ordinary name everywhere else (GitLab #864) — the same
+        // context-sensitive treatment `before` and `after` get, and for the
+        // same reason: `<subset>` is a name people write.
+        case .identifier(let name) where name == "subset":
+            return .equality
 
         // `in` is a membership comparison in operator position. It is a
         // lexer keyword because `for each <x> in <xs>` needs it, but every
@@ -2643,6 +2651,14 @@ extension Parser {
             if op == .is && check(.not) {
                 advance()
                 actualOp = .isNot
+            }
+
+            // `subset of <b>` — the `of` is part of the operator and reads
+            // like English (GitLab #864). It is optional so that `<a> subset
+            // <b>` is not a parse error for something whose meaning is plain;
+            // ARO-0042 writes the `of`.
+            if actualOp == .subset, case .identifier("of") = peek().kind {
+                advance()
             }
 
             // Handle "is true", "is false", "is nil/null" as equality comparisons
@@ -2754,6 +2770,7 @@ extension Parser {
         case .is: return .is
         case .identifier(let name) where name == "before": return .before
         case .identifier(let name) where name == "after": return .after
+        case .identifier(let name) where name == "subset": return .subset
         case .in: return .in
         case .and: return .and
         case .or: return .or

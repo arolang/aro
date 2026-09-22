@@ -686,6 +686,7 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
 | `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
@@ -725,6 +726,12 @@ and `Map the <ns: name> from the <us>.` are the same statement. There is no
 per-element binding, so `with <item> * 0.9` has nothing to range over — it used
 to parse and die on `Undefined variable: item`, and `with 3` was discarded
 silently; both are check-time errors now. Use `for each` to compute per element.
+
+**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
+It answers a question rather than producing a collection, so it sits with `in`,
+`contains` and `matches`: `Return an <OK: status> for the <request> when
+<required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
+left does not make a new member — and the empty set is a subset of everything.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
@@ -924,7 +931,7 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 │   # Data Processing
 ├── DataPipeline/       # Filter, transform, aggregate
 ├── GroupDemo/          # Group action: partition collections by field
-├── SetOperations/      # Union, intersect, difference
+├── SetOperations/      # Union, intersect, difference, symmetric-difference, subset of
 ├── CollectionMerge/    # Merging collections and objects
 ├── RepositoryObserver/ # Repository change observers
 ├── SQLiteExample/      # Database plugin usage
@@ -1052,7 +1059,7 @@ The `Proposals/` directory contains language specifications:
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
-| **0042 Set Operations** | intersect, difference, union on collections |
+| **0042 Set Operations** | intersect, difference, union, symmetric-difference, `subset of` |
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |

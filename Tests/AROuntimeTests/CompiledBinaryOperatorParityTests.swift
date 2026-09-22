@@ -45,6 +45,8 @@ struct CompiledBinaryOperatorParityTests {
             return ("a", ["a", "b"] as [any Sendable])
         case .contains:
             return (["a", "b"] as [any Sendable], "a")
+        case .subset:
+            return (["a"] as [any Sendable], ["a", "b"] as [any Sendable])
         case .matches:
             return ("abc", "a.c")
         case .before, .after:
@@ -88,6 +90,15 @@ struct CompiledBinaryOperatorParityTests {
         #expect(evaluateBinaryOp(op: "after",
                                  left: "2030-01-01T00:00:00Z",
                                  right: "2020-01-01T00:00:00Z") as? Bool == true)
+
+        // subset of (#864). This test is why it was caught: the first compiled
+        // run of `<a> subset of <b>` warned and answered false.
+        #expect(evaluateBinaryOp(op: "subset of",
+                                 left: ["a"] as [any Sendable],
+                                 right: ["a", "b"] as [any Sendable]) as? Bool == true)
+        #expect(evaluateBinaryOp(op: "subset of",
+                                 left: ["a", "c"] as [any Sendable],
+                                 right: ["a", "b"] as [any Sendable]) as? Bool == false)
 
         // in, over a collection (#558)
         let tags: [any Sendable] = ["red", "green"]
