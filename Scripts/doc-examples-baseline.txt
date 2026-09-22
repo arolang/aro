@@ -148,7 +148,7 @@ Proposals/ARO-0037-regex-split.md:34
 Proposals/ARO-0038-list-element-access.md:119
 Proposals/ARO-0038-list-element-access.md:62
 Proposals/ARO-0041-datetime-ranges.md:190
-Proposals/ARO-0041-datetime-ranges.md:269
+Proposals/ARO-0041-datetime-ranges.md:339
 Proposals/ARO-0041-datetime-ranges.md:98
 Proposals/ARO-0042-set-operations.md:19
 Proposals/ARO-0043-sink-syntax.md:48
