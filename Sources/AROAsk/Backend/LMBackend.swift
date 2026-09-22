@@ -65,6 +65,19 @@ public struct LMChatRequest: Codable, Sendable {
     public var tools: [LMToolDefinition]?
     public var temperature: Double?
     public var stream: Bool?
+    /// Ceiling on the tokens this reply may generate (GitLab #869).
+    ///
+    /// A reservation, not a target. When the prompt has grown, the
+    /// reservation is what gives way — an answer written in 4 000 tokens
+    /// instead of 16 384 is the same answer, and a request refused for
+    /// exceeding the window is no answer at all. `nil` leaves each backend's
+    /// own default in place.
+    public var maxTokens: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case model, messages, tools, temperature, stream
+        case maxTokens = "max_tokens"
+    }
 }
 
 /// Response from `/v1/chat/completions`.

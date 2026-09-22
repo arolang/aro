@@ -209,7 +209,10 @@ public actor NativeMLXBackend: LMBackend {
             temperature: Float(request.temperature ?? 0.2),
             topP: 0.9
         )
-        genParams.maxTokens = 16384
+        // The caller's reservation where it set one (GitLab #869), which is
+        // how a prompt near the window still gets an answer instead of an
+        // overflow; 16 384 otherwise, for the reason above.
+        genParams.maxTokens = request.maxTokens ?? 16384
 
         // Prepare input with chat template and tools
         let userInput = UserInput(

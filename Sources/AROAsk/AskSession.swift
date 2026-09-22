@@ -427,12 +427,51 @@ public actor AskSession {
         let sessionFailureLimit = 20
 
         for round in 0..<config.maxToolCallRounds {
+            // Keep the conversation inside the window on EVERY round, not
+            // once before the loop (GitLab #869). `compactIfNeeded` above
+            // runs when the conversation is smallest; everything that
+            // follows — up to 25 rounds of file contents — used to go in
+            // unmeasured, so a run that opened three large files mid-loop
+            // could pass the check comfortably and still overflow.
+            //
+            // Tool results are shrunk first (#868): deterministic, free, and
+            // it keeps the provenance a later turn needs. Summarising is the
+            // fallback, because it costs a generation and loses paths.
+            if round > 0, await budget.exceeds(fraction: 0.7, messages: context.messages) {
+                // `fits` is called synchronously inside the compactor, so the
+                // ratio is read once here rather than awaited per step. It
+                // cannot change mid-compaction anyway.
+                let ratio = await budget.charsPerToken
+                let ceiling = Int(Double(contextLength) * 0.7)
+                let report = ToolResultCompactor.compactUntilFits(
+                    &context.messages,
+                    fits: { msgs in
+                        TokenBudget.tokens(in: msgs, charsPerToken: ratio) < ceiling
+                    })
+                if report.didAnything {
+                    emitStatus("context is filling up — elided \(report.compacted) earlier "
+                             + "tool result(s), keeping their paths")
+                }
+                // Still over after the cheap step: fall back to summarising.
+                if await budget.exceeds(fraction: 0.85, messages: context.messages) {
+                    try await compactIfNeeded(&context)
+                }
+            }
+
+            // What is left for the answer after the prompt (GitLab #869).
+            // nil means "even the floor does not fit" — the compaction above
+            // has already had its turn, so the honest thing is to let the
+            // backend's own default stand and let it say what it says.
+            let allowance = await budget.outputAllowance(
+                for: context.messages, requested: Self.requestedOutputTokens)
+
             let request = LMChatRequest(
                 model: config.model,
                 messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: config.temperature,
-                stream: false
+                stream: false,
+                maxTokens: allowance
             )
             var reply = try await backend.chat(request: request)
 
@@ -1135,6 +1174,13 @@ public actor AskSession {
     /// What the conversation costs, from the budget rather than from a
     /// constant (GitLab #870). Kept as a method because several call sites
     /// read it; the arithmetic lives in `TokenBudget`.
+    /// What an answer is allowed to cost before the budget trims it.
+    ///
+    /// Matches the MLX backend's own ceiling, so on a conversation that fits
+    /// comfortably nothing changes: the reservation only binds once the
+    /// prompt has grown enough to make it bind.
+    static let requestedOutputTokens = 16384
+
     private func estimateTokens(_ messages: [AskMessage]) async -> Int {
         await budget.tokens(in: messages)
     }
