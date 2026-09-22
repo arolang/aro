@@ -1463,7 +1463,11 @@ public final class FeatureSetExecutor: Sendable {
                 // Execute loop body in iteration context
                 for bodyStatement in loop.body {
                     try await executeStatement(bodyStatement, context: iterationContext)
-                    if iterationContext.getResponse() != nil {
+                    if let response = iterationContext.getResponse() {
+                        // See `executeForEachLazy`: ending the loop is not
+                        // ending the feature set unless the response travels
+                        // with it (GitLab #665).
+                        context.setResponse(response)
                         return
                     }
                 }
@@ -1498,7 +1502,13 @@ public final class FeatureSetExecutor: Sendable {
 
             for bodyStatement in loop.body {
                 try await executeStatement(bodyStatement, context: iterationContext)
-                if iterationContext.getResponse() != nil {
+                if let response = iterationContext.getResponse() {
+                    // The response has to reach the FEATURE SET, not just end
+                    // the loop (GitLab #665). An iteration context is a plain
+                    // child, not a statement scope, so `setResponse` stored it
+                    // on the child and `getResponse` never propagated it — the
+                    // loop stopped and the statements after it ran anyway.
+                    context.setResponse(response)
                     return
                 }
             }

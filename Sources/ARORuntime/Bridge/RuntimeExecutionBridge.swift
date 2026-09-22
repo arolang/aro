@@ -2381,8 +2381,13 @@ public func aro_runtime_foreach_stream(
             for try await item in state.stream.stream {
                 let boxed = AROCValue(value: item)
                 let elementPtr = UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
-                _ = state.body(state.contextPtr, elementPtr, index)
+                // A NON-NULL return means "stop": the body hit a `Return` and
+                // the feature set is over (GitLab #665). The pointer is the
+                // body's own context parameter — a sentinel, never owned by
+                // this loop, so there is nothing to release.
+                let stop = state.body(state.contextPtr, elementPtr, index)
                 Unmanaged<AROCValue>.fromOpaque(elementPtr).release()
+                if stop != nil { break }
                 // Stop if an action in the body set an error on the context
                 if state.contextHandle.context.getExecutionError() != nil { break }
                 index += 1
@@ -2391,6 +2396,19 @@ public func aro_runtime_foreach_stream(
         semaphore.signal()
     }
     semaphore.wait()
+}
+
+/// Whether a `Return` has already set this context's response (GitLab #665).
+///
+/// The outer function needs this after a streamed `for each`: the body runs in
+/// its own function, so a `Return` inside it cannot branch to the enclosing
+/// feature set's early-return block. The body stops the stream, and the outer
+/// function asks here whether it stopped *because of a Return*.
+@_cdecl("aro_context_has_response")
+public func aro_context_has_response(_ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    guard let ptr = contextPtr else { return 0 }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    return contextHandle.context.getResponse() != nil ? 1 : 0
 }
 
 // MARK: - Mutable Scope (GitLab #131 While Loop)

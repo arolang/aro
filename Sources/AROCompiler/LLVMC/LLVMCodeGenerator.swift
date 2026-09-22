@@ -1098,7 +1098,8 @@ public final class LLVMCodeGenerator {
         let outerResultPtr  = ctx.currentResultPtr
         let outerIP         = ctx.currentInsertionPoint
         // The body is its own function: an early-return block belonging to the
-        // enclosing feature set is not a valid branch target from here.
+        // enclosing feature set is not a valid branch target from here. A block
+        // inside the body function is installed below (GitLab #665).
         let outerEarlyReturn = ctx.currentEarlyReturnBlock
         ctx.currentEarlyReturnBlock = nil
 
@@ -1122,6 +1123,21 @@ public final class LLVMCodeGenerator {
         let bodyErrorBlock = ctx.module.appendBlock(named: "\(prefix)_error", to: bodyFunc)
         ctx.setInsertionPoint(atEndOf: bodyErrorBlock)
         ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+
+        // `Return` inside the body ends the feature set (GitLab #665). The body
+        // is its own function, so it cannot branch to the enclosing feature
+        // set's early-return block — it returns a NON-NULL sentinel instead,
+        // and `aro_runtime_foreach_stream` reads that as "stop". The sentinel
+        // is the body's own context parameter: non-null by construction and
+        // owned by nobody, so the driver has nothing to free.
+        //
+        // Without this the loop kept iterating and each later iteration
+        // overwrote the response the `Return` had set. The array path has
+        // always branched; only the stream path was deaf.
+        let bodyReturnBlock = ctx.module.appendBlock(named: "\(prefix)_ret", to: bodyFunc)
+        ctx.setInsertionPoint(atEndOf: bodyReturnBlock)
+        ctx.module.insertReturn(bodyCtxParam, at: ctx.insertionPoint)
+        ctx.currentEarlyReturnBlock = bodyReturnBlock
 
         // Continue generating in the entry block
         ctx.setInsertionPoint(atEndOf: bodyEntry)
@@ -1194,6 +1210,21 @@ public final class LLVMCodeGenerator {
         let continueBlock = ctx.module.appendBlock(named: "\(prefix)_cont", to: ctx.currentFunction!)
         ctx.module.insertCondBr(if: errorOccurred, then: errorBlock, else: continueBlock, at: ctx.insertionPoint)
         ctx.setInsertionPoint(atEndOf: continueBlock)
+
+        // A `Return` in the body stopped the stream. The body could only say
+        // "stop"; whether that was a Return is answered here, and the feature
+        // set ends rather than running the statements after the loop
+        // (GitLab #665).
+        if let earlyReturn = ctx.currentEarlyReturnBlock {
+            let hasResponse = ctx.module.insertCall(
+                externals.contextHasResponse, on: [ctx.currentContextVar!], at: ctx.insertionPoint)
+            let returned = ctx.module.insertIntegerComparison(
+                .ne, hasResponse, ctx.i32Type.zero, at: ctx.insertionPoint)
+            let noReturnBlock = ctx.module.appendBlock(named: "\(prefix)_noret", to: ctx.currentFunction!)
+            ctx.module.insertCondBr(if: returned, then: earlyReturn, else: noReturnBlock,
+                                    at: ctx.insertionPoint)
+            ctx.setInsertionPoint(atEndOf: noReturnBlock)
+        }
 
         // Jump to endBlock (shared with array path)
         ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
