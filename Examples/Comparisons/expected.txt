@@ -1,0 +1,5 @@
+equal: true / equal
+greater: false / greater
+less: false / less
+admin access
+startup

@@ -2199,6 +2199,13 @@ private final class StringConstantCollector {
         if let withClause = modifiers.withClause {
             collectFromExpression(withClause)
         }
+
+        // The `against` operand's string constants have to be in the module
+        // too, or the binder emits a reference to one that was never created
+        // (GitLab #663).
+        if let againstClause = modifiers.againstClause {
+            collectFromExpression(againstClause)
+        }
     }
 
     private func collectFromLiteral(_ lit: LiteralValue) {

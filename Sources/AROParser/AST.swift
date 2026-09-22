@@ -741,9 +741,16 @@ public struct RangeModifiers: Sendable, CustomStringConvertible {
     /// Empty range modifiers
     public static let none = RangeModifiers()
 
-    /// Check if any range modifier is present
+    /// Check if any range modifier is present.
+    ///
+    /// `againstClause` counts. It was added for `Compare` (GitLab #469) after
+    /// this property was written, and leaving it out meant a statement whose
+    /// *only* modifier was `against` looked like it had none — so the compiled
+    /// modifier binder and the string collector both skipped it on their
+    /// `guard !modifiers.isEmpty`, and `Compare the <r> from the <a> against
+    /// the <b>.` lost its right operand in a binary (GitLab #663).
     public var isEmpty: Bool {
-        toClause == nil && withClause == nil
+        toClause == nil && withClause == nil && againstClause == nil
     }
 
     public var description: String {
