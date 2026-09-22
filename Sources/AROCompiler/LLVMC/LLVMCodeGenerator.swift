@@ -1261,9 +1261,19 @@ public final class LLVMCodeGenerator {
         // Push break target so inner BreakStatement knows where to jump
         breakBlockStack.append(endBlock)
 
-        // Generate body statements
+        // Generate body statements.
+        //
+        // `errorBlock`, not `incrBlock` (GitLab #654). Passing the loop's own
+        // increment block made a failing action inside `for <i> from a to b`
+        // advance to the *next iteration* instead of aborting the feature set:
+        // every remaining iteration then ran its first action before
+        // `contextHasError` was consulted, so side effects kept happening
+        // after the error and the program only stopped when the loop ended.
+        // The interpreter stops at the first error, and `generateForEachLoop`
+        // and `generateWhileLoop` both already pass `errorBlock` — this was
+        // the one loop form out of step.
         for (stmtIndex, stmt) in loop.body.enumerated() {
-            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
 
         // Pop break target when leaving this loop
