@@ -1006,9 +1006,31 @@ def _prompt_action_reference(catalog=None, kb=None):
     for name, entry in sorted(catalog.items()):
         role = (entry.get('role') or 'own').lower()
         aliases = entry.get('aliases') or [name]
-        token = aliases[0].capitalize()
-        if len(aliases) > 1:
-            token += '=' + '/'.join(a.capitalize() for a in aliases[1:3])
+
+        # The CANONICAL verb leads, and every alias follows.
+        #
+        # This used to be `aliases[0]` with the rest capped at two, and
+        # `aliases` is sorted alphabetically — so the prompt taught 28 of 71
+        # actions under a verb nobody writes. Logging was `Debug`, Return was
+        # `Respond`, Store was `Persist`, Create was `Build`, Compute was
+        # `Calculate`, Sort was `Arrange`. Every example in the proposals,
+        # the Book and CLAUDE.md uses the canonical verb; the prompt the
+        # model trains on led with a synonym.
+        #
+        # Two were worse than led-with-a-synonym. `Retrieve` and `Update`
+        # sort last among their own aliases, so the two-alias cap cut them
+        # out of the reference entirely — and the paragraph above this list
+        # says "Use only these verbs … if nothing here does what the user
+        # wants, say so". The prompt was telling the model that `Retrieve`,
+        # which opens the first HTTP example in CLAUDE.md, does not exist.
+        #
+        # Showing every alias instead of two costs 47 characters across the
+        # whole reference — about twelve tokens. A cap that saves twelve
+        # tokens by teaching valid verbs as invalid is not a saving.
+        others = [a for a in aliases if a != name]
+        token = name.capitalize()
+        if others:
+            token += '=' + '/'.join(a.capitalize() for a in others)
         preps = '/'.join(entry.get('prepositions') or [])
         if preps:
             token += ':' + preps
