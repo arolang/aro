@@ -63,7 +63,7 @@ public enum ToolPromptCatalogue {
         "search_project": (ToolPromptGroup.project,
                            "Semantic, not literal. Use grep when you know the exact string."),
 
-        "aro_check": (ToolPromptGroup.toolchain, nil),
+        "aro_check": (ToolPromptGroup.toolchain, nil),   // alwaysQueried, see below
         "aro_run": (ToolPromptGroup.toolchain, nil),
         "aro_build": (ToolPromptGroup.toolchain, nil),
         "aro_test": (ToolPromptGroup.toolchain, nil),
@@ -91,8 +91,17 @@ public enum ToolPromptCatalogue {
     /// land under "Other", which is the honest place for them.
     static func documented(_ tool: AskToolDescriptor) -> AskToolDescriptor {
         guard let copy = builtIns[tool.name] else { return tool }
-        return tool.withPromptCopy(group: copy.group, hint: copy.hint)
+        return tool.withPromptCopy(group: copy.group, hint: copy.hint,
+                                   alwaysQueried: alwaysQueried.contains(tool.name))
     }
+
+    /// Tools every turn that writes code must have called before answering.
+    ///
+    /// The same set `ToolRequirement.checkedTheCode` compels (GitLab #873):
+    /// the prompt says it, the catalogue states it as a requirement, and
+    /// `tool_choice` enforces it. Three places, one fact — and the
+    /// requirement disappears from all three when the tool is not attached.
+    static let alwaysQueried: Set<String> = ["aro_check"]
 
     /// Header of the section in `aro_system_prompt.txt` this replaces.
     ///

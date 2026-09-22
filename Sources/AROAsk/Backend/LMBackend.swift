@@ -46,7 +46,7 @@ public struct LMToolCall: Codable, Sendable, Equatable {
 }
 
 /// Request sent to `/v1/chat/completions`.
-public struct LMChatRequest: Codable, Sendable {
+public struct LMChatRequest: Encodable, Sendable {
     public struct Message: Codable, Sendable {
         public var role: String
         public var content: String?
@@ -78,13 +78,46 @@ public struct LMChatRequest: Codable, Sendable {
     public var topP: Double?
     /// Top-k cutoff applied before sampling (GitLab #877).
     public var topK: Int?
+    /// A tool this request must call (GitLab #873).
+    ///
+    /// Rendered as OpenAI's named `tool_choice`, which llama-server and
+    /// vLLM both honour. It takes the third option away: the model may not
+    /// answer instead. Backends that cannot express it ignore it and the
+    /// prose instruction in the prompt stands, so this degrades rather than
+    /// fails.
+    public var forcedToolCall: String?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, tools, temperature, stream
         case maxTokens = "max_tokens"
         case topP = "top_p"
         case topK = "top_k"
+        case toolChoice = "tool_choice"
     }
+
+    // `tool_choice` is OpenAI's nested object rather than a bare string, so
+    // the encoding is written out instead of synthesised.
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(model, forKey: .model)
+        try c.encode(messages, forKey: .messages)
+        try c.encodeIfPresent(tools, forKey: .tools)
+        try c.encodeIfPresent(temperature, forKey: .temperature)
+        try c.encodeIfPresent(stream, forKey: .stream)
+        try c.encodeIfPresent(maxTokens, forKey: .maxTokens)
+        try c.encodeIfPresent(topP, forKey: .topP)
+        try c.encodeIfPresent(topK, forKey: .topK)
+        if let forced = forcedToolCall {
+            var choice = c.nestedContainer(keyedBy: ToolChoiceKeys.self, forKey: .toolChoice)
+            try choice.encode("function", forKey: .type)
+            var function = choice.nestedContainer(keyedBy: ToolChoiceFunctionKeys.self,
+                                                  forKey: .function)
+            try function.encode(forced, forKey: .name)
+        }
+    }
+
+    private enum ToolChoiceKeys: String, CodingKey { case type, function }
+    private enum ToolChoiceFunctionKeys: String, CodingKey { case name }
 }
 
 /// Response from `/v1/chat/completions`.

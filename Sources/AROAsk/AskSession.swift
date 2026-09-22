@@ -441,6 +441,12 @@ public actor AskSession {
         /// checks (GitLab #871).
         var toolCallsMade: [String] = []
         var bailoutsFired: Set<BailoutGuard.Finding> = []
+        /// Whether this run wrote ARO to a file, which is the confirmed
+        /// signal that `aro_check` is owed (GitLab #873).
+        var wroteAROFile = false
+        /// Requirements already compelled, so a model that ignores a forced
+        /// call is not forced again for ever.
+        var forcedAlready: Set<String> = []
         let perToolFailureLimit = 3
         let sessionFailureLimit = 20
 
@@ -483,6 +489,25 @@ public actor AskSession {
             let allowance = await budget.outputAllowance(
                 for: context.messages, requested: Self.requestedOutputTokens)
 
+            // A lookup this turn owes and has not made (GitLab #873). Named
+            // in `tool_choice`, which takes the third option away: the model
+            // may not answer instead of calling it. Only a *confirmed*
+            // requirement is compelled — one read off what the turn produced,
+            // never one guessed from the words of the request — and only
+            // once, because a model that ignores a forced call will ignore
+            // the next one too.
+            let attachedNames = Set(tools.map { $0.function.name })
+            let forced = ToolRequirement.outstanding(
+                answer: "",
+                toolCallsMade: toolCallsMade,
+                wroteAROFile: wroteAROFile,
+                attached: attachedNames)
+                .first { $0.isCompellable && !forcedAlready.contains($0.preferred) }
+            if let forced {
+                forcedAlready.insert(forced.preferred)
+                emitStatus("requiring \(forced.preferred) — \(forced.reason)")
+            }
+
             let request = LMChatRequest(
                 model: config.model,
                 messages: await requestMessages(from: context.messages),
@@ -491,7 +516,8 @@ public actor AskSession {
                 stream: false,
                 maxTokens: allowance,
                 topP: config.topP,
-                topK: config.topK
+                topK: config.topK,
+                forcedToolCall: forced?.preferred
             )
             var reply = try await backend.chat(request: request)
 
@@ -818,6 +844,9 @@ public actor AskSession {
                     toolConsecutiveFailures[name] = 0
                 }
                 toolCallsMade.append(name)
+                if ToolRequirement.wroteARO(tool: name, argumentsJSON: call.function.arguments) {
+                    wroteAROFile = true
+                }
 
                 emitToolResult(name: name, arguments: call.function.arguments, output: output, failed: failed)
 

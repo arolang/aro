@@ -122,7 +122,8 @@ public struct AskToolDescriptor: Sendable {
     }
 
     /// This descriptor with its prompt-facing copy applied (GitLab #867).
-    public func withPromptCopy(group: String, hint: String?) -> AskToolDescriptor {
+    public func withPromptCopy(group: String, hint: String?,
+                               alwaysQueried: Bool = false) -> AskToolDescriptor {
         AskToolDescriptor(
             name: name,
             description: description,
@@ -130,7 +131,7 @@ public struct AskToolDescriptor: Sendable {
             riskLevel: riskLevel,
             promptGroup: group,
             promptHint: hint,
-            alwaysQueried: alwaysQueried,
+            alwaysQueried: alwaysQueried || self.alwaysQueried,
             execute: execute)
     }
 
