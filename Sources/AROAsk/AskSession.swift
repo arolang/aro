@@ -374,6 +374,15 @@ public actor AskSession {
     /// OPEN PROJECT and OPEN FILE context blocks right after the system prompt.
     private func requestMessages(from messages: [AskMessage]) async -> [LMChatRequest.Message] {
         var out = messages.map { $0.toRequestMessage() }
+        // Replace the prompt's tool list with the tools actually attached
+        // (GitLab #867). The stored system message keeps the shipped text —
+        // `.context` is a record of the conversation, not of what the harness
+        // did to it — and the substitution happens on the way out, once per
+        // request, so MCP tools that only exist at runtime are listed too.
+        if let first = out.first, first.role == "system", let text = first.content {
+            let tools = await registry.list()
+            out[0].content = ToolPromptCatalogue.substituted(into: text, tools: tools)
+        }
         var context: [LMChatRequest.Message] = []
         if config.injectProjectContext, let project = projectContextMessage() {
             context.append(project)

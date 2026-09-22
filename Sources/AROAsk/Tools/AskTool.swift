@@ -31,6 +31,18 @@ public struct AskToolDescriptor: Sendable {
     public let parameters: JSONValue
     /// Risk tier driving the approval policy (#370).
     public let riskLevel: AskToolRiskLevel
+    /// Heading this tool is listed under in the generated catalogue
+    /// (GitLab #867). Tools that name no group fall under "Other".
+    public let promptGroup: String
+    /// One line of usage guidance the `description` cannot carry — a
+    /// gotcha, a sensible default, when to prefer a sibling tool. `nil`
+    /// when the description already says everything.
+    public let promptHint: String?
+    /// Whether every turn that produces work must call this tool before
+    /// answering. Rendered as a requirement naming the tool — and dropped
+    /// automatically when the tool is not attached, which a sentence in a
+    /// static prompt could not do.
+    public let alwaysQueried: Bool
     public let execute: @Sendable (JSONValue) async throws -> String
 
     /// Whether this tool requires user confirmation. Derived
@@ -46,12 +58,18 @@ public struct AskToolDescriptor: Sendable {
         description: String,
         parameters: JSONValue,
         riskLevel: AskToolRiskLevel,
+        promptGroup: String = ToolPromptGroup.other,
+        promptHint: String? = nil,
+        alwaysQueried: Bool = false,
         execute: @escaping @Sendable (JSONValue) async throws -> String
     ) {
         self.name = name
         self.description = description
         self.parameters = parameters
         self.riskLevel = riskLevel
+        self.promptGroup = promptGroup
+        self.promptHint = promptHint
+        self.alwaysQueried = alwaysQueried
         self.execute = execute
     }
 
@@ -64,13 +82,19 @@ public struct AskToolDescriptor: Sendable {
         description: String,
         schema: ToolParameterSchema,
         riskLevel: AskToolRiskLevel = .readonly,
+        promptGroup: String = ToolPromptGroup.other,
+        promptHint: String? = nil,
+        alwaysQueried: Bool = false,
         execute: @escaping @Sendable (ToolArguments) async throws -> String
     ) {
         self.init(
             name: name,
             description: description,
             parameters: schema.jsonSchema,
-            riskLevel: riskLevel
+            riskLevel: riskLevel,
+            promptGroup: promptGroup,
+            promptHint: promptHint,
+            alwaysQueried: alwaysQueried
         ) { raw in
             try await execute(ToolArguments(raw: raw, schema: schema))
         }
@@ -95,6 +119,46 @@ public struct AskToolDescriptor: Sendable {
             riskLevel: requiresApproval ? .modify : .readonly,
             execute: execute
         )
+    }
+
+    /// This descriptor with its prompt-facing copy applied (GitLab #867).
+    public func withPromptCopy(group: String, hint: String?) -> AskToolDescriptor {
+        AskToolDescriptor(
+            name: name,
+            description: description,
+            parameters: parameters,
+            riskLevel: riskLevel,
+            promptGroup: group,
+            promptHint: hint,
+            alwaysQueried: alwaysQueried,
+            execute: execute)
+    }
+
+    /// `name(arg, optional?)` — the one-line form the generated catalogue
+    /// lists (GitLab #867).
+    ///
+    /// Derived from `parameters`, the JSON schema, rather than from the
+    /// Swift declaration: that is the one field every descriptor has,
+    /// including the MCP-bridged ones whose parameters arrive from a
+    /// server at runtime and can appear in no hand-written list.
+    public var promptSignature: String {
+        guard case .object(let schema) = parameters,
+              case .object(let properties)? = schema["properties"] else {
+            return "\(name)()"
+        }
+        var required: Set<String> = []
+        if case .array(let names)? = schema["required"] {
+            for case .string(let n) in names { required.insert(n) }
+        }
+        // Required first, then optional, each alphabetically: a stable
+        // order means a diff of this block is a real change, not a
+        // dictionary's iteration order moving around.
+        let names = properties.keys.sorted()
+        let rendered = names.sorted { a, b in
+            let ar = required.contains(a), br = required.contains(b)
+            return ar == br ? a < b : ar
+        }.map { required.contains($0) ? $0 : "\($0)?" }
+        return "\(name)(\(rendered.joined(separator: ", ")))"
     }
 
     public var toolDefinition: LMToolDefinition {
