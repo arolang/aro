@@ -72,7 +72,7 @@ Proposals/ARO-0006-error-philosophy.md:389
 Proposals/ARO-0007-events-reactive.md:161
 Proposals/ARO-0007-events-reactive.md:507
 Proposals/ARO-0007-events-reactive.md:725
-Proposals/ARO-0007-events-reactive.md:833
+Proposals/ARO-0007-events-reactive.md:871
 Proposals/ARO-0008-io-services.md:1011
 Proposals/ARO-0008-io-services.md:1162
 Proposals/ARO-0008-io-services.md:1215
