@@ -67,7 +67,7 @@ Almost everything else is macOS and Linux. Tracked by #203 and #679–#701.
 | `aro lsp`, `aro mcp`, `aro ask`, `aro kernel` | yes | yes | **not registered as subcommands** (#701) |
 | File monitor | FSEvents | inotify | 1 s polling |
 | Terminal UI | full | full | Windows Terminal only; **hidden prompt echoes the password** (#699) |
-| `.store` writability | opt-in via `chmod o+w` | same | **inverted — every store is writable** (#684) |
+| `.store` writability | opt-in via `chmod o+w` | same | opt-in via a `# aro-store: writable` marker (#684) |
 | Shutdown signals | `SIGINT`/`SIGTERM` | same | `SetConsoleCtrlHandler` for Ctrl-C, Ctrl-Break, close, logoff, shutdown (#685) |
 | Metrics | real | real | **all zeros, not absence** (#700) |
 | Solaro | yes | no | no |
