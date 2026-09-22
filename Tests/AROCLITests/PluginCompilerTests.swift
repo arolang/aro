@@ -226,14 +226,24 @@ struct PluginCompilerTests {
         )
     }
 
+    /// Runs the policy at the CLI layer, where it throws and writes into the
+    /// build's result. `EmbeddedPythonPolicyTests` covers the rules; these
+    /// cover that the build acts on them.
+    private func apply(linkMode: CCompiler.LinkMode,
+                       plugins: [String]) throws -> PluginCompiler.Result {
+        var result = PluginCompiler.Result()
+        try compiler(linkMode: linkMode).applyEmbeddedPythonPolicy(
+            plugins: plugins, buildMachinePython: nil, into: &result)
+        return result
+    }
+
     @Test("a --static build refuses a Python plugin")
     func staticBuildRefusesPythonPlugin() {
         // A standalone binary cannot carry an interpreter it resolved from the
         // build machine's paths; the build says so rather than the customer's
         // machine saying it later.
         #expect(throws: (any Error).self) {
-            try compiler(linkMode: .staticLink)
-                .reportEmbeddedPythonDependency(plugins: ["plugin-python-markdown"], python: nil)
+            _ = try apply(linkMode: .staticLink, plugins: ["plugin-python-markdown"])
         }
     }
 
@@ -241,14 +251,17 @@ struct PluginCompilerTests {
     func dynamicBuildAllowsPythonPlugin() throws {
         // --dynamic already means "not one file"; a dependency on a local
         // Python is consistent with what it promises, and is warned about.
-        try compiler(linkMode: .dynamicLink)
-            .reportEmbeddedPythonDependency(plugins: ["plugin-python-markdown"], python: nil)
+        let result = try apply(linkMode: .dynamicLink, plugins: ["plugin-python-markdown"])
+        // Warned about, not embedded: nothing was staged.
+        #expect(result.pythonStdlibToStage == nil)
     }
 
     @Test("a build with no Python plugins is unaffected in either mode")
     func noPythonPluginsNoPolicy() throws {
         for mode in [CCompiler.LinkMode.staticLink, .dynamicLink] {
-            try compiler(linkMode: mode).reportEmbeddedPythonDependency(plugins: [], python: nil)
+            let result = try apply(linkMode: mode, plugins: [])
+            #expect(result.pythonStdlibToStage == nil)
+            #expect(result.pythonLinkerFlags.isEmpty)
         }
     }
 }

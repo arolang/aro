@@ -74,6 +74,11 @@ struct PluginCompiler: Sendable {
         var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
         /// Extra linker flags (e.g. `-lpython3.12`) required by embedded Python plugins.
         var pythonLinkerFlags: [String] = []
+        /// Set when an embeddable CPython was found: the standard library to
+        /// copy next to the finished binary, and the version that names the
+        /// directory. Staging happens after linking, because only the build
+        /// command knows where the binary landed (#856).
+        var pythonStdlibToStage: (stdlibPath: String, version: String)?
     }
 
     /// Run the full plugin pre-compilation pipeline.
@@ -434,16 +439,25 @@ struct PluginCompiler: Sendable {
         // If Python plugins were found, find libpython and prepare deps
         if hasPythonPlugins {
             let pythonFinder = PythonLibraryFinder(verbose: verbose)
-            let pythonPathsForPolicy = pythonFinder.findPython()
+            let buildMachinePython = pythonFinder.findPython()
 
-            // GitLab #608 — say now what the binary cannot do later.
-            try reportEmbeddedPythonDependency(plugins: pythonPluginNames, python: pythonPathsForPolicy)
+            // GitLab #608 said now what the binary cannot do later; #856
+            // added the case where it *can*, given a CPython to carry. One
+            // decision covers both, so there is one set of rules rather than
+            // two that can drift apart.
+            let embeddingStatically = try applyEmbeddedPythonPolicy(
+                plugins: pythonPluginNames,
+                buildMachinePython: buildMachinePython,
+                into: &result
+            )
 
-            if let pythonPaths = pythonPathsForPolicy {
-                result.pythonLinkerFlags = pythonPaths.linkerFlags
+            if let pythonPaths = buildMachinePython {
+                if !embeddingStatically {
+                    result.pythonLinkerFlags = pythonPaths.linkerFlags
+                }
                 if verbose {
                     print("Python \(pythonPaths.version) found: \(pythonPaths.executable)")
-                    print("  Linker flags: \(pythonPaths.linkerFlags.joined(separator: " "))")
+                    print("  Linker flags: \(result.pythonLinkerFlags.joined(separator: " "))")
                 }
 
                 // Install requirements to a temporary venv if needed
@@ -474,6 +488,14 @@ struct PluginCompiler: Sendable {
 
                     if verbose { print("  Python dependencies installed") }
                 }
+            } else if embeddingStatically {
+                // The interpreter travels with the binary, so the build
+                // machine not having one of its own is irrelevant — except
+                // for `requirements.txt`, which needs a pip to run.
+                if !pythonRequirementsFiles.isEmpty {
+                    print("Warning: Python plugin requirements cannot be installed — no python3 on this machine")
+                    print("  The embedded interpreter carries the standard library only.")
+                }
             } else {
                 print("Warning: Python plugins found but python3 not available on build machine")
                 print("  Python plugins will use legacy base64 embedding")
@@ -494,75 +516,68 @@ struct PluginCompiler: Sendable {
         return result
     }
 
-    // MARK: - Embedded Python and the standalone contract (GitLab #608)
+    // MARK: - Embedded Python and the standalone contract (#608, #856)
 
-    /// Environment override that downgrades the `--static` refusal below to the
-    /// same warning `--dynamic` gets. For people who build on the machine that
-    /// will run the binary, and know it.
-    static let allowEmbeddedPythonEnvVar = "ARO_ALLOW_EMBEDDED_PYTHON"
-
-    /// Tell the user, at build time, what a Python plugin does to the binary
-    /// they are asking for — and under `--static`, refuse to produce it.
+    /// Decide what this build may claim about a Python plugin, and act on it.
     ///
     /// `aro build --static` (the default) promises one file you can copy. A
-    /// Python plugin cannot travel in it. The link line points at *this*
-    /// machine's CPython by absolute path — on macOS `<sys.prefix>/Python`, the
-    /// Homebrew or python.org framework binary; on Linux the `libpython3.X.a`
-    /// under `<prefix>/lib/python3.X/config-…` where one exists and
-    /// `-lpython3.X` otherwise. The C API is then resolved at startup with
-    /// `dlsym(nil, …)`, and the standard library is looked for at the build
-    /// machine's `sys.prefix`. None of those survive the copy.
+    /// Python plugin is the one plugin kind that cannot simply be folded in:
+    /// it needs an interpreter, and the interpreter, `libpython` and standard
+    /// library would otherwise be resolved from the machine that ran the
+    /// build. None of those survive the copy, and the failure they cause
+    /// happens on somebody else's machine, at startup, long after the build
+    /// said `[OK]`.
     ///
-    /// The failure they cause happens on the customer's machine, at startup,
-    /// long after the build said `[OK]`. So the build says it instead, by name,
-    /// while the person who can do something about it is still watching.
+    /// So the build says it instead, while the person who can do something
+    /// about it is still watching — or, given a CPython it can carry
+    /// (`ARO_STATIC_PYTHON`), embeds it, and the promise holds.
     ///
-    /// `--dynamic` is where a Python plugin belongs: that mode already means
-    /// "not one file — things are resolved beside and around the binary", so a
-    /// dependency on a local Python is consistent with what it promises. It
-    /// still gets a warning naming the exact installation it will need.
-    func reportEmbeddedPythonDependency(
+    /// The rules live in `EmbeddedPythonPolicy`, in AROCompiler, so they are
+    /// testable without running a build. This method is where the decision
+    /// meets the build: the only place that throws, prints, or writes linker
+    /// flags. #608 and #856 arrived as two separate reporting paths saying
+    /// overlapping things about the same situation; they are one here,
+    /// because two copies of a rule is how the two of them drift apart.
+    ///
+    /// - Returns: whether the interpreter is being embedded, which tells the
+    ///   caller not to overwrite the linker flags with the build machine's.
+    @discardableResult
+    func applyEmbeddedPythonPolicy(
         plugins: [String],
-        python: PythonLibraryFinder.PythonPaths?
-    ) throws {
-        guard !plugins.isEmpty else { return }
-        let named = plugins.sorted().map { "'\($0)'" }.joined(separator: ", ")
-        let allowed = ProcessInfo.processInfo.environment[Self.allowEmbeddedPythonEnvVar] == "1"
+        buildMachinePython: PythonLibraryFinder.PythonPaths?,
+        into result: inout Result
+    ) throws -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        let decision = EmbeddedPythonPolicy.decide(
+            plugins: plugins,
+            linkMode: linkMode,
+            distribution: StaticPythonDistribution.locate(environment: environment),
+            buildMachinePython: buildMachinePython.map {
+                (executable: $0.executable, libraryPath: $0.libraryPath, stdlibPath: $0.stdlibPath)
+            },
+            overrideEnabled: environment[EmbeddedPythonPolicy.overrideEnvironmentVariable] == "1"
+        )
 
-        func printDependency() {
-            if let python {
-                print("  It needs a CPython interpreter and its standard library, which this build")
-                print("  resolves from the machine it runs on:")
-                print("    interpreter: \(python.executable)")
-                print("    library:     \(python.libraryPath)")
-                print("    stdlib:      \(python.stdlibPath)")
-            } else {
-                print("  It needs a CPython interpreter and its standard library, and no python3 was")
-                print("  found on this machine — the plugin would be embedded as source with nothing")
-                print("  to run it.")
+        switch decision {
+        case .notApplicable:
+            return false
+        case .refuse(let reason):
+            print("Error: \(reason)")
+            throw ExitCode.failure
+        case .buildWithWarning(let reason):
+            print("Warning: \(reason)")
+            return false
+        case .embedStatically(let distribution):
+            result.pythonLinkerFlags = distribution.linkerFlags
+            result.pythonStdlibToStage = (stdlibPath: distribution.stdlibPath,
+                                          version: distribution.version)
+            print("Embedding CPython \(distribution.version) from \(distribution.root)")
+            if verbose {
+                print("  Archive: \(distribution.archivePath)")
+                print("  Stdlib:  \(distribution.stdlibPath)")
             }
+            return true
         }
-
-        if linkMode == .dynamicLink || allowed {
-            print("Warning: Python plugin(s) \(named) — this binary is NOT standalone.")
-            printDependency()
-            print("  Copying it to a machine without that same Python installation will fail at startup.")
-            if allowed && linkMode != .dynamicLink {
-                print("  (Built anyway because \(Self.allowEmbeddedPythonEnvVar)=1.)")
-            }
-            return
-        }
-
-        print("Error: Python plugin(s) \(named) cannot be embedded in a standalone binary.")
-        printDependency()
-        print("  `aro build --static` (the default) produces one file you can copy; those paths are")
-        print("  this machine's, so the binary would look standalone and fail on the target machine.")
-        print("  Choose one:")
-        print("    • aro build --dynamic <app>  — keep the dependency, and be told about it")
-        print("    • aro run <app>              — the interpreter, where Python plugins work")
-        print("    • port the plugin to Swift, C or Rust, which do bake into the binary")
-        print("  Set \(Self.allowEmbeddedPythonEnvVar)=1 to build anyway; you then own the target machine's Python.")
-        throw ExitCode.failure
     }
 
     // MARK: - Toolchain Helpers
