@@ -771,8 +771,8 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             // is expected — resolution falls through to property access below.
             if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
                 value = transformed
-            } else if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
-                // Fall back to dictionary property access (e.g., <user: name>)
+            } else if let propVal = specifierValue(value, spec) {
+                // Fall back to property access (e.g., <user: name>, <date: hour>)
                 value = propVal
             }
             // If neither works, just continue - the value stays as-is
@@ -1011,13 +1011,10 @@ private func resolveVariableExpression(_ expr: String, context: RuntimeContext) 
 
         // Navigate through property path
         for specifier in specifiers {
-            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
-                value = nested
-            } else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = convertToSendable(nested)
-            } else {
+            guard let nested = specifierValue(value, specifier) else {
                 return ""  // Property not found
             }
+            value = nested
         }
 
         return stringValue(value)
@@ -1350,6 +1347,28 @@ private func asBool(_ value: any Sendable) -> Bool {
     }
 }
 
+/// One step of `<value: specifier>` in compiled code.
+///
+/// Dictionaries were the only shape this understood, so an `Extractable` —
+/// `ARODate`, `ARODateRange`, `ARORecurrence`, `DateDistance` — answered
+/// nothing at all: `<order-date: hour>` printed empty in a built binary and the
+/// right number under `aro run` (GitLab #865). The interpreter has always gone
+/// through `Extractable`; this is the same lookup, on the compiled path.
+///
+/// Returns `nil` when the specifier names nothing on this value.
+func specifierValue(_ value: any Sendable, _ specifier: String) -> (any Sendable)? {
+    if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
+        return nested
+    }
+    if let dict = value as? [String: Any], let nested = dict[specifier] {
+        return convertToSendable(nested)
+    }
+    if let extractable = value as? any Extractable, let property = extractable.property(specifier) {
+        return property
+    }
+    return nil
+}
+
 /// Parse a value as an ARODate (ARO-0041)
 /// Handles ARODate objects and ISO8601 date strings
 private func parseARODate(_ value: any Sendable) -> ARODate? {
@@ -1511,16 +1530,10 @@ private func resolveInterpolationExpression(_ expr: String, context: RuntimeCont
 
         // Navigate through property path
         for specifier in specifiers {
-            // Try [String: any Sendable] first
-            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
-                value = nested
-            }
-            // Also try [String: Any] for dictionaries from JSON parsing
-            else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = convertToSendable(nested)
-            } else {
+            guard let nested = specifierValue(value, specifier) else {
                 return ""  // Property not found
             }
+            value = nested
         }
 
         return formatInterpolatedValue(value)
