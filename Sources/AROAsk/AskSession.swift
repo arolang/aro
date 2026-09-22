@@ -243,9 +243,12 @@ public actor AskSession {
     }
 
     private func emitToolResult(name: String, arguments: String, output: String, failed: Bool) {
-        if !config.quiet { TerminalUI.printToolResult(name: name, output: output) }
+        // The provenance trailer (GitLab #879) is for the harness, not for a
+        // reader or an embedder: strip it from everything that leaves here.
+        let shown = ToolResultEnvelope.visible(output)
+        if !config.quiet { TerminalUI.printToolResult(name: name, output: shown) }
         let modified = failed ? nil : Self.modifiedPath(tool: name, argumentsJSON: arguments)
-        eventSink?(.toolCallFinished(name: name, output: output, failed: failed, modifiedPath: modified))
+        eventSink?(.toolCallFinished(name: name, output: shown, failed: failed, modifiedPath: modified))
     }
 
     /// Tools that mutate the workspace, mapped to the argument key that
