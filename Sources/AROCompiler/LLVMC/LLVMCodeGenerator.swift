@@ -491,6 +491,12 @@ public final class LLVMCodeGenerator {
                 gen.generateRequireStatement(requireStmt, index: index, errorBlock: errorBlock)
             }
         },
+        ObjectIdentifier(WhenStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let whenStmt = stmt as? WhenStatement else { return }
+                gen.generateWhenStatement(whenStmt, index: index, errorBlock: errorBlock)
+            }
+        },
         ObjectIdentifier(PipelineStatement.self): { gen in
             { stmt, index, errorBlock in
                 // ARO-0067: A pipeline is just a sequence of ARO statements where
@@ -1437,6 +1443,47 @@ public final class LLVMCodeGenerator {
     }
 
     // MARK: - Require Statement Generation
+
+    /// `when <condition> { … }` — the guarded *block* of GitLab #516.
+    ///
+    /// It had no handler at all, so `generateStatement` recorded "Statement
+    /// type 'WhenStatement' is not supported in compiled mode" and the build
+    /// failed (GitLab #655). The spelling compiles under `aro run` and is
+    /// taught by the Language Guide, so this was a documented construct that
+    /// `aro build` rejected outright.
+    ///
+    /// The shape is the per-statement `when` guard from `generateAROStatement`,
+    /// with a body of statements instead of one: evaluate the condition, branch
+    /// to the body or past it, and merge. The body's statements keep the
+    /// feature set's own `errorBlock`, so a failure inside the block aborts the
+    /// feature set rather than falling out of the block — the same rule
+    /// GitLab #654 fixed for range loops.
+    private func generateWhenStatement(_ statement: WhenStatement, index: Int, errorBlock: BasicBlock) {
+        let prefix = "when\(index)"
+        let ip = ctx.insertionPoint
+
+        let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+        let mergeBlock = ctx.module.appendBlock(named: "\(prefix)_merge", to: ctx.currentFunction!)
+
+        let conditionJSON = ctx.stringConstant(serializer.serializeExpression(statement.condition))
+        let guardResult = ctx.module.insertCall(
+            externals.evaluateWhenGuard,
+            on: [ctx.currentContextVar!, conditionJSON],
+            at: ip
+        )
+        let guardPassed = ctx.module.insertIntegerComparison(
+            .ne, guardResult, ctx.i32Type.zero, at: ip
+        )
+        ctx.module.insertCondBr(if: guardPassed, then: bodyBlock, else: mergeBlock, at: ip)
+
+        ctx.setInsertionPoint(atEndOf: bodyBlock)
+        for (stmtIndex, stmt) in statement.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
+        }
+        ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+
+        ctx.setInsertionPoint(atEndOf: mergeBlock)
+    }
 
     private func generateRequireStatement(_ statement: RequireStatement, index: Int, errorBlock: BasicBlock) {
         // Framework dependencies are auto-bound by the runtime (console, http-server, etc.)
