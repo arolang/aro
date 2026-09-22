@@ -154,6 +154,21 @@
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
+ "configure": {
+  "role": "own",
+  "role_label": "OWN (Internal → Internal)",
+  "prepositions": [
+   "for",
+   "from",
+   "into",
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "configure"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ConfigureAction.swift"
+ },
  "connect": {
   "role": "server",
   "role_label": "SERVER (service lifecycle operations)",
@@ -218,7 +233,7 @@
   "aliases": [
    "emit"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/EmitAction.swift"
  },
  "execute": {
   "role": "own",
@@ -356,7 +371,7 @@
    "output",
    "print"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/LogAction.swift"
  },
  "make": {
   "role": "server",
@@ -424,7 +439,7 @@
    "notify",
    "signal"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/NotifyAction.swift"
  },
  "parse": {
   "role": "request",
@@ -485,7 +500,7 @@
    "publish",
    "share"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/PublishAction.swift"
  },
  "pull": {
   "role": "request",
@@ -611,7 +626,7 @@
    "respond",
    "return"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ReturnAction.swift"
  },
  "reverse": {
   "role": "own",
@@ -663,7 +678,7 @@
    "dispatch",
    "send"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/SendAction.swift"
  },
  "show": {
   "role": "own",
@@ -773,7 +788,7 @@
    "save",
    "store"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/StoreAction.swift"
  },
  "stream": {
   "role": "request",
@@ -822,7 +837,7 @@
    "raise",
    "throw"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ThrowAction.swift"
  },
  "transform": {
   "role": "own",
@@ -851,12 +866,11 @@
   ],
   "aliases": [
    "change",
-   "configure",
    "modify",
    "set",
    "update"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/UpdateAction.swift"
  },
  "validate": {
   "role": "own",
@@ -907,6 +921,6 @@
   "aliases": [
    "write"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/WriteAction.swift"
  }
 }
