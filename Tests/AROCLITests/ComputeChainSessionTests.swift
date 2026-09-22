@@ -21,7 +21,7 @@ struct ComputeChainSessionTests {
 
     @Test("trim|uppercase applies left to right")
     func trimUppercase() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <t> with \"  hi  \".")
         let result = try await session.executeStatement(
             "Compute the <clean: trim|uppercase> from <t>.")
@@ -33,7 +33,7 @@ struct ComputeChainSessionTests {
     func linesLength() async throws {
         // The chain observed failing in the wild: "Unknown Compute
         // qualifier: 'lines|length'".
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <content> with \"one\\ntwo\\nthree\\n\".")
         let result = try await session.executeStatement(
@@ -44,7 +44,7 @@ struct ComputeChainSessionTests {
 
     @Test("An unknown stage errors naming the stage, with the chain")
     func unknownStage() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <t> with \"  hi  \".")
         let result = try await session.executeStatement(
             "Compute the <clean: trim|bogus> from <t>.")

@@ -235,12 +235,12 @@ aro run .
 Output:
 
 ```
-[Application-Start] Starting event demo...
-[Say Hello] Greet handler triggered!
-[Say Hello] Hello, World!
-[Say Goodbye] Farewell handler triggered!
-[Say Goodbye] Goodbye, World!
-[Application-Start] All events processed!
+Starting event demo...
+Greet handler triggered!
+Hello, World!
+Farewell handler triggered!
+Goodbye, World!
+All events processed!
 [OK] startup
 ```
 

@@ -47,7 +47,7 @@ struct REPLIntelTests {
 
     @Test("A partial verb at statement start completes to actions")
     func verbCompletion() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let answer = REPLIntel.complete(
             code: "Comp", cursor: 4, session: session, definitions: [])
         #expect(answer.matches.contains("Compute"))
@@ -57,7 +57,7 @@ struct REPLIntelTests {
 
     @Test("A qualifier slot completes to qualifiers")
     func qualifierCompletion() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let code = "Compute the <x: upp"
         let answer = REPLIntel.complete(
             code: code, cursor: code.count, session: session, definitions: [])
@@ -66,7 +66,7 @@ struct REPLIntelTests {
 
     @Test("Session variables complete inside an identifier bracket")
     func sessionVariableCompletion() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Compute the <greeting> from \"hi\".")
         let code = "Log <greet"
         let answer = REPLIntel.complete(
@@ -79,7 +79,7 @@ struct REPLIntelTests {
 
     @Test("Meta-commands complete on a line-opening ':'")
     func metaCommandCompletion() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let answer = REPLIntel.complete(
             code: ":he", cursor: 3, session: session, definitions: [])
         // Replacement range covers "he" (the colon stays), so the
@@ -90,7 +90,7 @@ struct REPLIntelTests {
 
     @Test("A colon inside an identifier stays a qualifier slot")
     func colonDisambiguation() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let code = "Compute the <x: le"
         let answer = REPLIntel.complete(
             code: code, cursor: code.count, session: session, definitions: [])
@@ -102,7 +102,7 @@ struct REPLIntelTests {
 
     @Test("Inspecting a session variable shows its live value")
     func inspectVariable() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Compute the <answer> from 42.")
         let code = "Log <answer> to the <console>."
         let result = REPLIntel.inspect(
@@ -113,7 +113,7 @@ struct REPLIntelTests {
 
     @Test("Inspecting a verb answers with its role")
     func inspectVerb() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let code = "Compute the <x> from 1."
         let result = REPLIntel.inspect(
             code: code, cursor: 3, session: session, definitions: [])
@@ -123,7 +123,7 @@ struct REPLIntelTests {
 
     @Test("Inspecting whitespace finds nothing")
     func inspectNothing() {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = REPLIntel.inspect(
             code: "   ", cursor: 1, session: session, definitions: [])
         #expect(!result.found)

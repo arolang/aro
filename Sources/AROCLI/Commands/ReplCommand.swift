@@ -58,7 +58,7 @@ struct ReplCommand: AsyncParsableCommand {
     /// notebook cell, an editor panel) that already knows where the output
     /// came from — `[_repl_session_]` in front of every line is noise there.
     private func runJSON() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         // Plugins installed by `:plugin add` in earlier sessions load
         // here too — a notebook restarted yesterday's kernel must not

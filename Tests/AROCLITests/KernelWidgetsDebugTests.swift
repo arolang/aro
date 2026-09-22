@@ -131,7 +131,7 @@ struct KernelCommTests {
 struct KernelDebugAdapterTests {
 
     private func makeAdapter(
-        session: REPLSession = REPLSession(suppressLogPrefix: true),
+        session: REPLSession = REPLSession(),
         evaluator: @escaping (String) -> String? = { _ in nil }
     ) -> (KernelDebugAdapter, REPLSession) {
         (KernelDebugAdapter(session: session, evaluator: evaluator), session)

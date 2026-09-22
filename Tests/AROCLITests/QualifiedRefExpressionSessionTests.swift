@@ -18,7 +18,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("The issue's repro: <item: qty> * <item: price>")
     func lineTotal() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <item> with { qty: 3, price: 4 }.")
         let result = try await session.executeStatement(
@@ -29,7 +29,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("Qualified ref against a literal")
     func qualifiedTimesLiteral() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <item> with { qty: 5 }.")
         let result = try await session.executeStatement(
@@ -40,7 +40,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("Qualified ref mixed with a bare ref")
     func qualifiedMinusBare() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <item> with { price: 100 }.")
         _ = try await session.executeStatement(
@@ -53,7 +53,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("Nested property path operand")
     func nestedPathOperand() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <order> with { customer: { credit: 200 }, total: 50 }.")
         let result = try await session.executeStatement(
@@ -64,7 +64,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("when guard reads a qualified ref")
     func whenGuardQualified() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <record> with { active: true, value: 7 }.")
         let result = try await session.executeStatement(
@@ -75,7 +75,7 @@ struct QualifiedRefExpressionSessionTests {
 
     @Test("Extract boilerplate still works (both forms coexist)")
     func extractStillWorks() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <item> with { qty: 3, price: 4 }.")
         _ = try await session.executeStatement(

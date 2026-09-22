@@ -193,12 +193,6 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether this is a compiled binary execution
     private nonisolated let _isCompiled: Bool
 
-    /// When true, Log actions in `.human` output context omit the
-    /// `[featureSetName]` prefix. Used by the stdin-pipe entry point so
-    /// piped one-liners produce clean output, e.g.
-    /// `echo 'Log "Hi" to the <console>.' | aro` -> `Hi`.
-    private nonisolated let _suppressLogPrefix: Bool
-
     /// Phase 2 async driver channel — set once at context init time by
     /// AROCContextHandle for compiled binary feature sets.  When non-nil,
     /// ActionRunner.executeSyncWithResult submits work here instead of
@@ -282,8 +276,7 @@ public actor RuntimeContext: ExecutionContext {
         parent: ExecutionContext? = nil,
         isCompiled: Bool = false,
         isTemplateContext: Bool = false,
-        driverChannel: ActionDriverChannel? = nil,
-        suppressLogPrefix: Bool = false
+        driverChannel: ActionDriverChannel? = nil
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
@@ -291,7 +284,6 @@ public actor RuntimeContext: ExecutionContext {
         self._outputContext = outputContext
         self._isCompiled = isCompiled
         self._isTemplateContext = isTemplateContext
-        self._suppressLogPrefix = suppressLogPrefix
         self.driverChannel = driverChannel
         self.parent = parent
 
@@ -1114,8 +1106,7 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: _isTemplateContext,
-            driverChannel: driverChannel,
-            suppressLogPrefix: _suppressLogPrefix
+            driverChannel: driverChannel
         )
         scope._isStatementScope = true
         return scope
@@ -1397,8 +1388,7 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel,
-            suppressLogPrefix: _suppressLogPrefix
+            driverChannel: driverChannel
         )
     }
 
@@ -1413,8 +1403,7 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel,
-            suppressLogPrefix: _suppressLogPrefix
+            driverChannel: driverChannel
         )
     }
 
@@ -1436,8 +1425,7 @@ public actor RuntimeContext: ExecutionContext {
             container: container,
             parent: self,
             isCompiled: _isCompiled,
-            isTemplateContext: true,
-            suppressLogPrefix: _suppressLogPrefix
+            isTemplateContext: true
         )
     }
 
@@ -1482,9 +1470,6 @@ public actor RuntimeContext: ExecutionContext {
         _isCompiled
     }
 
-    public nonisolated var suppressLogPrefix: Bool {
-        _suppressLogPrefix
-    }
 
     // MARK: - Template Buffer (ARO-0050)
 

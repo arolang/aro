@@ -1,4 +1,4 @@
-# Generated: Mon Apr 13 16:04:23 2026
+# Generated: Wed Sep 23 00:47:00 2026
 # Type: console
 # Command: aro run ./Examples/QualifierPluginC
 # Timeout: 30s
@@ -13,5 +13,5 @@ List size:
 5
 String size:
 9
-demo
+[OK] demo
 value: Hello ARO

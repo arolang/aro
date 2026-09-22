@@ -33,7 +33,7 @@ struct FilterScalarListTests {
 
     @Test("Filtering a list of strings keeps the matching ones")
     func stringsAreFiltered() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(
@@ -48,7 +48,7 @@ struct FilterScalarListTests {
 
     @Test("The filtered list has the length the count reports")
     func lengthIsRight() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(
@@ -65,7 +65,7 @@ struct FilterScalarListTests {
         // Every name behaved identically before — that was the giveaway. They
         // still do, because a scalar carries no field to name.
         for name in ["line", "item", "value", "anything"] {
-            let session = REPLSession(suppressLogPrefix: true)
+            let session = REPLSession()
             let engine = REPLCellEngine(session: session)
             _ = await engine.executeCell(#"Create the <ls> with ["a1", "b2"]."#)
             _ = await engine.executeCell(
@@ -78,7 +78,7 @@ struct FilterScalarListTests {
 
     @Test("Numbers compare, rather than matching on equality or not at all")
     func numbersCompare() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell("Create the <ns> with [1, 5, 9].")
@@ -91,7 +91,7 @@ struct FilterScalarListTests {
 
     @Test("An and/or tree applies to the element at every leaf")
     func booleanTreesApply() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Create the <ws> with ["alpha", "beta", "gamma"]."#)
@@ -106,7 +106,7 @@ struct FilterScalarListTests {
 
     @Test("A predicate matching nothing still returns empty, not everything")
     func noMatchIsEmpty() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Create the <ls> with ["a", "b"]."#)
@@ -120,7 +120,7 @@ struct FilterScalarListTests {
 
     @Test("A record still filters on the named field")
     func recordsFilterOnTheField() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(
@@ -136,7 +136,7 @@ struct FilterScalarListTests {
     func missingFieldIsStillFalse() async {
         // The rule records have always followed must not change: a scalar
         // fallback applies to scalars, not to records missing a field.
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Create the <rs> with [{ id: 1 }, { id: 2 }]."#)

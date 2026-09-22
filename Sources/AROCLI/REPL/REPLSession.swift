@@ -115,20 +115,13 @@ public final class REPLSession: @unchecked Sendable {
     /// instead of layering a second handler on the same verb.
     private var userActionHost: UserDefinedActionHost?
 
-    /// The flag the session was constructed with. Persisted so that
-    /// `clear()` can rebuild the underlying RuntimeContext with the same
-    /// formatting behavior.
-    private let suppressLogPrefix: Bool
-
     /// Construct a REPL session. The action registry defaults to
     /// the process-wide singleton; tests can pass an isolated
     /// instance so concurrent sessions don't see each other's
     /// dynamic registrations (#363).
     public init(
-        suppressLogPrefix: Bool = false,
         actionRegistry: ActionRegistry = .shared
     ) {
-        self.suppressLogPrefix = suppressLogPrefix
         self.actionRegistry = actionRegistry
         self.eventBus = EventBus()
         self.globalSymbols = GlobalSymbolStorage()
@@ -136,8 +129,7 @@ public final class REPLSession: @unchecked Sendable {
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus,
-            suppressLogPrefix: suppressLogPrefix
+            eventBus: eventBus
         )
 
         // Register services for REPL session
@@ -621,8 +613,7 @@ public final class REPLSession: @unchecked Sendable {
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus,
-            suppressLogPrefix: suppressLogPrefix
+            eventBus: eventBus
         )
 
         // Re-register services after context reset

@@ -31,7 +31,7 @@ struct HelpTextParsesTests {
     /// command — which is also what makes the test faithful.
     private func helpText() async throws -> String {
         let result = try await HelpCommand().execute(
-            args: [], session: REPLSession(suppressLogPrefix: true))
+            args: [], session: REPLSession())
         guard case .output(let text) = result else {
             throw HelpTextError.notOutput(String(describing: result))
         }

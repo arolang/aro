@@ -96,7 +96,7 @@ This is the *entry pause* — the very first checkpoint before any user code run
 
 ```
 (aro-dbg) c
-[Application-Start] Hello, ARO World!
+Hello, ARO World!
 
 Program ended cleanly.
 ```

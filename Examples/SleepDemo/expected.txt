@@ -1,3 +1,8 @@
+# Generated: Wed Sep 23 00:47:08 2026
+# Type: console
+# Command: aro run ./Examples/SleepDemo
+# Timeout: 15s
+---
 Starting sleep demonstration...
 Sleeping 1 second...
 Awoke after 1 second.
@@ -9,4 +14,4 @@ Sleeping 500 milliseconds...
 Awoke after 500 ms.
 500
 Sleep demonstration complete.
-demo
+[OK] demo
