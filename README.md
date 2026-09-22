@@ -196,7 +196,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | `Exec` / `Shell` | ✅ | ✅ | ✅ ⁴ |
 | Git actions (ARO-0080) | ✅ | ✅ | ❌ ⁵ |
 | `.store` write-back | ✅ opt-in | ✅ opt-in | ✅ opt-in ⁶ |
-| Terminal UI | ✅ | ✅ | ⚠️ ⁷ |
+| Terminal UI | ✅ | ✅ | ✅ ⁷ |
 | Metrics | ✅ | ✅ | ❌ ⁸ |
 | **Tools** ||||
 | `aro lsp`, `mcp`, `ask`, `kernel` | ✅ | ✅ | ❌ ¹⁰ |
@@ -211,7 +211,9 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ⁵ the module is compiled out — GitLab #683
 ⁶ opt-in is a `# aro-store: writable` marker in the file's leading comment
    block, since Windows has no other-write bit; ARO-0073 §3a — GitLab #684
-⁷ Windows Terminal only, and hidden input echoes — GitLab #699
+⁷ registered whenever stdout is a console (cmd.exe and PowerShell included);
+   size from `GetConsoleScreenBufferInfo`, hidden input via `ENABLE_ECHO_INPUT`
+   — GitLab #699
 ⁸ reports zeros rather than absence — GitLab #700
 ⁹ `Log` output is captured; stray `print`s from plugins are not
 ¹⁰ not registered as subcommands — GitLab #701

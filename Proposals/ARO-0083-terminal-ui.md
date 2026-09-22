@@ -532,10 +532,17 @@ public static func mainScreen() -> String {
 ### 7.2 Partial Support
 
 **Windows**:
-- ⚠️ Windows Terminal: Full support
-- ⚠️ CMD/PowerShell: Limited ANSI support (Windows 10+)
-- ⚠️ Dimension detection via environment variables only
-- ⚠️ Hidden input: Falls back to regular input (TODO)
+- ✅ Windows Terminal: Full support
+- ⚠️ CMD/PowerShell: Limited ANSI support (Windows 10+); the terminal service
+  itself is registered whenever stdout is a console, so `Render`, `Show`,
+  `Clear`, `Prompt` and `Select` exist there
+- ✅ Dimension detection via `GetConsoleScreenBufferInfo` -- the window
+  rectangle, not `dwSize`, which is the scrollback buffer and is routinely
+  thousands of rows tall
+- ✅ Hidden input by clearing `ENABLE_ECHO_INPUT`, the counterpart of clearing
+  termios `ECHO`. It previously fell back to an echoing read, so
+  `Prompt the <password: hidden>` printed the password as it was typed
+  (GitLab #699)
 
 ### 7.3 Graceful Degradation
 

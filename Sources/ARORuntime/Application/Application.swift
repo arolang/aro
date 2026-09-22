@@ -153,19 +153,19 @@ public final class Application: @unchecked Sendable {
         self.templateService = ts
         await runtime.register(service: ts as TemplateService)
 
-        // Register terminal service (ARO-0052)
-        #if !os(Windows)
-        if isatty(STDOUT_FILENO) != 0 {
+        // Register terminal service (ARO-0052).
+        //
+        // One question on every platform: is stdout a terminal? Windows used
+        // to be asked something else — whether `WT_SESSION` was set — so
+        // `Render`, `Show`, `Clear`, `Prompt` and `Select` were simply absent
+        // in cmd.exe and PowerShell, and present in a Windows Terminal tab
+        // whose output was piped to a file (GitLab #699). `TTYDetector` asks
+        // `GetFileType(GetStdHandle(…))` there, which is what `isatty` asks
+        // here.
+        if TTYDetector.stdoutIsTTY {
             let terminalService = TerminalService()
             await runtime.register(service: terminalService)
         }
-        #else
-        // Windows: only register if Windows Terminal
-        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
-            let terminalService = TerminalService()
-            await runtime.register(service: terminalService)
-        }
-        #endif
 
         // Register keyboard service for key press events (ARO-0052)
         // The service internally checks isatty(STDIN_FILENO) before starting
