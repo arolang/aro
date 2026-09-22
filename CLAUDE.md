@@ -676,6 +676,9 @@ The Compute action transforms data using built-in operations:
 | `replace` | Substring replacement | `Compute the <out: replace> from <t> with { find: "-", replace: "_" }.` |
 | `html-escape` | Escape `& < > " '` for HTML | `Compute the <safe: html-escape> from <input>.` |
 | `url-encode` / `url-decode` | Percent-encode a query value | `Compute the <enc: url-encode> from <query>.` |
+| `url-resolve` | Resolve a relative URL against a base | `Compute the <abs: url-resolve> from <href> with { base: <page> }.` |
+| `url-defragment` / `url-normalize` | Strip `#frag`; one spelling per address | `Compute the <clean: url-defragment> from <link>.` |
+| `url-parts` | scheme, host, port, path, query, fragment | `Compute the <p: url-parts> from <link>.` |
 | `base64-encode` / `base64-decode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
 | `base64url-encode` / `base64url-decode` | URL-safe Base64 (JWTs) | `Compute the <tok: base64url-encode> from <payload>.` |
 | `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |

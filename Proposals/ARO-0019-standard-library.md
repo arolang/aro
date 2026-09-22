@@ -155,6 +155,10 @@ computations make that safe. They follow the same qualifier shape as
 | `html-escape` | Escape `& < > " '` for HTML output | `Compute the <safe: html-escape> from <input>.` |
 | `url-encode` | Percent-encode a query-string value | `Compute the <enc: url-encode> from <query>.` |
 | `url-decode` | Reverse `url-encode` | `Compute the <dec: url-decode> from <raw>.` |
+| `url-resolve` | Resolve a relative URL against a base (§3.1a) | `Compute the <abs: url-resolve> from <href> with { base: <page> }.` |
+| `url-defragment` | The URL without its `#fragment` (§3.1a) | `Compute the <clean: url-defragment> from <link>.` |
+| `url-normalize` | One spelling of one address (§3.1a) | `Compute the <n: url-normalize> from <link>.` |
+| `url-parts` | scheme, host, port, path, query, fragment (§3.1a) | `Compute the <p: url-parts> from <link>.` |
 | `base64-encode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
 | `base64-decode` | Reverse `base64-encode` | `Compute the <raw: base64-decode> from <b64>.` |
 | `base64url-encode` | URL-safe Base64 (RFC 4648 §5) — JWTs, URL payloads | `Compute the <tok: base64url-encode> from <payload>.` |
@@ -174,6 +178,73 @@ encoding a whole path or URL, where those characters are structural.
 following the happy-case philosophy. `base64-decode` and `base64url-decode`
 raise a runtime error, because there is no meaningful pass-through for input
 that is not valid Base64 UTF-8.
+
+### 3.1a URLs
+
+`url-encode` and `url-decode` escape *inside* a URL. Everything you do *to* a
+URL — resolving a relative one, comparing two, taking it apart — had no
+spelling, so the crawler chapter of *ARO by Example* built relative-URL
+resolution out of `Split` statements and string concatenation, and the result
+is wrong for several ordinary cases (GitLab #859).
+
+| Qualifier | Answers |
+|-----------|---------|
+| `url-resolve` | a relative URL made absolute against a base |
+| `url-defragment` | the URL without its `#fragment` |
+| `url-normalize` | the same address, spelled one way |
+| `url-parts` | `{ scheme, host, port, path, query, fragment }` |
+
+```aro
+Compute the <abs: url-resolve> from <href> with { base: <page-url> }.
+Compute the <clean: url-defragment> from <link>.
+Compute the <canonical: url-normalize> from <link>.
+Compute the <parts: url-parts> from <link>.
+```
+
+The base may also be given bare — `with <page-url>` — since a single obvious
+argument reads fine that way.
+
+#### What concatenation gets wrong
+
+Resolution is RFC 3986's, through Foundation's own resolver. These are the
+three cases the hand-built version got wrong, and they are not exotic:
+
+| Link | Concatenated | Resolved |
+|------|--------------|----------|
+| `../other/x.html` | `…/docs/guide/../other/x.html` | `…/docs/other/x.html` |
+| `//cdn.example.org/lib.js` | `https://example.com//cdn.example.org/lib.js` | `https://cdn.example.org/lib.js` |
+| `#section` | `…/page.html?x=1#top#section` | `…/page.html?x=1#section` |
+
+An **absolute** input comes back unchanged, so resolving a page's links never
+has to ask which kind each one is. Something that is not a URL at all is an
+error rather than a pass-through: a silently wrong URL is the failure this
+qualifier exists to remove.
+
+#### What `url-normalize` does and does not touch
+
+It lowercases the scheme and host, removes `.` and `..`, drops a port that is
+the scheme's default, and gives an authority with no path a `/` — because
+`https://example.com` and `https://example.com/` are the same resource and a
+crawler comparing strings would disagree.
+
+It leaves the **path's case** and the **query's order** exactly as written. A
+path is case-sensitive on most servers and parameter order can carry meaning,
+so changing either would change what the URL means rather than normalise it.
+
+#### `url-defragment` is lexical
+
+RFC 3986 reserves `#`, so a literal one must be written `%23` and the first raw
+`#` is always where the fragment starts. Cutting there is exact, and it is also
+the only way to avoid re-encoding a value the caller only asked to truncate.
+
+Stripping the fragment is what makes two links to the same page compare equal:
+a fragment is a pointer *into* a document, so two URLs differing only there are
+the same request.
+
+#### Absent parts are absent
+
+`url-parts` omits a part the URL does not have, rather than including it empty
+— the difference between "no port" and "port 0". `port` is a number.
 
 ### 3.2 Collections and Text
 

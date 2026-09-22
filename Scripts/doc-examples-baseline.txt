@@ -129,7 +129,7 @@ Proposals/ARO-0018-query-language.md:467
 Proposals/ARO-0018-query-language.md:59
 Proposals/ARO-0018-query-language.md:98
 Proposals/ARO-0019-standard-library.md:138
-Proposals/ARO-0019-standard-library.md:282
+Proposals/ARO-0019-standard-library.md:353
 Proposals/ARO-0022-state-guards.md:126
 Proposals/ARO-0022-state-guards.md:149
 Proposals/ARO-0022-state-guards.md:17

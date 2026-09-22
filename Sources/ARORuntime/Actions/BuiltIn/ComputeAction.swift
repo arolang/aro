@@ -165,6 +165,21 @@ public struct ComputeAction: SynchronousAction {
               summary: "Percent-encode a query value", op: Self.opURLEncode),
         .init(name: "url-decode", inputTypes: [.string], acceptsParameters: false,
               summary: "Decode a percent-encoded value", op: Self.opURLDecode),
+        // URL arithmetic (ARO-0019 §3.1a, GitLab #859). `url-encode` and
+        // `url-decode` were already here, so the namespace and the precedent
+        // were too — what was missing is everything you do to a URL that is
+        // not escaping it.
+        .init(name: "url-resolve", inputTypes: [.string], acceptsParameters: true,
+              summary: "Resolve a relative URL against a base; "
+                     + "with { base: … } or with <base>", op: Self.opURLResolve),
+        .init(name: "url-defragment", inputTypes: [.string], acceptsParameters: false,
+              summary: "The URL without its #fragment", op: Self.opURLDefragment),
+        .init(name: "url-normalize", inputTypes: [.string], acceptsParameters: false,
+              summary: "Lowercase scheme and host, remove . and .. and a "
+                     + "default port", op: Self.opURLNormalize),
+        .init(name: "url-parts", inputTypes: [.string], acceptsParameters: false,
+              summary: "Split into scheme, host, port, path, query, fragment",
+              op: Self.opURLParts),
         .init(name: "base64-encode", inputTypes: [.string], acceptsParameters: false,
               summary: "Standard Base64 encode", op: Self.opBase64Encode),
         .init(name: "base64-decode", inputTypes: [.string], acceptsParameters: false,
@@ -507,6 +522,130 @@ public struct ComputeAction: SynchronousAction {
         }
         let replacement = config["replace"] as? String ?? ""
         return text.replacingOccurrences(of: find, with: replacement)
+    }
+
+    // MARK: - URL arithmetic (ARO-0019 §3.1a, GitLab #859)
+
+    /// The base a `url-resolve` was given: `with { base: … }` or `with <base>`.
+    private static func resolveBase(_ context: ExecutionContext) -> String? {
+        if let config = context.resolveAny("_with_") as? [String: any Sendable],
+           let base = config["base"] {
+            return asText(base)
+        }
+        for slot in ["_with_", "_literal_"] {
+            if let value = context.resolveAny(slot), !(value is [String: any Sendable]) {
+                let text = asText(value)
+                if !text.isEmpty { return text }
+            }
+        }
+        return nil
+    }
+
+    /// `Compute the <abs: url-resolve> from <href> with { base: <page-url> }.`
+    ///
+    /// Resolution is RFC 3986's, via `URL(string:relativeTo:)` — which is the
+    /// point of having this at all. The crawler chapter built it out of
+    /// `Split` and concatenation, and that is wrong for `../`, for a
+    /// protocol-relative `//host/path`, and for a fragment on a relative link.
+    ///
+    /// An absolute input is returned unchanged, so resolving a page's links
+    /// does not need to ask which kind each one is.
+    private static func opURLResolve(_ input: any Sendable,
+                                     _ context: ExecutionContext) throws -> any Sendable {
+        let href = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let base = resolveBase(context) else {
+            throw ActionError.missingRequiredField(
+                field: "a base: with { base: \"https://example.com/a/b\" }",
+                action: "Compute url-resolve")
+        }
+        guard let baseURL = URL(string: base.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw ActionError.invalidInput(
+                "Compute url-resolve: the base must be an absolute URL", received: base)
+        }
+        guard let resolved = URL(string: href, relativeTo: baseURL) else {
+            // Not a URL at all. Returning the input unchanged would be the
+            // silent-wrong-answer this qualifier exists to remove.
+            throw ActionError.invalidInput(
+                "Compute url-resolve: not a URL", received: href)
+        }
+        return resolved.absoluteURL.absoluteString
+    }
+
+    /// The URL without its `#fragment`.
+    ///
+    /// A fragment is a client-side pointer into a document, so two URLs that
+    /// differ only there are the same *request* — which is why a crawler has
+    /// to strip it before deciding whether it has seen a page.
+    private static func opURLDefragment(_ input: any Sendable,
+                                        _ context: ExecutionContext) throws -> any Sendable {
+        // Lexical, deliberately: RFC 3986 reserves `#`, so a literal one must
+        // be written `%23` and the first raw `#` is always where the fragment
+        // starts. Cutting there is exact.
+        //
+        // Going through `URLComponents` would also be exact for a well-formed
+        // URL and *wrong* for anything else: it re-renders what it parsed, so
+        // `"not a url#frag"` came back `"not%20a%20url"` — a value this
+        // qualifier was only asked to truncate, quietly re-encoded.
+        let text = asText(input)
+        guard let hash = text.firstIndex(of: "#") else { return text }
+        return String(text[..<hash])
+    }
+
+    /// Lowercase the scheme and host, remove `.` and `..`, and drop a port
+    /// that is the scheme's default.
+    ///
+    /// The three things that make two spellings of one address compare
+    /// unequal. It does **not** touch the path's case or the query's order:
+    /// a path is case-sensitive on most servers and a query's order can carry
+    /// meaning, so "normalising" either would change what the URL means.
+    private static func opURLNormalize(_ input: any Sendable,
+                                       _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: text) else { return text }
+
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+
+        let defaultPorts = ["http": 80, "https": 443, "ftp": 21, "ws": 80, "wss": 443]
+        if let scheme = components.scheme, components.port == defaultPorts[scheme] {
+            components.port = nil
+        }
+
+        if !components.path.isEmpty, let url = URL(string: text) {
+            // `standardized` is what removes `.` and `..`, and it only applies
+            // to a URL with a path to walk.
+            let standardizedPath = url.standardized.path
+            if !standardizedPath.isEmpty { components.path = standardizedPath }
+        }
+        // An authority with no path is `https://example.com` — the empty path
+        // is what `URLComponents` renders, and `/` is the same resource.
+        if components.path.isEmpty, components.host != nil {
+            components.path = "/"
+        }
+
+        return components.string ?? text
+    }
+
+    /// `{ scheme, host, port, path, query, fragment }`.
+    ///
+    /// Absent parts are absent from the record rather than present and empty,
+    /// so `<parts: port>` reads as missing for a URL that names no port —
+    /// which is the difference between "no port" and "port 0".
+    private static func opURLParts(_ input: any Sendable,
+                                   _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: text) else {
+            throw ActionError.invalidInput("Compute url-parts: not a URL", received: text)
+        }
+        var parts: [String: any Sendable] = [:]
+        if let scheme = components.scheme { parts["scheme"] = scheme }
+        if let host = components.host, !host.isEmpty { parts["host"] = host }
+        if let port = components.port { parts["port"] = port }
+        if !components.path.isEmpty { parts["path"] = components.path }
+        if let query = components.query { parts["query"] = query }
+        if let fragment = components.fragment { parts["fragment"] = fragment }
+        if let user = components.user { parts["user"] = user }
+        return parts
     }
 
     // MARK: - Collection / text primitives (GitLab #486)
