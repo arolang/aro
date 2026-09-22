@@ -55,9 +55,9 @@ Proposals/ARO-0002-control-flow.md:980
 Proposals/ARO-0003-type-system.md:321
 Proposals/ARO-0003-type-system.md:57
 Proposals/ARO-0003-type-system.md:82
-Proposals/ARO-0004-actions.md:1014
-Proposals/ARO-0004-actions.md:520
-Proposals/ARO-0004-actions.md:896
+Proposals/ARO-0004-actions.md:1016
+Proposals/ARO-0004-actions.md:521
+Proposals/ARO-0004-actions.md:898
 Proposals/ARO-0005-application-architecture.md:150
 Proposals/ARO-0005-application-architecture.md:229
 Proposals/ARO-0005-application-architecture.md:264
@@ -70,9 +70,9 @@ Proposals/ARO-0006-error-philosophy.md:275
 Proposals/ARO-0006-error-philosophy.md:340
 Proposals/ARO-0006-error-philosophy.md:389
 Proposals/ARO-0007-events-reactive.md:161
-Proposals/ARO-0007-events-reactive.md:469
-Proposals/ARO-0007-events-reactive.md:687
-Proposals/ARO-0007-events-reactive.md:795
+Proposals/ARO-0007-events-reactive.md:507
+Proposals/ARO-0007-events-reactive.md:725
+Proposals/ARO-0007-events-reactive.md:833
 Proposals/ARO-0008-io-services.md:1011
 Proposals/ARO-0008-io-services.md:1162
 Proposals/ARO-0008-io-services.md:1215

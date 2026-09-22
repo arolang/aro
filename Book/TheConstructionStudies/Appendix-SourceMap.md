@@ -92,7 +92,15 @@ DataPipeline, Test, Terminal, System, and (off Windows) Git — and
 | `ActionDescriptors.swift` | ~168 | ResultDescriptor, ObjectDescriptor |
 | `Modules/*.swift` | — | The eleven module arrays |
 | `BuiltIn/ComputeAction.swift` | ~2,596 | Compute, Validate, Compare, Create, Update, Sort, Merge, Delete, Transform |
-| `BuiltIn/ResponseActions.swift` | ~1,389 | Return, Throw, Send, Log, Store, Write, Publish, Notify, Emit |
+| `BuiltIn/ReturnAction.swift` | ~268 | Return |
+| `BuiltIn/ThrowAction.swift` | ~33 | Throw |
+| `BuiltIn/SendAction.swift` | ~111 | Send, MessagingService, MessageSentEvent |
+| `BuiltIn/LogAction.swift` | ~248 | Log, LoggingService, LogLevel |
+| `BuiltIn/StoreAction.swift` | ~281 | Store, DataStoredEvent |
+| `BuiltIn/WriteAction.swift` | ~273 | Write, URLWriteResult |
+| `BuiltIn/PublishAction.swift` | ~54 | Publish, VariablePublishedEvent |
+| `BuiltIn/NotifyAction.swift` | ~119 | Notify, NotificationSentEvent |
+| `BuiltIn/EmitAction.swift` | ~144 | Emit, DomainEvent |
 | `BuiltIn/ServerActions.swift` | ~1,283 | Start, Stop, Listen, Keepalive, Connect, Broadcast, Close |
 | `BuiltIn/ExtractAction.swift` | ~1,083 | Data extraction, typed extraction (ARO-0046), Retrieve, Receive, Read |
 | `BuiltIn/QueryActions.swift` | ~878 | Map, Reduce, Filter, Group |

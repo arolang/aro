@@ -553,6 +553,16 @@ build:linux:
 
     # Release build with static Swift stdlib
     - *resolve-with-retry
+    # `ar` updates an archive in place: members not named by this build stay
+    # in it. `.build/` is cached on Package.resolved, which does not change
+    # when a source file is deleted — so a branch that splits or removes one
+    # produced a libARORuntime.a holding BOTH the old object and the new
+    # ones, and `aro build` then failed with ld.gold reporting every symbol
+    # twice (240 of them, ResponseActions.swift.o against LogAction.swift.o).
+    #
+    # Removing the archive first costs one re-archive and makes its contents
+    # a function of the sources that actually exist.
+    - rm -f .build/release/libARORuntime.a .build/*/release/libARORuntime.a
     - swift build -c release --static-swift-stdlib
     - swift build -c release --product ARORuntime
 

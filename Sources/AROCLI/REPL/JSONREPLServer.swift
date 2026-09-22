@@ -220,7 +220,7 @@ final class JSONREPLServer: @unchecked Sendable {
     private func execute(id: Int, code: String, cellID: String? = nil) async {
         #if os(Windows)
         // `Log` consults this sink before falling back to writing at fd 1
-        // (ResponseActions). Windows has no `pipe`/`dup2` capture, so the
+        // (LogAction). Windows has no `pipe`/`dup2` capture, so the
         // sink is the only thing that keeps a `Log` out of the protocol
         // stream there.
         let sink: @Sendable (String) -> Void = { [weak self] text in
