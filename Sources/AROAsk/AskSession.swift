@@ -506,7 +506,13 @@ public actor AskSession {
             // once with /no_think prepended to bypass reasoning entirely.
             // The model usually produces a direct answer the second time.
             // Skip the retry if the user already asked for /no_think.
+            // A stall is a message with no answer in it. A `<think>` block
+            // followed by four good paragraphs is an answer with a preamble,
+            // and regenerating it costs the reader the wait and gains
+            // nothing (GitLab #872).
             if stripped.truncatedDuringThinking
+                && stripped.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && (reply.toolCalls ?? []).isEmpty
                 && Self.thinkingTail(reply.content ?? "") == nil
                 && !prompt.hasPrefix("/no_think") {
                 emitStatus("model stalled while thinking — retrying with /no_think…")
@@ -534,7 +540,16 @@ public actor AskSession {
                     ))
                 }
                 let retryStripped = stripThinking(retryReply.content ?? "")
-                if !retryStripped.text.isEmpty || !(retryReply.toolCalls ?? []).isEmpty {
+                // Keep the better of the two, not the later one (GitLab
+                // #872). A retry that comes back level leaves the answer the
+                // user already watched arrive.
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: retryStripped.text,
+                                       toolCalls: retryReply.toolCalls,
+                                       truncated: retryStripped.truncatedDuringThinking)) {
                     reply = retryReply
                     stripped = retryStripped
                 }
@@ -578,8 +593,13 @@ public actor AskSession {
                     ))
                 }
                 let directiveStripped = stripThinking(directiveReply.content ?? "")
-                if !directiveStripped.text.isEmpty
-                    || !(directiveReply.toolCalls ?? []).isEmpty {
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: directiveStripped.text,
+                                       toolCalls: directiveReply.toolCalls,
+                                       truncated: directiveStripped.truncatedDuringThinking)) {
                     reply = directiveReply
                     stripped = directiveStripped
                 }
@@ -626,7 +646,13 @@ public actor AskSession {
                     ))
                 }
                 let nudgeStripped = stripThinking(nudgeReply.content ?? "")
-                if !(nudgeReply.toolCalls ?? []).isEmpty || !nudgeStripped.text.isEmpty {
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: nudgeStripped.text,
+                                       toolCalls: nudgeReply.toolCalls,
+                                       truncated: nudgeStripped.truncatedDuringThinking)) {
                     reply = nudgeReply
                     stripped = nudgeStripped
                 }
