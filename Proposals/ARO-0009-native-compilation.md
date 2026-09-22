@@ -605,6 +605,45 @@ The final executable contains:
 | Compiled ARO code | ~10-100 KB |
 | ARORuntime | ~1-5 MB |
 | Swift runtime | statically linked by default (`--static`); `--dynamic` bundles `libswift*` / `libFoundation*` beside the binary with `rpath=$ORIGIN` |
+| Embedded CPython (Python plugins only) | ~35 MB: the static `libpython`, plus 615 standard-library files staged as `aro-python<version>/` |
+
+### Python Plugins and the Standalone Claim
+
+Swift, C, C++ and Rust plugins become object code and link in. A Python plugin
+cannot: it needs an interpreter. `--static` promises a file that can be copied,
+so resolving the interpreter, `libpython` and the standard library from the
+build machine would make that promise false — the binary looks standalone,
+copies cleanly, and dies at startup somewhere else.
+
+The default is therefore to **refuse**, naming the three paths the binary would
+otherwise have carried, and listing the ways forward.
+
+| Situation | Behaviour |
+|-----------|-----------|
+| `ARO_STATIC_PYTHON` names an embeddable distribution | Embed: archive linked by absolute path, stdlib staged beside the binary |
+| `--dynamic` | Build, with a warning naming the dependency — `--dynamic` never claimed otherwise |
+| `ARO_ALLOW_EMBEDDED_PYTHON=1` | Build, with the same warning; the caller takes responsibility for the target machine |
+| Otherwise, under `--static` | Refuse |
+
+A distribution is embeddable when it has a **genuine** static
+`libpython<version>.a` — verified by reading `ar`'s `!<arch>` magic, because
+python.org ships a file of that name which is a symlink to the dynamic
+library — and a standard library at `<root>/lib/python<version>` containing
+`encodings`, which `Py_Initialize` imports before it will run anything.
+
+What is staged excludes CPython's own `test/` suite, `idlelib`, `tkinter`,
+`turtledemo`, `__pycache__`, and — deliberately — `site-packages`: copying
+whatever happens to be installed on the build machine is the same class of
+mistake as borrowing its interpreter. A plugin's declared `requirements.txt` is
+installed explicitly instead. Requirements that are **native wheels** remain
+outside what any static link can fold in.
+
+At run time the staged library is `aro-python<version>/` next to the executable,
+which is where the embedded interpreter's `PYTHONHOME` points. Not a temp
+directory: `/tmp` is often `noexec`, which the standard library's C extension
+modules do not survive, and it can be cleaned out from under a long-running
+service. The version in the name lets two ARO binaries built against different
+Pythons sit in one directory.
 
 ---
 

@@ -108,7 +108,13 @@ public struct StateGuardSet: Sendable {
         // Split by semicolon for AND logic
         let guardStrings = content.split(separator: ";")
         for guardString in guardStrings {
-            if let guard_ = StateGuard.parse(String(guardString).trimmingCharacters(in: .whitespaces)) {
+            let text = String(guardString).trimmingCharacters(in: .whitespaces)
+            // `dedupe:` is a declaration, not a field comparison — it names the
+            // payload field that identifies an event, and is read by
+            // `DedupeGuard`. Reading it as a state guard would ask every event
+            // for a field called "dedupe" and so match nothing.
+            if DedupeGuard.field(inGuardComponent: text) != nil { continue }
+            if let guard_ = StateGuard.parse(text) {
                 guards.append(guard_)
             }
         }
@@ -126,4 +132,83 @@ public struct StateGuardSet: Sendable {
 
     /// Number of guards in the set
     public var count: Int { guards.count }
+}
+
+// MARK: - Dedupe Guard
+
+/// A handler's declaration that it wants each event seen once, identified by
+/// one field of the payload: `Handler<dedupe:url>` (ARO-0007 §3.6).
+///
+/// The runtime used to do this for exactly one event name — an event called
+/// `CrawlPage` whose payload happened to be keyed `data` had its `url`
+/// de-duplicated, and nothing else could ask for the same thing. This is that
+/// behaviour with the name taken out of it: any handler of any event can
+/// declare the field that identifies its events, and a handler that declares
+/// nothing sees every event.
+public enum DedupeGuard: Sendable {
+    /// The field named by a single `dedupe:<field>` guard component.
+    static func field(inGuardComponent component: String) -> String? {
+        let parts = component.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "dedupe" else {
+            return nil
+        }
+        let field = parts[1].trimmingCharacters(in: .whitespaces)
+        return field.isEmpty ? nil : field
+    }
+
+    /// The payload field a business activity declares as its identity, if any.
+    /// Example: `"CrawlPage Handler<dedupe:url>"` -> `"url"`.
+    public static func field(in businessActivity: String) -> String? {
+        guard let startIndex = businessActivity.firstIndex(of: "<"),
+              let endIndex = businessActivity.firstIndex(of: ">"),
+              startIndex < endIndex else {
+            return nil
+        }
+        let content = businessActivity[businessActivity.index(after: startIndex)..<endIndex]
+        for component in content.split(separator: ";") {
+            if let field = field(inGuardComponent: String(component).trimmingCharacters(in: .whitespaces)) {
+                return field
+            }
+        }
+        return nil
+    }
+
+    /// The identity of one event: the named field's value, rendered as a string.
+    ///
+    /// `Emit` shapes a payload in more than one way — an object literal is
+    /// spread across the payload, a named variable is wrapped under its own
+    /// name — so the field is looked up at the top level, then one level down
+    /// through a nested dictionary. Dotted paths address a nested field
+    /// directly, as state guards do. A payload that does not carry the field
+    /// has no identity, and such an event is never dropped.
+    public static func identity(
+        ofField field: String,
+        in payload: [String: any Sendable]
+    ) -> String? {
+        if let direct = resolve(path: field, in: payload) {
+            return render(direct)
+        }
+        for (_, value) in payload.sorted(by: { $0.key < $1.key }) {
+            guard let nested = value as? [String: any Sendable],
+                  let found = resolve(path: field, in: nested) else { continue }
+            return render(found)
+        }
+        return nil
+    }
+
+    private static func resolve(path: String, in payload: [String: any Sendable]) -> (any Sendable)? {
+        var current: any Sendable = payload
+        for component in path.split(separator: ".") {
+            guard let dict = current as? [String: any Sendable],
+                  let next = dict[String(component)] else { return nil }
+            current = next
+        }
+        return current is [String: any Sendable] ? nil : current
+    }
+
+    private static func render(_ value: any Sendable) -> String {
+        if let string = value as? String { return string }
+        return String(describing: value)
+    }
 }

@@ -708,7 +708,7 @@ Python plugins use a different strategy: the Python interpreter itself (`libpyth
 3. Third-party dependencies (from `requirements.txt`) are installed at build time and their wheels can be bundled
 4. Plugin functions (`aro_plugin_info`, `aro_plugin_execute`) are called in-process via the Python C API
 
-This eliminates the subprocess overhead of the interpreter-mode `PythonPluginHost` and makes Python plugins self-contained — no Python installation needed on the target machine.
+This eliminates the subprocess overhead of the interpreter-mode `PythonPluginHost`. Whether the result is *self-contained* is a separate question, and the answer is only yes when the build was given a CPython it could carry: `ARO_STATIC_PYTHON` naming a distribution with a genuine static `libpython<version>.a`. Without one, `aro build --static` refuses rather than resolve the interpreter and standard library from the build machine and call the result portable (GitLab #856).
 
 ### Key Files
 

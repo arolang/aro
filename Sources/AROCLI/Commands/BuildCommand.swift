@@ -397,6 +397,27 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        // An embeddable CPython was found, so the standard library travels
+        // with the binary: copy the parts a plugin can actually use into
+        // `aro-python<version>/` beside the executable, which is where the
+        // embedded interpreter sets PYTHONHOME (#856).
+        if let staging = compiledPlugins.pythonStdlibToStage {
+            do {
+                let destination = PythonStdlibBundle.pythonHome(
+                    besideExecutable: binaryPath.path, version: staging.version)
+                let report = try PythonStdlibBundle.stage(
+                    stdlibPath: staging.stdlibPath, into: destination)
+                let megabytes = Double(report.byteCount) / 1_048_576.0
+                print("  Python \(staging.version) standard library: \(report.fileCount) files, "
+                      + String(format: "%.1f MB", megabytes))
+                if verbose { print("    → \(report.destination)") }
+            } catch {
+                print("Error: failed to stage the Python standard library: \(error)")
+                print("  The binary would start without one; refusing to call it standalone.")
+                throw ExitCode.failure
+            }
+        }
+
         // Managed plugins were pre-compiled above (before LLVM IR generation) so they
         // could be embedded in the binary. Report the count if verbose.
         if verbose && !embeddedPlugins.isEmpty {

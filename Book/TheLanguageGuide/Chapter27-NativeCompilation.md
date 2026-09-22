@@ -52,7 +52,7 @@ The binary produced by `aro build` is fully self-contained. The following assets
 
 - **OpenAPI specification** (`openapi.yaml`): Embedded as a string constant. The HTTP server reads it from memory at startup.
 - **Templates** (`templates/`): All template files are serialized and embedded. The template engine uses the embedded versions.
-- **Plugins** (`Plugins/`): Native plugins (C, Rust, Swift) are compiled and statically linked into the binary via symbol renaming — no `dlopen`, no temporary files. Python plugins are embedded with their source code and executed in-process via an embedded Python interpreter (`libpython3` linked into the binary) — no Python installation needed on the target machine, no subprocess overhead.
+- **Plugins** (`Plugins/`): Native plugins (C, Rust, Swift) are compiled and statically linked into the binary via symbol renaming — no `dlopen`, no temporary files. Python plugins are embedded with their source code and executed in-process via an embedded Python interpreter, which avoids the subprocess hop — but the interpreter itself is not something a linker can fold in the way it folds in an object file. Unless the build is given an embeddable CPython through `ARO_STATIC_PYTHON`, the binary would resolve `libpython`, the interpreter and the standard library from the build machine, so `--static` declines rather than hand you a file that copies cleanly and dies at somebody else's startup (GitLab #856). With a distribution it can carry, the interpreter and a trimmed standard library travel with the binary and nothing needs to be installed on the target machine.
 
 This means the output of `aro build` is a single executable file. You do not need to deploy `openapi.yaml`, `templates/`, or `Plugins/` alongside it.
 
