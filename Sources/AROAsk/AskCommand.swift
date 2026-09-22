@@ -52,6 +52,9 @@ public struct AskCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Do not connect to any MCP servers")
     public var noMcp: Bool = false
 
+    @Flag(name: .long, help: "Read-only: the model is not given the tools that write files or run commands, so it explains the change instead of making it.")
+    public var readOnly: Bool = false
+
     @Option(name: .long, help: "Sampling temperature (default 0.2)")
     public var temperature: Double = 0.2
 
@@ -467,6 +470,7 @@ public struct AskCommand: AsyncParsableCommand {
             autoApproveAll: yes,
             temperature: temperature,
             skipMCP: noMcp,
+            readOnly: readOnly,
             focusFile: file.map {
                 URL(fileURLWithPath: $0, relativeTo: cwd).standardizedFileURL
             }

@@ -18,6 +18,10 @@ public struct AskSessionConfig: Sendable {
     public var topP: Double
     public var topK: Int
     public var skipMCP: Bool
+    /// The model is not given the tools that write or execute (GitLab
+    /// #875). A tool the approver would refuse is not a capability — it is
+    /// a round the model spends discovering that.
+    public var readOnly: Bool
     /// File the user currently has open (editor focus). Its fresh content
     /// is injected into every request as a transient context block — never
     /// persisted to `.context`. Change at runtime via `setFocusFile(_:)`.
@@ -40,6 +44,7 @@ public struct AskSessionConfig: Sendable {
         topP: Double = SamplingDefaults.aroCoding.topP,
         topK: Int = SamplingDefaults.aroCoding.topK,
         skipMCP: Bool = false,
+        readOnly: Bool = false,
         focusFile: URL? = nil,
         quiet: Bool = false,
         injectProjectContext: Bool = false
@@ -52,6 +57,7 @@ public struct AskSessionConfig: Sendable {
         self.topP = topP
         self.topK = topK
         self.skipMCP = skipMCP
+        self.readOnly = readOnly
         self.focusFile = focusFile
         self.quiet = quiet
         self.injectProjectContext = injectProjectContext
@@ -398,8 +404,17 @@ public actor AskSession {
         // did to it — and the substitution happens on the way out, once per
         // request, so MCP tools that only exist at runtime are listed too.
         if let first = out.first, first.role == "system", let text = first.content {
-            let tools = await registry.list()
-            out[0].content = ToolPromptCatalogue.substituted(into: text, tools: tools)
+            let scope = ToolScope.apply(
+                to: await registry.list(),
+                situation: ToolScope.Situation(readOnly: config.readOnly))
+            var prompt = ToolPromptCatalogue.substituted(into: text, tools: scope.attached)
+            // A model that finds no way to write should know it is a policy,
+            // so it answers with what to change rather than hunting for a
+            // tool that is not there (#875).
+            if let notice = ToolScope.withheldNotice(scope.withheld) {
+                prompt += "\n\n" + notice + "\n"
+            }
+            out[0].content = prompt
         }
         var context: [LMChatRequest.Message] = []
         if config.injectProjectContext, let project = projectContextMessage() {
@@ -426,7 +441,14 @@ public actor AskSession {
         // Auto-compact: summarize old turns when context grows too large
         try await compactIfNeeded(&context)
 
-        let tools = await registry.definitions()
+        // Which of the registered tools this request is given (#875).
+        let allTools = await registry.list()
+        let scope = ToolScope.apply(
+            to: allTools, situation: ToolScope.Situation(readOnly: config.readOnly))
+        let tools = scope.attached.map(\.toolDefinition)
+        if let notice = ToolScope.withheldNotice(scope.withheld) {
+            emitStatus(notice)
+        }
 
         // Per-tool failure tracking + session-wide failure ceiling.
         // A flaky or broken tool would otherwise drive the model into
