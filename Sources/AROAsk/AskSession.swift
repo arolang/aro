@@ -101,6 +101,9 @@ public actor AskSession {
     private var backend: (any LMBackend)?
     private var mcpBridges: [MCPClientBridge] = []
     private var contextLength: Int = 8192
+    /// What the conversation costs and what still fits (GitLab #869, #870).
+    /// Created once `contextLength` is known.
+    private var budget = TokenBudget(window: 8192)
     private var focusFile: URL?
     private var eventSink: (@Sendable (AskEvent) -> Void)?
     private var editorHooks: AskEditorHooks?
@@ -157,6 +160,7 @@ public actor AskSession {
         try await selected.start()
         self.backend = selected
         self.contextLength = entry.contextLength ?? 8192
+        await budget.setWindow(contextLength)
     }
 
     /// Register tools + MCP but skip backend startup (for slash commands).
@@ -431,6 +435,14 @@ public actor AskSession {
                 stream: false
             )
             var reply = try await backend.chat(request: request)
+
+            // What that request actually cost, from whoever counted it
+            // (GitLab #870). The MLX backend counts exactly; an
+            // OpenAI-compatible server reports `usage.prompt_tokens`; a
+            // backend that does neither returns nil and the estimate stands.
+            await budget.observe(
+                usage: await backend.usageOfLastChat(),
+                promptCharacters: TokenBudget.characters(in: context.messages))
 
             // Verbose mode: dump the raw model output (including `<think>`)
             // to stderr so the user can see what the model was reasoning
@@ -1120,14 +1132,11 @@ public actor AskSession {
 
     /// Rough token estimate: ~4 characters per token, which is conservative
     /// enough to trigger compaction before the backend truncates.
-    private func estimateTokens(_ messages: [AskMessage]) -> Int {
-        messages.reduce(0) { total, msg in
-            let chars = (msg.content?.count ?? 0)
-                + (msg.toolCalls?.count ?? 0)
-                + (msg.name?.count ?? 0)
-                + 4  // role + framing overhead
-            return total + (chars + 3) / 4
-        }
+    /// What the conversation costs, from the budget rather than from a
+    /// constant (GitLab #870). Kept as a method because several call sites
+    /// read it; the arithmetic lives in `TokenBudget`.
+    private func estimateTokens(_ messages: [AskMessage]) async -> Int {
+        await budget.tokens(in: messages)
     }
 
     /// When the conversation exceeds 70% of the context window, summarize
@@ -1135,7 +1144,7 @@ public actor AskSession {
     /// Keeps: system prompt (index 0), summary, and the most recent turns.
     private func compactIfNeeded(_ context: inout AskContext) async throws {
         guard let backend = backend else { return }
-        let tokens = estimateTokens(context.messages)
+        let tokens = await estimateTokens(context.messages)
         let threshold = contextLength * 70 / 100
         guard tokens > threshold else { return }
 

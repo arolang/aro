@@ -219,6 +219,12 @@ public actor NativeMLXBackend: LMBackend {
 
         // Prepare input (applies chat template) then generate
         let lmInput = try await container.prepare(input: userInput)
+
+        // The exact prompt length, from the tokenizer that is about to read
+        // it (GitLab #870). Every other backend has to ask a server for this
+        // number or guess at it; here the tokens are already in hand, so the
+        // budget gets a measurement rather than an estimate.
+        let promptTokens = lmInput.text.tokens.size
         let stream = try await container.generate(
             input: lmInput,
             parameters: genParams
@@ -248,12 +254,17 @@ public actor NativeMLXBackend: LMBackend {
         let detectedToolCalls = parseToolCalls(from: textForToolParsing)
 
         let cleanedText = stripToolCallMarkup(from: accumulated)
+        lastUsage = LMUsage(promptTokens: promptTokens)
         return LMChatResponse.Choice.Message(
             role: "assistant",
             content: cleanedText.isEmpty ? nil : cleanedText,
             toolCalls: detectedToolCalls.isEmpty ? nil : detectedToolCalls
         )
     }
+
+    private var lastUsage: LMUsage?
+
+    public func usageOfLastChat() async -> LMUsage? { lastUsage }
 
     // MARK: - Tool call parsing
 

@@ -88,6 +88,30 @@ public struct LMChatResponse: Codable, Sendable {
         }
     }
     public var choices: [Choice]
+    /// The server's own token accounting for this exchange, where it
+    /// reports one (GitLab #870).
+    public var usage: LMUsage?
+}
+
+/// What a backend counted for one exchange.
+///
+/// `promptTokens` is the number that matters here: it is the tokenizer's
+/// count of the very body that was sent, which is the only honest answer to
+/// "how big is this conversation" and the one a character-based estimate is
+/// guessing at.
+public struct LMUsage: Codable, Sendable, Equatable {
+    public var promptTokens: Int?
+    public var completionTokens: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+    }
+
+    public init(promptTokens: Int? = nil, completionTokens: Int? = nil) {
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+    }
 }
 
 /// A chat-completion backend.
@@ -97,6 +121,20 @@ public protocol LMBackend: Sendable {
     func start() async throws
     func stop() async
     func chat(request: LMChatRequest) async throws -> LMChatResponse.Choice.Message
+
+    /// Token accounting for the most recent `chat`, when this backend knows
+    /// it (GitLab #870).
+    ///
+    /// A separate call rather than a changed return type: the message is what
+    /// every caller wants and threading a tuple through four backends and
+    /// every call site would be a large change for a number only the budget
+    /// reads. Backends that cannot count return `nil` and the budget keeps
+    /// using its estimate, so this is additive.
+    func usageOfLastChat() async -> LMUsage?
+}
+
+public extension LMBackend {
+    func usageOfLastChat() async -> LMUsage? { nil }
 }
 
 public enum LMBackendError: Error, CustomStringConvertible {
