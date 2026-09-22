@@ -423,6 +423,10 @@ public actor AskSession {
         // to the model so it can pick a different approach (#369).
         var toolConsecutiveFailures: [String: Int] = [:]
         var totalToolFailures = 0
+        /// Every tool this run dispatched, for the structural bail-out
+        /// checks (GitLab #871).
+        var toolCallsMade: [String] = []
+        var bailoutsFired: Set<BailoutGuard.Finding> = []
         let perToolFailureLimit = 3
         let sessionFailureLimit = 20
 
@@ -701,6 +705,28 @@ public actor AskSession {
 
             // If no tool calls, we have a final text reply — validate any ARO code
             guard let toolCalls = reply.toolCalls, !toolCalls.isEmpty else {
+                // The turn is about to end. Two failures are visible only
+                // now, and only structurally: an answer that handed the
+                // reader a tool name, and ARO code that was never checked
+                // (GitLab #871). Each nudge fires once — a model that
+                // ignores the first will ignore the second, and each one
+                // costs the reader a regeneration of an answer they already
+                // watched arrive.
+                if let finding = BailoutGuard.inspect(
+                    answer: stripped.text,
+                    toolNames: tools.map { $0.function.name },
+                    toolCallsMade: toolCallsMade,
+                    alreadyFired: bailoutsFired) {
+                    bailoutsFired.insert(finding)
+                    emitStatus(Self.bailoutStatus(for: finding))
+                    context.messages.append(AskMessage(
+                        role: "assistant",
+                        content: stripped.text.isEmpty ? nil : stripped.text))
+                    context.messages.append(AskMessage(role: "user", content: finding.nudge))
+                    try contextStore.save(context)
+                    continue
+                }
+
                 let finalText = stripped.text
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
@@ -769,6 +795,7 @@ public actor AskSession {
                 } else {
                     toolConsecutiveFailures[name] = 0
                 }
+                toolCallsMade.append(name)
 
                 emitToolResult(name: name, arguments: call.function.arguments, output: output, failed: failed)
 
@@ -897,6 +924,17 @@ public actor AskSession {
     /// protocol, so nothing actually ran. Matches the underscore /
     /// `aro_mcp_`-prefixed TOOL names, never the space-separated `aro check`
     /// CLI form, so legitimate CLI examples in answers are left untouched.
+    /// The status line for a bail-out, phrased so the reader knows why the
+    /// answer they just watched is being redone.
+    static func bailoutStatus(for finding: BailoutGuard.Finding) -> String {
+        switch finding {
+        case .handedOverAToolName(let name):
+            return "model told you to run '\(name)' instead of running it — asking it to call the tool…"
+        case .wroteCodeWithoutChecking:
+            return "model wrote ARO without checking it — asking it to run aro_check…"
+        }
+    }
+
     private func looksLikeDisguisedToolCall(_ text: String, toolNames: [String]) -> Bool {
         guard !toolNames.isEmpty else { return false }
         // Candidate command tokens: each tool name plus the wrapper prefixes
