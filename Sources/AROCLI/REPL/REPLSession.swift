@@ -333,7 +333,13 @@ public final class REPLSession: @unchecked Sendable {
             wrappedSource += "\n\n" + companions.joined(separator: "\n\n")
         }
 
-        let result = compiler.compile(wrappedSource)
+        // The session's own bindings are pre-bound as far as this cell is
+        // concerned: it is compiled alone, but `<w>` from an earlier cell is
+        // there at run time. Without this, `Publish as <x> <w>.` failed static
+        // analysis — the one statement that *errors* on an undefined name
+        // rather than warning, and the one cross-cell operation Publish is for
+        // (GitLab #689).
+        let result = compiler.compile(wrappedSource, preboundSymbols: Set(context.variableNames))
 
         if !result.isSuccess {
             let errorMsg = result.diagnostics.map { $0.message }.joined(separator: "\n")

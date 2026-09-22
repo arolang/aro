@@ -301,12 +301,17 @@ public final class SemanticAnalyzer {
     ///   caller has not scanned the application — a single-file compile — and
     ///   the unknown-action diagnostic says so instead of claiming the
     ///   application declares none.
+    /// - Parameter preboundSymbols: names already bound outside this source —
+    ///   a REPL session's variables when a single cell is compiled on its own
+    ///   (GitLab #689). Empty for an ordinary compile.
     public func analyze(
         _ program: Program,
         externallyHandledEvents: Set<String> = [],
-        declaredUserActions: UserActionRegistry? = nil
+        declaredUserActions: UserActionRegistry? = nil,
+        preboundSymbols: Set<String> = []
     ) -> AnalyzedProgram {
-        let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
+        let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics,
+                                        preboundSymbols: preboundSymbols)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
         let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
         let events = EventAnalyzer(diagnostics: diagnostics)
