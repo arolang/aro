@@ -104,6 +104,9 @@ public actor AskSession {
     /// What the conversation costs and what still fits (GitLab #869, #870).
     /// Created once `contextLength` is known.
     private var budget = TokenBudget(window: 8192)
+    /// What this session has already handed the model, so a second search
+    /// returns other things (GitLab #874).
+    private let retrievalMemory = RetrievalMemory()
     private var focusFile: URL?
     private var eventSink: (@Sendable (AskEvent) -> Void)?
     private var editorHooks: AskEditorHooks?
@@ -137,7 +140,8 @@ public actor AskSession {
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
         await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
-        await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
+        await registry.register(SearchTool.searchProject(
+            store: vectorStore, embedder: embedder, memory: retrievalMemory))
 
         // 2. Vector store, MCP bridges, and model resolution run
         // in parallel — they're independent and each is multi-
@@ -171,7 +175,8 @@ public actor AskSession {
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
         await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
-        await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
+        await registry.register(SearchTool.searchProject(
+            store: vectorStore, embedder: embedder, memory: retrievalMemory))
         try await vectorStore.load()
         if !config.skipMCP {
             await startMCPBridges()
