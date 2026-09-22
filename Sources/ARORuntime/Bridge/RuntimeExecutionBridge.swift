@@ -780,6 +780,24 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         return value
     }
 
+    // Emptiness check: {"$empty":{"expr":{…},"negated":false}}
+    //
+    // GitLab #652, and the same story as `$unary` below: the node existed in
+    // the AST and nothing serialised or decoded it, so `when <list> is empty`
+    // reached the binary as `$unknown`, evaluated to "", and `asBool` read
+    // that as false. The guard never ran its test — and `is not empty` was
+    // false too, so both directions were wrong.
+    //
+    // `ExpressionEvaluator.isEmptyValue` is shared rather than reimplemented:
+    // two answers to "is this empty" is how the modes drift apart again.
+    if let emptiness = expr["$empty"] as? [String: Any],
+       let inner = emptiness["expr"] as? [String: Any] {
+        let value = evaluateExpressionJSON(inner, context: context)
+        let negated = (emptiness["negated"] as? Bool) ?? false
+        let empty = ExpressionEvaluator.isEmptyValue(value)
+        return negated ? !empty : empty
+    }
+
     // Unary expression: {"$unary":{"op":"not","operand":{…}}}
     //
     // The compiler has always serialized these; this decoder never knew
