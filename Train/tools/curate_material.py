@@ -20,6 +20,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+# The sandbox that generated ARO is executed in lives with the pipeline
+# (GitLab #804).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'script'))
+import sandbox  # noqa: E402
+
 TOOLS_DIR = Path(__file__).resolve().parent
 MATERIAL_DIR = TOOLS_DIR.parent / 'Material'
 ARO_BIN = TOOLS_DIR.parent.parent / '.build/release/aro'
@@ -38,11 +43,10 @@ def aro_check(code: str) -> tuple[bool, str]:
     """Return (passed, error_message). Requires a full feature-set program."""
     if not ARO_BIN.exists():
         sys.exit(f'aro binary not found at {ARO_BIN}. Build first: swift build -c release')
-    with tempfile.TemporaryDirectory() as tmp:
-        (Path(tmp) / 'main.aro').write_text(code)
-        r = subprocess.run([str(ARO_BIN), 'check', tmp],
-                           capture_output=True, text=True, timeout=10)
-        return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
+    # Sandboxed (GitLab #804): curated material is still code the toolchain
+    # is about to parse, and it runs with its own cwd, HOME and TMPDIR.
+    r = sandbox.run_program_dir([str(ARO_BIN), 'check'], code, timeout=10)
+    return r.returncode == 0, (r.stderr or r.stdout).strip()[:300]
 
 
 def aro_check_syntax(snippet: str) -> tuple[bool, str]:
@@ -939,7 +943,7 @@ E.add('Extract two fields from an object and concatenate them.',
 # Application-End handlers.
 E.add('Application-End handler that closes a database connection.',
       '(Application-End: Success) {\n'
-      '    Close the <database-connections> for the <application>.\n'
+      '    Close the <database-connections> with <application>.\n'
       '    Log "closed" to the <console>.\n'
       '    Return an <OK: status> for the <shutdown>.\n'
       '}', 'application_end')
@@ -1206,7 +1210,7 @@ MF.add(
             '(shipOrder: Orders) {\n'
             '    Extract the <id> from the <pathParameters: id>.\n'
             '    Retrieve the <order> from the <order-repository> where <id> is <id>.\n'
-            '    Accept the <transition> for the <order> with "shipped".\n'
+            '    Accept the <transition: to_shipped> on <order: status>.\n'
             '    Emit an <OrderShipped: event> with <order>.\n'
             '    Return an <OK: status> with <order>.\n'
             '}\n',
@@ -1338,18 +1342,13 @@ def validate_multi_file(examples):
     kept, failed = [], []
     for ex in examples:
         files = ex['files']
-        with tempfile.TemporaryDirectory() as tmp:
-            for fname, content in files.items():
-                (Path(tmp) / fname).write_text(content)
-            try:
-                r = subprocess.run(
-                    [str(ARO_BIN), 'check', tmp],
-                    capture_output=True, text=True, timeout=15,
-                )
-                ok = r.returncode == 0
-                err = (r.stderr or r.stdout).strip()[:500]
-            except Exception as exc:
-                ok, err = False, str(exc)[:300]
+        try:
+            r = sandbox.run_program_dir([str(ARO_BIN), 'check'],
+                                        extra_files=files, timeout=15)
+            ok = r.returncode == 0
+            err = (r.stderr or r.stdout).strip()[:500]
+        except Exception as exc:
+            ok, err = False, str(exc)[:300]
         if ok:
             kept.append({
                 'instruction': ex['instruction'],
@@ -1425,7 +1424,7 @@ E.add('Render a Mustache-style template with a single placeholder.',
       '(RenderGreeting: Example) {\n'
       '    Create the <template> with "Hello, {{name}}!".\n'
       '    Create the <data> with { name: "Ada" }.\n'
-      '    Render the <html> from the <template> with <data>.\n'
+      '    Transform the <html> from the <template> with <data>.\n'
       '    Return an <OK: status> with <html>.\n'
       '}', 'template')
 
@@ -1433,7 +1432,7 @@ E.add('Render an HTML invoice from a template and an order object.',
       '(RenderInvoice: Example) {\n'
       '    Create the <template> with "<h1>Invoice #{{id}}</h1><p>Total: {{total}}</p>".\n'
       '    Create the <data> with { id: 42, total: 199 }.\n'
-      '    Render the <html> from the <template> with <data>.\n'
+      '    Transform the <html> from the <template> with <data>.\n'
       '    Return an <OK: status> with <html>.\n'
       '}', 'template')
 
@@ -1444,7 +1443,7 @@ E.add('Render a template that loops over a list of items.',
       '        { name: "Widget" },\n'
       '        { name: "Gadget" }\n'
       '    ] }.\n'
-      '    Render the <text> from the <template> with <data>.\n'
+      '    Transform the <text> from the <template> with <data>.\n'
       '    Return an <OK: status> with <text>.\n'
       '}', 'template')
 
@@ -1491,7 +1490,7 @@ E.add('Record a request duration to a histogram metric.',
 # Parameters (ARO-0047)
 E.add('Read command-line parameters at startup.',
       '(Application-Start: CLI Tool) {\n'
-      '    Parameters the <args> for the <application>.\n'
+      '    Extract the <args> from the <parameter>.\n'
       '    Log <args> to the <console>.\n'
       '    Return an <OK: status> for the <startup>.\n'
       '}', 'parameters')
@@ -1580,7 +1579,7 @@ MORE_UDA = [
     ('Define a user-defined action that counts the words in a string.',
      '(CountWords: Action takes <text>) {\n'
      '    Extract the <s> from the <input: text>.\n'
-     '    Split the <words> from <s> with " ".\n'
+     '    Split the <words> from <s> by " ".\n'
      '    Compute the <count: length> from <words>.\n'
      '    Return an <OK: status> with { count: <count> }.\n'
      '}'),
@@ -1634,13 +1633,13 @@ MORE_UDA = [
     ('Define a user-defined action that returns the head of a list.',
      '(Head: Action takes <list>) {\n'
      '    Extract the <items> from the <input: list>.\n'
-     '    Compute the <h: first> from <items>.\n'
+     '    Extract the <h: first> from the <items>.\n'
      '    Return an <OK: status> with { head: <h> }.\n'
      '}'),
     ('Define a user-defined action that returns the last element of a list.',
      '(Last: Action takes <list>) {\n'
      '    Extract the <items> from the <input: list>.\n'
-     '    Compute the <t: last> from <items>.\n'
+     '    Extract the <t: last> from the <items>.\n'
      '    Return an <OK: status> with { last: <t> }.\n'
      '}'),
     ('Define a user-defined action that reverses a list.',
@@ -1970,28 +1969,28 @@ MORE_TEMPLATE = [
      '(Welcome: Example) {\n'
      '    Create the <template> with "Welcome, {{name}}.".\n'
      '    Create the <data> with { name: "Pat" }.\n'
-     '    Render the <message> from the <template> with <data>.\n'
+     '    Transform the <message> from the <template> with <data>.\n'
      '    Return an <OK: status> with <message>.\n'
      '}'),
     ('Render an email body from a template using fields name and amount.',
      '(EmailBody: Example) {\n'
      '    Create the <template> with "Hi {{name}}, your bill is {{amount}}.".\n'
      '    Create the <data> with { name: "Sam", amount: 42 }.\n'
-     '    Render the <body> from the <template> with <data>.\n'
+     '    Transform the <body> from the <template> with <data>.\n'
      '    Return an <OK: status> with <body>.\n'
      '}'),
     ('Render a SMS notification from a template.',
      '(SMSText: Example) {\n'
      '    Create the <template> with "Code: {{code}}".\n'
      '    Create the <data> with { code: 1234 }.\n'
-     '    Render the <sms> from the <template> with <data>.\n'
+     '    Transform the <sms> from the <template> with <data>.\n'
      '    Return an <OK: status> with <sms>.\n'
      '}'),
     ('Render an HTML page with a title and a paragraph.',
      '(HTMLPage: Example) {\n'
      '    Create the <template> with "<html><h1>{{title}}</h1><p>{{body}}</p></html>".\n'
      '    Create the <data> with { title: "Hi", body: "World" }.\n'
-     '    Render the <html> from the <template> with <data>.\n'
+     '    Transform the <html> from the <template> with <data>.\n'
      '    Return an <OK: status> with <html>.\n'
      '}'),
     ('Render a template that iterates over a list of users.',
@@ -2001,14 +2000,14 @@ MORE_TEMPLATE = [
      '        { name: "Ada" },\n'
      '        { name: "Lin" }\n'
      '    ] }.\n'
-     '    Render the <list> from the <template> with <data>.\n'
+     '    Transform the <list> from the <template> with <data>.\n'
      '    Return an <OK: status> with <list>.\n'
      '}'),
     ('Render a confirmation message from an event payload.',
      '(ConfirmOrder: OrderCreated Handler) {\n'
      '    Extract the <order> from the <event: order>.\n'
      '    Create the <template> with "Thanks for order #{{id}}.".\n'
-     '    Render the <message> from the <template> with <order>.\n'
+     '    Transform the <message> from the <template> with <order>.\n'
      '    Send the <message> to the <order: email>.\n'
      '    Return an <OK: status> for the <notification>.\n'
      '}'),
@@ -2016,21 +2015,21 @@ MORE_TEMPLATE = [
      '(Summary: Example) {\n'
      '    Create the <template> with "# {{title}}\\n\\n{{body}}".\n'
      '    Create the <data> with { title: "Report", body: "All good." }.\n'
-     '    Render the <md> from the <template> with <data>.\n'
+     '    Transform the <md> from the <template> with <data>.\n'
      '    Return an <OK: status> with <md>.\n'
      '}'),
     ('Render an OG-style social card from a template.',
      '(SocialCard: Example) {\n'
      '    Create the <template> with "{{title}} — {{subtitle}}".\n'
      '    Create the <data> with { title: "ARO", subtitle: "Action-Result-Object" }.\n'
-     '    Render the <card> from the <template> with <data>.\n'
+     '    Transform the <card> from the <template> with <data>.\n'
      '    Return an <OK: status> with <card>.\n'
      '}'),
     ('Render a price tag from a template.',
      '(PriceTag: Example) {\n'
      '    Create the <template> with "{{name}}: €{{price}}".\n'
      '    Create the <data> with { name: "Widget", price: 9 }.\n'
-     '    Render the <tag> from the <template> with <data>.\n'
+     '    Transform the <tag> from the <template> with <data>.\n'
      '    Return an <OK: status> with <tag>.\n'
      '}'),
     ('Render a template inline inside an HTTP route handler.',
@@ -2038,7 +2037,7 @@ MORE_TEMPLATE = [
      '    Extract the <id> from the <pathParameters: id>.\n'
      '    Retrieve the <user> from the <user-repository>.\n'
      '    Create the <template> with "Hello, {{name}}!".\n'
-     '    Render the <body> from the <template> with <user>.\n'
+     '    Transform the <body> from the <template> with <user>.\n'
      '    Return an <OK: status> with <body>.\n'
      '}'),
 ]

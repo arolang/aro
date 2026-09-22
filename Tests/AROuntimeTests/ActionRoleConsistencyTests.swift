@@ -107,8 +107,9 @@ struct ActionRoleConsistencyTests {
 
     @Test("The registry has the action count the generated table claims")
     func testActionCount() {
-        // The generated ARO-0004 §11 table says 71. If an action is added, both
+        // The generated ARO-0004 §11 table says 72. If an action is added, both
         // this number and the table need updating — the CI job regenerates it.
-        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 71)
+        // 72 since Configure became an action of its own (GitLab #728).
+        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 72)
     }
 }

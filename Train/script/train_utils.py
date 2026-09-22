@@ -196,6 +196,16 @@ def check_convergence(pass_rates, val_losses=None, pass_tol=0.02,
                       loss_tol=0.01, patience=2):
     """Detect a converged iterative loop.
 
+    SUPERSEDED by `eval_stats.converged_by_overlap` (GitLab #786), which NB21
+    now calls. This function compares pass-rate deltas against a fixed
+    tolerance, and 0.02 is finer than the instrument it was applied to: on the
+    60-prompt code-generation set the smallest non-zero delta expressible is
+    1/60 = 0.0167, and on the 12-prompt task sets it is 0.083. The recorded
+    2026-08 run stopped with "pass-rate deltas ['0.033', '0.017'] (tol 0.02)"
+    — one of those two deltas is a single prompt. Kept for the existing tests
+    and for reading old `round_results.json` files; do not use it for new
+    stopping decisions.
+
     pass_rates: per-round syntax pass rates (floats, chronological).
     val_losses: per-round best validation losses (may be None / contain None).
     Converged when the last `patience` consecutive round-to-round deltas of

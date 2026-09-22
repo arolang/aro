@@ -137,7 +137,7 @@ prints the live table, including each action's valid prepositions.
 | Role | Actions |
 |------|---------|
 | REQUEST | Clone, Exists, Extract, List, ParseDispatch, Probe, Prompt, Pull, Read, Receive, Request, Retrieve, Select, Stat, Stream |
-| OWN | Accept, Assert, Call, Clear, Compare, Compute, Create, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
+| OWN | Accept, Assert, Call, Clear, Compare, Compute, Configure, Create, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
 | RESPONSE | Append, Broadcast, Log, Notify, Render, Repaint, Return, Send, Store, Throw, Write |
 | EXPORT | Emit, GitCommit, Publish, Push, Schedule, Tag |
 | SERVER | Close, Connect, Copy, Listen, Make, Move, Start, Stop, WaitForEvents |

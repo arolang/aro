@@ -864,7 +864,7 @@ Error: Can not extract the <name> from the <user: name> in template welcome.tpl
 
 - `Sources/ARORuntime/Core/ExecutionContext.swift` - Context cloning via `createChild()`
 - `Sources/ARORuntime/Core/FeatureSetExecutor.swift` - ForEachLoop execution pattern
-- `Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift` - LogAction as Print model
+- `Sources/ARORuntime/Actions/BuiltIn/LogAction.swift` - LogAction as Print model
 - `Sources/ARORuntime/FileSystem/FileSystemService.swift` - File reading pattern
 - `Sources/AROParser/AST.swift` - ForEachLoop AST structure
 - `Sources/AROCLI/Commands/BuildCommand.swift` - OpenAPI embedding pattern

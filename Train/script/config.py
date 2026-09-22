@@ -104,12 +104,89 @@ RUNS_DIR = DATA_ROOT / 'runs'
 # when notebooks change what/how they emit. SESSION_ID identifies one notebook
 # (or full-pipeline) execution — the META pipeline can pin a single session
 # across all notebooks by exporting ARO_TRAIN_SESSION.
-
-PIPELINE_VERSION = '2026.07'
+#
+# Changelog:
+#   2026.07 — renumbered notebooks; provenance stamping on every pair.
+#   2026.09 — NB28–NB32 script stages; eval-derived merge; TYPE_CAPS v4.
+#             The version sat at 2026.07 through all of that, so nothing
+#             written in September recorded the shape it was written by
+#             (GitLab #792). Bump it when the emitted shape changes, and the
+#             run archive under Train/runs/ records which shape produced it.
+PIPELINE_VERSION = '2026.09'
 
 RUN_TIMESTAMP = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
                  or f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}")
+
+# ── Committed run archive (GitLab #792) ──────────────────────────────────────
+# data/, models/ and release/ are gitignored and regenerated, which is right —
+# but it left nothing behind describing a finished run. RUN_ARCHIVE_ROOT is
+# tracked: `run_archive.py` copies the small, text-shaped summaries of a run
+# (stats.json, dataset_report.md, drop_reasons.csv, promotion_gate.json,
+# loop_metrics.json, model_manifest.json, the experiments CSV) into
+# Train/runs/<release>/ so a finished run is describable from the repository
+# alone. Weights stay out; nothing here is larger than a few hundred KB.
+RUN_ARCHIVE_ROOT = TRAIN_ROOT / 'runs'
+
+
+def run_archive_dir(release=None):
+    """Directory holding the committed summary of one release's run."""
+    release = release or os.environ.get('ARO_TRAIN_RELEASE') or PIPELINE_VERSION
+    return RUN_ARCHIVE_ROOT / str(release)
+
+
+# ── Fresh-run guard (GitLab #792) ────────────────────────────────────────────
+# 01_init wipes every stage directory unconditionally. That is what it is for —
+# but it also wipes the outputs of the expensive later stages, and a mis-started
+# meta run (or a re-run of 01 to regenerate the fix pairs) silently destroyed a
+# validated dataset and a set of adapters that cost GPU-days. Nothing recorded
+# that it had happened, which is one reason the last run cannot be reproduced.
+#
+# assert_fresh_allowed() refuses when a directory produced by a LATER stage
+# still holds files, unless the caller opts in. From a notebook the opt-in is
+# the ARO_TRAIN_FRESH=1 environment variable; from a script it is --fresh.
+
+class NotAFreshRun(RuntimeError):
+    """Raised when a wipe would destroy outputs a later stage produced."""
+
+
+def fresh_requested():
+    """True when the operator asked for a destructive fresh run."""
+    return os.environ.get('ARO_TRAIN_FRESH', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def _files_in(path):
+    p = Path(path)
+    if not p.exists():
+        return 0
+    return sum(1 for f in p.rglob('*') if f.is_file())
+
+
+def assert_fresh_allowed(protected_dirs, fresh=None):
+    """Refuse to wipe when `protected_dirs` still hold later-stage output.
+
+    `protected_dirs` is an iterable of (path, label). Returns the list of
+    (path, label, file_count) that would be destroyed; raises NotAFreshRun
+    when that list is non-empty and the operator has not opted in.
+    """
+    if fresh is None:
+        fresh = fresh_requested()
+    at_risk = [(Path(d), label, _files_in(d)) for d, label in protected_dirs]
+    at_risk = [row for row in at_risk if row[2] > 0]
+    if at_risk and not fresh:
+        listing = '\n'.join(f'    {p}  ({n} files)  — {label}'
+                            for p, label, n in at_risk)
+        raise NotAFreshRun(
+            'Refusing to wipe: these directories hold output produced by a '
+            'later pipeline stage.\n\n'
+            f'{listing}\n\n'
+            'Re-running 01_init would destroy work that cost GPU time and is '
+            'not reproducible from the repository.\n'
+            'If that is genuinely what you want, set ARO_TRAIN_FRESH=1 '
+            '(notebook) or pass --fresh (script) and run again.\n'
+            'To keep them, skip 01_init: Train/training.sh --from 02'
+        )
+    return at_risk
 
 # ── Dataset assembly type caps (used by 17_dataset_assembly) ─────────────────
 # Versioned so stats.json records which caps produced a given dataset
@@ -131,8 +208,18 @@ SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
 #       DEFAULT_TYPE_CAP) so the caps file stays the readable inventory of
 #       what the model is trained to do. All uncapped: the whole course is a
 #       few hundred pairs, and notebook skills have no other source.
+#   v5 (2026-09-21, issue #806): correction 4000 → 3000. eval_derived supplies
+#       6,084 correction pairs (5,440 from ask_eval_pairs.jsonl, 642 from
+#       antihallucination.jsonl, two more elsewhere), so error→fix was the
+#       single largest task type reaching training — more of it than of
+#       writing a program correctly in the first place. A model that has seen
+#       more broken ARO than working ARO learns the shape of the repair, not
+#       the shape of the language. Correction is now capped at, not above,
+#       code_generation. Note the cap is applied first-N-wins in insertion
+#       order by 17_dataset_assembly, so which rows survive is decided by
+#       append order rather than by quality — worth fixing separately.
 # Bump TYPE_CAPS_VERSION whenever the caps change.
-TYPE_CAPS_VERSION = 'v4-2026-09-07'
+TYPE_CAPS_VERSION = 'v5-2026-09-21'
 
 TYPE_CAPS = {
     'code_generation':     3000,   # raised — keep distinct eval-derived code
@@ -142,7 +229,7 @@ TYPE_CAPS = {
     'code_transformation': None,   # uncapped (minority)
     'tool_calling':        None,   # uncapped — critical for aro ask
     'debugging':           None,   # uncapped — always useful
-    'correction':          4000,   # bounded — dominant error→fix, not overwhelming
+    'correction':          3000,   # at, not above, code_generation (#806)
     'full_application':    None,   # uncapped — plan → complete multi-file app
     # ── Notebook skills (NB32, mined from Learning/*.repl) ──────────────────
     'notebook_output':     None,   # uncapped — predict a cell's real output
@@ -151,6 +238,178 @@ TYPE_CAPS = {
     'notebook_authoring':  None,   # uncapped — emit .repl JSON (ARO-0091)
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
+
+# ── Hyper-parameters (GitLab #795) ───────────────────────────────────────────
+# Every training stage used to declare its own constants in its own notebook.
+# Eight notebooks then disagreed with each other, and — worse — disagreed about
+# WHY. The SFT stage raised gradient accumulation to 16 "to smooth
+# heterogeneous-task gradient noise"; the iterative loop, training the same
+# model on an overlapping mixture, lowered it to 4 "for NaN robustness". Two
+# stages appeared to use LoRA rank 16 and two rank 8, and a reader had no way
+# to tell a deliberate difference from a copy-paste.
+#
+# HPARAMS is now the single table. A stage reads its own row; nothing declares
+# a training constant in a notebook cell any more, and check_hparams.py fails
+# CI if one starts again. HPARAMS_VERSION is bumped whenever a value changes,
+# and every training run records the row it used to experiments.db, so a later
+# comparison is a query rather than archaeology.
+#
+# The rules the table follows:
+#
+#   * A stage differing from another needs a reason on the line. "It was like
+#     that" is not one.
+#   * A value nobody has measured is recorded as unmeasured rather than
+#     dressed up. The sweep in NB18 is the only stage that measures anything,
+#     and its results now land in experiments.db.
+#   * lora_rank is 8 everywhere. NB18's 150-iteration sweep spans rank 4, 8 and
+#     16 and picks 8. The two stages that looked like rank 16 (warm start,
+#     distillation) never set a rank at all — they pass only --num-layers and
+#     inherit mlx-lm's default, which is 8. The "rank 16" in the warm-start
+#     chart title was a label, never a setting.
+#
+HPARAMS_VERSION = 'v1-2026-09-21'
+
+_SHARED = {
+    'lora_rank':     8,       # see note above — measured, not inherited
+    'lora_dropout':  0.0,     # unchanged from every stage; no stage has varied it
+    'lora_scale':    20.0,    # ditto
+    'weight_decay':  0.01,    # AdamW; added in #416 against memorisation
+    'max_seq_len':   4096,
+}
+
+HPARAMS = {
+    # Warm start on the action/syntax reference (07). Short, cheap, and its job
+    # is to teach the DSL before generation stages depend on it.
+    'warm_start': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    4,
+        'grad_accum':    1,     # unmeasured: this stage has never accumulated.
+                                # Left alone deliberately — raising it changes
+                                # the one stage whose output every later stage
+                                # resumes from, and nobody has measured it.
+        'val_batches':   25,
+        'max_seq_len':   2048,  # the only stage below the shared 4096, and
+                                # deliberately: it trains on the action/syntax
+                                # reference, whose pairs are short, so a longer
+                                # window buys padding and nothing else.
+    }),
+
+    # Full SFT on the 30B MoE teacher (18). The best-tuned row in the table:
+    # #440 moved LR 1e-5→8e-6, accumulation 8→16, warmup 40→100, iters 800→1000
+    # against a reported train-loss spike and a val plateau.
+    'sft': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,
+        'batch_size':    2,
+        'grad_accum':    16,    # effective batch 32
+        'iters':         1000,
+        'lr_warmup':     100,
+        'steps_per_eval': 50,
+        'val_batches':   25,
+    }),
+
+    # Preference pass (19). Lower LR because the data is curated and small;
+    # fewer layers and no accumulation headroom because DPO holds a reference
+    # model resident beside the policy.
+    'preference': dict(_SHARED, **{
+        'lora_layers':   8,
+        'learning_rate': 5e-6,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         200,
+        'beta':          0.3,
+    }),
+
+    # Iterative self-improvement rounds (21), on the same teacher as 'sft'.
+    # Both values here were changed to match 'sft': see the commit for #795.
+    'iterative': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,  # was 1e-5. Same model, overlapping mixture, and
+                                # #440 measured 8e-6 as the rate that stops the
+                                # spikes. Two rates for one model was the
+                                # contradiction, not a finding.
+        'batch_size':    2,
+        'grad_accum':    16,    # was 4, "smaller window reduces NaN risk on MoE".
+                                # Accumulation averages gradients: a smaller
+                                # window makes each optimiser step noisier, not
+                                # safer. The notebook's own NaN advice says to
+                                # lower the LR, which is the real lever.
+        'iters_per_round': 400,
+        'steps_per_eval': 50,
+    }),
+
+    # Distillation into the 8B student (22). Higher LR than the teacher stages
+    # because the student is smaller, dense, and starts from base.
+    'student': dict(_SHARED, **{
+        'lora_layers':   16,    # raised from 8 by the round-2 audit, which
+                                # reported it closing the 30B→8B gap. The one
+                                # layer-count change in the pipeline with a
+                                # recorded result behind it.
+        'learning_rate': 2e-5,
+        'batch_size':    1,
+        'grad_accum':    16,
+    }),
+
+    # Booster 1 — curated Material/ on top of the student (23).
+    'material': dict(_SHARED, **{
+        'lora_layers':   8,     # a few hundred curated pairs; 16 layers on that
+                                # much data is capacity looking for something to
+                                # memorise.
+        'learning_rate': 2e-5,  # was 1e-4 — 5× the student's own rate, on less
+                                # and better data, with no rationale recorded
+                                # anywhere. This is the first booster fused onto
+                                # the model that ships.
+        'batch_size':    1,
+        'grad_accum':    8,
+    }),
+
+    # Booster 2 — reasoning traces (24).
+    'thinking': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    2,
+        'grad_accum':    8,
+        'iters':         400,
+    }),
+
+    # Booster 3 — multi-turn conversation (25). The final model.
+    'conversation': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         300,
+        'max_seq_len':   5120,  # justified exception: multi-turn transcripts
+                                # genuinely run past 4096, and truncating one
+                                # mid-turn teaches a conversation that stops.
+    }),
+}
+
+
+def hparams(stage):
+    """The hyper-parameter row for one training stage.
+
+    Raises KeyError naming the known stages rather than returning a default:
+    a typo that silently trains on someone else's settings is the failure this
+    table exists to prevent.
+    """
+    try:
+        return dict(HPARAMS[stage])
+    except KeyError:
+        known = ', '.join(sorted(HPARAMS))
+        raise KeyError(f'unknown training stage {stage!r}; known stages: {known}') from None
+
+
+def hparams_record(stage, **overrides):
+    """The row plus its provenance, shaped for experiment_db.record_run()."""
+    row = hparams(stage)
+    row.update(overrides)
+    row['stage'] = stage
+    row['hparams_version'] = HPARAMS_VERSION
+    row['effective_batch'] = row.get('batch_size', 1) * row.get('grad_accum', 1)
+    return row
+
 
 FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
 ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
@@ -902,185 +1161,266 @@ def load_model(with_adapter=True, kb=None):
 
 
 # ── System prompt builder ─────────────────────────────────────────────────────
+# The shipped prompt was 14 475 bytes and said several things twice (GitLab
+# #808). Its first half was `knowledge.json['aro_syntax']` pasted in raw and
+# sliced at 4000 characters: the feature-set skeleton and the whole
+# Application-End block appeared once as prose and once again inside a fence,
+# the slice ended mid-word ("built-in ope"), and — because that text was a
+# scrape of documentation rather than anything checked against the language —
+# it still taught `Compare the <first-length> against the <second-length>.`,
+# the pre-#469 form that tries to rebind its own operand and cannot run under
+# immutability. The curated rules further down the same prompt taught the
+# correct form, so the model's standing instructions contradicted themselves,
+# and roughly four thousand tokens of every request paid for the contradiction.
+#
+# The prompt is now generated: the action reference and the qualifier list come
+# from the catalogues (`aro_action_catalog.json`, `aro_qualifier_catalog.json`,
+# both extracted from the runtime), and everything else is written once. Nothing
+# is pasted in from a documentation scrape, so nothing can go stale without a
+# catalogue changing — which `catalog_hash` in the release manifest then makes
+# visible (#807).
+#
+# It cannot shrink to the ~4 KB the issue estimated without dropping the action
+# and qualifier catalogues, and those are the 2.4 KB that make "use only these
+# verbs" and "the qualifier set is closed" enforceable instructions rather than
+# vague advice — verb hallucination is a documented limitation of this model.
+# Everything that is not a catalogue fits in about 4 KB; the catalogues are the
+# rest.
 
-def build_system_prompt(kb=None, max_syntax_chars=4000):
+_PROMPT_ROLE_GLOSS = [
+    ('request',  'REQUEST   external → internal'),
+    ('own',      'OWN       internal → internal'),
+    ('response', 'RESPONSE  internal → external'),
+    ('export',   'EXPORT    makes data or symbols visible outside'),
+    ('server',   'SERVICE   starts, stops and talks to services'),
+]
+
+# The tools `aro ask` registers. Kept here rather than scraped because the
+# prompt has to name them exactly; `aro_knowledge` was registered by the CLI and
+# missing from the prompt, so the model was never told it existed.
+_PROMPT_TOOLS = [
+    ('read_file(path, offset?, limit?)',            'read with line numbers'),
+    ('write_file(path, content)',                   'create or overwrite'),
+    ('edit_file(path, old, new)',                   'old must be unique'),
+    ('list_dir(path?)  grep(pattern, path?, glob?)', 'browse and search'),
+    ('search_project(query, k?)',                   'semantic project search'),
+    ('aro_check(path)',                             'run after every write'),
+    ('aro_run(path, args?)  aro_build(path)  aro_test(path)', 'run/compile/test'),
+    ('parse_aro(path)  list_actions()',             'AST; the live action list'),
+    ('list_proposals()  read_proposal(number)',     'language specifications'),
+    ('aro_knowledge(question)',                     'ask how ARO does something'),
+    ('create_plugin(name, language, handle)',       'scaffold a plugin'),
+    ('write_openapi(...)  generate_docs(path)',     'contract and README'),
+    ('run_shell(command)',                          'last resort'),
+]
+
+
+def _prompt_wrap(items, indent='  ', width=78, sep='  '):
+    """Pack short items onto as few lines as will stay readable."""
+    lines, line = [], indent
+    for item in items:
+        if len(line) + len(item) > width and line.strip():
+            lines.append(line.rstrip())
+            line = indent
+        line += item + sep
+    if line.strip():
+        lines.append(line.rstrip())
+    return '\n'.join(lines)
+
+
+def _prompt_action_reference(catalog=None, kb=None):
+    """The action reference, grouped by data-flow role.
+
+    One `Verb=Alias/Alias:prep/prep` token per action instead of the old
+    one-padded-line-each, which spent 28 columns of whitespace per action.
+    Falls back to `kb['actions']` when the catalogue file is missing, so the
+    prompt still builds on a checkout that has not run the extractor.
     """
-    Build the standard ARO system prompt from the knowledge base.
-    Includes syntax rules, action reference, tool calling instructions,
-    common idioms, and response behaviour.
+    if catalog is None:
+        path = SCRIPT_DIR / 'aro_action_catalog.json'
+        catalog = json.loads(path.read_text()) if path.exists() else None
+    if not catalog:
+        catalog = {}
+        for a in (kb or {}).get('actions', []):
+            verbs = a.get('verbs') or []
+            if not verbs:
+                continue
+            catalog[verbs[0].lower()] = {
+                'role': (a.get('role') or 'own').lower(),
+                'prepositions': a.get('prepositions') or [],
+                'aliases': [v.lower() for v in verbs],
+            }
+
+    by_role = {}
+    for name, entry in sorted(catalog.items()):
+        role = (entry.get('role') or 'own').lower()
+        aliases = entry.get('aliases') or [name]
+
+        # The CANONICAL verb leads, and every alias follows.
+        #
+        # This used to be `aliases[0]` with the rest capped at two, and
+        # `aliases` is sorted alphabetically — so the prompt taught 28 of 71
+        # actions under a verb nobody writes. Logging was `Debug`, Return was
+        # `Respond`, Store was `Persist`, Create was `Build`, Compute was
+        # `Calculate`, Sort was `Arrange`. Every example in the proposals,
+        # the Book and CLAUDE.md uses the canonical verb; the prompt the
+        # model trains on led with a synonym.
+        #
+        # Two were worse than led-with-a-synonym. `Retrieve` and `Update`
+        # sort last among their own aliases, so the two-alias cap cut them
+        # out of the reference entirely — and the paragraph above this list
+        # says "Use only these verbs … if nothing here does what the user
+        # wants, say so". The prompt was telling the model that `Retrieve`,
+        # which opens the first HTTP example in CLAUDE.md, does not exist.
+        #
+        # Showing every alias instead of two costs 47 characters across the
+        # whole reference — about twelve tokens. A cap that saves twelve
+        # tokens by teaching valid verbs as invalid is not a saving.
+        others = [a for a in aliases if a != name]
+        token = name.capitalize()
+        if others:
+            token += '=' + '/'.join(a.capitalize() for a in others)
+        preps = '/'.join(entry.get('prepositions') or [])
+        if preps:
+            token += ':' + preps
+        by_role.setdefault(role, []).append(token)
+
+    out = []
+    for role, gloss in _PROMPT_ROLE_GLOSS:
+        verbs = by_role.pop(role, [])
+        if verbs:
+            out.append(gloss)
+            out.append(_prompt_wrap(verbs))
+    for role, verbs in sorted(by_role.items()):
+        out.append(role.upper())
+        out.append(_prompt_wrap(verbs))
+    return '\n'.join(out)
+
+
+def _prompt_qualifier_reference(catalog=None):
+    """The closed Compute qualifier set, from the catalogue."""
+    if catalog is None:
+        path = SCRIPT_DIR / 'aro_qualifier_catalog.json'
+        catalog = json.loads(path.read_text()) if path.exists() else {}
+    names = sorted(n for n, e in (catalog or {}).items()
+                   if not isinstance(e, dict) or e.get('namespace', '_builtin') == '_builtin')
+    return _prompt_wrap([n + ',' for n in names]).rstrip(',')
+
+
+def build_system_prompt(kb=None, max_syntax_chars=None):
+    """The system prompt shipped with the model and used in every training row.
+
+    Generated from the action and qualifier catalogues plus the rules below,
+    each stated once. `max_syntax_chars` is accepted and ignored: it used to
+    truncate a pasted documentation scrape mid-word, and there is no longer a
+    scrape to truncate.
     """
-    kb = kb or load_knowledge()
-
-    action_lines = []
-    for a in kb.get('actions', []):
-        verbs = ', '.join(a['verbs'][:3])
-        preps = ', '.join(a.get('prepositions', [])[:3])
-        role = a.get('role', '')
-        action_lines.append(f'  {verbs:<28} [{role:<8}]  prepositions: {preps}')
-    action_ref = '\n'.join(action_lines)
-
-    syntax_summary = kb.get('aro_syntax', '')[:max_syntax_chars]
+    kb = kb if kb is not None else load_knowledge()
+    actions = _prompt_action_reference(kb=kb)
+    qualifiers = _prompt_qualifier_reference()
+    tools = '\n'.join(f'  {sig:<53}{why}' for sig, why in _PROMPT_TOOLS)
 
     return f"""You are an expert ARO (Action Result Object) coding assistant.
-ARO is a DSL where every statement follows: Verb the <Result> preposition [the] <Object>.
+Every ARO statement is: Verb the <Result> preposition [the] <Object>.
 
-ARO SYNTAX RULES:
-{syntax_summary}
+SHAPE
+- Feature set: (Name: Business Activity) {{ statements }}. Comments are (* … *).
+- An application is a DIRECTORY: every .aro file in it compiles together, there
+  are no imports, and every feature set sees every other. Never redefine a
+  feature set that already exists in a sibling file.
+- Exactly one (Application-Start: …) per application. End a feature set with
+  Return an <OK: status> for the <thing>.
+- Articles (a/an/the) are optional; spacing inside a statement is not.
+- HTTP is contract-first: a feature set is named after an operationId in
+  openapi.yaml. An event handler's activity is exactly `<EventName> Handler`.
 
-AVAILABLE ACTIONS (verb [role] → prepositions):
-{action_ref}
+VALUES
+- Bindings are immutable: bind a NEW name per transformation. The qualifier
+  slot selects the operation, the base is the name:
+  Compute the <clean: trim> from the <raw>.
+- Concatenation is ++ ; + is arithmetic.
+- Compare reads both operands and binds a fresh result:
+  Compare the <same> from the <a> against the <b>.   then read <same: matches>
+  (or <same: result>, which is equal / less / greater). Never rebind a name.
+- Map projects a FIELD, never an expression:
+  Map the <names> from the <users> with name.   Use `for each` to compute
+  something per element.
+- Sorting, reversing and element access are ACTIONS, not qualifiers:
+  Sort the <s> for the <xs>.   Reverse the <r> for the <xs>.
+  Extract the <f: first> from the <xs>.
+- A result TYPE uses `as`: Compute the <n> as Float from the <s>.
 
-CORE RULES:
-- Feature set: (Name: Business Activity) {{ statements }}
-- Exactly one Application-Start per application
-- An application is a DIRECTORY: all .aro files compile together, no
-  imports, every feature set sees every other. Never duplicate a feature
-  set (e.g. an event handler) that exists in a sibling file.
-- Variables are immutable — bind a NEW name for each transformation
-  (qualifier-as-name: Compute the <clean: trim> from <raw>.)
-- Articles (a/an/the) are optional; spacing inside statements is not
-  significant (`the<name>` equals `the <name>`)
-- String concatenation: <a> ++ <b>  (NOT + which is arithmetic)
-- Iteration: for each <item> in <list> {{ ... }}  (lowercase; optional
-  `where <cond>` filter). Counted repeat: for <i> from 0 to <n> {{ ... }}
-- Branching: match <x> {{ case /regex/ {{ ... }} }} ; statement guards:
-  Log "hi" to the <console> when <role> == "admin".  (== not =)
-- Compute qualifiers are a CLOSED set (length, uppercase, trim, sum, avg,
-  unique, sha256, lines, join, replace, html-escape, url-encode,
-  base64-encode, ...). NEVER invent one. Sorting/reversing are actions
-  (Sort the <s> for the <x>.), element access is Extract
-  (Extract the <f: first> from the <x>.), types use `as`
-  (Compute the <n> as Float from <s>.)
-- Compare binds a fresh result: Compare the <same> from the <a> against
-  the <b>. then read <same: matches> — never rebind an existing name
-- Map projects a FIELD: Map the <names> from the <users> with name.
-  (`with` takes a field name, never an expression — use for each to
-  compute per element)
-- Return an <OK: status> ... to end a feature set
-- Emit a <Name: event> with <data>; handled by a feature set whose
-  business activity is exactly `Name Handler`
-- Extract the <x> from the <source: qualifier> to read fields
-- Happy path only: no try/catch, no null checks, no error branches —
-  the runtime reports failures itself
+CONTROL FLOW
+- for each <item> in <list> {{ … }}          (optional `where <condition>`)
+- for <i> from 0 to <n> {{ … }}
+- match <x> {{ case /regex/ {{ … }} otherwise {{ … }} }}
+- Guard one statement: Log "hi" to the <console> when <role> == "admin".
+  (== not =)
 
-COMMON PATTERNS:
+ERRORS
+- Happy path only. No try/catch, no null checks, no error branches — the
+  runtime reports a failure itself, in the words of the statement that failed.
 
-1. HTTP endpoint (operationId matches feature set name):
-   (getUser: User API) {{
-       Extract the <id> from the <pathParameters: id>.
-       Retrieve the <user> from the <user-repository> where id = <id>.
-       Return an <OK: status> with <user>.
-   }}
+ACTIONS — Verb=aliases:prepositions, by data-flow role. Use only these verbs
+with only these prepositions; if nothing here does what the user wants, say so
+and name the closest action rather than invent one.
+{actions}
 
-2. Application startup with Keepalive:
-   (Application-Start: My App) {{
-       Log "Starting..." to the <console>.
-       Start the <http-server> with <contract>.
-       Keepalive the <application> for the <events>.
-       Return an <OK: status> for the <startup>.
-   }}
+COMPUTE QUALIFIERS — a CLOSED set. Never invent one: an unknown qualifier is an
+error, not a value passed through.
+{qualifiers}
+Plugin qualifiers are namespaced <value: handle.qualifier>; a chain `a|b` and a
+date offset like `-7d` are also valid in the qualifier slot.
 
-3. Event emission and handler:
-   Emit a <UserCreated: event> with <user>.
-   (Send Email: UserCreated Handler) {{
-       Extract the <user> from the <event: user>.
-       Send the <email> to the <user: email>.
-       Return an <OK: status> for the <notification>.
-   }}
+PATTERNS
+(getUser: User API) {{                     (* operationId from openapi.yaml *)
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
+}}
+(Application-Start: My App) {{
+    Log "Starting..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.   (* servers only *)
+    Return an <OK: status> for the <startup>.
+}}
+Emit a <UserCreated: event> with <user>.   — handled by a feature set whose
+activity is `UserCreated Handler`, which reads <event: user>.
 
-4. Iteration with transformation:
-   for each <item> in <items> {{
-       Compute the <name: uppercase> from the <item: name>.
-       Log <name> to the <console>.
-   }}
-
-TOOL CALLING:
-You have tools to read and modify the user's project and to run the ARO
-toolchain. Invoke them via the JSON tool-call protocol, one call per tool:
-<tool_call>{{"name": "write_file", "arguments": {{"path": "main.aro", "content": "..."}}}}</tool_call>
-
-A tool call ONLY runs when emitted through this protocol. NEVER print a tool
-as a shell command or inside a code fence — that just shows the user a
-command that never executed. Do not prefix tool names with `aro_mcp_`,
-`mcp_`, or `functions.`. WRONG (nothing runs):
-```bash
-aro_mcp_aro_check /path/to/App
-```
-```sh
-read_file main.aro
-```
-RIGHT — emit the tool call directly, then use its result:
+TOOLS
+A tool runs ONLY when emitted through the JSON protocol, one call per tool:
 <tool_call>{{"name": "aro_check", "arguments": {{"path": "/path/to/App"}}}}</tool_call>
+Printing a tool as a shell command, or in a code fence, runs nothing — it shows
+the user a command that never executed. Never prefix a tool name with
+`aro_mcp_`, `mcp_` or `functions.`.
+{tools}
+To change a project: read_file (skip it when an OPEN FILE block already shows
+the file) → edit_file, or write_file for a new file → aro_check what you
+touched → fix and re-check if it fails → answer with the path and what changed.
 
-AVAILABLE TOOLS (name(arguments) — purpose):
-  read_file(path, offset?, limit?)          read a file with line numbers
-  write_file(path, content)                 create or overwrite a file
-  edit_file(path, old_string, new_string)   exact string replacement (old_string must be unique)
-  list_dir(path?)                           list a directory
-  grep(pattern, path?, glob?)               regex search across files
-  search_project(query, k?)                 semantic search in the indexed project
-  aro_check(path)                           syntax-check .aro files — run after every write
-  aro_run(path, args?)                      run an ARO application (30s cap)
-  aro_build(path)                           compile to a native binary
-  aro_test(path)                            run colocated ARO tests
-  parse_aro(path)                           parse a .aro file to its AST
-  list_actions()                            list built-in and plugin actions
-  list_proposals() / read_proposal(number)  ARO language specifications
-  create_plugin(name, language, handle)     scaffold a new plugin
-  write_openapi(title, version, paths, output_path?)  generate openapi.yaml
-  generate_docs(path, output?)              generate a README.md
-  run_shell(command)                        arbitrary shell command (last resort)
+ANSWERING
+- WRITE/CREATE/BUILD: write the code into the source file, validate it with
+  aro_check, answer with a short summary. A bare ```aro block only when asked
+  to "show" code or when there is no project to write into.
+- An OPEN FILE block is the file the user has open and the default target for
+  "this file"; its content is already in front of you, so edit without reading.
+- QUESTION: answer concisely with ```aro examples, naming the ARO action the
+  user needs — never a tool function name.
+- FIX/DEBUG: read the code, diagnose in prose, apply the fix, verify it.
+- Never put tool names or any non-ARO syntax inside an ```aro fence: tool names
+  are runtime internals, not part of the language.
+- If you are unsure whether an action exists, say so rather than guess. Always
+  produce syntactically valid ARO."""
 
-THE STANDARD WORKFLOW for changing a project:
-  1. read_file — skip this when an OPEN FILE block already shows the file.
-  2. edit_file for a targeted change; write_file for a new or rewritten file.
-     Source code belongs in source files, not in the chat.
-  3. aro_check on the file or directory you touched.
-  4. If aro_check fails, fix the code and re-check before answering.
-  5. Reply with a short summary — the file path and what changed. Do not
-     paste the whole file back into the chat.
 
-NEVER write tool names, function signatures, or any non-ARO syntax inside
-```aro fences. Tool names are runtime internals, not part of the ARO language.
-
-WRONG (tool names leaking into an ARO answer):
-```aro
-read_file(path: "foo.aro")
-edit_file("foo.aro", old, new)
-aro_check("./")
-```
-
-RIGHT (ARO syntax in ```aro fences, tool calls invoked separately):
-```aro
-Read the <content> from the <file: "foo.aro">.
-```
-
-RESPONSE BEHAVIOUR:
-- WRITE/CREATE/BUILD request: write the code into the actual source file
-  with write_file (new file) or edit_file (existing file), then validate
-  with aro_check and fix any reported errors. Answer with a short summary
-  of which file you wrote and what it does. Only answer with a bare
-  ```aro block when the user explicitly asks to "show" code or when no
-  project directory is available to write into.
-- OPEN FILE block in context: that is the file the user has open in the
-  editor right now — the default target for "this file", "this code", and
-  unnamed change requests. Its content is already in the block (no
-  read_file needed); modify it with edit_file using the block's path.
-- QUESTION about ARO: answer concisely with examples in ```aro fences. Do
-  NOT mention tool function names in the answer — answer with the ARO
-  verb the user actually needs (e.g. "use the `Read` action" not "use the
-  `read_file` function").
-- FIX/DEBUG request: load the existing code via read_file (or the OPEN
-  FILE block), diagnose in prose, apply a fix via edit_file, then verify
-  via aro_check.
-- ONLY use action verbs from the AVAILABLE ACTIONS list above. NEVER invent
-  new actions. If a user asks for functionality not covered by an existing
-  action, explain which available action(s) to use instead. For example,
-  there is no "Tail" action — use the file-monitor (Start + File Event
-  Handler) for watching files, or Read for reading file contents.
-- Do not invent prepositions not listed above.
-- If unsure whether an action exists, say so — do not guess.
-- Always produce syntactically valid ARO."""
+# One prompt, one hash, one set of standing instructions. Every training row
+# that carries a system message carries THIS string (GitLab #808): the thinking
+# and conversation rows used to carry none while the DPO and round data carried
+# the full one, so the model was fine-tuned on two different contracts and
+# served under a third.
+def training_system_prompt(kb=None):
+    """The system message for a training row. Identical to what is served."""
+    return build_system_prompt(kb)
 
 
 # ── Notebook pair tracking ───────────────────────────────────────────────────
@@ -1349,6 +1689,11 @@ def save_notebook_pair(notebook_tag: str, pair: dict,
     if not _fixtrain_gate_pair(pair, notebook_tag):
         return False
     pair = stamp_provenance(pair, notebook_tag, generation_strategy, lineage)
+    pair = ensure_task_type(pair, notebook_tag)
+    if not _dedup_gate(pair, notebook_tag):
+        return False
+    if not _pair_gate(pair, notebook_tag):
+        return False
     _ensure_run_recorded()
     _ensure_pairs_header()
     PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1372,6 +1717,8 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     _ensure_pairs_header()
     written = 0
     gate_dropped = 0
+    runtime_dropped = 0
+    duplicate_dropped = 0
     with open(PAIRS_FILE, 'a') as f:
         for pair in pairs:
             pair['notebook'] = notebook_tag
@@ -1380,12 +1727,65 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
                 gate_dropped += 1
                 continue
             pair = stamp_provenance(pair, notebook_tag, generation_strategy)
+            pair = ensure_task_type(pair, notebook_tag)
+            if not _dedup_gate(pair, notebook_tag):
+                duplicate_dropped += 1
+                continue
+            if not _pair_gate(pair, notebook_tag):
+                runtime_dropped += 1
+                continue
             f.write(json.dumps(pair) + '\n')
             written += 1
     if gate_dropped:
         print(f'[{notebook_tag}] fixtrain-gate dropped {gate_dropped} pairs '
               f'(run fixtrain_report() for the per-rule breakdown)')
+    if runtime_dropped:
+        print(f'[{notebook_tag}] pair-gate dropped {runtime_dropped} pairs the '
+              f'runtime rejects (run pair_gate_report() for the per-source table)')
+    if duplicate_dropped:
+        print(f'[{notebook_tag}] dedup dropped {duplicate_dropped} repeats '
+              f'(run dedup_report() for the breakdown)')
+    _record_pairs_saved(notebook_tag, len(pairs), written, gate_dropped,
+                        generation_strategy,
+                        runtime_dropped=runtime_dropped,
+                        duplicate_dropped=duplicate_dropped)
     return written
+
+
+def _record_pairs_saved(notebook_tag, offered, written, gate_dropped,
+                        generation_strategy=None, runtime_dropped=0,
+                        duplicate_dropped=0):
+    """Log every data stage to experiments.db (GitLab #812).
+
+    Only four stages used to record anything, and all four were training
+    stages — so the half of the pipeline that decides WHAT the model learns
+    was the half with no record. Rather than editing every data notebook to
+    remember, the recording happens here: this is the one funnel every stage
+    writes its pairs through, so a stage that saves pairs is a stage that is
+    logged, including one added tomorrow.
+
+    Never raises. Bookkeeping must not be able to fail a run.
+    """
+    # Every reason a pair was dropped, not just the first one that existed.
+    # The fixtrain gate was alone when this was written; the pair gate and the
+    # deduplicator arrived alongside it, and a record naming one of three
+    # reasons understates the funnel it exists to describe.
+    reasons = {'fixtrain_gate': gate_dropped,
+               'pair_gate': runtime_dropped,
+               'dedup': duplicate_dropped}
+    reasons = {name: count for name, count in reasons.items() if count}
+
+    try:
+        from experiment_db import record_data_stage
+        record_data_stage(
+            notebook_tag, rows_in=offered, rows_out=written,
+            drop_reasons=reasons,
+            artifacts={'pairs_file': str(PAIRS_FILE)},
+            generation_strategy=generation_strategy,
+            type_caps_version=TYPE_CAPS_VERSION)
+    except Exception as exc:
+        print(f'[{notebook_tag}] experiments.db not updated: {exc}',
+              file=sys.stderr)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1404,6 +1804,34 @@ SYNTAX_REFERENCE_REQUIRED_SECTIONS = (
     'Action Semantic Roles',
 )
 SYNTAX_REFERENCE_MIN_CHARS = 1500
+
+# Forms the language used to accept and no longer does (GitLab #809). The
+# shipped system prompt is generated from this reference, so a stale form here
+# is a stale form in every prompt the model is trained and served with — and
+# the released prompt did carry the two-operand `Compare`, which GitLab #469
+# made unrunnable. These are cheap to check and expensive to miss.
+STALE_TEACHING_PATTERNS = (
+    (_re.compile(r'^\s*Compare the <[\w-]+>\s+against\b', _re.MULTILINE),
+     'the two-operand `Compare … against` — it rebinds its own first operand '
+     'and cannot run; Compare binds a fresh result (GitLab #469)'),
+    (_re.compile(r'\bStore the <[^>]+>\s+in the\b'),
+     '`Store … in` — `in` is a keyword, not a preposition; Store takes '
+     '`into` or `to`'),
+    (_re.compile(r'\bRender the <[^>]+>\s+from the\b'),
+     '`Render … from` — Render takes only `to`; rendering a template is '
+     '`Transform … from the <template: …>` (ARO-0050)'),
+    (_re.compile(r'\bSplit the <[^>]+>\s+from\s+[^.\n]*\bwith\b'),
+     '`Split … with` — Split takes its delimiter after `by` (ARO-0037)'),
+    (_re.compile(r'\bCompute the <[\w-]+:\s*(?:first|last)>'),
+     'element access as a Compute qualifier — it is an Extract qualifier '
+     '(ARO-0038)'),
+)
+
+
+def stale_teaching(text):
+    """Forms in `text` the runtime no longer accepts. Empty means clean."""
+    return [why for pattern, why in STALE_TEACHING_PATTERNS
+            if pattern.search(text or '')]
 
 
 def validate_syntax_reference(text,
@@ -1427,6 +1855,9 @@ def validate_syntax_reference(text,
     for marker in ('command not found', 'unknown subcommand', 'traceback (most recent call last)'):
         if marker in text[:400].lower():
             problems.append(f'looks like an error message (contains {marker!r})')
+    # A form the runtime has stopped accepting poisons every prompt generated
+    # from this reference (GitLab #809).
+    problems += [f'teaches {why}' for why in stale_teaching(text)]
     if problems:
         raise ValueError(
             'aro_syntax reference failed validation:\n  - ' + '\n  - '.join(problems)
@@ -1442,21 +1873,21 @@ def extract_aro_blocks(text):
 
 
 def aro_check_snippet(code, timeout=10, extra_files=None):
-    """Run `aro check` on a code string in a temp dir.
+    """Run `aro check` on a code string in a sandboxed temp dir.
 
     Returns (passed: bool | None, error: str). None means the aro binary is
     not available (caller decides whether that is fatal).
+
+    Sandboxed via sandbox.run_program_dir (GitLab #804): `aro check` does not
+    execute the program, but it does parse a directory of model output, and the
+    same call shape is used for `aro run` — keeping both on one path means the
+    containment cannot be forgotten in the one that matters.
     """
-    import tempfile
+    import sandbox
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / 'main.aro').write_text(code)
-            if extra_files:
-                for name, content in extra_files.items():
-                    (Path(tmp) / name).write_text(content)
-            r = subprocess.run(['aro', 'check', tmp],
-                               capture_output=True, text=True, timeout=timeout)
-            return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
+        r = sandbox.run_program_dir(['aro', 'check'], code,
+                                    extra_files=extra_files, timeout=timeout)
+        return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
     except FileNotFoundError:
         return None, 'aro_not_found'
     except subprocess.TimeoutExpired:
@@ -1536,8 +1967,20 @@ VERB_SUPPLEMENT = frozenset({
     'tee',                                    # ARO-0051 streaming
 })
 
-# Control-flow keywords that can start a statement-like line.
-CONTROL_FLOW_WORDS = frozenset({'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'})
+# Reserved words that can open a statement without being an action call —
+# `require`, `if`, `for each`, `while`. The list is aro_oracle's, taken from
+# the lexer's own table; a gate that knows only the ActionRegistry calls
+# `Require the <console> from the <framework>.` a hallucination, and
+# Examples/Conditionals runs on exactly that line.
+def _language_keywords():
+    try:
+        import aro_oracle
+        return set(aro_oracle.LANGUAGE_KEYWORDS)
+    except Exception:
+        return {'for', 'when', 'match', 'if', 'case', 'parallel', 'otherwise'}
+
+
+CONTROL_FLOW_WORDS = frozenset(_language_keywords())
 
 
 def authoritative_action_verbs():
@@ -1603,9 +2046,14 @@ def hallucinated_verbs_in_code(code, valid_verbs=None):
 # extracted verb+preposition combinations against the metadata mined from
 # Swift source in knowledge.json (e.g. `Log … to`, never `Log … for`).
 
+# `as` was in this set and should never have been: it introduces a result
+# type (`Compute the <n> as Float from <s>.`) and the Publish alias
+# (`Publish as <alias> <variable>.`), not an action's object. With it here the
+# gate reported seventeen perfectly valid Compute statements as using a
+# preposition Compute does not take.
 ARO_PREPOSITIONS = frozenset({
     'from', 'to', 'with', 'for', 'on', 'into', 'at', 'by',
-    'where', 'against', 'via', 'using', 'in', 'as',
+    'where', 'against', 'via', 'using', 'in',
 })
 # Always allowed regardless of the action: `when` guards and `where` queries.
 _ALWAYS_ALLOWED_PREPS = frozenset({'when', 'where'})
@@ -1614,13 +2062,31 @@ _VP_STMT_RE = _re.compile(r'^\s*([A-Z][A-Za-z]+)\s+(?:the\s+|an?\s+)?<[^>]*>\s+(
 
 
 def build_verb_preposition_map(kb=None):
-    """Return {verb(lower): set(prepositions)} from knowledge.json actions."""
-    kb = kb or load_knowledge()
+    """Return {verb(lower): set(prepositions)}.
+
+    The authoritative catalog comes first (GitLab #779): it is generated from
+    `aro actions --format json`, so it knows every alias a registered action
+    answers to and the prepositions the runtime will accept for it.
+    knowledge.json is mined from prose and had six of those sets wrong —
+    `Compare … from` and `Sort … from` missing, `Store … in` invented — which
+    is a gate rejecting valid code and passing code `aro check` refuses.
+    knowledge.json fills in only verbs the catalog does not cover."""
     vp = {}
+    for meta in authoritative_action_catalog().values():
+        preps = {p.lower() for p in meta.get('prepositions', [])}
+        if not preps:
+            continue
+        for v in meta.get('aliases', []):
+            vp.setdefault(v.lower(), set()).update(preps)
+    try:
+        kb = kb or load_knowledge()
+    except Exception:
+        return vp
     for a in kb.get('actions', []):
         preps = {p.lower() for p in a.get('prepositions', [])}
         for v in a.get('verbs', []):
-            vp.setdefault(v.lower(), set()).update(preps)
+            if v.lower() not in vp:
+                vp.setdefault(v.lower(), set()).update(preps)
     return vp
 
 
@@ -2072,6 +2538,428 @@ def _fixtrain_gate_pair(pair, notebook_tag=''):
     return False
 
 
+# ── What counts as a thinking trace (GitLab #789) ────────────────────────────
+# The booster's stage scored a trace on "at least 40 characters inside
+# <think>" plus `aro check` on the answer. 1 154 of its 1 156 traces were the
+# same template — a per-statement enumeration of each verb's role and
+# preposition, 1 640 characters of it on average — and another 1 192 rows had
+# no think block at all, so the model learned to think or not at random.
+#
+# Three things a trace must be, none of which a character count can tell:
+# present (never mixed with rows that have none), not the template, and
+# reasoning about something that happened rather than reciting a table.
+
+THINK_RE = _re.compile(r'<think>(.*?)</think>', _re.DOTALL)
+THINK_MIN_CHARS = 120
+
+# The template's fingerprint. `a EXPORT action`, `a OWN action`: the wrong
+# article, and, for Log, the wrong role — the registry says RESPONSE.
+_TEMPLATED_THINK_RES = (
+    _re.compile(r'\ba (?:EXPORT|OWN|REQUEST|RESPONSE|SERVER) action\b'),
+    _re.compile(r'It takes the preposition `\w+`\.\s*\n\s*-'),
+    _re.compile(r'Let me work out the ARO\.'),
+)
+
+
+def thinking_trace(text):
+    """The contents of the <think> block, or None."""
+    match = THINK_RE.search(text or '')
+    return match.group(1).strip() if match else None
+
+
+def thinking_trace_is_templated(text) -> bool:
+    trace = thinking_trace(text) or text or ''
+    return any(pattern.search(trace) for pattern in _TEMPLATED_THINK_RES)
+
+
+def validate_thinking_row(row, require_system_prompt=True):
+    """Problems with one thinking-booster row; empty means it is usable."""
+    problems = []
+    messages = row.get('messages') or []
+    roles = [m.get('role') for m in messages if isinstance(m, dict)]
+    if require_system_prompt and 'system' not in roles:
+        problems.append('no system prompt (`aro ask` always sends one)')
+    answer = _pair_assistant_text(row)
+    trace = thinking_trace(answer)
+    if trace is None:
+        problems.append('no <think> block (think and no-think must not mix)')
+    else:
+        if len(trace) < THINK_MIN_CHARS:
+            problems.append(f'think block is {len(trace)} chars')
+        if thinking_trace_is_templated(answer):
+            problems.append('templated pseudo-reasoning')
+    return problems
+
+
+# ── Deduplication at the door (GitLab #784) ──────────────────────────────────
+# Deduplication happened once, at assembly, on the first 300 characters of the
+# instruction plus a Jaccard threshold — and never on outputs. So 284 repeated
+# instructions and 199 byte-identical pairs survived, and, far worse, 2 710
+# repeated *answers*: one commit message is the answer to 379 different
+# prompts. The comment-extraction stage generates nine paraphrases in each
+# direction, which turns roughly 1 300 comments into 23 057 rows sharing
+# 1 149 distinct outputs — twenty copies of every answer.
+#
+# Memorisation is the predictable result, and the SFT notebook's own note
+# about validation loss rising after ~400 iterations is consistent with it.
+#
+# Three caps, applied where pairs are written rather than where they are
+# assembled:
+DEDUP_EXACT_PAIRS = True        # never write the same (instruction, output) twice
+MAX_REPEATS_PER_INSTRUCTION = int(
+    os.environ.get('ARO_TRAIN_MAX_PER_INSTRUCTION', '3'))
+MAX_REPEATS_PER_OUTPUT = int(
+    os.environ.get('ARO_TRAIN_MAX_PER_OUTPUT', '3'))
+
+DEDUP_STATS = _Counter()
+_seen_pairs = set()
+_seen_instructions = _Counter()
+_seen_outputs = _Counter()
+_dedup_loaded = {'from': None}
+
+_WHITESPACE_RE = _re.compile(r'\s+')
+
+
+def normalize_for_dedup(text) -> str:
+    """Whitespace-folded, case-folded text — the unit both caps count."""
+    return _WHITESPACE_RE.sub(' ', (text or '').strip().lower())
+
+
+def _pair_prompt_text(pair):
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in msgs:
+            if isinstance(msg, dict) and msg.get('role') == 'user':
+                return msg.get('content') or ''
+        return ''
+    return pair.get('instruction') or pair.get('prompt') or ''
+
+
+def pair_fingerprint(pair) -> tuple:
+    return (normalize_for_dedup(_pair_prompt_text(pair)),
+            normalize_for_dedup(_pair_assistant_text(pair)))
+
+
+def _load_dedup_index(path=None):
+    """Seed the caps from the corpus already on disk, so a rerun cannot
+    reintroduce what a previous run already wrote."""
+    path = Path(path) if path else PAIRS_FILE
+    if _dedup_loaded['from'] == str(path):
+        return
+    _seen_pairs.clear()
+    _seen_instructions.clear()
+    _seen_outputs.clear()
+    _dedup_loaded['from'] = str(path)
+    if not path.exists():
+        return
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if is_jsonl_metadata_record(record):
+                continue
+            instruction, output = pair_fingerprint(record)
+            _seen_pairs.add((instruction, output))
+            _seen_instructions[instruction] += 1
+            _seen_outputs[output] += 1
+
+
+def _dedup_gate(pair, notebook_tag=''):
+    """True when the pair is new enough to be worth writing."""
+    if not DEDUP_EXACT_PAIRS:
+        return True
+    _load_dedup_index()
+    instruction, output = pair_fingerprint(pair)
+    if not instruction and not output:
+        return True
+    if (instruction, output) in _seen_pairs:
+        DEDUP_STATS['exact_pair'] += 1
+        return False
+    if (MAX_REPEATS_PER_INSTRUCTION
+            and _seen_instructions[instruction] >= MAX_REPEATS_PER_INSTRUCTION):
+        DEDUP_STATS['instruction_cap'] += 1
+        return False
+    if (MAX_REPEATS_PER_OUTPUT
+            and _seen_outputs[output] >= MAX_REPEATS_PER_OUTPUT):
+        DEDUP_STATS['output_cap'] += 1
+        return False
+    _seen_pairs.add((instruction, output))
+    _seen_instructions[instruction] += 1
+    _seen_outputs[output] += 1
+    return True
+
+
+def dedup_report(reset=False):
+    """What the caps kept out this run."""
+    if not DEDUP_STATS:
+        print('dedup: nothing dropped this run')
+    else:
+        print('dedup drops:')
+        for reason, n in DEDUP_STATS.most_common():
+            print(f'  {n:6d}x  {reason}')
+    counts = dict(DEDUP_STATS)
+    if reset:
+        DEDUP_STATS.clear()
+    return counts
+
+
+# ── task_type is not optional (GitLab #782) ──────────────────────────────────
+# 4 822 of the 10 007 rows carried `task_type: None` — the book-QA, knowledge
+# extraction and LLM-extraction stages simply never set one. 17_dataset_assembly
+# then guessed from the source prefix and 20_evaluation stratified the holdout
+# on that guess, which is how a 200-row holdout ended up with exactly one
+# translation, one correction and one multi_file_application sample in it.
+#
+# The guess lives here now, where it can be tested, and it is a guess of last
+# resort: a stage that knows what it is producing should say so.
+
+TASK_TYPE_SOURCE_PREFIXES = (
+    ('book_qa:', 'syntax_qa'),
+    ('wiki:', 'syntax_qa'),
+    ('actions_explain', 'syntax_qa'),
+    ('actions_which', 'syntax_qa'),
+    ('actions_alias', 'syntax_qa'),
+    ('proposal:', 'syntax_qa'),
+    ('repair', 'correction'),
+    ('fix_', 'correction'),
+    ('diagnostic', 'correction'),
+    ('git_', 'debugging'),
+    ('mutation', 'code_generation'),
+    ('recombination', 'code_generation'),
+    ('spec_to_code', 'code_generation'),
+    ('readme_to_code', 'code_generation'),
+    ('example:', 'code_generation'),
+    ('book:', 'code_generation'),
+    ('curated/', 'code_generation'),
+    ('aro_by_example', 'code_generation'),
+    ('actions_usage', 'code_generation'),
+    ('actions_context', 'code_generation'),
+    ('multi_turn', 'tool_calling'),
+    ('notebook', 'notebook_qa'),
+)
+
+# `## openapi.yaml` + `## main.aro`, or any two `## <file>` headings: the
+# answer is a whole application, not a snippet. These were being filed as
+# `code_generation` and the one task type the caps care most about was
+# invisible.
+_MULTI_FILE_HEADING_RE = _re.compile(r'^\s*#{2,3}\s+[\w./-]+\.(aro|yaml|yml|store|json)\s*$',
+                                     _re.MULTILINE)
+
+
+def looks_like_multi_file_application(text) -> bool:
+    headings = _MULTI_FILE_HEADING_RE.findall(text or '')
+    return len(headings) >= 2
+
+
+def infer_task_type(pair, default=None):
+    """Best guess at a pair's task_type, or `default` when there is none.
+
+    Order matters: the shape of the answer beats the source tag, because a
+    source that usually produces snippets sometimes produces an application.
+    """
+    explicit = pair.get('task_type')
+    if explicit:
+        return explicit
+    answer = _pair_assistant_text(pair)
+    prompt = ''
+    msgs = pair.get('messages')
+    if isinstance(msgs, list):
+        for msg in msgs:
+            if isinstance(msg, dict) and msg.get('role') == 'user':
+                prompt = msg.get('content') or ''
+                break
+        if any(isinstance(m, dict) and m.get('role') == 'tool' for m in msgs) \
+                or '<tool_call>' in answer:
+            return 'tool_calling'
+    else:
+        prompt = pair.get('instruction') or pair.get('prompt') or ''
+    if looks_like_multi_file_application(answer):
+        return 'multi_file_application'
+    prov = pair.get('provenance') or {}
+    source = str(prov.get('source') or pair.get('source')
+                 or prov.get('generation_strategy') or '').lower()
+    for prefix, task_type in TASK_TYPE_SOURCE_PREFIXES:
+        if source.startswith(prefix):
+            return task_type
+    lowered = prompt.lower()
+    if lowered.startswith('fix this') or 'what is wrong' in lowered:
+        return 'correction'
+    if '```aro' in answer:
+        return 'code_generation'
+    if '?' in prompt:
+        return 'syntax_qa'
+    return default
+
+
+class MissingTaskType(ValueError):
+    """Raised when a pair reaches the corpus without a task_type and none can
+    be inferred. Caps and the stratified holdout are computed from this field;
+    a row without one is a row nobody can account for."""
+
+
+REQUIRE_TASK_TYPE = os.environ.get(
+    'ARO_TRAIN_REQUIRE_TASK_TYPE', '1').strip().lower() not in ('0', 'false', 'no')
+
+
+def ensure_task_type(pair, notebook_tag=''):
+    """Fill in `task_type`, or raise. Returns the pair."""
+    task_type = infer_task_type(pair)
+    if task_type:
+        pair['task_type'] = task_type
+        return pair
+    if REQUIRE_TASK_TYPE:
+        raise MissingTaskType(
+            f'[{notebook_tag or "?"}] pair has no task_type and none could be '
+            f'inferred; set it explicitly when you save the pair. '
+            f'Instruction: {(pair.get("instruction") or "")[:100]!r}')
+    return pair
+
+
+def task_type_census(path=None):
+    """{task_type: count} over a corpus file, `None` included as a key."""
+    path = Path(path) if path else PAIRS_FILE
+    counts = _Counter()
+    if not path.exists():
+        return {}
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if is_jsonl_metadata_record(record):
+                continue
+            counts[record.get('task_type') or '(none)'] += 1
+    return dict(counts.most_common())
+
+
+# ── The save-time runtime gate (GitLab #780) ─────────────────────────────────
+# The verb-authority and FIXTRAIN gates existed, but only the eval-derived
+# merge stage applied them. Everything that writes through save_notebook_pairs
+# — the git pairs, the actions rows, the knowledge extraction, the book QA —
+# went in ungated, and about a hundred and seventy pairs carrying verbs no
+# action implements (Hash, Grant, Process, Encrypt, Require, Greet, Deduct …)
+# reached the corpus that way. Hallucinated actions are the top failure class
+# in the eval results; training on these re-teaches them.
+#
+# So the gate moves to the one door every stage goes through, and it asks the
+# binary as well as the catalogs. ARO_TRAIN_PAIR_GATE picks how much:
+#
+#   full    (default) catalogs + `aro check` on every ```aro block
+#   static            catalogs only — no subprocess, for a fast dry run
+#   off               nothing, for bootstrapping a corpus before a build
+PAIR_GATE_MODE = os.environ.get('ARO_TRAIN_PAIR_GATE', 'full').strip().lower()
+PAIR_GATE_STATS = _Counter()
+PAIR_GATE_BY_SOURCE = {}
+_PAIR_GATE_DROP_LOG_LIMIT = 10
+_pair_gate_drops_logged = {'count': 0}
+_pair_gate_cache = {}
+
+
+def _pair_gate_tools():
+    """The validator's gates, imported lazily so importing config stays cheap
+    and a host without an `aro` binary can still import it."""
+    import revalidate_corpus as _rc
+    if 'catalogs' not in _pair_gate_cache:
+        _pair_gate_cache['catalogs'] = _rc.load_catalogs()
+        _pair_gate_cache['checks'] = {}
+    return _rc, _pair_gate_cache['catalogs']
+
+
+def validate_pair_aro(pair, mode=None):
+    """Ask the runtime about a pair's ```aro blocks before it is written.
+
+    Returns the verdict dict that is stored on the pair as `validation`:
+    `valid`, the `aro_version` that said so, and the specific complaints.
+    Never raises — a gate that dies on a malformed pair stops a pipeline that
+    should merely have dropped one row.
+    """
+    mode = (mode or PAIR_GATE_MODE)
+    if mode == 'off':
+        return {'valid': True, 'gate': 'off'}
+    try:
+        rc, (verbs, vp, qualifier_known) = _pair_gate_tools()
+    except Exception as exc:                                   # pragma: no cover
+        return {'valid': True, 'gate': f'unavailable: {exc}'}
+    cache = None
+    if mode != 'static':
+        binary = rc.aro_oracle.aro_bin()
+        if binary:
+            cache = _pair_gate_cache.setdefault(
+                'cache', rc.CheckCache(binary))
+    try:
+        verdict = rc.validate_pair(pair, verbs, vp, qualifier_known, cache)
+    except Exception as exc:                                   # pragma: no cover
+        return {'valid': True, 'gate': f'error: {exc}'}
+    verdict['gate'] = mode if cache else f'{mode} (no binary)'
+    return verdict
+
+
+def _pair_gate(pair, notebook_tag=''):
+    """True when the pair may be written. Records why, when it may not."""
+    if PAIR_GATE_MODE == 'off':
+        return True
+    verdict = validate_pair_aro(pair)
+    prov = pair.get('provenance') or {}
+    source = (prov.get('source') or pair.get('source')
+              or prov.get('generation_strategy') or pair.get('category')
+              or notebook_tag or '?')
+    bucket = PAIR_GATE_BY_SOURCE.setdefault(source, _Counter())
+    bucket['seen'] += 1
+    if verdict.get('valid'):
+        bucket['passed'] += 1
+        pair['validation'] = verdict
+        return True
+    import revalidate_corpus as _rc
+    reasons = _rc.failure_reasons(verdict) or ['unknown']
+    PAIR_GATE_STATS.update(reasons)
+    _pair_gate_drops_logged['count'] += 1
+    if _pair_gate_drops_logged['count'] <= _PAIR_GATE_DROP_LOG_LIMIT:
+        detail = (verdict.get('unknown_verbs') or verdict.get('bad_prepositions')
+                  or verdict.get('unknown_qualifiers')
+                  or [(verdict.get('check_errors') or [''])[0][:80]])
+        tag = f'[{notebook_tag}] ' if notebook_tag else ''
+        print(f'  {tag}pair-gate drop ({", ".join(reasons)}): {detail}',
+              flush=True)
+    return False
+
+
+def pair_gate_report(reset=False):
+    """Per-source pass rates for everything written this run.
+
+    This table is what was missing: the gate ran at one stage, so nobody could
+    see that the git pairs failed nine times as often as the curated ones.
+    """
+    if not PAIR_GATE_BY_SOURCE:
+        print('pair-gate: nothing recorded this run '
+              f'(mode={PAIR_GATE_MODE})')
+        return {}
+    print(f'pair-gate ({PAIR_GATE_MODE}) per-source pass rate:')
+    print(f'  {"source":<44} {"seen":>7} {"kept":>7} {"pass %":>7}')
+    rows = sorted(PAIR_GATE_BY_SOURCE.items(),
+                  key=lambda kv: (kv[1]['passed'] / max(1, kv[1]['seen']), kv[0]))
+    for source, counts in rows:
+        seen, passed = counts['seen'], counts['passed']
+        print(f'  {source[:44]:<44} {seen:>7} {passed:>7} '
+              f'{100.0 * passed / seen if seen else 0:>6.1f}%')
+    if PAIR_GATE_STATS:
+        print(f'  drop reasons: {dict(PAIR_GATE_STATS)}')
+    snapshot = {s: dict(c) for s, c in PAIR_GATE_BY_SOURCE.items()}
+    if reset:
+        PAIR_GATE_BY_SOURCE.clear()
+        PAIR_GATE_STATS.clear()
+        _pair_gate_drops_logged['count'] = 0
+    return snapshot
+
+
 # ── Semantic near-duplicate detection (issue #404) ───────────────────────────
 
 def _dup_token_set(text):
@@ -2188,8 +3076,22 @@ SOURCE_QUALITY_SCORES = {
     'readme':                 0.7,
     'external_repo':          0.7,
     'readme_to_code':         0.7,
+    # Mined from git history (GitLab #781). Real code, but the answer side is
+    # a commit message and a diff, which is the weakest supervision in the
+    # mixture; it was 36% of the corpus scoring the 0.8 default because every
+    # row carried its own `path@sha` as its source and no two rows shared one.
+    'git':                    0.6,
 }
 DEFAULT_SOURCE_QUALITY = 0.8
+
+# Per-source ceilings, counted on the family rather than the tag (GitLab
+# #781). The share knobs below act on a source's share of the train set, which
+# only works when a source is one name: git-mined pairs were three thousand
+# distinct sources of one row each, so the 0.30 soft cap never saw the 36%.
+SOURCE_CAPS = {
+    'git': 1200,
+}
+DEFAULT_SOURCE_CAP = None
 
 # Assembly-time policy knobs (used by NB16)
 AUTO_WRAP_MAX_SHARE   = 0.35   # max share of code_generation pairs that may be auto-wrapped (issue #380)
@@ -2197,14 +3099,42 @@ SOURCE_SOFT_CAP_SHARE = 0.30   # sources above this share get soft down-weighted
 SOURCE_SHARE_FLAG     = 0.40   # flag any source above this share of the train set
 
 
+_GIT_SOURCE_RE = _re.compile(r'\.aro@[0-9a-f]{6,40}$', _re.IGNORECASE)
+
+
+def source_family(source):
+    """The one name a source tag belongs to.
+
+    Share caps and quality scores are computed per source, so a stage that
+    tags every row with its own file path and SHA is not one source at 36% of
+    the corpus but three thousand sources of one row each — and no cap ever
+    fires. `path.aro@<sha>` is the git miner; a bare absolute path is NB14's
+    comment extraction.
+    """
+    src = (source or '').strip()
+    if not src:
+        return 'unknown'
+    if _GIT_SOURCE_RE.search(src):
+        return 'git'
+    if src.startswith('/') or src.endswith('.aro'):
+        return 'comment'
+    return src.split(':')[0].strip().lower()
+
+
 def source_quality_score(source, notebook=None):
     """Quality score in (0, 1] for a pair's `source` tag."""
-    src = (source or '').strip()
-    # NB14 comment pairs carry a file path as source — real hand-written code.
-    if src.startswith('/') or src.endswith('.aro'):
-        return 0.95
-    prefix = src.split(':')[0].strip().lower()
-    return SOURCE_QUALITY_SCORES.get(prefix, DEFAULT_SOURCE_QUALITY)
+    family = source_family(source)
+    if family == 'unknown':
+        return DEFAULT_SOURCE_QUALITY
+    if family == 'comment':
+        # NB14 comment pairs carry a file path as source — hand-written code.
+        return SOURCE_QUALITY_SCORES.get('comment', 0.95)
+    return SOURCE_QUALITY_SCORES.get(family, DEFAULT_SOURCE_QUALITY)
+
+
+def source_cap(source):
+    """How many pairs of this source's family the dataset will take, or None."""
+    return SOURCE_CAPS.get(source_family(source), DEFAULT_SOURCE_CAP)
 
 
 def derive_source_quality_from_validation(validated_samples, min_count=20):

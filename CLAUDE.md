@@ -40,6 +40,9 @@ aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linux: Foundation still dynamic.)
 aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to the binary; rpath=$ORIGIN.
+ARO_STATIC_PYTHON=/path/to/dist aro build ./MyApp   # Carry CPython, so a Python plugin
+                      # can go in a standalone binary (GitLab #856). Needs a real static
+                      # libpython<ver>.a; a stock python.org install ships a symlink to the dylib.
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 # Testing `aro build` against local runtime changes: build the runtime
@@ -525,15 +528,73 @@ The runtime automatically registers them as `handle.qualifier` in `QualifierRegi
 - **QualifierRegistry** (`Qualifiers/QualifierRegistry.swift`): Central registry for plugin qualifiers
 - **PluginQualifierHost** (`Plugins/PluginQualifierHost.swift`): Protocol for executing qualifiers
 
+### Python plugins in a standalone binary (GitLab #856)
+
+`aro build --static` promises one file you can copy, and a Python plugin
+ordinarily breaks that: the binary needs an interpreter, a `libpython`, and the
+standard library, all resolved from the machine that built it. So the build
+declines rather than producing something that looks standalone and dies on the
+target machine.
+
+Point `ARO_STATIC_PYTHON` at a CPython distribution that can be embedded and it
+builds instead, carrying the interpreter and the parts of the standard library a
+program actually needs:
+
+```bash
+ARO_STATIC_PYTHON=/opt/cpython-static aro build ./MyApp
+```
+
+The distribution needs a **real** static `libpython<version>.a` and its stdlib —
+a python-build-standalone download, or CPython configured `--disable-shared`. A
+stock python.org or Homebrew install will not do, and the reason is worth
+knowing: they ship a file *named* `libpython3.x.a` that is a symlink to the
+dynamic library, so a naive check finds a static archive that is not one. The
+build reads the file's magic (`!<arch>`) rather than trusting its name.
+
+What travels: 615 files and about 35 MB, measured against CPython 3.12. What
+does not: CPython's own test suite, `idlelib` and `tkinter`, `__pycache__`, and
+`site-packages` — the last deliberately, since copying whatever is installed on
+the build machine is how a binary acquires dependencies nobody declared. A
+plugin's own requirements are added explicitly instead.
+
+The stdlib lands beside the executable as `aro-python<version>/`, not in a temp
+directory: `/tmp` is frequently mounted `noexec`, which the stdlib's C
+extensions cannot survive.
+
+A plugin needing a **native** wheel still cannot be embedded — those are
+compiled extensions that no amount of static linking folds in — so the refusal
+path remains for them.
+
 ### Binary Mode Support
 
-Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes:
-- During `aro build`, plugins in `Plugins/` are compiled and bundled
-- Swift/C plugins are compiled to dynamic libraries
-- Python plugins are copied with their source files
-- Native plugins are linked INTO the binary, their symbols renamed
-  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
-  Python plugins ship as source beside it
+Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes,
+but the two link modes bundle them differently — and the choice is resolved once, in
+`BuildCommand`, before plugins are compiled, so the plugin stage knows which build it
+is in (GitLab #815).
+
+**`--static` (the default) bakes native plugins in.** A Swift package plugin is built
+with `swift build -c release` if nothing built it already, C sources are compiled, and
+a Rust crate gets a `staticlib`; the resulting `.o` files are linked INTO the binary
+with their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexist
+(`Linker.swift`). No `dlopen` at run time.
+
+**`--dynamic` ships the plugin's shared library beside the binary** and loads it at
+startup the way the interpreter does. Nothing is baked in, and no object files are
+needed.
+
+**Python plugins cannot be made standalone** (GitLab #608). They need a CPython
+interpreter and its standard library at run time, and the build resolves both from the
+*build* machine — an absolute path to a framework or `libpython`, plus that machine's
+`sys.prefix`. So `aro build --static` refuses one, naming the plugin and the exact
+Python installation it would have depended on; `--dynamic` builds it with a warning
+saying the same, because that mode never promised a single file.
+`ARO_ALLOW_EMBEDDED_PYTHON=1` builds anyway, for people who build on the machine that
+will run it.
+
+Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
+the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
+from that rather than probing the loader, which answers a different question
+(GitLab #618).
 
 ## ARO Syntax
 

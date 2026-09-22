@@ -183,6 +183,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | `aro run`, `check`, `compile`, `test` | ✅ | ✅ | ✅ |
 | `aro repl`, `repl --json` | ✅ | ✅ | ✅ ⁹ |
 | `aro build` | ✅ | ✅ | ❌ ¹ |
+| `aro build` with a Python plugin | ⚠️ ¹¹ | ⚠️ ¹¹ | ❌ ¹ |
 | **Services** ||||
 | HTTP server | ✅ | ✅ | ✅ ² |
 | Streaming request bodies | ✅ | ✅ | ❌ ² |
@@ -212,6 +213,8 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ⁸ reports zeros rather than absence — GitLab #700
 ⁹ `Log` output is captured; stray `print`s from plugins are not
 ¹⁰ not registered as subcommands — GitLab #701
+¹¹ needs `ARO_STATIC_PYTHON` pointing at an embeddable CPython; otherwise the
+   build refuses rather than depend on the build machine's interpreter — GitLab #856
 
 `MISSING.md` is the fuller list of what is absent, and why.
 

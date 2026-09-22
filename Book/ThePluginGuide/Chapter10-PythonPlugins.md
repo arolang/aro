@@ -1076,7 +1076,7 @@ Python plugins open the entire Python ecosystem to ARO:
 - **`aro_plugin_qualifier(name: str, input_json: str) -> str`** — one dispatcher for all qualifiers, not one function each. It must return `{"result": <value>}` or `{"error": "..."}`; the qualifier name arrives exactly as declared, so look it up exactly (unlike actions, whose names are snake-cased into `aro_action_<name>`)
 - **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`, execution context under `"_context"`
 - **Communication (interpreter mode)**: a fresh `python3 -c` process per call. No persistent process, no stdin/stdout dialogue, no state carried between calls — design for statelessness and import heavy libraries lazily
-- **Communication (binary mode)**: In-process execution via embedded `libpython3` — no subprocess, no Python installation needed on the target machine. `aro build` links `libpython3` into the binary and embeds plugin source as string constants.
+- **Communication (binary mode)**: In-process execution via embedded `libpython3` — no subprocess. `aro build` links `libpython3` into the binary and embeds plugin source as string constants. The target machine needs no Python of its own *if* the build was given an embeddable CPython via `ARO_STATIC_PYTHON`; otherwise `--static` refuses, because the binary would otherwise carry the build machine's paths (GitLab #856).
 - **Dependencies**: Standard `requirements.txt` with pip. In binary mode, dependencies are installed at build time and bundled.
 - **ML/AI**: Hugging Face Transformers for LLM inference
 - **Performance**: Model caching, batching, GPU acceleration

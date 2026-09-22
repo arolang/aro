@@ -54,6 +54,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, TRAIN_ROOT,
 )
+import stage_runner  # noqa: E402
+import sandbox  # noqa: E402
 
 NOTEBOOK_TAG = 'NB28_repairs'
 SEED_DIR = TRAIN_ROOT / 'seeds' / '28_repairs'
@@ -77,13 +79,13 @@ ARO = resolve_aro()
 
 
 def aro_check(files: dict) -> tuple[int, str]:
-    """`aro check` over a dict of {filename: content} as one application."""
-    with tempfile.TemporaryDirectory() as tmp:
-        for name, content in files.items():
-            (Path(tmp) / name).write_text(content)
-        r = subprocess.run([ARO, 'check', tmp],
-                           capture_output=True, text=True, timeout=30)
-        return r.returncode, (r.stdout + r.stderr)
+    """`aro check` over a dict of {filename: content} as one application.
+
+    Sandboxed (GitLab #804): the content is model-adjacent seed data and runs
+    with its own working directory, HOME and TMPDIR, never the pipeline's.
+    """
+    r = sandbox.run_program_dir([ARO, 'check'], extra_files=files, timeout=30)
+    return r.returncode, (r.stdout + r.stderr)
 
 
 # ── load + validate ──────────────────────────────────────────────────────────
@@ -136,13 +138,14 @@ def build_pairs() -> tuple[list[dict], list[str]]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true',
-                    help='validate and report; save nothing')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     args = ap.parse_args()
+    opts = stage_runner.StageOptions.from_args(args)
 
     print(f'aro binary: {ARO}')
     print(f'seed dir:   {SEED_DIR}')
     pairs, failures = build_pairs()
+    pairs = opts.apply(pairs)
 
     for f in failures:
         print(f'  DROPPED  {f}')

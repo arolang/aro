@@ -4,7 +4,7 @@
 // ============================================================
 //
 // `aro repl --json` speaks its protocol on stdout, but ARO programs write to
-// stdout too — `Log` goes there directly (ResponseActions), and so do a
+// stdout too — `Log` goes there directly (LogAction), and so do a
 // handful of warnings and `print`s scattered through the runtime. A single
 // `Log` would corrupt the protocol stream and desynchronise the client.
 //
