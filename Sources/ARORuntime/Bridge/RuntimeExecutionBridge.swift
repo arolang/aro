@@ -68,6 +68,32 @@ public func aro_context_create_named(
     return UnsafeMutableRawPointer(contextPtr)
 }
 
+/// `Require the <API_TOKEN> from the <environment>.` in a compiled binary
+/// (GitLab #854).
+///
+/// The code generator used to emit an `extract` whose object was the bare noun
+/// `environment`, which no action understands — so the statement failed with
+/// `Undefined variable: 'environment'` while `aro run` bound the value. Worse,
+/// the binary still exited `[OK]`: the failure was printed on a line of its
+/// own and the program carried on as though the variable were unset.
+///
+/// This does exactly what `FeatureSetExecutor` does for the interpreter: read
+/// the process environment, and bind only when the variable is set. An unset
+/// variable binds nothing, so the later read fails where the read is — which
+/// is the behaviour ARO-0006 asks for.
+@_cdecl("aro_context_require_environment")
+public func aro_context_require_environment(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ namePtr: UnsafePointer<CChar>?
+) {
+    guard let ptr = contextPtr, let namePtr else { return }
+    let name = String(cString: namePtr)
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    if let value = ProcessInfo.processInfo.environment[name] {
+        contextHandle.context.bind(name, value: value)
+    }
+}
+
 /// Create a child execution context from a parent context
 /// - Parameters:
 ///   - parentContextPtr: Parent context handle

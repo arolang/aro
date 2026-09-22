@@ -1447,6 +1447,24 @@ public final class LLVMCodeGenerator {
 
         let ip = ctx.insertionPoint
 
+        // `from the <environment>` reads the process environment, exactly as
+        // the interpreter's `executeRequireStatement` does (GitLab #854).
+        //
+        // It used to fall through to the `extract` below, whose object was the
+        // bare noun `environment` — a name no action understands. The
+        // statement failed with `Undefined variable: 'environment'` and the
+        // binary still exited `[OK]`, so a service reading its token from the
+        // environment started and then behaved as though it were unset.
+        if case .environment = statement.source {
+            let envName = ctx.stringConstant(statement.variableName)
+            _ = ctx.module.insertCall(
+                externals.contextRequireEnvironment,
+                on: [ctx.currentContextVar!, envName],
+                at: ip
+            )
+            return
+        }
+
         // Bind the required variable name
         let varNameStr = ctx.stringConstant("_require_variable_")
         let varValue = ctx.stringConstant(statement.variableName)
