@@ -466,6 +466,10 @@ public actor AskSession {
         /// Whether this run wrote ARO to a file, which is the confirmed
         /// signal that `aro_check` is owed (GitLab #873).
         var wroteAROFile = false
+        var groundingChecked = false
+        let grounding = GroundingCheck(
+            root: config.workingDirectory,
+            proposalNumbers: GroundingCheck.proposalNumbers(in: config.workingDirectory))
         /// Requirements already compelled, so a model that ignores a forced
         /// call is not forced again for ever.
         var forcedAlready: Set<String> = []
@@ -795,6 +799,28 @@ public actor AskSession {
                     context.messages.append(AskMessage(role: "user", content: finding.nudge))
                     try contextStore.save(context)
                     continue
+                }
+
+                // Claims this project contradicts — a path that is not here,
+                // a proposal that does not exist, a qualifier ARO does not
+                // have (GitLab #876). Deterministic: everything checked is
+                // checked against the repo, so the verdict cannot itself be
+                // a hallucination. Fires once, like the bail-outs.
+                if !groundingChecked {
+                    groundingChecked = true
+                    let findings = grounding.inspect(answer: stripped.text)
+                    if !findings.isEmpty {
+                        emitStatus("answer makes \(findings.count) claim(s) this project "
+                                 + "contradicts — asking for it again…")
+                        context.messages.append(AskMessage(
+                            role: "assistant",
+                            content: stripped.text.isEmpty ? nil : stripped.text))
+                        context.messages.append(AskMessage(
+                            role: "user",
+                            content: GroundingCheck.correction(for: findings)))
+                        try contextStore.save(context)
+                        continue
+                    }
                 }
 
                 let finalText = stripped.text
