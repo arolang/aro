@@ -33,14 +33,13 @@ struct ActionBridgeCoverageTests {
     /// linker asks: a shim that compiles but is not exported would still fail
     /// the build of a generated binary.
     private func bridgeExportExists(for verb: String) -> Bool {
-        let symbol = "aro_action_\(verb)"
-        #if canImport(Darwin)
-        let handle = dlopen(nil, RTLD_NOW)
-        #else
-        let handle = dlopen(nil, RTLD_NOW)
-        #endif
-        defer { if handle != nil { dlclose(handle) } }
-        return dlsym(handle, symbol) != nil
+        // `dlopen(nil, …)` is the running image itself, on both platforms.
+        // Binding it rather than passing the optional straight through:
+        // Glibc's `dlclose` takes a non-optional, where Darwin's is implicitly
+        // unwrapped, so the unbound form compiled on macOS and failed on Linux.
+        guard let handle = dlopen(nil, RTLD_NOW) else { return false }
+        defer { dlclose(handle) }
+        return dlsym(handle, "aro_action_\(verb)") != nil
     }
 
     @Test("Every verb the code generator can emit a call for has an export")
